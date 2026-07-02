@@ -2678,8 +2678,10 @@
   }
   /* Equal-growing flanks keep the title centered; the title takes its natural
      width (ellipsizing only if the modal is genuinely too narrow), and the nav
-     buttons never wrap. */
-  .modal-head__flank { flex: 1 1 0; min-width: 0; display: flex; align-items: center; }
+     buttons never wrap. The flank floors at its button's min-content width (not
+     0) so a wide title can never shrink the flank below the button and let the
+     button spill sideways over the title — the title ellipsizes instead. */
+  .modal-head__flank { flex: 1 1 0; min-width: min-content; display: flex; align-items: center; }
   .modal-head__flank.right { justify-content: flex-end; }
   .modal-head__title {
     flex: 0 1 auto; text-align: center; line-height: 1.15;
@@ -2894,9 +2896,12 @@
   .town-menu-btn .tm-name { font-size: 1.5rem; font-weight: bold; letter-spacing: .5px; }
   .town-menu-btn .tm-desc { font-size: 1.2rem; color: var(--orange-500); line-height: 1.3; }
   /* The primary call-to-action — it's how you get back into the dungeon — so it sits
-     at the TOP of the menu, spans the full width, and glows so it's unmistakable. */
+     on its OWN row at the TOP of the menu, centred, and glows so it's unmistakable.
+     It hugs its label (justify-self: center) instead of stretching the full row, so
+     there's no dead space flanking the text. */
   .town-menu-btn.tm-gate {
     grid-column: 1 / -1;
+    justify-self: center;         /* size to the label, don't span the whole row */
     position: relative;           /* anchors the two orbiting wisps */
     justify-content: center;      /* centre the icon + label group */
     text-align: center;
@@ -2904,7 +2909,7 @@
     border: 2px solid var(--gold-350);
     background: linear-gradient(180deg, var(--gold-850), var(--orange-850));
     color: var(--text);
-    padding: 22px 16px;           /* taller than a normal service row */
+    padding: 22px 44px;           /* taller, with room around the label */
     animation: gatePulse 1.6s ease-in-out infinite;
   }
   .town-menu-btn.tm-gate:active { background: var(--gold-850); }
@@ -11229,6 +11234,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Popup titles clear their nav buttons", by: "Claude", notes: ["A long popup title (e.g. Name Your Hero) no longer lets the Back/Close button spill sideways over it on a narrow window — the title now ellipsizes instead of overlapping."] },
   { date: "2026-07-02", size: "small", v: "Depth banner no longer eaten by its cache", by: "Claude", notes: ["A depth-milestone cache that rolls legendary/unique now shows NEW DEPTH RECORD first, then the drop reveal — instead of the drop banner instantly clobbering the milestone one.", "Loot banners now queue and play in turn; each banner's sound, flash and shake fire as it appears."] },
   { date: "2026-07-02", size: "small", v: "Readable floating text", by: "Claude", notes: ["Damage, gold and reward pops that fired at once now stack into a clean rising column instead of overlapping into a blob.", "Material and ingredient drops stay in the combat log only — no more duplicate on-kill floater.", "Hard cap keeps a big multi-hit burst from walling the screen with numbers."] },
   { date: "2026-07-02", size: "small", v: "Banners centre on the map", by: "Claude", notes: ["Level-up and loot banners now centre over the dungeon map, not the whole window — so they stay centred when a side drawer is open."] },
