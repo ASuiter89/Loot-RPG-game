@@ -1478,9 +1478,10 @@
   .sk-tnode { width: 46px; height: 46px; border-radius: 9px; }
   /* A single branch web fills the whole panel, so its nodes are bigger and their
      names get room to breathe. */
-  .sk-tree.web .sk-tnode { width: 58px; height: 58px; }
-  .sk-tree.web .sk-tnode .nm { font-size: 1.2rem; bottom: -14px; left: -22px; right: -22px;
-    max-width: none; white-space: normal; line-height: 1.05; text-shadow: 0 1px 2px var(--ink); }
+  .sk-tree.web .sk-tnode { width: 66px; height: 66px; }
+  .sk-tree.web .sk-tnode .nm { font-size: 1.2rem; top: calc(100% + 3px); bottom: auto; left: -22px; right: -22px;
+    max-width: none; white-space: normal; line-height: 1.05; text-shadow: 0 1px 2px var(--ink);
+    background: none; padding: 0; }
   .sk-tnode .ic { font-size: 2rem; }
   .sk-tnode .nm { font-size: 1.1rem; max-width: 44px; }
   .sk-tnode .pips { gap: 1px; margin-top: 1px; flex-wrap: wrap; justify-content: center; max-width: 42px; }
@@ -1711,9 +1712,9 @@
   /* SKILLS-tab loadout tray — the bank of slots you drag learned actives into. It
      sits above the skill tree so the source nodes and the slots are co-visible. */
   .sk-loadout { margin: 4px 0 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
-  .lt-title { font-size: 1.3rem; color: var(--purple-200); margin-bottom: 5px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+  .lt-title { font-size: 1.3rem; color: var(--purple-200); margin-bottom: 5px; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; text-align: center; gap: 6px; }
   .lt-hint { font-size: 1.2rem; color: var(--blue-350); opacity: 0.85; }
-  .lt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+  .lt-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 5px; }
   /* A slim divider between the four manual slots and the lone auto-cast slot. */
   .lt-sep { flex: 0 0 1px; align-self: stretch; min-height: 36px; margin: 0 3px; background: linear-gradient(180deg, transparent, var(--border) 25%, var(--border) 75%, transparent); }
   .lt-slot { position: relative; width: calc(46px * var(--ui-scale,1)); height: calc(46px * var(--ui-scale,1)); border-radius: 8px; border: 1px solid var(--border); background: var(--panel-raised); display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -11076,6 +11077,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Skill panel polish", by: "Claude", notes: ["Skill-slots header, hint and slot boxes are now centered.", "Skill names sit below each tile instead of overlapping the icon.", "Bigger skill-tree icons.", "Dropped the redundant lock badge — greyed-out tiles already read as locked.", "Clicking a tile now hides the hover tooltip, so it stops blocking the detail popup."] },
   { date: "2026-07-02", size: "small", v: "Settings gains a Visuals tab", by: "Claude", notes: ["UI SIZE, UI FONT and CURSOR moved out of Play into a new Visuals tab. Tab order is now Play, Visuals, Audio, Progress, About.", "UI FONT is now a collapsing dropdown showing your current face; open it for a two-column grid of options instead of one tall column."] },
   { date: "2026-07-02", size: "small", v: "Punchier level-up banner", by: "Claude", notes: ["Level-up banner now flares with golden light rays and a bloom, plus a fuller, more rewarding fanfare.", "\"Spend your points\" hint shows only through level 3, then steps aside."] },
   { date: "2026-07-02", size: "small", v: "Skill-tree tabs taller, with branch blurbs", by: "Claude", notes: ["Passive/Active/Path and specialization tabs are taller for easier clicking.", "Selecting a specialization (Slayer, Duelist, Pyro…) now shows a one-line blurb explaining what that build path is about."] },
@@ -23406,7 +23408,7 @@ function renderSkills(el) {
     const avail = canBuySkill(n);
     const ready = !owned && !avail && skillReqMet(n);
     const state = maxd ? 'maxed' : avail ? 'avail' : owned ? 'owned' : ready ? 'ready' : 'locked';
-    const badge = maxd ? '✓' : avail ? '+' : owned ? rank : ready ? '☆' : '🔒';
+    const badge = maxd ? '✓' : avail ? '+' : owned ? rank : ready ? '☆' : '';
     // A learned active bound to a hotkey gets a small corner chip showing where it's
     // bound — the key number for a manual slot, ⟳ for the auto-cast slot. Owned actives
     // that aren't bound stay fully lit (they're learned, just not on the bar) — no
@@ -23424,7 +23426,7 @@ function renderSkills(el) {
     return `<button class="sk-tnode ${state}${n.keystone ? ' keystone' : ''}${n.type === 'active' ? ' act' : ''}${selectedSkillId === n.id ? ' sel' : ''}" id="sknode-${n.id}" ${drag}
         style="left:${(p[0] * 100).toFixed(2)}%;top:${(p[1] * 100).toFixed(2)}%" onclick="selectSkill('${n.id}')" ondblclick="buySkill('${n.id}')"
         data-tip="${tipShort}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
-      <span class="ic">${dlIconFill(n.icon)}</span><span class="nm">${n.name}</span><span class="badge">${badge}</span>${slotMark}
+      <span class="ic">${dlIconFill(n.icon)}</span><span class="nm">${n.name}</span>${badge !== '' ? `<span class="badge">${badge}</span>` : ''}${slotMark}
     </button>`;
   }).join('');
 
@@ -23802,6 +23804,7 @@ function skillTotalSummary(node, rank) {
 // Click a skill node to open its full detail card; click the same node again (or
 // the card body, or anywhere outside) to close it. Hover just shows a short tip.
 function selectSkill(id) {
+  hideHoverTip();  // the detail popover replaces the hover card, which otherwise blocks the view
   selectedSkillId = (selectedSkillId === id) ? null : id;
   renderPanel();
 }
