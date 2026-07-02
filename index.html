@@ -5875,15 +5875,26 @@ function heroFaceDataURL(cls, sex) {
 }
 // Inline HTML for a hero's face icon (down-facing idle), matching the in-world
 // sprite. Returns '' for an unknown class so a caller's own emoji fallback shows;
-// falls back to the atlas hero tile for any class without bespoke walk art.
+// for a class WITH bespoke walk art whose sheet is still decoding it returns a
+// same-size TRANSPARENT slot (never the static atlas hero tile) so no old sprite
+// flashes; only a class that has NO walk art uses the atlas tile.
 function heroFaceIcon(cls, sex, px) {
   if (!cls || typeof CLASSES !== 'object' || !CLASSES[cls]) return '';
   const sx = (sex === 'female') ? 'female' : 'male';
+  // Scale by UI SIZE up front so the <img> and the loading placeholder share the
+  // exact same box (no layout shift when the real sprite swaps in). Computing p
+  // here also keeps it defined for the placeholder branch below.
+  const p = Math.round(px * (uiScale || 1));
   const url = heroWalkSheet(cls, sx) ? heroFaceDataURL(cls, sx) : null;
   // Scale the baked <img> by UI SIZE so DOM portraits grow with the interface;
-  // image-rendering:pixelated keeps the upscaled sprite crisp. The dlIcon
-  // fallback already applies uiScale on its own, so it keeps the raw base px.
-  if (url) { const p = Math.round(px * (uiScale || 1)); return `<img class="hero-face" src="${url}" width="${p}" height="${p}" alt="" style="image-rendering:pixelated;vertical-align:middle">`; }
+  // image-rendering:pixelated keeps the upscaled sprite crisp.
+  if (url) { return `<img class="hero-face" src="${url}" width="${p}" height="${p}" alt="" style="image-rendering:pixelated;vertical-align:middle">`; }
+  // Walk sheet still decoding: hold a transparent, same-size slot instead of the
+  // static atlas hero tile. Returning a NON-EMPTY span is load-bearing — callers
+  // chain `heroFaceIcon(...) || dlIcon(CLASSES[cls].icon)`, and CLASSES[cls].icon
+  // is a WEAPON icon, so '' would just swap one wrong asset for another. The
+  // walk-sheet onload (see _mkWalkSheet) re-renders the portrait once it's ready.
+  if (heroHasWalkArt(cls)) return `<span class="hero-face" style="display:inline-block;width:${p}px;height:${p}px;vertical-align:middle"></span>`;
   return dlIcon('hero_' + cls, px) || '';
 }
 // DOM: an inline CSS-step-animated walk-DOWN icon for a hero class, so menus (the
@@ -11475,6 +11486,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "No stale sprite flash on load", by: "Claude", notes: ["Hero portraits, the in-world hero, and roaming vendors/mercenaries no longer flash a static placeholder tile before their animated sprite finishes loading — they hold a blank slot and paint the real art the instant it's ready."] },
   { date: "2026-07-02", size: "medium", v: "Town shops reordered & level-gated", by: "Claude", notes: ["Town tiles now follow a fixed order: Healer, Merchant, Ramen House, then progression-gated services, with the Vault last.", "Craftsman opens at level 5; Gambler at depth 10; Trainer & Enchanter at level 10.", "Transmuter opens on reaching Hardened; Bounty Board & Mystic on unlocking Hardened; Sellsword on reaching Brutal.", "Locked services still show in order, greyed, with their unlock requirement.", "Stash Vault renamed to Vault."] },
   { date: "2026-07-02", size: "medium", v: "Uncapped hits, tankier bosses, varied foes", by: "Claude", notes: [
     "Removed the per-hit damage cap on enemies — a big swing, skill or crit now lands its full number instead of being clamped to a fraction of the target's health.",
@@ -17357,6 +17369,12 @@ function drawHeroSprite(px, py, tw, th, scale) {
   // When the current hero has one, it fully replaces the atlas tile + mirroring.
   const walkImg = heroWalkSheet();
   if (walkImg) { drawHeroWalk(walkImg, px, py, tw, th); return; }
+  // This class has a bespoke walk sheet that just hasn't decoded yet (only true
+  // for the sub-second load window, and hidden behind the title overlay then):
+  // hold off rather than flash the static atlas hero tile as a stand-in. The
+  // shadow already drew and the walk sheet's onload repaints the instant it's
+  // ready. Only a class with NO walk art falls through to the atlas tile below.
+  if (heroHasWalkArt()) return;
   const heroSprite = (player.class && SPRITE_IDX['hero_' + player.class] !== undefined)
     ? 'hero_' + player.class : 'hero';
   // The hero faces left by default; moving right mirrors the whole sprite.
@@ -18164,11 +18182,11 @@ function draw() {
     const gcx = px + tw/2, gcy = py + th/2;
     glowUnder(gcx, gcy, tw * (0.92 + 0.14 * pulse), `rgba(255,198,66,${0.34 + 0.24 * pulse})`);
     glowUnder(gcx, gcy, tw * (0.54 + 0.10 * pulse), `rgba(255,226,138,${0.45 + 0.28 * pulse})`);
-    // merchant sprite on top (a full pixel townsfolk sprite, so no procedural
-    // robe blob behind it any more)
-    if (!drawTownWalk('merchant', px + tw/2, py + th*0.9, Math.round(th * 1.6))) {
-      if (spriteReady) drawSpriteC('npc_shop', px + tw/2, py + th/2 + th*0.02, charSpritePx(tw));
-    }
+    // merchant sprite on top — a full pixel townsfolk walk sprite. It always has
+    // bespoke art, so we never flash the static npc_shop atlas tile as a stand-in
+    // while its (preloaded, tiny) sheet decodes: the glow/shadow already drew and
+    // the sheet's onload repaints the moment it's ready.
+    drawTownWalk('merchant', px + tw/2, py + th*0.9, Math.round(th * 1.6));
   }
 
   // Wandering Mystic (hooded pact-vendor with a purple mystical aura)
@@ -18183,10 +18201,11 @@ function draw() {
     const gcx = px + tw/2, gcy = py + th/2;
     glowUnder(gcx, gcy, tw * (0.92 + 0.14 * pulse), `rgba(150,78,255,${0.34 + 0.24 * pulse})`);
     glowUnder(gcx, gcy, tw * (0.54 + 0.10 * pulse), `rgba(196,134,255,${0.45 + 0.28 * pulse})`);
-    // mystic sprite on top (full hooded pixel sprite — no procedural robe blob)
-    if (!drawTownWalk('mystic', px + tw/2, py + th*0.9, Math.round(th * 1.6))) {
-      if (spriteReady) drawSpriteC('npc_mage', px + tw/2, py + th/2 + th*0.02, charSpritePx(tw));
-    }
+    // mystic sprite on top — a full hooded pixel walk sprite that always has
+    // bespoke art, so we never flash the static npc_mage atlas tile as a stand-in
+    // while its (preloaded) sheet decodes; the aura already drew and the sheet's
+    // onload repaints the instant it's ready.
+    drawTownWalk('mystic', px + tw/2, py + th*0.9, Math.round(th * 1.6));
   }
 
   // Town buildings + NPCs (only present in the safe hub). Buildings first so the
@@ -18415,9 +18434,12 @@ function draw() {
     // Attack lunge nudges the minion sprite toward its target (lifespan bar stays put).
     const mLunge = attackLungeOffset(m, tw, th);
     const mlx = mLunge ? mLunge.dx : 0, mly = mLunge ? mLunge.dy : 0;
-    // Hired mercenaries draw as their own animated walk-down character.
-    if (!(m.mercArt && drawTownWalk(m.mercArt, mx + tw/2 + mlx, my + th*0.92 + mly, Math.round(th * 1.5))) && mSprite)
-      drawSpriteC(mSprite, mx + tw/2 + mlx, my + th/2 + th*0.02 + mly, mSz);
+    // Hired mercenaries draw as their own animated walk-down character (they
+    // always have bespoke walk art), so we never flash a generic minion sprite as
+    // a stand-in while that sheet decodes; regular summoned minions (no mercArt)
+    // keep drawing their own atlas minion sprite.
+    if (m.mercArt) drawTownWalk(m.mercArt, mx + tw/2 + mlx, my + th*0.92 + mly, Math.round(th * 1.5));
+    else if (mSprite) drawSpriteC(mSprite, mx + tw/2 + mlx, my + th/2 + th*0.02 + mly, mSz);
     // Skeleton archer carries a bow, drawn at its side the same way the hero's
     // equipped bow is rendered (whole-number scale so the diagonals stay clean).
     if (m.kind === 'skelarcher' && !m.mercArt && spriteReady && SPRITE_IDX['w_bow'] !== undefined) {
