@@ -340,6 +340,14 @@
   .bar-fill { height: 100%; border-radius: 3px; transition: width 0.2s; }
   .hp-fill  { background: linear-gradient(180deg, var(--red-350), var(--hp)); box-shadow: 0 0 7px var(--hp), inset 0 1px 0 color-mix(in srgb, var(--paper) 40%, transparent); }
   .mp-fill  { background: linear-gradient(180deg, var(--blue-250), var(--mp)); box-shadow: 0 0 7px var(--mp), inset 0 1px 0 color-mix(in srgb, var(--paper) 40%, transparent); }
+  /* Over-time recovery zone: a translucent band from the current fill out to
+     (current + pending), showing HP/MP that will pay out over the next moments.
+     Sits BEHIND the solid fill (z-index) so it only shows in the gap. */
+  .bar-track { position: relative; }
+  .hp-fill, .mp-fill { position: relative; z-index: 2; }
+  .bar-pending { position: absolute; top: 0; left: 0; height: 100%; z-index: 1; border-radius: 3px; transition: width 0.2s; }
+  .hp-pending { background: color-mix(in srgb, var(--hp) 42%, transparent); }
+  .mp-pending { background: color-mix(in srgb, var(--mp) 42%, transparent); }
   /* Danger pulse — toggled in updateBars() when HP gets critically low.
      The fill pulses brightness (visible despite the track's overflow:hidden),
      while the track flashes an outer red glow that the clip doesn't cut off. */
@@ -1377,6 +1385,7 @@
     box-shadow: 0 6px 20px color-mix(in srgb, var(--ink) 60%, transparent); }
   .sk-pop b { color: var(--gold); }
   .sk-pop .ty { color: var(--blue-350); font-size: 1.2rem; margin-top: 1px; }
+  .sk-pop .sk-recov { margin-top: 2px; font-size: 1.1rem; color: var(--hp); opacity: 0.85; }
   .sk-pop .ds { margin-top: 3px; color: var(--purple-50); }
   /* Mechanics readout: one tagged chip per engine piece (charge, trigger,
      synergy, transform, detonate…) so a node reads how it actually plays. */
@@ -1601,6 +1610,12 @@
   .dh-vital-fill.mp { background: linear-gradient(180deg, var(--blue-250) 0%, var(--mp) 50%, var(--blue-550) 100%); box-shadow: 0 0 12px color-mix(in srgb, var(--mp) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--paper) 40%, transparent); }
   /* MP drains from the inner edge so both bars empty toward the centre, mirroring. */
   .dh-mp .dh-vital-fill { left: auto; right: 0; }
+  /* Over-time recovery zone on the big desktop vitals — translucent band behind the
+     solid fill (DOM order puts it first, so the fill and value text paint on top). */
+  .dh-vital-pending { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 6px; transition: width 0.22s ease; }
+  .dh-vital-pending.hp { background: color-mix(in srgb, var(--hp) 40%, transparent); }
+  .dh-vital-pending.mp { background: color-mix(in srgb, var(--mp) 40%, transparent); }
+  .dh-mp .dh-vital-pending { left: auto; right: 0; }
   .dh-vital-val {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     font-family: var(--font-ui); font-weight: bold; font-size: 1.7rem; color: var(--paper);
@@ -4230,12 +4245,12 @@
     <div id="hero-name-hud" class="hero-name-hud" style="display:none"></div>
     <div class="stat-bar" data-tip="<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health (HP)</div><div class='ht-line'>Your life. When it hits 0 you die. Restore it with potions, resting in town, and levelling up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
       <span style="color:var(--hp);font-size:1.3rem;font-weight:bold;text-shadow:0 0 5px var(--hp)">HP</span>
-      <div class="bar-track"><div class="bar-fill hp-fill" id="hp-bar" style="width:100%"></div></div>
+      <div class="bar-track"><div class="bar-pending hp-pending" id="hp-pending"></div><div class="bar-fill hp-fill" id="hp-bar" style="width:100%"></div></div>
       <span id="hp-text" style="font-size:1.2rem">100</span>
     </div>
     <div class="stat-bar" data-tip="<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana (MP)</div><div class='ht-line'>Spent to cast class skills and spells. Regenerates slowly over time and partly recovers when you level up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
       <span style="color:var(--mp);font-size:1.3rem;font-weight:bold;text-shadow:0 0 5px var(--mp)">MP</span>
-      <div class="bar-track"><div class="bar-fill mp-fill" id="mp-bar" style="width:100%"></div></div>
+      <div class="bar-track"><div class="bar-pending mp-pending" id="mp-pending"></div><div class="bar-fill mp-fill" id="mp-bar" style="width:100%"></div></div>
       <span id="mp-text" style="font-size:1.2rem">60/60</span>
     </div>
     <div class="stat-bar" data-tip="<div class='ht-name' style='color:var(--gold-350)'><span data-spr=ic_stun></span> Stamina</div><div class='ht-line'>Fuels Sprinting (Shift) and Dashing (Space). Drains as you exert and refills after a short pause. Might deepens the pool and speeds its recharge.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
@@ -4300,7 +4315,7 @@
       <div class="dh-top">
         <div class="dh-vital dh-hp" data-tip="<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health (HP)</div><div class='ht-line'>Your life. When it hits 0 you die. Restore it with potions, resting in town, and levelling up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="dh-vital-tag">HP</span>
-          <div class="dh-vital-track"><div class="dh-vital-fill hp" id="dh-hp-fill"></div><span class="dh-vital-val" id="dh-hp-val">100/100</span></div>
+          <div class="dh-vital-track"><div class="dh-vital-pending hp" id="dh-hp-pending"></div><div class="dh-vital-fill hp" id="dh-hp-fill"></div><span class="dh-vital-val" id="dh-hp-val">100/100</span></div>
         </div>
         <div class="dh-mid">
           <div class="dh-info">
@@ -4315,7 +4330,7 @@
           </div>
         </div>
         <div class="dh-vital dh-mp" data-tip="<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana (MP)</div><div class='ht-line'>Spent to cast class skills and spells. Regenerates slowly over time and partly recovers when you level up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
-          <div class="dh-vital-track"><div class="dh-vital-fill mp" id="dh-mp-fill"></div><span class="dh-vital-val" id="dh-mp-val">60/60</span></div>
+          <div class="dh-vital-track"><div class="dh-vital-pending mp" id="dh-mp-pending"></div><div class="dh-vital-fill mp" id="dh-mp-fill"></div><span class="dh-vital-val" id="dh-mp-val">60/60</span></div>
           <span class="dh-vital-tag">MP</span>
         </div>
       </div>
@@ -6848,8 +6863,8 @@ const ATTR_FX = {
   hpPerVit:      11,     // Vitality → max HP
   defPerVit:     0.5,    // Vitality → Defense
   hpRegenPerVit: 0.06,   // Vitality → HP regen per world beat (a slow trickle — HP is finite)
-  mpPerSpr:      5,      // Spirit → max MP
-  mpRegenPerSpr: 0.042,   // Spirit → MP regen per world beat (a slow trickle — mana runs dry)
+  mpPerSpr:      4,      // Spirit → max MP (trimmed: mana is a rationed resource now)
+  mpRegenPerSpr: 0.025,   // Spirit → MP regen per world beat (a slow trickle — mana runs dry)
   spellPerSpr:   3,      // Spirit → spell skill power (Firebolt/Mend)
   // Agility/Luck feed integer RATINGS contested against enemy level (see the
   // rating-vs-level block below). Agility drives BOTH evasion and accuracy; Luck
@@ -7166,8 +7181,8 @@ function baseMaxHp() {
   return Math.max(1, Math.round(hp));
 }
 function baseMaxMp() {
-  let mp = player.level*3.5 + totalAttr('spirit') * ATTR_FX.mpPerSpr + totalStat('MP');
-  if (player.class === 'mage') mp = mp * 1.30; // Mage: deeper mana pool
+  let mp = player.level*2.5 + totalAttr('spirit') * ATTR_FX.mpPerSpr + totalStat('MP');
+  if (player.class === 'mage') mp = mp * 1.20; // Mage: deeper mana pool
   mp = mp * (1 + skillBonus('maxMpPct') + foodFx('maxMpPct')); // skills + ramen
   return Math.max(0, Math.round(mp));
 }
@@ -7327,7 +7342,7 @@ function mpRegenPerSec() {
   // A slow trickle on purpose: mana should run dry in sustained fights so mana
   // pots stay worth quaffing. Scaled to a real per-second rate; applyRegen banks
   // the fractional per-beat share so sub-1 regen works while MP stays an integer.
-  return (0.2 + totalAttr('spirit') * ATTR_FX.mpRegenPerSpr + skillBonus('mpRegen')) * TICKS_PER_SEC;
+  return (0.15 + totalAttr('spirit') * ATTR_FX.mpRegenPerSpr + skillBonus('mpRegen')) * TICKS_PER_SEC;
 }
 
 // Every food drop shows the shared `food` pixel tile (referenced directly).
@@ -8404,7 +8419,7 @@ const SKILL_TREES = {
       {"id":"m_p21","name":"Permafrost","icon":"sk_m_cryomancy","fx":{"spell":0.02},"mod":{"skill":"m_a01","radius":1,"status":{"effect":"stun","dur":2,"chance":0.9}},"desc":"+2% spell damage/rank; Frost Shard freezes far more reliably and splashes (transforms Frost Shard).","br":1,"x":0.72,"y":0.34,"band":1,"req":["m_p01"]},
       {"id":"m_p22","name":"Arc Lightning","icon":"sk_m_spellpower","fx":{"spell":0.018},"charge":{"id":"power","max":5,"fx":{"crit":0.012}},"trigger":{"on":"crit","effect":{"charge":"power"}},"desc":"Adds +1.2% crit/Power-stack (stacks with Arcane Study) and crits grant Power; +1.8% spell/rank.","br":2,"x":0.72,"y":0.34,"band":1,"req":["m_p02"]},
       {"id":"m_p23","name":"Arcane Surge","icon":"sk_m_overflow","fx":{"maxMpPct":0.03},"charge":{"id":"power","max":6,"fx":{"spell":0.02}},"trigger":{"on":"cast","effect":{"charge":"power"}},"desc":"Power can now stack to 6 and each grants +2% extra spell; casts keep it charged. +3% mana/rank.","br":3,"x":0.72,"y":0.34,"band":1,"req":["m_p03"]},
-      {"id":"m_p24","name":"Mana Font","icon":"sk_m_wellspring","fx":{"mpRegen":1.5,"maxMpPct":0.025},"trigger":{"on":"dodge","effect":{"mana":0.1,"chance":1}},"desc":"+1.5 mana regen and +2.5% mana/rank; dodging an attack surges 10% mana back.","br":4,"x":0.72,"y":0.34,"band":1,"req":["m_p04"]},
+      {"id":"m_p24","name":"Mana Font","icon":"sk_m_wellspring","fx":{"mpRegen":1.5,"maxMpPct":0.025},"trigger":{"on":"dodge","effect":{"mana":0.04,"chance":1}},"desc":"+1.5 mana regen and +2.5% mana/rank; dodging an attack surges 4% mana back.","br":4,"x":0.72,"y":0.34,"band":1,"req":["m_p04"]},
       {"id":"m_p30","name":"Conflagration","icon":"sk_m_inferno","fx":{"spell":0.025},"cfx":{"spell":0.045},"cond":"lowhp","mod":{"skill":"m_a20","radius":1,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"+2.5% spell/rank (+4.5% while wounded); Fireball's blast grows and burns deeper (transforms Fireball, cond lowhp).","br":0,"x":0.28,"y":0.58,"band":2,"req":["m_p10"]},
       {"id":"m_p31","name":"Glacial Armor","icon":"sk_m_runeskin","fx":{"dmgTaken":0.014},"cfx":{"dodge":0.012},"cond":"casteroff","trigger":{"on":"block","effect":{"buff":{"id":"thorns","dur":3,"mag":10},"chance":1}},"desc":"-1.4% damage taken/rank (+dodge off-hand free); blocks coat you in icy thorns (cond casteroff).","br":1,"x":0.28,"y":0.58,"band":2,"req":["m_p11"]},
       {"id":"m_p32","name":"Overcharge","icon":"sk_m_overflow","fx":{"critDmg":0.05},"charge":{"id":"arcane","max":4,"fx":{"critDmg":0.1}},"trigger":{"on":"crit","effect":{"charge":"arcane"}},"desc":"Defines ARCANE (+10% crit damage/stack, max 4); your crits build Arcane. +5% crit damage/rank.","br":2,"x":0.28,"y":0.58,"band":2,"req":["m_p12"]},
@@ -8806,7 +8821,7 @@ function fireSkillTrigger(event, ctx) {
     if (fx.chance != null && Math.random() >= fx.chance) continue;
     if (fx.charge) gainCharge(fx.charge, fx.amt || 1);
     if (fx.buff) applyBuff(fx.buff.id, fx.buff.dur, fx.buff.mag);
-    if (fx.heal) { const got = Math.min(player.maxHp - player.hp, Math.round(player.maxHp * fx.heal)); if (got > 0) { player.hp += got; spawnFloatingText(player.x, player.y, `+${got}`, '#7fffaa'); } }
+    if (fx.heal) { const got = applyHeal(Math.round(player.maxHp * fx.heal), { instant: t.on === 'lowhp' }); if (got > 0) spawnFloatingText(player.x, player.y, `+${got}`, '#7fffaa'); } // emergency (lowhp) heals land instantly; incidental on-kill/on-cast slivers heal over time
     if (fx.mana) { const got = Math.min(player.maxMp - player.mp, Math.round(player.maxMp * fx.mana)); if (got > 0) { player.mp += got; } }
     if (fx.nextCrit) skillPrimed.crit = true;
     if (fx.damage && ctx && ctx.enemy && !ctx.enemy.dead) {
@@ -9949,6 +9964,14 @@ window.gameState = function gameState(radius) {
       x: player.x, y: player.y, facing: player.facing, faceDir: player.faceDir, // facing: left/right (aim); faceDir: 4-way walk facing
       name: player.name, sex: player.sex,                                        // sex drives the hero sprite (Warrior has male/female art)
       hp: player.hp, maxHp: player.maxHp, mp: player.mp, maxMp: player.maxMp,
+      // Over-time recovery: HP/MP already earned that will pay into the bars over the
+      // next few beats at a capped rate (the translucent zone on the HP/MP bars).
+      // pendingHeal = incoming HP (leech + potion sips); pendingMana = incoming MP.
+      // Instant heals (active-cast heals, emergency low-HP saves) skip this. While
+      // inCombat (a few seconds after dealing/taking damage) mana regen is halved.
+      pendingHeal: (player.pendingHeal || 0) + (player.pendingPotionHeal || 0),
+      pendingMana: player.pendingMana || 0,
+      inCombat: (player._combatSecs || 0) > 0,
       stamina: Math.round(player.stamina || 0), maxStamina: Math.round(player.maxStamina || 0), // Stamina for sprint/dash
       dashReady: (player.dashCd || 0) <= 0 && (player.stamina || 0) >= (typeof DASH_COST !== 'undefined' ? DASH_COST : 35),
       level: player.level, xp: player.xp,
@@ -10090,7 +10113,7 @@ window.gameGuide = function gameGuide(topic) {
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
-      `Health potion: ${key('healthPotion')} · Mana potion: ${key('manaPotion')} — always available (not a hoarded consumable), but they share a 5-second cooldown.`,
+      `Health potion: ${key('healthPotion')} · Mana potion: ${key('manaPotion')} — always available (not a hoarded consumable); they share a cooldown and both now restore OVER TIME (see the "healing" topic).`,
       `Town Portal: ${key('portal')} — channel a portal to town (needs 3 clean turns; any enemy hit — or moving — cancels it).`,
       `Swap weapon / gear set: ${key('swapWeapon')} — flip between loadout 1 and 2.`,
       `Bag / inventory: ${key('bag')} — opens the LOOT / GEAR / HERO / SKILLS tabs.`,
@@ -10114,8 +10137,17 @@ window.gameGuide = function gameGuide(topic) {
       `Per-hit damage is capped at roughly 1/4 of a normal foe's max HP (1/6 elite, 1/9 boss), so against bosses sustained DPS and skills (which cap higher) matter more than one big swing.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
-      `Defense / block / damage-reduction come from gear, the Vitality attribute, and your class passive. Heal with ${key('healthPotion')} when low (shares the 5s potion cooldown).`,
+      `Defense / block / damage-reduction come from gear, the Vitality attribute, and your class passive. Healing is now OVER TIME (a pending pool that fills the bar on a slope, shown as a translucent zone) — sip ${key('healthPotion')} EARLY rather than at zero; see the "healing" topic.`,
       `Swap loadouts with ${key('swapWeapon')} to switch between, say, a ranged kite set and a melee finisher.`,
+    ],
+    healing: [
+      `RECOVERY IS OVER TIME, not instant. Most healing no longer snaps HP up — it fills a PENDING pool that pays into HP at a capped rate (~12%/s of max HP per source), so the bar climbs on a visible slope. gameState().player.pendingHeal is the HP still owed; the HP/MP bars show it as a translucent zone ahead of the solid fill.`,
+      `OVER-TIME sources STACK (a potion sip pays out on top of any pending leech): the Health Potion, all life leech / lifesteal, Scythe Reap, Vampiric, Life-on-Kill, and incidental on-kill / on-cast "sliver" heals.`,
+      `INSTANT sources land immediately, as before: deliberate active HEAL skills you cast (e.g. Divine Storm, Final Judgment, Blood Drinker) and EMERGENCY low-HP triggers (a passive that heals when you drop below 25% HP). A skill's detail card tags which kind it grants (heal — instant / leech — over time).`,
+      `The Health Potion mends 35% of max HP over a few seconds (Potency raises the amount; shared 6s cooldown, down to 2s via Recharge). It is INTERRUPTIBLE: one DIRECT hit above 18% of max HP spills half the remaining sip ("SIP SPILLED"). Damage-over-time (lava/poison/burn) never interrupts it, and earned leech is never interrupted — only the potion sip is fragile.`,
+      `Because you can no longer burst back to full, don't wait until you're low: sip EARLY, keep moving, and let the pending pool refill the slope while you avoid the next hit.`,
+      `MANA is a RATIONED resource now: a smaller pool (less MP per Spirit, lower base), higher skill costs, and slower regen — and MP regen is HALVED while you're "in combat" (a few seconds after dealing or taking damage — gameState().player.inCombat), so sustained casting genuinely drains you.`,
+      `The Mana Potion restores 40% of max MP OVER TIME (gameState().player.pendingMana shows MP still incoming) and shares the health potion's cooldown — so quaffing mana means forgoing a heal, a real triage choice. Mana Shield converts damage to MP more efficiently the more you invest in it. Carry mana potions if you lean on spells.`,
     ],
     skills: [
       `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready.`,
@@ -10233,6 +10265,7 @@ window.gameGuide = function gameGuide(topic) {
     character: 'character', creation: 'character', create: 'character', sex: 'character', gender: 'character', male: 'character', female: 'character', name: 'character', naming: 'character', newgame: 'character', body: 'character',
     shop: 'town', merchant: 'town', craft: 'town', crafting: 'town', forge: 'town', ramen: 'town', mystic: 'town', stash: 'town', portal: 'town',
     control: 'controls', key: 'controls', keys: 'controls', keybind: 'controls', keybinds: 'controls', keybinding: 'controls',
+    heal: 'healing', healing: 'healing', recovery: 'healing', regen: 'healing', regeneration: 'healing', potion: 'healing', potions: 'healing', mana: 'healing', mp: 'healing', leech: 'healing', lifesteal: 'healing', overtime: 'healing', pending: 'healing', hp: 'healing', hitpoints: 'healing', sustain: 'healing',
     drive: 'driving', driving: 'driving', api: 'driving', act: 'driving', acting: 'driving', input: 'driving',
     tip: 'tips', strategy: 'tips', help: 'overview', start: 'overview', intro: 'overview', goal: 'overview',
   };
@@ -11404,6 +11437,15 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "big", v: "Healing over time & rationed mana", by: "Claude", notes: [
+    "Healing now pays out OVER TIME instead of snapping the bar up — potions, life leech, Reap, Vampiric and Life-on-Kill fill a pending pool that mends you on a steady slope.",
+    "The HP/MP bars show incoming recovery as a translucent zone, so current health, incoming heal and missing health all read at a glance.",
+    "Sources stack: a potion sip heals on top of any pending leech.",
+    "Health potion mends 35% over a few seconds and is interruptible — a heavy direct hit spills half the sip; damage-over-time never interrupts it.",
+    "Deliberate active heals and emergency low-HP saves still land instantly; skill cards now tag heals as Instant or Over time.",
+    "Mana is now rationed: smaller pool, pricier skills, slower regen, and regen halves while in combat — so mana potions (also over time) finally matter.",
+    "Mana Shield converts damage to mana more efficiently the more you invest in it.",
+  ] },
   { date: "2026-07-02", size: "medium", v: "Pixel icons everywhere — no emoji fallbacks", by: "Claude", notes: ["Every game icon — items, gear, materials, food, currencies, HP/MP, enemies, bosses, NPCs, pets, summons, class & attribute icons, world features, status markers — now renders its pixel sprite directly instead of routing through an emoji. Removed the runtime emoji-to-sprite converter and every emoji fallback: the atlas is always drawn.", "Attribute icons now fit: Might shows a power tile and Luck a shine (were a warrior and a chest).", "Purely decorative header glyphs with no matching sprite are left as-is."] },
   { date: "2026-07-02", size: "small", v: "Volume tiles step up", by: "Claude", notes: ["Tapping the MUSIC or SFX tile now raises the volume a notch instead of lowering it; it wraps from full back to off."] },
   { date: "2026-07-02", size: "small", v: "Stairs arrow toggle", by: "Claude", notes: ["Toggle the off-screen down-stairs arrow in Settings → Visuals (on by default).", "Choice syncs across devices when signed in."] },
@@ -12800,7 +12842,7 @@ function updateTraps(dt) {
         if (tr.dmgCd <= 0) {
           const dmg = Math.max(1, mitigateDamage(tr.dmg, dungeonLevel));
           player.hp = Math.max(1, player.hp - dmg);   // vents singe but never kill outright (like lava)
-          notePlayerDamage(dmg, 'fire vent');
+          notePlayerDamage(dmg, 'fire vent', true);
           spawnFloatingText(player.x, player.y, `${dmg}`, '#ff7733');
           spawnParticles(player.x, player.y, '#ff7733', 5, 0.09);
           tr.dmgCd = 0.5; updateBars();
@@ -16653,7 +16695,7 @@ function affixStatValue(stat, lvl, mult) {
 // `per` is the growth and `cap` the per-roll ceiling.
 const AFFIX_CURVES = {
   ATK:{flat:1}, DEF:{flat:1}, SPD:{flat:1}, HP:{flat:6}, MP:{flat:3.4}, REGEN:{flat:0.2},
-  THORNS:{flat:0.7}, HPKILL:{flat:0.7}, MPKILL:{flat:0.5},
+  THORNS:{flat:0.7}, HPKILL:{flat:0.7}, MPKILL:{flat:0.35},
   // Chance/avoidance stats are flat RATINGS now (scale with item level, no cap):
   // they feed the rating-vs-level curves in combat instead of being a flat %.
   CRIT:{flat:1.0}, LCK:{flat:1.0}, DODGE:{flat:1.0}, BLOCK:{flat:1.2}, DR:{flat:0.8}, ACC:{flat:1.8},
@@ -19207,7 +19249,7 @@ function tickStatusEffects() {
       if (pulse && s.effect === 'poison') {
         const dmg = 2 + dungeonLevel;
         player.hp = Math.max(1, player.hp - dmg);
-        notePlayerDamage(dmg, 'poison');
+        notePlayerDamage(dmg, 'poison', true);
         spawnFloatingText(player.x, player.y, `${dmg}`, '#44dd44');
         log(`<span data-spr=potion_g></span> Poison deals ${dmg} damage!`);
         updateBars();
@@ -19215,7 +19257,7 @@ function tickStatusEffects() {
       if (pulse && s.effect === 'burn') {
         const dmg = 4 + Math.round(dungeonLevel * 1.5);
         player.hp = Math.max(1, player.hp - dmg);
-        notePlayerDamage(dmg, 'burning');
+        notePlayerDamage(dmg, 'burning', true);
         spawnFloatingText(player.x, player.y, `${dmg}`, '#ff8a3a');
         log(`<span data-spr=ic_fire></span> Burning deals ${dmg} damage!`);
         updateBars();
@@ -19909,6 +19951,11 @@ function tickPact() {
 // max HP. Banks the per-beat share (rate × WORLD_TICK_SECONDS) so the actual heal
 // rate matches the per-second number shown on the HERO sheet.
 function applyRegen() {
+  // In-combat mana gate: dealing/taking damage keeps you "in combat" for a few real
+  // seconds, during which mana regen is halved — so a spender can't refill mid-fight.
+  if (player._combatSecs > 0) player._combatSecs = Math.max(0, player._combatSecs - WORLD_TICK_SECONDS);
+  // Over-time recovery: pending heal/mana pools pay out into the live bars this beat.
+  drainPendingRecovery();
   // Vitality grants passive HP regen on top of any REGEN rolled on gear. The
   // per-beat share is fractional, so bank it in an accumulator and only ever add
   // whole points to player.hp (keeps the HP readout a clean integer).
@@ -19924,8 +19971,10 @@ function applyRegen() {
   }
   // Mana trickles back each beat (faster with Spirit) so staff bolts stay usable.
   // The per-beat share is fractional, so bank it in an accumulator and only ever
-  // add whole points to player.mp (keeps the MP readout an integer).
-  const mr = mpRegenPerSec() * WORLD_TICK_SECONDS;
+  // add whole points to player.mp (keeps the MP readout an integer). Halved while
+  // in combat (see the gate above), so sustained casting genuinely drains you.
+  const gate = player._combatSecs > 0 ? MANA_COMBAT_REGEN_MULT : 1;
+  const mr = mpRegenPerSec() * WORLD_TICK_SECONDS * gate;
   if (player.hp > 0 && player.mp < player.maxMp && mr > 0) {
     player._mpAcc = (player._mpAcc || 0) + mr;
     const whole = Math.floor(player._mpAcc);
@@ -19935,6 +19984,104 @@ function applyRegen() {
       updateBars();
     }
   }
+}
+
+// ══════════════════════════════════════════
+// OVER-TIME RECOVERY  (pending heal / mana pools)
+// ══════════════════════════════════════════
+// Most healing no longer snaps HP up instantly — it deposits into a PENDING pool
+// that pays out into real HP at a capped %/s rate, so the bar climbs on a legible
+// slope instead of teleporting. Sources STACK: a potion sip pays out alongside any
+// pending leech, and healing keeps ticking after you disengage. Deliberate active
+// heals and emergency low-HP saves stay INSTANT (they bypass this via applyHeal's
+// instant flag). The potion's share sits in its own sub-pool so a heavy DIRECT hit
+// can interrupt the sip (potion-only) without touching earned leech. The pending
+// amounts are shown as a translucent zone on the HP/MP bars (see updateBars).
+const HEAL_DRAIN_PCT = 0.12;         // pending HP pays out at 12%/s of max HP (per pool)
+const MANA_DRAIN_PCT = 0.16;         // pending MP pays out at 16%/s of max MP
+const POTION_INTERRUPT_FRAC = 0.18;  // a single direct hit above this % of max HP halves pending potion healing
+const COMBAT_GATE_SECS = 3;          // "in combat" window (real seconds) after dealing/taking damage
+const MANA_COMBAT_REGEN_MULT = 0.5;  // mana regen multiplier while in combat
+
+// Total HP still owed by the over-time pools (for the bar overlay + guards).
+function pendingHealTotal() { return (player.pendingHeal || 0) + (player.pendingPotionHeal || 0); }
+
+// Deposit HP healing into the over-time pool. isPotion routes into the interruptible
+// sub-pool. Returns the amount queued (for floating text / logs).
+function queueHeal(amount, isPotion) {
+  amount = Math.round(amount);
+  if (!(amount > 0)) return 0;
+  if (isPotion) player.pendingPotionHeal = (player.pendingPotionHeal || 0) + amount;
+  else player.pendingHeal = (player.pendingHeal || 0) + amount;
+  // Never bank more than a full bar of owed healing (trim non-potion first).
+  let over = pendingHealTotal() - player.maxHp;
+  if (over > 0) {
+    const trim = Math.min(over, player.pendingHeal || 0);
+    player.pendingHeal = (player.pendingHeal || 0) - trim; over -= trim;
+    if (over > 0) player.pendingPotionHeal = Math.max(0, (player.pendingPotionHeal || 0) - over);
+  }
+  return amount;
+}
+// Deposit MP into the over-time pool (mana potion). Returns the amount queued.
+function queueMana(amount) {
+  amount = Math.round(amount);
+  if (!(amount > 0)) return 0;
+  player.pendingMana = Math.min(player.maxMp, (player.pendingMana || 0) + amount);
+  return amount;
+}
+// Route a heal INSTANT or OVER-TIME. opts.instant lands now (active-cast heals,
+// emergency low-HP saves); otherwise it queues (opts.potion → interruptible pool).
+// Returns the amount applied/queued so callers can show floating text.
+function applyHeal(amount, opts) {
+  amount = Math.round(amount);
+  if (!(amount > 0)) return 0;
+  opts = opts || {};
+  if (opts.instant) {
+    const got = Math.min(amount, player.maxHp - player.hp);
+    if (got > 0) player.hp += got;
+    return Math.max(0, got);
+  }
+  return queueHeal(amount, opts.potion);
+}
+// Drain one pending pool into its live stat at a capped %/s rate. The accumulator
+// keeps sub-1 rates working while the readout stays integer. Returns [cur, pending, acc].
+function drainPool(cur, max, pending, acc, ratePct) {
+  if (cur >= max || pending <= 0) return [cur, 0, 0]; // topped off / empty — discard any owed recovery
+  acc = (acc || 0) + max * ratePct * WORLD_TICK_SECONDS;
+  const pay = Math.min(Math.floor(acc), pending, max - cur);
+  if (pay > 0) { acc -= pay; cur += pay; pending -= pay; }
+  return [cur, pending, acc];
+}
+// Pay out all pending recovery for one world beat (called from applyRegen). No-ops
+// (and skips the bar refresh) once every pool is empty.
+function drainPendingRecovery() {
+  if (pendingHealTotal() + (player.pendingMana || 0) <= 0) return;
+  if (player.hp > 0) {
+    let a = drainPool(player.hp, player.maxHp, player.pendingHeal || 0, player._healAcc, HEAL_DRAIN_PCT);
+    player.hp = a[0]; player.pendingHeal = a[1]; player._healAcc = a[2];
+    let b = drainPool(player.hp, player.maxHp, player.pendingPotionHeal || 0, player._potHealAcc, HEAL_DRAIN_PCT);
+    player.hp = b[0]; player.pendingPotionHeal = b[1]; player._potHealAcc = b[2];
+  }
+  let m = drainPool(player.mp, player.maxMp, player.pendingMana || 0, player._manaAcc, MANA_DRAIN_PCT);
+  player.mp = m[0]; player.pendingMana = m[1]; player._manaAcc = m[2];
+  updateBars();
+}
+// Flag the hero as "in combat" (halves mana regen for a few seconds).
+function noteCombat() { player._combatSecs = COMBAT_GATE_SECS; }
+// A heavy DIRECT hit interrupts an in-progress potion sip (potion-only): it halves
+// the still-pending potion healing. DoT ticks don't call this, so lava/poison/bleed
+// never spills a sip. Earned leech (the other pool) is untouched.
+function notePotionInterrupt(dmg) {
+  if (dmg > player.maxHp * POTION_INTERRUPT_FRAC && (player.pendingPotionHeal || 0) > 0) {
+    player.pendingPotionHeal = Math.floor(player.pendingPotionHeal * 0.5);
+    spawnFloatingText(player.x, player.y - 0.3, 'SIP SPILLED', '#ff9db0');
+  }
+}
+// Clear all pending recovery (on death/revive so a corpse's owed leech doesn't heal
+// the hero the instant they come back).
+function clearPendingRecovery() {
+  player.pendingHeal = 0; player.pendingPotionHeal = 0; player.pendingMana = 0;
+  player._healAcc = 0; player._potHealAcc = 0; player._manaAcc = 0;
 }
 
 // ══════════════════════════════════════════
@@ -20491,7 +20638,7 @@ function onEnterCell(nx, ny) {
   if (tile === 7) {
     const burn = Math.round(4 + dungeonLevel * 1.5 + player.maxHp * 0.05);
     player.hp = Math.max(1, player.hp - burn);
-    notePlayerDamage(burn, 'lava');
+    notePlayerDamage(burn, 'lava', true);
     spawnFloatingText(player.x, player.y, `${burn}`, '#ff7733');
     log(`<span data-spr=ic_fire></span> The lava scorches you for ${burn}!`, 'important');
     updateBars();
@@ -20714,8 +20861,10 @@ function lifestealHeal(amount) {
   // Life leech: lifesteal passives + gear Life Leech % (+ any lifesteal buff).
   const ls = (skillBonus('lifesteal') + buffMag('lifestealUp') + totalStat('LEECH') / 100 + foodFx('lifesteal')) * lsMult; // + Vampire/Tonkotsu ramen
   if (ls > 0 && player.hp < player.maxHp) {
-    const got = Math.min(Math.max(1, Math.round(amount * ls)), player.maxHp - player.hp, lsCap);
-    if (got > 0) { player.hp += got; spawnFloatingText(player.x, player.y, `+${got}`, '#ff6688'); }
+    // Leech is a RATE, not a burst: bank the per-swing amount and let it pay out
+    // over time (queueHeal), so a big AoE hit no longer snaps the bar up in one frame.
+    const got = Math.min(Math.max(1, Math.round(amount * ls)), lsCap);
+    if (got > 0) { queueHeal(got); spawnFloatingText(player.x, player.y, `+${got}`, '#ff6688'); }
   }
   // Mana leech: gear Mana Leech % restores MP from damage dealt (also capped).
   const mlCap = Math.max(1, Math.round(player.maxMp * 0.12));
@@ -20726,14 +20875,18 @@ function lifestealHeal(amount) {
   }
 }
 
-// Mana Shield (Mage passive): divert part of an incoming hit onto your MP pool
-// at 2 MP per 1 HP. Returns the HP damage that gets through after absorption.
+// Mana Shield (Mage passive): divert part of an incoming hit onto your MP pool.
+// The conversion IMPROVES with investment now that mana is scarce — 2.0 MP:1 HP at
+// low investment down to 1.6 MP:1 HP at full (0.8) mana-shield — so a committed
+// caster gets more mitigation per point of mana spent. Returns the HP damage that
+// gets through after absorption.
 function absorbWithMana(dmg) {
   const frac = Math.min(0.8, skillBonus('manaShield'));
   if (frac <= 0 || player.mp <= 0) return dmg;
-  const absorbed = Math.min(Math.floor(dmg * frac), Math.floor(player.mp / 2));
+  const ratio = 2.0 - 0.4 * (frac / 0.8);            // 2.0 → 1.6 MP per 1 HP as investment climbs
+  const absorbed = Math.min(Math.floor(dmg * frac), Math.floor(player.mp / ratio));
   if (absorbed <= 0) return dmg;
-  player.mp -= absorbed * 2;
+  player.mp = Math.max(0, player.mp - Math.round(absorbed * ratio));
   spawnFloatingText(player.x, player.y - 0.3, `<span data-spr=ic_orb></span>${absorbed}`, '#7d9bff');
   return Math.max(0, dmg - absorbed);
 }
@@ -20824,6 +20977,7 @@ function armorPenFrac() {
 // died (rewards handled by onEnemyDefeated).
 function dealDamage(e, dmg, isCrit) {
   if (e.dead) return true;
+  noteCombat();   // trading blows keeps you "in combat", gating mana regen (see applyRegen)
   if (e.shieldT > 0) dmg = Math.max(1, Math.round(dmg * 0.5)); // boss ward halves the blow
   // Vulnerable (cursed/marked) foes take amplified damage from every source.
   if (statusEffects.some(s => s.target === e && s.effect === 'vuln')) dmg = Math.round(dmg * 1.35);
@@ -20831,8 +20985,8 @@ function dealDamage(e, dmg, isCrit) {
   // Vampiric (item power): siphon a slice of the damage dealt back as health.
   const vamp = itemPowerCount('vampiric');
   if (vamp && player.hp < player.maxHp) {
-    const got = Math.min(Math.max(1, Math.round(dmg * 0.05 * vamp)), player.maxHp - player.hp);
-    if (got > 0) { player.hp += got; spawnFloatingText(player.x, player.y - 0.3, `+${got}`, '#ff6a8a'); }
+    const got = Math.max(1, Math.round(dmg * 0.05 * vamp));
+    if (got > 0) { queueHeal(got); spawnFloatingText(player.x, player.y - 0.3, `+${got}`, '#ff6a8a'); } // over-time
   }
   // Treasure Goblin: the FIRST hit starts a getaway timer. Burst it down before
   // the clock runs out (see goblinFlee) or it vanishes with its hoard.
@@ -20926,8 +21080,7 @@ function onEnemyDefeated(e) {
   // Life/Mana on Kill (gear): a flat top-up every time a foe falls.
   const hpKill = totalStat('HPKILL');
   if (hpKill > 0 && player.hp < player.maxHp) {
-    const got = Math.min(hpKill, player.maxHp - player.hp);
-    if (got > 0) { player.hp += got; spawnFloatingText(player.x, player.y, `+${got}`, '#ff6688'); }
+    if (hpKill > 0) { queueHeal(hpKill); spawnFloatingText(player.x, player.y, `+${hpKill}`, '#ff6688'); } // over-time
   }
   const mpKill = totalStat('MPKILL');
   if (mpKill > 0 && player.mp < player.maxMp) {
@@ -21168,8 +21321,8 @@ function attackEnemy(e, opts = {}) {
   // a fraction of max HP per swing (like lifesteal) so it can't out-heal a boss.
   if (style === 'reap' && dealtTotal > 0 && player.hp < player.maxHp) {
     const reapCap = Math.max(1, Math.round(player.maxHp * 0.15));
-    const got = Math.min(Math.max(1, Math.round(dealtTotal * 0.25)), player.maxHp - player.hp, reapCap);
-    if (got > 0) { player.hp += got; spawnFloatingText(player.x, player.y, `+${got}`, '#7fffaa'); }
+    const got = Math.min(Math.max(1, Math.round(dealtTotal * 0.25)), reapCap);
+    if (got > 0) { queueHeal(got); spawnFloatingText(player.x, player.y, `+${got}`, '#7fffaa'); } // over-time
   }
 
   // Bloodthirst (Warrior passive): heal a slice of all damage dealt this swing.
@@ -21413,10 +21566,11 @@ function rankScale(rank) { return (1 + 0.12 * ((rank || 1) - 1)) * (1 + mileston
 // BEFORE gear Mana Cost Reduction (which castSkillById layers on at cast time).
 // Rank 0 (not yet learned) previews the rank-1 cost.
 const MANA_PER_RANK = 0.08; // +8% of base mana per rank above the first
+const SKILL_MP_MULT = 1.5;  // global mana-cost multiplier (mana is rationed — spells cost more)
 function skillManaCost(node, rank) {
   if (!node || !node.mp) return 0;
   const r = Math.max(1, rank || 1);
-  return Math.max(1, Math.round(node.mp * (1 + MANA_PER_RANK * (r - 1))));
+  return Math.max(1, Math.round(node.mp * SKILL_MP_MULT * (1 + MANA_PER_RANK * (r - 1))));
 }
 
 // Base physical magnitude for weapon actives (a normal swing's raw number, plus
@@ -21675,8 +21829,8 @@ function resolveCast(node, rank) {
     // you off the pack it just hit; Warded Halls dampen it further.
     const lsMult = (floorMod && floorMod.lifestealMult) || 1;
     const cap = Math.max(1, Math.round(player.maxHp * 0.15));
-    const got = Math.min(Math.round(total * c.lifesteal * lsMult), player.maxHp - player.hp, cap);
-    if (got > 0) { player.hp += got; spawnFloatingText(player.x, player.y, `+${got}`, '#ff6688'); }
+    const got = Math.min(Math.round(total * c.lifesteal * lsMult), cap);
+    if (got > 0) { queueHeal(got); spawnFloatingText(player.x, player.y, `+${got}`, '#ff6688'); } // active-skill leech pays out over time
   }
   if (c.heal) {
     let heal = 0;
@@ -22289,7 +22443,7 @@ function tickBossHazards() {
     player._fireBurnAt = Date.now();
     const burn = Math.max(1, mitigateDamage(fire.dmg, dungeonLevel));
     player.hp = Math.max(1, player.hp - burn);
-    notePlayerDamage(burn, 'wall of flame');
+    notePlayerDamage(burn, 'wall of flame', true);
     spawnFloatingText(player.x, player.y, `${burn}`, '#ff7733');
     spawnParticles(player.x, player.y, '#ff7733', 5, 0.08);
     log(`<span data-spr=ic_fire></span> You stand in the flames for ${burn}!`);
@@ -22800,8 +22954,10 @@ function lastStandLog() {
 // exactly what killed them and what wore them down. Self-prunes to a recent window;
 // the last entry before a lethal blow is the killing hit.
 let dmgTaken = [];
-function notePlayerDamage(amount, label) {
+function notePlayerDamage(amount, label, isDoT) {
   if (!(amount > 0) || !label) return;
+  noteCombat();                             // any damage keeps you "in combat" (halves mana regen)
+  if (!isDoT) notePotionInterrupt(amount);  // a heavy DIRECT hit spills a pending potion sip; DoT never does
   const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
   dmgTaken.push({ label: String(label), amount: Math.round(amount), t: now });
   const cutoff = now - 25000;            // keep ~25s of history
@@ -22826,6 +22982,7 @@ function deathSummaryLines() {
 function handleDeath() {
   clearGreed(); updateObjectiveChip();   // death breaks the streak & clears floor state
   resetPortal();   // a killing blow always collapses any half-formed town portal + its timer
+  clearPendingRecovery();   // owed over-time leech/potion doesn't heal a corpse (or a Last-Stand/revive rise)
   // Last Stand: once per floor, a killing blow leaves you clinging to 1 HP
   // instead of dying. It's free (no buff burned) so it triggers before the
   // Phoenix bowl below, saving that revive for a later death.
@@ -23383,6 +23540,14 @@ function renderStatusStrip() {
 }
 function updateBars() {
   renderStaminaBar();
+  // Over-time recovery overlay helper: the pending element spans 0 → (current% +
+  // pending%), so the translucent band shows only in the gap ahead of the solid fill.
+  const setPending = (id, cur, max, pend) => {
+    const el = document.getElementById(id); if (!el) return;
+    const curPct = max > 0 ? Math.max(0, Math.min(100, cur / max * 100)) : 0;
+    const pendPct = max > 0 ? Math.max(0, Math.min(100 - curPct, pend / max * 100)) : 0;
+    el.style.width = (curPct + pendPct) + '%';
+  };
   const hpBar = document.getElementById('hp-bar');
   hpBar.style.width = (player.hp/player.maxHp*100)+'%';
   document.getElementById('hp-text').textContent = `${player.hp}/${player.maxHp}`;
@@ -23392,6 +23557,8 @@ function updateBars() {
   if (hpBar.parentElement) hpBar.parentElement.classList.toggle('hp-low-track', hpLow);
   document.getElementById('mp-bar').style.width = (player.mp/player.maxMp*100)+'%';
   document.getElementById('mp-text').textContent = `${player.mp}/${player.maxMp}`;
+  setPending('hp-pending', player.hp, player.maxHp, pendingHealTotal());
+  setPending('mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
   document.getElementById('gold-count').textContent = fmtGold(player.gold);
 
   // ── Desktop bottom HUD (web layout only): big flanking HP/MP bars, the
@@ -23404,6 +23571,8 @@ function updateBars() {
     const dhMp = document.getElementById('dh-mp-fill');
     if (dhMp) dhMp.style.width = Math.max(0, Math.min(100, player.mp / player.maxMp * 100)) + '%';
     dset('dh-mp-val', `${player.mp}/${player.maxMp}`);
+    setPending('dh-hp-pending', player.hp, player.maxHp, pendingHealTotal());
+    setPending('dh-mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
     const dhXp = document.getElementById('dh-xp-fill');
     if (dhXp) dhXp.style.width = Math.min(100, player.xp / xpForLevel(player.level) * 100) + '%';
     dset('dh-xp-lvl', 'Lv ' + player.level);
@@ -23571,7 +23740,7 @@ function updateBars() {
 // cooldown, so you can't spam them — after a sip both flasks recharge over a few
 // real seconds. Health potions restore a percentage of max HP so they scale with
 // you instead of becoming useless at high levels.
-const HEAL_PERCENT = 0.25;     // a sip mends 25% of max HP — sustain, not a reset
+const HEAL_PERCENT = 0.35;     // a sip mends 35% of max HP, paid out OVER TIME (not an instant reset)
 const POTION_CD = 6;            // shared cooldown — 6 real seconds between sips
 function healPotionAmount() { return Math.max(1, Math.round(player.maxHp * potionHealPct())); }
 function potionReady() { return (player.potionCd || 0) <= 0; }
@@ -23580,26 +23749,24 @@ function useHealthPotion() {
   if (portalChanneling()) return;   // held while a town portal channels (tap TOWN to break off)
   if (!potionReady()) { log(`⏳ Potions recharge — ${Math.ceil(player.potionCd)}s left.`); return; }
   if (player.hp >= player.maxHp) { log('Already at full health.'); return; }
-  const heal = Math.min(player.maxHp - player.hp, healPotionAmount());
-  player.hp += heal;
+  const amt = queueHeal(healPotionAmount(), true); // over-time, interruptible sip (a heavy direct hit spills it)
   sfx('potion');
-  log(`<span data-spr=ic_heart></span> Quaffed a ${logPotion('Health Potion')}. +${heal} HP`, 'loot');
+  log(`<span data-spr=ic_heart></span> Quaffed a ${logPotion('Health Potion')} — mending ${amt} HP over a few seconds.`, 'loot');
   spendPotionTurn();
 }
 
 // Mana potions restore a fraction of max MP (so they scale with you) rather than
 // a flat pool — kept deliberately modest so mana stays a resource you ration.
-const MANA_PERCENT = 0.25;
+const MANA_PERCENT = 0.40;     // a sip restores 40% of max MP, paid out OVER TIME
 function manaPotionAmount() { return Math.max(10, Math.round(player.maxMp * potionManaPct())); }
 function useManaPotion() {
   if (inTown) return;               // potions are locked in town (see renderSkillBar) — no free refills
   if (portalChanneling()) return;   // held while a town portal channels (tap TOWN to break off)
   if (!potionReady()) { log(`⏳ Potions recharge — ${Math.ceil(player.potionCd)}s left.`); return; }
   if (player.mp >= player.maxMp) { log('Already at full mana.'); return; }
-  const restore = Math.min(player.maxMp - player.mp, manaPotionAmount());
-  player.mp += restore;
+  const amt = queueMana(manaPotionAmount()); // over-time restore
   sfx('potion');
-  log(`<span data-spr=ui_mp></span> Quaffed a ${logPotion('Mana Potion')}. +${restore} MP`, 'loot');
+  log(`<span data-spr=ui_mp></span> Quaffed a ${logPotion('Mana Potion')} — restoring ${amt} MP over a few seconds.`, 'loot');
   spendPotionTurn();
 }
 
@@ -24275,6 +24442,7 @@ function renderSkills(el) {
     pop = `<div class="sk-pop" id="sk-pop">
       <b>${dlIcon(sn.icon,18)||''} ${sn.name}</b>${rankTxt}
       <div class="ty">${typeTxt}</div>
+      ${skillRecoveryTag(sn)}
       <div class="ds">${sn.desc}</div>
       ${skillMechHtml(sn)}
       ${ruHtml}
@@ -24343,6 +24511,23 @@ function skillLoadoutTrayHtml() {
     <div class="lt-title"><span data-spr=ic_stun></span> Skill slots <span class="lt-hint">drag a learned skill in · drag to rearrange · drag out to remove · tap to edit</span></div>
     <div class="lt-row">${manual}<span class="lt-sep" aria-hidden="true"></span>${autoCell}</div>
   </div>`;
+}
+
+// Recovery-type tag for the skill detail card: does this node's healing land
+// INSTANTLY (deliberate active heals, emergency low-HP saves) or pay out OVER TIME
+// (leech and incidental sliver heals) — mirroring the over-time recovery system so
+// the player can tell at a glance which kind of sustain a skill grants.
+function skillRecoveryTag(n) {
+  if (!n) return '';
+  const c = n.cast, tr = (n.trigger && n.trigger.effect) || null, tags = [];
+  if (c && c.heal) tags.push('heal — instant');
+  if (c && c.lifesteal) tags.push('leech — over time');
+  if (n.fx && n.fx.lifesteal) tags.push('leech — over time');
+  if (tr && tr.heal) tags.push(n.trigger.on === 'lowhp' ? 'emergency heal — instant' : 'heal — over time');
+  if (tr && tr.mana) tags.push('mana — instant');
+  if (!tags.length) return '';
+  const seen = {}, uniq = tags.filter(t => (seen[t] ? false : (seen[t] = true)));
+  return `<div class="sk-recov"><span data-spr=ic_heart></span> ${uniq.join(' · ')}</div>`;
 }
 
 // A short human label for an active's targeting shape, shown in its popover.
@@ -24684,8 +24869,8 @@ function renderSkillBar() {
   const urgent = !town && potReady && player.hp < player.maxHp * 0.35;
   const healHint = town ? 'locked in town' : (touchUI() ? 'tap to drink' : 'press ' + kbLabel('healthPotion'));
   const manaHint = town ? 'locked in town' : (touchUI() ? 'tap to drink' : 'press ' + kbLabel('manaPotion'));
-  const healTip = `<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health Potion</div><div class='ht-line'>${town ? 'Saved for the dungeon — rest in town to heal for free instead.' : 'Quaff to restore a burst of health.'}</div><div class='ht-sub'>${healHint}${town ? '' : ` · ${effectivePotionCd()}-second cooldown`}</div>`;
-  const manaTip = `<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana Potion</div><div class='ht-line'>${town ? 'Saved for the dungeon — rest in town to refill for free instead.' : 'Quaff to restore a burst of mana.'}</div><div class='ht-sub'>${manaHint}${town ? '' : ` · ${effectivePotionCd()}-second cooldown`}</div>`;
+  const healTip = `<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health Potion</div><div class='ht-line'>${town ? 'Saved for the dungeon — rest in town to heal for free instead.' : 'Mends health <b>over a few seconds</b> — a heavy direct hit spills the rest of the sip.'}</div><div class='ht-sub'>${healHint}${town ? '' : ` · over time · ${effectivePotionCd()}-second cooldown`}</div>`;
+  const manaTip = `<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana Potion</div><div class='ht-line'>${town ? 'Saved for the dungeon — rest in town to refill for free instead.' : 'Restores mana <b>over a few seconds</b>.'}</div><div class='ht-sub'>${manaHint}${town ? '' : ` · over time · ${effectivePotionCd()}-second cooldown`}</div>`;
   const cdDial = (key) => `<span class="sb-cd" data-cd="${key}"></span>`;
   const healBtn = `<button class="skillbar-btn potion ${town ? 'town-locked' : (potReady && !hpFull ? 'ready' : 'empty')} ${urgent ? 'urgent' : ''} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} ${town ? '' : 'onclick="useHealthPotion()"'}>
       <span class="sb-key">${kbShort(kbLabel('healthPotion'))}</span><span class="sb-icon">${HEAL_POTION_SVG}</span><span class="sb-info" id="heal-label">${pcd > 0 ? Math.ceil(pcd) + 's' : ''}</span>${cdDial('pot')}
