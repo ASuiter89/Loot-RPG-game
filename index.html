@@ -4272,7 +4272,7 @@
   <div class="hud-item" id="power-hud" data-tip="<div class='ht-name'><span data-spr='ui_power'></span> Power</div><div class='ht-line'>A rough measure of your overall strength, combining your level, equipped gear, attributes and skills.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr="ui_power"></span> <span class="hud-val" id="power-num">0</span></div>
   <div class="hud-item" id="pact-hud" style="display:none" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">🔮 <span class="hud-val" id="pact-num"></span></div>
   <div class="hud-item" id="food-hud" style="display:none" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"></div>
-  <div id="gold-display" data-tip="<div class='ht-name' style='color:var(--gold)'>💰 Gold</div><div class='ht-line'>The dungeon's main currency. Spend it at the town shops, the Forge, the Enchanter, and the Stash.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">💰 <span id="gold-count">0</span>g</div>
+  <div id="gold-display" data-tip="<div class='ht-name' style='color:var(--gold)'>💰 Gold</div><div class='ht-line'>The dungeon's main currency. Spend it at the town shops, the Forge, the Enchanter, and the Stash.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">💰 <span id="gold-count">0</span></div>
   <!-- Touch-only ⚙️ gear: opens Settings on mobile (where there's no Esc key).
        Hidden on desktop, which uses Esc and hides the whole header anyway. -->
   <button id="settings-gear" onclick="toggleSettingsMenu(event)" aria-label="Settings" title="Settings">⚙️</button>
@@ -6586,7 +6586,7 @@ function spendCost(cost) {
 }
 function costLabel(cost) {
   const parts = [];
-  if (cost.gold) parts.push(`${cost.gold}g`);
+  if (cost.gold) parts.push(`💰${cost.gold}`);
   for (const k of CRAFT_MAT_KEYS) if (cost[k]) parts.push(`${cost[k]}${CRAFT_MATERIALS[k].emoji}`);
   return parts.join('  ');
 }
@@ -6599,7 +6599,7 @@ function costLabelHi(cost) {
   const parts = [];
   if (cost.gold) {
     const short = (cost.gold || 0) > player.gold;
-    parts.push(`<span class="${short ? 'cost-short' : ''}">${cost.gold}g</span>`);
+    parts.push(`<span class="${short ? 'cost-short' : ''}">💰${cost.gold}</span>`);
   }
   for (const k of CRAFT_MAT_KEYS) if (cost[k]) {
     const short = cost[k] > (m[k] || 0);
@@ -9142,7 +9142,7 @@ function refundSkill(id) {
   const blocker = refundBlockedBy(node);
   if (blocker) { log(`Can't refund ${node.name} — ${blocker} still relies on it. Refund that first.`); sfx('denied'); return; }
   const cost = skillRefundCost();
-  if (!canAfford(cost)) { log(`💰 Not enough gold to refund — need ${cost.gold}g.`); sfx('denied'); return; }
+  if (!canAfford(cost)) { log(`💰 Not enough gold to refund — need 💰${cost.gold}.`); sfx('denied'); return; }
   spendCost(cost);
   if (rank - 1 <= 0) delete player.skills[id]; else player.skills[id] = rank - 1;
   player.skillPoints = (player.skillPoints || 0) + 1;
@@ -9153,7 +9153,7 @@ function refundSkill(id) {
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   sfx('shrine');
   const newRank = skillRank(id);
-  log(`↩️ Refunded ${node.name}${(node.max || 1) > 1 ? ` (now rank ${newRank}/${node.max})` : ''} — 1 skill point returned for ${cost.gold}g.`, 'important');
+  log(`↩️ Refunded ${node.name}${(node.max || 1) > 1 ? ` (now rank ${newRank}/${node.max})` : ''} — 1 skill point returned for 💰${cost.gold}.`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); saveGame();
 }
 
@@ -11256,6 +11256,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Gold shows a coin icon, not a trailing g", by: "Claude", notes: ["Every money amount — HUD, shops, tooltips, buttons, logs and combat pops — now leads with the gold-coin icon instead of a trailing “g”."] },
   { date: "2026-07-02", size: "small", v: "Smoother combat frame rate", by: "Claude", notes: ["Screen-shake and the skill bar no longer force extra full redraws — big fights stay smoother.", "The skill bar only rebuilds when it actually changes instead of ~2.5×/sec, cutting steady background stutter."] },
   { date: "2026-07-02", size: "small", v: "Tidier Ramen toppings + wallet", by: "Claude", notes: ["Ramen topping tiles are compact cards with a much bigger topping icon, no longer stretched across the whole row.", "Crafting-materials wallet strip hugs its contents instead of spanning the full panel width."] },
   { date: "2026-07-02", size: "small", v: "Tidier foe inspect card", by: "Claude", notes: ["The tap-to-inspect creature card is more compact — smaller box and text.", "Pressing anywhere else on the map now closes it, including click-and-hold to move."] },
@@ -11729,7 +11730,7 @@ function showGraveyard() {
         + `<span class="gy-info"><span class="gy-name">${escapeHtml(su.name || 'Adventurer')}${hcMark}${cur}</span>`
         + `<span class="gy-sub">${escapeHtml(clsName)} · Lv ${su.level}</span></span>`
         + `<span class="gy-stats"><span class="gy-floor">${floorLabel(su.floor)}</span>`
-        + `<span class="gy-meta">${fmtGold(su.gold)}g · ${formatPlayTime(ms)}</span></span>`
+        + `<span class="gy-meta">💰${fmtGold(su.gold)} · ${formatPlayTime(ms)}</span></span>`
         + `</div>`;
     }).join('');
     const graveHtml = list.map(r => {
@@ -11742,7 +11743,7 @@ function showGraveyard() {
         + `<span class="gy-info"><span class="gy-name">${escapeHtml(r.name || 'Adventurer')}${hcMark}</span>`
         + `<span class="gy-sub">${escapeHtml(clsName)} · Lv ${r.level}</span></span>`
         + `<span class="gy-stats"><span class="gy-floor">${floorLabel(r.floor)}</span>`
-        + `<span class="gy-meta">${fmtGold(r.gold)}g · ${formatPlayTime(r.playMs || 0)}${date ? ' · ' + date : ''}</span></span>`
+        + `<span class="gy-meta">💰${fmtGold(r.gold)} · ${formatPlayTime(r.playMs || 0)}${date ? ' · ' + date : ''}</span></span>`
         + `</div>`;
     }).join('');
     bodyEl.innerHTML =
@@ -13230,7 +13231,7 @@ function completeQuest(msg) {
   if (!quest) return;
   const r = questReward();
   groundItems.push({ x: player.x, y: player.y, luck: 4, ilvl: dungeonLevel + 1 });
-  log(`✅ ${msg} +${r.gold}g, +${r.xp} XP, and a chest appears!`, 'important');
+  log(`✅ ${msg} +💰${r.gold}, +${r.xp} XP, and a chest appears!`, 'important');
   screenFlash('#22cc66');
   sfx('levelup');
   quest = null;
@@ -13337,7 +13338,7 @@ function maybeSpawnQuest(reach) {
     const c = randomFloorTile(reach); if (!c) return;
     if (kind === 'tribute') {
       quest = { type: 'tribute', spot: { x: c.x, y: c.y }, spotEmoji: '🗿', cost: 40 + dungeonLevel * 15, done: false };
-      log(`🗿 An offering altar hums on this floor — pay ${quest.cost}g for a windfall.`, 'important');
+      log(`🗿 An offering altar hums on this floor — pay 💰${quest.cost} for a windfall.`, 'important');
     } else {
       quest = { type: 'grave', spot: { x: c.x, y: c.y }, spotEmoji: '🪦', done: false };
       log('🪦 A grave glints with buried treasure... disturbing it may wake the dead.', 'important');
@@ -13443,8 +13444,8 @@ function handleQuestStep(nx, ny) {
       break;
     case 'tribute':
       if (q.spot.x === nx && q.spot.y === ny) {
-        if (player.gold >= q.cost) { player.gold -= q.cost; groundItems.push({ x: nx, y: ny, luck: 6, ilvl: dungeonLevel + 1 }); completeQuest(`The altar accepts your ${q.cost}g offering — riches answer!`); }
-        else log(`🗿 The altar demands ${q.cost}g — you can't afford it yet.`);
+        if (player.gold >= q.cost) { player.gold -= q.cost; groundItems.push({ x: nx, y: ny, luck: 6, ilvl: dungeonLevel + 1 }); completeQuest(`The altar accepts your 💰${q.cost} offering — riches answer!`); }
+        else log(`🗿 The altar demands 💰${q.cost} — you can't afford it yet.`);
       }
       break;
     case 'grave':
@@ -13494,12 +13495,12 @@ function refreshShopCost() {
 function refreshShop() {
   if (!merchant) return;
   const cost = refreshShopCost();
-  if (player.gold < cost) { log(`💰 Not enough gold to restock — need ${cost}g.`); sfx('denied'); return; }
+  if (player.gold < cost) { log(`💰 Not enough gold to restock — need 💰${cost}.`); sfx('denied'); return; }
   player.gold -= cost;
   merchant.stock = rollShopStock(merchant.ilvl || (player.maxFloor || 1) + 1, merchant.stockLo || 3, merchant.stockHi || 4);
   if (merchant.town) townShopStock = merchant.stock; // keep the persisted town wares in sync
   sfx('buy');
-  log(`🔄 The merchant clears the table and lays out fresh wares for ${cost}g.`, 'important');
+  log(`🔄 The merchant clears the table and lays out fresh wares for 💰${cost}.`, 'important');
   updateBars(); renderShop(); saveGame();
 }
 
@@ -13660,7 +13661,7 @@ function renderShop() {
   // Pay-to-restock button — re-rolls the wares for gold (the stock otherwise
   // stays put when you close and reopen).
   const rcost = refreshShopCost();
-  const refreshBtn = `<button class="shop-refresh-btn" ${player.gold >= rcost ? '' : 'disabled'} onclick="refreshShop()">🔄 Restock — ${rcost}g</button>`;
+  const refreshBtn = `<button class="shop-refresh-btn" ${player.gold >= rcost ? '' : 'disabled'} onclick="refreshShop()">🔄 Restock — 💰${rcost}</button>`;
   if (merchant.stock.length === 0) {
     el.innerHTML = '<div class="shop-empty">Sold out! Pay to restock for fresh wares.</div>' + refreshBtn;
     return;
@@ -13692,7 +13693,7 @@ function renderShop() {
         <div class="shop-row-sub">${sub}</div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
       </div>
-      <button class="act-btn ${afford?'':'short'}" ${afford?'':'disabled'} onclick="buyItem(${i})">${price}g</button>
+      <button class="act-btn ${afford?'':'short'}" ${afford?'':'disabled'} onclick="buyItem(${i})">💰${price}</button>
     </div>`;
   }).join('') + '</div>' + refreshBtn;
 }
@@ -13715,14 +13716,14 @@ function renderShopSellHTML() {
   const bulkGold = unlocked.reduce((a, it) => a + Math.max(1, Math.round(it.value * 0.5)), 0);
   const scrapN = unlocked.filter(it => it.slot && TIERS[it.tier]).length;
   const bulk = `<div class="shop-sell-bulk">`
-    + `<button class="loot-bulk-btn" ${unlocked.length ? '' : 'disabled'} onclick="shopBulk('sell')">${dlIcon('ic_money', 13) || '💰'} Sell all · ${bulkGold}g</button>`
+    + `<button class="loot-bulk-btn" ${unlocked.length ? '' : 'disabled'} onclick="shopBulk('sell')">${dlIcon('ic_money', 13) || '💰'} Sell all · 💰${bulkGold}</button>`
     + (scrapN ? `<button class="loot-bulk-btn" onclick="shopBulk('scrap')">${dlIcon('mat_scrap', 13) || '♻️'} Scrap all · ${scrapN}</button>` : '')
     + `</div>`;
   const rows = inventory.map((it, i) => {
     const price = Math.max(1, Math.round(it.value * 0.5));
     const sub = it.slot ? SLOTS[it.slot].label.replace(/^\S+\s/, '') : 'item';
     const locked = it.locked;
-    const sellBtn = locked ? '' : `<button class="shop-sell-btn" onclick="shopSell(${i})">${price}g</button>`;
+    const sellBtn = locked ? '' : `<button class="shop-sell-btn" onclick="shopSell(${i})">💰${price}</button>`;
     const scrapBtn = (!locked && it.slot && TIERS[it.tier])
       ? `<button class="shop-scrap-btn" title="Scrap" onclick="shopScrap(${i})">${dlIcon('mat_scrap', 13) || '♻️'}</button>` : '';
     const lock = locked ? `<span class="shop-price short">${dlIcon('key', 12) || '🔒'}</span>` : '';
@@ -13804,7 +13805,7 @@ function renderMystic() {
       const label = DUR_LABEL[dur.floors] || (dur.floors + ' floors');
       return `<button class="pact-buy-btn" ${afford ? '' : 'disabled'} onclick="buyPact(${i}, ${dur.floors})">
         <span class="pact-floors">${label}</span>
-        <span class="pact-cost${afford ? '' : ' cost-short'}">${price.toLocaleString()}g</span>
+        <span class="pact-cost${afford ? '' : ' cost-short'}">💰${price.toLocaleString()}</span>
       </button>`;
     }).join('');
     return `<div class="pact-card" style="--accent:${accent};--accentSoft:${softOf(accent)}">
@@ -13827,7 +13828,7 @@ function buyPact(i, floors) {
   // `floors` counts the next N floors you descend into; tickPact() consumes one
   // after each floor is generated (see the stairs handler), so this is exact.
   pact = { id: def.id, icon: def.icon, name: def.name, desc: def.desc, floors, fx: def.fx };
-  log(`${def.icon} You strike the ${def.name} — sealed for the next ${floors} floor${floors === 1 ? '' : 's'}. (-${price}g)`, 'important');
+  log(`${def.icon} You strike the ${def.name} — sealed for the next ${floors} floor${floors === 1 ? '' : 's'}. (-💰${price})`, 'important');
   updateBars();
   renderMystic();
   renderPanel();
@@ -14055,7 +14056,7 @@ function renderMercCamp() {
         <div class="shop-row-name">${t.name}</div>
         <div class="shop-row-stats">${t.desc} · ${MERC_FLOORS} floors</div>
       </div>
-      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="hireMerc('${t.id}')">${cost}g</button>
+      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="hireMerc('${t.id}')">💰${cost}</button>
     </div>`;
   }).join('') + '</div>';
   setTownContent(html);
@@ -14067,7 +14068,7 @@ function hireMerc(id) {
   player.gold -= cost;
   player.merc = { kind: t.id, floors: MERC_FLOORS, mult: t.mult };
   sfx('buy');
-  log(`🛡️ You hire a ${t.name} for ${cost}g — they'll join you for ${MERC_FLOORS} floors.`, 'important');
+  log(`🛡️ You hire a ${t.name} for 💰${cost} — they'll join you for ${MERC_FLOORS} floors.`, 'important');
   updateBars(); renderMercCamp(); saveGame();
 }
 
@@ -14098,7 +14099,7 @@ function renderTransmuter() {
         <div class="shop-row-name">3× <span style="color:${c}">${tier}</span> → 1× <span style="color:${cn}">${next}</span></div>
         <div class="shop-row-stats">${list.length} ${tier} pieces in your bag</div>
       </div>
-      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="transmute('${tier}')">${cost}g</button>
+      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="transmute('${tier}')">💰${cost}</button>
     </div>`;
   }
   html += '</div>';
@@ -14167,8 +14168,8 @@ function bountyPool() {
     { kind: 'boss',  title: 'Champion Hunter',   need: 4,                 snap: BK, desc: n => `Slay ${n} bosses`,         gold: R(2.4), mat: ['core', 3],     ilvl: depth + 4 },
     { kind: 'elite', title: 'Elite Contract',    need: 5,                 snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(1.5), mat: ['glimmer', 2],  ilvl: depth + 2 },
     { kind: 'elite', title: 'Bane of Champions', need: 10,                snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(2.3), mat: ['glimmer', 3],  ilvl: depth + 3 },
-    { kind: 'gold',  title: 'Treasure Hunter',   need: 400 + depth * 90,  snap: GE, desc: n => `Plunder ${n}g from foes`,  gold: R(1.2), mat: ['scrap', 10],   ilvl: depth + 1 },
-    { kind: 'gold',  title: "Dragon's Hoard",    need: 1200 + depth * 220,snap: GE, desc: n => `Plunder ${n}g from foes`,  gold: R(1.9), mat: ['core', 2],     ilvl: depth + 3 },
+    { kind: 'gold',  title: 'Treasure Hunter',   need: 400 + depth * 90,  snap: GE, desc: n => `Plunder 💰${n} from foes`,  gold: R(1.2), mat: ['scrap', 10],   ilvl: depth + 1 },
+    { kind: 'gold',  title: "Dragon's Hoard",    need: 1200 + depth * 220,snap: GE, desc: n => `Plunder 💰${n} from foes`,  gold: R(1.9), mat: ['core', 2],     ilvl: depth + 3 },
   ];
 }
 function rollBounties() {
@@ -14191,7 +14192,7 @@ function renderBounty() {
     const cur = (b.kind === 'delve') ? `<br><span style="opacity:.85">You're currently on floor ${Math.max(1, dungeonLevel || player.maxFloor || 1)}.</span>` : '';
     html += `<div class="town-blurb"><b>Active bounty:</b> ${b.desc.replace('{n}', b.need)}${cur}<br>
       <div class="bar-track" style="margin:6px 0"><div class="bar-fill" style="width:${pct}%;background:${done ? 'var(--uncommon)' : 'var(--gold)'}"></div></div>
-      ${prog} / ${b.need} — reward: <b style="color:var(--gold)">${b.gold}g</b> + ${b.mat[1]}${dlIcon('mat_' + b.mat[0], 16)} + a piece of gear.</div>`;
+      ${prog} / ${b.need} — reward: <b style="color:var(--gold)">💰${b.gold}</b> + ${b.mat[1]}${dlIcon('mat_' + b.mat[0], 16)} + a piece of gear.</div>`;
     html += `<div class="town-menu" style="gap:8px">
       <button class="act-btn" ${done ? '' : 'disabled'} style="width:100%;padding:10px" onclick="claimBounty()">${done ? '✅ Claim reward' : 'In progress…'}</button>
       <button class="slotpick-cancel" style="width:100%" onclick="abandonBounty()">Abandon bounty</button></div>`;
@@ -14205,7 +14206,7 @@ function renderBounty() {
       ${dlIcon('npc_quest', 32)}
       <div class="shop-row-info">
         <div class="shop-row-name">${o.title}</div>
-        <div class="shop-row-stats">${o.desc(o.need)} · ${o.gold}g + ${o.mat[1]}${dlIcon('mat_' + o.mat[0], 16)} + gear</div>
+        <div class="shop-row-stats">${o.desc(o.need)} · 💰${o.gold} + ${o.mat[1]}${dlIcon('mat_' + o.mat[0], 16)} + gear</div>
       </div>
       <button class="act-btn" onclick="acceptBounty(${i})">ACCEPT</button>
     </div>`;
@@ -14228,7 +14229,7 @@ function claimBounty() {
   inventory.push(item);
   player.bounty = null;
   sfx('levelup'); screenFlash('#ffd24b');
-  log(`📜 Bounty complete! +${b.gold}g, materials, and ${logItem(item)}.`, 'loot');
+  log(`📜 Bounty complete! +💰${b.gold}, materials, and ${logItem(item)}.`, 'loot');
   updateBars(); renderPanel(); renderBounty(); updateObjectiveChip(); saveGame();
 }
 function abandonBounty() { player.bounty = null; sfx('click'); log('📜 You abandon the bounty.'); renderBounty(); updateObjectiveChip(); saveGame(); }
@@ -15031,7 +15032,7 @@ function acquireLoot(item) {
   if (action === 'sell') {
     const price = Math.max(1, Math.round(item.value * 0.5));
     player.gold += price;
-    log(`💰 Auto-sold ${logItem(item)} for ${price}g.`);
+    log(`💰 Auto-sold ${logItem(item)} for 💰${price}.`);
     return 'sell';
   }
   if (bagFull()) { warnBagFull(); return 'full'; }
@@ -15049,7 +15050,7 @@ function sellFromBag(i) {
   inventory.splice(i, 1);
   selectedItem = null; hideTooltip();
   sfx('sell');
-  log(`💰 Sold ${logItem(item)} for ${price}g.`);
+  log(`💰 Sold ${logItem(item)} for 💰${price}.`);
   updateBars(); renderPanel(); saveGame();
 }
 
@@ -15083,7 +15084,7 @@ function bagBulk(which) {
   inventory = inventory.filter(it => !drop.has(it));
   selectedItem = null; hideTooltip();
   sfx('sell');
-  if (which === 'sell') { player.gold += gold; log(`💰 Sold ${targets.length} item${targets.length === 1 ? '' : 's'} for ${gold}g.`); }
+  if (which === 'sell') { player.gold += gold; log(`💰 Sold ${targets.length} item${targets.length === 1 ? '' : 's'} for 💰${gold}.`); }
   else log(`♻️ Scrapped ${targets.length} item${targets.length === 1 ? '' : 's'} into ${costLabel(mats)}.`, 'loot');
   updateBars(); renderPanel(); saveGame();
 }
@@ -15110,20 +15111,20 @@ function renderHealer() {
       <span class="loot-icon">❤️</span>
       <div class="shop-row-info"><div class="shop-row-name">Full Rest &amp; Cure</div>
         <div class="shop-row-sub">Restore all HP/MP and clear poison &amp; curses</div></div>
-      <button class="act-btn ${afford ? '' : 'short'}" ${(full || !afford) ? 'disabled' : ''} onclick="restHeal()">${full ? 'Rested' : cost + 'g'}</button>
+      <button class="act-btn ${afford ? '' : 'short'}" ${(full || !afford) ? 'disabled' : ''} onclick="restHeal()">${full ? 'Rested' : '💰' + cost}</button>
     </div>
-    ${(!full && !afford) ? `<div class="town-blurb" style="color:var(--hp)">You can't cover the ${cost}g fee — earn more gold first.</div>` : ''}
+    ${(!full && !afford) ? `<div class="town-blurb" style="color:var(--hp)">You can't cover the 💰${cost} fee — earn more gold first.</div>` : ''}
     ${potionUpgradeHTML()}`);
 }
 function restHeal() {
   if (player.hp >= player.maxHp && player.mp >= player.maxMp) return;
   const cost = healCost();
-  if (player.gold < cost) { log(`Not enough gold — the healer charges ${cost}g for a full rest.`); return; }
+  if (player.gold < cost) { log(`Not enough gold — the healer charges 💰${cost} for a full rest.`); return; }
   player.gold -= cost;
   player.hp = player.maxHp; player.mp = player.maxMp;
   statusEffects = statusEffects.filter(s => s.target !== 'player');
   sfx('potion');
-  log(`⛑️ The healer restores you to full and cleanses every ailment for ${cost}g.`, 'loot');
+  log(`⛑️ The healer restores you to full and cleanses every ailment for 💰${cost}.`, 'loot');
   updateBars(); renderHealer(); saveGame();
 }
 
@@ -15157,13 +15158,13 @@ function potionUpgradeHTML() {
       <span class="loot-icon">❤️</span>
       <div class="shop-row-info"><div class="shop-row-name">Potion Potency · Lv ${pLvl}/${POTION_POWER_MAX}</div>
         <div class="shop-row-sub">${pMax ? `Each sip restores ${pctNow}% of max HP/MP.` : `Restores ${pctNow}% → <b style="color:var(--gold)">${pctNext}%</b> of max HP/MP per sip.`}</div></div>
-      ${pMax ? `<button class="act-btn is-active" disabled>MAX</button>` : `<button class="act-btn ${pAfford ? '' : 'short'}" ${pAfford ? '' : 'disabled'} onclick="upgradePotion('power')">${pCost}g</button>`}
+      ${pMax ? `<button class="act-btn is-active" disabled>MAX</button>` : `<button class="act-btn ${pAfford ? '' : 'short'}" ${pAfford ? '' : 'disabled'} onclick="upgradePotion('power')">💰${pCost}</button>`}
     </div>
     <div class="shop-row has-actions ${(cMax || cAfford) ? '' : 'cant-afford'}">
       <span class="loot-icon">🔷</span>
       <div class="shop-row-info"><div class="shop-row-name">Potion Recharge · Lv ${cLvl}/${POTION_CD_MAX}</div>
         <div class="shop-row-sub">${cMax ? `Potions recharge in ${cdNow}s.` : `Recharge ${cdNow}s → <b style="color:var(--gold)">${cdNext}s</b> between sips.`}</div></div>
-      ${cMax ? `<button class="act-btn is-active" disabled>MAX</button>` : `<button class="act-btn ${cAfford ? '' : 'short'}" ${cAfford ? '' : 'disabled'} onclick="upgradePotion('cd')">${cCost}g</button>`}
+      ${cMax ? `<button class="act-btn is-active" disabled>MAX</button>` : `<button class="act-btn ${cAfford ? '' : 'short'}" ${cAfford ? '' : 'disabled'} onclick="upgradePotion('cd')">💰${cCost}</button>`}
     </div>`;
 }
 function upgradePotion(kind) {
@@ -15171,7 +15172,7 @@ function upgradePotion(kind) {
   const max = kind === 'power' ? POTION_POWER_MAX : POTION_CD_MAX;
   if (lvl >= max) return;
   const cost = potionUpgradeCost(kind);
-  if (player.gold < cost) { log(`Not enough gold — that upgrade costs ${cost}g.`); return; }
+  if (player.gold < cost) { log(`Not enough gold — that upgrade costs 💰${cost}.`); return; }
   player.gold -= cost;
   if (kind === 'power') player.potionPowerLvl = lvl + 1; else player.potionCdLvl = lvl + 1;
   sfx('buy');
@@ -15213,8 +15214,8 @@ function renderStash() {
     <div class="shop-row">
       <span class="loot-icon">🏦</span>
       <div class="shop-row-info">
-        <div class="shop-row-name">Stashed gold: <span style="color:var(--gold)">${g}g</span></div>
-        <div class="shop-row-sub">Carried: ${player.gold}g</div>
+        <div class="shop-row-name">Stashed gold: <span style="color:var(--gold)">💰${g}</span></div>
+        <div class="shop-row-sub">Carried: 💰${player.gold}</div>
       </div>
     </div>
     <div class="stash-gold-bar">
@@ -15242,7 +15243,7 @@ function stashDepositGold(amt) {
   player.gold -= amt;
   stash.gold = (stash.gold || 0) + amt;
   sfx('buy');
-  log(`🏦 Deposited ${amt}g into the vault. (${stash.gold}g stored)`, 'loot');
+  log(`🏦 Deposited 💰${amt} into the vault. (💰${stash.gold} stored)`, 'loot');
   updateBars(); renderStash(); saveGame(); saveStash();
 }
 function stashWithdrawGold(amt) {
@@ -15251,7 +15252,7 @@ function stashWithdrawGold(amt) {
   stash.gold -= amt;
   player.gold += amt;
   sfx('buy');
-  log(`🏦 Withdrew ${amt}g from the vault. (${stash.gold}g stored)`, 'loot');
+  log(`🏦 Withdrew 💰${amt} from the vault. (💰${stash.gold} stored)`, 'loot');
   updateBars(); renderStash(); saveGame(); saveStash();
 }
 function stashDepositItem(i) {
@@ -15297,16 +15298,16 @@ function renderTrainer() {
       <span class="loot-icon"></span>
       <div class="shop-row-info"><div class="shop-row-name">Respec Attributes</div>
         <div class="shop-row-sub">Refund every point spent above the base ${ATTR_BASE}</div></div>
-      <button class="act-btn ${player.gold >= cost ? '' : 'short'}" ${(player.gold >= cost && spent > 0) ? '' : 'disabled'} onclick="respecAttrs()">${cost}g</button>
+      <button class="act-btn ${player.gold >= cost ? '' : 'short'}" ${(player.gold >= cost && spent > 0) ? '' : 'disabled'} onclick="respecAttrs()">💰${cost}</button>
     </div>
     <div class="shop-row has-actions ${player.gold >= skillRespecCost() ? '' : 'cant-afford'}">
       <span class="loot-icon">🌟</span>
       <div class="shop-row-info"><div class="shop-row-name">Forget Skills</div>
         <div class="shop-row-sub">Refund all ${spentSkillPoints()} spent skill point${spentSkillPoints() === 1 ? '' : 's'} to spend anew</div></div>
-      <button class="act-btn ${player.gold >= skillRespecCost() ? '' : 'short'}" ${(player.gold >= skillRespecCost() && spentSkillPoints() > 0) ? '' : 'disabled'} onclick="respecSkills()">${skillRespecCost()}g</button>
+      <button class="act-btn ${player.gold >= skillRespecCost() ? '' : 'short'}" ${(player.gold >= skillRespecCost() && spentSkillPoints() > 0) ? '' : 'disabled'} onclick="respecSkills()">💰${skillRespecCost()}</button>
     </div>
     ${trainerAscensionBlock()}
-    <div class="town-blurb" style="margin-top:10px">Retrain into a different class for ${classChangeCost()}g. Your attributes are kept; if your new class can't wield your weapon, it goes back in your bag.</div>
+    <div class="town-blurb" style="margin-top:10px">Retrain into a different class for 💰${classChangeCost()}. Your attributes are kept; if your new class can't wield your weapon, it goes back in your bag.</div>
     ${CLASS_KEYS.map(k => {
       const c = CLASSES[k];
       const cur = player.class === k;
@@ -15315,7 +15316,7 @@ function renderTrainer() {
       const cantAfford = !cur && player.gold < ccost;
       const btn = cur
         ? `<button class="act-btn is-active" disabled>★ active</button>`
-        : `<button class="act-btn ${cantAfford ? 'short' : ''}" ${cantAfford ? 'disabled' : ''} onclick="changeClass('${k}')">${ccost}g</button>`;
+        : `<button class="act-btn ${cantAfford ? 'short' : ''}" ${cantAfford ? 'disabled' : ''} onclick="changeClass('${k}')">💰${ccost}</button>`;
       return `<div class="shop-row has-actions ${cantAfford ? 'cant-afford' : ''}">
         <span class="loot-icon">${c.icon}</span>
         <div class="shop-row-info"><div class="shop-row-name" style="color:${c.color}">${c.name}${cur ? ' (current)' : ''}</div>
@@ -15350,7 +15351,7 @@ function trainerAscensionBlock() {
     let btn;
     if (cur) btn = `<button class="act-btn is-active" disabled>★ active</button>`;
     else if (!ready) btn = `<button class="act-btn" disabled>🔒</button>`;
-    else btn = `<button class="act-btn ${goldShort ? 'short' : ''}" ${can ? '' : 'disabled'} onclick="ascend('${k}')">${cost ? cost + 'g' : 'Free'}</button>`;
+    else btn = `<button class="act-btn ${goldShort ? 'short' : ''}" ${can ? '' : 'disabled'} onclick="ascend('${k}')">${cost ? '💰' + cost : 'Free'}</button>`;
     return `<div class="shop-row has-actions ${goldShort ? 'cant-afford' : ''}">
       <span class="loot-icon">${dlIcon(a.icon, 24) || ''}</span>
       <div class="shop-row-info"><div class="shop-row-name" style="color:${a.color}">${a.name}${cur ? ' (current)' : ''}</div>
@@ -15903,7 +15904,7 @@ function renderGambler() {
   if (gambleLast) {
     const it = gambleLast.item;
     const above = (it.ilvl > d) ? ' <span style="color:var(--gold-350)">(above your depth!)</span>' : '';
-    resultRow = `<div class="town-blurb" style="margin-top:10px">Your last wager (${gambleLast.cost}g) turned up:</div>
+    resultRow = `<div class="town-blurb" style="margin-top:10px">Your last wager (💰${gambleLast.cost}) turned up:</div>
       <div class="shop-row">
         <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
         <div class="shop-row-info ${rarityClass(it)}">
@@ -15920,7 +15921,7 @@ function renderGambler() {
       <span class="loot-icon">🎲</span>
       <div class="shop-row-info"><div class="shop-row-name">${rollLabel}</div>
         <div class="shop-row-sub">${rollSub}</div></div>
-      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="gambleRoll()">${cost}g</button>
+      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="gambleRoll()">💰${cost}</button>
     </div>
     ${resultRow}`);
 }
@@ -15938,7 +15939,7 @@ function gambleRoll() {
   const rank = Object.keys(TIERS).indexOf(tier);
   const jackpot = rank >= 4; // legendary or unique
   sfx(jackpot ? 'levelup' : 'loot');
-  log(`🎲 You wager ${cost}g and the dice favor you — ${logItem(item)}!`, jackpot ? 'important' : 'loot');
+  log(`🎲 You wager 💰${cost} and the dice favor you — ${logItem(item)}!`, jackpot ? 'important' : 'loot');
   updateBars(); renderPanel(); renderGambler(); saveGame();
 }
 
@@ -18412,9 +18413,25 @@ function draw() {
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = 'rgba(0,0,0,0.5)';
     ctx.lineWidth = 2;
-    ctx.strokeText(ft.text, px, py);
-    ctx.fillStyle = ft.color;
-    ctx.fillText(ft.text, px, py);
+    // Gold floaters lead with the coin sprite (matching the HUD/menus). Draw it to
+    // the left of the number and shift the number right so the pair stays centred
+    // on the spawn point and reads as one "coin + amount" group.
+    const coinOk = ft.coin && spriteReady && SPRITE_IDX['ic_money'] !== undefined;
+    if (coinOk) {
+      const cs = Math.max(16, Math.round(fsz * 1.15));
+      const gap = Math.max(1, Math.round(fsz * 0.15));
+      const twd = ctx.measureText(ft.text).width;
+      const left = px - (cs + gap + twd) / 2;
+      const tcx = left + cs + gap + twd / 2;
+      ctx.strokeText(ft.text, tcx, py);
+      ctx.fillStyle = ft.color;
+      ctx.fillText(ft.text, tcx, py);
+      drawSpriteC('ic_money', left + cs / 2, py, cs);
+    } else {
+      ctx.strokeText(ft.text, px, py);
+      ctx.fillStyle = ft.color;
+      ctx.fillText(ft.text, px, py);
+    }
     ctx.restore();
   });
 
@@ -18528,10 +18545,12 @@ function drawMinimap() {
   }
 }
 
-function spawnFloatingText(x, y, text, color, size) {
+function spawnFloatingText(x, y, text, color, size, coin) {
   // Canvas floating text can't host sprite spans, so just strip any emoji — the
   // number/word stays. (No emoji anywhere.) `size` scales the font (>1 = a big,
-  // bold pop, used for crit / rampage damage numbers).
+  // bold pop, used for crit / rampage damage numbers). `coin` draws the gold-coin
+  // sprite to the left of the text so gold floaters read as "coin + amount", to
+  // match the HUD/menus instead of a trailing "g".
   const now = Date.now();
   // Anti-overlap: a kill or multi-hit can fire several floaters at almost the
   // same spot in one frame. Rather than let them pile into an unreadable blob,
@@ -18542,7 +18561,7 @@ function spawnFloatingText(x, y, text, color, size) {
   for (const ft of floatingTexts) {
     if (now - ft.start < 350 && Math.abs(ft.x - x) < 1.1) stack++;
   }
-  floatingTexts.push({ x, y: y - stack * 0.5, text: stripEmoji(text), color, start: now, duration: 800, size: size || 1 });
+  floatingTexts.push({ x, y: y - stack * 0.5, text: stripEmoji(text), color, start: now, duration: 800, size: size || 1, coin: !!coin });
   // Safety net: never let a big burst wall the screen with text.
   if (floatingTexts.length > 16) floatingTexts.splice(0, floatingTexts.length - 16);
 }
@@ -19341,8 +19360,8 @@ function depthMilestone(prevMax, newMax) {
   const bonusGold = 25 * floorHit;
   player.gold += bonusGold;
   const cache = generateItem(4, newMax + 1, milestoneTier(floorHit));
-  if (acquireLoot(cache) === 'keep') log(`🏆 Depth ${floorHit}! +${bonusGold}g and a cache: ${logItem(cache)}.`, 'important');
-  else log(`🏆 Depth ${floorHit}! +${bonusGold}g and a bonus cache.`, 'important');
+  if (acquireLoot(cache) === 'keep') log(`🏆 Depth ${floorHit}! +💰${bonusGold} and a cache: ${logItem(cache)}.`, 'important');
+  else log(`🏆 Depth ${floorHit}! +💰${bonusGold} and a bonus cache.`, 'important');
   updateBars();
 }
 
@@ -20243,7 +20262,7 @@ function onEnterCell(nx, ny) {
     const g = groundGold.splice(gi, 1)[0];
     player.gold += g.amount;
     sfx('gold');
-    spawnFloatingText(player.x, player.y, `+${g.amount}g`, '#ffd24b');
+    spawnFloatingText(player.x, player.y, `+${g.amount}`, '#ffd24b', 1, true);
     log(`🪙 Picked up ${g.amount} gold!`, 'loot');
     updateBars();
   }
@@ -20319,7 +20338,7 @@ function goDownStairs(nx, ny) {
       const r = questReward();
       const reward = generateItem(4, dungeonLevel + 1);
       inventory.push(reward);
-      log(`✅ ${quest.npc.name} reached the stairs safely! +${r.gold}g, +${r.xp} XP, reward: ${logItem(reward)}`, 'important');
+      log(`✅ ${quest.npc.name} reached the stairs safely! +💰${r.gold}, +${r.xp} XP, reward: ${logItem(reward)}`, 'important');
       screenFlash('#22cc66'); sfx('levelup'); checkLevelUp();
     } else {
       log(`😟 You descended without ${quest.npc.name} — the escort failed.`);
@@ -20699,8 +20718,8 @@ function onEnemyDefeated(e) {
   else if (e.isElite) player.eliteKills = (player.eliteKills || 0) + 1;
   player.goldEarned = (player.goldEarned || 0) + gold;
   updateObjectiveChip();   // a kill may advance the active bounty
-  spawnFloatingText(e.x + 0.35, e.y, `+${gold}g`, '#ffd24b');
-  log(`☠ ${label} +${xp}xp +${gold}g`, 'important');
+  spawnFloatingText(e.x + 0.35, e.y, `+${gold}`, '#ffd24b', 1, true);
+  log(`☠ ${label} +${xp}xp +💰${gold}`, 'important');
   // Kill juice: elites and bosses die with a meaty finisher (crunch + flash + burst).
   if (e.isBoss) { sfx('bosskill'); screenFlash('#ff3344'); addShake(12); spawnParticles(e.x, e.y, '#ffd24b', 22, 0.16); }
   else if (e.isElite) { sfx('crunch'); screenFlash('#ffffff'); addShake(9); spawnParticles(e.x, e.y, '#ffe0a0', 16, 0.14); }
@@ -20819,8 +20838,8 @@ function onEnemyDefeated(e) {
     const bonus = 30 + dungeonLevel * 8;
     player.gold += bonus;
     gainMaterial('chaos', 1);
-    spawnFloatingText(e.x, e.y, `+${bonus}g`, '#ffd24b');
-    log(`💰 The Treasure Goblin bursts — +${bonus}g, a 🌀 Chaos Orb, and a glittering chest!`, 'loot');
+    spawnFloatingText(e.x, e.y, `+${bonus}`, '#ffd24b', 1, true);
+    log(`💰 The Treasure Goblin bursts — +💰${bonus}, a 🌀 Chaos Orb, and a glittering chest!`, 'loot');
     updateBars();
     collectChestLoot(6, e.level || dungeonLevel, e.x, e.y);
   }
@@ -22671,7 +22690,7 @@ function handleDeath() {
   player.mp = Math.round(player.maxMp * 0.5);
   showDeathScreen(lostGold, lostXp, dungeonReturn, lostBag, (graveSite ? fellOn : 0), relocked);
   dmgTaken = [];
-  log(`💀 ${player.name || HERO} was SLAIN on ${floorLabel(fellOn)}! Lost ${lostGold}g${lostXp ? ` and ${lostXp} XP` : ''}${lostBag ? `, and dropped your bag (${lostBag}) — reclaim it on ${floorLabel(fellOn)}` : ''} — revived weakened in town. The dungeon eases up while you find your feet.`, 'important');
+  log(`💀 ${player.name || HERO} was SLAIN on ${floorLabel(fellOn)}! Lost 💰${lostGold}${lostXp ? ` and ${lostXp} XP` : ''}${lostBag ? `, and dropped your bag (${lostBag}) — reclaim it on ${floorLabel(fellOn)}` : ''} — revived weakened in town. The dungeon eases up while you find your feet.`, 'important');
   recomputeMaxStats();
   updateBars();
   renderPanel();
@@ -22684,7 +22703,7 @@ function showDeathScreen(lostGold, lostXp, returnFloor, lostBag, graveFloor, rel
   const el = document.getElementById('death-penalties');
   if (el) {
     const lines = [
-      `💰 Lost ${lostGold}g${lostXp ? ` & ${lostXp} XP` : ''} — gear kept`,
+      `💰 Lost 💰${lostGold}${lostXp ? ` & ${lostXp} XP` : ''} — gear kept`,
       (lostBag && graveFloor) ? `🪦 Bag (${lostBag} item${lostBag === 1 ? '' : 's'}) dropped on ${floorLabel(graveFloor)} — go reclaim it` : null,
       `⬇️ Re-enter at ${floorLabel(returnFloor)}${relocked ? ' · deeper floors relock' : ''}`,
     ].filter(Boolean);
@@ -23489,7 +23508,7 @@ function bagActionsHTML(item, i) {
     return `<div class="loot-actions"><span class="la-note">${dlIcon('key', 12) || '🔒'} Locked — unlock to sell or scrap</span></div>`;
   }
   const sellPrice = Math.max(1, Math.round(item.value * 0.5));
-  const sellBtn = `<button class="row-btn la-btn" onclick="sellFromBag(${i})">${dlIcon('ic_money', 13) || '💰'} Sell · ${sellPrice}g</button>`;
+  const sellBtn = `<button class="row-btn la-btn" onclick="sellFromBag(${i})">${dlIcon('ic_money', 13) || '💰'} Sell · 💰${sellPrice}</button>`;
   // Compact yield hint: lead with the Scrap (🔩) icon, then just the icons of any
   // rarer mats this piece adds (✨/🔆/🌀) — no number ranges, so it never wraps.
   const extraMats = salvageRanges(item).filter(r => r.key !== 'scrap')
@@ -23605,7 +23624,7 @@ function renderPanel() {
     const bulkGold = bulkTargets.reduce((s, it) => s + Math.max(1, Math.round(it.value * 0.5)), 0);
     const mMoney = dlIcon('ic_money', 13) || '💰', mScrap = dlIcon('mat_scrap', 13) || '♻️';
     const bulkBar = bulkTargets.length ? `<div class="loot-bulk-bar">
-      <button class="loot-bulk-btn" onclick="bagBulk('sell')">${mMoney} Sell all · ${bulkGold}g</button>
+      <button class="loot-bulk-btn" onclick="bagBulk('sell')">${mMoney} Sell all · 💰${bulkGold}</button>
       ${bulkScrapN ? `<button class="loot-bulk-btn" onclick="bagBulk('scrap')">${mScrap} Scrap all · ${bulkScrapN}</button>` : ''}
     </div>` : '';
     // Auto-Loot entry point — lives here on the LOOT tab (not in settings) since it
@@ -24021,7 +24040,7 @@ function renderSkills(el) {
       const rBlock = refundBlockedBy(sn);
       const rCost = skillRefundCost();
       if (rBlock) refundBtn = `<button class="pop-refund" disabled>↩️ Refund locked — ${rBlock} needs it</button>`;
-      else { const aff = canAfford(rCost); refundBtn = `<button class="pop-refund${aff ? '' : ' short'}" ${aff ? '' : 'disabled'} onclick="refundSkill('${sn.id}')">↩️ Refund 1 pt — ${rCost.gold}g</button>`; }
+      else { const aff = canAfford(rCost); refundBtn = `<button class="pop-refund${aff ? '' : ' short'}" ${aff ? '' : 'disabled'} onclick="refundSkill('${sn.id}')">↩️ Refund 1 pt — 💰${rCost.gold}</button>`; }
     }
     // Owned actives can be slotted onto / pulled off the hotkey bar straight from
     // the popover (the quick path alongside dragging the node onto a tray slot).
@@ -25051,7 +25070,7 @@ function itemCardHTML(item, opts = {}) {
     ${reqLine}
     ${stats}
     ${weaponLine}
-    <div style="color:var(--warn);font-size:1.2rem;margin-top:3px">Value: ${item.value}g</div>
+    <div style="color:var(--warn);font-size:1.2rem;margin-top:3px">Value: 💰${item.value}</div>
     <div class="tt-flavor">${item.flavor}</div>`;
 }
 
@@ -26305,7 +26324,7 @@ function renderSlots() {
         <span class="slot-class">${icon}</span>
         <span class="slot-name">${who}</span>${hcMark}
       </div>
-      <div class="slot-stats">Lv ${s.level} · ${where} · ${s.gold}g · <span class="slot-time">⏱️ ${formatPlayTime(s.playMs)}</span>${time ? ` · <span class="slot-time">saved ${time}</span>` : ''}</div>
+      <div class="slot-stats">Lv ${s.level} · ${where} · 💰${s.gold} · <span class="slot-time">⏱️ ${formatPlayTime(s.playMs)}</span>${time ? ` · <span class="slot-time">saved ${time}</span>` : ''}</div>
       <div class="slot-actions">${playBtn}${delBtn}</div>
     </div>`;
   }
@@ -26417,7 +26436,7 @@ function lbFloorLabel(v) {
 const LB_SORTS = {
   floor: { col: 'max_floor', fmt: lbFloorLabel },
   level: { col: 'level',     fmt: v => 'Lv ' + v },
-  gold:  { col: 'gold',      fmt: v => v + 'g' },
+  gold:  { col: 'gold',      fmt: v => '💰' + v },
   power: { col: 'power',     fmt: v => PWR_GLYPH + v },
 };
 let lbTab = 'floor';
