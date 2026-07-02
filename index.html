@@ -3708,6 +3708,15 @@
       bottom: calc(var(--dhud-h) + 16px);
       max-width: calc(100vw - var(--log-col) - var(--panel-col) - 36px);
     }
+    /* The big center-screen banners (LEVEL UP, loot/milestone finds) span the full
+       viewport by default, so with a side drawer open they'd read off-centre —
+       shoved toward whichever half the map isn't in. Shrink their band to the MAP
+       column (between the log and the loot drawer) so the text centres over the
+       dungeon itself. Both edges track --log-col / --panel-col, which transition
+       when a drawer folds, so the banner re-centres in step with the reflow. These
+       banners centre via text-align (not translateX) and animate via transform:
+       scale, so overriding left/right alone leaves the pop animation untouched. */
+    #levelup-banner, #loot-banner { left: var(--log-col); right: var(--panel-col); }
     #map-info {
       display: flex; flex-direction: column; gap: 4px;
       position: absolute; z-index: 50; pointer-events: none;
@@ -11220,6 +11229,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Banners centre on the map", by: "Claude", notes: ["Level-up and loot banners now centre over the dungeon map, not the whole window — so they stay centred when a side drawer is open."] },
   { date: "2026-07-02", size: "small", v: "Hardcore earns all 100 feats, two tabs", by: "Claude", notes: ["Hardcore now earns the same full set of achievements as normal play, not a short curated list.", "Achievements popup splits into two tabs — Kitten Mode and Hardcore — so each mode's feats have their own grid.", "Hardcore feats still persist through death and stay earned account-wide."] },
   { date: "2026-07-02", size: "small", v: "Font consistency fix", by: "Claude", notes: ["Menu buttons that fell back to the browser's sans-serif — Ramen House chips, sell/scrap trays and more — now follow the picked UI font like the rest of the game.", "Settings tabs and the Keybindings Back button dropped a stray monospace font."] },
   { date: "2026-07-02", size: "small", v: "Health & Mana bars under hero", by: "Claude", notes: ["New Settings ▸ Play toggle adds slim red Health and blue Mana bars beneath your hero.", "Each pops up only while that vital isn't full, just like the stamina bar. Off by default; saved across sessions."] },
