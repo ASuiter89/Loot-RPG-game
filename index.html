@@ -2043,9 +2043,10 @@
   .pda-body {
     position: absolute; left: 50%; top: 49%;
     transform: translate(-50%, -50%);
-    height: 135%; width: auto;
+    height: 95%; width: auto;
     z-index: 0; pointer-events: none;
-    filter: drop-shadow(0 5px 12px rgba(0,0,0,0.55));
+    opacity: 0.5;
+    filter: drop-shadow(0 3px 8px rgba(0,0,0,0.4));
   }
   .pda-body img, .pda-body .dl-ic { display: block; height: 100%; width: auto; image-rendering: pixelated; }
   /* Each slot reuses the .pd-cell / .pd-slot chrome, pinned at its body location. */
