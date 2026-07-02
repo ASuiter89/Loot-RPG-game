@@ -9406,7 +9406,7 @@ window.gameGuide = function gameGuide(topic) {
       `AUTO-LOOT applies a per-rarity rule the instant gear drops: Keep (default), Scrap (into materials), or Sell (50% value gold). Set it on the LOOT tab (♻ Auto-Loot). gameState().menu.autoLoot shows the rules.`,
       `It only touches organically-found drops (chests, kills) — never shop buys or forged gear — and never locked items.`,
       `Auto-scrap only works on equippable gear; non-gear set to Scrap falls back to Keep. Use Sell to auto-dispose of non-gear.`,
-      `Scrapping yields materials by the item's rarity: scrap always, glimmer from white up, core from rarer gear, and a shot at chaos on rare+ — every piece past grey breaks down into a varied haul. gameState().menu.materials shows your wallet.`,
+      `Scrapping yields materials by rarity band: scrap from any piece, glimmer from green up, core from blue up, and a chaos shot only from epic+ — grey/white melt to pure scrap, so finer mats stay tied to finer gear. gameState().menu.materials shows your wallet.`,
       `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" then call saveGame().`,
     ],
     hazards: [
@@ -10565,6 +10565,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Materials tied to rarity bands", by: "Claude", notes: ["Scrap, Glimmer and Core were flooding in — dialled back and made cleaner.", "Salvage now reads by colour: grey/white give pure Scrap, green+ start giving Glimmer, blue+ Core, only epic+ shed a Chaos Orb — no more every-piece spray.", "Trimmed material kill-drops and capped the deep-floor Scrap bonus so it no longer balloons."] },
   { date: "2026-07-01", size: "small", v: "Set items fully teal", by: "Claude", notes: ["Set pieces now show the teal set colour in the chat log and the paper-doll two-hand slot too, matching the bag, drops and tooltips — no more tier orange."] },
   { date: "2026-07-02", size: "small", v: "UI SIZE scales icons too", by: "Claude", notes: ["Every menu, HUD and panel icon now grows with the UI SIZE setting alongside the text — sprites, currency and material icons, status badges, portraits, town-service art and the cursor all scale from 1x to 2x instead of staying tiny.", "Fixed some icons scaling twice and ballooning at higher UI SIZE."] },
   { date: "2026-07-02", size: "small", v: "Town & shop menus fill the screen", by: "Claude", notes: ["Town, shop and pact menus use the full width now: cards add columns up to a cap, then stretch to consume the rest of the space instead of stranding a narrow centred strip.", "Town hub lays out as a clean grid with no lone trailing tile."] },
@@ -19585,9 +19586,9 @@ function onEnemyDefeated(e) {
     const big = e.isBoss ? 3 : (e.isElite ? 2 : 1);
     // Material Find % (gear) boosts the odds of every crafting-material drop.
     const matMult = lootMult * (1 + totalStat('MATFIND') / 100);
-    if (Math.random() < 0.5 * matMult || e.isElite || e.isBoss)  add('scrap', rnd(1, 2) * big + Math.floor(dungeonLevel / 4));
-    if (Math.random() < 0.11 * matMult || e.isBoss)              add('glimmer', e.isBoss ? rnd(1, 2) : 1);
-    if (Math.random() < (0.022 + dungeonLevel * 0.0025) * matMult || (e.isBoss && Math.random() < 0.6)) add('core', e.isBoss ? rnd(1, 2) : 1);
+    if (Math.random() < 0.42 * matMult || e.isElite || e.isBoss)  add('scrap', rnd(1, 2) * big + Math.floor(dungeonLevel / 10));
+    if (Math.random() < 0.08 * matMult || e.isBoss)               add('glimmer', e.isBoss ? rnd(1, 2) : 1);
+    if (Math.random() < (0.015 + dungeonLevel * 0.0015) * matMult || (e.isBoss && Math.random() < 0.5)) add('core', e.isBoss ? rnd(1, 2) : 1);
     if (e.isBoss ? Math.random() < 0.18 : Math.random() < 0.004 * matMult) add('chaos', 1);
     const keys = Object.keys(gained);
     if (keys.length) {
