@@ -19939,6 +19939,38 @@ function playerBoxedIn() {
          playerSolidCell(cx, cy + 1) && playerSolidCell(cx, cy - 1);
 }
 
+// A full ring (playerBoxedIn) is rare; the usual "mobbed and stuck" is looser —
+// foes plug the way you're heading AND the lanes you'd slide into to get around
+// them, while one far corner stays technically open. This tests that real pin
+// relative to the hero's HEADING so the squeeze-out kicks in then too:
+//   • diagonal press → wedged into a foe corner (both the X and Y cells ahead are
+//     solid and at least one holds a foe), or
+//   • cardinal press → a foe dead ahead with BOTH side-lanes solid and at least
+//     one of those side blockers a foe (a genuine body pile, not a lone foe you
+//     could walk around or one plugging a 1-wide corridor — those stay solid so
+//     "slide around him" and corridor choke points still matter).
+function mobPinned(ix, iy) {
+  if (playerBoxedIn()) return true;
+  const cx = player.x, cy = player.y;
+  const sx = Math.abs(ix) > 0.35 ? Math.sign(ix) : 0;
+  const sy = Math.abs(iy) > 0.35 ? Math.sign(iy) : 0;
+  if (sx && sy) {
+    return playerSolidCell(cx + sx, cy) && playerSolidCell(cx, cy + sy) &&
+           !!(getEnemyAt(cx + sx, cy) || getEnemyAt(cx, cy + sy));
+  }
+  if (sx) {
+    return !!getEnemyAt(cx + sx, cy) &&
+           playerSolidCell(cx, cy - 1) && playerSolidCell(cx, cy + 1) &&
+           !!(getEnemyAt(cx, cy - 1) || getEnemyAt(cx, cy + 1));
+  }
+  if (sy) {
+    return !!getEnemyAt(cx, cy + sy) &&
+           playerSolidCell(cx - 1, cy) && playerSolidCell(cx + 1, cy) &&
+           !!(getEnemyAt(cx - 1, cy) || getEnemyAt(cx + 1, cy));
+  }
+  return false;
+}
+
 // A mob pin (see mobPinned) is the one time the hero may push THROUGH a foe: while
 // bodies plug its heading and its slide lanes and it's still trying to move, it
 // shoves toward its heading, slipping between the pinning foes toward open ground at
@@ -20155,10 +20187,10 @@ function updatePlayer(dt) {
     if (Math.abs(player.vy) < 0.02) player.vy = 0;
   }
   if (player.vx !== 0 || player.vy !== 0) movePlayerBy(player.vx * dt, player.vy * dt);
-  // Foes on every side would otherwise pin the hero in place — normal collision
-  // can't slide out when each neighbour cell holds a foe. If the hero is boxed in
-  // and still trying to move, let it shove THROUGH the pile toward open ground.
-  if (moving && playerBoxedIn()) squeezeThroughMob(ix, iy, dt);
+  // A mob would otherwise pin the hero in place — normal collision can't slide out
+  // when foes plug both the way ahead and the lanes it'd slide into. If the hero is
+  // pinned by bodies and still trying to move, let it shove THROUGH toward open ground.
+  if (moving && mobPinned(ix, iy)) squeezeThroughMob(ix, iy, dt);
 }
 
 // Everything that used to happen at the tail of a turn-based move(), now driven
