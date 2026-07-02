@@ -4312,15 +4312,15 @@
         <!-- Tab bar: each button swaps the visible pane below, so the menu is a
              few short lists instead of one long scroll. -->
         <div class="settings-tabs" role="tablist">
-          <button class="settings-tab-btn" data-tab="play" onclick="showSettingsTab('play')"><span class="stab-ic">🎮</span><span class="stab-lbl">Play</span></button>
+          <button class="settings-tab-btn active" data-tab="play" onclick="showSettingsTab('play')"><span class="stab-ic">🎮</span><span class="stab-lbl">Play</span></button>
           <button class="settings-tab-btn" data-tab="visuals" onclick="showSettingsTab('visuals')"><span class="stab-ic">🎨</span><span class="stab-lbl">Visuals</span></button>
-          <button class="settings-tab-btn active" data-tab="audio" onclick="showSettingsTab('audio')"><span class="stab-ic">🔊</span><span class="stab-lbl">Audio</span></button>
+          <button class="settings-tab-btn" data-tab="audio" onclick="showSettingsTab('audio')"><span class="stab-ic">🔊</span><span class="stab-lbl">Audio</span></button>
           <button class="settings-tab-btn" data-tab="progress" onclick="showSettingsTab('progress')"><span class="stab-ic">📊</span><span class="stab-lbl">Progress</span></button>
           <button class="settings-tab-btn" data-tab="about" onclick="showSettingsTab('about')"><span class="stab-ic">ℹ️</span><span class="stab-lbl">About</span></button>
         </div>
 
         <!-- ── AUDIO ── volume, vibe, and a skip-to-next-track control. -->
-        <div class="settings-pane active" data-pane="audio">
+        <div class="settings-pane" data-pane="audio">
         <button class="settings-item sound-action" id="music-action" onclick="cycleMusic()" data-tip="<div class='ht-name'>🎵 Music volume</div><div class='ht-line'>Tap to step the volume down a notch; wraps from off back to full.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon" id="music-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span><span class="action-label">MUSIC</span><span class="vol-meter" id="music-meter"></span>
         </button>
@@ -4348,7 +4348,7 @@
         </div>
 
         <!-- ── PLAY ── in-run toggles &amp; helpers. -->
-        <div class="settings-pane" data-pane="play">
+        <div class="settings-pane active" data-pane="play">
         <button class="settings-item" id="target-mode-action" onclick="cycleTargetMode()" data-tip="<div class='ht-name'>🎯 Auto-attack focus</div><div class='ht-line'>Choose which foe your auto-attack locks onto.</div><div class='ht-sub'>Click to cycle</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="1" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="1" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="23" y2="12"/></svg></span><span class="action-label" id="target-mode-label">TARGET</span>
         </button>
@@ -9858,6 +9858,7 @@ window.gameGuide = function gameGuide(topic) {
       `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec). The Might attribute deepens the pool and speeds its recharge. Check player.dashReady before dashing.`,
       `Terrain underfoot matters: mud ("," tile) cuts speed ~45%; ice ("_" tile) makes you accelerate sluggishly and keep gliding — both are in the map glyphs now. Don't try to fight or dodge precisely while standing on them.`,
       `Being Slowed (a debuff) halves speed; being Stunned roots you entirely (see gameState().effects).`,
+      `Foes are solid, so a single one body-blocks you — slide along it and step around. But a TOTAL surround can't pin you forever: while foes box you in on every side, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall).`,
     ],
     combat: [
       `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight).`,
@@ -11066,7 +11067,7 @@ function centerSettingsCard() {
 }
 // Which settings tab is showing. Persists across opens so reopening lands where
 // you left off; keybindsBack() reopens straight onto the Play tab (where KEYS lives).
-let settingsTab = 'audio';
+let settingsTab = 'play';
 function showSettingsTab(name) {
   settingsTab = name;
   document.querySelectorAll('#settings-card .settings-tab-btn').forEach(b =>
@@ -11081,8 +11082,11 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Gear-doll polish", by: "Claude", notes: ["Faded the hero body behind the GEAR paper-doll a little more so worn slots read clearer.", "Shrank the ⚡ marker beside every Power number so the digits stand out."] },
+  { date: "2026-07-02", size: "small", v: "Settings opens on Play", by: "Claude", notes: ["Settings now opens on the Play tab by default instead of Audio."] },
+  { date: "2026-07-02", size: "small", v: "Break out of a full surround", by: "Claude", notes: ["Foes boxing you in on every side no longer pin you in place — keep pushing and the hero shoves between them toward open ground.", "A single foe still hard-blocks you; slide along it to get around."] },
   { date: "2026-07-02", size: "small", v: "Skill panel polish", by: "Claude", notes: ["Skill-slots header, hint and slot boxes are now centered.", "Skill names sit below each tile instead of overlapping the icon.", "Bigger skill-tree icons.", "Dropped the redundant lock badge — greyed-out tiles already read as locked.", "Clicking a tile now hides the hover tooltip, so it stops blocking the detail popup."] },
   { date: "2026-07-02", size: "small", v: "Settings gains a Visuals tab", by: "Claude", notes: ["UI SIZE, UI FONT and CURSOR moved out of Play into a new Visuals tab. Tab order is now Play, Visuals, Audio, Progress, About.", "UI FONT is now a collapsing dropdown showing your current face; open it for a two-column grid of options instead of one tall column."] },
+  { date: "2026-07-02", size: "small", v: "Smoother side-panel collapse", by: "Claude", notes: ["Folding the combat log or loot drawer on desktop now slides smoothly instead of stuttering — the map re-fit no longer double-draws each frame."] },
   { date: "2026-07-02", size: "small", v: "Punchier level-up banner", by: "Claude", notes: ["Level-up banner now flares with golden light rays and a bloom, plus a fuller, more rewarding fanfare.", "\"Spend your points\" hint shows only through level 3, then steps aside."] },
   { date: "2026-07-02", size: "small", v: "Skill-tree tabs taller, with branch blurbs", by: "Claude", notes: ["Passive/Active/Path and specialization tabs are taller for easier clicking.", "Selecting a specialization (Slayer, Duelist, Pyro…) now shows a one-line blurb explaining what that build path is about."] },
   { date: "2026-07-02", size: "small", v: "Livelier town background", by: "Claude", notes: ["The town menu's ambient scenes got a big upgrade — each now paints a tinted, breathing sky, a moon or low sun, a silhouetted rooftop skyline with windows that wake and dim, and brighter layered particles.", "Ten distinct vignettes (dusk rooftops, starry night with shooting stars, rainy town, snowfall by moonlight, aurora, lantern festival, blossoms and more) instead of one faint, near-invisible layer."] },
@@ -19489,7 +19493,7 @@ function move(dx, dy) {
 // town NPCs and live foes all block. A cracked wall is smashed and a locked door
 // is unlocked (consuming the key) ON CONTACT — both then become passable, so
 // pushing into one breaks through it just the way stepping into it used to.
-function playerSolidCell(cx, cy) {
+function playerSolidCell(cx, cy, ignoreFoes) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return true;
   const t = mapData[cy][cx];
   if (t === 10) return true;            // cracked wall — solid until smashed (see breakAhead)
@@ -19500,8 +19504,10 @@ function playerSolidCell(cx, cy) {
   if (mystic && mystic.x === cx && mystic.y === cy) return true;
   // Foes are solid — you can't walk through them. You can still always retreat:
   // they move slower than you (WORLD_TICK), and resting flush against a foe leaves
-  // your box just shy of its cell, so you can slide along it and step away.
-  if (getEnemyAt(cx, cy)) return true;
+  // your box just shy of its cell, so you can slide along it and step away. The one
+  // exception is a TOTAL surround: squeezeThroughMob() tests with ignoreFoes so a
+  // hero the mob has pinned on every side can still shove out (never through walls).
+  if (!ignoreFoes && getEnemyAt(cx, cy)) return true;
   if (furnitureMap[cy + ',' + cx] !== undefined) return true; // indoor furniture is solid
   return false;
 }
@@ -19524,6 +19530,16 @@ function playerBoxBlocked(px, py) {
   return playerSolidCell(x0, y0) || playerSolidCell(x1, y0) ||
          playerSolidCell(x0, y1) || playerSolidCell(x1, y1);
 }
+// Like playerBoxBlocked but FOES don't count — only static terrain (walls, deep
+// water, boss barriers, furniture, town NPCs). squeezeThroughMob uses this so a
+// pinned hero can slip THROUGH the foes boxing it in, but never through a wall.
+function playerBoxBlockedTerrain(px, py) {
+  const r = PLAYER_R, e = 1e-4;
+  const x0 = Math.floor(px - r), x1 = Math.floor(px + r - e);
+  const y0 = Math.floor(py - r), y1 = Math.floor(py + r - e);
+  return playerSolidCell(x0, y0, true) || playerSolidCell(x1, y0, true) ||
+         playerSolidCell(x0, y1, true) || playerSolidCell(x1, y1, true);
+}
 
 // If the hero's body ends up genuinely overlapping a solid cell — almost always a
 // foe that stepped into the tile beside us while we hugged the boundary — nudge it
@@ -19531,6 +19547,7 @@ function playerBoxBlocked(px, py) {
 // the hero permanently. Flush contact is NOT overlap (see the epsilon above), so
 // this never shoves you off a foe you're meleeing.
 function unstickPlayer(dt) {
+  if (player._squeezeT > 0) return;   // a mob-squeeze owns the hero — don't yank it back into the pile
   if (!playerBoxBlocked(player.fx, player.fy)) return;
   const push = Math.max(0.05, PLAYER_SPEED * 0.7 * dt);
   const cand = [[push,0],[-push,0],[0,push],[0,-push],[push,push],[push,-push],[-push,push],[-push,-push]];
@@ -19541,6 +19558,41 @@ function unstickPlayer(dt) {
       return;
     }
   }
+}
+
+// True when all four cells orthogonally around the hero's cell are solid (a foe
+// or wall in each) — the hero has no open neighbour to step into and, since
+// movement resolves one axis at a time, no diagonal escape either. This is the
+// exact "totally pinned" state a swarm creates. We test at the CELL level (not a
+// sub-tile nudge): the hero's box is narrower than a tile, so it always has a
+// little play WITHIN its own cell — only a full ring of solid neighbours truly
+// traps it. A lone body-blocking foe leaves three sides open, so this stays false.
+function playerBoxedIn() {
+  const cx = player.x, cy = player.y;
+  return playerSolidCell(cx + 1, cy) && playerSolidCell(cx - 1, cy) &&
+         playerSolidCell(cx, cy + 1) && playerSolidCell(cx, cy - 1);
+}
+
+// A total surround is the one time the hero may push THROUGH a foe: while pinned
+// on every side and still trying to move, it shoves toward its heading, slipping
+// between the pinning foes toward open ground at a crawl (~45% speed). The terrain
+// test still blocks walls/water/furniture, so this only ever frees a mobbed hero —
+// it can't be abused to walk through a lone body-blocking foe (playerBoxedIn is
+// false the instant any one side is open). _squeezeT keeps unstickPlayer from
+// yanking the hero back into the pile mid-slip.
+function squeezeThroughMob(ix, iy, dt) {
+  const preX = player.x, preY = player.y;
+  const s = PLAYER_SPEED * 0.45 * dt;
+  const dx = ix * s, dy = iy * s;                 // ix,iy already a unit heading
+  let moved = false;
+  if (dx && !playerBoxBlockedTerrain(player.fx + dx, player.fy)) { player.fx += dx; moved = true; }
+  if (dy && !playerBoxBlockedTerrain(player.fx, player.fy + dy)) { player.fy += dy; moved = true; }
+  if (!moved) return;                             // walled in on the heading — nothing to shove into
+  player.fx = Math.max(0.5, Math.min(MAP_W - 0.5, player.fx));
+  player.fy = Math.max(0.5, Math.min(MAP_H - 0.5, player.fy));
+  player.x = Math.floor(player.fx); player.y = Math.floor(player.fy);
+  player._squeezeT = 0.2;
+  if (player.x !== preX || player.y !== preY) onEnterCell(player.x, player.y);
 }
 
 // Shift the hero by (ddx,ddy) tiles this frame, resolving X then Y so the body
@@ -19627,6 +19679,7 @@ function doDash() {
 // or stunned (the world clock still ticks those down).
 function updatePlayer(dt) {
   if (player.dashCd > 0) player.dashCd -= dt;
+  if (player._squeezeT > 0) player._squeezeT -= dt;   // wind down an active mob-squeeze (see below)
   unstickPlayer(dt);   // free the hero if a foe stepped into our body's space
   if (isPlayerStunned()) { player.vx = 0; player.vy = 0; player.dashT = 0; regenStamina(dt); return; }
   // Channeling a town portal roots the hero — but a deliberate step (WASD / arrows /
@@ -19708,6 +19761,10 @@ function updatePlayer(dt) {
     if (Math.abs(player.vy) < 0.02) player.vy = 0;
   }
   if (player.vx !== 0 || player.vy !== 0) movePlayerBy(player.vx * dt, player.vy * dt);
+  // Foes on every side would otherwise pin the hero in place — normal collision
+  // can't slide out when each neighbour cell holds a foe. If the hero is boxed in
+  // and still trying to move, let it shove THROUGH the pile toward open ground.
+  if (moving && playerBoxedIn()) squeezeThroughMob(ix, iy, dt);
 }
 
 // Everything that used to happen at the tail of a turn-based move(), now driven
@@ -24702,21 +24759,19 @@ function log(msg, cls='') {
 // hundred ms (see the --log-col / --panel-col transition). The map canvas fills
 // whatever width the panels yield, so its backing buffer has to be re-fit every
 // frame for the length of the slide — otherwise the fixed-size buffer would stretch
-// (soft and blurry) until the animation settled, then snap crisp. draw() already
-// runs every frame in the game loop, so re-fitting the buffer each frame is enough
-// to keep the map sharp throughout the slide. Kept in sync with the CSS duration.
+// (soft and blurry) until the animation settled, then snap crisp.
+//
+// This just opens a time window; the single game-loop RAF does the actual per-frame
+// refit (see gameLoop, which re-fits then draws in the same frame). Driving it from
+// the one loop — rather than spawning a SECOND rAF that also redraws — is what keeps
+// the slide smooth: it's one canvas re-fit + one draw per frame instead of two full
+// map redraws fighting for the frame budget, and doing the re-fit immediately before
+// the draw guarantees the map never flashes a freshly-cleared buffer. Kept in sync
+// with the CSS transition duration.
 const PANEL_SLIDE_MS = 320;
-let _slideRefitUntil = 0, _slideRefitOn = false;
+let _slideRefitUntil = 0;
 function refitMapDuringSlide() {
   _slideRefitUntil = performance.now() + PANEL_SLIDE_MS + 60;   // a touch past the transition end
-  if (_slideRefitOn) return;                                    // already looping — just extend the window
-  _slideRefitOn = true;
-  (function step() {
-    if (typeof resizeCanvas === 'function') resizeCanvas();
-    if (typeof draw === 'function') { try { draw(); } catch (e) {} }
-    if (performance.now() < _slideRefitUntil) requestAnimationFrame(step);
-    else _slideRefitOn = false;
-  })();
 }
 
 // ── COLLAPSIBLE COMBAT LOG ──
@@ -27440,6 +27495,12 @@ function gameLoop(ts) {
   safeStep('stamina', () => renderStaminaBar());   // stamina drains/refills continuously — keep the END bar live
   safeStep('cdDials', () => updateCooldownDials()); // animate the skill/potion cooldown dials in real time
   safeStep('halo', () => updateHaloVignette());     // the danger halo is a DOM overlay — pulse it every frame
+  // While a side panel is sliding open/closed its column width animates, so the
+  // map's on-screen box changes every frame. Re-fit the backing buffer right
+  // before the draw (same frame → guaranteed order, no blank flash) so the map
+  // stays crisp through the slide instead of stretching. One re-fit + one draw
+  // per frame keeps the slide smooth (see refitMapDuringSlide).
+  if (performance.now() < _slideRefitUntil) safeStep('slideRefit', () => resizeCanvas());
   safeStep('draw', () => draw());
 }
 requestAnimationFrame(gameLoop);
