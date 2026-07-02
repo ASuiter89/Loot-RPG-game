@@ -1663,8 +1663,12 @@
      overflow-x:auto is only a fallback for a too-narrow column, but setting it
      also forces overflow-y to compute to 'auto' — which showed a phantom vertical
      scrollbar whenever the tallest slot (the auto-cast tile) sat a few px past the
-     belt. Pin overflow-y:hidden so the belt never scrolls vertically. */
-  .dh-belt { display: flex; align-items: center; justify-content: stretch; min-height: 56px; padding: 0 8px; overflow-x: auto; overflow-y: hidden; }
+     belt. Pin overflow-y:hidden so the belt never scrolls vertically.
+     The belt grows to fill the HUD's spare height (flex:1) and centres the skill
+     row, so the margin ABOVE the skills always matches the margin BELOW them; the
+     top/bottom padding is a guaranteed even minimum, and the XP bar stays pinned
+     to the very bottom of the HUD. */
+  .dh-belt { display: flex; align-items: center; justify-content: stretch; flex: 1 1 auto; min-height: 0; padding: calc(12px * var(--ui-scale,1)) 8px; overflow-x: auto; overflow-y: hidden; }
   .dh-belt > #skill-bar { flex: 1 1 auto; width: 100%; }
   .dh-belt::-webkit-scrollbar { height: 0; }
   /* Segmented experience bar along the very bottom. */
@@ -2099,8 +2103,9 @@
   }
   /* Item power badge — a single gold number shown alongside an item's stats. */
   .item-power { color: var(--gold-350); font-weight: bold; opacity: 0.95; margin-left: 5px; white-space: nowrap; }
-  /* The ⚡ marker before a Power number, sized a touch smaller than the digits so it
-     reads as a glyph rather than a leading digit. Shared by every power badge. */
+  /* The Power marker before a Power number — the shared `ui_power` atlas tile
+     (same icon as the bottom HUD), painted via data-spr. Shared by every power
+     badge so Power reads with one consistent icon everywhere. */
   .pwr-g { font-size: 0.8em; }
   .item-diff { font-size: 1.2rem; margin-top: 1px; line-height: 1.3; }
 
@@ -3484,8 +3489,10 @@
       --log-col:  clamp(250px, 24vw, 480px);  --log-open:   clamp(250px, 24vw, 480px);
       --panel-col: clamp(210px, 22vw, 440px); --panel-open: clamp(210px, 22vw, 440px);
       /* Bottom HUD belt is rem-based so it grows with the type (and the UI SIZE
-         setting) instead of clipping the skill icons and HP/MP row when scaled. */
-      --dhud-h: clamp(118px, 10rem, 190px);
+         setting) instead of clipping the skill icons and HP/MP row when scaled.
+         Tall enough to hold the HP/MP row, the enlarged skill tiles with an even
+         margin above and below them, and the XP bar along the bottom. */
+      --dhud-h: clamp(150px, 12.5rem, 240px);
     }
     /* Fold a panel to a 30px spine. Only the *-col var folds; the *-open var — the
        width the panel BODY is pinned to (see #log / #panel-body) — is governed by
@@ -3803,9 +3810,14 @@
       flex-wrap: nowrap;
       pointer-events: auto;
     }
-    /* Big enough to read, but allowed to shrink so all 12 slots stay one row even
-       when the log is open and the map column is narrow. */
-    #skill-bar { --sb-size: calc(48px * var(--ui-scale,1)); }
+    /* Large, easy-to-hit tiles. If the map column is too narrow for every slot at
+       this size the belt scrolls horizontally (overflow-x on .dh-belt) and the
+       left/right groups stay on one row (nowrap) rather than wrapping and clipping. */
+    #skill-bar { --sb-size: calc(72px * var(--ui-scale,1)); }
+    #skill-bar .sb-left, #skill-bar .sb-right { flex-wrap: nowrap; }
+    /* The sprite/SVG/emoji icons scale up with the bigger tiles so each button keeps
+       the same filled look instead of a small icon marooned in a large box. */
+    #skill-bar .skillbar-btn .sb-icon { transform: scale(1.5); }
     #skill-bar .skillbar-btn .sb-icon { font-size: 2.4rem; }
     /* Spell icons (no MP label) fill the larger tile here. */
     #skill-bar .skillbar-btn .sb-icon.big { font-size: 3.4rem; }
@@ -10002,7 +10014,7 @@ window.gameGuide = function gameGuide(topic) {
       `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec). The Might attribute deepens the pool and speeds its recharge. Check player.dashReady before dashing.`,
       `Terrain underfoot matters: mud ("," tile) cuts speed ~45%; ice ("_" tile) makes you accelerate sluggishly and keep gliding — both are in the map glyphs now. Don't try to fight or dodge precisely while standing on them.`,
       `Being Slowed (a debuff) halves speed; being Stunned roots you entirely (see gameState().effects).`,
-      `Foes are solid, so a single one body-blocks you — slide along it and step around. But a TOTAL surround can't pin you forever: while foes box you in on every side, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall).`,
+      `Foes are solid, so a single one body-blocks you — slide along it and step around. But a MOB can't pin you forever: when bodies plug your heading AND the lanes you'd slide into to go around them, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall, and a lone foe with any real gap beside it stays solid).`,
     ],
     combat: [
       `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight).`,
@@ -10048,7 +10060,7 @@ window.gameGuide = function gameGuide(topic) {
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too.`,
       `From the LOOT tab, tap an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
-      `The LOOT tab has a Sort button (rarity / power / slot / value / name) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
+      `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. Off-class weapons can be carried and sold but not equipped.`,
       `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them.`,
     ],
@@ -11243,10 +11255,14 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Tidier foe inspect card", by: "Claude", notes: ["The tap-to-inspect creature card is more compact — smaller box and text.", "Pressing anywhere else on the map now closes it, including click-and-hold to move."] },
+  { date: "2026-07-02", size: "small", v: "Consistent Power icon", by: "Claude", notes: ["Every Power number — item badges, the character panel, item tooltips, the work list — now uses the same icon as the bottom HUD, instead of a lightning glyph that was rendering as the stun icon.", "Fixed the work list showing an item's Power twice."] },
+  { date: "2026-07-02", size: "small", v: "Break out when mobbed, not just fully ringed", by: "Claude", notes: ["Getting swarmed no longer freezes you: when foes plug the way you're heading and the lanes you'd slide around them, keep pushing and the hero shoves between the bodies toward open ground.", "A lone foe with any real gap beside it still hard-blocks you, and corridors stay choke points."] },
+  { date: "2026-07-02", size: "small", v: "Bigger skill tiles on the HUD", by: "Claude", notes: ["Bottom-HUD skill buttons are 50% larger with icons scaled to match.", "Even margin above and below the skill row; the HUD grows to fit."] },
   { date: "2026-07-02", size: "small", v: "Chunkier floor buttons", by: "Claude", notes: ["Dungeon Gate floor buttons are now larger, taller and squarer with bigger numerals — easier to read and click."] },
   { date: "2026-07-02", size: "small", v: "Smart click-to-move pathing", by: "Claude", notes: ["Click a spot behind a wall and the hero now routes around it instead of grinding into the corner — faint gold breadcrumbs sketch the planned path.", "Prefers safe ground, steering around lava and spikes when there's a way past.", "Works while holding the button too: drag past a wall and the route re-plans to keep chasing the cursor."] },
   { date: "2026-07-02", size: "small", v: "Line of sight required to hit at range", by: "Claude", notes: ["Ranged skills and spells (bolt, blast, beam, nova, chain) now need a clear line to a foe — no firing through walls, deep water or sealed doors.", "Ranged summoned minions close in until they can see their target instead of shooting through walls.", "More boss tricks (firewall, firestorm, shockwave, frost nova, quake, vortex) now need line of sight, so ducking behind cover breaks them."] },
   { date: "2026-07-02", size: "small", v: "Smoother pickups", by: "Claude", notes: ["Grabbing loot no longer hitches the frame — the bag rebuilds at most once per frame and only when it's on-screen, and rapid pickups save once instead of on every chest."] },
+  { date: "2026-07-02", size: "small", v: "Hover stat codes on the equip-compare line", by: "Claude", notes: ["Stat abbreviations in the item-vs-equipped compare line (bag & shop) now reveal their full name on hover, like the item's own stat line."] },
   { date: "2026-07-02", size: "small", v: "Popup titles clear their nav buttons", by: "Claude", notes: ["A long popup title (e.g. Name Your Hero) no longer lets the Back/Close button spill sideways over it on a narrow window — the title now ellipsizes instead of overlapping."] },
   { date: "2026-07-02", size: "small", v: "Depth banner no longer eaten by its cache", by: "Claude", notes: ["A depth-milestone cache that rolls legendary/unique now shows NEW DEPTH RECORD first, then the drop reveal — instead of the drop banner instantly clobbering the milestone one.", "Loot banners now queue and play in turn; each banner's sound, flash and shake fire as it appears."] },
   { date: "2026-07-02", size: "small", v: "Readable floating text", by: "Claude", notes: ["Damage, gold and reward pops that fired at once now stack into a clean rising column instead of overlapping into a blob.", "Material and ingredient drops stay in the combat log only — no more duplicate on-kill floater.", "Hard cap keeps a big multi-hit burst from walling the screen with numbers."] },
@@ -11267,6 +11283,7 @@ const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Livelier town background", by: "Claude", notes: ["The town menu's ambient scenes got a big upgrade — each now paints a tinted, breathing sky, a moon or low sun, a silhouetted rooftop skyline with windows that wake and dim, and brighter layered particles.", "Ten distinct vignettes (dusk rooftops, starry night with shooting stars, rainy town, snowfall by moonlight, aurora, lantern festival, blossoms and more) instead of one faint, near-invisible layer."] },
   { date: "2026-07-02", size: "small", v: "Auto-Loot set-piece rule", by: "Claude", notes: ["♻ Auto-Loot picker gains a teal \"set\" row above unique — set pieces now answer to their own Keep/Scrap/Sell rule instead of inheriting the unique one, so you can keep chase sets while auto-selling plain uniques.", "Defaults to Keep; existing saves seed the new rule to Keep."] },
   { date: "2026-07-02", size: "small", v: "Twin wisps on the ENTER button", by: "Claude", notes: ["Two glints of light now circle the main button's border on opposite sides instead of one."] },
+  { date: "2026-07-02", size: "small", v: "Tidier loot sort menu", by: "Claude", notes: ["Dropped the Name sort — order the bag by rarity, power, slot or value.", "Sort menu now stays open when you pick an option, so you can flip between orders."] },
   { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Claude", notes: ["Title hero card now left-aligns its text and stands a big animated hero walking in place on the right."] },
   { date: "2026-07-01", size: "small", v: "Cleaner stat-abbreviation key", by: "Claude", notes: ["Loot stat-abbreviation key now groups item stats by theme (Offense, Defense, Sustain, Caster, Utility/Find), alphabetical within each group.", "Flows into two columns on desktop for easier scanning."] },
   { date: "2026-07-01", size: "medium", v: "Completed sets grant a signature power + golden aura", by: "Jeff Louie", notes: ["Completing a set (all 4 pieces) now unlocks a unique SIGNATURE POWER, not just more stats: Warden's Aegis Wall (block + damage reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), Arcanist's Arcane Overflow (cooldown reduction + mana leech).", "A completed set wraps the hero in a faint golden aura, and its \"… set\" tag turns gold with a ✦.", "Set tooltip now shows the power, a Worn n/4 count and a completion banner."] },
@@ -13531,12 +13548,16 @@ function stockPrice(s) {
 }
 
 // Compact one-line summary of an item's stats & attributes, e.g.
-// The ⚡ marker that leads a Power value. Wrapped so it renders a touch smaller than
-// the number beside it (see .pwr-g). Reused by every power badge for one consistent look.
-const PWR_GLYPH = '<span class="pwr-g">⚡</span>';
+// The Power marker that leads a Power value: the SAME `ui_power` atlas tile the
+// bottom HUD shows, painted from data-spr (see paintDataSpr) so every place that
+// shows Power uses one consistent icon — not a bare ⚡, which the global emoji map
+// would render as the stun glyph. Reused by every power badge.
+const PWR_GLYPH = '<span class="pwr-g" data-spr="ui_power"></span>';
 
 // "⚡14 · 8-12 DMG · +3 ATK · +5 MIG".
-function itemStatLine(item) {
+// Pass {noPower:true} to omit the leading Power marker (for rows that show Power
+// separately elsewhere, so it isn't printed twice).
+function itemStatLine(item, opts) {
   // Each stat code is a hoverable chip — pointing at it reveals the full name.
   const chip = (code, full) => `<span class="stat-abbr" ${hoverTip(full)}>${code}</span>`;
   const parts = Object.entries(item.stats).map(([k, v]) => {
@@ -13552,7 +13573,7 @@ function itemStatLine(item) {
   const body = parts.join(' · ');
   const powHtml = itemPowerFront(item);   // glowing special power — leads the line
   const setTag = itemSetTag(item);        // set membership — trails the line
-  const lead = item.slot ? `${PWR_GLYPH}${itemPower(item)}` : '';
+  const lead = (item.slot && !(opts && opts.noPower)) ? `${PWR_GLYPH}${itemPower(item)}` : '';
   return [lead, powHtml, body].filter(Boolean).join(' · ') + setTag;
 }
 
@@ -13587,9 +13608,10 @@ function statDiffLine(item) {
   for (const k of keys) {
     const d = Math.round(num(item, k) - num(cur, k));
     if (!d) continue;
-    const short = STAT_SHORT[k] || (ATTRIBUTES[k] && ATTRIBUTES[k].short) || k;
     const c = d > 0 ? '#5ee08a' : '#e0556b';
-    (d > 0 ? pos : neg).push(`<span style="color:${c}">${d > 0 ? '+' : ''}${d} ${short}</span>`);
+    // The code is a hoverable chip so pointing at it reveals the full stat name.
+    const chip = `<span class="stat-abbr" ${hoverTip(lootStatName(k))}>${lootStatCode(k)}</span>`;
+    (d > 0 ? pos : neg).push(`<span style="color:${c}">${d > 0 ? '+' : ''}${d} ${chip}</span>`);
   }
   const parts = pos.concat(neg);
   return parts.length ? parts.join('  ') : '<span style="color:var(--junk)">no stat change</span>';
@@ -15585,7 +15607,7 @@ function renderEnchanter() {
     if (g.where !== 'bag') continue;
     const it = g.item;
     const slotLabel = it.slot ? SLOTS[it.slot].label.replace(/^\S+\s/, '') : '';
-    const stats = itemStatLine(it).replace(/^⚡\d+\s*·?\s*/, ''); // power shown on its own line below
+    const stats = itemStatLine(it, {noPower:true}); // power shown on its own line below
     lootRows += `<div class="shop-row has-actions">
       <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
       <div class="shop-row-info ${rarityClass(it)}">
@@ -18534,7 +18556,9 @@ function spawnParticles(x, y, color, n, speed) {
     particles.push({ x: x + 0.5, y: y + 0.5, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 0.02,
       born: now, life: 280 + Math.random() * 220, color });
   }
-  draw();
+  // No draw() here: the rAF game loop already redraws every frame, so forcing a
+  // full extra redraw on every particle burst (several per frame in a big fight)
+  // was pure duplicated work. The sparks still appear on the very next frame.
 }
 // Current camera-shake offset in pixels (decays to 0), used by draw().
 function shakeOffset() {
@@ -19920,12 +19944,45 @@ function playerBoxedIn() {
          playerSolidCell(cx, cy + 1) && playerSolidCell(cx, cy - 1);
 }
 
-// A total surround is the one time the hero may push THROUGH a foe: while pinned
-// on every side and still trying to move, it shoves toward its heading, slipping
-// between the pinning foes toward open ground at a crawl (~45% speed). The terrain
-// test still blocks walls/water/furniture, so this only ever frees a mobbed hero —
-// it can't be abused to walk through a lone body-blocking foe (playerBoxedIn is
-// false the instant any one side is open). _squeezeT keeps unstickPlayer from
+// A full ring (playerBoxedIn) is rare; the usual "mobbed and stuck" is looser —
+// foes plug the way you're heading AND the lanes you'd slide into to get around
+// them, while one far corner stays technically open. This tests that real pin
+// relative to the hero's HEADING so the squeeze-out kicks in then too:
+//   • diagonal press → wedged into a foe corner (both the X and Y cells ahead are
+//     solid and at least one holds a foe), or
+//   • cardinal press → a foe dead ahead with BOTH side-lanes solid and at least
+//     one of those side blockers a foe (a genuine body pile, not a lone foe you
+//     could walk around or one plugging a 1-wide corridor — those stay solid so
+//     "slide around him" and corridor choke points still matter).
+function mobPinned(ix, iy) {
+  if (playerBoxedIn()) return true;
+  const cx = player.x, cy = player.y;
+  const sx = Math.abs(ix) > 0.35 ? Math.sign(ix) : 0;
+  const sy = Math.abs(iy) > 0.35 ? Math.sign(iy) : 0;
+  if (sx && sy) {
+    return playerSolidCell(cx + sx, cy) && playerSolidCell(cx, cy + sy) &&
+           !!(getEnemyAt(cx + sx, cy) || getEnemyAt(cx, cy + sy));
+  }
+  if (sx) {
+    return !!getEnemyAt(cx + sx, cy) &&
+           playerSolidCell(cx, cy - 1) && playerSolidCell(cx, cy + 1) &&
+           !!(getEnemyAt(cx, cy - 1) || getEnemyAt(cx, cy + 1));
+  }
+  if (sy) {
+    return !!getEnemyAt(cx, cy + sy) &&
+           playerSolidCell(cx - 1, cy) && playerSolidCell(cx + 1, cy) &&
+           !!(getEnemyAt(cx - 1, cy) || getEnemyAt(cx + 1, cy));
+  }
+  return false;
+}
+
+// A mob pin (see mobPinned) is the one time the hero may push THROUGH a foe: while
+// bodies plug its heading and its slide lanes and it's still trying to move, it
+// shoves toward its heading, slipping between the pinning foes toward open ground at
+// a crawl (~45% speed). The terrain test still blocks walls/water/furniture, so this
+// only ever frees a mobbed hero — it can't be abused to walk through a lone
+// body-blocking foe (mobPinned needs the slide lanes blocked by bodies too, so any
+// real "go around him" gap keeps the foe solid). _squeezeT keeps unstickPlayer from
 // yanking the hero back into the pile mid-slip.
 function squeezeThroughMob(ix, iy, dt) {
   const preX = player.x, preY = player.y;
@@ -20135,10 +20192,10 @@ function updatePlayer(dt) {
     if (Math.abs(player.vy) < 0.02) player.vy = 0;
   }
   if (player.vx !== 0 || player.vy !== 0) movePlayerBy(player.vx * dt, player.vy * dt);
-  // Foes on every side would otherwise pin the hero in place — normal collision
-  // can't slide out when each neighbour cell holds a foe. If the hero is boxed in
-  // and still trying to move, let it shove THROUGH the pile toward open ground.
-  if (moving && playerBoxedIn()) squeezeThroughMob(ix, iy, dt);
+  // A mob would otherwise pin the hero in place — normal collision can't slide out
+  // when foes plug both the way ahead and the lanes it'd slide into. If the hero is
+  // pinned by bodies and still trying to move, let it shove THROUGH toward open ground.
+  if (moving && mobPinned(ix, iy)) squeezeThroughMob(ix, iy, dt);
 }
 
 // Everything that used to happen at the tail of a turn-based move(), now driven
@@ -23342,9 +23399,8 @@ const LOOT_SORTS = [
   { key: 'power',  label: 'Power'  },
   { key: 'slot',   label: 'Slot'   },
   { key: 'value',  label: 'Value'  },
-  { key: 'name',   label: 'Name'   },
 ];
-function setLootSort(k) { lootSort = k; lootSortOpen = false; renderPanel(); }
+function setLootSort(k) { lootSort = k; renderPanel(); }
 function toggleLootSortMenu() { lootSortOpen = !lootSortOpen; if (lootSortOpen) lootFilterOpen = false; renderPanel(); }
 function toggleLootFilterMenu() { lootFilterOpen = !lootFilterOpen; if (lootFilterOpen) lootSortOpen = false; renderPanel(); }
 // Toggle one stat/attribute in the LOOT stat filter (keeps the panel open so you
@@ -23486,7 +23542,7 @@ function renderPanel() {
     // options panel below the row (so nothing floats over the list on mobile).
     const sortLabel = (LOOT_SORTS.find(s => s.key === lootSort) || LOOT_SORTS[0]).label;
     const controls = `<div class="loot-controls">
-      <button class="loot-ctrl-btn ${lootSortOpen ? 'open' : ''}" onclick="toggleLootSortMenu()" ${hoverTip(`<div class='ht-name'>⇅ Sort</div><div class='ht-line'>Order the bag by rarity, power, slot, value or name.</div>`)}>⇅ Sort <span class="lc-val">${sortLabel}</span><span class="lc-caret">${lootSortOpen ? '▾' : '▸'}</span></button>
+      <button class="loot-ctrl-btn ${lootSortOpen ? 'open' : ''}" onclick="toggleLootSortMenu()" ${hoverTip(`<div class='ht-name'>⇅ Sort</div><div class='ht-line'>Order the bag by rarity, power, slot or value.</div>`)}>⇅ Sort <span class="lc-val">${sortLabel}</span><span class="lc-caret">${lootSortOpen ? '▾' : '▸'}</span></button>
       <button class="loot-ctrl-btn ${lootFilterOpen ? 'open' : ''} ${lootStatFilter.length ? 'on' : ''}" onclick="toggleLootFilterMenu()" ${hoverTip(`<div class='ht-name'>⚑ Filter</div><div class='ht-line'>Show only gear that carries the stats you pick.</div>`)}>⚑ Filter${lootStatFilter.length ? ` <span class="lc-val">${lootStatFilter.length}</span>` : ''}<span class="lc-caret">${lootFilterOpen ? '▾' : '▸'}</span></button>
     </div>`;
     const sortPop = lootSortOpen ? '<div class="loot-ctrl-pop">' + LOOT_SORTS.map(s =>
@@ -23526,8 +23582,6 @@ function renderPanel() {
           return slotOf(ia) - slotOf(ib) || tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia);
         case 'value':
           return (ib.value || 0) - (ia.value || 0) || tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia);
-        case 'name':
-          return String(ia.name).localeCompare(String(ib.name)) || tierRank(ib) - tierRank(ia);
         case 'rarity':
         default:
           // Highest rarity first (unique → junk); Power breaks ties, then slot.
@@ -23696,7 +23750,7 @@ function renderHero(el) {
   el.innerHTML = `
     <div class="hero-nameplate">${escapeHtml(player.name || 'Adventurer')}</div>
     <div class="hero-power">
-      <div class="hp-label">⚡ POWER</div>
+      <div class="hp-label">${PWR_GLYPH} POWER</div>
       <div class="hp-value">${playerPower()}</div>
     </div>
     <div class="hero-sub">Level ${player.level} · ${gearPower} from gear</div>
@@ -24977,7 +25031,7 @@ function itemCardHTML(item, opts = {}) {
     ${label}
     <div class="tt-name" style="color:${tierColor(item)}">${item.name}</div>
     <div class="tt-tier" style="color:${tierColor(item)}">${item.slot ? SLOTS[item.slot].label : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</div>
-    ${item.slot ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">⚡ Power: ${power}</div>` : ''}
+    ${item.slot ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${power}</div>` : ''}
     ${reqLine}
     ${stats}
     ${weaponLine}
@@ -27658,7 +27712,7 @@ log('Open 🎒 BAG to view your loot; press the pad\'s USE button to grab items.
 log(`Tap the ❤️ or 🔷 flask to quaff a ${logPotion('Potion')} — free to use, but they share a short cooldown.`);
 log('⌨️ Keys: Q health potion · E mana potion · R primary skill · 3–9 skills · T town · B open bag · Space/F use.');
 log('⚡ You start with a skill point — open 🎒 BAG ▸ SKILLS to learn your first active, then tap ⚡ (or press ' + skillKeyLabel(1) + ') to cast it.');
-log('⚡ Each item has a Power value; your total Power blends level, gear, and attributes.');
+log(PWR_GLYPH + ' Each item has a Power value; your total Power blends level, gear, and attributes.');
 log('💠 Level up to earn points, then raise attributes in the bag\'s HERO tab.');
 log('🗡️ Every weapon fights differently — axes cleave, daggers flurry, bows & staves strike at range, maces stun, scythes drain. Try them all!');
 log('🏰 Tap TOWN (or press ' + kbLabel('portal') + ') to warp to the safe hub: craftsman, healer, trainer, enchanter, and a gate to re-enter any floor you\'ve reached.');
