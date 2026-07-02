@@ -2662,72 +2662,115 @@
   #town-bg > * { position: absolute; }
   #town-modal > #town-header, #town-modal > #town-gold,
   #town-modal > #town-mats, #town-modal > #town-content { position: relative; z-index: 1; }
+  /* ── SCENE SKY ── each scene paints a tinted gradient that slowly breathes
+     behind its particles, so the hub reads as a real time-of-day vignette rather
+     than a flat panel. Colours are token-derived so they track the theme. */
+  .tb-sky { inset: 0; animation: tbSkyBreathe 15s ease-in-out infinite; }
+  @keyframes tbSkyBreathe { 0%,100% { opacity: .82; } 50% { opacity: 1; } }
+  .tb-sky.dusk     { background: linear-gradient(180deg, color-mix(in srgb, var(--purple-500) 42%, transparent), color-mix(in srgb, var(--orange-650) 34%, transparent) 55%, color-mix(in srgb, var(--orange-750) 18%, transparent)); }
+  .tb-sky.night    { background: linear-gradient(180deg, color-mix(in srgb, var(--blue-800) 82%, transparent), color-mix(in srgb, var(--blue-700) 42%, transparent) 60%, transparent); }
+  .tb-sky.storm    { background: linear-gradient(180deg, color-mix(in srgb, var(--blue-800) 66%, transparent), color-mix(in srgb, var(--neutral-700) 40%, transparent)); }
+  .tb-sky.frost    { background: linear-gradient(180deg, color-mix(in srgb, var(--blue-800) 60%, transparent), color-mix(in srgb, var(--blue-650) 30%, transparent)); }
+  .tb-sky.golden   { background: linear-gradient(180deg, color-mix(in srgb, var(--gold-850) 42%, transparent), color-mix(in srgb, var(--orange-650) 30%, transparent) 55%, color-mix(in srgb, var(--orange-750) 20%, transparent)); }
+  .tb-sky.aurora   { background: linear-gradient(180deg, color-mix(in srgb, var(--blue-800) 78%, transparent), color-mix(in srgb, var(--teal-700) 28%, transparent) 62%, transparent); }
+  .tb-sky.blossom  { background: linear-gradient(180deg, color-mix(in srgb, var(--red-750) 40%, transparent), color-mix(in srgb, var(--gold-850) 30%, transparent)); }
+  .tb-sky.lantern  { background: linear-gradient(180deg, color-mix(in srgb, var(--purple-500) 34%, transparent), color-mix(in srgb, var(--orange-850) 65%, transparent)); }
+  .tb-sky.autumn   { background: linear-gradient(180deg, color-mix(in srgb, var(--orange-650) 40%, transparent), color-mix(in srgb, var(--gold-850) 34%, transparent)); }
+  .tb-sky.fountain { background: linear-gradient(180deg, color-mix(in srgb, var(--blue-800) 55%, transparent), color-mix(in srgb, var(--teal-700) 26%, transparent)); }
+  /* Celestial glows — a soft moon or low sun anchoring the sky. */
+  .tb-moon { border-radius: 50%; box-shadow: 0 0 24px 6px color-mix(in srgb, var(--blue-100) 30%, transparent);
+    background: radial-gradient(circle at 38% 34%, color-mix(in srgb, var(--paper) 92%, transparent), color-mix(in srgb, var(--blue-100) 55%, transparent) 55%, transparent 72%);
+    animation: tbOrb 7s ease-in-out infinite; }
+  .tb-sun { border-radius: 50%; box-shadow: 0 0 42px 14px color-mix(in srgb, var(--orange-750) 26%, transparent);
+    background: radial-gradient(circle, color-mix(in srgb, var(--orange-750) 85%, transparent), color-mix(in srgb, var(--orange-700) 42%, transparent) 55%, transparent 72%);
+    animation: tbOrb 6s ease-in-out infinite; }
+  @keyframes tbOrb { 0%,100% { filter: brightness(.9); } 50% { filter: brightness(1.18); } }
+  /* Shooting star — a rare bright streak crossing the night. */
+  .tb-shoot { top: 0; width: 66px; height: 2px; border-radius: 2px; opacity: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--paper) 90%, transparent));
+    animation: tbShoot linear infinite; }
+  @keyframes tbShoot { 0% { opacity: 0; transform: translate(0,0) rotate(24deg) scaleX(.2); }
+    3% { opacity: .95; } 11%,100% { opacity: 0; transform: translate(240px, 108px) rotate(24deg) scaleX(1); } }
+  /* Distant town skyline — a silhouette of rooftops with windows waking + dimming.
+     Ambient scenery (like the clouds/aurora), not a game asset. */
+  .tb-roofs { left: 0; right: 0; bottom: 0; height: 68px; }
+  .tb-house { position: absolute; bottom: 0; background: color-mix(in srgb, var(--ink) 78%, var(--purple-500));
+    border-top: 1px solid color-mix(in srgb, var(--purple-500) 40%, transparent); }
+  .tb-roof { position: absolute; bottom: 100%; left: 50%; width: 0; height: 0; transform: translateX(-50%);
+    border-left: solid transparent; border-right: solid transparent;
+    border-bottom: solid color-mix(in srgb, var(--ink) 74%, var(--purple-500)); }
+  .tb-win { position: absolute; width: 3px; height: 4px; border-radius: 1px;
+    background: color-mix(in srgb, var(--orange-750) 88%, transparent);
+    box-shadow: 0 0 5px color-mix(in srgb, var(--orange-750) 60%, transparent);
+    animation: tbWin ease-in-out infinite; }
+  @keyframes tbWin { 0%,100% { opacity: .2; } 50% { opacity: .95; } }
+
   /* Fireflies — slow glowing motes that wander and blink (dusk). */
-  .tb-fly { width: 4px; height: 4px; border-radius: 50%; background: var(--green-200);
-    box-shadow: 0 0 8px 2px color-mix(in srgb, var(--green-200) 80%, transparent); opacity: 0;
+  .tb-fly { width: 5px; height: 5px; border-radius: 50%; background: var(--green-200);
+    box-shadow: 0 0 10px 3px color-mix(in srgb, var(--green-200) 85%, transparent); opacity: 0;
     animation: tbFly ease-in-out infinite; }
   @keyframes tbFly { 0%,100% { opacity: 0; transform: translate(0,0); }
-    20% { opacity: .85; } 50% { opacity: .4; transform: translate(var(--dx,14px), var(--dy,-10px)); }
-    80% { opacity: .85; } }
+    20% { opacity: 1; } 50% { opacity: .5; transform: translate(var(--dx,14px), var(--dy,-10px)); }
+    80% { opacity: 1; } }
   /* Chimney smoke — soft puffs rising from the rooftops and dissipating. */
   .tb-smoke { bottom: -24px; width: 26px; height: 26px; border-radius: 50%;
-    background: radial-gradient(circle, color-mix(in srgb, var(--neutral-250) 22%, transparent), transparent 70%);
+    background: radial-gradient(circle, color-mix(in srgb, var(--neutral-250) 28%, transparent), transparent 70%);
     opacity: 0; animation: tbSmoke linear infinite; }
   @keyframes tbSmoke { 0% { opacity: 0; transform: translateY(0) scale(.6); }
-    15% { opacity: .5; } 100% { opacity: 0; transform: translate(var(--dx,20px), -75vh) scale(2.4); } }
+    15% { opacity: .6; } 100% { opacity: 0; transform: translate(var(--dx,20px), -75vh) scale(2.4); } }
   /* Falling leaves — autumn leaves tumbling down on a light breeze. */
-  .tb-leaf { top: -16px; width: 9px; height: 9px; border-radius: 0 65% 0 65%;
+  .tb-leaf { top: -16px; width: 10px; height: 10px; border-radius: 0 65% 0 65%;
     background: var(--lc, var(--orange-450)); opacity: 0; animation: tbLeaf linear infinite; }
   @keyframes tbLeaf { 0% { opacity: 0; transform: translate(0,0) rotate(0); }
-    10% { opacity: .8; } 100% { opacity: .2; transform: translate(var(--dx,30px), 95vh) rotate(540deg); } }
+    10% { opacity: .95; } 100% { opacity: .25; transform: translate(var(--dx,30px), 95vh) rotate(540deg); } }
   /* Night sky — quiet twinkling stars. */
-  .tb-star { width: 2px; height: 2px; border-radius: 50%; background: var(--paper);
-    box-shadow: 0 0 4px 1px color-mix(in srgb, var(--paper) 70%, transparent); animation: tbTwinkle ease-in-out infinite; }
-  @keyframes tbTwinkle { 0%,100% { opacity: .12; } 50% { opacity: 1; } }
+  .tb-star { width: 3px; height: 3px; border-radius: 50%; background: var(--paper);
+    box-shadow: 0 0 6px 1px color-mix(in srgb, var(--paper) 75%, transparent); animation: tbTwinkle ease-in-out infinite; }
+  @keyframes tbTwinkle { 0%,100% { opacity: .18; } 50% { opacity: 1; } }
   /* Sunbeam dust — warm gold motes drifting up through an afternoon shaft. */
-  .tb-ray { inset: 0; background: linear-gradient(115deg, transparent 42%, color-mix(in srgb, var(--gold) 7%, transparent) 52%, transparent 62%); }
+  .tb-ray { inset: 0; background: linear-gradient(115deg, transparent 40%, color-mix(in srgb, var(--gold) 11%, transparent) 52%, transparent 64%); }
   .tb-mote { bottom: -8px; border-radius: 50%; background: var(--xp);
-    box-shadow: 0 0 6px 1px color-mix(in srgb, var(--gold) 50%, transparent); opacity: 0; animation: tbMote linear infinite; }
+    box-shadow: 0 0 7px 1px color-mix(in srgb, var(--gold) 55%, transparent); opacity: 0; animation: tbMote linear infinite; }
   @keyframes tbMote { 0% { opacity: 0; transform: translate(0,0); }
-    15% { opacity: .7; } 85% { opacity: .45; } 100% { opacity: 0; transform: translate(var(--dx,26px), -95vh); } }
+    15% { opacity: .85; } 85% { opacity: .55; } 100% { opacity: 0; transform: translate(var(--dx,26px), -95vh); } }
   /* Gentle rain — thin drifting streaks. */
-  .tb-rain { top: -20px; width: 1px; height: 14px;
-    background: linear-gradient(transparent, color-mix(in srgb, var(--info) 50%, transparent)); opacity: 0;
+  .tb-rain { top: -20px; width: 1px; height: 16px;
+    background: linear-gradient(transparent, color-mix(in srgb, var(--info) 65%, transparent)); opacity: 0;
     animation: tbRain linear infinite; }
-  @keyframes tbRain { 0% { opacity: 0; transform: translateY(0); } 12% { opacity: .55; }
-    100% { opacity: .3; transform: translateY(108vh); } }
+  @keyframes tbRain { 0% { opacity: 0; transform: translateY(0); } 12% { opacity: .7; }
+    100% { opacity: .4; transform: translateY(108vh); } }
   /* Snow — soft flakes settling through still air. */
   .tb-snow { top: -12px; border-radius: 50%; background: var(--paper);
-    box-shadow: 0 0 4px color-mix(in srgb, var(--paper) 60%, transparent); opacity: 0; animation: tbSnow linear infinite; }
-  @keyframes tbSnow { 0% { opacity: 0; transform: translate(0,0); } 12% { opacity: .9; }
-    100% { opacity: .4; transform: translate(var(--dx,20px), 100vh); } }
+    box-shadow: 0 0 4px color-mix(in srgb, var(--paper) 65%, transparent); opacity: 0; animation: tbSnow linear infinite; }
+  @keyframes tbSnow { 0% { opacity: 0; transform: translate(0,0); } 12% { opacity: .95; }
+    100% { opacity: .45; transform: translate(var(--dx,20px), 100vh); } }
   /* Hanging lanterns — warm glows breathing gently. */
   .tb-lantern { border-radius: 50%;
-    background: radial-gradient(circle, color-mix(in srgb, var(--orange-750) 30%, transparent), transparent 70%);
+    background: radial-gradient(circle, color-mix(in srgb, var(--orange-750) 42%, transparent), transparent 70%);
     animation: tbLantern ease-in-out infinite; }
-  @keyframes tbLantern { 0%,100% { opacity: .3; } 50% { opacity: .85; } }
+  @keyframes tbLantern { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
   /* Drifting clouds — soft masses sliding across a calm sky. */
   .tb-cloud { border-radius: 50%;
-    background: radial-gradient(ellipse, color-mix(in srgb, var(--text) 13%, transparent), transparent 70%);
+    background: radial-gradient(ellipse, color-mix(in srgb, var(--paper) 16%, transparent), transparent 70%);
     animation: tbCloud linear infinite; }
   @keyframes tbCloud { 0% { transform: translateX(-40%); } 100% { transform: translateX(140%); } }
   /* Blossom petals — pink petals carried on the wind. */
   .tb-petal { top: -14px; width: 8px; height: 6px; border-radius: 60% 60% 60% 0;
     background: var(--red-450); opacity: 0; animation: tbPetal linear infinite; }
-  @keyframes tbPetal { 0% { opacity: 0; transform: translate(0,0) rotate(0); } 10% { opacity: .9; }
-    100% { opacity: .3; transform: translate(var(--dx,44px), 95vh) rotate(720deg); } }
+  @keyframes tbPetal { 0% { opacity: 0; transform: translate(0,0) rotate(0); } 10% { opacity: 1; }
+    100% { opacity: .35; transform: translate(var(--dx,44px), 95vh) rotate(720deg); } }
   /* Aurora — a slow ribbon of colour breathing over a night sky. */
   .tb-aurora { inset: 0;
-    background: linear-gradient(120deg, transparent 28%, color-mix(in srgb, var(--accent-teal) 10%, transparent), color-mix(in srgb, var(--blue-250) 8%, transparent), transparent 72%);
+    background: linear-gradient(120deg, transparent 26%, color-mix(in srgb, var(--accent-teal) 16%, transparent), color-mix(in srgb, var(--blue-250) 12%, transparent), transparent 74%);
     background-size: 220% 220%; animation: tbAurora 18s ease-in-out infinite; }
-  @keyframes tbAurora { 0%,100% { background-position: 0% 50%; opacity: .5; }
-    50% { background-position: 100% 50%; opacity: .95; } }
+  @keyframes tbAurora { 0%,100% { background-position: 0% 50%; opacity: .55; }
+    50% { background-position: 100% 50%; opacity: 1; } }
   /* Fountain bubbles — quiet bubbles rising from the town well. */
-  .tb-bubble { bottom: -12px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--info) 40%, transparent);
-    background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--paper) 32%, transparent), color-mix(in srgb, var(--info) 5%, transparent) 60%, transparent);
+  .tb-bubble { bottom: -12px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--info) 45%, transparent);
+    background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--paper) 38%, transparent), color-mix(in srgb, var(--info) 6%, transparent) 60%, transparent);
     opacity: 0; animation: tbBubble linear infinite; }
-  @keyframes tbBubble { 0% { opacity: 0; transform: translate(0,0) scale(.6); } 15% { opacity: .7; }
-    90% { opacity: .45; } 100% { opacity: 0; transform: translate(var(--dx,14px), -90vh) scale(1); } }
+  @keyframes tbBubble { 0% { opacity: 0; transform: translate(0,0) scale(.6); } 15% { opacity: .8; }
+    90% { opacity: .5; } 100% { opacity: 0; transform: translate(var(--dx,14px), -90vh) scale(1); } }
   /* Town hub menu — town is a menu of services, not a walkable plaza. */
   .town-menu { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
   /* Small opt-in toggle for the town's background chatter — lives under the menu. */
@@ -2743,7 +2786,11 @@
   .town-menu-btn {
     display: flex; align-items: center; gap: 9px; text-align: left;
     padding: 11px 11px; border: 1px solid var(--border); border-radius: 8px;
-    background: var(--orange-850); color: var(--gold-200); font-family: var(--font-ui);
+    /* Slightly translucent so the animated ambient scene (#town-bg) breathes
+       through the whole hub instead of only the header — the fill stays dark
+       enough over the dark scene skies to keep the gold text fully legible. */
+    background: color-mix(in srgb, var(--orange-850) 86%, transparent);
+    color: var(--gold-200); font-family: var(--font-ui);
     cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   }
   .town-menu-btn:active { background: var(--orange-850); }
@@ -10897,6 +10944,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Livelier town background", by: "Claude", notes: ["The town menu's ambient scenes got a big upgrade — each now paints a tinted, breathing sky, a moon or low sun, a silhouetted rooftop skyline with windows that wake and dim, and brighter layered particles.", "Ten distinct vignettes (dusk rooftops, starry night with shooting stars, rainy town, snowfall by moonlight, aurora, lantern festival, blossoms and more) instead of one faint, near-invisible layer."] },
   { date: "2026-07-02", size: "small", v: "Twin wisps on the ENTER button", by: "Claude", notes: ["Two glints of light now circle the main button's border on opposite sides instead of one."] },
   { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Claude", notes: ["Title hero card now left-aligns its text and stands an animated hero walking in place on the right, sized to match the text height."] },
   { date: "2026-07-01", size: "small", v: "Cleaner stat-abbreviation key", by: "Claude", notes: ["Loot stat-abbreviation key now groups item stats by theme (Offense, Defense, Sustain, Caster, Utility/Find), alphabetical within each group.", "Flows into two columns on desktop for easier scanning."] },
@@ -13982,37 +14030,67 @@ const TOWN_MENU = [
   { kind: 'transmuter',icon: '⚗️', dl: 'npc_mage',       name: 'Transmuter',  desc: 'Fuse 3 items into 1 rarer' },
   { kind: 'bounty',    icon: '📜', dl: 'npc_quest',       name: 'Bounty Board',desc: 'Take a bounty for a reward' },
 ];
-// ── TOWN AMBIENT BACKGROUND ── a different peaceful scene drifts behind the town
-// menu each visit, so the safe haven feels lived-in rather than a static list.
-// Each builder returns decorative CSS particles (styled in #town-bg CSS); a
-// random one — never the same twice running — is seeded whenever the hub opens.
+// ── TOWN AMBIENT BACKGROUND ── a different living scene drifts behind the town
+// menu each visit, so the safe haven feels alive rather than a static list. Every
+// scene composites a tinted, breathing sky + an optional moon/sun + one or two
+// particle layers (all styled in #town-bg CSS). A random one — never the same
+// twice running — is seeded whenever the hub opens.
 function _tbR(a, b) { return a + Math.random() * (b - a); }
 function _tbI(a, b) { return Math.round(_tbR(a, b)); }
+// ── Scene layer builders ── each returns a chunk of decorative HTML. Scenes
+// below stack a sky + celestial + particle layers into a distinct vignette.
+function _tbSky(kind) { return `<span class="tb-sky ${kind}"></span>`; }
+function _tbMoon(x, y, sz) { return `<span class="tb-moon" style="left:${x}%;top:${y}%;width:${sz}px;height:${sz}px;margin:-${sz/2}px 0 0 -${sz/2}px"></span>`; }
+function _tbSun(x, y, sz) { return `<span class="tb-sun" style="left:${x}%;top:${y}%;width:${sz}px;height:${sz}px;margin:-${sz/2}px 0 0 -${sz/2}px"></span>`; }
+function _tbStars(n) { let h = ''; for (let i = 0; i < n; i++) h += `<span class="tb-star" style="left:${_tbI(0,100)}%;top:${_tbI(2,68)}%;animation-duration:${_tbR(2,5).toFixed(1)}s;animation-delay:${_tbR(0,5).toFixed(1)}s"></span>`; return h; }
+function _tbShoot(n) { let h = ''; for (let i = 0; i < n; i++) h += `<span class="tb-shoot" style="left:${_tbI(-6,58)}%;top:${_tbI(2,28)}%;animation-duration:${_tbR(7,11).toFixed(1)}s;animation-delay:${_tbR(1,9).toFixed(1)}s"></span>`; return h; }
+function _tbFlies(n) { let h = ''; for (let i = 0; i < n; i++) h += `<span class="tb-fly" style="left:${_tbI(0,100)}%;top:${_tbI(6,90)}%;animation-duration:${_tbR(4,8).toFixed(1)}s;animation-delay:${_tbR(0,8).toFixed(1)}s;--dx:${_tbI(-24,24)}px;--dy:${_tbI(-24,24)}px"></span>`; return h; }
+function _tbSmoke() { let h = ''; const cols = [_tbI(12,30), _tbI(45,60), _tbI(72,90)]; cols.forEach(c => { for (let i = 0; i < 5; i++) h += `<span class="tb-smoke" style="left:${c + _tbI(-4,4)}%;bottom:${_tbI(42,58)}px;animation-duration:${_tbR(9,14).toFixed(1)}s;animation-delay:${_tbR(0,12).toFixed(1)}s;--dx:${_tbI(6,28)}px"></span>`; }); return h; }
+function _tbLeaves(n) { let h = ''; const cs = ['#c98b3a', '#b5642a', '#d6a94a', '#8f7a2e']; for (let i = 0; i < n; i++) h += `<span class="tb-leaf" style="left:${_tbI(0,100)}%;animation-duration:${_tbR(7,12).toFixed(1)}s;animation-delay:${_tbR(0,10).toFixed(1)}s;--dx:${_tbI(-30,50)}px;--lc:${cs[i % cs.length]}"></span>`; return h; }
+function _tbRain(n) { let h = ''; for (let i = 0; i < n; i++) h += `<span class="tb-rain" style="left:${_tbI(0,100)}%;animation-duration:${_tbR(0.8,1.6).toFixed(2)}s;animation-delay:${_tbR(0,2).toFixed(2)}s"></span>`; return h; }
+function _tbSnow(n) { let h = ''; for (let i = 0; i < n; i++) { const s = _tbR(2,5).toFixed(1); h += `<span class="tb-snow" style="left:${_tbI(0,100)}%;width:${s}px;height:${s}px;animation-duration:${_tbR(8,15).toFixed(1)}s;animation-delay:${_tbR(0,12).toFixed(1)}s;--dx:${_tbI(-25,25)}px"></span>`; } return h; }
+function _tbRays() { let h = '<span class="tb-ray"></span>'; for (let i = 0; i < 18; i++) { const s = _tbR(2,4).toFixed(1); h += `<span class="tb-mote" style="left:${_tbI(0,100)}%;width:${s}px;height:${s}px;animation-duration:${_tbR(11,18).toFixed(1)}s;animation-delay:${_tbR(0,14).toFixed(1)}s;--dx:${_tbI(-20,40)}px"></span>`; } return h; }
+function _tbLanterns(n) { let h = ''; for (let i = 0; i < n; i++) { const sz = _tbI(70,140); h += `<span class="tb-lantern" style="left:${_tbI(4,90)}%;top:${_tbI(4,78)}%;width:${sz}px;height:${sz}px;margin:-${sz/2}px 0 0 -${sz/2}px;animation-duration:${_tbR(3.5,6).toFixed(1)}s;animation-delay:${_tbR(0,4).toFixed(1)}s"></span>`; } return h; }
+function _tbClouds(n) { let h = ''; for (let i = 0; i < n; i++) { const w = _tbI(120,240); h += `<span class="tb-cloud" style="top:${_tbI(2,45)}%;width:${w}px;height:${_tbI(40,70)}px;animation-duration:${_tbR(40,75).toFixed(0)}s;animation-delay:-${_tbR(0,40).toFixed(0)}s"></span>`; } return h; }
+function _tbPetals(n) { let h = ''; for (let i = 0; i < n; i++) { const p = ['#f6c0d0', '#f4a9c2', '#fbd4de'][i % 3]; h += `<span class="tb-petal" style="left:${_tbI(0,100)}%;background:${p};animation-duration:${_tbR(6,11).toFixed(1)}s;animation-delay:${_tbR(0,9).toFixed(1)}s;--dx:${_tbI(20,70)}px"></span>`; } return h; }
+function _tbBubbles(n) { let h = ''; for (let i = 0; i < n; i++) { const s = _tbI(5,12); h += `<span class="tb-bubble" style="left:${_tbI(30,70)}%;width:${s}px;height:${s}px;animation-duration:${_tbR(5,9).toFixed(1)}s;animation-delay:${_tbR(0,8).toFixed(1)}s;--dx:${_tbI(-16,16)}px"></span>`; } return h; }
+function _tbAurora() { return '<span class="tb-aurora"></span>'; }
+// A distant town skyline — silhouetted rooftops whose windows softly wake and
+// dim. Built across a fixed pixel span; #town-bg clips any overflow.
+function _tbRoofs() {
+  let h = '<span class="tb-roofs">';
+  for (let x = -6; x < 560;) {
+    const w = _tbI(28, 52), bh = _tbI(26, 58), rh = _tbI(9, 18);
+    let wins = '';
+    for (let wx = 5; wx < w - 5; wx += 11)
+      for (let wy = 9; wy < bh - 5; wy += 14)
+        if (Math.random() < 0.45) wins += `<span class="tb-win" style="left:${wx}px;top:${wy}px;animation-duration:${_tbR(2.5,6).toFixed(1)}s;animation-delay:${_tbR(0,6).toFixed(1)}s"></span>`;
+    h += `<span class="tb-house" style="left:${x}px;width:${w}px;height:${bh}px"><span class="tb-roof" style="border-left-width:${Math.round(w/2)}px;border-right-width:${Math.round(w/2)}px;border-bottom-width:${rh}px"></span>${wins}</span>`;
+    x += w + _tbI(1, 5);
+  }
+  return h + '</span>';
+}
 const TOWN_SCENES = [
-  // Fireflies at dusk
-  () => { let h = ''; for (let i = 0; i < 16; i++) h += `<span class="tb-fly" style="left:${_tbI(0,100)}%;top:${_tbI(6,94)}%;animation-duration:${_tbR(4,8).toFixed(1)}s;animation-delay:${_tbR(0,8).toFixed(1)}s;--dx:${_tbI(-24,24)}px;--dy:${_tbI(-24,24)}px"></span>`; return h; },
-  // Chimney smoke
-  () => { let h = ''; const cols = [_tbI(12,30), _tbI(45,60), _tbI(72,90)]; cols.forEach(c => { for (let i = 0; i < 5; i++) h += `<span class="tb-smoke" style="left:${c + _tbI(-4,4)}%;animation-duration:${_tbR(9,14).toFixed(1)}s;animation-delay:${_tbR(0,12).toFixed(1)}s;--dx:${_tbI(6,28)}px"></span>`; }); return h; },
-  // Falling autumn leaves
-  () => { let h = ''; const cs = ['#c98b3a', '#b5642a', '#d6a94a', '#8f7a2e']; for (let i = 0; i < 16; i++) h += `<span class="tb-leaf" style="left:${_tbI(0,100)}%;animation-duration:${_tbR(7,12).toFixed(1)}s;animation-delay:${_tbR(0,10).toFixed(1)}s;--dx:${_tbI(-30,50)}px;--lc:${cs[i % cs.length]}"></span>`; return h; },
-  // Twinkling night sky
-  () => { let h = ''; for (let i = 0; i < 40; i++) h += `<span class="tb-star" style="left:${_tbI(0,100)}%;top:${_tbI(2,70)}%;animation-duration:${_tbR(2,5).toFixed(1)}s;animation-delay:${_tbR(0,5).toFixed(1)}s"></span>`; return h; },
-  // Sunbeam dust motes
-  () => { let h = '<span class="tb-ray"></span>'; for (let i = 0; i < 18; i++) { const s = _tbR(2,4).toFixed(1); h += `<span class="tb-mote" style="left:${_tbI(0,100)}%;width:${s}px;height:${s}px;animation-duration:${_tbR(11,18).toFixed(1)}s;animation-delay:${_tbR(0,14).toFixed(1)}s;--dx:${_tbI(-20,40)}px"></span>`; } return h; },
-  // Gentle rain
-  () => { let h = ''; for (let i = 0; i < 34; i++) h += `<span class="tb-rain" style="left:${_tbI(0,100)}%;animation-duration:${_tbR(0.8,1.6).toFixed(2)}s;animation-delay:${_tbR(0,2).toFixed(2)}s"></span>`; return h; },
-  // Drifting snow
-  () => { let h = ''; for (let i = 0; i < 26; i++) { const s = _tbR(2,5).toFixed(1); h += `<span class="tb-snow" style="left:${_tbI(0,100)}%;width:${s}px;height:${s}px;animation-duration:${_tbR(8,15).toFixed(1)}s;animation-delay:${_tbR(0,12).toFixed(1)}s;--dx:${_tbI(-25,25)}px"></span>`; } return h; },
-  // Hanging lantern glows
-  () => { let h = ''; for (let i = 0; i < 6; i++) { const sz = _tbI(70,140); h += `<span class="tb-lantern" style="left:${_tbI(4,90)}%;top:${_tbI(4,80)}%;width:${sz}px;height:${sz}px;margin:-${sz/2}px 0 0 -${sz/2}px;animation-duration:${_tbR(3.5,6).toFixed(1)}s;animation-delay:${_tbR(0,4).toFixed(1)}s"></span>`; } return h; },
-  // Drifting clouds
-  () => { let h = ''; for (let i = 0; i < 5; i++) { const w = _tbI(120,240); h += `<span class="tb-cloud" style="top:${_tbI(2,45)}%;width:${w}px;height:${_tbI(40,70)}px;animation-duration:${_tbR(40,75).toFixed(0)}s;animation-delay:-${_tbR(0,40).toFixed(0)}s"></span>`; } return h; },
-  // Blossom petals on the wind
-  () => { let h = ''; for (let i = 0; i < 16; i++) { const p = ['#f6c0d0', '#f4a9c2', '#fbd4de'][i % 3]; h += `<span class="tb-petal" style="left:${_tbI(0,100)}%;background:${p};animation-duration:${_tbR(6,11).toFixed(1)}s;animation-delay:${_tbR(0,9).toFixed(1)}s;--dx:${_tbI(20,70)}px"></span>`; } return h; },
-  // Aurora over a night sky
-  () => { let h = '<span class="tb-aurora"></span>'; for (let i = 0; i < 22; i++) h += `<span class="tb-star" style="left:${_tbI(0,100)}%;top:${_tbI(2,60)}%;animation-duration:${_tbR(2,5).toFixed(1)}s;animation-delay:${_tbR(0,5).toFixed(1)}s"></span>`; return h; },
-  // Fountain bubbles
-  () => { let h = ''; for (let i = 0; i < 16; i++) { const s = _tbI(5,12); h += `<span class="tb-bubble" style="left:${_tbI(30,70)}%;width:${s}px;height:${s}px;animation-duration:${_tbR(5,9).toFixed(1)}s;animation-delay:${_tbR(0,8).toFixed(1)}s;--dx:${_tbI(-16,16)}px"></span>`; } return h; },
+  // Dusk over the rooftops — fireflies rising, chimneys smoking
+  () => _tbSky('dusk') + _tbRoofs() + _tbSmoke() + _tbFlies(16),
+  // Clear starry night — moon, twinkling stars, a rare shooting star
+  () => _tbSky('night') + _tbMoon(_tbI(66,86), _tbI(14,26), _tbI(46,66)) + _tbStars(42) + _tbShoot(1),
+  // Autumn afternoon — leaves tumbling past the town
+  () => _tbSky('autumn') + _tbRoofs() + _tbLeaves(18),
+  // Rainy town — low clouds, drifting rain, warm lantern glow
+  () => _tbSky('storm') + _tbClouds(3) + _tbLanterns(3) + _tbRain(40),
+  // Snowfall by moonlight
+  () => _tbSky('frost') + _tbMoon(_tbI(14,32), _tbI(12,24), _tbI(42,60)) + _tbStars(16) + _tbSnow(30),
+  // Golden afternoon — a low sun and dust in the light
+  () => _tbSky('golden') + _tbSun(_tbI(66,84), _tbI(20,34), _tbI(70,100)) + _tbRays(),
+  // Lantern festival — hanging lanterns over the rooftops, fireflies, smoke
+  () => _tbSky('lantern') + _tbRoofs() + _tbLanterns(6) + _tbSmoke() + _tbFlies(8),
+  // Aurora night — a slow ribbon of colour over the stars
+  () => _tbSky('aurora') + _tbAurora() + _tbMoon(_tbI(16,30), _tbI(12,22), _tbI(40,56)) + _tbStars(26),
+  // Blossom day — petals on a soft breeze under drifting clouds
+  () => _tbSky('blossom') + _tbClouds(2) + _tbPetals(18),
+  // Fountain courtyard — bubbles rising, fireflies at the water's edge
+  () => _tbSky('fountain') + _tbBubbles(16) + _tbFlies(8),
 ];
 let _townSceneLast = -1;
 function seedTownBg() {
