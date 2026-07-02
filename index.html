@@ -2103,8 +2103,9 @@
   }
   /* Item power badge — a single gold number shown alongside an item's stats. */
   .item-power { color: var(--gold-350); font-weight: bold; opacity: 0.95; margin-left: 5px; white-space: nowrap; }
-  /* The ⚡ marker before a Power number, sized a touch smaller than the digits so it
-     reads as a glyph rather than a leading digit. Shared by every power badge. */
+  /* The Power marker before a Power number — the shared `ui_power` atlas tile
+     (same icon as the bottom HUD), painted via data-spr. Shared by every power
+     badge so Power reads with one consistent icon everywhere. */
   .pwr-g { font-size: 0.8em; }
   .item-diff { font-size: 1.2rem; margin-top: 1px; line-height: 1.3; }
 
@@ -11253,6 +11254,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Consistent Power icon", by: "Claude", notes: ["Every Power number — item badges, the character panel, item tooltips, the work list — now uses the same icon as the bottom HUD, instead of a lightning glyph that was rendering as the stun icon.", "Fixed the work list showing an item's Power twice."] },
   { date: "2026-07-02", size: "small", v: "Break out when mobbed, not just fully ringed", by: "Claude", notes: ["Getting swarmed no longer freezes you: when foes plug the way you're heading and the lanes you'd slide around them, keep pushing and the hero shoves between the bodies toward open ground.", "A lone foe with any real gap beside it still hard-blocks you, and corridors stay choke points."] },
   { date: "2026-07-02", size: "small", v: "Bigger skill tiles on the HUD", by: "Claude", notes: ["Bottom-HUD skill buttons are 50% larger with icons scaled to match.", "Even margin above and below the skill row; the HUD grows to fit."] },
   { date: "2026-07-02", size: "small", v: "Chunkier floor buttons", by: "Claude", notes: ["Dungeon Gate floor buttons are now larger, taller and squarer with bigger numerals — easier to read and click."] },
@@ -13541,12 +13543,16 @@ function stockPrice(s) {
 }
 
 // Compact one-line summary of an item's stats & attributes, e.g.
-// The ⚡ marker that leads a Power value. Wrapped so it renders a touch smaller than
-// the number beside it (see .pwr-g). Reused by every power badge for one consistent look.
-const PWR_GLYPH = '<span class="pwr-g">⚡</span>';
+// The Power marker that leads a Power value: the SAME `ui_power` atlas tile the
+// bottom HUD shows, painted from data-spr (see paintDataSpr) so every place that
+// shows Power uses one consistent icon — not a bare ⚡, which the global emoji map
+// would render as the stun glyph. Reused by every power badge.
+const PWR_GLYPH = '<span class="pwr-g" data-spr="ui_power"></span>';
 
 // "⚡14 · 8-12 DMG · +3 ATK · +5 MIG".
-function itemStatLine(item) {
+// Pass {noPower:true} to omit the leading Power marker (for rows that show Power
+// separately elsewhere, so it isn't printed twice).
+function itemStatLine(item, opts) {
   // Each stat code is a hoverable chip — pointing at it reveals the full name.
   const chip = (code, full) => `<span class="stat-abbr" ${hoverTip(full)}>${code}</span>`;
   const parts = Object.entries(item.stats).map(([k, v]) => {
@@ -13562,7 +13568,7 @@ function itemStatLine(item) {
   const body = parts.join(' · ');
   const powHtml = itemPowerFront(item);   // glowing special power — leads the line
   const setTag = itemSetTag(item);        // set membership — trails the line
-  const lead = item.slot ? `${PWR_GLYPH}${itemPower(item)}` : '';
+  const lead = (item.slot && !(opts && opts.noPower)) ? `${PWR_GLYPH}${itemPower(item)}` : '';
   return [lead, powHtml, body].filter(Boolean).join(' · ') + setTag;
 }
 
@@ -15596,7 +15602,7 @@ function renderEnchanter() {
     if (g.where !== 'bag') continue;
     const it = g.item;
     const slotLabel = it.slot ? SLOTS[it.slot].label.replace(/^\S+\s/, '') : '';
-    const stats = itemStatLine(it).replace(/^⚡\d+\s*·?\s*/, ''); // power shown on its own line below
+    const stats = itemStatLine(it, {noPower:true}); // power shown on its own line below
     lootRows += `<div class="shop-row has-actions">
       <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
       <div class="shop-row-info ${rarityClass(it)}">
@@ -23707,7 +23713,7 @@ function renderHero(el) {
   el.innerHTML = `
     <div class="hero-nameplate">${escapeHtml(player.name || 'Adventurer')}</div>
     <div class="hero-power">
-      <div class="hp-label">⚡ POWER</div>
+      <div class="hp-label">${PWR_GLYPH} POWER</div>
       <div class="hp-value">${playerPower()}</div>
     </div>
     <div class="hero-sub">Level ${player.level} · ${gearPower} from gear</div>
@@ -24988,7 +24994,7 @@ function itemCardHTML(item, opts = {}) {
     ${label}
     <div class="tt-name" style="color:${tierColor(item)}">${item.name}</div>
     <div class="tt-tier" style="color:${tierColor(item)}">${item.slot ? SLOTS[item.slot].label : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</div>
-    ${item.slot ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">⚡ Power: ${power}</div>` : ''}
+    ${item.slot ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${power}</div>` : ''}
     ${reqLine}
     ${stats}
     ${weaponLine}
@@ -27669,7 +27675,7 @@ log('Open 🎒 BAG to view your loot; press the pad\'s USE button to grab items.
 log(`Tap the ❤️ or 🔷 flask to quaff a ${logPotion('Potion')} — free to use, but they share a short cooldown.`);
 log('⌨️ Keys: Q health potion · E mana potion · R primary skill · 3–9 skills · T town · B open bag · Space/F use.');
 log('⚡ You start with a skill point — open 🎒 BAG ▸ SKILLS to learn your first active, then tap ⚡ (or press ' + skillKeyLabel(1) + ') to cast it.');
-log('⚡ Each item has a Power value; your total Power blends level, gear, and attributes.');
+log(PWR_GLYPH + ' Each item has a Power value; your total Power blends level, gear, and attributes.');
 log('💠 Level up to earn points, then raise attributes in the bag\'s HERO tab.');
 log('🗡️ Every weapon fights differently — axes cleave, daggers flurry, bows & staves strike at range, maces stun, scythes drain. Try them all!');
 log('🏰 Tap TOWN (or press ' + kbLabel('portal') + ') to warp to the safe hub: craftsman, healer, trainer, enchanter, and a gate to re-enter any floor you\'ve reached.');
