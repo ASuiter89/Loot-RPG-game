@@ -5894,6 +5894,55 @@ function drawSprite(name, dx, dy, dsize) {
 function drawSpriteC(name, cx, cy, size) {
   return drawSprite(name, cx - size / 2, cy - size / 2, size);
 }
+// ── STATUS-TINT SPRITE CACHE ──
+// Enemies flash white when hit and take a coloured wash while burning/poisoned/
+// chilled/stunned/cursed/charged. Doing that with ctx.filter on every afflicted
+// foe every frame is one of the most expensive 2D-canvas operations there is —
+// each drawImage runs a whole filter pipeline. But these filters are pure
+// per-pixel colour transforms, so applying one to the 16px atlas tile ONCE and
+// caching the result is pixel-for-pixel identical to the live filter (nearest-
+// neighbour upscaling commutes with a per-pixel transform) at a fraction of the
+// cost. Keyed by sprite name + tint; the tile is tiny so the cache stays cheap.
+const TINT_FILTERS = {
+  hit:    'brightness(2.6) saturate(0.4)',
+  burn:   'grayscale(1) sepia(1) saturate(9) hue-rotate(-30deg) brightness(1.2)',
+  poison: 'grayscale(1) sepia(1) saturate(6) hue-rotate(60deg) brightness(1.05)',
+  vuln:   'grayscale(1) sepia(1) saturate(6) hue-rotate(220deg) brightness(0.92)',
+  stun:   'grayscale(1) sepia(1) saturate(7) hue-rotate(-15deg) brightness(1.25)',
+  chill:  'grayscale(1) sepia(1) saturate(6) hue-rotate(160deg) brightness(1.15)',
+  static: 'brightness(1.35) saturate(1.5)',
+};
+const _tintCache = new Map();   // `${name}|${tint}` → 16px canvas
+function tintedTile(name, tint) {
+  const key = name + '|' + tint;
+  const hit = _tintCache.get(key);
+  if (hit !== undefined) return hit;
+  const i = SPRITE_IDX[name], filt = TINT_FILTERS[tint];
+  if (i === undefined || !filt || !spriteReady) return null;   // don't cache until the atlas is ready
+  const cv = document.createElement('canvas');
+  cv.width = ATLAS_TS; cv.height = ATLAS_TS;
+  const g = cv.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.filter = filt;
+  const sx = (i % ATLAS_COLS) * ATLAS_TS, sy = ((i / ATLAS_COLS) | 0) * ATLAS_TS;
+  g.drawImage(spriteSheet, sx, sy, ATLAS_TS, ATLAS_TS, 0, 0, ATLAS_TS, ATLAS_TS);
+  _tintCache.set(key, cv);
+  return cv;
+}
+// Blit a status-tinted sprite centred on (cx,cy), mirroring drawSprite's crisp
+// whole-tile snapping exactly. Returns false (so the caller draws the plain
+// sprite) when the tinted tile isn't available yet.
+function drawSpriteTintedC(name, cx, cy, size, tint) {
+  const cv = tintedTile(name, tint);
+  if (!cv) return false;
+  const s = ATLAS_TS * Math.max(1, Math.round(size / ATLAS_TS));
+  const ox = Math.round(cx - s / 2), oy = Math.round(cy - s / 2);
+  const sm = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(cv, 0, 0, ATLAS_TS, ATLAS_TS, ox, oy, s, s);
+  ctx.imageSmoothingEnabled = sm;
+  return true;
+}
 // ── ANIMATED PORTAL ── one swirling, glowing portal used everywhere portals
 // appear: in-level teleporters (purple), the town gate channel (blue) and the
 // rainbow next-difficulty gate. Counter-rotating coloured arcs spin around a
@@ -11340,6 +11389,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Smoother big fights", by: "Claude", notes: ["Enemy status tints (burning, poisoned, chilled…), the hit-flash, elite/boss auras and threat rings now use cached art instead of rebuilding pricey per-frame effects — much smoother with lots of foes on screen.", "Elite/boss/affix auras read as a soft coloured halo."] },
   { date: "2026-07-02", size: "small", v: "Pathing line toggle", by: "Claude", notes: ["Toggle the click-to-move breadcrumb trail in Settings → Visuals (on by default); the pulsing destination ring stays.", "Choice syncs across devices when signed in."] },
   { date: "2026-07-02", size: "small", v: "Enemy stuns half as long", by: "Claude", notes: ["Stuns that enemies land on you now last half as long, so a bad hit roots you for far less time.", "Tenacity still shortens them further on top."] },
   { date: "2026-07-02", size: "small", v: "Pause menu polish", by: "Claude", notes: ["Settings tooltips now sit on top of the menu instead of hiding behind its dimmed backdrop.", "Opening the pause/settings menu freezes the world — sprites, glows and portals hold still, then resume right where they left off when you close it."] },
@@ -18135,22 +18185,17 @@ function draw() {
     const cursed = eStatus.some(s => s.effect === 'vuln');
     const chilled = eStatus.some(s => s.effect === 'chill');
     const charged = eStatus.some(s => s.effect === 'static');
-    ctx.save();
-    if (e.hitAt && Date.now() - e.hitAt < 110) ctx.filter = 'brightness(2.6) saturate(0.4)';   // white hit-flash
-    else if (burning) ctx.filter = 'grayscale(1) sepia(1) saturate(9) hue-rotate(-30deg) brightness(1.2)';
-    else if (poisoned) ctx.filter = 'grayscale(1) sepia(1) saturate(6) hue-rotate(60deg) brightness(1.05)';
-    else if (cursed) ctx.filter = 'grayscale(1) sepia(1) saturate(6) hue-rotate(220deg) brightness(0.92)';
-    else if (stunned) ctx.filter = 'grayscale(1) sepia(1) saturate(7) hue-rotate(-15deg) brightness(1.25)';
-    else if (chilled) ctx.filter = 'grayscale(1) sepia(1) saturate(6) hue-rotate(160deg) brightness(1.15)';
-    else if (charged) ctx.filter = 'brightness(1.35) saturate(1.5)';
-    // Pop: a coloured glowing halo marks elites/bosses/affixed foes so they stand
-    // out. Plain foes get no halo — a dark one read as a faint square box around
-    // the sprite, so it's been removed for ordinary enemies.
-    const eAura = e.isBoss ? 'rgba(255,70,70,0.95)' : (e.isElite ? 'rgba(255,215,90,0.95)' : e.affixColor);
-    if (eAura) {
-      ctx.shadowColor = eAura;
-      ctx.shadowBlur = Math.max(2, tw * 0.26);
-    }
+    // Status tint → a cached pre-tinted sprite (was a per-frame ctx.filter, one of
+    // the priciest 2D-canvas ops; the cached tile is pixel-identical). Priority
+    // matches the old if/else chain: hit-flash first, then the elemental washes.
+    let _tint = null;
+    if (e.hitAt && Date.now() - e.hitAt < 110) _tint = 'hit';   // white hit-flash
+    else if (burning) _tint = 'burn';
+    else if (poisoned) _tint = 'poison';
+    else if (cursed) _tint = 'vuln';
+    else if (stunned) _tint = 'stun';
+    else if (chilled) _tint = 'chill';
+    else if (charged) _tint = 'static';
     // Pixel-art creature sprite (scaled to the footprint), falling back to glyph.
     // A brief attack lunge nudges only the sprite toward its target — the HP bar
     // and threat ring below stay anchored to the enemy's real tile.
@@ -18158,15 +18203,29 @@ function draw() {
     const _elx = _elunge ? _elunge.dx : 0, _ely = _elunge ? _elunge.dy : 0;
     const _esz = Math.round(cw * (e.isBoss ? 1.0 : (e.isElite ? 0.96 : 0.9)));
     const _espr = enemySprite(e);
-    if (!(spriteReady && _espr && drawSpriteC(_espr, cx + _elx, py + ch/2 + th*0.02 + _ely, _esz))) {
+    const _scx = cx + _elx, _scy = py + ch/2 + th*0.02 + _ely;
+    // Pop: a coloured halo marks elites/bosses/affixed foes so they stand out.
+    // Painted as a cached radial glow behind the sprite (was a per-frame
+    // shadowBlur on the sprite itself). Plain foes get no halo.
+    const eAura = e.isBoss ? 'rgba(255,70,70,0.95)' : (e.isElite ? 'rgba(255,215,90,0.95)' : e.affixColor);
+    if (eAura) glowUnder(_scx, _scy, cw * 0.6, eAura);
+    let _drew = false;
+    if (spriteReady && _espr) {
+      if (_tint) _drew = drawSpriteTintedC(_espr, _scx, _scy, _esz, _tint);
+      if (!_drew) _drew = drawSpriteC(_espr, _scx, _scy, _esz);   // tint not ready → plain sprite
+    }
+    if (!_drew) {
+      // Rare no-atlas fallback keeps the live filter (not a perf concern here).
+      ctx.save();
+      if (_tint) ctx.filter = TINT_FILTERS[_tint];
       if (e.mColor) {
         const _mn = (typeof MONSTERS === 'object' && MONSTERS[e.type] && MONSTERS[e.type].name) || e.name || '?';
-        drawMonsterSquare(cx + _elx, py + ch/2 + th*0.02 + _ely, _esz, e.mColor, _mn.charAt(0).toUpperCase());
+        drawMonsterSquare(_scx, _scy, _esz, e.mColor, _mn.charAt(0).toUpperCase());
       } else {
         drawEmoji(e.type, cx + _elx, py + ch/2 + th*0.04 + _ely, Math.round(cw * (e.isBoss ? 0.95 : (e.isElite ? 0.94 : 0.9))));
       }
+      ctx.restore();
     }
-    ctx.restore();
 
     // ── THREAT TELEGRAPH ── make "who can hit me, from where, right now" legible.
     // Ring any foe that can strike the hero on its next move (melee adjacent, or
@@ -18182,18 +18241,10 @@ function draw() {
         const tp = 0.5 + 0.5 * Math.sin(animNow() / 380);   // calm, slow pulse
         const fcx = cx, fcy = py + ch / 2;
         // Threat marker: a soft red glow ring that fades out at both edges (no
-        // hard outline), echoing the radial-glow style used elsewhere.
+        // hard outline), echoing the radial-glow style used elsewhere. Cached
+        // ring texture blitted at the pulsing alpha — no per-frame gradient.
         const rr = cw * 0.52, a = 0.20 + 0.16 * tp;
-        const g = ctx.createRadialGradient(fcx, fcy, rr * 0.46, fcx, fcy, rr);
-        g.addColorStop(0, 'rgba(255,70,58,0)');
-        g.addColorStop(0.72, `rgba(255,70,58,${a})`);
-        g.addColorStop(1, 'rgba(255,70,58,0)');
-        ctx.save();
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(fcx, fcy, rr, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        ringGlow(fcx, fcy, rr, '255,70,58', a);
       }
     }
 
@@ -18831,6 +18882,45 @@ function drawActorShadow(cx, cyFeet, w) {
   ctx.restore();
 }
 
+// ── CACHED SOFT-GLOW SPRITES ──
+// A radial glow used to mean a fresh createRadialGradient every frame for every
+// glowing thing on screen (pickups, vendor auras, the grave beacon, enemy elite
+// halos, threat rings…). Instead each glow SHAPE is painted once into a small
+// offscreen canvas keyed by its solid RGB, then blitted (scaled to the requested
+// radius, with the caller's alpha applied via globalAlpha). A pulsing glow now
+// re-blits the same texture at a new alpha instead of rebuilding a gradient, and
+// the output matches the old gradient fills. Separating RGB (cache key) from
+// alpha (globalAlpha) keeps the cache tiny — one texture per colour, not per frame.
+const GLOW_TEX = 64;
+const _discGlow = new Map();   // "r,g,b" → canvas: solid centre → transparent edge
+const _ringGlow = new Map();   // "r,g,b" → canvas: transparent centre → colour → transparent edge
+function _parseRGBA(color) {
+  const m = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)/.exec(color);
+  if (m) return { rgb: `${Math.round(+m[1])},${Math.round(+m[2])},${Math.round(+m[3])}`, a: m[4] == null ? 1 : +m[4] };
+  // Hex (#rgb / #rrggbb / #rrggbbaa) — used by affix aura colours.
+  const h = /^#([0-9a-f]{3,8})$/i.exec((color || '').trim());
+  if (h) {
+    let s = h[1];
+    if (s.length === 3) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
+    const r = parseInt(s.slice(0, 2), 16), g = parseInt(s.slice(2, 4), 16), b = parseInt(s.slice(4, 6), 16);
+    const a = s.length >= 8 ? parseInt(s.slice(6, 8), 16) / 255 : 1;
+    return { rgb: `${r},${g},${b}`, a };
+  }
+  return { rgb: '255,255,255', a: 1 };
+}
+function _glowSprite(cache, rgb, ring) {
+  let cv = cache.get(rgb);
+  if (cv) return cv;
+  cv = document.createElement('canvas'); cv.width = cv.height = GLOW_TEX;
+  const g = cv.getContext('2d'), c = GLOW_TEX / 2;
+  const grd = g.createRadialGradient(c, c, ring ? c * 0.46 : 0, c, c, c);
+  if (ring) { grd.addColorStop(0, `rgba(${rgb},0)`); grd.addColorStop(0.72, `rgba(${rgb},1)`); grd.addColorStop(1, `rgba(${rgb},0)`); }
+  else      { grd.addColorStop(0, `rgba(${rgb},1)`); grd.addColorStop(1, `rgba(${rgb},0)`); }
+  g.fillStyle = grd;
+  g.beginPath(); g.arc(c, c, c, 0, Math.PI * 2); g.fill();
+  cache.set(rgb, cv);
+  return cv;
+}
 // Red targeting reticle over the auto-attack's locked-on foe. A procedural UI
 // marker (like the threat ring), not a sprite: a thin pulsing ring, four gapped
 // N/E/S/W ticks and a centre dot, so the current target reads at a glance
@@ -18863,17 +18953,23 @@ function drawTargetCrosshair(cx, cy, size) {
   ctx.restore();
 }
 
-// A soft CIRCULAR glow behind a pickup. (Canvas shadowBlur on a square sprite
-// renders as an ugly square halo, so we paint a radial gradient instead.)
+// A soft CIRCULAR glow behind a pickup/actor: a cached radial-glow texture tinted
+// by `color` and faded by its alpha, scaled to radius r.
 function glowUnder(cx, cy, r, color) {
-  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-  g.addColorStop(0, color);
-  g.addColorStop(1, 'transparent');
+  const { rgb, a } = _parseRGBA(color);
   ctx.save();
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.globalAlpha = a;
+  ctx.imageSmoothingEnabled = true;   // keep the upscaled glow texture soft, not blocky
+  ctx.drawImage(_glowSprite(_discGlow, rgb, false), cx - r, cy - r, r * 2, r * 2);
+  ctx.restore();
+}
+// A soft ring glow (fades at both centre and edge), used for threat telegraphs.
+// `alpha` is the peak opacity; the ring shape itself is cached per colour.
+function ringGlow(cx, cy, r, rgb, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.imageSmoothingEnabled = true;   // keep the upscaled ring texture soft, not blocky
+  ctx.drawImage(_glowSprite(_ringGlow, rgb, true), cx - r, cy - r, r * 2, r * 2);
   ctx.restore();
 }
 
