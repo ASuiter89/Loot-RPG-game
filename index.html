@@ -11222,6 +11222,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Fix: title screen wouldn't offer Continue", by: "Claude", notes: ["Settings sync could crash the boot before the title screen finished loading, so returning heroes never saw the Continue button — fixed.", "Re-applying your saved log/loot-drawer collapse state on load no longer counts as a fresh change, keeping cross-device sync timestamps accurate."] },
   { date: "2026-07-02", size: "small", v: "Target crosshair + Visuals tidy-up", by: "Claude", notes: ["Red crosshair now marks the foe your auto-attack is locked onto; toggle it in Settings → Visuals (on by default).", "Hero Bars toggle moved from Play to Visuals, beside it.", "UI FONT picker is now a plain dropdown matching the music picker.", "History window is wider so names and stats no longer clip."] },
   { date: "2026-07-02", size: "small", v: "Settings sync to your account", by: "Claude", notes: ["Signed-in players carry preferences across devices — sound levels, keybinds, UI font, cursor, sprint mode, music vibe, hero bars, and panel/minimap collapse.", "Newest change wins across devices; UI scale and the touch d-pad stay per-device.", "Optional — logged-out play is unchanged and still saves only on this device."] },
   { date: "2026-07-02", size: "small", v: "Gold shows a coin icon, not a trailing g", by: "Claude", notes: ["Every money amount — HUD, shops, tooltips, buttons, logs and combat pops — now leads with the gold-coin icon instead of a trailing “g”."] },
@@ -25422,7 +25423,7 @@ function toggleLog() {
   // No saved choice → follow the layout (collapsed on mobile) without persisting,
   // so it stays responsive until the player makes an explicit choice.
   if (pref === null) setLogCollapsed(true, false);   // start hidden everywhere; reclaimed space goes to the map + loot panel
-  else setLogCollapsed(pref === '1');
+  else setLogCollapsed(pref === '1', false);         // just re-applying the saved value at boot — don't re-persist or mark it a fresh change
 })();
 
 // ── COLLAPSIBLE LOOT DRAWER (desktop) ──
@@ -25447,7 +25448,7 @@ function togglePanelCollapse() {
   let pref = null;
   try { pref = localStorage.getItem(PANEL_COLLAPSE_KEY); } catch (e) {}
   // Default open; only an explicit saved choice collapses it.
-  if (pref !== null) setPanelCollapsed(pref === '1');
+  if (pref !== null) setPanelCollapsed(pref === '1', false);   // re-applying the saved value at boot — don't re-persist or mark it a fresh change
 })();
 
 // Potions get their own signature colour wherever they're named in the log.
@@ -27109,7 +27110,12 @@ function settingsChanged() {
   cloudScheduleSettings();
 }
 function cloudScheduleSettings() {
-  if (!cloudEnabled() || !authState.user) return;
+  // A low-level preference setter can fire settingsChanged() during load-time
+  // init — before the cloud layer's bindings (Supabase config + authState) have
+  // been initialised further down the script. Reading those still-in-TDZ
+  // bindings would throw and halt the whole boot, so probe readiness defensively
+  // and bail out quietly if the cloud subsystem isn't up yet.
+  try { if (!cloudEnabled() || !authState.user) return; } catch (e) { return; }
   if (cloudSettingsTimer) return;
   cloudSettingsTimer = setTimeout(() => { cloudSettingsTimer = null; cloudPushSettings(); }, 3500);
 }
