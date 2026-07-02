@@ -2143,7 +2143,7 @@
     font-size: 1.3rem;
     min-width: 160px;
     max-width: 240px;
-    z-index: 420; /* above every town/shop modal */
+    z-index: 630; /* above every modal it can pop from, incl. the settings/pause menu (600) and slot picker (620) — else it hides behind their scrim */
     pointer-events: none;
     line-height: 1.6;
     /* A soft drop shadow lifts it off the drawer so it reads as a floating
@@ -5764,7 +5764,7 @@ for (const _k in TOWN_NPC_ART) {
 function drawTownWalk(kind, cx, footY, size) {
   const img = _townNpcImg[kind];
   if (!img || !img._ready) return false;
-  const col = Math.floor(Date.now() / 180) % 4;
+  const col = Math.floor(animNow() / 180) % 4;
   const dx = Math.round(cx - size / 2), dy = Math.round(footY - size * 0.92);
   const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false;
   ctx.drawImage(img, col * HERO_WALK_TS, 0, HERO_WALK_TS, HERO_WALK_TS, dx, dy, size, size);
@@ -5860,7 +5860,7 @@ const PORTAL_PALETTES = {
   rainbow:    ['#ff4d4d', '#ff9a3d', '#ffe24d', '#5de06a', '#4dc8ff', '#7a6bff', '#d24dff'],
 };
 function drawPortal(cx, cy, size, style) {
-  const t = Date.now();
+  const t = animNow();
   const pulse = 0.5 + 0.5 * Math.sin(t / 300);
   const spin = (t / 700) % (Math.PI * 2);
   const cols = PORTAL_PALETTES[style] || PORTAL_PALETTES.teleporter;
@@ -6225,7 +6225,7 @@ function drawFurnitureAt(x, y, px, py, tw, th) {
 function drawLiquid(px, py, tw, th, x, y, seed, C, kind) {
   if (lpcReady && !inTown) return; // LPC terrain pass draws water/lava
   const t = kind === 'lava' ? 7 : 6;
-  const now = Date.now();
+  const now = animNow();
   const h = Math.abs(seed);
   const jr = (n) => (((h * 131 + n * 977) >>> 4) % 1000) / 1000; // 0..1, stable per cell
   const same = (xx, yy) => xx >= 0 && yy >= 0 && xx < MAP_W && yy < MAP_H && mapData[yy][xx] === t;
@@ -9627,6 +9627,25 @@ let skillBranch = 0;        // which specialization branch (column 0..4) is show
 let mapData = [];
 let dungeonLevel = 1;
 
+// ── ANIMATION CLOCK ──
+// Looping world animation (enemy idle pulses, portal swirls, water/lava shimmer,
+// glows, the set-aura breathe…) reads animNow() instead of Date.now() so it FREEZES
+// whenever the world clock is held by a pause/menu overlay. draw() keeps running
+// every frame (the canvas shows through the settings scrim), but this clock stops
+// advancing while paused, so the scene sits perfectly still and then resumes from
+// exactly where it stopped — no jump. It rides on the same clockPaused() test as the
+// world, so a town you're merely resting in stays alive while a real menu on top of
+// it freezes. Event-stamped transients (hit-flash, particles, floating numbers,
+// lunges, screen shake) keep using Date.now(): nothing new fires while paused, and
+// they're compared against their own Date.now() stamps. Declared up here (not beside
+// animNow) so it's initialized before the first init-time draw() ever calls animNow.
+let _animMs = 0, _animPrevTs = null;
+function tickAnimClock(ts) {
+  if (_animPrevTs != null && !clockPaused()) _animMs += ts - _animPrevTs;
+  _animPrevTs = ts;
+}
+function animNow() { return _animMs; }
+
 // ── TOWN (safe hub you can warp to) ──
 // When true, you are out of the dungeon and in the town hub — a MENU of services
 // rather than a walkable plaza. There are no enemies and no map to wander; you
@@ -11279,6 +11298,7 @@ function showSettingsTab(name) {
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Pathing line toggle", by: "Claude", notes: ["Toggle the click-to-move breadcrumb trail in Settings → Visuals (on by default); the pulsing destination ring stays.", "Choice syncs across devices when signed in."] },
   { date: "2026-07-02", size: "small", v: "Enemy stuns half as long", by: "Claude", notes: ["Stuns that enemies land on you now last half as long, so a bad hit roots you for far less time.", "Tenacity still shortens them further on top."] },
+  { date: "2026-07-02", size: "small", v: "Pause menu polish", by: "Claude", notes: ["Settings tooltips now sit on top of the menu instead of hiding behind its dimmed backdrop.", "Opening the pause/settings menu freezes the world — sprites, glows and portals hold still, then resume right where they left off when you close it."] },
   { date: "2026-07-02", size: "small", v: "Character card in the pause menu", by: "Claude", notes: ["Pause menu (Esc) now shows your hero card — name, class, level, deepest floor and gold — above Settings, the same panel as the title screen."] },
   { date: "2026-07-02", size: "small", v: "See & shoot over water and open ground", by: "Claude", notes: ["Line of sight is now blocked only by SOLID obstructions — walls, cracked walls, locked doors, boss barriers and furniture.", "Water, lava, spikes and other floor terrain no longer block shots or spells: if you can walk over (or across) it, you can see and fire over it.", "Solid furniture and boss barriers now give real cover, blocking bolts and spells like a wall."] },
   { date: "2026-07-02", size: "small", v: "Dodge enemy ranged shots", by: "Claude", notes: ["Ranged foes now loose a real bolt aimed where you stand instead of an unavoidable hit with a cosmetic arrow.", "Sidestep the bolt's path — or break its line behind a wall — and it misses; it only hurts you if it actually reaches you.", "Damage, dodge and on-hit effects now resolve on impact, so kiting a shooter genuinely works."] },
@@ -16022,7 +16042,7 @@ function drawTownBuildings(offX, offY, tw, th) {
       // block seams on the lintel
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.fillRect(x0 + w * 0.5 - 1, y0 + h * 0.02, 2, h * 0.2);
-      const tp = 0.5 + 0.5 * Math.sin(Date.now() / 300);
+      const tp = 0.5 + 0.5 * Math.sin(animNow() / 300);
       ctx.save();
       // Town portals are BLUE (in-level teleporters are purple), so the gate that
       // leads home reads at a glance as the safe one.
@@ -16098,7 +16118,7 @@ function drawTownBuildings(offX, offY, tw, th) {
 function drawTownNpcs(offX, offY, tw, th, scale) {
   townNpcs.forEach(n => {
     const px = offX + n.x * tw, py = offY + n.y * th;
-    const t = (Date.now() % 2400) / 2400;
+    const t = (animNow() % 2400) / 2400;
     const pulse = 0.18 + 0.12 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2));
     ctx.save();
     ctx.fillStyle = n.kind === 'gate' ? `rgba(150,90,255,${pulse + 0.12})` : `rgba(255,210,120,${pulse})`;
@@ -17124,7 +17144,7 @@ let _walkPhase = 0, _walkLastT = 0;
 // up to date as the hero moves (see updatePlayer). These sheets carry their own
 // left AND right rows, so they are NOT mirrored like the atlas hero.
 function drawHeroWalk(img, px, py, tw, th) {
-  const now = Date.now();
+  const now = animNow();
   let adt = _walkLastT ? (now - _walkLastT) / 1000 : 0;
   if (adt > 0.1) adt = 0.1;                  // clamp after a stall so the cycle can't jump
   _walkLastT = now;
@@ -17156,7 +17176,7 @@ function drawHeroWalk(img, px, py, tw, th) {
 // complete (see completedSets) — the prestige "you finished a set" flourish. Drawn
 // under the sprite so it haloes the feet/body. Cheap: one additive radial gradient.
 function drawSetAura(cx, cy, tw) {
-  const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 460);   // 0..1 slow breathe
+  const pulse = 0.5 + 0.5 * Math.sin(animNow() / 460);   // 0..1 slow breathe
   const R = tw * (1.12 + 0.1 * pulse);
   const gold = PALETTE.gold || '#e8c267';
   ctx.save();
@@ -17599,7 +17619,7 @@ function draw() {
         } else {
           // Cleared → highlight the way deeper with a pulsing gold ring so the
           // descent stair is unmistakable next to the (plain) up-stairs.
-          const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 320);
+          const pulse = 0.5 + 0.5 * Math.sin(animNow() / 320);
           const lw = Math.max(2, tw * 0.09), o = lw / 2 + 1;
           ctx.save();
           ctx.lineWidth = lw;
@@ -17628,7 +17648,7 @@ function draw() {
         // from a central spout into a glowing basin.
         drawFloorBase(px, py, tw, th, seed, C);
         const cx = px + tw/2, cy = py + th/2, s = tw/TILE;
-        const tNow = Date.now();
+        const tNow = animNow();
         const wp = 0.5 + 0.5*Math.sin(tNow/400);   // slow pool shimmer
         // soft ground shadow
         ctx.save();
@@ -17714,7 +17734,7 @@ function draw() {
         // behind the icon only (same radial style as a lucky chest), not a flat
         // wash over the whole tile.
         drawFloorBase(px, py, tw, th, seed, C);
-        const sp = 0.5 + 0.5*Math.sin(Date.now()/350);
+        const sp = 0.5 + 0.5*Math.sin(animNow()/350);
         if (spriteReady && SPRITE_IDX['feat_shrine'] !== undefined) {
           glowUnder(px + tw/2, py + th/2, tw*(0.34 + 0.06*sp), `rgba(216,168,255,${0.40 + 0.22*sp})`);
           drawSprite('feat_shrine', px, py, tw);
@@ -17868,7 +17888,7 @@ function draw() {
       ctx.restore();
     }
     const mxp = offX + moveTarget.wx * tw, myp = offY + moveTarget.wy * th;
-    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 180);
+    const pulse = 0.5 + 0.5 * Math.sin(animNow() / 180);
     const rad = tw * (0.18 + 0.05 * pulse);
     ctx.save();
     ctx.lineWidth = Math.max(1.5, tw * 0.05);
@@ -17889,7 +17909,7 @@ function draw() {
   bossHazards.forEach(h => {
     const px = offX + h.x * tw, py = offY + h.y * th;
     const cx = px + tw/2, cy = py + th/2;
-    const wob = 0.6 + 0.4 * Math.sin(Date.now()/120 + (h.x*7 + h.y*13));
+    const wob = 0.6 + 0.4 * Math.sin(animNow()/120 + (h.x*7 + h.y*13));
     if (h.kind === 'fire') {
       glowUnder(cx, cy, tw*0.55, `rgba(255,110,40,${0.28 + 0.18*wob})`);
       if (!(spriteReady && drawSpriteC('ic_fire', cx, cy, Math.round(tw*0.92))))
@@ -17994,7 +18014,7 @@ function draw() {
     // Heavy gold glow that pulses and fades out from behind them (the same radial
     // style as pickup glows). Two layered radial fades — a broad halo plus a
     // brighter core — read as a thicker, weightier glow than a single pass.
-    const t = (Date.now() % 1800) / 1800;
+    const t = (animNow() % 1800) / 1800;
     const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2);
     const gcx = px + tw/2, gcy = py + th/2;
     glowUnder(gcx, gcy, tw * (0.92 + 0.14 * pulse), `rgba(255,198,66,${0.34 + 0.24 * pulse})`);
@@ -18017,7 +18037,7 @@ function draw() {
     // Heavy purple glow that pulses and fades — same layered radial style as the
     // merchant's, so the two roaming vendors read as a matched pair (gold vs
     // purple) and stand out boldly from the floor.
-    const t = (Date.now() % 2600) / 2600;
+    const t = (animNow() % 2600) / 2600;
     const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2);
     const gcx = px + tw/2, gcy = py + th/2;
     glowUnder(gcx, gcy, tw * (0.92 + 0.14 * pulse), `rgba(150,78,255,${0.34 + 0.24 * pulse})`);
@@ -18114,7 +18134,7 @@ function draw() {
       const inRange = isRanged && edist <= (ebeh.range || 4) && hasLineToPlayer(e);
       const threatens = edist <= 1 || inRange;
       if (threatens) {
-        const tp = 0.5 + 0.5 * Math.sin(Date.now() / 380);   // calm, slow pulse
+        const tp = 0.5 + 0.5 * Math.sin(animNow() / 380);   // calm, slow pulse
         const fcx = cx, fcy = py + ch / 2;
         // Threat marker: a soft red glow ring that fades out at both edges (no
         // hard outline), echoing the radial-glow style used elsewhere.
@@ -18167,7 +18187,7 @@ function draw() {
   if (graveMarker) {
     const gpx = offX + graveMarker.x * tw, gpy = offY + graveMarker.y * th;
     const cx = gpx + tw / 2, cy = gpy + th / 2 + th * 0.02;
-    const t = Date.now() / 300;
+    const t = animNow() / 300;
     const gsp = 0.5 + 0.5 * Math.sin(t);
     // Bright pulsing glow behind the grave sprite — a soft radial fade (the same
     // style as pickups), not a boxy shadow halo. Doubled up so it really beams.
@@ -18177,7 +18197,7 @@ function draw() {
     // Two staggered expanding "come grab me" rings that fade as they grow — an
     // animated beacon so the reclaim spot is impossible to miss.
     for (let r = 0; r < 2; r++) {
-      const ringT = ((Date.now() + r * 600) % 1200) / 1200;
+      const ringT = ((animNow() + r * 600) % 1200) / 1200;
       ctx.strokeStyle = `rgba(255,215,90,${0.6 * (1 - ringT)})`;
       ctx.lineWidth = Math.max(1.5, tw * 0.06);
       ctx.beginPath();
@@ -18190,7 +18210,7 @@ function draw() {
     // Bobbing downward chevron floating above the grave — a clear "pick this up"
     // beacon that points right at your lost loot. Drawn procedurally (UI marker).
     ctx.save();
-    const bob = Math.sin(Date.now() / 250) * th * 0.08;
+    const bob = Math.sin(animNow() / 250) * th * 0.08;
     const ay = gpy - th * 0.18 + bob, aw = tw * 0.26, ah = th * 0.2;
     ctx.fillStyle = `rgba(255,225,110,${0.75 + 0.25 * gsp})`;
     ctx.strokeStyle = 'rgba(90,55,0,0.6)';
@@ -18213,7 +18233,7 @@ function draw() {
 
   // Quest markers — NPCs, objectives, and pickups, each ringed to stand out.
   if (quest) {
-    const sp = 0.5 + 0.5*Math.sin(Date.now()/300);
+    const sp = 0.5 + 0.5*Math.sin(animNow()/300);
     const drawMark = (mx, my, emoji, ring, sprite) => {
       const dx0 = offX + mx * tw, dy0 = offY + my * th;
       ctx.textAlign = 'center';
@@ -18313,12 +18333,12 @@ function draw() {
       ctx.fillRect(tcx - tw * 0.32, tcy - th * 0.32, tw * 0.64, th * 0.64);
       const warming = !tr.on && tr.t > tr.period * (1 - tr.onFrac) - 0.5;
       if (tr.on) {
-        const f = 0.6 + 0.4 * Math.sin(Date.now() / 70 + tr.x);
+        const f = 0.6 + 0.4 * Math.sin(animNow() / 70 + tr.x);
         ctx.shadowColor = '#ff6a22'; ctx.shadowBlur = tw * 0.4;
         ctx.fillStyle = `rgba(255,${Math.round(100 + 80 * f)},40,0.88)`;
         ctx.beginPath(); ctx.arc(tcx, tcy, tw * 0.27 * f, 0, Math.PI * 2); ctx.fill();
       } else if (warming) {
-        ctx.fillStyle = `rgba(255,120,40,${0.18 + 0.2 * Math.abs(Math.sin(Date.now() / 90))})`;
+        ctx.fillStyle = `rgba(255,120,40,${0.18 + 0.2 * Math.abs(Math.sin(animNow() / 90))})`;
         ctx.beginPath(); ctx.arc(tcx, tcy, tw * 0.13, 0, Math.PI * 2); ctx.fill();
       }
     }
@@ -18404,7 +18424,7 @@ function draw() {
   // the gate charges, with the remaining-seconds count floating above so the progress
   // (and the "don't get hit" stakes) read at a glance.
   if (portalChanneling()) {
-    const pulse = 0.55 + 0.35 * Math.sin(Date.now() / 180);
+    const pulse = 0.55 + 0.35 * Math.sin(animNow() / 180);
     // The shared animated portal, tinted BLUE for the home gate (teleporters purple).
     drawPortal(px + tw / 2, py + th / 2, tw, 'town');
     ctx.save();
@@ -18656,7 +18676,7 @@ function drawStairsArrow(offX, offY, tw, th, W, H) {
   // Cleared stairs pulse gold ("descend here"); while sealed it's the same gold
   // but calmer, echoing the on-tile locked/open language. Colour is UI-semantic,
   // so it comes from the palette mirror rather than a hardcoded hex.
-  const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 320);
+  const pulse = 0.5 + 0.5 * Math.sin(animNow() / 320);
   const open = (typeof floorCleared === 'undefined') || floorCleared;
   const alpha = open ? 0.9 + 0.1 * pulse : 0.5 + 0.12 * pulse;
   const size = Math.max(16, tw * 0.9);
@@ -18771,7 +18791,7 @@ function drawActorShadow(cx, cyFeet, w) {
 // N/E/S/W ticks and a centre dot, so the current target reads at a glance
 // without hiding the enemy. `size` is the enemy footprint width in pixels.
 function drawTargetCrosshair(cx, cy, size) {
-  const t = 0.5 + 0.5 * Math.sin(Date.now() / 260);   // gentle "active lock" pulse
+  const t = 0.5 + 0.5 * Math.sin(animNow() / 260);   // gentle "active lock" pulse
   const r = size * 0.5;
   const red = 'rgba(255,48,58,';                       // bright targeting red
   ctx.save();
@@ -19379,7 +19399,7 @@ function updateHaloVignette() {
   if (!vig) return;
   const halos = activeHalos();
   if (!halos.length) { if (vig.style.opacity !== '0') vig.style.opacity = '0'; return; }
-  const phase = Date.now() % (halos.length * HALO_SLOT_MS);
+  const phase = animNow() % (halos.length * HALO_SLOT_MS);
   const idx = Math.floor(phase / HALO_SLOT_MS);
   const local = (phase % HALO_SLOT_MS) / HALO_SLOT_MS; // 0..1 within this colour's slot
   const fade = Math.sin(Math.PI * local);              // 0 → 1 → 0 bloom
@@ -28408,6 +28428,7 @@ function gameLoop(ts) {
   let dt = (ts - _lastTs) / 1000;
   _lastTs = ts;
   if (dt > 0.1) dt = 0.1;          // clamp after a stall so nothing teleports
+  tickAnimClock(ts);               // advance the looping-animation clock (frozen while paused)
   if (!rtPaused()) {
     safeStep('move', () => updatePlayer(dt));              // 8-dir movement may trigger stairs/town/death…
     if (!rtPaused()) safeStep('combat', () => updatePlayerCombat(dt));
