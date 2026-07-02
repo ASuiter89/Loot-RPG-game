@@ -2678,8 +2678,10 @@
   }
   /* Equal-growing flanks keep the title centered; the title takes its natural
      width (ellipsizing only if the modal is genuinely too narrow), and the nav
-     buttons never wrap. */
-  .modal-head__flank { flex: 1 1 0; min-width: 0; display: flex; align-items: center; }
+     buttons never wrap. The flank floors at its button's min-content width (not
+     0) so a wide title can never shrink the flank below the button and let the
+     button spill sideways over the title — the title ellipsizes instead. */
+  .modal-head__flank { flex: 1 1 0; min-width: min-content; display: flex; align-items: center; }
   .modal-head__flank.right { justify-content: flex-end; }
   .modal-head__title {
     flex: 0 1 auto; text-align: center; line-height: 1.15;
@@ -11229,6 +11231,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Popup titles clear their nav buttons", by: "Claude", notes: ["A long popup title (e.g. Name Your Hero) no longer lets the Back/Close button spill sideways over it on a narrow window — the title now ellipsizes instead of overlapping."] },
   { date: "2026-07-02", size: "small", v: "Readable floating text", by: "Claude", notes: ["Damage, gold and reward pops that fired at once now stack into a clean rising column instead of overlapping into a blob.", "Material and ingredient drops stay in the combat log only — no more duplicate on-kill floater.", "Hard cap keeps a big multi-hit burst from walling the screen with numbers."] },
   { date: "2026-07-02", size: "small", v: "Banners centre on the map", by: "Claude", notes: ["Level-up and loot banners now centre over the dungeon map, not the whole window — so they stay centred when a side drawer is open."] },
   { date: "2026-07-02", size: "small", v: "Hardcore earns all 100 feats, two tabs", by: "Claude", notes: ["Hardcore now earns the same full set of achievements as normal play, not a short curated list.", "Achievements popup splits into two tabs — Kitten Mode and Hardcore — so each mode's feats have their own grid.", "Hardcore feats still persist through death and stay earned account-wide."] },
