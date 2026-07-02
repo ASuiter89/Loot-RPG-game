@@ -2967,6 +2967,7 @@
   #title-hero .th-stats { display: flex; justify-content: center; gap: 18px; margin-top: 9px; font-size: 1.4rem; color: var(--orange-400); }
   #title-hero .th-stats b { color: var(--xp); font-weight: bold; }
   .title-play {
+    position: relative; isolation: isolate;
     width: 100%; box-sizing: border-box; padding: 15px; margin-bottom: 10px;
     border: 2px solid var(--gold); border-radius: 8px;
     background: linear-gradient(180deg, var(--orange-850), var(--orange-850));
@@ -2976,6 +2977,41 @@
     -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   }
   .title-play:active { background: var(--orange-850); }
+  /* Primary CTA (ENTER / CONTINUE) — the one action that starts the game, so it
+     gets extra pull: the whole frame breathes with a pulsing golden glow while a
+     bright wisp of light continuously circles the border. Scoped to #title-play
+     so the secondary title buttons stay calm. */
+  @property --tp-wisp { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+  #title-play { animation: titlePlayPulse 2.6s ease-in-out infinite; }
+  #title-play .tp-label { position: relative; z-index: 1; }
+  /* Rotating wisp: a conic gradient with one bright hot arc, masked down to the
+     2px border ring so the light reads as travelling around the button's edge. */
+  #title-play::before {
+    content: ''; position: absolute; inset: 0; z-index: 0;
+    border-radius: inherit; padding: 2px; pointer-events: none;
+    background: conic-gradient(from var(--tp-wisp),
+      transparent 0deg,
+      transparent 250deg,
+      color-mix(in srgb, var(--gold-350) 55%, transparent) 300deg,
+      var(--xp) 335deg,
+      color-mix(in srgb, var(--gold-350) 55%, transparent) 360deg);
+    -webkit-mask: linear-gradient(white 0 0) content-box, linear-gradient(white 0 0);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(white 0 0) content-box, linear-gradient(white 0 0);
+            mask-composite: exclude;
+    animation: titlePlayWisp 3.2s linear infinite;
+  }
+  @keyframes titlePlayWisp { to { --tp-wisp: 360deg; } }
+  @keyframes titlePlayPulse {
+    0%,100% { box-shadow: 0 0 16px color-mix(in srgb, var(--orange-750) 26%, transparent);
+              border-color: var(--gold); }
+    50%     { box-shadow: 0 0 32px color-mix(in srgb, var(--gold-350) 55%, transparent),
+                          0 0 8px color-mix(in srgb, var(--gold-350) 40%, transparent);
+              border-color: var(--gold-350); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #title-play, #title-play::before { animation: none; }
+  }
   .title-play.secondary {
     padding: 11px; font-size: 1.5rem; letter-spacing: 1px; border-width: 1px;
     background: var(--orange-850); color: var(--orange-300); box-shadow: none;
@@ -4517,7 +4553,7 @@
     </div>
     <!-- Hero / journey card — shown above CONTINUE for a returning hero, filled by showTitle(). -->
     <div id="title-hero" style="display:none"></div>
-    <button class="title-play" id="title-play" onclick="titlePlay()">⚔️ ENTER THE DUNGEON</button>
+    <button class="title-play" id="title-play" onclick="titlePlay()"><span class="tp-label">ENTER</span></button>
     <button class="title-play secondary" id="title-newrun" style="display:none" onclick="titleNewRun()">↻ Reset Current Run</button>
     <!-- Achievements — full-width button (matches CONTINUE / Reset Run). Opens the
          progress-badge popup; label + visibility set by renderTitleAchievements(). -->
@@ -10776,6 +10812,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Punchier ENTER button", by: "Claude", notes: ["Title's main button now reads just ENTER (sword icon gone) with a pulsing golden frame and a wisp of light circling the border, so the way in pops."] },
   { date: "2026-07-02", size: "small", v: "Pick your UI font", by: "Claude", notes: ["New UI FONT picker in ⚙ Settings → Play — choose from 11 embedded faces (Cinzel, Uncial Antiqua, MedievalSharp, Grenze Gotisch, Bangers, Fredoka, Orbitron, Press Start 2P, Pixelify Sans, Jersey 10, VT323). Each option shows its own name in its own face.", "Default is now Cinzel, an elegant Roman serif. The DUNGEON LOOT title stays Uncial Antiqua whatever you pick."] },
   { date: "2026-07-02", size: "small", v: "Bigger town service sprites", by: "Claude", notes: ["Animated town-service sprites are twice as large now, standing as tall as both lines of their button label."] },
   { date: "2026-07-01", size: "small", v: "Sort & stat-filter your loot", by: "Claude", notes: ["LOOT tab gains a Sort button — order the bag by rarity, power, slot, value or name.", "New Filter button shows only gear carrying the stats you pick (crit, leech, +Might…); the picker lists just the stats you actually own.", "Bulk Sell/Scrap all respects the active filters, so it only ever hits the visible rows."] },
@@ -26550,7 +26587,7 @@ function showTitle() {
   const resuming = !!(player && player.class);
   const play = document.getElementById('title-play');
   const newrun = document.getElementById('title-newrun');
-  if (play) play.innerHTML = resuming ? '▶ CONTINUE' : '⚔️ ENTER THE DUNGEON';
+  if (play) play.innerHTML = `<span class="tp-label">${resuming ? '▶ CONTINUE' : 'ENTER'}</span>`;
   if (newrun) newrun.style.display = resuming ? '' : 'none';
   // Hero / journey card — identity + how far this hero has delved.
   const hero = document.getElementById('title-hero');
