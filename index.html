@@ -11254,6 +11254,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Smoother combat frame rate", by: "Claude", notes: ["Screen-shake and the skill bar no longer force extra full redraws — big fights stay smoother.", "The skill bar only rebuilds when it actually changes instead of ~2.5×/sec, cutting steady background stutter."] },
   { date: "2026-07-02", size: "small", v: "Tidier foe inspect card", by: "Claude", notes: ["The tap-to-inspect creature card is more compact — smaller box and text.", "Pressing anywhere else on the map now closes it, including click-and-hold to move."] },
   { date: "2026-07-02", size: "small", v: "Consistent Power icon", by: "Claude", notes: ["Every Power number — item badges, the character panel, item tooltips, the work list — now uses the same icon as the bottom HUD, instead of a lightning glyph that was rendering as the stun icon.", "Fixed the work list showing an item's Power twice."] },
   { date: "2026-07-02", size: "small", v: "Break out when mobbed, not just fully ringed", by: "Claude", notes: ["Getting swarmed no longer freezes you: when foes plug the way you're heading and the lanes you'd slide around them, keep pushing and the hero shoves between the bodies toward open ground.", "A lone foe with any real gap beside it still hard-blocks you, and corridors stay choke points."] },
@@ -18547,7 +18548,7 @@ function spawnFloatingText(x, y, text, color, size) {
 // self-expiring; the pulse loop keeps repainting while any are live.
 let particles = [];
 let shakeMag = 0, shakeUntil = 0;
-function addShake(mag) { shakeMag = Math.max(shakeMag, mag); shakeUntil = Date.now() + 200; draw(); }
+function addShake(mag) { shakeMag = Math.max(shakeMag, mag); shakeUntil = Date.now() + 200; }  // rAF loop redraws every frame — no forced draw() needed
 // Burst of `n` little sparks at map-tile (x,y), drifting and fading.
 function spawnParticles(x, y, color, n, speed) {
   const now = Date.now();
@@ -24403,6 +24404,13 @@ function positionSkillPop() {
 // slots (keys 1–4) pinned RIGHT. Listing the skills here means mobile players, who
 // have no keyboard, can still see and cast them. Hidden in town (touch) and parked
 // as a tray in town (web). See the .sb-left / .sb-auto-wrap / .sb-right layout CSS.
+// The world clock calls renderSkillBar() every tick (2.5×/sec) so cooldown/ready
+// states stay live. Re-assigning bar.innerHTML each time tears down and re-parses
+// the whole bar (and syncTownBarReserve forces a layout), which is pure churn when
+// nothing actually changed — the common case while exploring. Cache the built
+// markup and only touch the DOM when it differs. Live cooldown NUMBERS ride on the
+// per-frame updateCooldownDials (the .sb-cd dials), so they stay smooth regardless.
+let _lastSkillBarHtml = null;
 function renderSkillBar() {
   const bar = document.getElementById('skill-bar');
   if (!bar) return;
@@ -24415,7 +24423,7 @@ function renderSkillBar() {
   // slots in town. On touch the SKILLS tab still carries that tray, so the bar would
   // just be a redundant second copy — keep the old behavior and hide it in town.
   const town = inTown && isWebLayout();
-  if (inTown && !town) { bar.style.display = 'none'; bar.innerHTML = ''; document.body.classList.remove('town-bar'); syncTownBarReserve(); return; }
+  if (inTown && !town) { bar.style.display = 'none'; bar.innerHTML = ''; _lastSkillBarHtml = ''; document.body.classList.remove('town-bar'); syncTownBarReserve(); return; }
   // On the web layout the in-town bar parks as a solid tray the town menu leaves
   // room for (see syncTownBarReserve), with its potions inert. Out in the dungeon
   // it's the live combat bar, and it always renders even before any active is
@@ -24519,9 +24527,12 @@ function renderSkillBar() {
   }
   // Three sections: Town/Health/Mana left, the auto-cast slot centred, the four
   // manual slots right (see the .sb-left / .sb-auto-wrap / .sb-right flex CSS).
-  bar.innerHTML = `<div class="sb-left">${townBtn}${healBtn}${manaBtn}</div>`
+  const html = `<div class="sb-left">${townBtn}${healBtn}${manaBtn}</div>`
     + `<div class="sb-auto-wrap">${autoCell}</div>`
     + `<div class="sb-right">${skillsHtml}</div>`;
+  if (html === _lastSkillBarHtml) return;   // identical markup — skip the DOM teardown + reflow
+  _lastSkillBarHtml = html;
+  bar.innerHTML = html;
   syncTownBarReserve();
 }
 
