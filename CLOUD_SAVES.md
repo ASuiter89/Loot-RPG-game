@@ -53,6 +53,40 @@ create policy "own saves delete" on public.saves
   for delete using (auth.uid() = user_id);
 ```
 
+### Settings sync (optional, same project)
+
+Signed-in players also carry their **preferences** across devices — sound levels,
+keybinds, UI font, cursor, sprint mode, music vibe, hero bars, and the panel /
+minimap collapse states. These live in a separate `settings` table, one row per
+account. Run this once alongside the `saves` table above:
+
+```sql
+create table if not exists public.settings (
+  user_id    uuid        not null references auth.users(id) on delete cascade,
+  data       jsonb       not null,
+  updated_at timestamptz not null default now(),
+  primary key (user_id)
+);
+
+alter table public.settings enable row level security;
+
+create policy "own settings select" on public.settings
+  for select using (auth.uid() = user_id);
+create policy "own settings insert" on public.settings
+  for insert with check (auth.uid() = user_id);
+create policy "own settings update" on public.settings
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own settings delete" on public.settings
+  for delete using (auth.uid() = user_id);
+```
+
+Like the shared stash, settings are **last-writer-wins** by the blob's own
+timestamp: the most recently changed preferences win across devices. Two
+form-factor-specific settings are deliberately **left per-device** and never
+synced — the UI scale (tuned to each screen) and the touch d-pad layout. If the
+`settings` table is missing, settings sync silently no-ops and everything else
+(saves, stash, leaderboard) keeps working.
+
 Then, in **Authentication → Providers → Email**, make sure **Email** sign-ups
 are enabled. For the smoothest experience, turn **"Confirm email" off** so new
 accounts can sign in immediately. If you leave confirmation **on**, sign-up still
