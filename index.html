@@ -7054,6 +7054,19 @@ function recordDepth() {
 const MATERIAL_MIN_DIFF = { scrap: 1, glimmer: 1, core: 2, chaos: 3 };
 function activeDifficulty() { return inTown ? diffOf(Math.max(1, dungeonReturn || 1)) : currentDifficulty(); }
 function materialUnlocked(k) { return activeDifficulty() >= (MATERIAL_MIN_DIFF[k] || 1); }
+// Grant a curated reward's material (Treasure Goblin, bounty) while still honouring
+// the difficulty gate: hand over the requested material if your tier can drop it,
+// otherwise step DOWN to the best one it can (Chaos → Core → Glimmer → Scrap) so the
+// reward stays generous but never leaks a material you haven't unlocked yet. Returns
+// the key actually granted so the caller can name it.
+function grantGatedMaterial(preferred, qty) {
+  const order = ['chaos', 'core', 'glimmer', 'scrap'];
+  const start = Math.max(0, order.indexOf(preferred));
+  let key = 'scrap';
+  for (let i = start; i < order.length; i++) { if (materialUnlocked(order[i])) { key = order[i]; break; } }
+  gainMaterial(key, qty);
+  return key;
+}
 
 // Per-point power weight of an attribute FOR THE CURRENT CLASS. Every attribute is
 // worth the class-independent ATTR_POWER_WEIGHT (its derived-stat package); the
@@ -10174,7 +10187,7 @@ window.gameGuide = function gameGuide(topic) {
       `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. Off-class weapons can be carried and sold but not equipped.`,
       `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them.`,
-      `Crafting materials (Scrap → Glimmer → Core → Chaos, common→rare) reach you two ways. Foes DROP them, gated by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four). SALVAGING gear sheds them by the item's rarity regardless of difficulty — so a lucky high-rarity find is the only early route to a material your tier can't yet drop. Both are deliberately scarce; see gameGuide("autoloot") for the salvage bands.`,
+      `Crafting materials (Scrap → Glimmer → Core → Chaos, common→rare) come mainly two ways. Foes DROP them, gated by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four). SALVAGING gear sheds them by the item's rarity regardless of difficulty — so a lucky high-rarity find is the only early route to a material your tier can't yet drop. Curated rewards (bounties, Treasure Goblins) respect the same difficulty gate, stepping a too-rare reward down to the best material your tier can drop. Materials are deliberately scarce; see gameGuide("autoloot") for the salvage bands.`,
     ],
     autoloot: [
       `AUTO-LOOT applies a per-rarity rule the instant gear drops: Keep (default), Scrap (into materials), or Sell (50% value gold). Set it on the LOOT tab (♻ Auto-Loot). gameState().menu.autoLoot shows the rules.`,
@@ -11424,7 +11437,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
-  { date: "2026-07-02", size: "medium", v: "Material drops gated & scarcer", by: "Claude", notes: ["Kill-drops gate by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four).", "Salvage is the only early route to a material your tier can't yet drop — it sheds by the item's rarity, not difficulty.", "Rarer mats from salvage are now a lucky roll, not guaranteed, so Core/Chaos stay scarce.", "Salvage quantity scales with item level on a curve that flattens as ilvl climbs.", "Every individual item salvages a little differently — two same-rarity pieces vary in drop rate and amount."] },
+  { date: "2026-07-02", size: "medium", v: "Material drops gated & scarcer", by: "Claude", notes: ["Kill-drops gate by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four).", "Salvage is the only early route to a material your tier can't yet drop — it sheds by the item's rarity, not difficulty.", "Rarer mats from salvage are now a lucky roll, not guaranteed, so Core/Chaos stay scarce.", "Salvage quantity scales with item level on a curve that flattens as ilvl climbs.", "Every individual item salvages a little differently — two same-rarity pieces vary in drop rate and amount.", "Bounty and Treasure Goblin material rewards respect the gate too, stepping a too-rare payout down to what your tier can drop."] },
   { date: "2026-07-02", size: "small", v: "Volume tiles step up", by: "Claude", notes: ["Tapping the MUSIC or SFX tile now raises the volume a notch instead of lowering it; it wraps from full back to off."] },
   { date: "2026-07-02", size: "small", v: "Stairs arrow toggle", by: "Claude", notes: ["Toggle the off-screen down-stairs arrow in Settings → Visuals (on by default).", "Choice syncs across devices when signed in."] },
   { date: "2026-07-02", size: "small", v: "Fix: title screen wouldn't offer Continue", by: "Claude", notes: ["Settings sync could crash the boot before the title screen finished loading, so returning heroes never saw the Continue button — fixed.", "Re-applying your saved log/loot-drawer collapse state on load no longer counts as a fresh change, keeping cross-device sync timestamps accurate."] },
@@ -14419,7 +14432,9 @@ function acceptBounty(i) {
 function claimBounty() {
   const b = player.bounty; if (!b || !bountyDone(b)) return;
   player.gold += b.gold;
-  if (b.mat) gainMaterial(b.mat[0], b.mat[1]);
+  // Bounty material respects the difficulty gate too — a Core reward on a Normal
+  // hero steps down to the best material that tier can drop (see grantGatedMaterial).
+  if (b.mat) grantGatedMaterial(b.mat[0], b.mat[1]);
   const item = generateItem(2, b.ilvl || ((player.maxFloor || 1) + 1));
   inventory.push(item);
   player.bounty = null;
@@ -15195,10 +15210,12 @@ function salvageRanges(item) {
     const mid = qMid * salvageIlvlCurve(item.ilvl || 1, strength) * qJit;
     const lo = Math.max(1, Math.round(mid * 0.65));
     const hi = Math.max(lo + 1, Math.round(mid * 1.35));
-    out.push({ key, chance: Math.min(1, chance * cJit), lo, hi });
+    // chance ≥ 1 means GUARANTEED — the per-item jitter varies only its quantity,
+    // never gates it away (Scrap is the reliable bulk; every piece must yield ≥1).
+    out.push({ key, chance: chance >= 1 ? 1 : Math.min(1, chance * cJit), lo, hi });
   };
-  // Scrap — every piece, the common bulk; grows fastest with rarity and ilvl.
-  push('scrap', 0.95, 1 + rank * 0.9, 1);
+  // Scrap — every piece, guaranteed: the common bulk; grows fastest with rarity/ilvl.
+  push('scrap', 1, 1 + rank * 0.9, 1);
   // Glimmer — white (rank ≥1) and up; a lucky-ish shed, likelier on finer gear. Grey
   // junk stays pure Scrap.
   if (rank >= 1) push('glimmer', 0.30 + rank * 0.05, 1 + rank * 0.25, 0.5);
@@ -21248,9 +21265,10 @@ function onEnemyDefeated(e) {
   if (e.isGoblin) {
     const bonus = 30 + dungeonLevel * 8;
     player.gold += bonus;
-    gainMaterial('chaos', 1);
+    // A Chaos Orb once Brutal unlocks it, else the best material this tier can drop.
+    const gk = grantGatedMaterial('chaos', 1);
     spawnFloatingText(e.x, e.y, `+${bonus}`, '#ffd24b', 1, true);
-    log(`💰 The Treasure Goblin bursts — +💰${bonus}, a 🌀 Chaos Orb, and a glittering chest!`, 'loot');
+    log(`💰 The Treasure Goblin bursts — +💰${bonus}, ${CRAFT_MATERIALS[gk].emoji} ${CRAFT_MATERIALS[gk].name}, and a glittering chest!`, 'loot');
     updateBars();
     collectChestLoot(6, e.level || dungeonLevel, e.x, e.y);
   }
@@ -28349,7 +28367,7 @@ log(PWR_GLYPH + ' Each item has a Power value; your total Power blends level, ge
 log('💠 Level up to earn points, then raise attributes in the bag\'s HERO tab.');
 log('🗡️ Every weapon fights differently — axes cleave, daggers flurry, bows & staves strike at range, maces stun, scythes drain. Try them all!');
 log('🏰 Tap TOWN (or press ' + kbLabel('portal') + ') to warp to the safe hub: craftsman, healer, trainer, enchanter, and a gate to re-enter any floor you\'ve reached.');
-log('🧰 Foes drop crafting materials — 🔩 Scrap, 🔆 Core, ✨ Glimmer, 🌀 Chaos Orb. The 🔨 Craftsman forges blank gear; the 🪄 Enchanter fills in its modifiers.');
+log('🧰 Foes drop crafting materials — 🔩 Scrap & ✨ Glimmer from the start, 🔆 Core and 🌀 Chaos Orbs as you brave deeper tiers. The 🔨 Craftsman forges blank gear; the 🪄 Enchanter fills in its modifiers.');
 log('♻️ Tap any loot in your 🎒 BAG to Sell it for gold or Scrap it into materials — any time, no vendor needed. Use the ♻️ Auto-Loot button on the LOOT tab to do it automatically by rarity on pickup.');
 log('⚔️ Move freely in real time and auto-attack foes in reach — get surrounded and every foe piles on, so don\'t let them encircle you.');
 log('🎨 Pixel art from the DawnLike tileset by DragonDePlatino & DawnBringer (CC-BY 4.0).');
