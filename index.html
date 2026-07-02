@@ -2027,15 +2027,23 @@
      pinned where it sits on the body (helm at the head, amulet at the neck,
      weapon & off-hand at the hands, chest on the torso, gloves & ring by the
      hands, greaves at the legs). Slot positions are % of the frame. */
+  /* GEAR equip fills the panel: set bar on top, the doll centred in the middle
+     (so there's breathing room above the head), the hint lines pinned to the
+     bottom. */
+  .gear-equip { min-height: 100%; display: flex; flex-direction: column; }
+  .pda-stage { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 6px 0; }
   .paperdoll-anat {
     position: relative; width: 100%;
-    max-width: calc(360px * var(--ui-scale,1));
-    margin: 12px auto 4px; aspect-ratio: 3 / 4;
+    max-width: calc(400px * var(--ui-scale,1));
+    margin: 0 auto; aspect-ratio: 3 / 4; overflow: hidden;
   }
+  /* Big centred sprite — scaled past the frame so the character (not its
+     transparent tile padding) fills it; the frame's overflow:hidden clips the
+     empty margins. */
   .pda-body {
     position: absolute; left: 50%; top: 49%;
     transform: translate(-50%, -50%);
-    height: 82%; width: auto; max-width: 132%;
+    height: 135%; width: auto;
     z-index: 0; pointer-events: none;
     filter: drop-shadow(0 5px 12px rgba(0,0,0,0.55));
   }
@@ -23375,22 +23383,23 @@ function renderPaperdoll() {
   const body = heroFaceIcon(player.class, player.sex, 232) || dlIcon('hero', 232);
   const bodyHTML = body ? `<div class="pda-body">${body}</div>` : '';
   const POS = {
-    head:    [50, 16],
-    amulet:  [50, 37],
-    chest:   [50, 51],
-    legs:    [50, 75],
-    weapon:  [12, 49],
-    offhand: [88, 49],
-    hands:   [12, 66],
-    ring:    [88, 66],
+    head:    [50, 13],
+    amulet:  [50, 33],
+    chest:   [50, 50],
+    legs:    [50, 78],
+    weapon:  [12, 47],
+    offhand: [88, 47],
+    hands:   [12, 65],
+    ring:    [88, 65],
   };
   const slots = Object.keys(POS).map(slot => {
     const [x, y] = POS[slot];
     return `<div class="pda-wrap" style="left:${x}%;top:${y}%">${renderDollSlot(slot)}</div>`;
   }).join('');
-  return gearSetBarHTML() + `<div class="paperdoll-anat">${bodyHTML}${slots}</div>
-    <div class="pd-hint">Tap a slot for details · ✕ to unequip · EQUIP loot from the LOOT tab</div>
-    <div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div>`;
+  return `<div class="gear-equip">${gearSetBarHTML()}` +
+    `<div class="pda-stage"><div class="paperdoll-anat">${bodyHTML}${slots}</div></div>` +
+    `<div class="pd-hint">Tap a slot for details · ✕ to unequip · EQUIP loot from the LOOT tab</div>` +
+    `<div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div></div>`;
 }
 // The Enchanter's Equipped section reuses the same paper-doll body, but each worn
 // piece is tapped to pick it for enchanting (no gear-set bar, no ✕ unequip).
