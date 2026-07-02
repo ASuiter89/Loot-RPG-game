@@ -2896,9 +2896,12 @@
   .town-menu-btn .tm-name { font-size: 1.5rem; font-weight: bold; letter-spacing: .5px; }
   .town-menu-btn .tm-desc { font-size: 1.2rem; color: var(--orange-500); line-height: 1.3; }
   /* The primary call-to-action — it's how you get back into the dungeon — so it sits
-     at the TOP of the menu, spans the full width, and glows so it's unmistakable. */
+     on its OWN row at the TOP of the menu, centred, and glows so it's unmistakable.
+     It hugs its label (justify-self: center) instead of stretching the full row, so
+     there's no dead space flanking the text. */
   .town-menu-btn.tm-gate {
     grid-column: 1 / -1;
+    justify-self: center;         /* size to the label, don't span the whole row */
     position: relative;           /* anchors the two orbiting wisps */
     justify-content: center;      /* centre the icon + label group */
     text-align: center;
@@ -2906,7 +2909,7 @@
     border: 2px solid var(--gold-350);
     background: linear-gradient(180deg, var(--gold-850), var(--orange-850));
     color: var(--text);
-    padding: 22px 16px;           /* taller than a normal service row */
+    padding: 22px 44px;           /* taller, with room around the label */
     animation: gatePulse 1.6s ease-in-out infinite;
   }
   .town-menu-btn.tm-gate:active { background: var(--gold-850); }
@@ -11232,6 +11235,7 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Popup titles clear their nav buttons", by: "Claude", notes: ["A long popup title (e.g. Name Your Hero) no longer lets the Back/Close button spill sideways over it on a narrow window — the title now ellipsizes instead of overlapping."] },
+  { date: "2026-07-02", size: "small", v: "Depth banner no longer eaten by its cache", by: "Claude", notes: ["A depth-milestone cache that rolls legendary/unique now shows NEW DEPTH RECORD first, then the drop reveal — instead of the drop banner instantly clobbering the milestone one.", "Loot banners now queue and play in turn; each banner's sound, flash and shake fire as it appears."] },
   { date: "2026-07-02", size: "small", v: "Readable floating text", by: "Claude", notes: ["Damage, gold and reward pops that fired at once now stack into a clean rising column instead of overlapping into a blob.", "Material and ingredient drops stay in the combat log only — no more duplicate on-kill floater.", "Hard cap keeps a big multi-hit burst from walling the screen with numbers."] },
   { date: "2026-07-02", size: "small", v: "Banners centre on the map", by: "Claude", notes: ["Level-up and loot banners now centre over the dungeon map, not the whole window — so they stay centred when a side drawer is open."] },
   { date: "2026-07-02", size: "small", v: "Hardcore earns all 100 feats, two tabs", by: "Claude", notes: ["Hardcore now earns the same full set of achievements as normal play, not a short curated list.", "Achievements popup splits into two tabs — Kitten Mode and Hardcore — so each mode's feats have their own grid.", "Hardcore feats still persist through death and stay earned account-wide."] },
@@ -19208,16 +19212,34 @@ function showLevelUpBanner(level) {
 
 // ── LOOT BANNER ── the big center-screen payoff for a legendary/unique find
 // (and the deep-dive milestone), coloured in the rarity hue.
+// Banners can fire back-to-back — a depth milestone reveals its cache the same
+// instant it shows its own "NEW DEPTH RECORD" banner, and two big drops can land
+// together. Rather than let a later banner clobber one that's still mid-show
+// (which read as a context-free "UNIQUE DROP" popping up out of nowhere on a new
+// floor), queue them and play each in turn. Each gets its full pop animation, and
+// its sound/flash/shake — passed as onShow — fires the moment IT appears, not when
+// it was enqueued, so the sensory hit always lands with its own banner.
 let lootBannerTimer;
-function showLootBanner(title, kicker, color) {
+const lootBannerQueue = [];
+let lootBannerShowing = false;
+function showLootBanner(title, kicker, color, onShow) {
+  lootBannerQueue.push({ title, kicker, color, onShow });
+  if (!lootBannerShowing) playNextLootBanner();
+}
+function playNextLootBanner() {
   const el = document.getElementById('loot-banner');
-  if (!el) return;
-  el.style.setProperty('--lb-col', color || '#ff8800');
-  const k = document.getElementById('loot-banner-kicker'); if (k) k.textContent = kicker || 'LEGENDARY DROP';
-  const t = document.getElementById('loot-banner-title'); if (t) t.textContent = title || '';
+  const next = lootBannerQueue.shift();
+  if (!el || !next) { lootBannerShowing = false; return; }
+  lootBannerShowing = true;
+  el.style.setProperty('--lb-col', next.color || '#ff8800');
+  const k = document.getElementById('loot-banner-kicker'); if (k) k.textContent = next.kicker || 'LEGENDARY DROP';
+  const t = document.getElementById('loot-banner-title'); if (t) t.textContent = next.title || '';
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  if (next.onShow) { try { next.onShow(); } catch (e) {} }
   clearTimeout(lootBannerTimer);
-  lootBannerTimer = setTimeout(() => el.classList.remove('show'), 2400);
+  // Let the pop animation run its full course (its last frames fade out), then hand
+  // off to the next queued banner — its own remove/reflow/add re-triggers the pop.
+  lootBannerTimer = setTimeout(() => { el.classList.remove('show'); playNextLootBanner(); }, 2400);
 }
 // Escalating sensory reward the instant a fresh item is acquired: blue/purple get
 // a bright chime + flash; orange/red stop the world with a banner, sting & shake.
@@ -19225,8 +19247,10 @@ function lootReveal(item) {
   if (!item || !item.tier) return;
   const col = tierColor(item);   // set pieces flash their own colour, not unique red
   if (item.tier === 'legendary' || item.tier === 'unique') {
-    showLootBanner(item.name, item.set ? 'SET PIECE' : item.tier === 'unique' ? 'UNIQUE DROP' : 'LEGENDARY DROP', col);
-    sfx('legendary'); screenFlash(col); addShake(9);
+    // Sting, flash and shake ride along with the banner so they land when it shows
+    // (it may be queued behind a depth banner), not the instant it's enqueued.
+    showLootBanner(item.name, item.set ? 'SET PIECE' : item.tier === 'unique' ? 'UNIQUE DROP' : 'LEGENDARY DROP', col,
+      () => { sfx('legendary'); screenFlash(col); addShake(9); });
   } else if (item.tier === 'epic') {
     sfx('epicdrop'); screenFlash(col);
   } else if (item.tier === 'rare') {
@@ -19242,9 +19266,12 @@ function depthMilestone(prevMax, newMax) {
   const from = Math.floor(prevMax / 5), to = Math.floor(newMax / 5);
   if (to <= from) return;
   const floorHit = to * 5;
-  sfx('milestone');
-  showLootBanner(`Floor ${floorHit} reached`, 'NEW DEPTH RECORD', '#7fe0ff');
-  screenFlash('#3aa0ff');
+  // Show the depth banner first (fanfare + blue flash land as it appears); the
+  // cache's own reveal banner queues behind it via acquireLoot → lootReveal, so a
+  // unique cache now reads as "NEW DEPTH RECORD" then "UNIQUE DROP", not a lone
+  // context-free unique popup the instant you step onto the floor.
+  showLootBanner(`Floor ${floorHit} reached`, 'NEW DEPTH RECORD', '#7fe0ff',
+    () => { sfx('milestone'); screenFlash('#3aa0ff'); });
   const bonusGold = 25 * floorHit;
   player.gold += bonusGold;
   const cache = generateItem(4, newMax + 1, milestoneTier(floorHit));
