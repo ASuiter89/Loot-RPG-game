@@ -2980,7 +2980,7 @@
   @media (min-width: 760px) and (hover: hover) and (pointer: fine) {
     #class-modal { max-width: 640px; }
     #lb-modal, #slots-modal { max-width: 560px; }
-    #name-modal, #account-modal { max-width: 460px; }
+    #name-modal, #account-modal { max-width: 540px; }
     #keybind-card { max-width: 500px; }
     #title-inner { max-width: 600px; }
   }
@@ -3022,7 +3022,7 @@
   .slot-btn.danger { flex: 0 0 auto; border-color: var(--red-650); color: var(--red-300); background: var(--orange-850); }
   .slot-btn.danger:active { background: var(--orange-850); }
   .slot-btn.danger.armed { background: var(--hp); color: var(--paper); border-color: var(--paper); }
-  #name-modal { max-width: 360px; }
+  #name-modal { max-width: 420px; }
   .ov-title { color: var(--xp); font-size: 1.8rem; font-weight: bold; text-align: center; display: block; }
   .ov-sub { color: var(--orange-400); font-size: 1.3rem; text-align: center; margin: 6px 0 12px; line-height: 1.4; }
   #name-input {
@@ -4884,13 +4884,13 @@
            spellcheck="false" onkeydown="if(event.key==='Enter')submitName()">
     <div class="ov-sub" style="margin:2px 0 7px">Choose your hero</div>
     <div id="sex-pick" class="sex-pick">
-      <button type="button" class="sex-opt" id="sex-female" onclick="pickSex('female')">
-        <canvas class="sex-prev" id="sex-prev-female" width="48" height="48" aria-hidden="true"></canvas>
-        <span class="sex-lbl">Female</span>
-      </button>
       <button type="button" class="sex-opt" id="sex-male" onclick="pickSex('male')">
         <canvas class="sex-prev" id="sex-prev-male" width="48" height="48" aria-hidden="true"></canvas>
         <span class="sex-lbl">Male</span>
+      </button>
+      <button type="button" class="sex-opt" id="sex-female" onclick="pickSex('female')">
+        <canvas class="sex-prev" id="sex-prev-female" width="48" height="48" aria-hidden="true"></canvas>
+        <span class="sex-lbl">Female</span>
       </button>
     </div>
     <label class="hc-toggle" id="hc-toggle">
@@ -11425,6 +11425,7 @@ const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Tidier foe inspect card", by: "Claude", notes: ["The tap-to-inspect creature card is more compact — smaller box and text.", "Pressing anywhere else on the map now closes it, including click-and-hold to move."] },
   { date: "2026-07-02", size: "small", v: "Consistent Power icon", by: "Claude", notes: ["Every Power number — item badges, the character panel, item tooltips, the work list — now uses the same icon as the bottom HUD, instead of a lightning glyph that was rendering as the stun icon.", "Fixed the work list showing an item's Power twice."] },
   { date: "2026-07-02", size: "small", v: "Break out when mobbed, not just fully ringed", by: "Claude", notes: ["Getting swarmed no longer freezes you: when foes plug the way you're heading and the lanes you'd slide around them, keep pushing and the hero shoves between the bodies toward open ground.", "A lone foe with any real gap beside it still hard-blocks you, and corridors stay choke points."] },
+  { date: "2026-07-02", size: "small", v: "Name-hero modal tweaks", by: "Claude", notes: ["Male now sits on the left, Female on the right in the body-type picker.", "Wider modal so the hardcore blurb and other text fit without cramping."] },
   { date: "2026-07-02", size: "small", v: "Bigger skill tiles on the HUD", by: "Claude", notes: ["Bottom-HUD skill buttons are 50% larger with icons scaled to match.", "Even margin above and below the skill row; the HUD grows to fit."] },
   { date: "2026-07-02", size: "small", v: "Chunkier floor buttons", by: "Claude", notes: ["Dungeon Gate floor buttons are now larger, taller and squarer with bigger numerals — easier to read and click."] },
   { date: "2026-07-02", size: "small", v: "Smart click-to-move pathing", by: "Claude", notes: ["Click a spot behind a wall and the hero now routes around it instead of grinding into the corner — faint gold breadcrumbs sketch the planned path.", "Prefers safe ground, steering around lava and spikes when there's a way past.", "Works while holding the button too: drag past a wall and the route re-plans to keep chasing the cursor."] },
