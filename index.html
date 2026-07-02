@@ -2187,21 +2187,21 @@
      closes it) and laid out as a tidy stat grid. */
   #enemy-card {
     position: fixed; display: none;
-    background: var(--bg); border: 1px solid var(--orange-650); border-radius: 7px;
-    padding: 7px 9px 8px; font-size: 1.3rem; min-width: 150px; max-width: 220px;
-    z-index: 430; cursor: pointer; line-height: 1.5;
+    background: var(--bg); border: 1px solid var(--orange-650); border-radius: 6px;
+    padding: 5px 7px 6px; font-size: 1.1rem; min-width: 112px; max-width: 172px;
+    z-index: 430; cursor: pointer; line-height: 1.3;
     box-shadow: 0 6px 20px color-mix(in srgb, var(--ink) 60%, transparent);
     -webkit-tap-highlight-color: transparent;
   }
-  #enemy-card .ec-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-  #enemy-card .ec-name { font-weight: bold; font-size: 1.4rem; color: var(--gold-350); line-height: 1.2; }
-  #enemy-card .ec-sub  { font-size: 1.2rem; color: var(--orange-500); letter-spacing: 0.5px; }
-  #enemy-card .ec-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+  #enemy-card .ec-head { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; }
+  #enemy-card .ec-name { font-weight: bold; font-size: 1.3rem; color: var(--gold-350); line-height: 1.15; }
+  #enemy-card .ec-sub  { font-size: 1.1rem; color: var(--orange-500); letter-spacing: 0.5px; }
+  #enemy-card .ec-grid { display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; }
   #enemy-card .ec-k { color: var(--meta); }
   #enemy-card .ec-v { color: var(--purple-50); text-align: right; font-variant-numeric: tabular-nums; }
   #enemy-card .ec-v.hidden { color: var(--junk); letter-spacing: 1px; }
-  #enemy-card .ec-foot { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--panel);
-    font-size: 1.2rem; color: var(--orange-500); display: flex; align-items: center; gap: 5px; }
+  #enemy-card .ec-foot { margin-top: 5px; padding-top: 4px; border-top: 1px solid var(--panel);
+    font-size: 1.1rem; color: var(--orange-500); display: flex; align-items: center; gap: 5px; }
   #enemy-card .ec-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--blue-800); overflow: hidden; }
   #enemy-card .ec-bar > i { display: block; height: 100%; background: linear-gradient(90deg,var(--orange-550),var(--gold)); }
   /* Wraps a (possibly disabled) reroll button so the hover popup still fires —
@@ -11257,6 +11257,7 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Tidier Ramen toppings + wallet", by: "Claude", notes: ["Ramen topping tiles are compact cards with a much bigger topping icon, no longer stretched across the whole row.", "Crafting-materials wallet strip hugs its contents instead of spanning the full panel width."] },
+  { date: "2026-07-02", size: "small", v: "Tidier foe inspect card", by: "Claude", notes: ["The tap-to-inspect creature card is more compact — smaller box and text.", "Pressing anywhere else on the map now closes it, including click-and-hold to move."] },
   { date: "2026-07-02", size: "small", v: "Consistent Power icon", by: "Claude", notes: ["Every Power number — item badges, the character panel, item tooltips, the work list — now uses the same icon as the bottom HUD, instead of a lightning glyph that was rendering as the stun icon.", "Fixed the work list showing an item's Power twice."] },
   { date: "2026-07-02", size: "small", v: "Break out when mobbed, not just fully ringed", by: "Claude", notes: ["Getting swarmed no longer freezes you: when foes plug the way you're heading and the lanes you'd slide around them, keep pushing and the hero shoves between the bodies toward open ground.", "A lone foe with any real gap beside it still hard-blocks you, and corridors stay choke points."] },
   { date: "2026-07-02", size: "small", v: "Bigger skill tiles on the HUD", by: "Claude", notes: ["Bottom-HUD skill buttons are 50% larger with icons scaled to match.", "Even margin above and below the skill row; the HUD grows to fit."] },
@@ -11842,6 +11843,10 @@ function setMoveTargetFromClient(cx, cy) {
 }
 canvas.addEventListener('pointerdown', e => {
   gestureStart = { x: e.clientX, y: e.clientY };   // anchor for tap-to-inspect (both layouts)
+  // Pressing anywhere on the map that isn't the inspected foe dismisses its card
+  // right away, so a click-and-hold / drag-to-move closes it too (a plain tap on the
+  // SAME foe is left for pointerup, which toggles the card shut).
+  if (enemyCardFor && enemyAtClient(e.clientX, e.clientY) !== enemyCardFor) closeEnemyCard();
   if (isWebLayout()) {                              // desktop: click / hold-to-move, no joystick
     if (e.button !== 0 || rtPaused()) return;      // left button only; not while a menu/town/death pauses play
     clickMoveId = e.pointerId;
@@ -11964,9 +11969,9 @@ function renderEnemyCard(e, cx, cy) {
   if (!el) return;
   const kills = bestiaryKills(e);
   const spr = enemySprite(e);
-  const icon = (spr && dlIcon(spr, 22))
-    || (e.mColor ? `<span style="display:inline-block;width:2.2rem;height:2.2rem;border-radius:4px;background:${e.mColor};border:1px solid rgba(0,0,0,0.5);vertical-align:middle"></span>`
-                 : `<span style="font-size:2.2rem">${e.type || '❓'}</span>`);
+  const icon = (spr && dlIcon(spr, 18))
+    || (e.mColor ? `<span style="display:inline-block;width:1.8rem;height:1.8rem;border-radius:4px;background:${e.mColor};border:1px solid rgba(0,0,0,0.5);vertical-align:middle"></span>`
+                 : `<span style="font-size:1.8rem">${e.type || '❓'}</span>`);
   const name = e.isBoss ? (e.name || 'Boss') : (e.name || 'Unknown foe');
   const sub = e.isBoss ? 'BOSS' : (e.isElite ? 'ELITE' : 'CREATURE');
   // The stat rows, each gated by its own learn-threshold.
