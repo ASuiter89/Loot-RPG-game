@@ -6313,16 +6313,29 @@ const TIERS = {
 // only ever going to break down anyway. The per-rarity choice ('keep' | 'scrap' |
 // 'sell') lives on player.autoLoot and saves with the character.
 const AUTO_LOOT_ACTIONS = ['keep', 'scrap', 'sell'];
+// The rows the picker offers: every rarity, plus a "set" pseudo-rarity slotted in
+// right above unique. Set pieces roll at the unique tier but chase their own
+// class, so they get their own rule instead of inheriting the unique disposition.
+const AUTO_LOOT_CATS = (() => {
+  const cats = Object.keys(TIERS);
+  cats.splice(cats.indexOf('unique'), 0, 'set');
+  return cats;
+})();
+// Which auto-loot rule a freshly-found item answers to: set pieces use the 'set'
+// rule, everything else its rarity tier.
+function autoLootKey(item) { return (item && item.set) ? 'set' : (item && item.tier); }
+// Display colour for a picker row (the 'set' pseudo-rarity has no TIERS entry).
+function autoLootColor(cat) { return cat === 'set' ? SET_RARITY_COLOR : ((TIERS[cat] || {}).color || ICON_EMPTY_COLOR); }
 function defaultAutoLoot() {
   const o = {};
-  for (const t of Object.keys(TIERS)) o[t] = 'keep';
+  for (const t of AUTO_LOOT_CATS) o[t] = 'keep';
   return o;
 }
 // The configured rule set, healing any missing/invalid entries in place so older
 // saves (and partial data) always read back a complete, valid map.
 function autoLootConfig() {
   if (!player.autoLoot || typeof player.autoLoot !== 'object') player.autoLoot = defaultAutoLoot();
-  for (const t of Object.keys(TIERS)) if (!AUTO_LOOT_ACTIONS.includes(player.autoLoot[t])) player.autoLoot[t] = 'keep';
+  for (const t of AUTO_LOOT_CATS) if (!AUTO_LOOT_ACTIONS.includes(player.autoLoot[t])) player.autoLoot[t] = 'keep';
   return player.autoLoot;
 }
 // Short status for the LOOT-tab Auto-Loot button: 'off' when every rarity is kept,
@@ -6330,7 +6343,7 @@ function autoLootConfig() {
 function autoLootSummary() {
   const cfg = autoLootConfig();
   let scrap = 0, sell = 0;
-  for (const t of Object.keys(TIERS)) { if (cfg[t] === 'scrap') scrap++; else if (cfg[t] === 'sell') sell++; }
+  for (const t of AUTO_LOOT_CATS) { if (cfg[t] === 'scrap') scrap++; else if (cfg[t] === 'sell') sell++; }
   if (!scrap && !sell) return 'off';
   const parts = [];
   if (scrap) parts.push(`${scrap} scrap`);
@@ -9786,10 +9799,11 @@ window.gameGuide = function gameGuide(topic) {
     ],
     autoloot: [
       `AUTO-LOOT applies a per-rarity rule the instant gear drops: Keep (default), Scrap (into materials), or Sell (50% value gold). Set it on the LOOT tab (♻ Auto-Loot). gameState().menu.autoLoot shows the rules.`,
+      `The picker has a row per rarity plus a "set" row (right above unique) for set pieces — they roll at the unique tier but answer to their own rule, so you can keep chase set pieces while still auto-selling plain uniques.`,
       `It only touches organically-found drops (chests, kills) — never shop buys or forged gear — and never locked items.`,
       `Auto-scrap only works on equippable gear; non-gear set to Scrap falls back to Keep. Use Sell to auto-dispose of non-gear.`,
       `Scrapping yields materials by rarity band: scrap from any piece, glimmer from green up, core from blue up, and a chaos shot only from epic+ — grey/white melt to pure scrap, so finer mats stay tied to finer gear. gameState().menu.materials shows your wallet.`,
-      `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" then call saveGame().`,
+      `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" (tier being any rarity or "set") then call saveGame().`,
     ],
     hazards: [
       `Map glyphs: # wall (solid), . floor, ~ deep water (impassable, blocks bolts), ^ lava (walkable, burns), " spikes (walkable, stab), , mud (slow), _ ice (slip), + locked vault door, % cracked wall (smash by walking into it), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
@@ -10949,6 +10963,7 @@ function showSettingsTab(name) {
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Skill-tree tabs taller, with branch blurbs", by: "Claude", notes: ["Passive/Active/Path and specialization tabs are taller for easier clicking.", "Selecting a specialization (Slayer, Duelist, Pyro…) now shows a one-line blurb explaining what that build path is about."] },
   { date: "2026-07-02", size: "small", v: "Livelier town background", by: "Claude", notes: ["The town menu's ambient scenes got a big upgrade — each now paints a tinted, breathing sky, a moon or low sun, a silhouetted rooftop skyline with windows that wake and dim, and brighter layered particles.", "Ten distinct vignettes (dusk rooftops, starry night with shooting stars, rainy town, snowfall by moonlight, aurora, lantern festival, blossoms and more) instead of one faint, near-invisible layer."] },
+  { date: "2026-07-02", size: "small", v: "Auto-Loot set-piece rule", by: "Claude", notes: ["♻ Auto-Loot picker gains a teal \"set\" row above unique — set pieces now answer to their own Keep/Scrap/Sell rule instead of inheriting the unique one, so you can keep chase sets while auto-selling plain uniques.", "Defaults to Keep; existing saves seed the new rule to Keep."] },
   { date: "2026-07-02", size: "small", v: "Twin wisps on the ENTER button", by: "Claude", notes: ["Two glints of light now circle the main button's border on opposite sides instead of one."] },
   { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Claude", notes: ["Title hero card now left-aligns its text and stands an animated hero walking in place on the right, sized to match the text height."] },
   { date: "2026-07-01", size: "small", v: "Cleaner stat-abbreviation key", by: "Claude", notes: ["Loot stat-abbreviation key now groups item stats by theme (Offense, Defense, Sustain, Caster, Utility/Find), alphabetical within each group.", "Flows into two columns on desktop for easier scanning."] },
@@ -11304,18 +11319,19 @@ function renderAutoLoot() {
   const body = document.getElementById('autoloot-body');
   if (!body) return;
   const cfg = autoLootConfig();
-  // One row per rarity, rarest-aware order (junk → unique), each with its colour
-  // dot and a Keep / Scrap / Sell segmented control. Scrapping junk yields almost
-  // nothing, but the option is offered for every rarity for consistency.
+  // One row per rarity, rarest-aware order (junk → set → unique), each with its
+  // colour dot and a Keep / Scrap / Sell segmented control. Scrapping junk yields
+  // almost nothing, but the option is offered for every rarity for consistency.
   const optIcon = { keep: '', scrap: (dlIcon('mat_scrap', 12) || ''), sell: (dlIcon('ic_money', 12) || '') };
-  body.innerHTML = Object.keys(TIERS).map(tier => {
-    const cur = cfg[tier] || 'keep';
+  body.innerHTML = AUTO_LOOT_CATS.map(cat => {
+    const cur = cfg[cat] || 'keep';
+    const col = autoLootColor(cat);
     const opts = AUTO_LOOT_ACTIONS.map(a =>
-      `<button class="al-opt ${a} ${cur === a ? 'on' : ''}" onclick="setAutoLoot('${tier}','${a}')">${optIcon[a]}${AUTO_LOOT_LABELS[a]}</button>`
+      `<button class="al-opt ${a} ${cur === a ? 'on' : ''}" onclick="setAutoLoot('${cat}','${a}')">${optIcon[a]}${AUTO_LOOT_LABELS[a]}</button>`
     ).join('');
     return `<div class="al-row">
-      <span class="al-dot" style="color:${TIERS[tier].color}">●</span>
-      <span class="al-name" style="color:${TIERS[tier].color}">${tier}</span>
+      <span class="al-dot" style="color:${col}">●</span>
+      <span class="al-name" style="color:${col}">${cat}</span>
       <span class="al-seg">${opts}</span>
     </div>`;
   }).join('') + `<div class="al-allrow">
@@ -11324,9 +11340,9 @@ function renderAutoLoot() {
         `<button class="al-opt ${a}" onclick="setAutoLootAll('${a}')">${optIcon[a]}${AUTO_LOOT_LABELS[a]}</button>`).join('')}</span>
     </div>`;
 }
-function setAutoLoot(tier, action) {
-  if (!TIERS[tier] || !AUTO_LOOT_ACTIONS.includes(action)) return;
-  autoLootConfig()[tier] = action;
+function setAutoLoot(cat, action) {
+  if (!AUTO_LOOT_CATS.includes(cat) || !AUTO_LOOT_ACTIONS.includes(action)) return;
+  autoLootConfig()[cat] = action;
   sfx('click');
   renderAutoLoot();
   renderPanel();   // refresh the LOOT-tab button's on/off status behind the overlay
@@ -11335,7 +11351,7 @@ function setAutoLoot(tier, action) {
 function setAutoLootAll(action) {
   if (!AUTO_LOOT_ACTIONS.includes(action)) return;
   const cfg = autoLootConfig();
-  for (const t of Object.keys(TIERS)) cfg[t] = action;
+  for (const t of AUTO_LOOT_CATS) cfg[t] = action;
   sfx('click');
   renderAutoLoot();
   renderPanel();   // refresh the LOOT-tab button's on/off status behind the overlay
@@ -14659,7 +14675,7 @@ function acquireLoot(item) {
   recordWardrobe(item);
   lootReveal(item);   // escalating drop-moment payoff by rarity (blue → red)
   const cfg = autoLootConfig();
-  let action = cfg[item.tier] || 'keep';
+  let action = cfg[autoLootKey(item)] || 'keep';
   // Scrapping only makes sense for salvageable gear; anything else falls back to keep.
   if (action === 'scrap' && !(item.slot && TIERS[item.tier])) action = 'keep';
   if (action === 'scrap') {
