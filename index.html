@@ -1842,6 +1842,10 @@
   .item-name { font-weight: bold; }
   .item-type { font-size: 1.2rem; opacity: 0.7; }
   .stat-abbr { cursor: help; border-bottom: 1px dotted color-mix(in srgb, var(--paper) 28%, transparent); }
+  /* Build-defining "special power" tag — leads the stat line and glows in its own
+     colour (set via --pc) so it stands out. */
+  .ipow { font-weight: bold; text-shadow: 0 0 5px var(--pc); animation: ipowGlow 1.7s ease-in-out infinite; }
+  @keyframes ipowGlow { 0%, 100% { text-shadow: 0 0 4px var(--pc); } 50% { text-shadow: 0 0 11px var(--pc), 0 0 18px var(--pc); } }
 
   /* "FIRST EQUIP" badge — an empty slot you've never filled. Made loud (gold
      pill, glow, gentle pulse) so a brand-new gear slot grabs the eye. */
@@ -10568,6 +10572,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "medium", v: "Way more special powers, up front & glowing", by: "Jeff Louie", notes: ["A gear piece's special power (Vampiric, Brutal, Savage…) now leads its stat line and pulses with a coloured glow so it stands out at a glance, instead of trailing at the end.", "Added ~37 new build-defining powers across offense, crit, sustain, defense, casting, control, speed and fortune — so top-tier drops feel far more varied."] },
   { date: "2026-07-01", size: "small", v: "Skill-bar key labels fit their boxes", by: "Jeff Louie", notes: ["Long key names (Space, arrow keys) show as short glyphs on the bar instead of spilling out of the box."] },
   { date: "2026-07-02", size: "small", v: "Materials tied to rarity bands", by: "Claude", notes: ["Scrap, Glimmer and Core were flooding in — dialled back and made cleaner.", "Salvage now reads by colour: grey/white give pure Scrap, green+ start giving Glimmer, blue+ Core, only epic+ shed a Chaos Orb — no more every-piece spray.", "Trimmed material kill-drops and capped the deep-floor Scrap bonus so it no longer balloons."] },
   { date: "2026-07-01", size: "small", v: "Set items fully teal", by: "Claude", notes: ["Set pieces now show the teal set colour in the chat log and the paper-doll two-hand slot too, matching the bag, drops and tooltips — no more tier orange."] },
@@ -12830,8 +12835,10 @@ function itemStatLine(item) {
     parts.push(`+${v} ${chip(a.short || k, a.label || k)}`);
   }
   const body = parts.join(' · ');
-  const extra = itemPowerLine(item);   // special power / set membership, if any
-  return (item.slot ? `⚡${itemPower(item)}${body ? ' · ' + body : ''}` : body) + extra;
+  const powHtml = itemPowerFront(item);   // glowing special power — leads the line
+  const setTag = itemSetTag(item);        // set membership — trails the line
+  const lead = item.slot ? `⚡${itemPower(item)}` : '';
+  return [lead, powHtml, body].filter(Boolean).join(' · ') + setTag;
 }
 
 // Concise, colour-coded list of how an item's stats differ from whatever is
@@ -18502,6 +18509,47 @@ const ITEM_POWERS = {
   greedy:   { name: 'Greedy',   color: '#ffd24b', desc: 'Slain foes cough up extra gold.' },
   stalwart: { name: 'Stalwart', color: '#9effa0', desc: 'Bolsters your maximum health.' },
   attuned:  { name: 'Attuned',  color: '#a9b6ff', desc: 'Deepens your maximum mana.' },
+  // ── Extra build-defining powers. Each carries a `stats` map folded into
+  // totalStat via itemPowerStatBonus(): percent stats grant their % as written,
+  // rating/flat stats use a per-item-level coefficient so they stay relevant at
+  // any depth. (vampiric/arcing/greedy/stalwart/attuned above keep bespoke hooks.)
+  brutal:      { name: 'Brutal',       color: '#ff7a3a', desc: '+18% damage on every hit.',            stats: { IDMG: 18 } },
+  savage:      { name: 'Savage',       color: '#ff5a4a', desc: 'Critical strikes hit +45% harder.',    stats: { CRITDMG: 45 } },
+  keen:        { name: 'Keen',         color: '#ffd05a', desc: 'Greatly raises your crit chance.',      stats: { CRIT: 0.85 } },
+  duelist:     { name: "Duelist's",    color: '#ffb04a', desc: 'More crits, and they bite harder.',     stats: { CRIT: 0.55, CRITDMG: 25 } },
+  rending:     { name: 'Rending',      color: '#e08a4a', desc: 'Ignores +22% of a foe\'s armor.',       stats: { PEN: 22 } },
+  giantsbane:  { name: "Giant's Bane", color: '#ffcf4b', desc: '+30% damage dealt to bosses.',          stats: { BOSSDMG: 30 } },
+  cleaving:    { name: 'Cleaving',     color: '#ff9a5a', desc: 'Hits splash to nearby foes (+30%).',     stats: { CLEAVE: 30 } },
+  flurry:      { name: 'Flurry',       color: '#ffcf7a', desc: '+18% chance to strike twice.',          stats: { DBLSTRIKE: 18 } },
+  frenzied:    { name: 'Frenzied',     color: '#ff8a5a', desc: 'You attack +20% faster.',               stats: { ATKSPD: 20 } },
+  executioner: { name: 'Executioner',  color: '#d64a5a', desc: 'Finishes low-health foes (+16%).',      stats: { EXEC: 16 } },
+  brutish:     { name: 'Brutish',      color: '#ff6a4a', desc: 'A heavy boost to raw Attack.',          stats: { ATK: 1.1 } },
+  warlord:     { name: "Warlord's",    color: '#ff8a3a', desc: '+12% damage, +18% vs bosses.',          stats: { IDMG: 12, BOSSDMG: 18 } },
+  reckless:    { name: 'Reckless',     color: '#ff4a4a', desc: 'Huge damage — at the cost of defense.', stats: { IDMG: 16, DEF: -0.6 } },
+  bloodthirsty:{ name: 'Bloodthirsty', color: '#ff5a7a', desc: 'Leech +8% of the damage you deal.',     stats: { LEECH: 8 } },
+  siphoning:   { name: 'Siphoning',    color: '#7ab0ff', desc: 'Restore mana for +8% of damage dealt.', stats: { MPLEECH: 8 } },
+  ironhide:    { name: 'Ironhide',     color: '#9effa0', desc: 'A heavy boost to Defense.',             stats: { DEF: 1.25 } },
+  warded:      { name: 'Warded',       color: '#8affc0', desc: 'Blunts all incoming damage.',           stats: { DR: 0.55 } },
+  thornmail:   { name: 'Thornmail',    color: '#b0ff8a', desc: 'Attackers wound themselves on you.',    stats: { THORNS: 0.9 } },
+  evasive:     { name: 'Evasive',      color: '#8affe0', desc: 'Slip past more incoming attacks.',      stats: { DODGE: 0.7 } },
+  bulwark:     { name: 'Bulwark',      color: '#8ad0ff', desc: 'Raises your guard to block hits.',      stats: { BLOCK: 0.7 } },
+  aegis:       { name: 'Aegis',        color: '#7fe0ff', desc: 'Turns aside and reflects blows.',       stats: { DR: 0.4, THORNS: 0.6 } },
+  mending:     { name: 'Mending',      color: '#9effb0', desc: 'Steadily regenerates your health.',     stats: { REGEN: 0.15 } },
+  spellbound:  { name: 'Spellbound',   color: '#c77bff', desc: '+25% spell damage.',                    stats: { SPELLPWR: 25 } },
+  warmage:     { name: 'Warmage',      color: '#b98aff', desc: '+25% to weapon-based skills.',          stats: { SKILLPWR: 25 } },
+  spellblade:  { name: 'Spellblade',   color: '#a98aff', desc: 'Boosts spells and weapon skills.',      stats: { SPELLPWR: 16, SKILLPWR: 16 } },
+  quickened:   { name: 'Quickened',    color: '#a9c6ff', desc: 'Spell skills recharge +20% faster.',    stats: { CASTSPD: 20 } },
+  hasty:       { name: 'Hasty',        color: '#9ec0ff', desc: 'All skills recharge +14% faster.',      stats: { CDR: 14 } },
+  focused:     { name: 'Focused',      color: '#8ad0ff', desc: 'Skills cost 18% less mana.',            stats: { MCR: 18 } },
+  tenacious:   { name: 'Tenacious',    color: '#ffd27a', desc: 'Shrug off stuns, freezes and slows.',   stats: { TENAC: 30 } },
+  hemorrhage:  { name: 'Hemorrhage',   color: '#e05a6a', desc: 'Your hits open bleeding wounds.',       stats: { BLEED: 18 } },
+  concussive:  { name: 'Concussive',   color: '#e0c05a', desc: 'Crushing hits stun harder & longer.',   stats: { STUNPWR: 25 } },
+  fleet:       { name: 'Fleet',        color: '#8affe0', desc: 'You move and act noticeably quicker.',  stats: { SPD: 0.9 } },
+  deadeye:     { name: 'Deadeye',      color: '#ffe08a', desc: 'Rarely miss — a big Accuracy boost.',   stats: { ACC: 1.0 } },
+  fortunate:   { name: 'Fortunate',    color: '#7fd0ff', desc: '+25% chance of rarer loot.',            stats: { MAGICFIND: 25 } },
+  prospector:  { name: 'Prospector',   color: '#ffd24b', desc: 'Foes drop +30% more gold.',             stats: { GOLDFIND: 30 } },
+  scholar:     { name: 'Scholar',      color: '#a9e08a', desc: 'Earn +20% experience.',                 stats: { XPGAIN: 20 } },
+  salvager:    { name: 'Salvager',     color: '#c0a06a', desc: 'Find +30% more crafting materials.',    stats: { MATFIND: 30 } },
 };
 function rollItemPower() { const ks = Object.keys(ITEM_POWERS); return ks[Math.floor(Math.random() * ks.length)]; }
 // How many active worn pieces carry a given power (so two Vampiric pieces stack).
@@ -18516,6 +18564,22 @@ function itemPowerCount(key) {
   return n;
 }
 function hasItemPower(key) { return itemPowerCount(key) > 0; }
+// Flat stat bonuses granted by worn powers that carry a `stats` map. Percent
+// stats add their value directly; rating/flat stats scale with the piece's item
+// level so a special power keeps pace at any depth. Folded into totalStat().
+function itemPowerStatBonus(name) {
+  let sum = 0;
+  const active = activeSlots();
+  for (const slot of SLOT_KEYS) {
+    if (!active[slot]) continue;
+    const it = equipped[slot];
+    const p = it && it.power && ITEM_POWERS[it.power];
+    if (!p || !p.stats || typeof p.stats[name] !== 'number') continue;
+    const base = p.stats[name];
+    sum += PCT_STATS.has(name) ? base : Math.round(base * (it.ilvl || 1));
+  }
+  return sum;
+}
 const ITEM_SETS = {
   warden:   { name: "Warden's",   color: '#7fd0ff', bonus: { 2: { DEF: 12, HP: 40 },      4: { DEF: 30, HP: 120, BLOCK: 10 } } },
   reaver:   { name: "Reaver's",   color: '#ff7a5c', bonus: { 2: { ATK: 10, CRIT: 6 },     4: { ATK: 26, CRIT: 14, IDMG: 12 } } },
@@ -18579,6 +18643,20 @@ function setTooltipHTML(setId) {
 }
 // Short markup describing an item's special power / set membership, appended to its
 // stat line so the build-defining bit is visible wherever gear is listed.
+// The glowing "✦ Name" tag for an item's build-defining power, WITHOUT a leading
+// separator, so callers can lead the stat line with it. Empty if no power.
+function itemPowerFront(item) {
+  if (!item.power || !ITEM_POWERS[item.power]) return '';
+  const p = ITEM_POWERS[item.power];
+  return `<span class="ipow" style="color:${p.color};--pc:${p.color}" ${hoverTip(p.desc)}>✦ ${p.name}</span>`;
+}
+// The set-membership tag (with a leading separator) that trails the stat line.
+function itemSetTag(item) {
+  if (!item.set || !ITEM_SETS[item.set]) return '';
+  const s = ITEM_SETS[item.set];
+  const n = wornSetCounts()[item.set] || 0;
+  return ` · <span style="color:${s.color}" ${hoverTip(setTooltipHTML(item.set))}>${s.name} set${n ? ` (${n})` : ''}</span>`;
+}
 function itemPowerLine(item) {
   let out = '';
   if (item.power && ITEM_POWERS[item.power]) {
@@ -19236,7 +19314,7 @@ function totalStat(name) {
       sum += (slot === 'offhand' && tgPenalty !== 1) ? Math.round(it.stats[name] * tgPenalty) : it.stats[name];
     }
   }
-  return sum + setStatBonus(name);   // worn set-piece thresholds add their bonus
+  return sum + setStatBonus(name) + itemPowerStatBonus(name);   // set thresholds + special-power stat bonuses
 }
 
 // Armor reduces incoming damage by a *percentage* with diminishing returns,
