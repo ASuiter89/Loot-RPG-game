@@ -1214,8 +1214,14 @@
   .sk-tnode.keystone .ic { border-radius: 0; }
   .sk-tnode.keystone.owned, .sk-tnode.keystone.maxed { box-shadow: 0 0 12px color-mix(in srgb, var(--gold) 70%, transparent); }
   .sk-tnode.keystone.locked { box-shadow: none; }
-  /* Tap a node → this popover with its full detail + a Learn button. */
-  .sk-pop { position: absolute; z-index: 20; width: 232px; max-width: calc(100% - 6px); background: var(--bg); border: 1px solid var(--interactive);
+  /* Hover/tap a node → this popover with its full detail + a Learn button. It's a
+     tooltip like any other: position:fixed and placed by placeTooltipBesideAnchor
+     (see the SHARED TOOLTIP BEHAVIOUR note by #tooltip), so it pops to the SIDE of
+     the node instead of over it and no longer grows the drawer's scroll height.
+     Wider than the drawer column since it spills out over the map to the left; a
+     very tall card scrolls inside itself rather than running off-screen. */
+  .sk-pop { position: fixed; z-index: 20; width: 300px; max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px); overflow-y: auto; background: var(--bg); border: 1px solid var(--interactive);
     border-radius: 8px; padding: 8px 9px; font-size: 1.2rem; line-height: 1.5; color: var(--purple-50);
     box-shadow: 0 6px 20px color-mix(in srgb, var(--ink) 60%, transparent); }
   .sk-pop b { color: var(--gold); }
@@ -1856,6 +1862,20 @@
   .item-diff { font-size: 1.2rem; margin-top: 1px; line-height: 1.3; }
 
   /* ── TOOLTIP ── */
+  /* SHARED TOOLTIP BEHAVIOUR — read before adding a new hover card.
+     Every floating hover card in the game (the item tooltip #tooltip, the skill
+     detail popover .sk-pop, and the styled button/stat popup #hovertip) behaves
+     the SAME way, so the UI stays predictable:
+       • It is position:fixed, so a tall card never grows a scroll container —
+         that used to add a scrollbar to the loot drawer and reflow the whole
+         menu the instant a card appeared.
+       • It pops out to the SIDE of whatever you're pointing at and never covers
+         it: LEFT of the anchor by default (spilling over the map, away from the
+         drawer), flipping to the RIGHT only when the anchor sits too close to
+         the left screen edge for the card to fit.
+     The placement is done in ONE place — placeTooltipBesideAnchor() in the
+     script. New tooltips MUST reuse that helper (don't hand-roll top/left) so
+     they inherit this behaviour automatically. */
   #tooltip {
     position: fixed;
     display: none;
@@ -10539,6 +10559,7 @@ const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Hover a stat to see what it does", by: "Jeff Louie", notes: ["At the Enchanter (and anywhere a stat name shows a dotted underline), hovering or press-holding a stat or attribute now explains what it does — e.g. Speed, Crit Rating, Execute, Armor Pen — not just its full name."] },
   { date: "2026-07-02", size: "small", v: "Side panels resize in step, no jump", by: "Claude", notes: ["Folding a side panel while the other stays open no longer snaps the open one to its new width before the drawer moves — both panels' contents now glide to their new sizes together with the slide, whichever one you toggle.", "Closing a lone-open panel slides it away cleanly instead of shrinking its contents first."] },
   { date: "2026-07-02", size: "small", v: "Enchanter no longer rerolls on a stray tap", by: "Claude", notes: ["Clicking a property's name on the Enchanter no longer fires a reroll. Rows with both Value and Type buttons have no single primary action, so only the buttons act now."] },
+  { date: "2026-07-02", size: "small", v: "Tooltips pop to the side", by: "Claude", notes: ["Every hover card — item tooltips, the skill detail card, button/stat popups — now pops out to the side (left, or right when too close to the left edge) instead of over what you're pointing at.", "Skill detail card is wider and no longer covers its node or adds a scrollbar that jostled the whole Skills menu."] },
   { date: "2026-07-02", size: "small", v: "Attack animations", by: "Claude", notes: ["Heroes, enemies and summoned allies now lunge toward their target for a quick beat when they swing or shoot, so attacks read at a glance."] },
   { date: "2026-07-02", size: "small", v: "Consistent menu buttons", by: "Claude", notes: ["Every shop and service now shows an action's cost on one tappable button — red when you can't afford it, gold ★ active for your current pick — instead of a mix of styles. Rows that carry buttons are no longer clickable as a whole bar, and town menus use a clear Back button."] },
   { date: "2026-07-02", size: "small", v: "Unified color system", by: "Claude", notes: ["All UI colors now flow from one shared design-token palette, so screens stay visually consistent and future changes match automatically. A few near-duplicate shades merged; the look is unchanged."] },
@@ -22946,17 +22967,12 @@ document.addEventListener('click', (e) => {
 function positionSkillPop() {
   const pop = document.getElementById('sk-pop');
   const node = selectedSkillId && document.getElementById('sknode-' + selectedSkillId);
-  const tree = document.getElementById('sk-tree');
-  if (!pop || !node || !tree) return;
-  const tw = tree.clientWidth, th = tree.clientHeight;
-  const cx = node.offsetLeft, cy = node.offsetTop; // node center (CSS translate is visual only)
-  const pw = pop.offsetWidth, ph = pop.offsetHeight;
-  let left = Math.max(2, Math.min(cx - pw / 2, tw - pw - 2));
-  let top = cy + 34;                          // default: below the node
-  if (top + ph > th - 2) top = cy - 34 - ph;  // flip above if it would overflow
-  if (top < 2) top = 2;
-  pop.style.left = left + 'px';
-  pop.style.top = top + 'px';
+  if (!pop || !node) return;
+  const r = node.getBoundingClientRect();
+  if (!r.width && !r.height) return;          // stale rect from a node mid-render
+  // Pop out beside the node like every other tooltip — never over it, and (being
+  // fixed) without growing the drawer's scroll height. See placeTooltipBesideAnchor.
+  placeTooltipBesideAnchor(pop, r);
 }
 
 // The on-screen combat bar, in three sections: the Town / Health / Mana buttons
@@ -23472,40 +23488,49 @@ function showTooltip(e, i) {
   showTooltipForItem(inventory[i], e.currentTarget);
 }
 
-// Place the tooltip just left of the side panel, vertically aligned with the
-// row/slot it describes, so it never overlaps the drawer or floats in the
-// middle of the screen. Falls back to a centered position when there isn't
-// room to the left (narrow / mobile screens) or no anchor is given.
-function positionTooltip(anchor) {
+// ── Shared tooltip placement ─────────────────────────────────────────────────
+// The ONE positioner every floating hover card uses (item tooltip, skill popover,
+// button/stat hovertip). It pops the card out to the SIDE of its anchor and never
+// over it: to the LEFT by default (so cards spill over the map, clear of the loot
+// drawer), flipping to the RIGHT only when the anchor is too close to the left
+// screen edge for the card to fit. Vertically it lines the card's top up with the
+// anchor, then clamps so the whole card stays on-screen. All these cards are
+// position:fixed, so this never affects any scroll container.
+// NEW TOOLTIPS SHOULD CALL THIS rather than hand-rolling top/left — see the
+// SHARED TOOLTIP BEHAVIOUR note in the CSS.
+function placeTooltipBesideAnchor(popEl, rect) {
   const gap = 8;
-  const tt = ttEl.getBoundingClientRect();
-  const panel = document.getElementById('side-panel');
-  const pr = panel.getBoundingClientRect();
-  // anchor may be a live element, a captured top coordinate (number), or null.
-  let anchorTop = null;
-  if (typeof anchor === 'number') {
-    anchorTop = anchor;
-  } else if (anchor && typeof anchor.getBoundingClientRect === 'function') {
+  const pw = popEl.offsetWidth, ph = popEl.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = rect.left - pw - gap;            // preferred: to the left of the anchor
+  if (left < gap) {
+    const right = rect.right + gap;           // no room left → try the right
+    left = (right + pw <= vw - gap) ? right    // fits on the right — use it
+         : Math.max(gap, vw - pw - gap);       // neither side fits — clamp on-screen
+  }
+  let top = Math.max(gap, Math.min(rect.top, vh - ph - gap));
+  popEl.style.left = left + 'px';
+  popEl.style.top = top + 'px';
+}
+
+// Position the item tooltip beside the row/slot it describes (see
+// placeTooltipBesideAnchor). The anchor may be a live element, a captured top
+// coordinate (touch, where the row re-rendered out from under us) or null; the
+// last two fall back to the loot drawer's edge so the card still pops out beside
+// the panel, over the map.
+function positionTooltip(anchor) {
+  let rect = null;
+  if (anchor && typeof anchor.getBoundingClientRect === 'function') {
     const r = anchor.getBoundingClientRect();
     // A re-rendered row leaves a detached element with an all-zero rect; ignore it.
-    if (r.width || r.height || r.top) anchorTop = r.top;
+    if (r.width || r.height || r.top) rect = r;
   }
-  let left, top;
-  if (anchorTop !== null) {
-    left = pr.left - tt.width - gap; // tuck it to the left of the open drawer
-    top = anchorTop;
-    if (left < gap) left = Math.max(gap, (window.innerWidth - tt.width) / 2);
-  } else {
-    left = Math.max(gap, (window.innerWidth - tt.width) / 2);
-    top = 70;
+  if (!rect) {
+    const panel = document.getElementById('side-panel');
+    const pr = panel ? panel.getBoundingClientRect() : { left: window.innerWidth, right: window.innerWidth };
+    rect = { left: pr.left, right: pr.right, top: (typeof anchor === 'number') ? anchor : 70 };
   }
-  // Keep the whole tooltip on screen.
-  left = Math.min(left, window.innerWidth - tt.width - gap);
-  left = Math.max(gap, left);
-  top = Math.min(top, window.innerHeight - tt.height - gap);
-  top = Math.max(gap, top);
-  ttEl.style.left = left + 'px';
-  ttEl.style.top = top + 'px';
+  placeTooltipBesideAnchor(ttEl, rect);
 }
 
 // Build the inner markup for a single item's tooltip card. `opts.label` adds a
@@ -23625,17 +23650,9 @@ function renderHoverTip(el, htmlOverride) {
   if (!html) return;
   hoverTipEl.innerHTML = html;
   hoverTipEl.style.display = 'block';
-  // Sit above the element, centred; drop below if there's no room above.
-  const r = el.getBoundingClientRect();
-  const tip = hoverTipEl.getBoundingClientRect();
-  const gap = 8;
-  let left = r.left + r.width / 2 - tip.width / 2;
-  let top = r.top - tip.height - gap;
-  if (top < gap) top = r.bottom + gap;
-  left = Math.max(gap, Math.min(left, window.innerWidth - tip.width - gap));
-  top = Math.max(gap, Math.min(top, window.innerHeight - tip.height - gap));
-  hoverTipEl.style.left = left + 'px';
-  hoverTipEl.style.top = top + 'px';
+  // Pop out beside the element like every other tooltip (see
+  // placeTooltipBesideAnchor): to the side, never over the thing you're pointing at.
+  placeTooltipBesideAnchor(hoverTipEl, el.getBoundingClientRect());
 }
 function hideHoverTip() { hoverTipEl.style.display = 'none'; }
 

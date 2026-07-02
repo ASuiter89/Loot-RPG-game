@@ -111,6 +111,16 @@ Compose menus from the canonical components so arrangement is consistent across
   row that carries its own `.act-btn`(s); only the button acts. Put multiple
   buttons in a `.row-actions` wrapper. Reserve whole-row `onclick` for
   single-target navigation rows (e.g. picking which item to enchant).
+- **Tooltips / hover cards all behave the same** — every floating hover card (the
+  item tooltip `#tooltip`, the skill detail popover `.sk-pop`, the styled button/
+  stat popup `#hovertip`) is `position: fixed` and positioned by the single shared
+  `placeTooltipBesideAnchor()` helper. It pops the card out to the **side** of the
+  thing you're pointing at — **left** by default, flipping **right** only when the
+  anchor is too close to the left screen edge — and never over the anchor. Fixed
+  positioning keeps a tall card from growing a scroll container (which used to add
+  a scrollbar that reflowed the whole panel). **A new tooltip must reuse this
+  helper — don't hand-roll `top`/`left`** (see the "SHARED TOOLTIP BEHAVIOUR" note
+  in the `<style>` block).
 - **Modal chrome** — every popup's title bar is a **`.modal-head`** with a
   `.modal-head__flank` (left) + centered `.modal-head__title` +
   `.modal-head__flank.right`. Navigation is a real **`.modal-nav-btn`**, never a
