@@ -10565,6 +10565,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-01", size: "small", v: "Set items fully teal", by: "Claude", notes: ["Set pieces now show the teal set colour in the chat log and the paper-doll two-hand slot too, matching the bag, drops and tooltips — no more tier orange."] },
   { date: "2026-07-02", size: "small", v: "UI SIZE scales icons too", by: "Claude", notes: ["Every menu, HUD and panel icon now grows with the UI SIZE setting alongside the text — sprites, currency and material icons, status badges, portraits, town-service art and the cursor all scale from 1x to 2x instead of staying tiny.", "Fixed some icons scaling twice and ballooning at higher UI SIZE."] },
   { date: "2026-07-02", size: "small", v: "Town & shop menus fill the screen", by: "Claude", notes: ["Town, shop and pact menus use the full width now: cards add columns up to a cap, then stretch to consume the rest of the space instead of stranding a narrow centred strip.", "Town hub lays out as a clean grid with no lone trailing tile."] },
   { date: "2026-07-02", size: "small", v: "Uniform skill-bar buttons", by: "Claude", notes: ["Potions, Town, the skill slots and the auto-cast slot are now equal-size squares, so the bar reads as one even row.", "Dropped the TOWN and AUTO word labels — the icon and key already say it — so text no longer crowds or overlaps the icons."] },
@@ -23289,7 +23290,7 @@ function renderDollSlot(slot, mode) {
     const tic = dlIcon(dollSprite('weapon', w), 40) || `<span class="pd-emoji">🤲</span>`;
     // Mirror the weapon's own red/ignored state onto the hand it occupies.
     const wDead = !slotActive('weapon');
-    const tcol = wDead ? '#e0556b' : ((TIERS[w.tier] || {}).color || '');
+    const tcol = wDead ? '#e0556b' : (w.set ? SET_RARITY_COLOR : ((TIERS[w.tier] || {}).color || ''));
     const tstyle = tcol ? ` style="border-color:${tcol}77;box-shadow:0 0 6px ${tcol}33;opacity:.62"` : ' style="opacity:.62"';
     return `<div class="pd-cell">
       <div class="pd-slot filled${wDead ? ' pd-inactive' : ''}"${tstyle}
@@ -23926,7 +23927,7 @@ function togglePanelCollapse() {
 const POTION_COLOR = '#ff5ec4';
 // Wrap an item's name in its rarity tier colour for chat-log mentions.
 function logItem(item) {
-  const c = (TIERS[item.tier] || TIERS.normal).color;
+  const c = tierColor(item);   // set pieces log in the set colour, not their tier's
   return `<span style="color:${c}">${item.name}</span>`;
 }
 // Wrap a potion label in the shared potion colour for chat-log mentions.
