@@ -1976,6 +1976,12 @@
   .loot-glossary[open] > summary::before { content: '▾ '; }
   .loot-glossary > summary:hover { color: var(--gold); }
   .gl-body { padding: 0 10px 8px; }
+  /* On desktop the long stat key flows into two balanced columns; each themed
+     group is a single unit so a header never splits from its rows. */
+  @media (min-width: 760px) {
+    .gl-body { column-count: 2; column-gap: 18px; }
+    .gl-group { break-inside: avoid; }
+  }
   .gl-sect {
     color: var(--junk);
     text-transform: uppercase;
@@ -1983,6 +1989,9 @@
     font-size: 1.2rem;
     margin: 8px 0 3px;
   }
+  /* First header in a group hugs the top of its column (the group already spaces
+     itself); rely on the group wrapper for inter-group rhythm instead. */
+  .gl-group:first-child > .gl-sect { margin-top: 0; }
   .gl-row { display: flex; gap: 8px; padding: 1px 0; line-height: 1.35; }
   .gl-code {
     flex: 0 0 42px;
@@ -2188,6 +2197,42 @@
   .pd-slot.pd-inactive .dl-ic, .pd-slot.pd-inactive .pd-emoji { opacity: 0.45; filter: grayscale(0.7); }
   .pd-emoji { font-size: 3rem; line-height: 1; filter: grayscale(0.1); }
   .pd-pwr { position: absolute; bottom: 1px; right: 3px; font-size: 1.2rem; }
+
+  /* ── ANATOMICAL GEAR DOLL ── a large hero sprite with each equipment slot
+     pinned where it sits on the body (helm at the head, amulet at the neck,
+     weapon & off-hand at the hands, chest on the torso, gloves & ring by the
+     hands, greaves at the legs). Slot positions are % of the frame. */
+  /* GEAR equip fills the panel: set bar on top, the doll centred in the middle
+     (so there's breathing room above the head), the hint lines pinned to the
+     bottom. */
+  .gear-equip { min-height: 100%; display: flex; flex-direction: column; }
+  .pda-stage { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 6px 0; }
+  .paperdoll-anat {
+    position: relative; width: 100%;
+    max-width: calc(640px * var(--ui-scale,1));
+    margin: 0 auto; aspect-ratio: 3 / 4; overflow: hidden;
+  }
+  /* Big centred sprite — scaled past the frame so the character (not its
+     transparent tile padding) fills it; the frame's overflow:hidden clips the
+     empty margins. */
+  .pda-body {
+    position: absolute; left: 50%; top: 49%;
+    transform: translate(-50%, -50%);
+    height: 95%; width: auto;
+    z-index: 0; pointer-events: none;
+    opacity: 0.5;
+    filter: drop-shadow(0 3px 8px rgba(0,0,0,0.4));
+  }
+  .pda-body img, .pda-body .dl-ic { display: block; height: 100%; width: auto; image-rendering: pixelated; }
+  /* Each slot reuses the .pd-cell / .pd-slot chrome, pinned at its body location. */
+  /* Slots sized as a % of the doll frame, so they grow with the drawer width
+     (the frame fills the drawer) and never leave the panel looking empty. */
+  .pda-wrap {
+    position: absolute; transform: translate(-50%, -50%); z-index: 2;
+    width: 15.5%; min-width: calc(52px * var(--ui-scale,1));
+  }
+  .paperdoll-anat .pd-slot { max-width: none; background: color-mix(in srgb, var(--ink) 78%, transparent); }
+  .paperdoll-anat .pd-cap { font-size: 1.1rem; margin-top: 2px; text-align: center; text-shadow: 0 1px 3px var(--ink); }
   .pd-unequip {
     position: absolute; top: -7px; right: -7px;
     width: 19px; height: 19px; padding: 0;
@@ -2978,18 +3023,21 @@
     display: inline-block; width: calc(9px * var(--ui-scale,1)); height: calc(9px * var(--ui-scale,1)); border-radius: 2px;
     margin: 0 1px; vertical-align: middle; transform: rotate(45deg);
   }
-  /* Returning-hero card above CONTINUE: who you are + how far you've gotten. */
+  /* Returning-hero card above CONTINUE: who you are (left) + a walking hero
+     sprite on the right, sized to stand as tall as the stacked text. */
   #title-hero {
-    margin: 0 0 14px; padding: 11px 14px; text-align: center;
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    margin: 0 0 14px; padding: 11px 14px; text-align: left;
     border: 1px solid var(--frame); border-radius: 10px;
     background: linear-gradient(180deg, color-mix(in srgb, var(--gold-850) 50%, transparent), color-mix(in srgb, var(--ink) 50%, transparent));
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 8%, transparent);
   }
-  #title-hero .th-portrait { margin-bottom: 4px; line-height: 0; }
+  #title-hero .th-info { flex: 1 1 auto; min-width: 0; }
+  #title-hero .th-portrait { flex: 0 0 auto; line-height: 0; }
   #title-hero .th-portrait img { image-rendering: pixelated; }
   #title-hero .th-name { font-size: 1.9rem; font-weight: bold; letter-spacing: 1px; line-height: 1.1; }
   #title-hero .th-sub { font-size: 1.3rem; color: var(--orange-400); margin-top: 3px; letter-spacing: .5px; }
-  #title-hero .th-stats { display: flex; justify-content: center; gap: 18px; margin-top: 9px; font-size: 1.4rem; color: var(--orange-400); }
+  #title-hero .th-stats { display: flex; justify-content: flex-start; gap: 18px; margin-top: 9px; font-size: 1.4rem; color: var(--orange-400); }
   #title-hero .th-stats b { color: var(--xp); font-weight: bold; }
   .title-play {
     position: relative; isolation: isolate;
@@ -4396,7 +4444,7 @@
       <div class="howto-line" style="margin-top:5px">Mind your footing — ice slips, mud slows, arrow traps &amp; fire vents can be dodged. Foes roam and give chase when you're close.</div>
       <div class="howto-sec">💎 Loot rarity<span class="howto-tiers"><i style="background:var(--junk)"></i><i style="background:var(--normal)"></i><i style="background:var(--uncommon)"></i><i style="background:var(--rare)"></i><i style="background:var(--epic)"></i><i style="background:var(--legendary)"></i><i style="background:var(--unique)"></i></span></div>
       <div class="howto-line">Colour is rarity: grey → white → green → blue → purple → orange → red (Mythic). Tap loot in your <b>bag</b> to equip, sell, or scrap it.</div>
-      <div class="howto-line"><b style="color:var(--set)">Teal</b> marks a <b>set piece</b> — its own top-rarity class, as rare as red. Wear 2 or 4 matching pieces for escalating bonuses; hover a "<span style="color:var(--set)">… set</span>" tag to see them.</div>
+      <div class="howto-line"><b style="color:var(--set)">Teal</b> marks a <b>set piece</b> — its own top-rarity class, as rare as red. Wear 2 or 4 matching pieces for escalating bonuses; <b>completing</b> a set unlocks a unique <b>power</b> and a golden aura. Hover a "<span style="color:var(--set)">… set</span>" tag to see them.</div>
       <div class="howto-sec">✨ Skills &amp; potions</div>
       <div class="howto-line">Skills cost <b>MP</b> and each has its own cooldown in <b>seconds</b>; their buttons glow gold when ready. Health &amp; mana <b>potions</b> share a brief cooldown and pulse when ready to drink.</div>
       <div class="howto-sec">🔥 Hazards</div>
@@ -5179,6 +5227,15 @@ function shadeColor(hex, f) {
   const n = parseInt(m[1], 16);
   return `rgb(${Math.round(((n>>16)&255)*f)},${Math.round(((n>>8)&255)*f)},${Math.round((n&255)*f)})`;
 }
+// Same, but returns an rgba() with an explicit alpha — used for canvas glows/auras
+// where a colour needs to fade to transparent (gradient stops). Art colour, not a
+// style token, so it stays inline here.
+function hexA(hex, a) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+}
 // Draw a vector icon key onto the canvas, centred at (cx,cy) and `size` px wide.
 // Each layer is filled in its own material colour; when `color` is given it is
 // stroked first as a fat halo so the piece's rarity still reads on the hero.
@@ -5593,6 +5650,17 @@ function heroFaceIcon(cls, sex, px) {
   // fallback already applies uiScale on its own, so it keeps the raw base px.
   if (url) { const p = Math.round(px * (uiScale || 1)); return `<img class="hero-face" src="${url}" width="${p}" height="${p}" alt="" style="image-rendering:pixelated;vertical-align:middle">`; }
   return dlIcon('hero_' + cls, px) || '';
+}
+// DOM: an inline CSS-step-animated walk-DOWN icon for a hero class, so menus (the
+// title card…) can show a hero walking in place like the town-service sprites.
+// Reuses the same .town-walk class + townWalkStep keyframes; the difference is the
+// source is a full 4-row walk sheet (192x192), so background-size covers all four
+// rows and the px-tall element crops to the top (down) row. '' if art isn't ready.
+function heroWalkIcon(cls, sex, px) {
+  const img = heroWalkSheet(cls, sex);
+  if (!img) return '';
+  px = Math.round(px * (uiScale || 1));   // scale with UI SIZE, matching townWalkIcon
+  return `<span class="town-walk" style="width:${px}px;height:${px}px;background-image:url(${img.src});background-size:${px * 4}px ${px * 4}px;--twx:-${px * 4}px"></span>`;
 }
 // Blit a named sprite into a dst rect (nearest-neighbour for crisp pixels).
 // Returns false if the atlas isn't ready or the name is unknown, so callers can
@@ -9534,6 +9602,15 @@ window.gameState = function gameState(radius) {
     },
     // Buffs & debuffs currently on the hero (see effect names; turns or floors left).
     effects,
+    // Equipment sets currently worn: piece count, whether complete (top threshold
+    // reached), and the signature power a completed set turns on (its stat effects
+    // are already folded into player.offense / totalStat). A completed set also
+    // shows a golden aura on the hero. Mirrors the "… set" tooltip.
+    sets: (typeof wornSetCounts === 'function') ? Object.entries(wornSetCounts()).map(([sid, n]) => {
+      const s = ITEM_SETS[sid], done = setComplete(sid, n);
+      return { id: sid, name: s.name, worn: n, need: setMaxTier(s), complete: done,
+        power: s.power ? { name: s.power.name, active: done, effect: Object.assign({}, s.power.stats) } : null };
+    }) : [],
     // The manual hotbar: each filled slot's number key (1..4), what it casts, MP
     // cost, cooldown left and whether it's ready to fire.
     skills: skillBar,
@@ -9701,7 +9778,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     loot: [
       `Rarity is COLOUR ONLY (no text labels), lowest to highest: grey → white → green → blue → purple → orange → red. Higher tiers allow more bonus affixes.`,
-      `Set pieces are a distinct top-rarity class shown in teal (not the red of a unique). They drop only at the top tier — as rare as any unique — and grant escalating bonuses at 2 and 4 matched pieces worn. A piece can roll for any slot; hover/press-hold the "… set" tag on an item to see the bonuses, which slots you're wearing, and your current count.`,
+      `Set pieces are a distinct top-rarity class shown in teal (not the red of a unique). They drop only at the top tier — as rare as any unique — and grant escalating stat bonuses at 2 and 4 matched pieces worn. Wearing the full set (4 pieces = complete) also unlocks its SIGNATURE POWER — a unique effect, not just more stats: Warden's Aegis Wall (block + reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), or Arcanist's Arcane Overflow (cooldown reduction + mana leech). A completed set wraps the hero in a golden aura and its "… set" tag turns gold with a ✦. A piece can roll for any slot; hover/press-hold the tag to see the bonuses, the power, which slots you're wearing, and your count. gameState().sets lists worn sets, completion and active powers.`,
       `Item power is driven more by item level (ilvl, geared to current depth) than by rarity alone. gameState().menu.inventory gives brief items; read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too.`,
@@ -10875,6 +10952,9 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Settings gains a Visuals tab", by: "Claude", notes: ["UI SIZE, UI FONT and CURSOR moved out of Play into a new Visuals tab. Tab order is now Play, Visuals, Audio, Progress, About.", "UI FONT is now a collapsing dropdown showing your current face; open it for a two-column grid of options instead of one tall column."] },
+  { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Claude", notes: ["Title hero card now left-aligns its text and stands an animated hero walking in place on the right, sized to match the text height."] },
+  { date: "2026-07-01", size: "small", v: "Cleaner stat-abbreviation key", by: "Claude", notes: ["Loot stat-abbreviation key now groups item stats by theme (Offense, Defense, Sustain, Caster, Utility/Find), alphabetical within each group.", "Flows into two columns on desktop for easier scanning."] },
+  { date: "2026-07-01", size: "medium", v: "Completed sets grant a signature power + golden aura", by: "Jeff Louie", notes: ["Completing a set (all 4 pieces) now unlocks a unique SIGNATURE POWER, not just more stats: Warden's Aegis Wall (block + damage reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), Arcanist's Arcane Overflow (cooldown reduction + mana leech).", "A completed set wraps the hero in a faint golden aura, and its \"… set\" tag turns gold with a ✦.", "Set tooltip now shows the power, a Worn n/4 count and a completion banner."] },
   { date: "2026-07-02", size: "small", v: "Punchier ENTER button", by: "Claude", notes: ["Title's main button now reads just ENTER (sword icon gone) with a pulsing golden frame and a wisp of light circling the border, so the way in pops."] },
   { date: "2026-07-02", size: "small", v: "Pick your UI font", by: "Claude", notes: ["New UI FONT picker in ⚙ Settings → Play — choose from 11 embedded faces (Cinzel, Uncial Antiqua, MedievalSharp, Grenze Gotisch, Bangers, Fredoka, Orbitron, Press Start 2P, Pixelify Sans, Jersey 10, VT323). Each option shows its own name in its own face.", "Default is now Cinzel, an elegant Roman serif. The DUNGEON LOOT title stays Uncial Antiqua whatever you pick."] },
   { date: "2026-07-02", size: "small", v: "Bigger town service sprites", by: "Claude", notes: ["Animated town-service sprites are twice as large now, standing as tall as both lines of their button label."] },
@@ -16643,6 +16723,24 @@ function drawHeroWalk(img, px, py, tw, th) {
   ctx.imageSmoothingEnabled = sm;
 }
 
+// A faint, slowly-breathing golden aura around the hero whenever a worn set is
+// complete (see completedSets) — the prestige "you finished a set" flourish. Drawn
+// under the sprite so it haloes the feet/body. Cheap: one additive radial gradient.
+function drawSetAura(cx, cy, tw) {
+  const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 460);   // 0..1 slow breathe
+  const R = tw * (1.12 + 0.1 * pulse);
+  const gold = PALETTE.gold || '#e8c267';
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';               // additive → reads as emitted light
+  const g = ctx.createRadialGradient(cx, cy, R * 0.12, cx, cy, R);
+  g.addColorStop(0,    hexA(gold, 0.20 + 0.10 * pulse));
+  g.addColorStop(0.5,  hexA(gold, 0.08 + 0.05 * pulse));
+  g.addColorStop(1,    hexA(gold, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
 function drawHeroSprite(px, py, tw, th, scale) {
   // Pixel-art hero, chosen by class so a Warrior, Rogue, Mage and Templar each
   // read differently. The equipped weapon TYPE is shown as a pixel weapon held
@@ -17822,6 +17920,8 @@ function draw() {
   // Soft under-the-feet contact shadow grounds the hero (no coloured backing
   // circle — matching the de-cluttered enemies).
   drawActorShadow(px + tw/2, py + th*0.82, tw);
+  // Golden completion aura, under the hero, when any worn set is complete.
+  if (completedSets().length) drawSetAura(px + tw/2, py + th*0.6, tw);
   // Composite the hero — a class-specific pixel adventurer that visibly carries
   // its equipped weapon type at its side. A quick attack lunge nudges the sprite
   // toward its target while leaving the stamina bar / portal glow below in place.
@@ -18886,10 +18986,23 @@ function itemPowerStatBonus(name) {
   }
   return sum;
 }
+// Each set: escalating stat bonuses at 2 pieces, then completing it (the top
+// threshold = every tier defined here) unlocks a signature `power` — a unique
+// effect (leech, cleave, reflect, cooldowns…) folded into totalStat, NOT just
+// more raw stats — plus a golden completion aura on the hero.
 const ITEM_SETS = {
-  warden:   { name: "Warden's",   color: '#7fd0ff', bonus: { 2: { DEF: 12, HP: 40 },      4: { DEF: 30, HP: 120, BLOCK: 10 } } },
-  reaver:   { name: "Reaver's",   color: '#ff7a5c', bonus: { 2: { ATK: 10, CRIT: 6 },     4: { ATK: 26, CRIT: 14, IDMG: 12 } } },
-  arcanist: { name: "Arcanist's", color: '#c77bff', bonus: { 2: { SPELLPWR: 8, MP: 40 },  4: { SPELLPWR: 20, MP: 120, CDR: 8 } } },
+  warden:   { name: "Warden's",   color: '#7fd0ff',
+    bonus: { 2: { DEF: 12, HP: 40 }, 4: { DEF: 30, HP: 120, BLOCK: 10 } },
+    power: { name: 'Aegis Wall', stats: { DR: 8, THORNS: 8, BLOCK: 8 },
+      desc: 'Turn aside more blows and reflect a slice of every hit back at attackers.' } },
+  reaver:   { name: "Reaver's",   color: '#ff7a5c',
+    bonus: { 2: { ATK: 10, CRIT: 6 }, 4: { ATK: 26, CRIT: 14, IDMG: 12 } },
+    power: { name: 'Bloodfrenzy', stats: { LEECH: 8, CLEAVE: 30, EXEC: 12 },
+      desc: 'Hits cleave into nearby foes, leech their life, and execute the wounded.' } },
+  arcanist: { name: "Arcanist's", color: '#c77bff',
+    bonus: { 2: { SPELLPWR: 8, MP: 40 }, 4: { SPELLPWR: 20, MP: 120, CDR: 8 } },
+    power: { name: 'Arcane Overflow', stats: { CDR: 10, MPLEECH: 10, SPELLPWR: 12 },
+      desc: 'Skills recharge faster and the damage you deal refunds mana.' } },
 };
 function rollItemSet() { const ks = Object.keys(ITEM_SETS); return ks[Math.floor(Math.random() * ks.length)]; }
 function wornSetCounts() {
@@ -18902,7 +19015,19 @@ function wornSetCounts() {
   }
   return c;
 }
-// Extra value of a stat granted by whatever set thresholds are currently met.
+// The top worn-count threshold a set defines. Reaching it "completes" the set:
+// its final bonus tier AND its unique power turn on, and the hero gains the aura.
+function setMaxTier(set) { return Math.max(...Object.keys(set.bonus).map(Number)); }
+function setComplete(sid, n) { const s = ITEM_SETS[sid]; return !!s && n >= setMaxTier(s); }
+// Set ids currently worn at full completion — powers active, golden aura on.
+function completedSets() {
+  const out = [], counts = wornSetCounts();
+  for (const sid in counts) if (setComplete(sid, counts[sid])) out.push(sid);
+  return out;
+}
+// Extra value of a stat granted by whatever set thresholds are currently met,
+// plus the signature power of any completed set. Generalised over each set's
+// declared tiers so future sets can define their own thresholds.
 // Fast path: totalStat calls this constantly — bail before the active resolve
 // whenever no set pieces are worn at all (the overwhelmingly common case).
 function setStatBonus(name) {
@@ -18913,8 +19038,8 @@ function setStatBonus(name) {
   const counts = wornSetCounts();
   for (const sid in counts) {
     const set = ITEM_SETS[sid], n = counts[sid];
-    if (n >= 2 && set.bonus[2] && set.bonus[2][name]) sum += set.bonus[2][name];
-    if (n >= 4 && set.bonus[4] && set.bonus[4][name]) sum += set.bonus[4][name];
+    for (const t of Object.keys(set.bonus)) if (n >= +t && set.bonus[t][name] != null) sum += set.bonus[t][name];
+    if (set.power && set.power.stats && n >= setMaxTier(set) && set.power.stats[name] != null) sum += set.power.stats[name];
   }
   return sum;
 }
@@ -18934,18 +19059,27 @@ function setTooltipHTML(setId) {
     return has ? `<span style='color:${SET_RARITY_COLOR}'>${label} ✓</span>`
                : `<span style='opacity:.45'>${label}</span>`;
   }).join(' · ');
+  const maxT = setMaxTier(s);
+  const complete = worn >= maxT;
   // Each worn-count threshold and what it grants, lit when currently active.
-  const bonusLines = [2, 4].map(t => {
-    const b = s.bonus[t]; if (!b) return '';
+  const bonusLines = Object.keys(s.bonus).map(Number).sort((a, b) => a - b).map(t => {
+    const b = s.bonus[t];
     const stats = Object.entries(b)
       .map(([k, v]) => `+${v}${PCT_STATS.has(k) ? '%' : ''} ${STAT_SHORT[k] || k}`).join(' · ');
     const met = worn >= t;
     return `<div style='color:${met ? SET_RARITY_COLOR : 'var(--junk)'}'>${met ? '✓ ' : ''}${t} pieces: ${stats}</div>`;
   }).join('');
-  return `<div class='ht-name' style='color:${SET_RARITY_COLOR}'>${s.name} Set</div>` +
-    `<div class='ht-line'>A set piece can drop for any gear slot. Wear matching pieces for escalating bonuses.</div>` +
-    `<div class='ht-sub'><b>Worn: ${worn}</b> — ${slotList}</div>` +
-    `<div class='ht-sub'>${bonusLines}</div>`;
+  // The signature power — the completion reward. Gold and lit once the set is
+  // complete, dimmed with its unlock count while you're still collecting.
+  const powerLine = s.power
+    ? `<div style='color:${complete ? 'var(--gold)' : 'var(--junk)'};margin-top:3px'>` +
+      `${complete ? '✦ ' : `${maxT} pieces — `}<b>${s.power.name}</b>: ${s.power.desc}</div>` +
+      (complete ? `<div style='color:var(--gold)'>★ Set complete — a golden aura surrounds you.</div>` : '')
+    : '';
+  return `<div class='ht-name' style='color:${SET_RARITY_COLOR}'>${s.name} Set${complete ? " <span style='color:var(--gold)'>✦</span>" : ''}</div>` +
+    `<div class='ht-line'>A set piece can drop for any gear slot. Match pieces for escalating bonuses; complete the set (${maxT}) to unlock its power and a golden aura.</div>` +
+    `<div class='ht-sub'><b>Worn: ${worn}/${maxT}</b> — ${slotList}</div>` +
+    `<div class='ht-sub'>${bonusLines}${powerLine}</div>`;
 }
 // Short markup describing an item's special power / set membership, appended to its
 // stat line so the build-defining bit is visible wherever gear is listed.
@@ -18961,7 +19095,8 @@ function itemSetTag(item) {
   if (!item.set || !ITEM_SETS[item.set]) return '';
   const s = ITEM_SETS[item.set];
   const n = wornSetCounts()[item.set] || 0;
-  return ` · <span style="color:${s.color}" ${hoverTip(setTooltipHTML(item.set))}>${s.name} set${n ? ` (${n})` : ''}</span>`;
+  const done = setComplete(item.set, n);   // completed → gold with a ✦, matching the aura
+  return ` · <span style="color:${done ? 'var(--gold)' : s.color}" ${hoverTip(setTooltipHTML(item.set))}>${s.name} set${n ? ` (${n})` : ''}${done ? ' ✦' : ''}</span>`;
 }
 function itemPowerLine(item) {
   let out = '';
@@ -22621,8 +22756,28 @@ function lootRowVisible(item) {
 // hunting through tooltips. Built from STAT_SHORT/STAT_LABELS and ATTRIBUTES so
 // it can never drift out of sync with what the rows actually print.
 function lootGlossaryHTML() {
-  const statRows = Object.keys(STAT_SHORT).map(k =>
-    `<div class="gl-row"><span class="gl-code">${STAT_SHORT[k]}</span><span class="gl-mean">${STAT_LABELS[k] || k}</span></div>`
+  // Item stats split into themed buckets, alphabetical by short code within each,
+  // so the long list stays scannable (and flows into two columns on desktop).
+  // Keyed by internal stat key so it can never drift from STAT_SHORT/STAT_LABELS.
+  const STAT_GROUPS = [
+    ['Offense', ['ATK','ACC','CRIT','CRITDMG','IDMG','PEN','DBLSTRIKE','CLEAVE','EXEC','BOSSDMG','ATKSPD','BLEED','STUNPWR']],
+    ['Defense', ['DEF','HP','DR','BLOCK','DODGE','TENAC','THORNS']],
+    ['Sustain', ['REGEN','LEECH','MPLEECH','HPKILL','MPKILL']],
+    ['Caster',  ['MP','SPELLPWR','SKILLPWR','CASTSPD','CDR','MCR']],
+    ['Utility / Find', ['SPD','LCK','GOLDFIND','XPGAIN','MAGICFIND','MATFIND']],
+  ];
+  // Safety net: any stat not placed in a bucket above still appears under "Other",
+  // so a newly added stat can never silently vanish from the key.
+  const placed = new Set(STAT_GROUPS.flatMap(([, keys]) => keys));
+  const leftover = Object.keys(STAT_SHORT).filter(k => !placed.has(k));
+  if (leftover.length) STAT_GROUPS.push(['Other', leftover]);
+  const statRow = k =>
+    `<div class="gl-row"><span class="gl-code">${STAT_SHORT[k]}</span><span class="gl-mean">${STAT_LABELS[k] || k}</span></div>`;
+  const group = (name, inner) => `<div class="gl-group"><div class="gl-sect">${name}</div>${inner}</div>`;
+  const statSects = STAT_GROUPS.map(([name, keys]) =>
+    group(name, keys.slice()
+      .sort((a, b) => STAT_SHORT[a].localeCompare(STAT_SHORT[b], undefined, { numeric: true }))
+      .map(statRow).join(''))
   ).join('');
   const attrRows = ATTR_KEYS.map(k => {
     const a = ATTRIBUTES[k];
@@ -22631,8 +22786,8 @@ function lootGlossaryHTML() {
   }).join('');
   return `<details class="loot-glossary"><summary>Stat abbreviations</summary>` +
     `<div class="gl-body">` +
-    `<div class="gl-sect">Item stats</div>${statRows}` +
-    `<div class="gl-sect">Attributes</div>${attrRows}` +
+    statSects +
+    group('Attributes', attrRows) +
     `</div></details>`;
 }
 
@@ -23815,22 +23970,30 @@ function renderDollSlot(slot, mode) {
   </div>`;
 }
 function renderPaperdoll() {
-  const body = heroFaceIcon(player.class, player.sex, 132) || dlIcon('hero', 132);
-  const bodyHTML = body ? `<div class="pd-body">${body}</div>` : '';
-  // Laid out like a body: jewellery flanks the head, the weapons flank the
-  // chest, and the lower armour (hands + legs) shares a centred bottom row.
-  //   amulet | head  | ring
-  //   weapon | chest | off-hand
-  //        hands | legs   (centred)
-  const cells = [
-    renderDollSlot('amulet'), renderDollSlot('head'),  renderDollSlot('ring'),
-    renderDollSlot('weapon'), renderDollSlot('chest'), renderDollSlot('offhand'),
-  ].join('');
-  const bottom = `<div class="pd-bottom">${renderDollSlot('hands')}${renderDollSlot('legs')}</div>`;
-  return gearSetBarHTML() + `<div class="paperdoll">${bodyHTML}${cells}${bottom}
-    <div class="pd-hint">Tap a slot for details · ✕ to unequip · EQUIP loot from the LOOT tab</div>
-    <div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div>
-  </div>`;
+  // Anatomical layout: a big hero sprite with each slot pinned where the gear
+  // sits on the body. POS is [left%, top%] of the doll frame, tuned to the idle
+  // sprite — head up top, amulet at the neck, chest on the torso, a hand on each
+  // side, gloves & ring by the hands, greaves down at the legs.
+  const body = heroFaceIcon(player.class, player.sex, 232) || dlIcon('hero', 232);
+  const bodyHTML = body ? `<div class="pda-body">${body}</div>` : '';
+  const POS = {
+    head:    [50, 13],
+    amulet:  [50, 33],
+    chest:   [50, 50],
+    legs:    [50, 78],
+    weapon:  [12, 47],
+    offhand: [88, 47],
+    hands:   [12, 65],
+    ring:    [88, 65],
+  };
+  const slots = Object.keys(POS).map(slot => {
+    const [x, y] = POS[slot];
+    return `<div class="pda-wrap" style="left:${x}%;top:${y}%">${renderDollSlot(slot)}</div>`;
+  }).join('');
+  return `<div class="gear-equip">${gearSetBarHTML()}` +
+    `<div class="pda-stage"><div class="paperdoll-anat">${bodyHTML}${slots}</div></div>` +
+    `<div class="pd-hint">Tap a slot for details · ✕ to unequip · EQUIP loot from the LOOT tab</div>` +
+    `<div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div></div>`;
 }
 // The Enchanter's Equipped section reuses the same paper-doll body, but each worn
 // piece is tapped to pick it for enchanting (no gear-set bar, no ✕ unequip).
@@ -26662,13 +26825,18 @@ function showTitle() {
       const deepest = player.maxFloor || 1;
       const gold = fmtGold ? fmtGold(player.gold || 0) : (player.gold || 0);
       const hcTag = player.hardcore ? `<div><span class="hc-tag">${hcIcon(11)} HARDCORE · ONE LIFE</span></div>` : '';
-      const heroPic = heroFaceIcon(player.class, player.sex, 60);
+      // An animated walking hero sprite sits to the RIGHT of the left-aligned text,
+      // sized to stand about as tall as the stacked name/class/stats block. Falls
+      // back to the static face (then atlas tile) until the walk sheet has loaded.
+      const heroPic = heroWalkIcon(player.class, player.sex, 68) || heroFaceIcon(player.class, player.sex, 68);
       hero.innerHTML =
-        (heroPic ? `<div class="th-portrait">${heroPic}</div>` : '')
+        `<div class="th-info">`
         + `<div class="th-name" style="color:${cls.color || 'var(--xp)'}">${nm}</div>`
         + `<div class="th-sub">Level ${lvl} ${cls.name || 'Hero'}</div>`
         + `<div class="th-stats"><span>Deepest <b>Floor ${deepest}</b></span><span><b>${gold}</b>g</span></div>`
-        + hcTag;
+        + hcTag
+        + `</div>`
+        + (heroPic ? `<div class="th-portrait">${heroPic}</div>` : '');
       hero.style.display = '';
     } else {
       hero.style.display = 'none';
