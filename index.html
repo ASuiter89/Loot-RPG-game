@@ -11248,6 +11248,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Enemy stuns half as long", by: "Claude", notes: ["Stuns that enemies land on you now last half as long, so a bad hit roots you for far less time.", "Tenacity still shortens them further on top."] },
   { date: "2026-07-02", size: "small", v: "Character card in the pause menu", by: "Claude", notes: ["Pause menu (Esc) now shows your hero card — name, class, level, deepest floor and gold — above Settings, the same panel as the title screen."] },
   { date: "2026-07-02", size: "small", v: "See & shoot over water and open ground", by: "Claude", notes: ["Line of sight is now blocked only by SOLID obstructions — walls, cracked walls, locked doors, boss barriers and furniture.", "Water, lava, spikes and other floor terrain no longer block shots or spells: if you can walk over (or across) it, you can see and fire over it.", "Solid furniture and boss barriers now give real cover, blocking bolts and spells like a wall."] },
   { date: "2026-07-02", size: "small", v: "Dodge enemy ranged shots", by: "Claude", notes: ["Ranged foes now loose a real bolt aimed where you stand instead of an unavoidable hit with a cosmetic arrow.", "Sidestep the bolt's path — or break its line behind a wall — and it misses; it only hurts you if it actually reaches you.", "Damage, dodge and on-hit effects now resolve on impact, so kiting a shooter genuinely works."] },
@@ -19123,6 +19124,8 @@ function applyStatusEffect(target, effect, secs, source) {
   // Tenacity shortens (and, if reduced to a blink, outright shrugs off) incoming
   // crowd-control on the hero.
   if (target === 'player' && CC_EFFECTS.has(effect)) {
+    // Enemy stuns on the hero last half their listed duration.
+    if (effect === 'stun') secs *= 0.5;
     const t = playerTenacity();
     if (t > 0) secs *= (1 - t);
     if (secs < 0.4) { spawnFloatingText(player.x, player.y, 'RESIST', '#9fe8ff'); return; }
