@@ -2022,6 +2022,31 @@
   .pd-slot.pd-inactive .dl-ic, .pd-slot.pd-inactive .pd-emoji { opacity: 0.45; filter: grayscale(0.7); }
   .pd-emoji { font-size: 3rem; line-height: 1; filter: grayscale(0.1); }
   .pd-pwr { position: absolute; bottom: 1px; right: 3px; font-size: 1.2rem; }
+
+  /* ── ANATOMICAL GEAR DOLL ── a large hero sprite with each equipment slot
+     pinned where it sits on the body (helm at the head, amulet at the neck,
+     weapon & off-hand at the hands, chest on the torso, gloves & ring by the
+     hands, greaves at the legs). Slot positions are % of the frame. */
+  .paperdoll-anat {
+    position: relative; width: 100%;
+    max-width: calc(360px * var(--ui-scale,1));
+    margin: 12px auto 4px; aspect-ratio: 3 / 4;
+  }
+  .pda-body {
+    position: absolute; left: 50%; top: 49%;
+    transform: translate(-50%, -50%);
+    height: 82%; width: auto; max-width: 132%;
+    z-index: 0; pointer-events: none;
+    filter: drop-shadow(0 5px 12px rgba(0,0,0,0.55));
+  }
+  .pda-body img, .pda-body .dl-ic { display: block; height: 100%; width: auto; image-rendering: pixelated; }
+  /* Each slot reuses the .pd-cell / .pd-slot chrome, pinned at its body location. */
+  .pda-wrap {
+    position: absolute; transform: translate(-50%, -50%); z-index: 2;
+    width: calc(62px * var(--ui-scale,1));
+  }
+  .paperdoll-anat .pd-slot { max-width: none; background: color-mix(in srgb, var(--ink) 78%, transparent); }
+  .paperdoll-anat .pd-cap { font-size: 1.1rem; margin-top: 2px; text-align: center; text-shadow: 0 1px 3px var(--ink); }
   .pd-unequip {
     position: absolute; top: -7px; right: -7px;
     width: 19px; height: 19px; padding: 0;
@@ -23343,22 +23368,29 @@ function renderDollSlot(slot, mode) {
   </div>`;
 }
 function renderPaperdoll() {
-  const body = heroFaceIcon(player.class, player.sex, 132) || dlIcon('hero', 132);
-  const bodyHTML = body ? `<div class="pd-body">${body}</div>` : '';
-  // Laid out like a body: jewellery flanks the head, the weapons flank the
-  // chest, and the lower armour (hands + legs) shares a centred bottom row.
-  //   amulet | head  | ring
-  //   weapon | chest | off-hand
-  //        hands | legs   (centred)
-  const cells = [
-    renderDollSlot('amulet'), renderDollSlot('head'),  renderDollSlot('ring'),
-    renderDollSlot('weapon'), renderDollSlot('chest'), renderDollSlot('offhand'),
-  ].join('');
-  const bottom = `<div class="pd-bottom">${renderDollSlot('hands')}${renderDollSlot('legs')}</div>`;
-  return gearSetBarHTML() + `<div class="paperdoll">${bodyHTML}${cells}${bottom}
+  // Anatomical layout: a big hero sprite with each slot pinned where the gear
+  // sits on the body. POS is [left%, top%] of the doll frame, tuned to the idle
+  // sprite — head up top, amulet at the neck, chest on the torso, a hand on each
+  // side, gloves & ring by the hands, greaves down at the legs.
+  const body = heroFaceIcon(player.class, player.sex, 232) || dlIcon('hero', 232);
+  const bodyHTML = body ? `<div class="pda-body">${body}</div>` : '';
+  const POS = {
+    head:    [50, 16],
+    amulet:  [50, 37],
+    chest:   [50, 51],
+    legs:    [50, 75],
+    weapon:  [12, 49],
+    offhand: [88, 49],
+    hands:   [12, 66],
+    ring:    [88, 66],
+  };
+  const slots = Object.keys(POS).map(slot => {
+    const [x, y] = POS[slot];
+    return `<div class="pda-wrap" style="left:${x}%;top:${y}%">${renderDollSlot(slot)}</div>`;
+  }).join('');
+  return gearSetBarHTML() + `<div class="paperdoll-anat">${bodyHTML}${slots}</div>
     <div class="pd-hint">Tap a slot for details · ✕ to unequip · EQUIP loot from the LOOT tab</div>
-    <div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div>
-  </div>`;
+    <div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div>`;
 }
 // The Enchanter's Equipped section reuses the same paper-doll body, but each worn
 // piece is tapped to pick it for enchanting (no gear-set bar, no ✕ unequip).
