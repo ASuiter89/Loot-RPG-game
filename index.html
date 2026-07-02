@@ -5619,6 +5619,7 @@ function setUiFont(id) {
   if (!UI_FONTS.some(f => f.id === id)) return;
   uiFont = id;
   try { localStorage.setItem(UI_FONT_KEY, id); } catch (e) {}
+  settingsChanged();
   applyUiFont();
   renderFontControls();
   if (typeof sfx === 'function') sfx('click');
@@ -5669,6 +5670,7 @@ function setCursorChoice(id) {
   if (!CURSOR_OPTIONS.some(o => o.id === id)) return;
   cursorChoice = id;
   try { localStorage.setItem('cursorChoice', id); } catch (e) {}
+  settingsChanged();
   applyGameCursor();
   renderCursorControls();
   if (typeof sfx === 'function') sfx('click');
@@ -10396,6 +10398,7 @@ function stopTownAmbient() { clearTimeout(_townAmbTimer); _townAmbTimer = null; 
 function toggleTownAmbient() {
   audio.townAmbOn = !audio.townAmbOn;
   try { localStorage.setItem(TOWN_AMB_KEY, audio.townAmbOn ? 'on' : 'off'); } catch (e) {}
+  settingsChanged();
   if (audio.townAmbOn) { audioUnlock(); sfx('click'); startTownAmbient(); }
   else stopTownAmbient();
   const b = document.getElementById('town-amb-btn');
@@ -10558,6 +10561,7 @@ function syncMusicVibeUi() { const sel = document.getElementById('music-vibe-sel
 function setMusicVibe(v) {
   musicVibe = v;
   try { localStorage.setItem(MUSIC_VIBE_KEY, v); } catch (e) {}
+  settingsChanged();
   syncMusicVibeUi();
   if (typeof sfx === 'function') sfx('click');
   const ctx = audio && audio.ctx;
@@ -11098,6 +11102,7 @@ const MUSIC_OFF_SVG = SVG_OPEN + "<path d=\"M9 18V5l12-2v13\"/><circle cx=\"6\" 
 function setMusicLevel(lvl) {
   audio.musicLevel = Math.max(0, Math.min(AUDIO_LEVELS, lvl));
   try { localStorage.setItem(AUDIO_MUSIC_KEY, String(audio.musicLevel)); } catch (e) {}
+  settingsChanged();
   if (audio.musicGain) audio.musicGain.gain.value = musicBusGain();
   if (audio.musicLevel > 0) audioUnlock();
   updateMusicButton();
@@ -11105,6 +11110,7 @@ function setMusicLevel(lvl) {
 function setSfxLevel(lvl) {
   audio.sfxLevel = Math.max(0, Math.min(AUDIO_LEVELS, lvl));
   try { localStorage.setItem(AUDIO_SFX_KEY, String(audio.sfxLevel)); } catch (e) {}
+  settingsChanged();
   if (audio.sfxGain) audio.sfxGain.gain.value = sfxBusGain();
   if (audio.sfxLevel > 0) { audioUnlock(); sfx('click'); }
   updateSfxButton();
@@ -11189,6 +11195,7 @@ function toggleSprintMode() {
   sprintMode = sprintMode === 'hold' ? 'toggle' : 'hold';
   if (sprintMode === 'hold') sprintLatched = false;
   try { localStorage.setItem(SPRINT_MODE_KEY, sprintMode); } catch (e) {}
+  settingsChanged();
   sfx('click');
   updateSprintButton();
 }
@@ -11204,6 +11211,7 @@ function updateSprintButton() {
 function toggleHeroBars() {
   showHeroBars = !showHeroBars;
   try { localStorage.setItem(HERO_BARS_KEY, showHeroBars ? '1' : '0'); } catch (e) {}
+  settingsChanged();
   sfx('click');
   updateHeroBarsButton();
 }
@@ -11256,6 +11264,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Settings sync to your account", by: "Claude", notes: ["Signed-in players carry preferences across devices — sound levels, keybinds, UI font, cursor, sprint mode, music vibe, hero bars, and panel/minimap collapse.", "Newest change wins across devices; UI scale and the touch d-pad stay per-device.", "Optional — logged-out play is unchanged and still saves only on this device."] },
   { date: "2026-07-02", size: "small", v: "Gold shows a coin icon, not a trailing g", by: "Claude", notes: ["Every money amount — HUD, shops, tooltips, buttons, logs and combat pops — now leads with the gold-coin icon instead of a trailing “g”."] },
   { date: "2026-07-02", size: "small", v: "Off-screen stairs arrow", by: "Claude", notes: ["A gold arrow rides the edge of the map, always between you and the down-stairs and pointing straight at them, whenever the exit is off-screen.", "Slides around the border as you move and vanishes once the stairs scroll into view. Brighter once the floor is cleared."] },
   { date: "2026-07-02", size: "small", v: "Smoother combat frame rate", by: "Claude", notes: ["Screen-shake and the skill bar no longer force extra full redraws — big fights stay smoother.", "The skill bar only rebuilds when it actually changes instead of ~2.5×/sec, cutting steady background stutter."] },
@@ -18487,6 +18496,7 @@ function toggleMinimap() {
   const el = document.getElementById('minimap');
   if (el) el.classList.toggle('collapsed', minimapCollapsed);
   try { localStorage.setItem('dungeonLootMiniCollapsed', minimapCollapsed ? '1' : '0'); } catch (e) {}
+  settingsChanged();
 }
 const MM_TCOL = {
   0:  '#5b566f',  // floor
@@ -25398,7 +25408,7 @@ function setLogCollapsed(collapsed, persist = true) {
   document.body.classList.toggle('log-collapsed', collapsed);
   const el = document.getElementById('log');
   if (el && !collapsed) el.scrollTop = el.scrollHeight; // jump to newest on reopen
-  if (persist) { try { localStorage.setItem(LOG_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) {} }
+  if (persist) { try { localStorage.setItem(LOG_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) {} settingsChanged(); }
   // Folding the log slides the map column open/closed on desktop — keep the canvas
   // backing buffer re-fit to the animating width so the map stays crisp, not
   // stretched, for the whole slide.
@@ -25426,7 +25436,7 @@ function toggleLog() {
 const PANEL_COLLAPSE_KEY = 'panelCollapsed';
 function setPanelCollapsed(collapsed, persist = true) {
   document.body.classList.toggle('panel-collapsed', collapsed);
-  if (persist) { try { localStorage.setItem(PANEL_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) {} }
+  if (persist) { try { localStorage.setItem(PANEL_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) {} settingsChanged(); }
   // Folding the loot drawer slides its column width to/from the map on desktop —
   // re-fit the canvas backing buffer to the animating cell width each frame so the
   // map reveals MORE floor smoothly instead of stretching a stale buffer.
@@ -25581,7 +25591,7 @@ let keybinds = (function () {
     for (const a of KEYBIND_ACTIONS) if (typeof raw[a.id] === 'string') d[a.id] = raw[a.id]; } catch (e) {}
   return d;
 })();
-function saveKeybinds() { try { localStorage.setItem(KEYBINDS_STORE, JSON.stringify(keybinds)); } catch (e) {} }
+function saveKeybinds() { try { localStorage.setItem(KEYBINDS_STORE, JSON.stringify(keybinds)); } catch (e) {} settingsChanged(); }
 // Normalise a KeyboardEvent into a comparable token: lowercase letters, the
 // backquote char for the tilde key (with or without Shift), ' ' for Space.
 function keyTok(e) {
@@ -27026,6 +27036,140 @@ async function stashReconcile() {
   // Equal ts → treat as identical, nothing to do.
 }
 
+// ── Settings cloud sync ─────────────────────────────────────────────────────
+// Player preferences (audio levels, keybinds, UI font, sprint mode, panel
+// collapse states, …) live as individual localStorage keys. For a signed-in
+// account they mirror to a dedicated row (one per user) in a separate `settings`
+// table, so a player's preferences follow them across devices. Like the shared
+// stash this is last-writer-wins by a `ts` stamp; it isn't a character, so it has
+// its own table and its own reconcile — cloudReconcile() never touches it.
+//
+// Form-factor-specific preferences are deliberately LEFT OUT of the synced set so
+// they stay per-device: the UI scale (tuned to each screen) and the touch d-pad
+// layout (desktop doesn't even use it). Everything a player would expect to carry
+// across devices — sound, keybinds, font, cursor, sprint mode, … — syncs. To add
+// a new synced preference, just list its localStorage key below.
+//
+// One-time backend setup (Supabase SQL editor) — see CLOUD_SAVES.md:
+//   create table public.settings ( user_id uuid primary key
+//     references auth.users(id) on delete cascade,
+//     data jsonb not null, updated_at timestamptz not null default now() );
+//   + row-level-security policies scoping every row to auth.uid().
+const SETTINGS_SYNC_KEYS = [
+  'dungeonLootUiFont',        // chosen UI font
+  'cursorChoice',             // chosen cursor
+  'dungeonLoot_sprintMode',   // sprint HOLD vs TOGGLE
+  'dungeonLoot_heroBars',     // under-hero HP/MP bars on/off
+  'dungeonLootMusic',         // music volume level (0–5)
+  'dungeonLootSfx',           // sfx volume level (0–5)
+  'dungeonLootTownAmb',       // town ambience on/off
+  'musicVibe',                // locked music style / shuffle
+  'dungeonLoot_keybinds',     // custom key bindings (JSON)
+  'dungeonLootMiniCollapsed', // minimap collapsed
+  'logCollapsed',             // combat-log drawer collapsed
+  'panelCollapsed',           // loot drawer collapsed
+];
+const SETTINGS_META_KEY = 'dungeonLoot_settingsMeta_v1'; // local {ts} of last settings change
+
+// Local timestamp of the most recent settings change on this device (0 = never).
+function settingsLocalTs() {
+  try { const j = JSON.parse(localStorage.getItem(SETTINGS_META_KEY) || 'null'); return (j && j.ts) || 0; }
+  catch (e) { return 0; }
+}
+function settingsSetLocalTs(ts) {
+  try { localStorage.setItem(SETTINGS_META_KEY, JSON.stringify({ ts: ts })); } catch (e) {}
+}
+// Snapshot the current value of every synced key (skipping any that are unset).
+function settingsSnapshot() {
+  const keys = {};
+  for (const k of SETTINGS_SYNC_KEYS) {
+    try { const v = localStorage.getItem(k); if (v !== null) keys[k] = v; } catch (e) {}
+  }
+  return keys;
+}
+// Write a cloud blob's recognised keys into localStorage. Returns true if any
+// value actually changed, so the caller knows a reload is warranted to re-read
+// the load-time settings. A key the cloud hasn't stored is left as-is locally —
+// we never clear a preference the account simply doesn't know about yet.
+function settingsApply(keys) {
+  if (!keys || typeof keys !== 'object') return false;
+  let changed = false;
+  for (const k of SETTINGS_SYNC_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(keys, k)) continue;
+    const v = keys[k];
+    if (typeof v !== 'string') continue;
+    let cur = null; try { cur = localStorage.getItem(k); } catch (e) {}
+    if (v !== cur) { try { localStorage.setItem(k, v); changed = true; } catch (e) {} }
+  }
+  return changed;
+}
+// Called after any synced preference changes: stamp a fresh local ts and schedule
+// a debounced push to the account's settings row. A no-op when logged out.
+let cloudSettingsTimer = null;
+function settingsChanged() {
+  settingsSetLocalTs(Date.now());
+  cloudScheduleSettings();
+}
+function cloudScheduleSettings() {
+  if (!cloudEnabled() || !authState.user) return;
+  if (cloudSettingsTimer) return;
+  cloudSettingsTimer = setTimeout(() => { cloudSettingsTimer = null; cloudPushSettings(); }, 3500);
+}
+// Upsert this device's preferences into the account's settings row. Best-effort.
+async function cloudPushSettings(opts) {
+  opts = opts || {};
+  if (!cloudEnabled() || !authState.user) return false;
+  if (!opts.keepalive) await ensureToken();
+  const ts = settingsLocalTs() || Date.now();
+  try {
+    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/settings?on_conflict=user_id', {
+      method: 'POST',
+      headers: cloudRestHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify({
+        user_id: authState.user.id,
+        data: { v: 1, ts: ts, keys: settingsSnapshot() },
+        updated_at: new Date(ts).toISOString(),
+      }),
+      keepalive: !!opts.keepalive,
+    });
+    return res.ok;
+  } catch (e) { return false; }
+}
+// Merge this device's preferences with the account's. Newest ts wins; if the
+// account has no settings row yet, seed it with this device's current prefs.
+// Returns true when newer cloud prefs were adopted AND changed a local value, so
+// the boot caller can reload once to re-read them. Best-effort — any failure
+// (including a build whose DB lacks the settings table) simply leaves the
+// fully-working local preferences untouched.
+async function settingsReconcile() {
+  if (!cloudEnabled() || !authState.user) return false;
+  if (!await ensureToken()) return false;
+  let rows;
+  try {
+    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/settings?select=data&user_id=eq.' + authState.user.id, { headers: cloudRestHeaders() });
+    if (!res.ok) return false;
+    rows = await res.json();
+  } catch (e) { return false; }
+  const cloud = (rows && rows[0] && rows[0].data && typeof rows[0].data === 'object') ? rows[0].data : null;
+  const localTs = settingsLocalTs();
+  const cloudTs = (cloud && cloud.ts) || 0;
+  if (cloud) {
+    if (cloudTs > localTs) {
+      // Cloud copy is newer — adopt it locally.
+      const changed = settingsApply(cloud.keys || {});
+      settingsSetLocalTs(cloudTs);
+      return changed;
+    }
+    if (localTs > cloudTs) await cloudPushSettings();  // ours is newer — push it up
+    return false;
+  }
+  // No settings row on the account yet → seed it with this device's current prefs
+  // (stamp a local ts if we never had one so future reconciles compare correctly).
+  if (!localTs) settingsSetLocalTs(Date.now());
+  await cloudPushSettings();
+  return false;
+}
+
 // ── Reconcile (sync) ────────────────────────────────────────────────────────
 // Merge this device's slots with the account so NOTHING is ever overwritten by a
 // different character. The cloud's slot layout is the shared source of truth: a
@@ -27161,9 +27305,13 @@ async function cloudBootSync() {
   if (learnedDeath && hcEnforceActiveLockout(true)) return;
   const r = await cloudReconcile();
   await stashReconcile(); // sync the shared stash too (writes STASH_KEY before any reload)
+  // Pull the account's preferences (writes the settings localStorage keys before
+  // any reload, so the load-time reads pick them up). Reports whether adopting the
+  // cloud copy changed a local value, so a settings-only change still reloads.
+  const settingsPulled = await settingsReconcile();
   let alreadyReloaded = false;
   try { alreadyReloaded = sessionStorage.getItem(CLOUD_BOOT_RELOADED) === '1'; } catch (e) {}
-  if (r.activeChanged && !alreadyReloaded) {
+  if ((r.activeChanged || settingsPulled) && !alreadyReloaded) {
     try { sessionStorage.setItem(CLOUD_BOOT_RELOADED, '1'); } catch (e) {}
     // Freeze saves so the teardown autosave can't write the stale in-memory hero
     // back over the newer copy we just pulled into the active slot's cache.
@@ -27275,6 +27423,7 @@ async function doLogin() {
     try { saveGame(); } catch (e) {}   // persist the current local game before merging
     await cloudReconcile();
     await stashReconcile();            // merge the shared stash with the account's
+    await settingsReconcile();         // merge preferences with the account's
     _switchingSlot = true;             // don't let the teardown save overwrite a pulled-newer slot
     location.reload();
   } catch (e) { acctStatus('Network error — please try again.', 'err'); }
@@ -27294,6 +27443,7 @@ async function doSignup() {
       try { saveGame(); } catch (e) {}
       await cloudReconcile();
       await stashReconcile();          // merge the shared stash with the account's
+      await settingsReconcile();       // merge preferences with the account's
       _switchingSlot = true;           // don't let the teardown save overwrite a pulled-newer slot
       location.reload();
     } else {
@@ -27321,7 +27471,8 @@ async function doSyncNow() {
   if (learnedDeath && hcEnforceActiveLockout(true)) return;
   const r = await cloudReconcile();
   await stashReconcile();
-  if (r.activeChanged) { _switchingSlot = true; location.reload(); return; }
+  const settingsPulled = await settingsReconcile();
+  if (r.activeChanged || settingsPulled) { _switchingSlot = true; location.reload(); return; }
   acctStatus('Synced ✓ Everything is up to date.', 'ok');
 }
 
