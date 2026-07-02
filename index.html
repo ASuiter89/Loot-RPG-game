@@ -1663,8 +1663,12 @@
      overflow-x:auto is only a fallback for a too-narrow column, but setting it
      also forces overflow-y to compute to 'auto' — which showed a phantom vertical
      scrollbar whenever the tallest slot (the auto-cast tile) sat a few px past the
-     belt. Pin overflow-y:hidden so the belt never scrolls vertically. */
-  .dh-belt { display: flex; align-items: center; justify-content: stretch; min-height: 56px; padding: 0 8px; overflow-x: auto; overflow-y: hidden; }
+     belt. Pin overflow-y:hidden so the belt never scrolls vertically.
+     The belt grows to fill the HUD's spare height (flex:1) and centres the skill
+     row, so the margin ABOVE the skills always matches the margin BELOW them; the
+     top/bottom padding is a guaranteed even minimum, and the XP bar stays pinned
+     to the very bottom of the HUD. */
+  .dh-belt { display: flex; align-items: center; justify-content: stretch; flex: 1 1 auto; min-height: 0; padding: calc(12px * var(--ui-scale,1)) 8px; overflow-x: auto; overflow-y: hidden; }
   .dh-belt > #skill-bar { flex: 1 1 auto; width: 100%; }
   .dh-belt::-webkit-scrollbar { height: 0; }
   /* Segmented experience bar along the very bottom. */
@@ -3484,8 +3488,10 @@
       --log-col:  clamp(250px, 24vw, 480px);  --log-open:   clamp(250px, 24vw, 480px);
       --panel-col: clamp(210px, 22vw, 440px); --panel-open: clamp(210px, 22vw, 440px);
       /* Bottom HUD belt is rem-based so it grows with the type (and the UI SIZE
-         setting) instead of clipping the skill icons and HP/MP row when scaled. */
-      --dhud-h: clamp(118px, 10rem, 190px);
+         setting) instead of clipping the skill icons and HP/MP row when scaled.
+         Tall enough to hold the HP/MP row, the enlarged skill tiles with an even
+         margin above and below them, and the XP bar along the bottom. */
+      --dhud-h: clamp(150px, 12.5rem, 240px);
     }
     /* Fold a panel to a 30px spine. Only the *-col var folds; the *-open var — the
        width the panel BODY is pinned to (see #log / #panel-body) — is governed by
@@ -3803,9 +3809,14 @@
       flex-wrap: nowrap;
       pointer-events: auto;
     }
-    /* Big enough to read, but allowed to shrink so all 12 slots stay one row even
-       when the log is open and the map column is narrow. */
-    #skill-bar { --sb-size: calc(48px * var(--ui-scale,1)); }
+    /* Large, easy-to-hit tiles. If the map column is too narrow for every slot at
+       this size the belt scrolls horizontally (overflow-x on .dh-belt) and the
+       left/right groups stay on one row (nowrap) rather than wrapping and clipping. */
+    #skill-bar { --sb-size: calc(72px * var(--ui-scale,1)); }
+    #skill-bar .sb-left, #skill-bar .sb-right { flex-wrap: nowrap; }
+    /* The sprite/SVG/emoji icons scale up with the bigger tiles so each button keeps
+       the same filled look instead of a small icon marooned in a large box. */
+    #skill-bar .skillbar-btn .sb-icon { transform: scale(1.5); }
     #skill-bar .skillbar-btn .sb-icon { font-size: 2.4rem; }
     /* Spell icons (no MP label) fill the larger tile here. */
     #skill-bar .skillbar-btn .sb-icon.big { font-size: 3.4rem; }
@@ -11243,6 +11254,7 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Break out when mobbed, not just fully ringed", by: "Claude", notes: ["Getting swarmed no longer freezes you: when foes plug the way you're heading and the lanes you'd slide around them, keep pushing and the hero shoves between the bodies toward open ground.", "A lone foe with any real gap beside it still hard-blocks you, and corridors stay choke points."] },
+  { date: "2026-07-02", size: "small", v: "Bigger skill tiles on the HUD", by: "Claude", notes: ["Bottom-HUD skill buttons are 50% larger with icons scaled to match.", "Even margin above and below the skill row; the HUD grows to fit."] },
   { date: "2026-07-02", size: "small", v: "Chunkier floor buttons", by: "Claude", notes: ["Dungeon Gate floor buttons are now larger, taller and squarer with bigger numerals — easier to read and click."] },
   { date: "2026-07-02", size: "small", v: "Smart click-to-move pathing", by: "Claude", notes: ["Click a spot behind a wall and the hero now routes around it instead of grinding into the corner — faint gold breadcrumbs sketch the planned path.", "Prefers safe ground, steering around lava and spikes when there's a way past.", "Works while holding the button too: drag past a wall and the route re-plans to keep chasing the cursor."] },
   { date: "2026-07-02", size: "small", v: "Line of sight required to hit at range", by: "Claude", notes: ["Ranged skills and spells (bolt, blast, beam, nova, chain) now need a clear line to a foe — no firing through walls, deep water or sealed doors.", "Ranged summoned minions close in until they can see their target instead of shooting through walls.", "More boss tricks (firewall, firestorm, shockwave, frost nova, quake, vortex) now need line of sight, so ducking behind cover breaks them."] },
