@@ -11389,6 +11389,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Fix: title screen wouldn't offer Continue", by: "Claude", notes: ["Settings sync could crash the boot before the title screen finished loading, so returning heroes never saw the Continue button — fixed.", "Re-applying your saved log/loot-drawer collapse state on load no longer counts as a fresh change, keeping cross-device sync timestamps accurate."] },
   { date: "2026-07-02", size: "small", v: "Smoother big fights", by: "Claude", notes: ["Enemy status tints (burning, poisoned, chilled…), the hit-flash, elite/boss auras and threat rings now use cached art instead of rebuilding pricey per-frame effects — much smoother with lots of foes on screen.", "Elite/boss/affix auras read as a soft coloured halo."] },
   { date: "2026-07-02", size: "small", v: "Pathing line toggle", by: "Claude", notes: ["Toggle the click-to-move breadcrumb trail in Settings → Visuals (on by default); the pulsing destination ring stays.", "Choice syncs across devices when signed in."] },
   { date: "2026-07-02", size: "small", v: "Enemy stuns half as long", by: "Claude", notes: ["Stuns that enemies land on you now last half as long, so a bad hit roots you for far less time.", "Tenacity still shortens them further on top."] },
@@ -25679,7 +25680,7 @@ function toggleLog() {
   // No saved choice → follow the layout (collapsed on mobile) without persisting,
   // so it stays responsive until the player makes an explicit choice.
   if (pref === null) setLogCollapsed(true, false);   // start hidden everywhere; reclaimed space goes to the map + loot panel
-  else setLogCollapsed(pref === '1');
+  else setLogCollapsed(pref === '1', false);         // just re-applying the saved value at boot — don't re-persist or mark it a fresh change
 })();
 
 // ── COLLAPSIBLE LOOT DRAWER (desktop) ──
@@ -25704,7 +25705,7 @@ function togglePanelCollapse() {
   let pref = null;
   try { pref = localStorage.getItem(PANEL_COLLAPSE_KEY); } catch (e) {}
   // Default open; only an explicit saved choice collapses it.
-  if (pref !== null) setPanelCollapsed(pref === '1');
+  if (pref !== null) setPanelCollapsed(pref === '1', false);   // re-applying the saved value at boot — don't re-persist or mark it a fresh change
 })();
 
 // Potions get their own signature colour wherever they're named in the log.
@@ -27367,7 +27368,12 @@ function settingsChanged() {
   cloudScheduleSettings();
 }
 function cloudScheduleSettings() {
-  if (!cloudEnabled() || !authState.user) return;
+  // A low-level preference setter can fire settingsChanged() during load-time
+  // init — before the cloud layer's bindings (Supabase config + authState) have
+  // been initialised further down the script. Reading those still-in-TDZ
+  // bindings would throw and halt the whole boot, so probe readiness defensively
+  // and bail out quietly if the cloud subsystem isn't up yet.
+  try { if (!cloudEnabled() || !authState.user) return; } catch (e) { return; }
   if (cloudSettingsTimer) return;
   cloudSettingsTimer = setTimeout(() => { cloudSettingsTimer = null; cloudPushSettings(); }, 3500);
 }
