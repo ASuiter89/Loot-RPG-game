@@ -1793,6 +1793,43 @@
   }
   .loot-auto-btn.on .la-status { color: var(--gold); border-color: var(--orange-650); }
 
+  /* ── LOOT SORT & STAT FILTER ── two dropdown buttons that open an inline
+     options panel (no floating menu, so nothing overlaps the list on mobile). */
+  .loot-controls { display: flex; gap: 4px; margin: 0 2px 6px; }
+  .loot-ctrl-btn {
+    flex: 1 1 0; min-width: 0; background: var(--panel); color: var(--purple-150);
+    font-family: var(--font-ui); font-size: 1.2rem; letter-spacing: 0.5px;
+    padding: 6px 6px; border: 1px solid var(--border); border-radius: 5px;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation; display: inline-flex; align-items: center;
+    justify-content: center; gap: 5px;
+  }
+  .loot-ctrl-btn:active { background: var(--panel-raised); }
+  .loot-ctrl-btn.open { border-color: var(--gold); color: var(--gold); }
+  /* Lit when a stat filter is narrowing the list (matches the Auto-Loot "on" look). */
+  .loot-ctrl-btn.on { color: var(--gold); border-color: var(--orange-650); background: var(--orange-850); }
+  .loot-ctrl-btn .lc-val { color: var(--warn); font-weight: bold; }
+  .loot-ctrl-btn.open .lc-val, .loot-ctrl-btn.on .lc-val { color: var(--gold); }
+  .loot-ctrl-btn .lc-caret { font-size: 1.1rem; opacity: 0.8; }
+  /* Inline dropdown body shared by the Sort and Filter buttons. */
+  .loot-ctrl-pop {
+    margin: 0 2px 6px; padding: 6px; background: var(--bg);
+    border: 1px solid var(--frame); border-radius: 6px;
+    display: flex; flex-wrap: wrap; gap: 4px; align-items: stretch;
+  }
+  .loot-ctrl-opt {
+    flex: 1 1 0; min-width: 62px; background: var(--panel); color: var(--purple-150);
+    font-family: var(--font-ui); font-size: 1.2rem; padding: 6px 4px;
+    border: 1px solid var(--border); border-radius: 5px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation; text-align: center;
+  }
+  .loot-ctrl-opt:active { background: var(--panel-raised); }
+  .loot-ctrl-opt.active { background: var(--blue-800); border-color: var(--gold); color: var(--gold); }
+  /* Stat chips size to their code (not stretched) and wrap into a tidy grid. */
+  .loot-stat-chip { flex: 0 0 auto; min-width: 0; padding: 6px 9px; font-weight: bold; }
+  .loot-ctrl-pop .lc-hint { flex: 1 1 100%; color: var(--junk); font-size: 1.2rem; padding: 2px; }
+  .loot-ctrl-clear { flex: 1 1 100%; color: var(--danger); }
+
   /* ── LOOT GLOSSARY ── collapsible key to the short stat codes on loot rows. */
   .loot-glossary {
     margin: 10px 4px 4px;
@@ -8998,6 +9035,13 @@ let currentTab = 'inv';
 // Which gear slot the LOOT tab is filtered to ('all', a SLOT_KEYS value, or
 // 'other' for non-equipable items like potions).
 let lootFilter = 'all';
+// How the LOOT list is ordered: 'rarity' (default) | 'power' | 'slot' | 'value' | 'name'.
+let lootSort = 'rarity';
+// Stat/attribute keys the LOOT list is narrowed to (empty = no stat filter). An
+// item shows if it carries ANY selected stat, so builds can surface relevant gear.
+let lootStatFilter = [];
+// Whether the Sort / Filter dropdown panels are expanded on the LOOT tab.
+let lootSortOpen = false, lootFilterOpen = false;
 let selectedItem = null;
 let selectedSkillId = null; // skill-tree node whose detail popover is open (null = none)
 let skillView = 'active';  // which SKILLS sub-tree is shown: passive | active | path
@@ -9406,6 +9450,7 @@ window.gameGuide = function gameGuide(topic) {
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too.`,
       `From the LOOT tab, tap an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
+      `The LOOT tab has a Sort button (rarity / power / slot / value / name) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. Off-class weapons can be carried and sold but not equipped.`,
       `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them.`,
     ],
@@ -10572,6 +10617,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-01", size: "small", v: "Sort & stat-filter your loot", by: "Claude", notes: ["LOOT tab gains a Sort button — order the bag by rarity, power, slot, value or name.", "New Filter button shows only gear carrying the stats you pick (crit, leech, +Might…); the picker lists just the stats you actually own.", "Bulk Sell/Scrap all respects the active filters, so it only ever hits the visible rows."] },
   { date: "2026-07-02", size: "medium", v: "Way more special powers, up front & glowing", by: "Jeff Louie", notes: ["A gear piece's special power (Vampiric, Brutal, Savage…) now leads its stat line and pulses with a coloured glow so it stands out at a glance, instead of trailing at the end.", "Added ~37 new build-defining powers across offense, crit, sustain, defense, casting, control, speed and fortune — so top-tier drops feel far more varied."] },
   { date: "2026-07-01", size: "small", v: "Skill-bar key labels fit their boxes", by: "Jeff Louie", notes: ["Long key names (Space, arrow keys) show as short glyphs on the bar instead of spilling out of the box."] },
   { date: "2026-07-02", size: "small", v: "Materials tied to rarity bands", by: "Claude", notes: ["Scrap, Glimmer and Core were flooding in — dialled back and made cleaner.", "Salvage now reads by colour: grey/white give pure Scrap, green+ start giving Glimmer, blue+ Core, only epic+ shed a Chaos Orb — no more every-piece spray.", "Trimmed material kill-drops and capped the deep-floor Scrap bonus so it no longer balloons."] },
@@ -14295,9 +14341,8 @@ function scrapFromBag(i) {
 // Bulk sell / scrap everything currently visible under the LOOT filter, always
 // sparing locked pieces. `which` is 'sell' or 'scrap' (scrap skips non-gear).
 function bagBulk(which) {
-  const cat = it => it.slot || 'other';
   const targets = inventory.filter(it =>
-    (lootFilter === 'all' || cat(it) === lootFilter) && !it.locked &&
+    lootRowVisible(it) && !it.locked &&
     (which === 'sell' || (it.slot && TIERS[it.tier])));
   if (!targets.length) return;
   let gold = 0; const mats = {};
@@ -22266,6 +22311,50 @@ function setLootFilter(slot) {
   renderPanel();
 }
 
+// The LOOT-tab sort options, in menu order. Each supplies a comparator over
+// {item} rows; a shared pre-pass (class-unwieldable pieces sink to the bottom)
+// runs before whichever key the player picked (see lootRowCompare).
+const LOOT_SORTS = [
+  { key: 'rarity', label: 'Rarity' },
+  { key: 'power',  label: 'Power'  },
+  { key: 'slot',   label: 'Slot'   },
+  { key: 'value',  label: 'Value'  },
+  { key: 'name',   label: 'Name'   },
+];
+function setLootSort(k) { lootSort = k; lootSortOpen = false; renderPanel(); }
+function toggleLootSortMenu() { lootSortOpen = !lootSortOpen; if (lootSortOpen) lootFilterOpen = false; renderPanel(); }
+function toggleLootFilterMenu() { lootFilterOpen = !lootFilterOpen; if (lootFilterOpen) lootSortOpen = false; renderPanel(); }
+// Toggle one stat/attribute in the LOOT stat filter (keeps the panel open so you
+// can pick several in a row).
+function toggleLootStat(k) {
+  const i = lootStatFilter.indexOf(k);
+  if (i < 0) lootStatFilter.push(k); else lootStatFilter.splice(i, 1);
+  renderPanel();
+}
+function clearLootStats() { lootStatFilter = []; renderPanel(); }
+
+// Union of stat + attribute keys carried by an item — what the stat filter reads.
+function itemStatKeys(item) {
+  const out = [];
+  if (item.stats) for (const k in item.stats) out.push(k);
+  if (item.attrs) for (const k in item.attrs) out.push(k);
+  return out;
+}
+// Short display code for a stat OR attribute key (mirrors the compact loot row).
+function lootStatCode(k) { return STAT_SHORT[k] || (ATTRIBUTES[k] && ATTRIBUTES[k].short) || k; }
+// Full name for a stat OR attribute key (used in the filter chip's hover tip).
+function lootStatName(k) {
+  return STAT_LABELS[k] || (ATTRIBUTES[k] && ATTRIBUTES[k].label.replace(EMOJI_RE, '').trim()) || k;
+}
+// Does an item pass the LOOT tab's slot subtab AND stat filter? Shared by the
+// list render and the bulk sell/scrap so "Sell all" only ever hits visible rows.
+function lootRowVisible(item) {
+  const c = item.slot || 'other';
+  if (!(lootFilter === 'all' || c === lootFilter)) return false;
+  if (lootStatFilter.length && !itemStatKeys(item).some(k => lootStatFilter.includes(k))) return false;
+  return true;
+}
+
 // Collapsible key to the short stat/attribute codes that show on compact loot
 // rows (e.g. "+3 ATK · THN · +5 MIG"), so a new player can decode them without
 // hunting through tooltips. Built from STAT_SHORT/STAT_LABELS and ATTRIBUTES so
@@ -22337,31 +22426,65 @@ function renderPanel() {
     const subtabs = '<div class="loot-subtabs">' + tabDefs.map(t =>
       `<button class="loot-subtab ${lootFilter===t.key?'active':''}" onclick="setLootFilter('${t.key}')">${t.icon}${t.name}<span class="st-count">${t.n}</span></button>`
     ).join('') + '</div>';
+    // Sort + stat-filter controls: two dropdown buttons, each opening an inline
+    // options panel below the row (so nothing floats over the list on mobile).
+    const sortLabel = (LOOT_SORTS.find(s => s.key === lootSort) || LOOT_SORTS[0]).label;
+    const controls = `<div class="loot-controls">
+      <button class="loot-ctrl-btn ${lootSortOpen ? 'open' : ''}" onclick="toggleLootSortMenu()" ${hoverTip(`<div class='ht-name'>⇅ Sort</div><div class='ht-line'>Order the bag by rarity, power, slot, value or name.</div>`)}>⇅ Sort <span class="lc-val">${sortLabel}</span><span class="lc-caret">${lootSortOpen ? '▾' : '▸'}</span></button>
+      <button class="loot-ctrl-btn ${lootFilterOpen ? 'open' : ''} ${lootStatFilter.length ? 'on' : ''}" onclick="toggleLootFilterMenu()" ${hoverTip(`<div class='ht-name'>⚑ Filter</div><div class='ht-line'>Show only gear that carries the stats you pick.</div>`)}>⚑ Filter${lootStatFilter.length ? ` <span class="lc-val">${lootStatFilter.length}</span>` : ''}<span class="lc-caret">${lootFilterOpen ? '▾' : '▸'}</span></button>
+    </div>`;
+    const sortPop = lootSortOpen ? '<div class="loot-ctrl-pop">' + LOOT_SORTS.map(s =>
+      `<button class="loot-ctrl-opt ${lootSort === s.key ? 'active' : ''}" onclick="setLootSort('${s.key}')">${s.label}</button>`
+    ).join('') + '</div>' : '';
+    // Stat-filter options = the stat/attribute codes actually present in the bag,
+    // in glossary order, so you only ever see stats you can filter by.
+    let filterPop = '';
+    if (lootFilterOpen) {
+      const present = new Set();
+      inventory.forEach(it => itemStatKeys(it).forEach(k => present.add(k)));
+      const order = [...Object.keys(STAT_SHORT), ...ATTR_KEYS];
+      const opts = order.filter(k => present.has(k));
+      present.forEach(k => { if (!opts.includes(k)) opts.push(k); });
+      filterPop = '<div class="loot-ctrl-pop">' + (opts.length
+        ? opts.map(k => `<button class="loot-ctrl-opt loot-stat-chip ${lootStatFilter.includes(k) ? 'active' : ''}" onclick="toggleLootStat('${k}')" ${hoverTip(`<div class='ht-name'>${lootStatCode(k)}</div><div class='ht-line'>${lootStatName(k)}</div>`)}>${lootStatCode(k)}</button>`).join('')
+            + (lootStatFilter.length ? `<button class="loot-ctrl-opt loot-ctrl-clear" onclick="clearLootStats()">Clear filter</button>` : '')
+        : `<span class="lc-hint">No stats to filter yet — pick up some gear first.</span>`) + '</div>';
+    }
+    const lootCtrls = controls + sortPop + filterPop;
     // Rarity rank for sorting: junk 0 → unique 6 (higher = rarer).
     const TIER_KEYS = Object.keys(TIERS);
     const tierRank = item => TIER_KEYS.indexOf(item.tier);
+    const powOf = it => it.slot ? itemPower(it) : -1;
+    const slotOf = it => it.slot in slotOrder ? slotOrder[it.slot] : 99;
+    // Sort comparator over {item} rows. A shared pre-pass always sinks pieces this
+    // class can't wield to the bottom; then the chosen key orders the rest.
+    const lootRowCompare = (a, b) => {
+      const wa = (a.item.slot && !canEquipItem(a.item)) ? 1 : 0;
+      const wb = (b.item.slot && !canEquipItem(b.item)) ? 1 : 0;
+      if (wa !== wb) return wa - wb;
+      const ia = a.item, ib = b.item;
+      switch (lootSort) {
+        case 'power':
+          return powOf(ib) - powOf(ia) || tierRank(ib) - tierRank(ia) || slotOf(ia) - slotOf(ib);
+        case 'slot':
+          return slotOf(ia) - slotOf(ib) || tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia);
+        case 'value':
+          return (ib.value || 0) - (ia.value || 0) || tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia);
+        case 'name':
+          return String(ia.name).localeCompare(String(ib.name)) || tierRank(ib) - tierRank(ia);
+        case 'rarity':
+        default:
+          // Highest rarity first (unique → junk); Power breaks ties, then slot.
+          return tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia) || slotOf(ia) - slotOf(ib);
+      }
+    };
     const rows = inventory
       .map((item, i) => ({ item, i }))
-      .filter(({ item }) => lootFilter === 'all' || cat(item) === lootFilter)
-      .sort((a, b) => {
-        // Items the class can't wield sink to the very bottom of the list.
-        const wa = (a.item.slot && !canEquipItem(a.item)) ? 1 : 0;
-        const wb = (b.item.slot && !canEquipItem(b.item)) ? 1 : 0;
-        if (wa !== wb) return wa - wb;
-        // Highest rarity first (unique → junk); item Power breaks ties so the
-        // strongest gear floats to the top, then slot keeps each tier tidy.
-        const ra = tierRank(a.item), rb = tierRank(b.item);
-        if (ra !== rb) return rb - ra;
-        const pa = a.item.slot ? itemPower(a.item) : -1;
-        const pb = b.item.slot ? itemPower(b.item) : -1;
-        if (pa !== pb) return pb - pa;
-        const oa = a.item.slot in slotOrder ? slotOrder[a.item.slot] : 99;
-        const ob = b.item.slot in slotOrder ? slotOrder[b.item.slot] : 99;
-        return oa - ob;
-      });
+      .filter(({ item }) => lootRowVisible(item))
+      .sort(lootRowCompare);
     // Bulk sell / scrap for everything visible under the current filter (locked
     // pieces are always spared). Mirrors the per-item buttons on a selected row.
-    const bulkTargets = inventory.filter(it => (lootFilter === 'all' || cat(it) === lootFilter) && !it.locked);
+    const bulkTargets = inventory.filter(it => lootRowVisible(it) && !it.locked);
     const bulkScrapN = bulkTargets.filter(it => it.slot && TIERS[it.tier]).length;
     const bulkGold = bulkTargets.reduce((s, it) => s + Math.max(1, Math.round(it.value * 0.5)), 0);
     const mMoney = dlIcon('ic_money', 13) || '💰', mScrap = dlIcon('mat_scrap', 13) || '♻️';
@@ -22376,11 +22499,13 @@ function renderPanel() {
       <button class="loot-auto-btn${alSum === 'off' ? '' : ' on'}" onclick="openAutoLoot()" ${hoverTip(`<div class='ht-name'>♻️ Auto-Loot</div><div class='ht-line'>Auto-scrap or auto-sell loot of chosen rarities the moment it drops.</div>`)}>♻️ Auto-Loot <span class="la-status">${alSum}</span></button>
     </div>`;
     if (rows.length === 0) {
-      el.innerHTML = strip + subtabs + autoBar + bulkBar + lootGlossaryHTML() + '<div id="empty-panel">' +
-        (inventory.length === 0 ? 'No items yet.<br>Explore!' : 'Nothing here.') + '</div>';
+      const emptyMsg = inventory.length === 0 ? 'No items yet.<br>Explore!'
+        : lootStatFilter.length ? 'No items match the stat filter.' : 'Nothing here.';
+      el.innerHTML = strip + subtabs + lootCtrls + autoBar + bulkBar + lootGlossaryHTML() +
+        '<div id="empty-panel">' + emptyMsg + '</div>';
       return;
     }
-    el.innerHTML = strip + subtabs + autoBar + bulkBar + lootGlossaryHTML() + rows.map(({ item, i }) => {
+    el.innerHTML = strip + subtabs + lootCtrls + autoBar + bulkBar + lootGlossaryHTML() + rows.map(({ item, i }) => {
       const equipable = !!item.slot;
       const slotName = item.slot ? SLOTS[item.slot].label.replace(/^\S+\s/, '') : 'potion';
       // Compare this item's power to whatever currently fills its slot, so we can
