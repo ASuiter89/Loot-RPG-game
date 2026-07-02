@@ -9014,6 +9014,9 @@ let townBuildings = []; // decorative shop buildings drawn behind the NPCs
 let dungeonReturn = 1;
 // Which town screen is showing: 'hub' (the service menu) or 'service' (one shop).
 let townView = 'hub';
+// Which town service panel (Enchanter, Stash, …) is currently open, so gear
+// changes made from the persistent LOOT drawer can refresh its paper doll.
+let townServiceKind = null;
 // True while the player is in town because they just died (not a voluntary visit).
 // Lets the town hub flag how to get back to questing, then cleared on leaving.
 let revivedInTown = false;
@@ -13557,6 +13560,7 @@ function acceptGreed() {
 function declineGreed() { const ov = document.getElementById('greed-overlay'); if (ov) ov.classList.remove('open'); sfx('click'); }
 
 function openTownService(kind) {
+  townServiceKind = kind;
   if (kind === 'merchant') {
     // A well-stocked town merchant: several gear pieces geared to the deepest
     // floor you've reached, so shopping stays relevant. (Potions are a built-in
@@ -13679,6 +13683,7 @@ function seedTownBg() {
 }
 function openTownHub() {
   townView = 'hub';
+  townServiceKind = null;
   seedTownBg();
   document.getElementById('town-title').textContent = '🏰 Town';
   document.getElementById('town-back').hidden = true;
@@ -23455,6 +23460,7 @@ function quickEquip(i) {
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   updateBars();
   renderPanel();
+  refreshTownService();  // keep an open Enchanter/Stash paper doll in sync
   draw();          // re-skin the sprite with the newly worn gear
   saveGame();
 }
@@ -23473,6 +23479,14 @@ function toggleLock(i) {
   saveGame();
 }
 
+// Re-render the open town service panel (its paper doll + loot/bag lists) after a
+// gear change from the LOOT drawer, so e.g. the Enchanter doll updates in place.
+function refreshTownService() {
+  const ov = document.getElementById('town-overlay');
+  if (!ov || !ov.classList.contains('open') || townView !== 'service') return;
+  if (townServiceKind === 'enchanter') renderEnchanter();
+  else if (townServiceKind === 'stash') renderStash();
+}
 function unequip(slot) {
   const item = equipped[slot];
   if (!item) return;
@@ -23487,6 +23501,7 @@ function unequip(slot) {
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   updateBars();
   renderPanel();
+  refreshTownService();  // keep an open Enchanter/Stash paper doll in sync
   draw();          // sprite drops the gear it was wearing
   saveGame();
 }
