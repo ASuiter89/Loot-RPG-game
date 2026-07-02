@@ -378,12 +378,12 @@
      reads through, mirroring the floating skill bar / d-pad. Laid out by the
      on-map #buff-overlay (positioned below, near #map-info). */
   .buff-ic { position: relative; display: inline-flex; align-items: center; justify-content: center;
-             width: calc(22px * var(--ui-scale,1)); height: calc(22px * var(--ui-scale,1)); border-radius: 5px; background: color-mix(in srgb, var(--bg) 50%, transparent);
+             width: calc(44px * var(--ui-scale,1)); height: calc(44px * var(--ui-scale,1)); border-radius: 7px; background: color-mix(in srgb, var(--bg) 50%, transparent);
              box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 70%, transparent), inset 0 0 0 1px var(--green-500); cursor: help;
              backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); pointer-events: auto; }
   .buff-ic.debuff { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 70%, transparent), inset 0 0 0 1px var(--danger); }
-  .buff-time { position: absolute; right: -3px; bottom: -4px; min-width: calc(11px * var(--ui-scale,1)); height: calc(13px * var(--ui-scale,1));
-               padding: 0 1px; font-size: 1.1rem; line-height: calc(13px * var(--ui-scale,1)); font-weight: bold; text-align: center;
+  .buff-time { position: absolute; right: -4px; bottom: -5px; min-width: calc(20px * var(--ui-scale,1)); height: calc(20px * var(--ui-scale,1));
+               padding: 0 2px; font-size: 1.4rem; line-height: calc(20px * var(--ui-scale,1)); font-weight: bold; text-align: center;
                color: var(--paper); background: var(--green-500); border: 1px solid color-mix(in srgb, var(--ink) 80%, transparent); border-radius: 6px;
                text-shadow: 0 1px 1px color-mix(in srgb, var(--ink) 60%, transparent); }
   .buff-ic.debuff .buff-time { background: var(--danger); }
@@ -421,7 +421,9 @@
      never catches the pointer, so map taps pass straight through. */
   #minimap {
     position: absolute; top: 8px; left: 8px; z-index: 40;
-    width: 108px; height: 108px;
+    /* Box size is the player's MINIMAP setting (⚙ Settings → Visuals → MINIMAP);
+       --minimap-size is set on :root by applyMinimapSize(), defaulting to small. */
+    width: var(--minimap-size, 108px); height: var(--minimap-size, 108px);
     /* This is also a <canvas>, so the generic `canvas` rules (which place the
        main map into grid column 2 on desktop) would otherwise capture it and
        shift its positioning origin. Reset that placement and sizing so it stays
@@ -3711,9 +3713,10 @@
     #map-info {
       display: flex; flex-direction: column; gap: 4px;
       position: absolute; z-index: 50; pointer-events: none;
-      /* Sits just below the minimap (108px box + border) so the two stack
-         tidily in the corner instead of overlapping. */
-      top: 124px; left: calc(var(--log-col) + 10px);
+      /* Sits to the RIGHT of the minimap, top-aligned with it — offset by the
+         minimap's current box size (+border +gap) so the two sit side by side
+         and the pair reflows together when the MINIMAP size setting changes. */
+      top: 8px; left: calc(var(--log-col) + 10px + var(--minimap-size, 108px) + 10px);
     }
     /* On PC there's room for a bigger HUD: bump the stat / gold / chip fonts and
        bars up so health, mana, floor, level, etc. are easier to read. */
@@ -4474,6 +4477,13 @@
         <div id="uiscale-settings">
           <div class="settings-dpad-label">UI SIZE</div>
           <div class="settings-dpad-row" id="uiscale-row"></div>
+        </div>
+
+        <!-- MINIMAP — the top-left floor sketch's box size (Small / Medium /
+             Large). Populated by renderMinimapSizeControls(). -->
+        <div id="minimap-size-settings">
+          <div class="settings-dpad-label">MINIMAP</div>
+          <div class="settings-dpad-row" id="minimap-size-row"></div>
         </div>
 
         <!-- UI FONT — refaces the whole interface. A native dropdown styled like
@@ -5573,6 +5583,40 @@ function renderUiScaleControls() {
   ).join('');
 }
 applyUiScale();
+
+// ── MINIMAP SIZE — the top-left minimap box (⚙ Settings → Visuals → MINIMAP) ──
+// Three fixed box sizes; the canvas resolution is unchanged (still one device
+// pixel per tile), CSS just scales the box, so bigger = a larger, easier-to-read
+// sketch. Sets --minimap-size on :root, which #minimap reads for its width/height
+// and #map-info reads to sit just to its right. Stored per device (not the save).
+const MINIMAP_SIZE_KEY = 'dungeonLootMiniSize';
+const MINIMAP_SIZES = [
+  { id: 'small',  label: 'Small',  px: 108 },
+  { id: 'medium', label: 'Medium', px: 156 },
+  { id: 'large',  label: 'Large',  px: 208 },
+];
+let minimapSize = 'small';
+try { const _ms = localStorage.getItem(MINIMAP_SIZE_KEY); if (_ms && MINIMAP_SIZES.some(s => s.id === _ms)) minimapSize = _ms; } catch (e) {}
+function currentMinimapSize() { return MINIMAP_SIZES.find(s => s.id === minimapSize) || MINIMAP_SIZES[0]; }
+function applyMinimapSize() {
+  document.documentElement.style.setProperty('--minimap-size', currentMinimapSize().px + 'px');
+}
+function setMinimapSize(id) {
+  if (!MINIMAP_SIZES.some(s => s.id === id)) return;
+  minimapSize = id;
+  try { localStorage.setItem(MINIMAP_SIZE_KEY, id); } catch (e) {}
+  applyMinimapSize();
+  renderMinimapSizeControls();
+  if (typeof sfx === 'function') sfx('click');
+}
+function renderMinimapSizeControls() {
+  const row = document.getElementById('minimap-size-row');
+  if (!row) return;
+  row.innerHTML = MINIMAP_SIZES.map(s =>
+    `<button class="dpad-cfg-btn ${minimapSize === s.id ? 'sel' : ''}" onclick="setMinimapSize('${s.id}')">${s.label}</button>`
+  ).join('');
+}
+applyMinimapSize();
 
 // ── UI FONT ── the player picks one of the embedded faces (⚙ Settings → Visuals →
 // UI FONT). setUiFont() overrides the --font-ui custom property, which every
@@ -10004,7 +10048,7 @@ window.gameGuide = function gameGuide(topic) {
       `Bag / inventory: ${key('bag')} — opens the LOOT / GEAR / HERO / SKILLS tabs.`,
       `Cast hotbar skills: number keys ${key('skill1')}-${key('skill' + SKILL_SLOTS)} fire the ${SKILL_SLOTS} manual slots on the RIGHT of the bar (tap to cast). One extra skill sits in a dedicated auto-cast slot in the MIDDLE and fires itself — see the "autocast" topic.`,
       `Esc closes the top menu/overlay, or opens Settings. Settings is split into tabs (Play / Visuals / Audio / Progress / About); non-movement keys are remappable under the Play tab → KEYS (◀ Back or Esc there returns to Settings). The keys shown here are your CURRENT bindings.`,
-      `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker.`,
+      `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds MINIMAP (the top-left floor-sketch box size — Small / Medium / Large), UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker.`,
     ],
     movement: [
       `Walking, sprinting and dashing all move a free-floating body in real time (with momentum), not on a turn grid. Hold a direction; let go to stop.`,
@@ -11260,7 +11304,7 @@ function toggleSettingsMenu(e) {
   if (e) e.stopPropagation();
   const menu = document.getElementById('settings-menu');
   if (!menu) return;
-  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderDpadControls(); renderCursorControls(); renderUiScaleControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); centerSettingsCard(); }
+  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderDpadControls(); renderCursorControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); centerSettingsCard(); }
 }
 function closeSettingsMenu() {
   const menu = document.getElementById('settings-menu');
@@ -11302,6 +11346,7 @@ const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Character card in the pause menu", by: "Claude", notes: ["Pause menu (Esc) now shows your hero card — name, class, level, deepest floor and gold — above Settings, the same panel as the title screen."] },
   { date: "2026-07-02", size: "small", v: "See & shoot over water and open ground", by: "Claude", notes: ["Line of sight is now blocked only by SOLID obstructions — walls, cracked walls, locked doors, boss barriers and furniture.", "Water, lava, spikes and other floor terrain no longer block shots or spells: if you can walk over (or across) it, you can see and fire over it.", "Solid furniture and boss barriers now give real cover, blocking bolts and spells like a wall."] },
   { date: "2026-07-02", size: "small", v: "Dodge enemy ranged shots", by: "Claude", notes: ["Ranged foes now loose a real bolt aimed where you stand instead of an unavoidable hit with a cosmetic arrow.", "Sidestep the bolt's path — or break its line behind a wall — and it misses; it only hurts you if it actually reaches you.", "Damage, dodge and on-hit effects now resolve on impact, so kiting a shooter genuinely works."] },
+  { date: "2026-07-02", size: "small", v: "Minimap size + bigger status icons", by: "Claude", notes: ["New MINIMAP setting (⚙ Visuals) — pick Small, Medium or Large.", "Floor & foe count moved to the right of the minimap.", "Buff/debuff status icons in the top-right are twice as big."] },
   { date: "2026-07-02", size: "small", v: "Target crosshair + Visuals tidy-up", by: "Claude", notes: ["Red crosshair now marks the foe your auto-attack is locked onto; toggle it in Settings → Visuals (on by default).", "Hero Bars toggle moved from Play to Visuals, beside it.", "UI FONT picker is now a plain dropdown matching the music picker.", "History window is wider so names and stats no longer clip."] },
   { date: "2026-07-02", size: "small", v: "Settings sync to your account", by: "Claude", notes: ["Signed-in players carry preferences across devices — sound levels, keybinds, UI font, cursor, sprint mode, music vibe, hero bars, and panel/minimap collapse.", "Newest change wins across devices; UI scale and the touch d-pad stay per-device.", "Optional — logged-out play is unchanged and still saves only on this device."] },
   { date: "2026-07-02", size: "small", v: "Gold shows a coin icon, not a trailing g", by: "Claude", notes: ["Every money amount — HUD, shops, tooltips, buttons, logs and combat pops — now leads with the gold-coin icon instead of a trailing “g”."] },
@@ -23340,7 +23385,7 @@ const COMBAT_BUFF_ORDER = ['shield', 'regen', 'defUp', 'dmgUp', 'spellUp', 'crit
 function buffChipHTML(id, remaining, unit, mag) {
   const m = STATUS_META[id];
   if (!m) return '';
-  const icon = dlIcon(m.icon, 16) || '';
+  const icon = dlIcon(m.icon, 32) || '';
   if (!icon) return ''; // atlas not ready yet — skip; the strip refreshes next tick
   let magLine = '';
   if (mag != null) {
