@@ -19,6 +19,14 @@ at the site's root URL.
 - **Keep the game in one file.** Do not split the project into separate `.js` or
   `.css` files or introduce a bundler — the single-file design is intentional so
   the game stays trivially shareable and hostable.
+- **Desktop-first — optimize for desktop unless told otherwise.** Unless a
+  request explicitly says otherwise, treat desktop (mouse + keyboard, larger
+  landscape screens) as the primary target and optimize the game for it. When a
+  layout, control scheme, interaction, or performance trade-off pulls between
+  desktop and mobile, favor the desktop experience. Mobile support is secondary
+  and may eventually be dropped entirely, so don't compromise the desktop
+  experience or add complexity purely to serve mobile — keep existing mobile
+  behaviour working where it's cheap to do so, but never at desktop's expense.
 - **Pull the latest `main` before starting new work** to minimize merge
   conflicts.
 - **Work on a branch and open a PR — never commit straight to `main`.** Don't ask
