@@ -720,6 +720,17 @@
      the card DOWNWARD instead of re-centring. A flex margin:auto would override
      that and re-centre on every content change. */
   #settings-menu.open { display: flex; }
+  /* The pause menu stacks the character card above the settings card. The stack
+     is the single centred child of #settings-menu — centerSettingsCard() pushes
+     it to the vertical middle on open, then it grows downward like the card did
+     before (see the note above). */
+  #settings-stack {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    width: 100%; max-width: 300px;
+  }
+  /* Same hero/journey card as the title screen, sized to the settings card and
+     with the title's bottom margin dropped (the stack's gap spaces it instead). */
+  #settings-hero { width: 100%; margin: 0; box-sizing: border-box; }
   .settings-vibe { cursor: default; }
   /* Shared native-select look — the Audio tab's music-vibe picker and the Visuals
      tab's UI FONT picker use the same dropdown chrome. */
@@ -915,7 +926,7 @@
     letter-spacing: 1px; color: var(--red-200); border: 1px solid var(--red-550); background: color-mix(in srgb, var(--red-800) 25%, transparent);
     border-radius: 4px; padding: 1px 5px; }
   .hc-tag .dl-ic { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--red-800) 50%, transparent)); }
-  #title-hero .hc-tag { margin-top: 8px; }
+  .hero-card .hc-tag { margin-top: 8px; }
   .gy-row.hc { background: linear-gradient(90deg, color-mix(in srgb, var(--red-700) 16%, transparent), transparent); }
   .gy-row.hc .gy-name { color: var(--red-200); }
   /* Hardcore achievement badges glow crimson instead of gold when earned. */
@@ -3127,22 +3138,24 @@
     display: inline-block; width: calc(9px * var(--ui-scale,1)); height: calc(9px * var(--ui-scale,1)); border-radius: 2px;
     margin: 0 1px; vertical-align: middle; transform: rotate(45deg);
   }
-  /* Returning-hero card above CONTINUE: who you are (left) + a walking hero
-     sprite on the right, sized to stand as tall as the stacked text. */
-  #title-hero {
+  /* Hero / journey card — the "who you're playing" panel: who you are (left) +
+     a walking hero sprite on the right, sized to stand as tall as the stacked
+     text. Shared by the title screen (#title-hero, above CONTINUE) and the
+     pause menu (#settings-hero, above Settings) via .hero-card. */
+  .hero-card {
     display: flex; align-items: center; justify-content: space-between; gap: 14px;
     margin: 0 0 14px; padding: 11px 14px; text-align: left;
     border: 1px solid var(--frame); border-radius: 10px;
     background: linear-gradient(180deg, color-mix(in srgb, var(--gold-850) 50%, transparent), color-mix(in srgb, var(--ink) 50%, transparent));
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 8%, transparent);
   }
-  #title-hero .th-info { flex: 1 1 auto; min-width: 0; }
-  #title-hero .th-portrait { flex: 0 0 auto; line-height: 0; }
-  #title-hero .th-portrait img { image-rendering: pixelated; }
-  #title-hero .th-name { font-size: 1.9rem; font-weight: bold; letter-spacing: 1px; line-height: 1.1; }
-  #title-hero .th-sub { font-size: 1.3rem; color: var(--orange-400); margin-top: 3px; letter-spacing: .5px; }
-  #title-hero .th-stats { display: flex; justify-content: flex-start; gap: 18px; margin-top: 9px; font-size: 1.4rem; color: var(--orange-400); }
-  #title-hero .th-stats b { color: var(--xp); font-weight: bold; }
+  .hero-card .th-info { flex: 1 1 auto; min-width: 0; }
+  .hero-card .th-portrait { flex: 0 0 auto; line-height: 0; }
+  .hero-card .th-portrait img { image-rendering: pixelated; }
+  .hero-card .th-name { font-size: 1.9rem; font-weight: bold; letter-spacing: 1px; line-height: 1.1; }
+  .hero-card .th-sub { font-size: 1.3rem; color: var(--orange-400); margin-top: 3px; letter-spacing: .5px; }
+  .hero-card .th-stats { display: flex; justify-content: flex-start; gap: 18px; margin-top: 9px; font-size: 1.4rem; color: var(--orange-400); }
+  .hero-card .th-stats b { color: var(--xp); font-weight: bold; }
   .title-play {
     position: relative; isolation: isolate;
     width: 100%; box-sizing: border-box; padding: 15px; margin-bottom: 10px;
@@ -3546,8 +3559,11 @@
        touch larger here since there's room and a mouse is doing the dragging. */
     .sk-loadout { display: block; margin: 2px 0 10px; }
     /* Desktop has room — the settings modal shouldn't be a cramped phone-width
-       column, so widen its card and lay the button grids out roomier. */
+       column, so widen its card and lay the button grids out roomier. The stack
+       widens to match so the card (and the character card above it) aren't
+       re-constrained to the phone-width cap. */
     #settings-card { max-width: 520px; }
+    #settings-stack { max-width: 520px; }
     /* Keep pane grids at 2 columns even on desktop: Progress's 4 tiles land as a
        clean 2×2 (a 3-wide row would strand GRAVES alone), About's 2 as one row —
        and 2-wide gives wider, easier-to-hit buttons. */
@@ -4356,6 +4372,11 @@
          RT-blocking overlay) and makes everything behind it unclickable; click
          the scrim or press Esc to close. -->
     <div id="settings-menu" onclick="if(event.target.id==='settings-menu')closeSettingsMenu()">
+      <div id="settings-stack">
+      <!-- Character info card — the same hero/journey panel from the title screen,
+           surfaced above the settings card while the game is paused. Filled by
+           renderSettingsHero() on open; hidden before a hero exists. -->
+      <div id="settings-hero" class="hero-card" style="display:none"></div>
       <div id="settings-card">
         <div class="settings-title">⚙️ Settings</div>
         <!-- Tab bar: each button swaps the visible pane below, so the menu is a
@@ -4505,6 +4526,7 @@
         </div>
         </div>
 
+      </div>
       </div>
     </div>
 
@@ -4794,7 +4816,7 @@
       <span class="tier" style="background:var(--unique)"></span>
     </div>
     <!-- Hero / journey card — shown above CONTINUE for a returning hero, filled by showTitle(). -->
-    <div id="title-hero" style="display:none"></div>
+    <div id="title-hero" class="hero-card" style="display:none"></div>
     <button class="title-play" id="title-play" onclick="titlePlay()"><span class="tp-label">ENTER</span></button>
     <button class="title-play secondary" id="title-newrun" style="display:none" onclick="titleNewRun()">↻ Reset Current Run</button>
     <!-- Achievements — full-width button (matches CONTINUE / Reset Run). Opens the
@@ -11190,7 +11212,7 @@ function toggleSettingsMenu(e) {
   if (e) e.stopPropagation();
   const menu = document.getElementById('settings-menu');
   if (!menu) return;
-  if (menu.classList.toggle('open')) { sfx('click'); showSettingsTab(settingsTab); renderDpadControls(); renderCursorControls(); renderUiScaleControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); centerSettingsCard(); }
+  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderDpadControls(); renderCursorControls(); renderUiScaleControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); centerSettingsCard(); }
 }
 function closeSettingsMenu() {
   const menu = document.getElementById('settings-menu');
@@ -11205,7 +11227,10 @@ function centerSettingsCard() {
   const menu = document.getElementById('settings-menu');
   const card = document.getElementById('settings-card');
   if (!menu || !card) return;
-  const top = Math.max(12, Math.round((window.innerHeight - card.offsetHeight) / 2));
+  // Centre the whole stack (character card + settings card), not just the card,
+  // so adding the hero panel keeps the group vertically middled on open.
+  const measure = document.getElementById('settings-stack') || card;
+  const top = Math.max(12, Math.round((window.innerHeight - measure.offsetHeight) / 2));
   menu.style.paddingTop = top + 'px';
 }
 // Which settings tab is showing. Persists across opens so reopening lands where
@@ -11224,6 +11249,7 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Enemy stuns half as long", by: "Claude", notes: ["Stuns that enemies land on you now last half as long, so a bad hit roots you for far less time.", "Tenacity still shortens them further on top."] },
+  { date: "2026-07-02", size: "small", v: "Character card in the pause menu", by: "Claude", notes: ["Pause menu (Esc) now shows your hero card — name, class, level, deepest floor and gold — above Settings, the same panel as the title screen."] },
   { date: "2026-07-02", size: "small", v: "See & shoot over water and open ground", by: "Claude", notes: ["Line of sight is now blocked only by SOLID obstructions — walls, cracked walls, locked doors, boss barriers and furniture.", "Water, lava, spikes and other floor terrain no longer block shots or spells: if you can walk over (or across) it, you can see and fire over it.", "Solid furniture and boss barriers now give real cover, blocking bolts and spells like a wall."] },
   { date: "2026-07-02", size: "small", v: "Dodge enemy ranged shots", by: "Claude", notes: ["Ranged foes now loose a real bolt aimed where you stand instead of an unavoidable hit with a cosmetic arrow.", "Sidestep the bolt's path — or break its line behind a wall — and it misses; it only hurts you if it actually reaches you.", "Damage, dodge and on-hit effects now resolve on impact, so kiting a shooter genuinely works."] },
   { date: "2026-07-02", size: "small", v: "Target crosshair + Visuals tidy-up", by: "Claude", notes: ["Red crosshair now marks the foe your auto-attack is locked onto; toggle it in Settings → Visuals (on by default).", "Hero Bars toggle moved from Play to Visuals, beside it.", "UI FONT picker is now a plain dropdown matching the music picker.", "History window is wider so names and stats no longer clip."] },
@@ -25671,7 +25697,7 @@ function closeKeybinds() { keybindCapture = null; const o = document.getElementB
 function keybindsBack() {
   closeKeybinds();
   const m = document.getElementById('settings-menu');
-  if (m) { m.classList.add('open'); showSettingsTab('play'); centerSettingsCard(); }
+  if (m) { m.classList.add('open'); renderSettingsHero(); showSettingsTab('play'); centerSettingsCard(); }
 }
 function armKeybind(id) { keybindCapture = (keybindCapture === id ? null : id); renderKeybinds(); }
 function resetKeybinds() { for (const a of KEYBIND_ACTIONS) keybinds[a.id] = a.def; keybindCapture = null; saveKeybinds(); renderKeybinds(); if (typeof renderSkillBar === 'function') renderSkillBar(); }
@@ -27896,6 +27922,41 @@ function showAchievements() {
   if (ov) ov.classList.add('open');
 }
 function closeAchievements() { const ov = document.getElementById('achievements-overlay'); if (ov) ov.classList.remove('open'); }
+// Builds the "who you're playing" card — name, class, level, deepest floor, gold,
+// a HARDCORE tag, and a walking hero portrait. Shared by the title screen's
+// #title-hero card and the pause menu's #settings-hero card. Returns '' when
+// there's no active hero yet (a fresh save with no class chosen), so callers can
+// simply hide the element.
+function heroCardHtml() {
+  if (!(player && player.class)) return '';
+  const cls = (typeof CLASSES === 'object' && CLASSES[player.class]) || {};
+  const nm = escapeHtml(player.name || 'Adventurer');
+  const lvl = player.level || 1;
+  const deepest = player.maxFloor || 1;
+  const gold = fmtGold ? fmtGold(player.gold || 0) : (player.gold || 0);
+  const hcTag = player.hardcore ? `<div><span class="hc-tag">${hcIcon(11)} HARDCORE · ONE LIFE</span></div>` : '';
+  // An animated walking hero sprite sits to the RIGHT of the left-aligned text,
+  // standing a bit taller than the stacked name/class/stats block so it reads big.
+  // Falls back to the static face (then atlas tile) until the walk sheet has loaded.
+  const heroPic = heroWalkIcon(player.class, player.sex, 102) || heroFaceIcon(player.class, player.sex, 102);
+  return `<div class="th-info">`
+    + `<div class="th-name" style="color:${cls.color || 'var(--xp)'}">${nm}</div>`
+    + `<div class="th-sub">Level ${lvl} ${cls.name || 'Hero'}</div>`
+    + `<div class="th-stats"><span>Deepest <b>Floor ${deepest}</b></span><span><b>${gold}</b>g</span></div>`
+    + hcTag
+    + `</div>`
+    + (heroPic ? `<div class="th-portrait">${heroPic}</div>` : '');
+}
+// Paint the character card that sits above the settings card while paused. Mirrors
+// the title screen's hero card; hidden before a hero exists (e.g. Settings opened
+// from the title on a brand-new save).
+function renderSettingsHero() {
+  const el = document.getElementById('settings-hero');
+  if (!el) return;
+  const html = heroCardHtml();
+  if (html) { el.innerHTML = html; el.style.display = ''; }
+  else { el.innerHTML = ''; el.style.display = 'none'; }
+}
 function showTitle() {
   const ov = document.getElementById('title-overlay');
   if (!ov) return;
@@ -27926,29 +27987,9 @@ function showTitle() {
   // Hero / journey card — identity + how far this hero has delved.
   const hero = document.getElementById('title-hero');
   if (hero) {
-    if (resuming) {
-      const cls = (typeof CLASSES === 'object' && CLASSES[player.class]) || {};
-      const nm = escapeHtml(player.name || 'Adventurer');
-      const lvl = player.level || 1;
-      const deepest = player.maxFloor || 1;
-      const gold = fmtGold ? fmtGold(player.gold || 0) : (player.gold || 0);
-      const hcTag = player.hardcore ? `<div><span class="hc-tag">${hcIcon(11)} HARDCORE · ONE LIFE</span></div>` : '';
-      // An animated walking hero sprite sits to the RIGHT of the left-aligned text,
-      // standing a bit taller than the stacked name/class/stats block so it reads big.
-      // Falls back to the static face (then atlas tile) until the walk sheet has loaded.
-      const heroPic = heroWalkIcon(player.class, player.sex, 102) || heroFaceIcon(player.class, player.sex, 102);
-      hero.innerHTML =
-        `<div class="th-info">`
-        + `<div class="th-name" style="color:${cls.color || 'var(--xp)'}">${nm}</div>`
-        + `<div class="th-sub">Level ${lvl} ${cls.name || 'Hero'}</div>`
-        + `<div class="th-stats"><span>Deepest <b>Floor ${deepest}</b></span><span><b>${gold}</b>g</span></div>`
-        + hcTag
-        + `</div>`
-        + (heroPic ? `<div class="th-portrait">${heroPic}</div>` : '');
-      hero.style.display = '';
-    } else {
-      hero.style.display = 'none';
-    }
+    const html = heroCardHtml();
+    if (html) { hero.innerHTML = html; hero.style.display = ''; }
+    else hero.style.display = 'none';
   }
   renderTitleAchievements();
   refreshTitleToggles();
