@@ -732,8 +732,10 @@
      with the title's bottom margin dropped (the stack's gap spaces it instead). */
   #settings-hero { width: 100%; margin: 0; box-sizing: border-box; }
   .settings-vibe { cursor: default; }
-  #music-vibe-select { flex: 1; min-width: 0; background: var(--panel); color: var(--purple-50); border: 1px solid var(--border); border-radius: 6px; padding: 5px 6px; font-family: inherit; font-size: 1.3rem; letter-spacing: 0.3px; cursor: pointer; }
-  #music-vibe-select option { background: var(--panel); color: var(--purple-50); }
+  /* Shared native-select look — the Audio tab's music-vibe picker and the Visuals
+     tab's UI FONT picker use the same dropdown chrome. */
+  #music-vibe-select, #ui-font-select { flex: 1; min-width: 0; width: 100%; background: var(--panel); color: var(--purple-50); border: 1px solid var(--border); border-radius: 6px; padding: 5px 6px; font-family: inherit; font-size: 1.3rem; letter-spacing: 0.3px; cursor: pointer; }
+  #music-vibe-select option, #ui-font-select option { background: var(--panel); color: var(--purple-50); }
   #settings-card {
     display: flex;
     flex-direction: column;
@@ -1014,7 +1016,7 @@
   /* Graveyard popup — reuses the version/playtime overlay framing. */
   #graveyard-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 60%, transparent); z-index: 400; display: none; align-items: center; justify-content: center; padding: 16px; }
   #graveyard-overlay.open { display: flex; }
-  #graveyard-card { background: linear-gradient(180deg, var(--panel), var(--panel)); border: 2px solid var(--frame); border-radius: 10px; max-width: 360px; width: 100%; max-height: 80vh; overflow-y: auto; padding: 14px; box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 60%, transparent); }
+  #graveyard-card { background: linear-gradient(180deg, var(--panel), var(--panel)); border: 2px solid var(--frame); border-radius: 10px; max-width: 480px; width: 100%; max-height: 80vh; overflow-y: auto; padding: 14px; box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 60%, transparent); }
   .gy-row { display: flex; align-items: center; gap: 9px; padding: 8px 4px; border-bottom: 1px solid color-mix(in srgb, var(--paper) 5%, transparent); }
   .gy-portrait { flex: 0 0 auto; width: calc(28px * var(--ui-scale,1)); height: calc(28px * var(--ui-scale,1)); display: flex; align-items: center; justify-content: center; }
   .gy-portrait .gy-emoji { font-size: 2rem; }
@@ -1120,53 +1122,9 @@
   }
   .dpad-cfg-btn.sel { background: var(--border); color: var(--paper); border-color: var(--frame); }
 
-  /* UI FONT picker (Settings → Visuals → UI FONT). A collapsed dropdown shows the
-     current face; opening it reveals a two-column grid of tappable cards so the
-     faces don't run down one tall column. .font-dd-current and .font-opt-name are
-     rendered in THEIR OWN face via an inline font-family, so the name stays
-     legible in that font no matter which UI FONT is active — the one bit of the
-     interface the font switch never touches. The description follows --font-ui
-     like the rest of the UI. */
-  .font-dd { position: relative; }
-  /* Collapsed trigger: current face on the left, caret on the right. */
-  .font-dd-trigger {
-    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
-    padding: 8px 11px;
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    background: var(--panel);
-    color: var(--text);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-  }
-  .font-dd-trigger:active { background: var(--panel-raised); }
-  .font-dd-current { flex: 1; min-width: 0; font-size: 1.6rem; line-height: 1.2; color: var(--text); }
-  .font-dd-caret { flex: 0 0 auto; font-size: 1.3rem; color: var(--text-muted); transition: transform 0.15s ease; }
-  .font-dd.open .font-dd-caret { transform: rotate(180deg); }
-  /* Expanded panel: two columns of face cards, hidden until the dropdown opens. */
-  .font-dd-panel { display: none; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 5px; }
-  .font-dd.open .font-dd-panel { display: grid; }
-  /* No orphan tile: with an odd number of faces the lone last card spans the
-     full row instead of sitting alone in a column (mirrors .settings-grid). */
-  .font-dd-panel > .font-opt:last-child:nth-child(odd) { grid-column: 1 / -1; }
-  .font-opt {
-    display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-    width: 100%; text-align: left;
-    padding: 7px 9px;
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    background: var(--panel);
-    color: var(--text);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-  }
-  .font-opt:active { background: var(--panel-raised); }
-  .font-opt.sel { border-color: var(--gold); background: var(--tint-gold); }
-  .font-opt-name { font-size: 1.4rem; line-height: 1.2; color: var(--text); word-break: break-word; }
-  .font-opt.sel .font-opt-name { color: var(--gold); }
-  .font-opt-desc { font-family: var(--font-ui); font-size: 1.2rem; color: var(--text-muted); letter-spacing: .3px; }
+  /* The UI FONT picker is a native <select> styled by the shared
+     #music-vibe-select, #ui-font-select rule above (same chrome as the Audio
+     tab's music dropdown). */
 
   /* Horizontally-scrollable d-pad theme picker (settings → STYLE). Each swatch
      previews the themed arrow button; scroll the row to browse all 20 themes. */
@@ -1227,10 +1185,11 @@
   /* Sound off is a real state, so it stays dimmed/greyed even at rest. */
   .sound-action.muted { background: var(--bg); border-color: var(--panel); color: var(--meta); }
 
-  /* Sprint set to TOGGLE — and Hero Bars switched on — are active states, so they
-     light amber (the Stamina colour) to show the mode is live. */
+  /* Sprint set to TOGGLE — and Hero Bars / Crosshair switched on — are active
+     states, so they light amber (the Stamina colour) to show the mode is live. */
   .sprint-action.on,
-  .herobars-action.on { background: var(--orange-850); border-color: var(--gold-350); color: var(--xp); }
+  .herobars-action.on,
+  .crosshair-action.on { background: var(--orange-850); border-color: var(--gold-350); color: var(--xp); }
 
   /* Reset Run wipes the current hero, so it shouts: red-tinted and gently pulsing at
      rest (top of the Settings › Progress tab), then solid red once armed/pressed. */
@@ -4468,11 +4427,6 @@
         <button class="settings-item sprint-action" id="sprint-action" onclick="toggleSprintMode()" data-tip="<div class='ht-name'>🏃 Sprint Mode</div><div class='ht-line'><b>HOLD:</b> sprint only while Shift is down.<br><b>TOGGLE:</b> tap Shift to auto-sprint, tap again to stop — no need to hold.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 19 22 12 13 5"/><polyline points="2 19 11 12 2 5"/></svg></span><span class="action-label" id="sprint-label">SPRINT: HOLD</span>
         </button>
-        <!-- Under-hero HP/MP bars: slim red Health &amp; blue Mana bars beneath the
-             hero, appearing (like the stamina bar) only while that vital isn't full. -->
-        <button class="settings-item herobars-action" id="herobars-action" onclick="toggleHeroBars()" data-tip="<div class='ht-name'>❤️ Hero Bars</div><div class='ht-line'>Show slim red Health &amp; blue Mana bars under your hero, appearing while that vital isn't full — just like the stamina bar.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
-          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></span><span class="action-label" id="herobars-label">HERO BARS: OFF</span>
-        </button>
         <div class="settings-grid">
           <button class="settings-item" onclick="openKeybinds()">
             <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="10"/><line x1="10" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="14" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/></svg></span><span class="action-label">KEYS</span>
@@ -4496,8 +4450,18 @@
         </div>
         </div>
 
-        <!-- ── VISUALS ── interface scale, font and mouse cursor. -->
+        <!-- ── VISUALS ── on-screen overlays, interface scale, font and cursor. -->
         <div class="settings-pane" data-pane="visuals">
+        <!-- Target crosshair: a red reticle over the foe your auto-attack is
+             locked onto. On by default; drawn in the main render loop. -->
+        <button class="settings-item crosshair-action" id="crosshair-action" onclick="toggleCrosshair()" data-tip="<div class='ht-name'>🎯 Target Crosshair</div><div class='ht-line'>Draw a red crosshair over the foe your auto-attack is currently locked onto.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="1" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="1" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="23" y2="12"/><circle cx="12" cy="12" r="1.5"/></svg></span><span class="action-label" id="crosshair-label">CROSSHAIR: ON</span>
+        </button>
+        <!-- Under-hero HP/MP bars: slim red Health &amp; blue Mana bars beneath the
+             hero, appearing (like the stamina bar) only while that vital isn't full. -->
+        <button class="settings-item herobars-action" id="herobars-action" onclick="toggleHeroBars()" data-tip="<div class='ht-name'>❤️ Hero Bars</div><div class='ht-line'>Show slim red Health &amp; blue Mana bars under your hero, appearing while that vital isn't full — just like the stamina bar.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></span><span class="action-label" id="herobars-label">HERO BARS: OFF</span>
+        </button>
         <!-- UI SIZE — scales the whole interface (1x–2x in 0.25 steps). Every
              label is rem-sized off the root, so this one multiplier resizes all
              menus/HUD/panels at once. Populated by renderUiScaleControls(). -->
@@ -4506,19 +4470,13 @@
           <div class="settings-dpad-row" id="uiscale-row"></div>
         </div>
 
-        <!-- UI FONT — refaces the whole interface. Collapses to a single row
-             showing the current face; opening it reveals a two-column grid, each
-             name shown in its own font (the one thing the switch never touches).
-             The title logo stays Uncial Antiqua. Populated by renderFontControls(). -->
+        <!-- UI FONT — refaces the whole interface. A native dropdown styled like
+             the Audio tab's music picker; each face previews in its own font where
+             the browser renders option font-family. The title logo stays Uncial
+             Antiqua regardless. Populated by renderFontControls(). -->
         <div id="font-settings">
           <div class="settings-dpad-label">UI FONT</div>
-          <div class="font-dd" id="font-dd">
-            <button class="font-dd-trigger" id="font-dd-trigger" onclick="toggleFontDropdown(event)" aria-haspopup="listbox" aria-expanded="false">
-              <span class="font-dd-current" id="font-dd-current"></span>
-              <span class="font-dd-caret" aria-hidden="true">▾</span>
-            </button>
-            <div class="font-dd-panel" id="font-row" role="listbox"></div>
-          </div>
+          <select id="ui-font-select" onchange="setUiFont(this.value)"></select>
         </div>
 
         <!-- CURSOR — mouse-pointer picker. Shown only on mouse (fine pointer);
@@ -5647,42 +5605,16 @@ function setUiFont(id) {
   if (typeof sfx === 'function') sfx('click');
 }
 function renderFontControls() {
-  const row = document.getElementById('font-row');
-  if (!row) return;
-  // The NAME is pinned to its own face via an inline font-family, so it stays
-  // legible in that font no matter which UI FONT is active — the one thing the
-  // font switch never touches. The description follows --font-ui like everything else.
-  row.innerHTML = UI_FONTS.map(f =>
-    `<button class="font-opt ${uiFont === f.id ? 'sel' : ''}" role="option" aria-selected="${uiFont === f.id}" onclick="setUiFont('${f.id}')">`
-    + `<span class="font-opt-name" style="font-family:${f.css.replace(/"/g, '&quot;')}">${f.name}</span>`
-    + `<span class="font-opt-desc">${f.desc}</span></button>`
+  const sel = document.getElementById('ui-font-select');
+  if (!sel) return;
+  // Native <select>, styled like the Audio tab's music picker. Each option carries
+  // its face as an inline font-family so browsers that render option fonts preview
+  // it (a graceful extra — the label reads fine in the UI font otherwise).
+  sel.innerHTML = UI_FONTS.map(f =>
+    `<option value="${f.id}" style="font-family:${f.css.replace(/"/g, '&quot;')}">${f.name} (${f.desc})</option>`
   ).join('');
-  // Mirror the current face in the collapsed trigger, shown in its own font.
-  const cur = document.getElementById('font-dd-current');
-  if (cur) { const f = currentUiFont(); cur.textContent = f.name; cur.style.fontFamily = f.css; }
+  sel.value = uiFont;
 }
-// The UI FONT picker collapses to a single trigger row; toggling reveals the
-// two-column grid of faces below it (kept open after a pick so you can preview
-// several without reopening). A click anywhere outside collapses it again.
-function toggleFontDropdown(e) {
-  if (e) e.stopPropagation();
-  const dd = document.getElementById('font-dd');
-  if (!dd) return;
-  const open = dd.classList.toggle('open');
-  const trig = document.getElementById('font-dd-trigger');
-  if (trig) trig.setAttribute('aria-expanded', open ? 'true' : 'false');
-  if (typeof sfx === 'function') sfx('click');
-}
-function closeFontDropdown() {
-  const dd = document.getElementById('font-dd');
-  if (dd) dd.classList.remove('open');
-  const trig = document.getElementById('font-dd-trigger');
-  if (trig) trig.setAttribute('aria-expanded', 'false');
-}
-document.addEventListener('click', function (e) {
-  const dd = document.getElementById('font-dd');
-  if (dd && dd.classList.contains('open') && !dd.contains(e.target)) closeFontDropdown();
-});
 applyUiFont();
 
 let cursorChoice = 'blade';
@@ -9530,6 +9462,17 @@ let sprintLatched = false;                              // auto-sprint engaged (
 const HERO_BARS_KEY = 'dungeonLoot_heroBars';
 let showHeroBars = false;
 try { if (localStorage.getItem(HERO_BARS_KEY) === '1') showHeroBars = true; } catch (e) {}
+// Optional red targeting crosshair drawn over the foe the hero's auto-attack is
+// currently locked onto (see autoAttackTarget / the draw loop). On by default;
+// the choice is saved across sessions.
+const CROSSHAIR_KEY = 'dungeonLoot_crosshair';
+let showCrosshair = true;
+try { if (localStorage.getItem(CROSSHAIR_KEY) === '0') showCrosshair = false; } catch (e) {}
+// The foe the hero's auto-attack is currently locked onto (best in-reach target
+// under the current focus mode), recomputed each frame in updatePlayerCombat via
+// pickAutoTarget(). Declared here (with the other render state) so the draw loop's
+// crosshair reference is initialised before the first frame runs.
+let autoAttackTarget = null;
 // Click-to-move (desktop): a world point (in tile units, matching player.fx/fy)
 // the hero walks toward. `hold` means the button is still down, so the target
 // keeps tracking the cursor and the hero only stops when you let go. A plain
@@ -10030,7 +9973,7 @@ window.gameGuide = function gameGuide(topic) {
       `Bag / inventory: ${key('bag')} — opens the LOOT / GEAR / HERO / SKILLS tabs.`,
       `Cast hotbar skills: number keys ${key('skill1')}-${key('skill' + SKILL_SLOTS)} fire the ${SKILL_SLOTS} manual slots on the RIGHT of the bar (tap to cast). One extra skill sits in a dedicated auto-cast slot in the MIDDLE and fires itself — see the "autocast" topic.`,
       `Esc closes the top menu/overlay, or opens Settings. Settings is split into tabs (Play / Visuals / Audio / Progress / About); non-movement keys are remappable under the Play tab → KEYS (◀ Back or Esc there returns to Settings). The keys shown here are your CURRENT bindings.`,
-      `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds UI FONT (a dropdown of faces) and, on mouse, the CURSOR picker.`,
+      `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero) and, on mouse, the CURSOR picker.`,
     ],
     movement: [
       `Walking, sprinting and dashing all move a free-floating body in real time (with momentum), not on a turn grid. Hold a direction; let go to stop.`,
@@ -10043,7 +9986,7 @@ window.gameGuide = function gameGuide(topic) {
       `Foes are solid, so a single one body-blocks you — slide along it and step around. But a MOB can't pin you forever: when bodies plug your heading AND the lanes you'd slide into to go around them, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall, and a lone foe with any real gap beside it stays solid).`,
     ],
     combat: [
-      `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight).`,
+      `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight). A red crosshair marks the foe currently locked on (Settings → Visuals → CROSSHAIR toggles it; the 🎯 TARGET focus in Settings → Play picks which foe wins).`,
       `Weapon reach: Staff & Bow = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a wall, deep water, cracked wall or locked door between you and a foe blocks ranged auto-attacks, ranged skills and spells (both ways: foes can't shoot or hex you through walls either). Melee is unaffected; only adjacent foes are struck.`,
       `Per-hit damage is capped at roughly 1/4 of a normal foe's max HP (1/6 elite, 1/9 boss), so against bosses sustained DPS and skills (which cap higher) matter more than one big swing.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
@@ -11244,6 +11187,22 @@ function updateHeroBarsButton() {
   if (btn) btn.classList.toggle('on', showHeroBars);
 }
 
+// Flip the red targeting crosshair on and off. Persisted so the choice survives
+// reloads. Drawn over the auto-attack's locked target in the main render loop.
+function toggleCrosshair() {
+  showCrosshair = !showCrosshair;
+  try { localStorage.setItem(CROSSHAIR_KEY, showCrosshair ? '1' : '0'); } catch (e) {}
+  settingsChanged();
+  sfx('click');
+  updateCrosshairButton();
+}
+function updateCrosshairButton() {
+  const lbl = document.getElementById('crosshair-label');
+  if (lbl) lbl.textContent = showCrosshair ? 'CROSSHAIR: ON' : 'CROSSHAIR: OFF';
+  const btn = document.getElementById('crosshair-action');
+  if (btn) btn.classList.toggle('on', showCrosshair);
+}
+
 // Settings modal: a centred overlay holding sound, saves, Reset Run and options.
 // There's no on-screen button — it opens only with Esc (see handleEscape) and,
 // being an RT-blocking overlay, pausing the game while it's up. The scrim
@@ -11282,7 +11241,6 @@ function showSettingsTab(name) {
     b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('#settings-card .settings-pane').forEach(p =>
     p.classList.toggle('active', p.dataset.pane === name));
-  closeFontDropdown(); // start collapsed whenever a tab (re)opens
   const card = document.getElementById('settings-card');
   if (card) card.scrollTop = 0;
 }
@@ -11290,6 +11248,7 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Character card in the pause menu", by: "Claude", notes: ["Pause menu (Esc) now shows your hero card — name, class, level, deepest floor and gold — above Settings, the same panel as the title screen."] },
+  { date: "2026-07-02", size: "small", v: "Target crosshair + Visuals tidy-up", by: "Claude", notes: ["Red crosshair now marks the foe your auto-attack is locked onto; toggle it in Settings → Visuals (on by default).", "Hero Bars toggle moved from Play to Visuals, beside it.", "UI FONT picker is now a plain dropdown matching the music picker.", "History window is wider so names and stats no longer clip."] },
   { date: "2026-07-02", size: "small", v: "Settings sync to your account", by: "Claude", notes: ["Signed-in players carry preferences across devices — sound levels, keybinds, UI font, cursor, sprint mode, music vibe, hero bars, and panel/minimap collapse.", "Newest change wins across devices; UI scale and the touch d-pad stay per-device.", "Optional — logged-out play is unchanged and still saves only on this device."] },
   { date: "2026-07-02", size: "small", v: "Gold shows a coin icon, not a trailing g", by: "Claude", notes: ["Every money amount — HUD, shops, tooltips, buttons, logs and combat pops — now leads with the gold-coin icon instead of a trailing “g”."] },
   { date: "2026-07-02", size: "small", v: "Off-screen stairs arrow", by: "Claude", notes: ["A gold arrow rides the edge of the map, always between you and the down-stairs and pointing straight at them, whenever the exit is off-screen.", "Slides around the border as you move and vanishes once the stairs scroll into view. Brighter once the floor is cleared."] },
@@ -18149,6 +18108,12 @@ function draw() {
       ctx.fillStyle = e.isBoss ? '#ff6622' : (e.isElite ? '#ffaa22' : '#ff3344');
       ctx.fillRect(px+1, py, bw * (e.hp/e.maxHp), bh);
     }
+
+    // Targeting reticle — a red crosshair over the foe the hero's auto-attack is
+    // locked onto (optional; toggled in Settings → Visuals). Anchored to the real
+    // tile centre like the HP bar / threat ring, so a lunge doesn't drag it.
+    if (showCrosshair && !inTown && e === autoAttackTarget)
+      drawTargetCrosshair(cx, py + ch / 2, cw);
   });
 
   // Grave marker — your dropped satchel, waiting to be reclaimed. Drawn with the
@@ -18752,6 +18717,38 @@ function drawActorShadow(cx, cyFeet, w) {
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.beginPath();
   ctx.ellipse(cx, cyFeet, w * 0.34, w * 0.14, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// Red targeting reticle over the auto-attack's locked-on foe. A procedural UI
+// marker (like the threat ring), not a sprite: a thin pulsing ring, four gapped
+// N/E/S/W ticks and a centre dot, so the current target reads at a glance
+// without hiding the enemy. `size` is the enemy footprint width in pixels.
+function drawTargetCrosshair(cx, cy, size) {
+  const t = 0.5 + 0.5 * Math.sin(Date.now() / 260);   // gentle "active lock" pulse
+  const r = size * 0.5;
+  const red = 'rgba(255,48,58,';                       // bright targeting red
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(1.5, size * 0.05);
+  ctx.strokeStyle = red + (0.7 + 0.25 * t) + ')';
+  ctx.shadowColor = red + '0.9)';
+  ctx.shadowBlur = Math.max(2, size * 0.12);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);                  // ring
+  ctx.stroke();
+  const inR = r * 0.62, outR = r * 1.26;               // four ticks, gapped at centre
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - inR); ctx.lineTo(cx, cy - outR);
+  ctx.moveTo(cx, cy + inR); ctx.lineTo(cx, cy + outR);
+  ctx.moveTo(cx - inR, cy); ctx.lineTo(cx - outR, cy);
+  ctx.moveTo(cx + inR, cy); ctx.lineTo(cx + outR, cy);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = red + (0.85 + 0.15 * t) + ')';
+  ctx.beginPath();
+  ctx.arc(cx, cy, Math.max(1, size * 0.05), 0, Math.PI * 2);   // centre dot
   ctx.fill();
   ctx.restore();
 }
@@ -27086,6 +27083,7 @@ const SETTINGS_SYNC_KEYS = [
   'cursorChoice',             // chosen cursor
   'dungeonLoot_sprintMode',   // sprint HOLD vs TOGGLE
   'dungeonLoot_heroBars',     // under-hero HP/MP bars on/off
+  'dungeonLoot_crosshair',    // red target crosshair on/off
   'dungeonLootMusic',         // music volume level (0–5)
   'dungeonLootSfx',           // sfx volume level (0–5)
   'dungeonLootTownAmb',       // town ambience on/off
@@ -28048,6 +28046,7 @@ log('🌍 Terrain tiles from "[LPC] Terrains" by bluecarrot16 & LPC contributors
 updateSoundButtons();
 updateSprintButton();
 updateHeroBarsButton();
+updateCrosshairButton();
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
   window.addEventListener(ev, audioUnlock, { passive: true }));
 
@@ -28156,12 +28155,12 @@ function updateTargetModeUi() {
   if (btn) btn.dataset.tip = "<div class='ht-name'>🎯 Auto-attack focus: " + m.label + "</div><div class='ht-line'>" + m.desc + "</div><div class='ht-sub'>Click to cycle</div>";
 }
 
-// Auto-attack: when the cooldown is up, strike the nearest foe in weapon reach
-// (ranged/reach weapons need line of sight). Mirrors the old per-turn swing, just
-// fired on a timer instead of a key press. Rooted while channeling / stunned.
-function updatePlayerCombat(dt) {
-  if (player.atkCd > 0) player.atkCd -= dt;
-  if (player.atkCd > 0 || portalChanneling() || isPlayerStunned()) return;
+// Pick the in-reach foe the auto-attack should strike, honoring the player's
+// focus mode (closest/weakest/…). Returns null when nothing is in weapon reach
+// (ranged/reach weapons need line of sight). Kept separate from the swing gating
+// so the crosshair can track the target even mid-cooldown.
+function pickAutoTarget() {
+  if (typeof enemies === 'undefined' || !player || inTown) return null;
   const style = weaponStyle();
   const range = weaponRangeOf(equipped.weapon) || STYLE_RANGE[style] || 1;
   const ranged = range >= 2;
@@ -28175,7 +28174,21 @@ function updatePlayerCombat(dt) {
     const score = autoTargetScore(e, d, mode);    // pick by the player's target priority
     if (score < bestScore || (score === bestScore && d < bestD)) { bestScore = score; bestD = d; best = e; }
   }
+  return best;
+}
+
+// Auto-attack: when the cooldown is up, strike the nearest foe in weapon reach
+// (ranged/reach weapons need line of sight). Mirrors the old per-turn swing, just
+// fired on a timer instead of a key press. Rooted while channeling / stunned.
+function updatePlayerCombat(dt) {
+  if (player.atkCd > 0) player.atkCd -= dt;
+  autoAttackTarget = pickAutoTarget();   // keep the crosshair fresh even between swings
+  if (player.atkCd > 0 || portalChanneling() || isPlayerStunned()) return;
+  const best = autoAttackTarget;
   if (!best) return;
+  const style = weaponStyle();
+  const range = weaponRangeOf(equipped.weapon) || STYLE_RANGE[style] || 1;
+  const ranged = range >= 2;
   if (style === 'bolt') { if (player.mp < 4) return; player.mp -= 4; } // staff bolt spends a little MP
   if (best.x > player.x) player.facing = 'right'; else if (best.x < player.x) player.facing = 'left';
   entryGuard = false;   // swinging ends arrival grace
