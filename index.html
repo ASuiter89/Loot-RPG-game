@@ -11247,6 +11247,7 @@ const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Smart click-to-move pathing", by: "Claude", notes: ["Click a spot behind a wall and the hero now routes around it instead of grinding into the corner — faint gold breadcrumbs sketch the planned path.", "Prefers safe ground, steering around lava and spikes when there's a way past.", "Works while holding the button too: drag past a wall and the route re-plans to keep chasing the cursor."] },
   { date: "2026-07-02", size: "small", v: "Line of sight required to hit at range", by: "Claude", notes: ["Ranged skills and spells (bolt, blast, beam, nova, chain) now need a clear line to a foe — no firing through walls, deep water or sealed doors.", "Ranged summoned minions close in until they can see their target instead of shooting through walls.", "More boss tricks (firewall, firestorm, shockwave, frost nova, quake, vortex) now need line of sight, so ducking behind cover breaks them."] },
   { date: "2026-07-02", size: "small", v: "Smoother pickups", by: "Claude", notes: ["Grabbing loot no longer hitches the frame — the bag rebuilds at most once per frame and only when it's on-screen, and rapid pickups save once instead of on every chest."] },
+  { date: "2026-07-02", size: "small", v: "Hover stat codes on the equip-compare line", by: "Claude", notes: ["Stat abbreviations in the item-vs-equipped compare line (bag & shop) now reveal their full name on hover, like the item's own stat line."] },
   { date: "2026-07-02", size: "small", v: "Popup titles clear their nav buttons", by: "Claude", notes: ["A long popup title (e.g. Name Your Hero) no longer lets the Back/Close button spill sideways over it on a narrow window — the title now ellipsizes instead of overlapping."] },
   { date: "2026-07-02", size: "small", v: "Depth banner no longer eaten by its cache", by: "Claude", notes: ["A depth-milestone cache that rolls legendary/unique now shows NEW DEPTH RECORD first, then the drop reveal — instead of the drop banner instantly clobbering the milestone one.", "Loot banners now queue and play in turn; each banner's sound, flash and shake fire as it appears."] },
   { date: "2026-07-02", size: "small", v: "Readable floating text", by: "Claude", notes: ["Damage, gold and reward pops that fired at once now stack into a clean rising column instead of overlapping into a blob.", "Material and ingredient drops stay in the combat log only — no more duplicate on-kill floater.", "Hard cap keeps a big multi-hit burst from walling the screen with numbers."] },
@@ -13584,9 +13585,10 @@ function statDiffLine(item) {
   for (const k of keys) {
     const d = Math.round(num(item, k) - num(cur, k));
     if (!d) continue;
-    const short = STAT_SHORT[k] || (ATTRIBUTES[k] && ATTRIBUTES[k].short) || k;
     const c = d > 0 ? '#5ee08a' : '#e0556b';
-    (d > 0 ? pos : neg).push(`<span style="color:${c}">${d > 0 ? '+' : ''}${d} ${short}</span>`);
+    // The code is a hoverable chip so pointing at it reveals the full stat name.
+    const chip = `<span class="stat-abbr" ${hoverTip(lootStatName(k))}>${lootStatCode(k)}</span>`;
+    (d > 0 ? pos : neg).push(`<span style="color:${c}">${d > 0 ? '+' : ''}${d} ${chip}</span>`);
   }
   const parts = pos.concat(neg);
   return parts.length ? parts.join('  ') : '<span style="color:var(--junk)">no stat change</span>';
