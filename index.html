@@ -7740,14 +7740,22 @@ const BOSSES = [
 //   ranged    — attacks from a distance and tries to keep its spacing
 //   keepAway  — ranged foes back off when you close within this many tiles
 //   packRush  — closes faster when you're wounded (wolves hunt in packs)
+//   atkMult   — attack-CADENCE multiplier (time between swings; <1 jabs faster, >1 slower)
+//   hitMult   — per-swing melee DAMAGE multiplier
+//   hpMult    — max-HP multiplier vs the floor baseline (brutes tanky, vermin frail)
+//   dmgMult   — base-damage multiplier vs the floor baseline
+// Each archetype carries a distinct HP/damage profile, so a Bear (brute) and a Rat
+// (swift) on the SAME floor genuinely differ in toughness and punch — not just sprite
+// and movement. Combined with speed/cadence/range/ambush/pack/ranged, the seven
+// archetypes each play differently.
 const BEHAVIORS = {
-  chaser:  { speed: 1, range: 1, atkMult: 1.0 },
-  swift:   { speed: 2, range: 1, erratic: 0.25, atkMult: 0.6 },
-  erratic: { speed: 1, range: 1, erratic: 0.6, atkMult: 0.9 },
-  lurker:  { speed: 1, range: 1, ambush: 3, atkMult: 0.85 },
-  brute:   { speed: 1, range: 1, slow: true, hitMult: 1.5, atkMult: 1.7 },
-  caster:  { speed: 1, range: 4, ranged: true, keepAway: 2, castChance: 0.7, atkMult: 1.2 },
-  pack:    { speed: 1, range: 1, packRush: true, atkMult: 0.8 },
+  chaser:  { speed: 1, range: 1, atkMult: 1.0,  hpMult: 1.0,  dmgMult: 1.0 },
+  swift:   { speed: 2, range: 1, erratic: 0.25, atkMult: 0.6,  hpMult: 0.6,  dmgMult: 0.7 },
+  erratic: { speed: 1, range: 1, erratic: 0.6,  atkMult: 0.9,  hpMult: 0.7,  dmgMult: 0.8 },
+  lurker:  { speed: 1, range: 1, ambush: 3,     atkMult: 0.85, hpMult: 1.0,  dmgMult: 1.2 },
+  brute:   { speed: 1, range: 1, slow: true, hitMult: 1.5, atkMult: 1.7, hpMult: 2.0,  dmgMult: 1.15 },
+  caster:  { speed: 1, range: 4, ranged: true, keepAway: 2, castChance: 0.7, atkMult: 1.2, hpMult: 0.7, dmgMult: 1.0 },
+  pack:    { speed: 1, range: 1, packRush: true, atkMult: 0.8, hpMult: 0.85, dmgMult: 0.9 },
 };
 // Map each enemy sprite to a behaviour; anything unlisted hunts you down (chaser).
 const ENEMY_BEHAVIOR = {
@@ -10134,7 +10142,7 @@ window.gameGuide = function gameGuide(topic) {
     combat: [
       `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight). A red crosshair marks the foe currently locked on (Settings → Visuals → CROSSHAIR toggles it; the 🎯 TARGET focus in Settings → Play picks which foe wins).`,
       `Weapon reach: Staff & Bow = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
-      `Per-hit damage is capped at roughly 1/4 of a normal foe's max HP (1/6 elite, 1/9 boss), so against bosses sustained DPS and skills (which cap higher) matter more than one big swing.`,
+      `There is NO per-hit damage cap — a big swing, skill or crit lands its full number, so burst and crits are fully rewarded. A foe's actual HP is the only limiter: bosses carry deep HP pools (and hit harder), so they're a genuine, tanky fight rather than a one-shot.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
       `Defense / block / damage-reduction come from gear, the Vitality attribute, and your class passive. Healing is now OVER TIME (a pending pool that fills the bar on a slope, shown as a translucent zone) — sip ${key('healthPotion')} EARLY rather than at zero; see the "healing" topic.`,
@@ -10164,8 +10172,8 @@ window.gameGuide = function gameGuide(topic) {
     damage: [
       `Damage comes from THREE distinct sources, each with its own scaling lane — build into one and you don't accidentally buff the others:`,
       `AUTO-ATTACK: your automatic weapon swing. Scales with weapon Damage + Attack (ATK) + your class's damage attributes (e.g. Might). Dedicated amp: Increased Dmg % (IDMG). Speed lever: Attack Speed % (ATKSPD) — faster swings. Can MISS (accuracy vs the foe's evasion).`,
-      `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction % (CDR). Never miss; per-hit capped vs the foe's max HP.`,
-      `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; per-hit capped.`,
+      `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction % (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
+      `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
       `So NO — Attack does not feed everything: ATK + weapon Damage power auto-attacks and martial skills only; spells ignore them and live on Spirit + Spell Power. The three % amps (IDMG / Skill Power / Spell Power) are one-per-source and never cross over.`,
       `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). gameState().player.offense reports your current skillPower / spellPower / increasedDmg / attackSpeed / castSpeed / cooldownReduction totals.`,
       `Gear gating is thoughtful: a MELEE/RANGED weapon can only roll Skill Power & Attack Speed; a WAND/STAFF only Spell Power & Cast Speed. Gloves & rings lean martial (Skill Power); amulets & caster off-hands lean arcane (Spell/Cast). So the weapon you wield already points your build at one lane.`,
@@ -10211,6 +10219,7 @@ window.gameGuide = function gameGuide(topic) {
       `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), and status (e.g. ["stun"], ["slow"]).`,
       `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
       `Behaviors: chaser (steady), swift & pack (move 2 tiles/turn; wolves/packs rush when you drop below 50% HP), brute & chilled (slow — act every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand).`,
+      `Each archetype also has its OWN toughness & punch, not just movement: brutes are tanky and hit hard but swing slowly; swift vermin and erratic flyers are frail and jab for less; casters are squishy but strike from range; lurkers ambush for a heavier blow; packs are individually weak but swarm. So two foes on the same floor can differ a lot — read the behavior, not just the sprite.`,
       `Ranged foes fire DODGEABLE bolts, not guaranteed hits — a bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
       `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly.`,
       `Treasure Goblins (isGoblin) flee, never attack, and do NOT block the exit — chase fast for jackpot loot (they vanish ~15 ticks after first hit) or ignore them.`,
@@ -11437,6 +11446,12 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "medium", v: "Uncapped hits, tankier bosses, varied foes", by: "Claude", notes: [
+    "Removed the per-hit damage cap on enemies — a big swing, skill or crit now lands its full number instead of being clamped to a fraction of the target's health.",
+    "Bosses have much deeper health pools and hit somewhat harder — a real, tanky fight now that raw HP (not a cap) is the limiter.",
+    "Enemies have more health across the board.",
+    "Enemy archetypes now differ in toughness and punch, not just movement: brutes are tanky and hit hard but slow; swift/erratic foes are frail and quick; casters are squishy ranged; lurkers ambush harder; packs swarm. Two foes on a floor can feel very different.",
+  ] },
   { date: "2026-07-02", size: "big", v: "Healing over time & rationed mana", by: "Claude", notes: [
     "Healing now pays out OVER TIME instead of snapping the bar up — potions, life leech, Reap, Vampiric and Life-on-Kill fill a pending pool that mends you on a steady slope.",
     "The HP/MP bars show incoming recovery as a translucent zone, so current health, incoming heal and missing health all read at a glance.",
@@ -16306,7 +16321,11 @@ function spawnFloorMob(ex, ey) {
   if (!floorMobSpec) return null;
   const t = pick(floorMobSpec.types);
   const _md = (typeof MONSTERS === 'object') ? MONSTERS[t] : null;
-  const mob = { x: ex, y: ey, hp: floorMobSpec.hp, maxHp: floorMobSpec.hp, type: t, level: floorMobSpec.level, dmg: floorMobSpec.dmg, dead: false, behavior: behaviorFor(t),
+  // Per-archetype HP/damage so each type feels distinct (brutes tanky, vermin frail).
+  const beh = BEHAVIORS[behaviorFor(t)] || BEHAVIORS.chaser;
+  const hp = Math.max(1, Math.round(floorMobSpec.hp * (beh.hpMult || 1)));
+  const dmg = Math.max(1, Math.round(floorMobSpec.dmg * (beh.dmgMult || 1)));
+  const mob = { x: ex, y: ey, hp, maxHp: hp, type: t, level: floorMobSpec.level, dmg, dead: false, behavior: behaviorFor(t),
     name: _md ? _md.name : undefined, mColor: _md ? _md.color : null };
   if (Math.random() < 0.22) applyAffix(mob); // ~22% carry a fight-shaking affix
   enemies.push(mob);
@@ -16384,7 +16403,7 @@ function spawnEnemies() {
   // and the no-empty-rooms pass (populateEmptyRooms).
   const mobLevel = dungeonLevel;
   const threat = depthThreat(mobLevel);   // compounds with depth — deep is deadly
-  const baseHp = Math.max(1, Math.round((10 + mobLevel * 8) * threat * (floorMod.hpMult || 1) * pfx('hp', 1) * threatScale * reliefEase));
+  const baseHp = Math.max(1, Math.round((14 + mobLevel * 11) * threat * (floorMod.hpMult || 1) * pfx('hp', 1) * threatScale * reliefEase));
   const baseDmg = Math.max(1, Math.round((3.5 + mobLevel * 1.9 + bandIdx) * threat * (floorMod.dmgMult || 1) * pfx('dmg', 1) * threatScale * earlyBite * reliefEase));
   floorMobSpec = { types: floorTypes, hp: baseHp, dmg: baseDmg, level: mobLevel };
 
@@ -16434,8 +16453,8 @@ function spawnEnemies() {
         // pace as your power climbs). Its level also sets the loot it drops.
         const bossLevel = dungeonLevel + 2;
         const bossThreat = depthThreat(bossLevel) * threatScale;
-        const bossHp = Math.round((50 + bossLevel * 23) * bossThreat);
-        const bossDmg = Math.round((9 + bossLevel * 2.1) * bossThreat);
+        const bossHp = Math.round((50 + bossLevel * 23) * bossThreat * 2.2);   // deep pools — with no per-hit cap holding them up, bosses stay a real, tanky fight
+        const bossDmg = Math.round((9 + bossLevel * 2.1) * bossThreat * 1.25);  // and they hit somewhat harder
         enemies.push({
           x: ex, y: ey,
           hp: bossHp, maxHp: bossHp,
@@ -16455,16 +16474,17 @@ function spawnEnemies() {
       } else {
         // Regular-foe stats (baseHp / baseDmg / mobLevel) were rolled once above.
         if (i === eliteIndex) {
-          const eHp = Math.round(baseHp * 2.2);
           const eName = pick(ELITE_NAMES);
           const eType = pick(floorTypes);
+          const eBeh = BEHAVIORS[behaviorFor(eType)] || BEHAVIORS.chaser;   // elites inherit their archetype's HP/damage profile on top of the elite bonus
+          const eHp = Math.round(baseHp * 2.2 * (eBeh.hpMult || 1));
           enemies.push({
             x: ex, y: ey,
             hp: eHp, maxHp: eHp,
             type: eType,
             name: eName,
             level: mobLevel + 1,   // elites are a notch above the floor — richer loot
-            dmg: Math.round(baseDmg * 1.4),
+            dmg: Math.round(baseDmg * 1.4 * (eBeh.dmgMult || 1)),
             dead: false, isElite: true,
             behavior: behaviorFor(eType),
             mColor: (typeof MONSTERS === 'object' && MONSTERS[eType] && MONSTERS[eType].color) || null,
@@ -20909,20 +20929,16 @@ function adjacentEnemies(e) {
 }
 
 // Roll one player swing: weapon damage + level + gear ATK + class damage attrs,
-// capped so a plain hit can't exceed a fraction of the foe's max HP; crits and the
-// Power buff punch through that cap. Tougher foes resist burst more (elites take 6
-// hits, bosses 9, vs the normal 4), so each kill is more turns of exposure to
-// retaliation rather than a bigger one-shot. Crit damage scales with gear CRITDMG.
-// Returns { dmg, isCrit }.
+// then the multipliers (buffs, crit, execute, dmg-vs-boss, armor). There is NO
+// artificial per-hit cap — a big hit lands its full number, so burst and crits are
+// fully rewarded; a foe's actual HP pool is the only limiter (bosses carry deep
+// pools, so they still take a real fight to bring down). Returns { dmg, isCrit }.
 function rollPlayerHit(e) {
   // A primed crit (e.g. from on-dodge "your next hit crits") is consumed here;
   // otherwise roll crit against THIS foe's level (rating-vs-level system).
   const isCrit = skillPrimed.crit || Math.random() < critChanceVs(e);
   if (skillPrimed.crit) skillPrimed.crit = false;
   let dmg = getWeaponDamage() + player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
-  const hitDivisor = e.isBoss ? 9 : (e.isElite ? 6 : 4);
-  const hitCap = Math.max(1, Math.floor(e.maxHp / hitDivisor));
-  if (dmg > hitCap) dmg = Math.max(1, Math.round(hitCap * (rnd(80, 100) / 100)));
   if (buffs.power) dmg = Math.round(dmg * 1.5);
   if (foodFx('dmgPct')) dmg = Math.round(dmg * (1 + foodFx('dmgPct'))); // ramen damage buff
   dmg = Math.round(dmg * classDmgDealtMult()); // Warrior + damage passives
@@ -21596,17 +21612,17 @@ function applyOffenseMods(dmg, e, forceCrit, isSpell) {
   if (armor > 0) { const pen = armorPenFrac(); dmg *= (1 - armor * (1 - pen)); }
   return dmg;
 }
-// One weapon-based blow for an active: capped so burst can't one-shot a boss.
+// One weapon-based blow for an active. No per-hit cap — a big skill hit lands its
+// full number; a foe's HP pool is the only limiter.
 function skillPhysDamage(e, mult, rank, forceCrit) {
   let dmg = applyOffenseMods(skillWeaponBase() * mult * rankScale(rank) * skillPowerMult(), e, forceCrit, false);
-  const cap = Math.ceil(e.maxHp * (e.isBoss ? 0.5 : 0.8));
-  return Math.max(1, Math.min(Math.round(dmg), cap));
+  return Math.max(1, Math.round(dmg));
 }
-// One spell-based blow for an active (scales with Spirit + spell passives/buffs).
+// One spell-based blow for an active (scales with Spirit + spell passives/buffs). No
+// per-hit cap either.
 function skillSpellDamage(e, cast, mult, rank) {
   let dmg = applyOffenseMods(spellBase(cast.flat || 12, cast.perLvl || 2) * mult * rankScale(rank), e, false, true);
-  const cap = Math.ceil(e.maxHp * (e.isBoss ? 0.5 : 0.85));
-  return Math.max(1, Math.min(Math.round(dmg), cap));
+  return Math.max(1, Math.round(dmg));
 }
 
 // Direction (cardinal) toward the nearest foe in range, for line/beam shapes.
