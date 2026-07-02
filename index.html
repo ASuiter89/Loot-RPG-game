@@ -4617,7 +4617,7 @@
       <div class="howto-sec">🎯 Goal</div>
       <div class="howto-line">Delve floor by floor, grab ever-better <b>loot</b>, and survive as deep as you can. Death sends you back to <b>Town</b>, lighter — but your hero lives on.</div>
       <div class="howto-sec">🕹️ Moving &amp; fighting</div>
-      <div class="howto-ctrl"><span class="hk">Move</span><span>Joystick (drag anywhere), arrows / WASD, or click the map — hold to keep going, diagonals included.</span></div>
+      <div class="howto-ctrl"><span class="hk">Move</span><span>Joystick (drag anywhere), arrows / WASD, or click the map — the hero routes around walls to get there; hold to keep going, diagonals included.</span></div>
       <div class="howto-ctrl"><span class="hk">Sprint</span><span>Hold <b>Shift</b>, or push the stick to its edge.</span></div>
       <div class="howto-ctrl"><span class="hk">Dash</span><span><b>Space</b>. Sprint &amp; Dash burn stamina, which refills as you ease off.</span></div>
       <div class="howto-ctrl"><span class="hk">Attack</span><span>Automatic on any foe in reach.</span></div>
@@ -9494,7 +9494,11 @@ try { if (localStorage.getItem(HERO_BARS_KEY) === '1') showHeroBars = true; } ca
 // the hero walks toward. `hold` means the button is still down, so the target
 // keeps tracking the cursor and the hero only stops when you let go. A plain
 // click leaves `hold` false: the hero walks to the point once and stops there.
-const moveTarget = { active: false, hold: false, wx: 0, wy: 0, _stallT: 0, _lastDist: Infinity };
+// When the point isn't reachable in a straight line (a wall sits between), we
+// plan a route around it — `path` holds the waypoints and `pathIdx` the one the
+// hero is currently heading for (see updateMoveTargetPath / updatePlayer).
+const moveTarget = { active: false, hold: false, wx: 0, wy: 0, path: null, pathIdx: 0,
+                     _repathT: 0, _stallT: 0, _px: 0, _py: 0, _pathDX: -1, _pathDY: -1 };
 const MOVE_ARRIVE = 0.18;   // tiles — how close counts as "reached the click point"
 function heldDir(d) { return keyHeld[d] || touchHeld[d]; }
 function clearHeld() {
@@ -9502,7 +9506,7 @@ function clearHeld() {
   touchHeld.up = touchHeld.down = touchHeld.left = touchHeld.right = false;
   joy.active = false; joy.dx = joy.dy = joy.mag = 0;
   sprintHeld = false;
-  moveTarget.active = false; moveTarget.hold = false;
+  moveTarget.active = false; moveTarget.hold = false; moveTarget.path = null;
 }
 // Move the hero to a grid cell AND sync the smooth float position to its centre.
 // Used everywhere the hero is repositioned (spawn, stairs, teleports, blinks,
@@ -9976,6 +9980,7 @@ window.gameGuide = function gameGuide(topic) {
     controls: [
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A single tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
+      `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
@@ -11235,6 +11240,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Smart click-to-move pathing", by: "Claude", notes: ["Click a spot behind a wall and the hero now routes around it instead of grinding into the corner — faint gold breadcrumbs sketch the planned path.", "Prefers safe ground, steering around lava and spikes when there's a way past.", "Works while holding the button too: drag past a wall and the route re-plans to keep chasing the cursor."] },
   { date: "2026-07-02", size: "small", v: "Line of sight required to hit at range", by: "Claude", notes: ["Ranged skills and spells (bolt, blast, beam, nova, chain) now need a clear line to a foe — no firing through walls, deep water or sealed doors.", "Ranged summoned minions close in until they can see their target instead of shooting through walls.", "More boss tricks (firewall, firestorm, shockwave, frost nova, quake, vortex) now need line of sight, so ducking behind cover breaks them."] },
   { date: "2026-07-02", size: "small", v: "Smoother pickups", by: "Claude", notes: ["Grabbing loot no longer hitches the frame — the bag rebuilds at most once per frame and only when it's on-screen, and rapid pickups save once instead of on every chest."] },
   { date: "2026-07-02", size: "small", v: "Popup titles clear their nav buttons", by: "Claude", notes: ["A long popup title (e.g. Name Your Hero) no longer lets the Back/Close button spill sideways over it on a narrow window — the title now ellipsizes instead of overlapping."] },
@@ -11802,10 +11808,13 @@ let clickMoveId = null;
 function setMoveTargetFromClient(cx, cy) {
   const w = clientToWorld(cx, cy);
   if (!w) return;
+  const fresh = !moveTarget.active;
   moveTarget.wx = Math.max(0.5, Math.min(MAP_W - 0.5, w.wx));
   moveTarget.wy = Math.max(0.5, Math.min(MAP_H - 0.5, w.wy));
   moveTarget.active = true;
-  moveTarget._stallT = 0; moveTarget._lastDist = Infinity;
+  if (fresh) { moveTarget._stallT = 0; moveTarget._px = player.fx; moveTarget._py = player.fy; }
+  // Work out whether we need to route around a wall to reach the new point.
+  updateMoveTargetPath(false);
 }
 canvas.addEventListener('pointerdown', e => {
   gestureStart = { x: e.clientX, y: e.clientY };   // anchor for tap-to-inspect (both layouts)
@@ -17765,6 +17774,21 @@ function draw() {
   // ground where the hero is headed, so the click target reads at a glance. Drawn
   // on the floor, beneath actors. Procedural UI overlay, not a world asset.
   if (moveTarget.active && !inTown) {
+    // When routing around a wall, sketch faint gold breadcrumbs along the planned
+    // route (from where the hero is now) so the path it will take reads at a glance.
+    const path = moveTarget.path;
+    if (path && path.length) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(232,194,103,0.35)';
+      ctx.lineWidth = Math.max(1, tw * 0.04);
+      ctx.setLineDash([tw * 0.14, tw * 0.14]);
+      ctx.beginPath();
+      ctx.moveTo(offX + player.fx * tw, offY + player.fy * th);
+      for (let i = moveTarget.pathIdx; i < path.length; i++) ctx.lineTo(offX + path[i].x * tw, offY + path[i].y * th);
+      ctx.lineTo(offX + moveTarget.wx * tw, offY + moveTarget.wy * th);
+      ctx.stroke();
+      ctx.restore();
+    }
     const mxp = offX + moveTarget.wx * tw, myp = offY + moveTarget.wy * th;
     const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 180);
     const rad = tw * (0.18 + 0.05 * pulse);
@@ -19757,6 +19781,104 @@ function playerBoxBlockedTerrain(px, py) {
          playerSolidCell(x0, y1, true) || playerSolidCell(x1, y1, true);
 }
 
+// ── CLICK-TO-MOVE PATHFINDING ──
+// Click a spot you can't reach in a straight line and the hero routes around the
+// wall to get there. An A* over the tile grid finds the shortest walkable path;
+// the hero then follows its waypoints, short-cutting corners whenever it can head
+// straight for a later one (so it glides diagonally instead of shuffling tile to
+// tile). Foes are ignored while planning — they move, and are still physically
+// solid so the hero just waits/pushes if one steps into the corridor. Lava and
+// spikes are heavily penalised so a safe route is preferred, matching the rule
+// that you're never forced across a trap. The grid is tiny (≤52²) so replanning
+// a few times a second is effectively free.
+
+// Can the hero's body slide in a straight line between two world points without
+// touching static terrain OR crossing a trap? Samples the segment finely. Used
+// to decide whether pathing is needed and to short-cut path corners.
+function moveLineClear(x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 0.2));
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps, px = x0 + dx * t, py = y0 + dy * t;
+    if (playerBoxBlockedTerrain(px, py)) return false;
+    const tile = tileAtCell(Math.floor(px), Math.floor(py));
+    if (tile === 7 || tile === 8) return false;   // lava / spikes — prefer to go around
+  }
+  return true;
+}
+// Is this cell walkable for planning? Walls, water, doors, furniture, boss
+// barriers and town NPCs block; foes don't (they're transient).
+function pathCellBlocked(x, y) { return playerSolidCell(x, y, true); }
+// Extra cost for stepping onto a cell, so the route prefers safe, quick ground.
+function pathStepCost(x, y) {
+  const t = mapData[y][x];
+  if (t === 7 || t === 8) return 8;    // lava / spikes — only if there's no way around
+  if (t === 13) return 1.6;            // mud — slow, mildly avoided
+  return 1;
+}
+// A* from cell (sx,sy) to (gx,gy) over walkable cells: 8-directional, no corner
+// cutting past walls, hazard-weighted. Returns waypoints as tile-centre world
+// points (the start cell dropped, destination last), or null if unreachable.
+function findTilePath(sx, sy, gx, gy) {
+  if (gx < 0 || gy < 0 || gx >= MAP_W || gy >= MAP_H) return null;
+  if (sx === gx && sy === gy) return null;
+  if (pathCellBlocked(gx, gy)) return null;               // clicked into a wall — nothing to reach
+  const W = MAP_W, H = MAP_H, N = W * H;
+  const g = new Float64Array(N).fill(Infinity);
+  const came = new Int32Array(N).fill(-1);
+  const closed = new Uint8Array(N);
+  const start = sy * W + sx, goal = gy * W + gx;
+  const hEst = (x, y) => { const ax = Math.abs(x - gx), ay = Math.abs(y - gy); return (ax + ay) + (Math.SQRT2 - 2) * Math.min(ax, ay); }; // octile
+  // Tiny binary min-heap keyed by f (each entry carries its own f, so re-pushing
+  // an improved node never corrupts stale copies still in the heap).
+  const hN = [], hF = [];
+  const swap = (i, j) => { const n = hN[i]; hN[i] = hN[j]; hN[j] = n; const f = hF[i]; hF[i] = hF[j]; hF[j] = f; };
+  const push = (n, f) => { hN.push(n); hF.push(f); let i = hN.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (hF[p] <= hF[i]) break; swap(p, i); i = p; } };
+  const pop = () => { const top = hN[0], ln = hN.pop(), lf = hF.pop(); if (hN.length) { hN[0] = ln; hF[0] = lf; let i = 0; for (;;) { let l = 2*i+1, r = 2*i+2, s = i; if (l < hN.length && hF[l] < hF[s]) s = l; if (r < hN.length && hF[r] < hF[s]) s = r; if (s === i) break; swap(s, i); i = s; } } return top; };
+  const DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  g[start] = 0; push(start, hEst(sx, sy));
+  let guard = N * 8;
+  while (hN.length && guard-- > 0) {
+    const cur = pop();
+    if (cur === goal) break;
+    if (closed[cur]) continue;
+    closed[cur] = 1;
+    const cx = cur % W, cy = (cur / W) | 0;
+    for (let d = 0; d < 8; d++) {
+      const nx = cx + DIRS[d][0], ny = cy + DIRS[d][1];
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+      const ni = ny * W + nx;
+      if (closed[ni] || pathCellBlocked(nx, ny)) continue;
+      const diag = DIRS[d][0] !== 0 && DIRS[d][1] !== 0;
+      if (diag && (pathCellBlocked(cx + DIRS[d][0], cy) || pathCellBlocked(cx, cy + DIRS[d][1]))) continue; // never clip a wall corner
+      const ng = g[cur] + (diag ? Math.SQRT2 : 1) * pathStepCost(nx, ny);
+      if (ng < g[ni]) { g[ni] = ng; came[ni] = cur; push(ni, ng + hEst(nx, ny)); }
+    }
+  }
+  if (came[goal] === -1) return null;                     // no route
+  const path = [];
+  for (let n = goal; n !== start && n !== -1; n = came[n]) path.push({ x: (n % W) + 0.5, y: ((n / W) | 0) + 0.5 });
+  path.reverse();
+  return path.length ? path : null;
+}
+// Decide whether the current move target needs a route, and (re)plan if so. A
+// clear straight shot means no waypoints — the hero just steers straight, keeping
+// the crisp direct feel. `force` replans even when the destination cell is
+// unchanged (used by the periodic refresh as the hero advances / doors open).
+function updateMoveTargetPath(force) {
+  if (!moveTarget.active) return;
+  const tx = Math.floor(moveTarget.wx), ty = Math.floor(moveTarget.wy);
+  if (moveLineClear(player.fx, player.fy, moveTarget.wx, moveTarget.wy)) {
+    moveTarget.path = null; moveTarget.pathIdx = 0;
+    moveTarget._pathDX = tx; moveTarget._pathDY = ty;
+    return;
+  }
+  if (!force && moveTarget.path && moveTarget._pathDX === tx && moveTarget._pathDY === ty) return;
+  moveTarget.path = findTilePath(player.x, player.y, tx, ty);
+  moveTarget.pathIdx = 0;
+  moveTarget._pathDX = tx; moveTarget._pathDY = ty;
+}
+
 // If the hero's body ends up genuinely overlapping a solid cell — almost always a
 // foe that stepped into the tile beside us while we hugged the boundary — nudge it
 // out toward the nearest free spot so attacking or getting mobbed can never wedge
@@ -19874,9 +19996,13 @@ function doDash() {
   let dx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let dy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
   if (joy.active && joy.mag > 0.18) { dx = joy.dx; dy = joy.dy; }
-  // Click-to-move: with no manual direction, dash toward the cursor target.
+  // Click-to-move: with no manual direction, dash toward the target — or, when a
+  // route around a wall is planned, toward the next waypoint so we don't dash into it.
   if (dx === 0 && dy === 0 && moveTarget.active) {
-    const tdx = moveTarget.wx - player.fx, tdy = moveTarget.wy - player.fy;
+    let tx = moveTarget.wx, ty = moveTarget.wy;
+    const path = moveTarget.path;
+    if (path && path.length) { const wp = path[Math.min(moveTarget.pathIdx, path.length - 1)]; tx = wp.x; ty = wp.y; }
+    const tdx = tx - player.fx, tdy = ty - player.fy;
     if (Math.hypot(tdx, tdy) > 0.1) { dx = tdx; dy = tdy; }
   }
   if (dx === 0 && dy === 0) { dx = player.faceDx || 0; dy = player.faceDy || 0; if (dx === 0 && dy === 0) dx = player.facing === 'left' ? -1 : 1; }
@@ -19919,22 +20045,45 @@ function updatePlayer(dt) {
   // Click-to-move: with no keyboard/joystick input, steer toward the click target.
   // Any manual input cancels it (you take back the wheel). While the button is held
   // the target tracks the cursor, so the hero keeps walking toward it; a plain click
-  // walks to the point and stops on arrival. We straight-line it and let movePlayerBy
-  // slide along walls — no pathfinding — and bail if we stall against one.
+  // walks to the point and stops on arrival. If a wall sits between us and the point
+  // we follow a planned route around it (updateMoveTargetPath), short-cutting to the
+  // furthest waypoint we can head straight for; otherwise we steer straight and let
+  // movePlayerBy slide along walls. We bail only when genuinely wedged (non-hold).
   if (Math.abs(ix) > 0.01 || Math.abs(iy) > 0.01) {
-    moveTarget.active = false;
+    moveTarget.active = false; moveTarget.path = null;
   } else if (moveTarget.active) {
-    const tdx = moveTarget.wx - player.fx, tdy = moveTarget.wy - player.fy;
-    const td = Math.hypot(tdx, tdy);
-    if (!moveTarget.hold && td <= MOVE_ARRIVE) {
-      moveTarget.active = false;            // reached the clicked point — stop
-    } else if (td > 0.02) {
-      [ix, iy] = steerToward(tdx, tdy);      // slide around any wall between us and the cursor
-      if (!moveTarget.hold) {                // give up if pinned on a wall (no headway)
-        if (td < moveTarget._lastDist - 0.01) { moveTarget._lastDist = td; moveTarget._stallT = 0; }
-        else if ((moveTarget._stallT += dt) > 0.6) moveTarget.active = false;
+    // Refresh the route now and then as the hero advances (and drop it the moment
+    // a clear straight shot to the target opens up).
+    moveTarget._repathT -= dt;
+    if (moveTarget._repathT <= 0) { updateMoveTargetPath(true); moveTarget._repathT = 0.35; }
+
+    // Pick the point to steer at: the furthest path waypoint we can go straight to,
+    // or the exact click point when there's no route (or we're on the final leg).
+    let tx = moveTarget.wx, ty = moveTarget.wy;
+    const path = moveTarget.path;
+    let onFinalLeg = true;
+    if (path && path.length) {
+      let i = moveTarget.pathIdx;
+      while (i < path.length - 1 && moveLineClear(player.fx, player.fy, path[i + 1].x, path[i + 1].y)) i++;
+      moveTarget.pathIdx = i;
+      onFinalLeg = i >= path.length - 1;
+      if (!onFinalLeg) { tx = path[i].x; ty = path[i].y; }
+    }
+    const tdx = tx - player.fx, tdy = ty - player.fy;
+    const finalDist = Math.hypot(moveTarget.wx - player.fx, moveTarget.wy - player.fy);
+    if (!moveTarget.hold && onFinalLeg && finalDist <= MOVE_ARRIVE) {
+      moveTarget.active = false; moveTarget.path = null;   // reached the clicked point — stop
+    } else if (Math.hypot(tdx, tdy) > 0.02) {
+      [ix, iy] = steerToward(tdx, tdy);      // head for the waypoint; slide along any wall
+      // Give up only when truly stuck: no real ground covered for a beat (a wall or
+      // a foe pinning us). Path detours grow the straight-line gap, so we track
+      // actual movement, not distance-to-target. Holding never bails — it chases on.
+      if (!moveTarget.hold) {
+        if (Math.hypot(player.fx - moveTarget._px, player.fy - moveTarget._py) > 0.008) moveTarget._stallT = 0;
+        else if ((moveTarget._stallT += dt) > 1.1) { moveTarget.active = false; moveTarget.path = null; }
       }
     }
+    moveTarget._px = player.fx; moveTarget._py = player.fy;
   }
   const mag = Math.hypot(ix, iy);
   const moving = mag > 0.01;
