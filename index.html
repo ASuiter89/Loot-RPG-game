@@ -4396,10 +4396,10 @@
 
         <!-- ── AUDIO ── volume, vibe, and a skip-to-next-track control. -->
         <div class="settings-pane" data-pane="audio">
-        <button class="settings-item sound-action" id="music-action" onclick="cycleMusic()" data-tip="<div class='ht-name'>🎵 Music volume</div><div class='ht-line'>Tap to step the volume down a notch; wraps from off back to full.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+        <button class="settings-item sound-action" id="music-action" onclick="cycleMusic()" data-tip="<div class='ht-name'>🎵 Music volume</div><div class='ht-line'>Tap to step the volume up a notch; wraps from full back to off.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon" id="music-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span><span class="action-label">MUSIC</span><span class="vol-meter" id="music-meter"></span>
         </button>
-        <button class="settings-item sound-action" id="sfx-action" onclick="cycleSfx()" data-tip="<div class='ht-name'>🔊 SFX volume</div><div class='ht-line'>Tap to step the volume down a notch; wraps from off back to full.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+        <button class="settings-item sound-action" id="sfx-action" onclick="cycleSfx()" data-tip="<div class='ht-name'>🔊 SFX volume</div><div class='ht-line'>Tap to step the volume up a notch; wraps from full back to off.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon" id="sfx-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg></span><span class="action-label">SFX</span><span class="vol-meter" id="sfx-meter"></span>
         </button>
         <div class="settings-item settings-vibe" title="Pick the music vibe (or Shuffle through them all)">
@@ -11199,8 +11199,8 @@ const MUSIC_ON_SVG  = SVG_OPEN + "<path d=\"M9 18V5l12-2v13\"/><circle cx=\"6\" 
 const MUSIC_OFF_SVG = SVG_OPEN + "<path d=\"M9 18V5l12-2v13\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><circle cx=\"18\" cy=\"16\" r=\"3\"/><line x1=\"2\" y1=\"2\" x2=\"22\" y2=\"22\"/></svg>";
 
 // Music & SFX each have six states: off, then five volume steps. Tapping the
-// tile steps the level DOWN one notch and wraps from off back to full, so one
-// tap quiets it a little and a tap at the bottom brings it back.
+// tile steps the level UP one notch and wraps from full back to off, so one
+// tap makes it a little louder and a tap at the top silences it.
 function setMusicLevel(lvl) {
   audio.musicLevel = Math.max(0, Math.min(AUDIO_LEVELS, lvl));
   try { localStorage.setItem(AUDIO_MUSIC_KEY, String(audio.musicLevel)); } catch (e) {}
@@ -11217,9 +11217,9 @@ function setSfxLevel(lvl) {
   if (audio.sfxLevel > 0) { audioUnlock(); sfx('click'); }
   updateSfxButton();
 }
-// Step down one notch, wrapping 0 → full (…→2→1→off→5→4…).
-function cycleMusic() { setMusicLevel((audio.musicLevel + AUDIO_LEVELS) % (AUDIO_LEVELS + 1)); }
-function cycleSfx()   { setSfxLevel((audio.sfxLevel + AUDIO_LEVELS) % (AUDIO_LEVELS + 1)); }
+// Step up one notch, wrapping full → off (…→3→4→5→off→1→2…).
+function cycleMusic() { setMusicLevel((audio.musicLevel + 1) % (AUDIO_LEVELS + 1)); }
+function cycleSfx()   { setSfxLevel((audio.sfxLevel + 1) % (AUDIO_LEVELS + 1)); }
 // Hard-cut the music bus: every note still ringing stays wired to the OLD gain
 // node, which we disconnect from the output so it falls silent at once, while
 // fresh voices get a brand-new bus routed to master + reverb. Lets SKIP start a
@@ -11417,6 +11417,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Volume tiles step up", by: "Claude", notes: ["Tapping the MUSIC or SFX tile now raises the volume a notch instead of lowering it; it wraps from full back to off."] },
   { date: "2026-07-02", size: "small", v: "Stairs arrow toggle", by: "Claude", notes: ["Toggle the off-screen down-stairs arrow in Settings → Visuals (on by default).", "Choice syncs across devices when signed in."] },
   { date: "2026-07-02", size: "small", v: "Fix: title screen wouldn't offer Continue", by: "Claude", notes: ["Settings sync could crash the boot before the title screen finished loading, so returning heroes never saw the Continue button — fixed.", "Re-applying your saved log/loot-drawer collapse state on load no longer counts as a fresh change, keeping cross-device sync timestamps accurate."] },
   { date: "2026-07-02", size: "small", v: "Smoother big fights", by: "Claude", notes: ["Enemy status tints (burning, poisoned, chilled…), the hit-flash, elite/boss auras and threat rings now use cached art instead of rebuilding pricey per-frame effects — much smoother with lots of foes on screen.", "Elite/boss/affix auras read as a soft coloured halo."] },
