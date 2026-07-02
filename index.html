@@ -441,23 +441,64 @@
   .heal-btn.urgent { animation: healPulse 0.85s ease-in-out infinite; }
   @keyframes healPulse { 0%,100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 10px 2px color-mix(in srgb, var(--hp) 85%, transparent); } }
 
-  /* Big center-screen LEVEL UP banner — impossible to miss, points you to the bag */
+  /* Big center-screen LEVEL UP banner — a radiant golden burst, impossible to miss */
   #levelup-banner {
     position: fixed; left: 0; right: 0; top: 32%;
     pointer-events: none; z-index: 320; text-align: center;
     opacity: 0; transform: scale(0.6);
   }
   #levelup-banner.show { animation: levelupPop 2.6s ease-out forwards; }
+  /* A soft bloom and a spray of light rays flare out behind the text on level-up. */
+  #levelup-banner .lvl-bloom,
+  #levelup-banner .lvl-rays {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%); transform-origin: 50% 50%;
+    pointer-events: none; z-index: -1; opacity: 0;
+  }
+  #levelup-banner .lvl-bloom {
+    width: 360px; height: 360px; border-radius: var(--radius-pill);
+    background: radial-gradient(circle,
+      color-mix(in srgb, var(--gold-350) 55%, transparent) 0%,
+      color-mix(in srgb, var(--legendary) 28%, transparent) 42%,
+      transparent 70%);
+  }
+  #levelup-banner .lvl-rays {
+    width: 440px; height: 440px;
+    background: repeating-conic-gradient(from 0deg,
+      color-mix(in srgb, var(--gold-350) 62%, transparent) 0deg 5deg,
+      transparent 5deg 17deg);
+    /* Mask only reads alpha, so any opaque token works — hue is irrelevant here. */
+    -webkit-mask: radial-gradient(closest-side, transparent 26%, var(--ink) 42%, transparent 78%);
+    mask: radial-gradient(closest-side, transparent 26%, var(--ink) 42%, transparent 78%);
+  }
+  #levelup-banner.show .lvl-bloom { animation: lvlBloom 2.2s ease-out forwards; }
+  #levelup-banner.show .lvl-rays  { animation: lvlRays 1.6s ease-out forwards; }
+  @keyframes lvlBloom {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+    18%  { opacity: 0.9; }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.35); }
+  }
+  @keyframes lvlRays {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(0deg); }
+    22%  { opacity: 0.8; }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5) rotate(48deg); }
+  }
   #levelup-banner .lvl-title {
     font-family: var(--font-ui); font-weight: bold;
     font-size: 4rem; letter-spacing: 3px; color: var(--gold-350);
-    text-shadow: 0 0 14px color-mix(in srgb, var(--gold-350) 90%, transparent), 0 2px 4px var(--ink), 0 0 30px color-mix(in srgb, var(--legendary) 70%, transparent);
+    text-shadow: 0 0 14px color-mix(in srgb, var(--gold-350) 90%, transparent), 0 2px 4px var(--ink), 0 0 34px color-mix(in srgb, var(--legendary) 78%, transparent);
+  }
+  #levelup-banner.show .lvl-title { animation: lvlTitleGlow 2.6s ease-out; }
+  @keyframes lvlTitleGlow {
+    0%, 100% { filter: brightness(1); }
+    16%      { filter: brightness(1.4); }
   }
   #levelup-banner .lvl-sub {
     font-family: var(--font-ui); font-size: 1.6rem; letter-spacing: 1px;
     color: var(--paper); margin-top: 8px;
     text-shadow: 0 0 8px color-mix(in srgb, var(--gold-350) 80%, transparent), 0 1px 3px var(--ink);
   }
+  #levelup-banner .lvl-sub:empty { display: none; }  /* drop the hint line once it's cleared */
   @keyframes levelupPop {
     0%   { opacity: 0; transform: scale(0.5); }
     12%  { opacity: 1; transform: scale(1.12); }
@@ -4590,6 +4631,8 @@
 <div id="low-hp-vignette"></div>
 
 <div id="levelup-banner">
+  <div class="lvl-bloom"></div>
+  <div class="lvl-rays"></div>
   <div class="lvl-title">⭐ LEVEL UP!</div>
   <div class="lvl-sub">Open the 🎒 BAG → HERO tab to spend your points!</div>
 </div>
@@ -10131,10 +10174,20 @@ function sfx(name) {
     case 'loot':    [523, 659, 784].forEach((f, i) => tone(f, 0.1, t + i * 0.06, 'square', 0.4)); break;
     case 'gold':    tone(880, 0.06, t, 'square', 0.35); tone(1175, 0.07, t + 0.05, 'square', 0.3); break;
     case 'potion':  tone(440, 0.1, t, 'sine', 0.4, 880); tone(660, 0.12, t + 0.08, 'sine', 0.3, 990); break;
-    case 'levelup': // triumphant rising fanfare that lands on a bright major chord
-      [523, 659, 784].forEach((f, i) => tone(f, 0.14, t + i * 0.08, 'square', 0.42));
-      tone(1047, 0.5, t + 0.26, 'square', 0.45); tone(1319, 0.5, t + 0.26, 'triangle', 0.28);
+    case 'levelup': { // triumphant rising run that lands on a full, sparkling major chord
+      [523, 659, 784, 1047].forEach((f, i) => {   // quick ascent: C E G high-C
+        tone(f, 0.13, t + i * 0.07, 'square', 0.4);
+        tone(f, 0.13, t + i * 0.07, 'triangle', 0.18); // soft body under each step
+      });
+      const land = t + 0.30;                        // the payoff chord lands here
+      tone(1047, 0.6,  land,        'square',   0.42); // C
+      tone(1319, 0.6,  land,        'triangle', 0.30); // E
+      tone(1568, 0.6,  land,        'triangle', 0.26); // G — full major triad
+      tone(2093, 0.55, land + 0.02, 'sine',     0.20); // high-C shimmer on top
+      tone(131,  0.7,  land,        'sawtooth', 0.32, 65); // warm low root for weight
+      noise(0.5, land, 0.16, 6500, 'highpass');        // sparkle sweep over the chord
       break;
+    }
     case 'bosskill': { // grander victory fanfare — brassy two-part flourish + cymbal swell
       const fan = (f, d, w, v) => { tone(f, d, w, 'sawtooth', v * 0.5); tone(f, d, w, 'square', v * 0.4); };
       fan(392, 0.16, t,        0.5);  // G
@@ -10944,6 +10997,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Punchier level-up banner", by: "Claude", notes: ["Level-up banner now flares with golden light rays and a bloom, plus a fuller, more rewarding fanfare.", "\"Spend your points\" hint shows only through level 3, then steps aside."] },
   { date: "2026-07-02", size: "small", v: "Livelier town background", by: "Claude", notes: ["The town menu's ambient scenes got a big upgrade — each now paints a tinted, breathing sky, a moon or low sun, a silhouetted rooftop skyline with windows that wake and dim, and brighter layered particles.", "Ten distinct vignettes (dusk rooftops, starry night with shooting stars, rainy town, snowfall by moonlight, aurora, lantern festival, blossoms and more) instead of one faint, near-invisible layer."] },
   { date: "2026-07-02", size: "small", v: "Twin wisps on the ENTER button", by: "Claude", notes: ["Two glints of light now circle the main button's border on opposite sides instead of one."] },
   { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Claude", notes: ["Title hero card now left-aligns its text and stands an animated hero walking in place on the right, sized to match the text height."] },
@@ -18849,6 +18903,10 @@ function showLevelUpBanner(level) {
   if (!el) return;
   const title = el.querySelector('.lvl-title');
   if (title) title.textContent = `⭐ LEVEL ${level}!`;
+  // The "spend your points" hint only teaches the first few levels — after that
+  // it's just a nag, so drop it and let the banner simply celebrate the level.
+  const sub = el.querySelector('.lvl-sub');
+  if (sub) sub.textContent = level <= 3 ? 'Open the 🎒 BAG → HERO tab to spend your points!' : '';
   // Restart the animation cleanly even if banners stack from multi-level gains.
   el.classList.remove('show');
   void el.offsetWidth; // force reflow so the animation re-triggers
