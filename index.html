@@ -2998,18 +2998,21 @@
     display: inline-block; width: calc(9px * var(--ui-scale,1)); height: calc(9px * var(--ui-scale,1)); border-radius: 2px;
     margin: 0 1px; vertical-align: middle; transform: rotate(45deg);
   }
-  /* Returning-hero card above CONTINUE: who you are + how far you've gotten. */
+  /* Returning-hero card above CONTINUE: who you are (left) + a walking hero
+     sprite on the right, sized to stand as tall as the stacked text. */
   #title-hero {
-    margin: 0 0 14px; padding: 11px 14px; text-align: center;
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    margin: 0 0 14px; padding: 11px 14px; text-align: left;
     border: 1px solid var(--frame); border-radius: 10px;
     background: linear-gradient(180deg, color-mix(in srgb, var(--gold-850) 50%, transparent), color-mix(in srgb, var(--ink) 50%, transparent));
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 8%, transparent);
   }
-  #title-hero .th-portrait { margin-bottom: 4px; line-height: 0; }
+  #title-hero .th-info { flex: 1 1 auto; min-width: 0; }
+  #title-hero .th-portrait { flex: 0 0 auto; line-height: 0; }
   #title-hero .th-portrait img { image-rendering: pixelated; }
   #title-hero .th-name { font-size: 1.9rem; font-weight: bold; letter-spacing: 1px; line-height: 1.1; }
   #title-hero .th-sub { font-size: 1.3rem; color: var(--orange-400); margin-top: 3px; letter-spacing: .5px; }
-  #title-hero .th-stats { display: flex; justify-content: center; gap: 18px; margin-top: 9px; font-size: 1.4rem; color: var(--orange-400); }
+  #title-hero .th-stats { display: flex; justify-content: flex-start; gap: 18px; margin-top: 9px; font-size: 1.4rem; color: var(--orange-400); }
   #title-hero .th-stats b { color: var(--xp); font-weight: bold; }
   .title-play {
     position: relative; isolation: isolate;
@@ -5586,6 +5589,17 @@ function heroFaceIcon(cls, sex, px) {
   // fallback already applies uiScale on its own, so it keeps the raw base px.
   if (url) { const p = Math.round(px * (uiScale || 1)); return `<img class="hero-face" src="${url}" width="${p}" height="${p}" alt="" style="image-rendering:pixelated;vertical-align:middle">`; }
   return dlIcon('hero_' + cls, px) || '';
+}
+// DOM: an inline CSS-step-animated walk-DOWN icon for a hero class, so menus (the
+// title card…) can show a hero walking in place like the town-service sprites.
+// Reuses the same .town-walk class + townWalkStep keyframes; the difference is the
+// source is a full 4-row walk sheet (192x192), so background-size covers all four
+// rows and the px-tall element crops to the top (down) row. '' if art isn't ready.
+function heroWalkIcon(cls, sex, px) {
+  const img = heroWalkSheet(cls, sex);
+  if (!img) return '';
+  px = Math.round(px * (uiScale || 1));   // scale with UI SIZE, matching townWalkIcon
+  return `<span class="town-walk" style="width:${px}px;height:${px}px;background-image:url(${img.src});background-size:${px * 4}px ${px * 4}px;--twx:-${px * 4}px"></span>`;
 }
 // Blit a named sprite into a dst rect (nearest-neighbour for crisp pixels).
 // Returns false if the atlas isn't ready or the name is unknown, so callers can
@@ -10875,6 +10889,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Claude", notes: ["Title hero card now left-aligns its text and stands an animated hero walking in place on the right, sized to match the text height."] },
   { date: "2026-07-01", size: "small", v: "Cleaner stat-abbreviation key", by: "Claude", notes: ["Loot stat-abbreviation key now groups item stats by theme (Offense, Defense, Sustain, Caster, Utility/Find), alphabetical within each group.", "Flows into two columns on desktop for easier scanning."] },
   { date: "2026-07-01", size: "medium", v: "Completed sets grant a signature power + golden aura", by: "Jeff Louie", notes: ["Completing a set (all 4 pieces) now unlocks a unique SIGNATURE POWER, not just more stats: Warden's Aegis Wall (block + damage reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), Arcanist's Arcane Overflow (cooldown reduction + mana leech).", "A completed set wraps the hero in a faint golden aura, and its \"… set\" tag turns gold with a ✦.", "Set tooltip now shows the power, a Worn n/4 count and a completion banner."] },
   { date: "2026-07-02", size: "small", v: "Punchier ENTER button", by: "Claude", notes: ["Title's main button now reads just ENTER (sword icon gone) with a pulsing golden frame and a wisp of light circling the border, so the way in pops."] },
@@ -26747,13 +26762,18 @@ function showTitle() {
       const deepest = player.maxFloor || 1;
       const gold = fmtGold ? fmtGold(player.gold || 0) : (player.gold || 0);
       const hcTag = player.hardcore ? `<div><span class="hc-tag">${hcIcon(11)} HARDCORE · ONE LIFE</span></div>` : '';
-      const heroPic = heroFaceIcon(player.class, player.sex, 60);
+      // An animated walking hero sprite sits to the RIGHT of the left-aligned text,
+      // sized to stand about as tall as the stacked name/class/stats block. Falls
+      // back to the static face (then atlas tile) until the walk sheet has loaded.
+      const heroPic = heroWalkIcon(player.class, player.sex, 68) || heroFaceIcon(player.class, player.sex, 68);
       hero.innerHTML =
-        (heroPic ? `<div class="th-portrait">${heroPic}</div>` : '')
+        `<div class="th-info">`
         + `<div class="th-name" style="color:${cls.color || 'var(--xp)'}">${nm}</div>`
         + `<div class="th-sub">Level ${lvl} ${cls.name || 'Hero'}</div>`
         + `<div class="th-stats"><span>Deepest <b>Floor ${deepest}</b></span><span><b>${gold}</b>g</span></div>`
-        + hcTag;
+        + hcTag
+        + `</div>`
+        + (heroPic ? `<div class="th-portrait">${heroPic}</div>` : '');
       hero.style.display = '';
     } else {
       hero.style.display = 'none';
