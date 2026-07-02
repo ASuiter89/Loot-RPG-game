@@ -1189,6 +1189,7 @@
      states, so they light amber (the Stamina colour) to show the mode is live. */
   .sprint-action.on,
   .herobars-action.on,
+  .pathline-action.on,
   .crosshair-action.on { background: var(--orange-850); border-color: var(--gold-350); color: var(--xp); }
 
   /* Reset Run wipes the current hero, so it shouts: red-tinted and gently pulsing at
@@ -4461,6 +4462,11 @@
              hero, appearing (like the stamina bar) only while that vital isn't full. -->
         <button class="settings-item herobars-action" id="herobars-action" onclick="toggleHeroBars()" data-tip="<div class='ht-name'>❤️ Hero Bars</div><div class='ht-line'>Show slim red Health &amp; blue Mana bars under your hero, appearing while that vital isn't full — just like the stamina bar.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></span><span class="action-label" id="herobars-label">HERO BARS: OFF</span>
+        </button>
+        <!-- Pathing line: faint gold breadcrumbs sketching the click-to-move route
+             around walls. On by default; the pulsing destination ring is separate. -->
+        <button class="settings-item pathline-action" id="pathline-action" onclick="togglePathLine()" data-tip="<div class='ht-name'>🧭 Pathing Line</div><div class='ht-line'>Sketch faint gold breadcrumbs along the click-to-move route your hero will take around walls.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="19" r="2"/><path d="M7 19h6a3 3 0 0 0 3-3V9" stroke-dasharray="2.5 2.5"/><path d="M16 5l2.5 3.5L21 5z" fill="currentColor" stroke="none"/><circle cx="18.5" cy="6" r="0.5"/></svg></span><span class="action-label" id="pathline-label">PATHING LINE: ON</span>
         </button>
         <!-- UI SIZE — scales the whole interface (1x–2x in 0.25 steps). Every
              label is rem-sized off the root, so this one multiplier resizes all
@@ -9468,6 +9474,12 @@ try { if (localStorage.getItem(HERO_BARS_KEY) === '1') showHeroBars = true; } ca
 const CROSSHAIR_KEY = 'dungeonLoot_crosshair';
 let showCrosshair = true;
 try { if (localStorage.getItem(CROSSHAIR_KEY) === '0') showCrosshair = false; } catch (e) {}
+// Optional faint gold breadcrumb trail sketching the planned click-to-move route
+// around walls (see the moveTarget draw block). On by default; the pulsing
+// destination ring is unaffected. The choice is saved across sessions.
+const PATH_LINE_KEY = 'dungeonLoot_pathLine';
+let showPathLine = true;
+try { if (localStorage.getItem(PATH_LINE_KEY) === '0') showPathLine = false; } catch (e) {}
 // The foe the hero's auto-attack is currently locked onto (best in-reach target
 // under the current focus mode), recomputed each frame in updatePlayerCombat via
 // pickAutoTarget(). Declared here (with the other render state) so the draw loop's
@@ -9973,7 +9985,7 @@ window.gameGuide = function gameGuide(topic) {
       `Bag / inventory: ${key('bag')} — opens the LOOT / GEAR / HERO / SKILLS tabs.`,
       `Cast hotbar skills: number keys ${key('skill1')}-${key('skill' + SKILL_SLOTS)} fire the ${SKILL_SLOTS} manual slots on the RIGHT of the bar (tap to cast). One extra skill sits in a dedicated auto-cast slot in the MIDDLE and fires itself — see the "autocast" topic.`,
       `Esc closes the top menu/overlay, or opens Settings. Settings is split into tabs (Play / Visuals / Audio / Progress / About); non-movement keys are remappable under the Play tab → KEYS (◀ Back or Esc there returns to Settings). The keys shown here are your CURRENT bindings.`,
-      `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero) and, on mouse, the CURSOR picker.`,
+      `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker.`,
     ],
     movement: [
       `Walking, sprinting and dashing all move a free-floating body in real time (with momentum), not on a turn grid. Hold a direction; let go to stop.`,
@@ -11204,6 +11216,23 @@ function updateCrosshairButton() {
   if (btn) btn.classList.toggle('on', showCrosshair);
 }
 
+// Flip the click-to-move pathing line on and off. Persisted so the choice
+// survives reloads. Drawn as faint gold breadcrumbs along the planned route in
+// the main render loop (the destination ring is separate and always shows).
+function togglePathLine() {
+  showPathLine = !showPathLine;
+  try { localStorage.setItem(PATH_LINE_KEY, showPathLine ? '1' : '0'); } catch (e) {}
+  settingsChanged();
+  sfx('click');
+  updatePathLineButton();
+}
+function updatePathLineButton() {
+  const lbl = document.getElementById('pathline-label');
+  if (lbl) lbl.textContent = showPathLine ? 'PATHING LINE: ON' : 'PATHING LINE: OFF';
+  const btn = document.getElementById('pathline-action');
+  if (btn) btn.classList.toggle('on', showPathLine);
+}
+
 // Settings modal: a centred overlay holding sound, saves, Reset Run and options.
 // There's no on-screen button — it opens only with Esc (see handleEscape) and,
 // being an RT-blocking overlay, pausing the game while it's up. The scrim
@@ -11248,6 +11277,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Pathing line toggle", by: "Claude", notes: ["Toggle the click-to-move breadcrumb trail in Settings → Visuals (on by default); the pulsing destination ring stays.", "Choice syncs across devices when signed in."] },
   { date: "2026-07-02", size: "small", v: "Enemy stuns half as long", by: "Claude", notes: ["Stuns that enemies land on you now last half as long, so a bad hit roots you for far less time.", "Tenacity still shortens them further on top."] },
   { date: "2026-07-02", size: "small", v: "Character card in the pause menu", by: "Claude", notes: ["Pause menu (Esc) now shows your hero card — name, class, level, deepest floor and gold — above Settings, the same panel as the title screen."] },
   { date: "2026-07-02", size: "small", v: "See & shoot over water and open ground", by: "Claude", notes: ["Line of sight is now blocked only by SOLID obstructions — walls, cracked walls, locked doors, boss barriers and furniture.", "Water, lava, spikes and other floor terrain no longer block shots or spells: if you can walk over (or across) it, you can see and fire over it.", "Solid furniture and boss barriers now give real cover, blocking bolts and spells like a wall."] },
@@ -17825,7 +17855,7 @@ function draw() {
     // When routing around a wall, sketch faint gold breadcrumbs along the planned
     // route (from where the hero is now) so the path it will take reads at a glance.
     const path = moveTarget.path;
-    if (path && path.length) {
+    if (showPathLine && path && path.length) {
       ctx.save();
       ctx.strokeStyle = 'rgba(232,194,103,0.35)';
       ctx.lineWidth = Math.max(1, tw * 0.04);
@@ -27124,6 +27154,7 @@ const SETTINGS_SYNC_KEYS = [
   'dungeonLoot_sprintMode',   // sprint HOLD vs TOGGLE
   'dungeonLoot_heroBars',     // under-hero HP/MP bars on/off
   'dungeonLoot_crosshair',    // red target crosshair on/off
+  'dungeonLoot_pathLine',     // click-to-move pathing line on/off
   'dungeonLootMusic',         // music volume level (0–5)
   'dungeonLootSfx',           // sfx volume level (0–5)
   'dungeonLootTownAmb',       // town ambience on/off
@@ -28087,6 +28118,7 @@ updateSoundButtons();
 updateSprintButton();
 updateHeroBarsButton();
 updateCrosshairButton();
+updatePathLineButton();
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
   window.addEventListener(ev, audioUnlock, { passive: true }));
 
