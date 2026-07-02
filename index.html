@@ -3026,23 +3026,31 @@
   }
   .title-play:active { background: var(--orange-850); }
   /* Primary CTA (ENTER / CONTINUE) — the one action that starts the game, so it
-     gets extra pull: the whole frame breathes with a pulsing golden glow while a
-     bright wisp of light continuously circles the border. Scoped to #title-play
-     so the secondary title buttons stay calm. */
+     gets extra pull: the whole frame breathes with a pulsing golden glow while
+     two bright wisps of light chase each other around the border. Scoped to
+     #title-play so the secondary title buttons stay calm. */
   @property --tp-wisp { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
   #title-play { animation: titlePlayPulse 2.6s ease-in-out infinite; }
   #title-play .tp-label { position: relative; z-index: 1; }
-  /* Rotating wisp: a conic gradient with one bright hot arc, masked down to the
-     2px border ring so the light reads as travelling around the button's edge. */
+  /* Rotating wisps: a conic gradient with two bright hot arcs 180° apart, masked
+     down to the 2px border ring so the pair reads as two opposing points of light
+     travelling around the button's edge, always across from each other. */
   #title-play::before {
     content: ''; position: absolute; inset: 0; z-index: 0;
     border-radius: inherit; padding: 2px; pointer-events: none;
     background: conic-gradient(from var(--tp-wisp),
       transparent 0deg,
-      transparent 250deg,
-      color-mix(in srgb, var(--gold-350) 55%, transparent) 300deg,
-      var(--xp) 335deg,
-      color-mix(in srgb, var(--gold-350) 55%, transparent) 360deg);
+      transparent 55deg,
+      color-mix(in srgb, var(--gold-350) 55%, transparent) 75deg,
+      var(--xp) 90deg,
+      color-mix(in srgb, var(--gold-350) 55%, transparent) 105deg,
+      transparent 125deg,
+      transparent 235deg,
+      color-mix(in srgb, var(--gold-350) 55%, transparent) 255deg,
+      var(--xp) 270deg,
+      color-mix(in srgb, var(--gold-350) 55%, transparent) 285deg,
+      transparent 305deg,
+      transparent 360deg);
     -webkit-mask: linear-gradient(white 0 0) content-box, linear-gradient(white 0 0);
     -webkit-mask-composite: xor;
             mask: linear-gradient(white 0 0) content-box, linear-gradient(white 0 0);
@@ -8094,11 +8102,11 @@ const SKILL_TREES = {
       {"id":"m_p42","name":"Tesla Field","icon":"sk_m_conduit","fx":{"spell":0.03},"cfx":{"reflect":0.05},"cond":"wand","mod":{"skill":"m_a12","chain":2,"status":{"effect":"stun","dur":1,"chance":0.4}},"desc":"+3% spell/rank (+reflect with a wand); Chain Spark leaps to two more foes and shocks them (transforms Chain Spark, cond wand).","br":2,"x":0.72,"y":0.58,"band":2,"req":["m_p22"]},
       {"id":"m_p43","name":"Spell Weave","icon":"sk_m_spellpower","fx":{"spell":0.03,"maxMpPct":0.03},"cfx":{"spell":0.045},"cond":"wand","charge":{"id":"power","max":7,"fx":{"spell":0.015}},"desc":"Power stacks to 7 with +1.5% extra spell each; +3% spell and mana/rank, greatly more with a wand (cond wand).","br":3,"x":0.72,"y":0.58,"band":2,"req":["m_p23"]},
       {"id":"m_p44","name":"Greater Ward","icon":"sk_m_aegis","fx":{"manaShield":0.04},"cfx":{"manaShield":0.05},"cond":"casteroff","trigger":{"on":"lowhp","effect":{"buff":{"id":"shield","dur":4,"mag":120},"chance":1}},"desc":"+4% mana shield/rank (+more off-hand free); falling low slams up a huge barrier (cond casteroff).","br":4,"x":0.72,"y":0.58,"band":2,"req":["m_p24"]},
-      {"id":"m_p50","name":"Glass Cannon","icon":"sk_m_glass","fx":{"spell":0.4,"dmgDealt":0.18,"maxHpPct":-0.2,"crit":0.05},"cfx":{"spell":0.3},"cond":"lowhp","keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: stupendous spell damage, bonus damage and crit, but your maximum health is gutted (cond lowhp for even more).","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p30","m_p40"]},
-      {"id":"m_p51","name":"Absolute Zero","icon":"sk_m_immortalward","fx":{"spell":0.2,"dmgTaken":-0.05},"cfx":{"spell":0.25,"crit":0.1},"cond":"casteroff","mod":{"skill":"m_a11","status":{"effect":"stun","dur":3,"chance":1}},"keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: stunned foes take massive bonus spell damage and crit, and your Frost Nova always freezes solid (cond casteroff).","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p31","m_p41"]},
-      {"id":"m_p52","name":"Stormlord","icon":"sk_m_ascendant","fx":{"spell":0.22,"crit":0.08},"cfx":{"critDmg":0.4,"spell":0.18},"cond":"wand","charge":{"id":"arcane","max":6,"fx":{"spell":0.03}},"mod":{"skill":"m_a12","chain":3,"toLine":true},"keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: Arcane stacks to 6 (+3% spell each), enormous crit and Chain Spark forks endlessly along a line (cond wand).","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p32","m_p42"]},
-      {"id":"m_p53","name":"Archmage","icon":"sk_m_archmage","fx":{"spell":0.25,"maxMpPct":0.15},"cfx":{"spell":0.3,"crit":0.06},"cond":"wand","charge":{"id":"power","max":10,"fx":{"spell":0.02}},"keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: Power stacks to 10 (+2% spell each); titanic spell power and mana, vastly more with a wand (cond wand, Spellblade).","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p33","m_p43"]},
-      {"id":"m_p54","name":"Blood Pact","icon":"sk_m_omniscience","fx":{"spell":0.45,"lifesteal":0.06,"maxMpPct":0.1},"cfx":{"spell":0.25},"cond":"lowhp","kflag":"bloodpact","keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: your spells cost LIFE instead of mana, but in exchange you gain colossal spell damage and lifesteal (cond lowhp).","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p34","m_p44"]}
+      {"id":"m_p50","name":"Glass Cannon","icon":"sk_m_glass","fx":{"spell":0.35,"dmgDealt":0.15,"maxHpPct":-0.25,"pen":0.1},"cfx":{"spell":0.3,"lowHpDmg":0.25},"cond":"lowhp","trigger":{"on":"kill","effect":{"buff":{"id":"dmgUp","dur":3,"mag":0.15}}},"keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: raw, resistance-piercing spell damage with nothing held back — your health is gutted (-25%), but every kill stokes a +15% damage surge and the wounded burn for far more (cond lowhp).","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p30","m_p40"]},
+      {"id":"m_p51","name":"Absolute Zero","icon":"sk_m_immortalward","fx":{"dmgTaken":-0.1,"dodge":0.02,"spell":0.1},"cfx":{"dmgTaken":-0.06,"reflect":0.12},"cond":"casteroff","mod":{"skill":"m_a11","status":{"effect":"stun","dur":3,"chance":1},"radius":1},"trigger":{"on":"hit","effect":{"buff":{"id":"defUp","dur":2,"mag":0.15},"chance":0.5}},"keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: an unbreakable frost-warden — Frost Nova erupts wider and freezes every foe solid, while you shrug off blows (-10% damage taken, and turn them back as frost with a caster off-hand).","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p31","m_p41"]},
+      {"id":"m_p52","name":"Stormlord","icon":"sk_m_ascendant","fx":{"spell":0.15,"crit":0.1},"cfx":{"critDmg":0.45,"crit":0.05},"cond":"wand","charge":{"id":"arcane","max":6,"fx":{"spell":0.03}},"mod":{"skill":"m_a12","chain":4,"toLine":true},"trigger":{"on":"crit","effect":{"charge":"arcane"}},"keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: ride the storm — Chain Spark forks down a whole line to every foe it can reach, your crits hit ferociously hard, and each crit builds Arcane (stacks to 6). Best with a wand.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p32","m_p42"]},
+      {"id":"m_p53","name":"Archmage","icon":"sk_m_archmage","fx":{"spell":0.2,"maxMpPct":0.18,"mpRegen":2},"cfx":{"spell":0.25},"cond":"wand","charge":{"id":"power","max":10,"fx":{"spell":0.02}},"trigger":{"on":"crit","effect":{"mana":0.06,"charge":"power"}},"keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: a bottomless well of magic — Power stacks to 10, your mana pool and regen swell, and every spell crit refunds mana and builds Power. Vastly stronger with a wand.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p33","m_p43"]},
+      {"id":"m_p54","name":"Blood Pact","icon":"sk_m_omniscience","fx":{"spell":0.28,"lifesteal":0.1,"hpRegen":3},"cfx":{"lifesteal":0.06,"spell":0.2},"cond":"lowhp","kflag":"bloodpact","keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: your spells cost LIFE, not mana — cast without limit, kept alive by heavy lifesteal and regeneration (more while wounded).","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p34","m_p44"]}
     ], 'passive'),
     active: buildWeb([
       {"id":"m_a00","name":"Firebolt","icon":"sk_ma_firebolt","mp":6,"cd":1,"syn":{"skill":"m_p00","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Hurl a bolt of flame that sets a foe ablaze. +5% damage per point in Kindling.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
@@ -10889,6 +10897,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Twin wisps on the ENTER button", by: "Claude", notes: ["Two glints of light now circle the main button's border on opposite sides instead of one."] },
   { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Claude", notes: ["Title hero card now left-aligns its text and stands an animated hero walking in place on the right, sized to match the text height."] },
   { date: "2026-07-01", size: "small", v: "Cleaner stat-abbreviation key", by: "Claude", notes: ["Loot stat-abbreviation key now groups item stats by theme (Offense, Defense, Sustain, Caster, Utility/Find), alphabetical within each group.", "Flows into two columns on desktop for easier scanning."] },
   { date: "2026-07-01", size: "medium", v: "Completed sets grant a signature power + golden aura", by: "Jeff Louie", notes: ["Completing a set (all 4 pieces) now unlocks a unique SIGNATURE POWER, not just more stats: Warden's Aegis Wall (block + damage reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), Arcanist's Arcane Overflow (cooldown reduction + mana leech).", "A completed set wraps the hero in a faint golden aura, and its \"… set\" tag turns gold with a ✦.", "Set tooltip now shows the power, a Worn n/4 count and a completion banner."] },
