@@ -2602,7 +2602,7 @@
     cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   }
   .town-menu-btn:active { background: var(--orange-850); }
-  .town-menu-btn .tm-icon { font-size: 2.4rem; flex: 0 0 auto; width: calc(32px * var(--ui-scale,1)); text-align: center; }
+  .town-menu-btn .tm-icon { font-size: var(--fs-display-3); flex: 0 0 auto; width: calc(64px * var(--ui-scale,1)); text-align: center; }
   /* Animated walk-down sprite icon for a town service (CSS sprite step-animation). */
   .town-walk { display: inline-block; background-repeat: no-repeat; image-rendering: pixelated; vertical-align: middle; animation: townWalkStep .62s steps(4) infinite; }
   @keyframes townWalkStep { to { background-position-x: var(--twx); } }
@@ -10617,6 +10617,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Bigger town service sprites", by: "Claude", notes: ["Animated town-service sprites are twice as large now, standing as tall as both lines of their button label."] },
   { date: "2026-07-01", size: "small", v: "Sort & stat-filter your loot", by: "Claude", notes: ["LOOT tab gains a Sort button — order the bag by rarity, power, slot, value or name.", "New Filter button shows only gear carrying the stats you pick (crit, leech, +Might…); the picker lists just the stats you actually own.", "Bulk Sell/Scrap all respects the active filters, so it only ever hits the visible rows."] },
   { date: "2026-07-02", size: "medium", v: "Way more special powers, up front & glowing", by: "Jeff Louie", notes: ["A gear piece's special power (Vampiric, Brutal, Savage…) now leads its stat line and pulses with a coloured glow so it stands out at a glance, instead of trailing at the end.", "Added ~37 new build-defining powers across offense, crit, sustain, defense, casting, control, speed and fortune — so top-tier drops feel far more varied."] },
   { date: "2026-07-01", size: "small", v: "Skill-bar key labels fit their boxes", by: "Jeff Louie", notes: ["Long key names (Space, arrow keys) show as short glyphs on the bar instead of spilling out of the box."] },
@@ -13745,7 +13746,7 @@ function openTownHub() {
   document.getElementById('town-overlay').classList.add('open');
   const tiles = TOWN_MENU.map(s =>
     `<button class="town-menu-btn" onclick="openTownService('${s.kind}')">
-       <span class="tm-icon">${townWalkIcon(s.kind, 34) || dlIcon(s.dl) || s.icon}</span>
+       <span class="tm-icon">${townWalkIcon(s.kind, 68) || dlIcon(s.dl) || s.icon}</span>
        <span class="tm-text"><span class="tm-name">${s.name}</span><span class="tm-desc">${s.desc}</span></span>
      </button>`).join('');
   const returnFloor = Math.max(1, dungeonReturn || player.maxFloor || 1);
