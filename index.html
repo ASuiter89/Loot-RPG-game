@@ -130,6 +130,9 @@
     --epic: #aa44ff;
     --legendary: #ff8800;
     --unique: #ff2222;
+    /* Set pieces are their own top-rarity class (as rare as unique) worn in a
+       distinct teal so they read apart from the red uniques. */
+    --set: #1fd4c4;
 
     /* ---- Typography ---- */
     /* Type scale (rem on a 10px root → 1.1rem = 11px). Never below --fs-fine
@@ -1834,6 +1837,7 @@
   .item-epic      { color: var(--epic); }
   .item-legendary { color: var(--legendary); }
   .item-unique    { color: var(--unique); }
+  .item-set       { color: var(--set); }
 
   .item-name { font-weight: bold; }
   .item-type { font-size: 1.2rem; opacity: 0.7; }
@@ -4169,6 +4173,7 @@
       <div class="howto-line" style="margin-top:5px">Mind your footing — ice slips, mud slows, arrow traps &amp; fire vents can be dodged. Foes roam and give chase when you're close.</div>
       <div class="howto-sec">💎 Loot rarity<span class="howto-tiers"><i style="background:var(--junk)"></i><i style="background:var(--normal)"></i><i style="background:var(--uncommon)"></i><i style="background:var(--rare)"></i><i style="background:var(--epic)"></i><i style="background:var(--legendary)"></i><i style="background:var(--unique)"></i></span></div>
       <div class="howto-line">Colour is rarity: grey → white → green → blue → purple → orange → red (Mythic). Tap loot in your <b>bag</b> to equip, sell, or scrap it.</div>
+      <div class="howto-line"><b style="color:var(--set)">Teal</b> marks a <b>set piece</b> — its own top-rarity class, as rare as red. Wear 2 or 4 matching pieces for escalating bonuses; hover a "<span style="color:var(--set)">… set</span>" tag to see them.</div>
       <div class="howto-sec">✨ Skills &amp; potions</div>
       <div class="howto-line">Skills cost <b>MP</b> and each has its own cooldown in <b>seconds</b>; their buttons glow gold when ready. Health &amp; mana <b>potions</b> share a brief cooldown and pulse when ready to drink.</div>
       <div class="howto-sec">🔥 Hazards</div>
@@ -4905,8 +4910,19 @@ const LEGACY_EMOJI_KEYS = {
   '💍':'ring','📿':'amulet','🧿':'talisman','🔮':'orb',
 };
 const ICON_EMPTY_COLOR = '#5a5a68';
-// Rarity tint for an item's icon (muted grey when there's nothing to colour).
-function tierColor(item) { return (item && TIERS[item.tier] && TIERS[item.tier].color) || ICON_EMPTY_COLOR; }
+// Set pieces are their own top rarity: they roll only at the unique tier but wear
+// a distinct colour (mirrors the --set token) instead of the unique red, so a set
+// drop reads as its own class at a glance. Keep in sync with --set in :root.
+const SET_RARITY_COLOR = '#1fd4c4';
+// Rarity tint for an item's icon (muted grey when there's nothing to colour). A
+// set piece overrides its (always-unique) tier colour with the shared set colour.
+function tierColor(item) {
+  if (item && item.set) return SET_RARITY_COLOR;
+  return (item && TIERS[item.tier] && TIERS[item.tier].color) || ICON_EMPTY_COLOR;
+}
+// The CSS rarity class for an item's name/row — set pieces get their own colour
+// class instead of their tier's.
+function rarityClass(item) { return (item && item.set) ? 'item-set' : 'item-' + (item ? item.tier : 'normal'); }
 // Resolve a layer's material to a colour (a MATERIALS key, or a literal colour).
 function matColor(m) { return MATERIALS[m] || m; }
 // Inline-SVG markup for a vector icon key: each layer drawn in its own material
@@ -9378,6 +9394,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     loot: [
       `Rarity is COLOUR ONLY (no text labels), lowest to highest: grey → white → green → blue → purple → orange → red. Higher tiers allow more bonus affixes.`,
+      `Set pieces are a distinct top-rarity class shown in teal (not the red of a unique). They drop only at the top tier — as rare as any unique — and grant escalating bonuses at 2 and 4 matched pieces worn. A piece can roll for any slot; hover/press-hold the "… set" tag on an item to see the bonuses, which slots you're wearing, and your current count.`,
       `Item power is driven more by item level (ilvl, geared to current depth) than by rarity alone. gameState().menu.inventory gives brief items; read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too.`,
@@ -10552,6 +10569,7 @@ const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Town & shop menus fill the screen", by: "Claude", notes: ["Town, shop and pact menus use the full width now: cards add columns up to a cap, then stretch to consume the rest of the space instead of stranding a narrow centred strip.", "Town hub lays out as a clean grid with no lone trailing tile."] },
   { date: "2026-07-02", size: "small", v: "Uniform skill-bar buttons", by: "Claude", notes: ["Potions, Town, the skill slots and the auto-cast slot are now equal-size squares, so the bar reads as one even row.", "Dropped the TOWN and AUTO word labels — the icon and key already say it — so text no longer crowds or overlaps the icons."] },
   { date: "2026-07-02", size: "small", v: "Settings opens centred again", by: "Claude", notes: ["The Settings modal opens vertically centred and keeps its top anchored, so switching tabs grows it downward instead of jumping back to centre."] },
+  { date: "2026-07-02", size: "small", v: "Set pieces are their own teal rarity", by: "Claude", notes: ["Set pieces now drop only at the top tier — as rare as a unique — and wear their own teal colour everywhere (bag, tooltip, gear panel, hero sprite, drop banner) instead of blending in as purple/orange.", "Hover or press-hold a \"… set\" tag on an item to see the set's bonuses (active tiers lit), which slots it can fill, and how many pieces you're wearing.", "Fixed set bonuses that never applied: the 4-piece Block and the Arcanist Spell Power bonuses now take effect."] },
   { date: "2026-07-02", size: "small", v: "Time flows in town", by: "Claude", notes: ["Time passes in town just like the dungeon — HP/MP regen and skill/potion cooldowns keep ticking while you browse the hub, so a moment's rest heals you for free.", "The TOWN button now stays on the bar while you're in town, greyed out to mark where you are, instead of vanishing."] },
   { date: "2026-07-02", size: "small", v: "Bangers UI font", by: "Claude", notes: ["New bold, all-caps comic-book display font (Bangers) replaces the rounded one across every menu, the HUD and the title logo."] },
   { date: "2026-07-02", size: "small", v: "Combat log gets the gold edge too", by: "Claude", notes: ["Desktop combat-log column now edges the map with the same gold frame line as the loot drawer, so both side columns match instead of the log showing a duller border."] },
@@ -12900,7 +12918,7 @@ function renderShop() {
     {
       name = s.item.name;
       sub = SLOTS[s.item.slot].label.replace(/^\S+\s/, '');
-      cls = 'item-' + s.item.tier;
+      cls = rarityClass(s.item);
       stats = itemStatLine(s.item);
       // Compare against the currently-equipped piece in the same slot so the
       // buyer can spot upgrades at a glance, just like loot in the bag.
@@ -12954,9 +12972,9 @@ function renderShopSellHTML() {
     const scrapBtn = (!locked && it.slot && TIERS[it.tier])
       ? `<button class="shop-scrap-btn" title="Scrap" onclick="shopScrap(${i})">${dlIcon('mat_scrap', 13) || '♻️'}</button>` : '';
     const lock = locked ? `<span class="shop-price short">${dlIcon('key', 12) || '🔒'}</span>` : '';
-    return `<div class="shop-row item-${it.tier} ${locked ? 'locked' : ''}">`
+    return `<div class="shop-row ${rarityClass(it)} ${locked ? 'locked' : ''}">`
       + `<span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>`
-      + `<div class="shop-row-info item-${it.tier}"><div class="shop-row-name">${it.name}</div><div class="shop-row-sub">${sub}</div></div>`
+      + `<div class="shop-row-info ${rarityClass(it)}"><div class="shop-row-name">${it.name}</div><div class="shop-row-sub">${sub}</div></div>`
       + `${lock}${scrapBtn}${sellBtn}</div>`;
   }).join('');
   return bulk + rows;
@@ -14096,7 +14114,7 @@ function renderForge() {
     <div class="forge-grid forge-tiers">${tierBtns}</div>
     <div class="shop-row" style="margin-top:10px">
       <span class="loot-icon">${iconMarkup(itemIcon(preview), tierColor(preview))}</span>
-      <div class="shop-row-info item-${preview.tier}">
+      <div class="shop-row-info ${rarityClass(preview)}">
         <div class="shop-row-name">${preview.name}${craftedMark(preview)}</div>
         <div class="shop-row-stats">${itemStatLine(preview)} · ${caps.stat} stat / ${caps.attr} attr slots</div>
         ${forgeReqLine}
@@ -14385,7 +14403,7 @@ function stashItemRow(item, action, btnLabel, btnClass) {
   const sub = item.slot ? SLOTS[item.slot].label.replace(/^\S+\s/, '') : 'potion';
   return `<div class="shop-row">
     <span class="loot-icon">${iconMarkup(itemIcon(item), tierColor(item))}</span>
-    <div class="shop-row-info item-${item.tier}">
+    <div class="shop-row-info ${rarityClass(item)}">
       <div class="shop-row-name">${item.name}${upg}</div>
       <div class="shop-row-sub">${sub}</div>
       ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
@@ -14809,7 +14827,7 @@ function renderEnchanter() {
     const stats = itemStatLine(it).replace(/^⚡\d+\s*·?\s*/, ''); // power shown on its own line below
     lootRows += `<div class="shop-row has-actions">
       <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
-      <div class="shop-row-info item-${it.tier}">
+      <div class="shop-row-info ${rarityClass(it)}">
         <div class="shop-row-name">${it.name}${craftedMark(it)}</div>
         <div class="shop-row-sub">${slotLabel}<span class="item-power">⚡${itemPower(it)}</span></div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
@@ -14918,7 +14936,7 @@ function renderEnchantItem(item) {
 
   setTownContent(`
     <div class="shop-row has-actions"><button class="modal-nav-btn" onclick="enchantBack()">‹ Back</button>
-      <div class="shop-row-info item-${item.tier}" style="margin-left:8px"><div class="shop-row-name">${item.name}${craftedMark(item)}</div>
+      <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${item.name}${craftedMark(item)}</div>
       <div class="shop-row-sub">${SLOTS[item.slot].label.replace(/^\S+\s/,'')} · ilvl ${item.ilvl} · ${statN}/${caps.stat} stats · ${attrN}/${caps.attr} attrs</div></div></div>
     <div class="ench-legend">Value rerolls the number · Type swaps the modifier · ${touchUI() ? 'press &amp; hold a button for details' : 'hover a button for details'}</div>
     ${lockRows}
@@ -15099,7 +15117,7 @@ function renderGambler() {
     resultRow = `<div class="town-blurb" style="margin-top:10px">Your last wager (${gambleLast.cost}g) turned up:</div>
       <div class="shop-row">
         <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
-        <div class="shop-row-info item-${it.tier}">
+        <div class="shop-row-info ${rarityClass(it)}">
           <div class="shop-row-name">${it.name}</div>
           <div class="shop-row-stats">ilvl ${it.ilvl}${above} · ${itemStatLine(it)}</div>
         </div>
@@ -15829,16 +15847,15 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   addStatAffixes(item, lvl, mult, rollAffixCount(caps.stat));
   addAttrAffixes(item, lvl, mult, rollAffixCount(caps.attr));
 
-  // ── BUILD-DEFINING EXTRAS ── the top tiers carry a special power (changes HOW
-  // you fight) or belong to a collectible set (escalating worn-count bonuses).
-  // Uniques always define a build; legendaries split between the two; a slice of
-  // epics seed set pieces so a set is realistically collectible on the way up.
+  // ── BUILD-DEFINING EXTRAS ── a unique either carries a special power (changes
+  // HOW you fight) or is a collectible set piece (escalating worn-count bonuses).
+  // Set pieces are their own top rarity — as rare as any unique and worn in their
+  // own colour — so completing a set is a real chase. Legendaries always carry a
+  // power; lower tiers get neither.
   if (tier === 'unique') {
-    item.power = rollItemPower();
-  } else if (tier === 'legendary') {
     if (Math.random() < 0.4) item.set = rollItemSet(); else item.power = rollItemPower();
-  } else if (tier === 'epic' && Math.random() < 0.14) {
-    item.set = rollItemSet();
+  } else if (tier === 'legendary') {
+    item.power = rollItemPower();
   }
   if (item.set && ITEM_SETS[item.set]) item.name = ITEM_SETS[item.set].name + ' ' + baseName;
 
@@ -16334,7 +16351,7 @@ function drawHeroSprite(px, py, tw, th, scale) {
   const headIcon  = visualIcon('head');
   const chestIcon = visualIcon('chest');
   const weaponIcon = visualIcon('weapon');
-  const chestTier = equipped.chest ? (TIERS[equipped.chest.tier]?.color || '#6d5a44') : null;
+  const chestTier = equipped.chest ? (equipped.chest.set ? SET_RARITY_COLOR : (TIERS[equipped.chest.tier]?.color || '#6d5a44')) : null;
 
   ctx.save();
   ctx.textAlign = 'center';
@@ -16388,8 +16405,8 @@ function drawHeroSprite(px, py, tw, th, scale) {
   // ── worn gear, each drawn in its zone and tinted to its rarity colour ──
   ctx.shadowColor = 'rgba(0,0,0,0.55)';
   ctx.shadowBlur = 2*scale;
-  const headColor   = equipped.head   ? (TIERS[equipped.head.tier]?.color   || '#cfd3da') : '#cfd3da';
-  const weaponColor = equipped.weapon ? (TIERS[equipped.weapon.tier]?.color || '#cfd3da') : '#cfd3da';
+  const headColor   = equipped.head   ? (equipped.head.set   ? SET_RARITY_COLOR : (TIERS[equipped.head.tier]?.color   || '#cfd3da')) : '#cfd3da';
+  const weaponColor = equipped.weapon ? (equipped.weapon.set ? SET_RARITY_COLOR : (TIERS[equipped.weapon.tier]?.color || '#cfd3da')) : '#cfd3da';
 
   if (chestIcon) {
     // The torso is already painted the chest's rarity colour, so draw the piece
@@ -18420,9 +18437,9 @@ function showLootBanner(title, kicker, color) {
 // a bright chime + flash; orange/red stop the world with a banner, sting & shake.
 function lootReveal(item) {
   if (!item || !item.tier) return;
-  const col = (TIERS[item.tier] || {}).color || '#fff';
+  const col = tierColor(item);   // set pieces flash their own colour, not unique red
   if (item.tier === 'legendary' || item.tier === 'unique') {
-    showLootBanner(item.name, item.tier === 'unique' ? 'UNIQUE DROP' : 'LEGENDARY DROP', col);
+    showLootBanner(item.name, item.set ? 'SET PIECE' : item.tier === 'unique' ? 'UNIQUE DROP' : 'LEGENDARY DROP', col);
     sfx('legendary'); screenFlash(col); addShake(9);
   } else if (item.tier === 'epic') {
     sfx('epicdrop'); screenFlash(col);
@@ -18492,9 +18509,9 @@ function itemPowerCount(key) {
 }
 function hasItemPower(key) { return itemPowerCount(key) > 0; }
 const ITEM_SETS = {
-  warden:   { name: "Warden's",   color: '#7fd0ff', bonus: { 2: { DEF: 12, HP: 40 },  4: { DEF: 30, HP: 120, BLK: 10 } } },
-  reaver:   { name: "Reaver's",   color: '#ff7a5c', bonus: { 2: { ATK: 10, CRIT: 6 }, 4: { ATK: 26, CRIT: 14, IDMG: 12 } } },
-  arcanist: { name: "Arcanist's", color: '#c77bff', bonus: { 2: { SP: 8, MP: 40 },    4: { SP: 20, MP: 120, CDR: 8 } } },
+  warden:   { name: "Warden's",   color: '#7fd0ff', bonus: { 2: { DEF: 12, HP: 40 },      4: { DEF: 30, HP: 120, BLOCK: 10 } } },
+  reaver:   { name: "Reaver's",   color: '#ff7a5c', bonus: { 2: { ATK: 10, CRIT: 6 },     4: { ATK: 26, CRIT: 14, IDMG: 12 } } },
+  arcanist: { name: "Arcanist's", color: '#c77bff', bonus: { 2: { SPELLPWR: 8, MP: 40 },  4: { SPELLPWR: 20, MP: 120, CDR: 8 } } },
 };
 function rollItemSet() { const ks = Object.keys(ITEM_SETS); return ks[Math.floor(Math.random() * ks.length)]; }
 function wornSetCounts() {
@@ -18523,6 +18540,35 @@ function setStatBonus(name) {
   }
   return sum;
 }
+// Rich hover card for a set-name tag: which slots the set can fill (lit for the
+// ones you currently wear it in), and each worn-count threshold's bonus (lit when
+// active, dimmed when not yet met). Reads live worn state so it tracks as you gear
+// up. Single-quoted attributes only — hoverTip escapes double quotes.
+function setTooltipHTML(setId) {
+  const s = ITEM_SETS[setId];
+  if (!s) return '';
+  const worn = wornSetCounts()[setId] || 0;
+  // A set piece can roll for ANY slot; show every slot, lighting the ones you're
+  // currently wearing a piece of THIS set in.
+  const slotList = SLOT_KEYS.map(slot => {
+    const has = equipped[slot] && equipped[slot].set === setId;
+    const label = SLOTS[slot].label.replace(/^\S+\s/, '');
+    return has ? `<span style='color:${SET_RARITY_COLOR}'>${label} ✓</span>`
+               : `<span style='opacity:.45'>${label}</span>`;
+  }).join(' · ');
+  // Each worn-count threshold and what it grants, lit when currently active.
+  const bonusLines = [2, 4].map(t => {
+    const b = s.bonus[t]; if (!b) return '';
+    const stats = Object.entries(b)
+      .map(([k, v]) => `+${v}${PCT_STATS.has(k) ? '%' : ''} ${STAT_SHORT[k] || k}`).join(' · ');
+    const met = worn >= t;
+    return `<div style='color:${met ? SET_RARITY_COLOR : 'var(--junk)'}'>${met ? '✓ ' : ''}${t} pieces: ${stats}</div>`;
+  }).join('');
+  return `<div class='ht-name' style='color:${SET_RARITY_COLOR}'>${s.name} Set</div>` +
+    `<div class='ht-line'>A set piece can drop for any gear slot. Wear matching pieces for escalating bonuses.</div>` +
+    `<div class='ht-sub'><b>Worn: ${worn}</b> — ${slotList}</div>` +
+    `<div class='ht-sub'>${bonusLines}</div>`;
+}
 // Short markup describing an item's special power / set membership, appended to its
 // stat line so the build-defining bit is visible wherever gear is listed.
 function itemPowerLine(item) {
@@ -18534,7 +18580,7 @@ function itemPowerLine(item) {
   if (item.set && ITEM_SETS[item.set]) {
     const s = ITEM_SETS[item.set];
     const n = wornSetCounts()[item.set] || 0;
-    out += ` · <span style="color:${s.color}">${s.name} set${n ? ` (${n})` : ''}</span>`;
+    out += ` · <span style="color:${s.color}" ${hoverTip(setTooltipHTML(item.set))}>${s.name} set${n ? ` (${n})` : ''}</span>`;
   }
   return out;
 }
@@ -22263,7 +22309,7 @@ function renderPanel() {
         ? `<div class='ht-name'>🔒 Locked</div><div class='ht-line'>Safe from selling, scrapping &amp; auto-loot. Tap to unlock.</div>`
         : `<div class='ht-name'>🔓 Unlocked</div><div class='ht-line'>Tap to lock — keeps it from being sold or scrapped.</div>`)}>${dlIcon('key', 16) || (item.locked ? '🔒' : '🔓')}</button>`;
       return `
-      <div class="loot-item item-${item.tier} ${selectedItem===i?'selected':''} ${isUpgrade?'upgrade':''} ${item.locked?'locked':''}">
+      <div class="loot-item ${rarityClass(item)} ${selectedItem===i?'selected':''} ${isUpgrade?'upgrade':''} ${item.locked?'locked':''}">
         <div class="loot-info" onclick="selectItem(${i}, this)"
              onmouseenter="showTooltip(event,${i})" onmouseleave="hideTooltip()">
           <div class="item-name">${item.name}${craftedMark(item)}</div>
@@ -23267,7 +23313,7 @@ function renderDollSlot(slot, mode) {
     ? (reqS && !reqS.ok ? `needs ${reqS.need} ${ATTRIBUTES[reqS.attr].short}` : 'unequippable')
     : '';
   const cap = item ? item.name : SLOTS[slot].label.replace(/^\S+\s/, '');
-  const tierColor = item ? (TIERS[item.tier] || {}).color || '' : '';
+  const tierColor = item ? (item.set ? SET_RARITY_COLOR : (TIERS[item.tier] || {}).color || '') : '';
   const frameStyle = item
     ? (inactive
         ? ` style="border-color:var(--red-350);box-shadow:0 0 9px var(--red-350)66;opacity:.62"`
@@ -23537,7 +23583,6 @@ function positionTooltip(anchor) {
 // small heading ("Hovered"/"Equipped"); `opts.compareTo` renders the power
 // difference vs that item as a percentage change.
 function itemCardHTML(item, opts = {}) {
-  const tier = TIERS[item.tier];
   const head = item.slot ? headlineStats(item) : [];
   const statRows = Object.entries(item.stats).map(([k,v]) => {
     // DMG is a range string like "8-12"; others are flat numbers (negative on a curse).
@@ -23589,8 +23634,8 @@ function itemCardHTML(item, opts = {}) {
   }
   return `
     ${label}
-    <div class="tt-name" style="color:${tier.color}">${item.name}</div>
-    <div class="tt-tier" style="color:${tier.color}">${item.slot ? SLOTS[item.slot].label : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</div>
+    <div class="tt-name" style="color:${tierColor(item)}">${item.name}</div>
+    <div class="tt-tier" style="color:${tierColor(item)}">${item.slot ? SLOTS[item.slot].label : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</div>
     ${item.slot ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">⚡ Power: ${power}</div>` : ''}
     ${reqLine}
     ${stats}
