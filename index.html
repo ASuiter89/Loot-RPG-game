@@ -242,7 +242,7 @@
   #settings-gear {
     display: none;
     align-items: center; justify-content: center;
-    width: 32px; height: 32px; margin-left: auto; flex: 0 0 auto;
+    width: calc(32px * var(--ui-scale,1)); height: calc(32px * var(--ui-scale,1)); margin-left: auto; flex: 0 0 auto;
     border: 1px solid var(--frame); border-radius: 8px;
     background: color-mix(in srgb, var(--panel) 70%, transparent); color: var(--gold); font-size: 1.8rem; line-height: 1;
     cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
@@ -295,12 +295,12 @@
      reads through, mirroring the floating skill bar / d-pad. Laid out by the
      on-map #buff-overlay (positioned below, near #map-info). */
   .buff-ic { position: relative; display: inline-flex; align-items: center; justify-content: center;
-             width: 22px; height: 22px; border-radius: 5px; background: color-mix(in srgb, var(--bg) 50%, transparent);
+             width: calc(22px * var(--ui-scale,1)); height: calc(22px * var(--ui-scale,1)); border-radius: 5px; background: color-mix(in srgb, var(--bg) 50%, transparent);
              box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 70%, transparent), inset 0 0 0 1px var(--green-500); cursor: help;
              backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); pointer-events: auto; }
   .buff-ic.debuff { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 70%, transparent), inset 0 0 0 1px var(--danger); }
-  .buff-time { position: absolute; right: -3px; bottom: -4px; min-width: 11px; height: 13px;
-               padding: 0 1px; font-size: 1.1rem; line-height: 13px; font-weight: bold; text-align: center;
+  .buff-time { position: absolute; right: -3px; bottom: -4px; min-width: calc(11px * var(--ui-scale,1)); height: calc(13px * var(--ui-scale,1));
+               padding: 0 1px; font-size: 1.1rem; line-height: calc(13px * var(--ui-scale,1)); font-weight: bold; text-align: center;
                color: var(--paper); background: var(--green-500); border: 1px solid color-mix(in srgb, var(--ink) 80%, transparent); border-radius: 6px;
                text-shadow: 0 1px 1px color-mix(in srgb, var(--ink) 60%, transparent); }
   .buff-ic.debuff .buff-time { background: var(--danger); }
@@ -564,7 +564,10 @@
     touch-action: manipulation;
   }
   .action-icon { font-size: 2rem; line-height: 1; display:flex; align-items:center; justify-content:center; }
-  .action-icon svg { display:block; }
+  /* Size the bag/nav action-button SVGs at 1em so they track the icon cell's
+     rem font-size (and thus UI SIZE), matching the emoji-based action buttons
+     beside them. The more-specific .settings-item rule below still wins there. */
+  .action-icon svg { display:block; width: 1em; height: 1em; }
   .action-label { font-size: 1.2rem; letter-spacing: 1px; }
 
   /* ── SETTINGS MODAL ── sound, saves, new-run and options. No on-screen button:
@@ -587,7 +590,11 @@
     padding: max(24px, 6vh) 18px 18px;
     background: color-mix(in srgb, var(--ink) 72%, transparent);
   }
-  #settings-card { margin: auto; }
+  /* No margin:auto here on purpose — the card is centred on open by
+     centerSettingsCard() (which sets the modal's padding-top) and then stays
+     top-anchored via align-items:flex-start, so switching to a taller tab grows
+     the card DOWNWARD instead of re-centring. A flex margin:auto would override
+     that and re-centre on every content change. */
   #settings-menu.open { display: flex; }
   .settings-vibe { cursor: default; }
   #music-vibe-select { flex: 1; min-width: 0; background: var(--panel); color: var(--purple-50); border: 1px solid var(--border); border-radius: 6px; padding: 5px 6px; font-family: inherit; font-size: 1.3rem; letter-spacing: 0.3px; cursor: pointer; }
@@ -752,7 +759,7 @@
   #hc-death-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 92%, transparent); z-index: 520; display: none; align-items: center; justify-content: center; padding: 20px; }
   #hc-death-overlay.open { display: flex; animation: deathFade 0.5s ease; }
   #hc-death-card { background: linear-gradient(180deg, var(--ink), var(--ink)); border: 2px solid var(--red-550); border-radius: 12px; max-width: 340px; width: 100%; padding: 24px 18px; text-align: center; box-shadow: 0 0 50px color-mix(in srgb, var(--red-800) 55%, transparent); }
-  #hc-death-card .hc-skull { width: 46px; height: 46px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--red-800) 55%, transparent)); }
+  #hc-death-card .hc-skull { width: calc(46px * var(--ui-scale,1)); height: calc(46px * var(--ui-scale,1)); margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--red-800) 55%, transparent)); }
   .hc-death-title { color: var(--hp); font-size: 2.4rem; font-weight: bold; letter-spacing: 3px; text-shadow: 0 0 14px color-mix(in srgb, var(--hp) 70%, transparent); margin-bottom: 6px; }
   .hc-death-sub { font-size: 1.4rem; color: var(--red-150); line-height: 1.5; margin-bottom: 14px; }
   .hc-death-sub b { color: var(--red-350); }
@@ -837,7 +844,7 @@
   .howto-ctrl .hk { flex: 0 0 52px; color: var(--gold); font-weight: bold; }
   .howto-ctrl b { color: var(--paper); }
   .howto-tiers { display: inline-flex; gap: 3px; vertical-align: middle; margin-left: 4px; }
-  .howto-tiers i { width: 9px; height: 9px; border-radius: 2px; transform: rotate(45deg); display: inline-block; }
+  .howto-tiers i { width: calc(9px * var(--ui-scale,1)); height: calc(9px * var(--ui-scale,1)); border-radius: 2px; transform: rotate(45deg); display: inline-block; }
   /* Date section header — sticks to the top of the scroll card so the current
      group's date stays visible as you scroll the changelog. */
   .version-date {
@@ -873,7 +880,7 @@
   #graveyard-overlay.open { display: flex; }
   #graveyard-card { background: linear-gradient(180deg, var(--panel), var(--panel)); border: 2px solid var(--frame); border-radius: 10px; max-width: 360px; width: 100%; max-height: 80vh; overflow-y: auto; padding: 14px; box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 60%, transparent); }
   .gy-row { display: flex; align-items: center; gap: 9px; padding: 8px 4px; border-bottom: 1px solid color-mix(in srgb, var(--paper) 5%, transparent); }
-  .gy-portrait { flex: 0 0 auto; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; }
+  .gy-portrait { flex: 0 0 auto; width: calc(28px * var(--ui-scale,1)); height: calc(28px * var(--ui-scale,1)); display: flex; align-items: center; justify-content: center; }
   .gy-portrait .gy-emoji { font-size: 2rem; }
   .gy-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .gy-name { font-size: 1.4rem; color: var(--text); font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1325,32 +1332,37 @@
      auto-cast slot CENTRED, and the four manual skill slots pinned RIGHT. The left
      and right sections take an equal share of the width so the auto-slot (its own
      natural width) sits dead-centre regardless of how full either side is. */
-  #skill-bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px; }
+  #skill-bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px; --sb-size: calc(46px * var(--ui-scale,1)); }
   #skill-bar .sb-left  { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 5px; justify-content: flex-start; flex-wrap: wrap; }
   #skill-bar .sb-right { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 5px; justify-content: flex-end; flex-wrap: wrap; }
   #skill-bar .sb-auto-wrap { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
   /* The auto-cast slot looks exactly like the manual skill slots — same fill, border,
      ready/empty/cooling states (all inherited from .skillbar-btn). The only thing that
      sets it apart is the small ⟳ AUTO tag riding along its top edge. */
-  .skillbar-btn.autoslot .auto-tag { position: absolute; top: 1px; left: 0; right: 0; z-index: 5;
-    text-align: center; font-size: 1.1rem; letter-spacing: 0.5px; color: var(--blue-350); white-space: nowrap; }
+  .skillbar-btn.autoslot .auto-tag { position: absolute; top: 2px; left: 0; right: 0; z-index: 5;
+    text-align: center; font-size: 0.95rem; letter-spacing: 0.2px; color: var(--blue-350); white-space: nowrap; overflow: hidden;
+    text-shadow: 0 1px 2px #000, 0 0 3px #000; pointer-events: none; }
   /* Reserve headroom for the tag so it never overlaps the slot icon (the #skill-bar
      selector outranks the belt's own padding rules). */
-  .skillbar-btn.autoslot, #skill-bar .skillbar-btn.autoslot { padding-top: 15px; min-width: 58px; }
+  .skillbar-btn.autoslot, #skill-bar .skillbar-btn.autoslot { padding-top: calc(12px * var(--ui-scale,1)); }
   .skillbar-btn.autoslot.ready .auto-tag { color: var(--gold); }
-  .skillbar-btn { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; min-width: 42px; padding: 3px 5px; border-radius: 7px; border: 1px solid var(--border); background: var(--panel-raised); color: var(--purple-200); cursor: pointer; font-family: var(--font-ui); -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  /* Uniform SQUARE buttons — potions, TOWN, the 4 skill slots and the auto slot
+     all share one size (--sb-size, which scales with UI SIZE). The key sits as a
+     corner chip and the caption as a bottom overlay, so the centred icon never
+     overlaps them and every button is the same box regardless of its content. */
+  .skillbar-btn { position: relative; box-sizing: border-box; width: var(--sb-size, 46px); height: var(--sb-size, 46px); min-width: 0; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; padding: 2px; border-radius: 7px; border: 1px solid var(--border); background: var(--panel-raised); color: var(--purple-200); cursor: pointer; font-family: var(--font-ui); -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   /* The hero's primary active (slot 1) is marked off in gold so it reads as the signature ability cast by the ⚡ button. */
   .skillbar-btn.baseline { border-color: var(--frame); background: var(--orange-850); color: var(--gold-200); }
   .skillbar-btn.baseline .sb-key { color: var(--gold); }
   .skillbar-btn.baseline.disabled { background: var(--panel); border-color: var(--panel); color: var(--btn-off); }
-  .skillbar-btn .sb-key { position: absolute; top: 1px; left: 3px; font-size: 1.1rem; color: var(--blue-350); }
-  .skillbar-btn .sb-icon { font-size: 1.9rem; line-height: 1; }
+  .skillbar-btn .sb-key { position: absolute; top: 2px; left: 2px; z-index: 4; font-size: 1.1rem; line-height: 1; color: var(--blue-350); background: rgba(0,0,0,0.42); border-radius: 4px; padding: 0 3px; text-shadow: 0 1px 1px #000; pointer-events: none; }
+  .skillbar-btn .sb-icon { flex: 0 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; font-size: 2rem; line-height: 1; }
   /* Spell tiles drop the MP label, so the icon grows to fill the tile (hover the
      button for MP / cooldown details). The min-height reserves the icon's line even
      when the atlas hasn't loaded yet (dlIcon returns ''), so a filled slot keeps its
      full tile shape instead of collapsing to a thin pill. */
-  .skillbar-btn .sb-icon.big { font-size: 3rem; min-height: 30px; }
-  .skillbar-btn .sb-info { font-size: 1.1rem; letter-spacing: 0.5px; }
+  .skillbar-btn .sb-icon.big { font-size: 2.2rem; }
+  .skillbar-btn .sb-info { position: absolute; bottom: 1px; left: 0; right: 0; text-align: center; font-size: 0.95rem; line-height: 1.1; letter-spacing: 0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px #000, 0 0 3px #000; pointer-events: none; }
   /* Ready to cast: brighter fill + a crisp outline that gently pulses so an
      available skill clearly stands apart from greyed/cooling-down ones. */
   .skillbar-btn.ready { background: var(--border); border-color: var(--gold); color: var(--text); animation: skillReadyGold 1.4s ease-in-out infinite; }
@@ -1481,7 +1493,7 @@
   /* Every hotkey slot is rendered, even unassigned ones, as a dashed drop target
      you can drag a learned skill onto (or tap to assign). Kept compact and dim so
      a row of open slots reads as "space to fill", not clutter. */
-  .skillbar-btn.slot-empty { min-width: 34px; background: var(--panel); border: 1px dashed var(--border); color: var(--purple-500); opacity: 0.72; }
+  .skillbar-btn.slot-empty { background: var(--panel); border: 1px dashed var(--border); color: var(--purple-500); opacity: 0.72; }
   .skillbar-btn.slot-empty:hover { opacity: 1; border-color: var(--interactive); color: var(--purple-200); }
   .skillbar-btn.slot-empty .slot-plus { font-size: 2rem; line-height: 1; font-weight: 700; }
   .skillbar-btn.slot-empty.baseline { border-color: var(--orange-550); color: var(--orange-400); background: var(--orange-850); }
@@ -1516,12 +1528,11 @@
      its own larger sizing in the wide-layout media query above.) */
   @media (pointer: coarse) {
     #skill-bar { gap: 6px; }
-    #skill-bar .skillbar-btn { min-width: 48px; padding: 5px 6px; }
-    #skill-bar .skillbar-btn.slot-empty { min-width: 40px; }
+    #skill-bar { --sb-size: calc(50px * var(--ui-scale,1)); }
+    /* skill slots share --sb-size; no per-variant min-width */
     #skill-bar .skillbar-btn .sb-icon { font-size: 2.2rem; }
     #skill-bar .skillbar-btn .sb-icon.big { font-size: 3.2rem; }
-    #skill-bar .skillbar-btn .sb-icon.big .dl-ic { width: 34px !important; height: 34px !important; }
-    #skill-bar .skillbar-btn .sb-icon svg { width: 26px; height: 30px; }
+    #skill-bar .skillbar-btn .sb-icon svg { width: auto; height: calc(28px * var(--ui-scale,1)); }
     #skill-bar .skillbar-btn .sb-key { font-size: 1.2rem; }
     #skill-bar .skillbar-btn .sb-info { font-size: 1.1rem; }
     /* Lay the 4 skill slots out as a tidy 2x2 block, not 3-on-top-1-below. */
@@ -1536,7 +1547,7 @@
   .lt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
   /* A slim divider between the four manual slots and the lone auto-cast slot. */
   .lt-sep { flex: 0 0 1px; align-self: stretch; min-height: 36px; margin: 0 3px; background: linear-gradient(180deg, transparent, var(--border) 25%, var(--border) 75%, transparent); }
-  .lt-slot { position: relative; width: 46px; height: 46px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel-raised); display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .lt-slot { position: relative; width: calc(46px * var(--ui-scale,1)); height: calc(46px * var(--ui-scale,1)); border-radius: 8px; border: 1px solid var(--border); background: var(--panel-raised); display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .lt-slot.primary { border-color: var(--gold); background: var(--orange-850); }
   .lt-slot.empty { background: var(--panel); border-style: dashed; color: var(--purple-500); }
   .lt-slot.empty:hover { border-color: var(--interactive); }
@@ -1605,8 +1616,8 @@
     cursor: pointer;
     line-height: 1.2;
   }
-  .loot-subtab .svg-icon { width: 14px; height: 14px; }
-  .loot-subtab .dl-ic { width: 16px !important; height: 16px !important; }
+  .loot-subtab .svg-icon { width: calc(14px * var(--ui-scale,1)); height: calc(14px * var(--ui-scale,1)); }
+  .loot-subtab .dl-ic { width: calc(16px * var(--ui-scale,1)) !important; height: calc(16px * var(--ui-scale,1)) !important; }
   .loot-subtab:hover { background: var(--panel); color: var(--neutral-250); }
   .loot-subtab.active {
     background: var(--blue-800);
@@ -1646,8 +1657,8 @@
   /* Little item picture shown at the start of each loot / gear / shop row. */
   .loot-icon {
     flex-shrink: 0;
-    width: 22px;
-    height: 22px;
+    width: calc(22px * var(--ui-scale,1));
+    height: calc(22px * var(--ui-scale,1));
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1656,17 +1667,17 @@
     line-height: 1;
     filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--ink) 60%, transparent));
   }
-  .slot-icon { width: 18px; height: 18px; font-size: 1.6rem; }
+  .slot-icon { width: calc(18px * var(--ui-scale,1)); height: calc(18px * var(--ui-scale,1)); font-size: 1.6rem; }
   /* Vector item icons: silhouettes tinted to rarity, sized to their container. */
-  .svg-icon { width: 18px; height: 18px; display: block; }
-  .slot-icon .svg-icon { width: 16px; height: 16px; }
+  .svg-icon { width: calc(18px * var(--ui-scale,1)); height: calc(18px * var(--ui-scale,1)); display: block; }
+  .slot-icon .svg-icon { width: calc(16px * var(--ui-scale,1)); height: calc(16px * var(--ui-scale,1)); }
 
   /* Chip row (used by the gamble slot picker) */
   .cos-chips { display: flex; flex-wrap: wrap; gap: 4px; }
   .cos-chip {
     flex-shrink: 0;
-    min-width: 30px;
-    height: 30px;
+    min-width: calc(30px * var(--ui-scale,1));
+    height: calc(30px * var(--ui-scale,1));
     padding: 0 4px;
     border: 1px solid var(--border);
     border-radius: 5px;
@@ -1725,8 +1736,8 @@
     background: var(--panel);
     color: var(--orange-650);
     font-size: 1.5rem;
-    width: 28px;
-    height: 28px;
+    width: calc(28px * var(--ui-scale,1));
+    height: calc(28px * var(--ui-scale,1));
     line-height: 1;
     border: 1px solid var(--panel-raised);
   }
@@ -1994,7 +2005,7 @@
   .pd-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; z-index: 1; width: 100%; }
   .pd-slot {
     position: relative;
-    width: 100%; max-width: 76px; aspect-ratio: 1;
+    width: 100%; max-width: calc(76px * var(--ui-scale,1)); aspect-ratio: 1;
     border: 1px solid var(--orange-850); border-radius: 5px;
     background: color-mix(in srgb, var(--ink) 60%, transparent);
     display: flex; align-items: center; justify-content: center;
@@ -2550,7 +2561,7 @@
     cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   }
   .town-menu-btn:active { background: var(--orange-850); }
-  .town-menu-btn .tm-icon { font-size: 2.4rem; flex: 0 0 auto; width: 32px; text-align: center; }
+  .town-menu-btn .tm-icon { font-size: 2.4rem; flex: 0 0 auto; width: calc(32px * var(--ui-scale,1)); text-align: center; }
   /* Animated walk-down sprite icon for a town service (CSS sprite step-animation). */
   .town-walk { display: inline-block; background-repeat: no-repeat; image-rendering: pixelated; vertical-align: middle; animation: townWalkStep .62s steps(4) infinite; }
   @keyframes townWalkStep { to { background-position-x: var(--twx); } }
@@ -2571,7 +2582,7 @@
     animation: gatePulse 1.6s ease-in-out infinite;
   }
   .town-menu-btn.tm-gate:active { background: var(--gold-850); }
-  .town-menu-btn.tm-gate .tm-icon { font-size: 2.8rem; width: 36px; }
+  .town-menu-btn.tm-gate .tm-icon { font-size: 2.8rem; width: calc(36px * var(--ui-scale,1)); }
   .town-menu-btn.tm-gate .tm-name { font-size: 1.7rem; color: var(--xp); }
   .town-menu-btn.tm-gate .tm-desc { font-size: 1.2rem; color: var(--gold-200); }
   @keyframes gatePulse {
@@ -2796,7 +2807,7 @@
   #title-logo .title-sub-word { display: block; color: var(--orange-300); font-size: 2.3rem; letter-spacing: 8px; }
   #title-tag { color: var(--orange-400); font-size: 1.4rem; margin: 10px 0 22px; line-height: 1.5; }
   #title-tag .tier {
-    display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+    display: inline-block; width: calc(9px * var(--ui-scale,1)); height: calc(9px * var(--ui-scale,1)); border-radius: 2px;
     margin: 0 1px; vertical-align: middle; transform: rotate(45deg);
   }
   /* Returning-hero card above CONTINUE: who you are + how far you've gotten. */
@@ -2840,9 +2851,10 @@
   }
   #achievements-body .ta-head.ta-total { text-align: center; font-size: 1.4rem; margin-bottom: 4px; }
   #achievements-body .ta-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 14px; }
-  .ta-badge { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 92px; cursor: help; }
-  .ta-badge .ta-ic { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  .ta-badge { display: flex; flex-direction: column; align-items: center; gap: 3px; width: calc(92px * var(--ui-scale,1)); cursor: help; }
+  .ta-badge .ta-ic { width: calc(36px * var(--ui-scale,1)); height: calc(36px * var(--ui-scale,1)); border-radius: 50%; display: flex; align-items: center; justify-content: center;
     border: 1px solid var(--frame); background: var(--orange-850); color: var(--gold); }
+  .ta-badge .ta-ic svg { width: calc(20px * var(--ui-scale,1)); height: calc(20px * var(--ui-scale,1)); }
   .ta-badge.earned .ta-ic { box-shadow: 0 0 10px color-mix(in srgb, var(--orange-750) 35%, transparent); }
   /* Unearned feats fade well back so the earned ones clearly stand out. */
   .ta-badge.locked { opacity: 0.42; }
@@ -2871,9 +2883,12 @@
   /* Fixed-height icon row keeps every tile's label on the same baseline whether
      the icon is an emoji or a DawnLike sprite. */
   .title-set-btn .tsb-ic {
-    font-size: 2.2rem; line-height: 1; height: 24px;
+    font-size: 2.2rem; line-height: 1; height: calc(24px * var(--ui-scale,1));
     display: flex; align-items: center; justify-content: center;
   }
+  /* The gear/help/cloud/history tiles use inline <svg width=21 height=21>; size
+     them via the UI SIZE multiplier so they scale like the emoji-based tiles. */
+  .title-set-btn .tsb-ic svg { width: calc(21px * var(--ui-scale,1)); height: calc(21px * var(--ui-scale,1)); }
   .title-set-btn .tsb-lbl { font-size: 1.2rem; letter-spacing: .5px; line-height: 1.2; white-space: nowrap; }
   /* ── MONOCHROME UI EMOJI ── Menu/HUD emoji that aren't game-thing icons render
      as flat single-colour symbols instead of colourful emoji (or being dropped).
@@ -2930,7 +2945,7 @@
   /* The "me" highlight always wins over the top-rank wash so you can still spot
      your own row at a glance. */
   .lb-row.me { border-color: var(--gold); background: var(--orange-850); }
-  .lb-class { font-size: 1.6rem; flex: 0 0 auto; width: 18px; text-align: center; }
+  .lb-class { font-size: 1.6rem; flex: 0 0 auto; width: calc(18px * var(--ui-scale,1)); text-align: center; }
   .lb-name { flex: 1 1 auto; color: var(--gold-200); font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lb-val { color: var(--gold); font-weight: bold; flex: 0 0 auto; white-space: nowrap; }
   .lb-foot { margin-top: 12px; }
@@ -3148,7 +3163,7 @@
        clean 2×2 (a 3-wide row would strand GRAVES alone), About's 2 as one row —
        and 2-wide gives wider, easier-to-hit buttons. */
     #settings-card .settings-grid { grid-template-columns: repeat(2, 1fr); }
-    .sk-loadout .lt-slot { width: 52px; height: 52px; }
+    .sk-loadout .lt-slot { width: calc(52px * var(--ui-scale,1)); height: calc(52px * var(--ui-scale,1)); }
 
     /* PANEL CHROME: the LOOT/GEAR/HERO/SKILLS tabs and the loot-filter chips are
        navigation chrome, not body copy. With the fluid type scale the body text
@@ -3200,23 +3215,24 @@
       box-shadow: none;
     }
     /* Keep the panel full-screen (so it reads as the map swapping to a menu) and
-       let its contents FILL the play-area width — the old 720px cap stranded the
-       menu in a narrow centred column with dead space on both sides. The cap is
-       now generous (fills a ~half-ultrawide window completely) and only reins in
-       ultra-wide monitors so text lines don't get unreadably long. The card grids
-       below turn the extra width into more columns rather than wider rows. */
+       let its contents FILL the whole play-area width — no centred column, no
+       dead space on the sides. Width is consumed by the card grids below, which
+       add columns up to a per-grid max and then STRETCH those columns to fill
+       the rest (see the capped-fluid grid-template-columns). */
     #town-modal > #town-header, #town-modal > #town-gold,
     #town-modal > #town-mats, #town-modal > #town-content,
     #shop-modal > #shop-gold, #shop-modal > #shop-content,
     #mystic-modal > #mystic-content {
-      width: 100%; max-width: min(1100px, 100%); margin-left: auto; margin-right: auto;
+      width: 100%; max-width: 100%; margin-left: 0; margin-right: 0;
     }
-    /* Card grids fill the widened column with as many columns as fit, so shops,
-       pacts and the town hub use the space instead of wrapping text in a narrow
-       two-across strip. */
-    .pact-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
-    .shop-grid { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
-    .town-menu { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+    /* Capped-fluid card grids: pack as many min-width columns as fit, but never
+       more than N — the max(min-col, 100%/(N+1)+1px) term makes an (N+1)th column
+       impossible past the cap, and the 1fr then stretches the N columns to
+       consume the full width. min-col scales with UI SIZE so bigger text keeps
+       roomy cards (and drops a column) instead of overflowing. */
+    .pact-grid { grid-template-columns: repeat(auto-fill, minmax(max(calc(300px * var(--ui-scale,1)), calc(100% / 4 + 1px)), 1fr)); }
+    .shop-grid { grid-template-columns: repeat(auto-fill, minmax(max(calc(260px * var(--ui-scale,1)), calc(100% / 5 + 1px)), 1fr)); }
+    .town-menu { grid-template-columns: repeat(auto-fill, minmax(max(calc(210px * var(--ui-scale,1)), calc(100% / 7 + 1px)), 1fr)); }
     /* Shop cards as a 2-row grid: icon down the left, the name+description spanning
        the FULL card width up top, and the price + buy/hire control on their own
        footer row. This stops prose descriptions (mercenaries, bounties) from being
@@ -3358,13 +3374,12 @@
     }
     /* Big enough to read, but allowed to shrink so all 12 slots stay one row even
        when the log is open and the map column is narrow. */
-    #skill-bar .skillbar-btn { min-width: 46px; padding: 5px 6px; flex: 0 1 auto; }
+    #skill-bar { --sb-size: calc(48px * var(--ui-scale,1)); }
     #skill-bar .skillbar-btn .sb-icon { font-size: 2.4rem; }
     /* Spell icons (no MP label) fill the larger tile here. */
     #skill-bar .skillbar-btn .sb-icon.big { font-size: 3.4rem; }
-    #skill-bar .skillbar-btn .sb-icon.big .dl-ic { width: 34px !important; height: 34px !important; }
     /* Potion flasks are inline SVGs with fixed px sizes — scale them up too. */
-    #skill-bar .skillbar-btn .sb-icon svg { width: 25px; height: 28px; }
+    #skill-bar .skillbar-btn .sb-icon svg { width: auto; height: calc(28px * var(--ui-scale,1)); }
     #skill-bar .skillbar-btn .sb-key { font-size: 1.2rem; }
     #skill-bar .skillbar-btn .sb-info { font-size: 1.2rem; }
     /* Map: the largest square that fits its cell, centered. */
@@ -3563,7 +3578,7 @@
   }
   /* Centre button is the USE / interact control — a faint, colourless clock. */
   #touch-dpad .dpad-center { color: color-mix(in srgb, var(--paper) 50%, transparent); }
-  .dpad-center .dp-clock { width: 20px; height: 20px; display: block; }
+  .dpad-center .dp-clock { width: calc(20px * var(--ui-scale,1)); height: calc(20px * var(--ui-scale,1)); display: block; }
 
   /* Beach-tutorial hint chip — an optional "?" help affordance pinned just above
      the bottom action bar while the tutorial is active. The whole chip is
@@ -3596,7 +3611,7 @@
   #tutorial-hint:active { background: color-mix(in srgb, var(--panel) 96%, transparent); }
   #tutorial-hint .th-q {
     flex: 0 0 auto;
-    width: 22px; height: 22px; border-radius: 50%;
+    width: calc(22px * var(--ui-scale,1)); height: calc(22px * var(--ui-scale,1)); border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     background: var(--gold); color: var(--orange-850);
     font-weight: bold; font-size: 1.6rem; line-height: 1;
@@ -3767,7 +3782,7 @@
   .cook-btn.ghost { background: var(--panel-raised); border-color: var(--border); color: var(--orange-400); flex: 0 0 70px; }
   .food-row, .recipe-row { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 4px 2px; }
   .recipe-row.locked { opacity: 0.7; }
-  .food-emoji { font-size: 2.2rem; width: 24px; text-align: center; }
+  .food-emoji { font-size: 2.2rem; width: calc(24px * var(--ui-scale,1)); text-align: center; }
   .food-info { flex: 1; min-width: 0; }
   .food-name { font-size: 1.3rem; color: var(--text); font-weight: bold; }
   .food-fx { font-size: 1.2rem; color: var(--green-350); }
@@ -5074,6 +5089,14 @@ function setUiScale(v) {
   applyUiScale();
   renderUiScaleControls();
   if (typeof applyGameCursor === 'function') applyGameCursor(); // rebake the pointer at the new size
+  // Re-lay any open DOM panels so their atlas icons (built at render time by
+  // dlIcon, which bakes a px size) pick up the new scale immediately. Text is
+  // rem and reflows on its own; the skill bar also re-renders every tick, but the
+  // side panel / open shop only rebuild on interaction, so nudge them here. Each
+  // render fn guards its own preconditions; wrap in try/catch for safety.
+  try { if (typeof renderSkillBar === 'function') renderSkillBar(); } catch (e) {}
+  try { if (typeof renderPanel === 'function') renderPanel(); } catch (e) {}
+  try { if (typeof merchant !== 'undefined' && merchant && typeof renderShop === 'function') renderShop(); } catch (e) {}
   if (typeof sfx === 'function') sfx('click');
 }
 function renderUiScaleControls() {
@@ -5236,6 +5259,10 @@ function drawTownWalk(kind, cx, footY, size) {
 function townWalkIcon(kind, px) {
   const url = TOWN_NPC_ART[kind];
   if (!url) return '';
+  // Scale with the UI SIZE setting so town-service sprites grow with the rest of
+  // the interface, matching dlIconAt (width/height, the 4-frame strip size and
+  // the animation offset all key off px, so one multiply scales them together).
+  px = px * (uiScale || 1);
   return `<span class="town-walk" style="width:${px}px;height:${px}px;background-image:url(${url});background-size:${px * 4}px ${px}px;--twx:-${px * 4}px"></span>`;
 }
 // A hero's DOWN-facing idle frame as a cached data URL, so DOM/menu contexts (the
@@ -5264,7 +5291,10 @@ function heroFaceIcon(cls, sex, px) {
   if (!cls || typeof CLASSES !== 'object' || !CLASSES[cls]) return '';
   const sx = (sex === 'female') ? 'female' : 'male';
   const url = heroWalkSheet(cls, sx) ? heroFaceDataURL(cls, sx) : null;
-  if (url) return `<img class="hero-face" src="${url}" width="${px}" height="${px}" alt="" style="image-rendering:pixelated;vertical-align:middle">`;
+  // Scale the baked <img> by UI SIZE so DOM portraits grow with the interface;
+  // image-rendering:pixelated keeps the upscaled sprite crisp. The dlIcon
+  // fallback already applies uiScale on its own, so it keeps the raw base px.
+  if (url) { const p = Math.round(px * (uiScale || 1)); return `<img class="hero-face" src="${url}" width="${p}" height="${p}" alt="" style="image-rendering:pixelated;vertical-align:middle">`; }
   return dlIcon('hero_' + cls, px) || '';
 }
 // Blit a named sprite into a dst rect (nearest-neighbour for crisp pixels).
@@ -5362,6 +5392,14 @@ function itemSpritePx(tw) {
 function dlIconAt(name, px) {
   const i = SPRITE_IDX[name];
   if (i === undefined || !spriteReady) return '';
+  // Scale every DOM atlas icon by the UI SIZE setting so menu/HUD/panel icons
+  // grow in lockstep with the rem-based text around them (the game map/canvas is
+  // unaffected — that scaling lives in drawSpriteC/the camera). Unchanged at 1x
+  // and crisp at whole-number scales (1x → 2x doubles a 16px tile to 32px); the
+  // 1.25/1.5/1.75 steps soften the pixels slightly, the same tradeoff the scaled
+  // text makes. Snapping to a tile multiple already happened in dlIcon(), so the
+  // base stays crisp and this only applies the player's chosen multiplier.
+  px = px * (uiScale || 1);
   const aw = spriteSheet.naturalWidth || 256, ah = spriteSheet.naturalHeight || 144;
   const col = i % ATLAS_COLS, row = (i / ATLAS_COLS) | 0, sc = px / ATLAS_TS;
   return `<span class="dl-ic" style="width:${px}px;height:${px}px;` +
@@ -10527,6 +10565,10 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "UI SIZE scales icons too", by: "Claude", notes: ["Every menu, HUD and panel icon now grows with the UI SIZE setting alongside the text — sprites, currency and material icons, status badges, portraits, town-service art and the cursor all scale from 1x to 2x instead of staying tiny.", "Fixed some icons scaling twice and ballooning at higher UI SIZE."] },
+  { date: "2026-07-02", size: "small", v: "Town & shop menus fill the screen", by: "Claude", notes: ["Town, shop and pact menus use the full width now: cards add columns up to a cap, then stretch to consume the rest of the space instead of stranding a narrow centred strip.", "Town hub lays out as a clean grid with no lone trailing tile."] },
+  { date: "2026-07-02", size: "small", v: "Uniform skill-bar buttons", by: "Claude", notes: ["Potions, Town, the skill slots and the auto-cast slot are now equal-size squares, so the bar reads as one even row.", "Dropped the TOWN and AUTO word labels — the icon and key already say it — so text no longer crowds or overlaps the icons."] },
+  { date: "2026-07-02", size: "small", v: "Settings opens centred again", by: "Claude", notes: ["The Settings modal opens vertically centred and keeps its top anchored, so switching tabs grows it downward instead of jumping back to centre."] },
   { date: "2026-07-02", size: "small", v: "Set pieces are their own teal rarity", by: "Claude", notes: ["Set pieces now drop only at the top tier — as rare as a unique — and wear their own teal colour everywhere (bag, tooltip, gear panel, hero sprite, drop banner) instead of blending in as purple/orange.", "Hover or press-hold a \"… set\" tag on an item to see the set's bonuses (active tiers lit), which slots it can fill, and how many pieces you're wearing.", "Fixed set bonuses that never applied: the 4-piece Block and the Arcanist Spell Power bonuses now take effect."] },
   { date: "2026-07-02", size: "small", v: "Time flows in town", by: "Claude", notes: ["Time passes in town just like the dungeon — HP/MP regen and skill/potion cooldowns keep ticking while you browse the hub, so a moment's rest heals you for free.", "The TOWN button now stays on the bar while you're in town, greyed out to mark where you are, instead of vanishing."] },
   { date: "2026-07-02", size: "small", v: "Bangers UI font", by: "Claude", notes: ["New bold, all-caps comic-book display font (Bangers) replaces the rounded one across every menu, the HUD and the title logo."] },
@@ -16130,7 +16172,12 @@ function _ctxIconPx(parent) {
   if (parent && parent.nodeType === 1) {
     try { fs = parseFloat(getComputedStyle(parent).fontSize) || 16; } catch (e) {}
   }
-  return Math.max(16, Math.round(fs * 1.2));
+  // The computed font-size ALREADY includes the UI SIZE multiplier (the rem root
+  // scales by --ui-scale), and dlIcon/dlIconAt now re-apply uiScale themselves —
+  // so divide it back out here to hand dlIcon a BASE px and avoid scaling twice
+  // (that double-count ballooned auto-de-emojified icons ~4x at 2x UI SIZE).
+  const s = (typeof uiScale === 'number' && uiScale) ? uiScale : 1;
+  return Math.max(16, Math.round((fs / s) * 1.2));
 }
 function _iconifyTextNode(node) {
   const text = node.nodeValue;
@@ -23058,7 +23105,7 @@ function renderSkillBar() {
   if (!autoS) {
     const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast slot</div><div class='ht-line'>${touchUI() ? 'Tap to choose' : 'Drag a learned skill here, or tap to choose'} a skill to cast automatically — it fires the instant it's ready. Best for buffs and summons.</div>`;
     autoCell = `<button class="skillbar-btn slot-empty autoslot" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
-      <span class="sb-key auto-tag">⟳ AUTO</span><span class="sb-icon big slot-plus">＋</span>
+      <span class="sb-key auto-tag">⟳</span><span class="sb-icon big slot-plus">＋</span>
     </button>`;
   } else {
     const s = autoS;
@@ -23067,7 +23114,7 @@ function renderSkillBar() {
     const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown · casts itself the moment it's ready</div><div class='ht-sub' style='opacity:.7'>${touchUI() ? 'tap to change or clear' : 'drag a skill here to change · tap to edit'}</div>`;
     autoCell = `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}','${AUTO_SLOT}')" ondragend="skillDragEnd()" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
-      <span class="sb-key auto-tag">⟳ AUTO</span><span class="sb-icon big">${dlIcon(s.icon, 30)||''}</span>${cdDial('sk:' + s.id)}
+      <span class="sb-key auto-tag">⟳</span><span class="sb-icon big">${dlIcon(s.icon, 30)||''}</span>${cdDial('sk:' + s.id)}
     </button>`;
   }
   // Desktop only: a TOWN button on the far left of the bar (the header's TOWN
@@ -23090,7 +23137,7 @@ function renderSkillBar() {
       ? `<div class='ht-name'>🌀 Town Portal</div><div class='ht-line'>Opening… ${Math.ceil(portalCharge)} second${Math.ceil(portalCharge) === 1 ? '' : 's'} left. A foe's hit shatters it.</div><div class='ht-sub'>press ${kbLabel('portal')} or move to cancel</div>`
       : `<div class='ht-name'>🏰 Town Portal</div><div class='ht-line'>Open a portal to the safe hub. It channels for a few seconds — you can't act while it does — moving or a foe's hit cancels it.</div><div class='ht-sub'>press ${kbLabel('portal')}</div>`;
     townBtn = `<button class="skillbar-btn town${here ? ' town-locked' : ''}${ch ? ' channeling' : ''}" ${hoverTip(townTip)} ${here ? '' : 'onclick="enterTown()"'}>
-      <span class="sb-key">${kbLabel('portal')}</span><span class="sb-icon">${dlIcon('ui_gate',24) || '🏰'}</span><span class="sb-info">${ch ? Math.ceil(portalCharge) : 'TOWN'}</span>
+      <span class="sb-key">${kbLabel('portal')}</span><span class="sb-icon">${dlIcon('ui_gate',24) || '🏰'}</span><span class="sb-info">${ch ? Math.ceil(portalCharge) : ''}</span>
     </button>`;
   }
   // Three sections: Town/Health/Mana left, the auto-cast slot centred, the four
