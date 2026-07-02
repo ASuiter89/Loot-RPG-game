@@ -11234,6 +11234,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Smoother pickups", by: "Claude", notes: ["Grabbing loot no longer hitches the frame — the bag rebuilds at most once per frame and only when it's on-screen, and rapid pickups save once instead of on every chest."] },
   { date: "2026-07-02", size: "small", v: "Popup titles clear their nav buttons", by: "Claude", notes: ["A long popup title (e.g. Name Your Hero) no longer lets the Back/Close button spill sideways over it on a narrow window — the title now ellipsizes instead of overlapping."] },
   { date: "2026-07-02", size: "small", v: "Depth banner no longer eaten by its cache", by: "Claude", notes: ["A depth-milestone cache that rolls legendary/unique now shows NEW DEPTH RECORD first, then the drop reveal — instead of the drop banner instantly clobbering the milestone one.", "Loot banners now queue and play in turn; each banner's sound, flash and shake fire as it appears."] },
   { date: "2026-07-02", size: "small", v: "Readable floating text", by: "Claude", notes: ["Damage, gold and reward pops that fired at once now stack into a clean rising column instead of overlapping into a blob.", "Material and ingredient drops stay in the combat log only — no more duplicate on-kill floater.", "Hard cap keeps a big multi-hit burst from walling the screen with numbers."] },
@@ -20042,7 +20043,7 @@ function onEnterCell(nx, ny) {
     log('🗝️ You found a vault key! Seek the locked door.', 'important');
   }
   // Auto-pickup chests — walk onto a tile and every chest on it opens itself.
-  if (pickupChestsAt(nx, ny) > 0) { renderPanel(); updateBars(); }
+  if (pickupChestsAt(nx, ny) > 0) { renderPanelSoon(); updateBars(); }
 
   // Lava / spikes bite once per cell entered (never lethal on their own), exactly
   // as a turn-based step into them used to.
@@ -22738,7 +22739,7 @@ function pickup() {
   if (inTown || portalChanneling()) return;
   if (merchant && Math.abs(merchant.x - player.x) <= 1 && Math.abs(merchant.y - player.y) <= 1) { openShop(); return; }
   if (mystic && Math.abs(mystic.x - player.x) <= 1 && Math.abs(mystic.y - player.y) <= 1) { openMystic(); return; }
-  if (pickupChestsAt(player.x, player.y) > 0) { renderPanel(); updateBars(); saveGame(); }
+  if (pickupChestsAt(player.x, player.y) > 0) { renderPanelSoon(); updateBars(); saveGameSoon(); }
 }
 
 // Install the re-entrancy / halt guard around every player-action entry point.
@@ -23259,7 +23260,20 @@ function bagActionsHTML(item, i) {
   return `<div class="loot-actions">${sellBtn}${scrapBtn}</div>`;
 }
 
+// A full renderPanel() is a heavy innerHTML rebuild (it sorts/filters the whole
+// bag and paints sprite icons + tooltips for every row). Doing it inline on every
+// pickup — inside the movement frame, once per chest you walk over — visibly
+// hitches the game. Hot paths call renderPanelSoon() instead: it just marks the
+// panel dirty, and the game loop flushes it at most once per frame, and only when
+// the drawer is actually on-screen. So a pile of chests costs a single rebuild,
+// and grabbing loot with the bag closed/collapsed costs none.
+let _panelDirty = false;
+function panelVisible() { return panelOpen && !document.body.classList.contains('panel-collapsed'); }
+function renderPanelSoon() { _panelDirty = true; }
+function flushPanel() { if (_panelDirty && panelVisible()) renderPanel(); }
+
 function renderPanel() {
+  _panelDirty = false;   // any render (direct or flushed) satisfies a pending request
   const el = document.getElementById('panel-content');
   if (currentTab === 'inv') {
     const strip = matStripHTML();
@@ -25491,6 +25505,18 @@ function saveGame() {
   lbScheduleSubmit();
   // Mirror this slot to the cloud account, if the player is signed in (debounced).
   cloudScheduleSave(activeSlot);
+}
+
+// Coalesce bursts of saves into one write. saveGame() serialises the whole
+// character and does a synchronous localStorage write, so calling it on every
+// pickup stutters the frame; grabbing several chests at once would fire it
+// repeatedly. This collapses a burst into a single deferred save. The 20s
+// autosave and the pagehide/visibilitychange handlers still call saveGame()
+// directly, so no progress is ever lost if the timer hasn't fired yet.
+let _saveSoonTimer = null;
+function saveGameSoon(delay = 500) {
+  if (_saveSoonTimer) return;   // a save is already scheduled — let it cover this one too
+  _saveSoonTimer = setTimeout(() => { _saveSoonTimer = null; saveGame(); }, delay);
 }
 
 function loadGame() {
@@ -27752,6 +27778,7 @@ function gameLoop(ts) {
   safeStep('stamina', () => renderStaminaBar());   // stamina drains/refills continuously — keep the END bar live
   safeStep('cdDials', () => updateCooldownDials()); // animate the skill/potion cooldown dials in real time
   safeStep('halo', () => updateHaloVignette());     // the danger halo is a DOM overlay — pulse it every frame
+  safeStep('panel', () => flushPanel());            // rebuild the bag at most once per frame, only while it's on-screen
   // While a side panel is sliding open/closed its column width animates, so the
   // map's on-screen box changes every frame. Re-fit the backing buffer right
   // before the draw (same frame → guaranteed order, no blank flash) so the map
