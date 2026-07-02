@@ -3202,6 +3202,24 @@
     letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold-200);
   }
   #achievements-body .ta-head.ta-total { text-align: center; font-size: 1.4rem; margin-bottom: 4px; }
+  /* Two-tab switcher (Kitten Mode / Hardcore) pinned above the badge grid so you
+     can swap which mode's feats you're viewing. Both tabs list the same feats;
+     only the earned/locked state differs per mode. */
+  #achievements-body .ach-tabs {
+    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+    margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--orange-850);
+  }
+  #achievements-body .ach-tab {
+    display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-ui);
+    font-size: 1.4rem; letter-spacing: .5px; padding: 6px 16px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: var(--radius-pill);
+    background: var(--orange-850); color: var(--orange-400);
+  }
+  #achievements-body .ach-tab .ach-tab-ic { display: inline-flex; align-items: center; }
+  #achievements-body .ach-tab .ach-tab-ic svg { width: calc(17px * var(--ui-scale,1)); height: calc(17px * var(--ui-scale,1)); }
+  #achievements-body .ach-tab .ach-tab-ic .dl-ic { vertical-align: middle; }
+  #achievements-body .ach-tab.active { background: var(--orange-650); color: var(--gold-200); border-color: var(--gold); }
+  #achievements-body .ach-tab.hc.active { background: color-mix(in srgb, var(--red-800) 35%, transparent); color: var(--red-200); border-color: var(--red-550); }
   #achievements-body .ta-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 14px; }
   .ta-badge { display: flex; flex-direction: column; align-items: center; gap: 3px; width: calc(92px * var(--ui-scale,1)); cursor: help; }
   .ta-badge .ta-ic { width: calc(36px * var(--ui-scale,1)); height: calc(36px * var(--ui-scale,1)); border-radius: 50%; display: flex; align-items: center; justify-content: center;
@@ -11078,6 +11096,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Hardcore earns all 100 feats, two tabs", by: "Claude", notes: ["Hardcore now earns the same full set of achievements as normal play, not a short curated list.", "Achievements popup splits into two tabs — Kitten Mode and Hardcore — so each mode's feats have their own grid.", "Hardcore feats still persist through death and stay earned account-wide."] },
   { date: "2026-07-02", size: "small", v: "Break out of a full surround", by: "Claude", notes: ["Foes boxing you in on every side no longer pin you in place — keep pushing and the hero shoves between them toward open ground.", "A single foe still hard-blocks you; slide along it to get around."] },
   { date: "2026-07-02", size: "small", v: "Skill panel polish", by: "Claude", notes: ["Skill-slots header, hint and slot boxes are now centered.", "Skill names sit below each tile instead of overlapping the icon.", "Bigger skill-tree icons.", "Dropped the redundant lock badge — greyed-out tiles already read as locked.", "Clicking a tile now hides the hover tooltip, so it stops blocking the detail popup."] },
   { date: "2026-07-02", size: "small", v: "Settings gains a Visuals tab", by: "Claude", notes: ["UI SIZE, UI FONT and CURSOR moved out of Play into a new Visuals tab. Tab order is now Play, Visuals, Audio, Progress, About.", "UI FONT is now a collapsing dropdown showing your current face; open it for a two-column grid of options instead of one tall column."] },
@@ -22297,9 +22316,11 @@ function showHardcoreDeathScreen(name, level, cls, fellOn, deepest, newAch) {
   }
   const achEl = document.getElementById('hc-death-ach');
   if (achEl) {
-    const total = hcMeta.ach.length;
+    // Count only feats that still exist in the achievement list (ignoring any
+    // legacy ids left in the ledger from the old curated hardcore set).
+    const total = hcMeta.ach.filter(id => ACHIEVEMENTS.some(a => a.id === id)).length;
     if (newAch && newAch.length) {
-      const names = newAch.map(id => { const a = HC_ACHIEVEMENTS.find(x => x.id === id); return a ? a.name : null; }).filter(Boolean);
+      const names = newAch.map(id => { const a = ACHIEVEMENTS.find(x => x.id === id); return a ? a.name : null; }).filter(Boolean);
       achEl.style.display = '';
       achEl.innerHTML = `${hcIcon(14)} Earned in this run: <b>${names.map(escapeHtml).join(', ')}</b><br>Your Hardcore feats live on — ${total} unlocked, shown on the title screen.`;
     } else if (total) {
@@ -25570,27 +25591,31 @@ function hcGrantAch(id) {
 // graveyard, death screen). Falls back to the ☠ glyph only before the atlas loads.
 function hcIcon(px) { return (typeof dlIcon === 'function' && dlIcon('ic_cursed', px)) || '☠️'; }
 
-// ── Hardcore achievements ── meta-progression that persists in hcMeta.ach, so it
-// survives the death (and wipe) of the hero that earned it. Tested against the
-// live hardcore hero; once earned, stays earned account-wide forever.
-const HC_ACHIEVEMENTS = [
-  { id: 'hc_ironborn',  name: 'Ironborn',          desc: 'Begin a Hardcore hero.',            svg: '<path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5z"/>',                                              test: p => !!p.hardcore },
-  { id: 'hc_survivor',  name: 'Hardcore Survivor', desc: 'Reach floor 5 in Hardcore.',        svg: '<path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5z"/><polyline points="9 12 11 14 15 9"/>',         test: p => (p.maxFloor || 1) >= 5 },
-  { id: 'hc_ironclad',  name: 'Ironclad',          desc: 'Reach floor 10 in Hardcore.',       svg: '<path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5z"/><line x1="12" y1="7" x2="12" y2="16"/><line x1="8" y1="11" x2="16" y2="11"/>', test: p => (p.maxFloor || 1) >= 10 },
-  { id: 'hc_deathless', name: 'Deathless Delver',  desc: 'Reach floor 20 in Hardcore.',       svg: '<path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5z"/><polyline points="8 11 12 15 16 9"/>',         test: p => (p.maxFloor || 1) >= 20 },
-  { id: 'hc_ironheart', name: 'Iron Heart',        desc: 'Reach hero level 25 in Hardcore.',  svg: '<polygon points="12 2 15 9 22 9 16.5 13.5 18.5 21 12 16.5 5.5 21 7.5 13.5 2 9 9 9"/>',                 test: p => (p.level || 1) >= 25 },
-  { id: 'hc_undying',   name: 'Hardcore Conqueror',desc: 'Conquer a difficulty in Hardcore.', svg: '<circle cx="12" cy="8" r="6"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>',           test: p => (p.diffCleared || 0) >= 1 },
-];
-// Grant any hardcore achievement the live hero now qualifies for. Cheap enough to
-// call from saveGame() (a handful of comparisons once everything's earned).
+// ── Hardcore achievements ── Hardcore earns the SAME feats as normal play (the
+// ACHIEVEMENTS list defined further below), so both modes have full parity. The
+// difference is persistence: a hardcore hero's earned feats are meta-progression
+// stored in hcMeta.ach, so they survive the death (and wipe) of the hero that
+// earned them. Tested against the live hardcore hero; once earned, stays earned
+// account-wide forever.
+// Grant any achievement the live hardcore hero now qualifies for. Cheap enough to
+// call from saveGame() (~100 comparisons, mostly short-circuited once earned).
+// Several grants in one pass — e.g. the first check after this update on an
+// already-deep hero — collapse into one summary line so the log isn't flooded.
 function checkHardcoreAchievements() {
   if (typeof player !== 'object' || !player || !player.hardcore) return;
-  for (const a of HC_ACHIEVEMENTS) {
-    if (!hcHasAch(a.id) && a.test(player) && hcGrantAch(a.id)) {
-      try { log(`${hcIcon(15)} <b style="color:var(--red-350)">Hardcore Achievement</b> — <b>${a.name}</b>: ${a.desc}`, 'important'); } catch (e) {}
-      try { sfx('levelup'); } catch (e) {}
-    }
+  const earned = [];
+  for (const a of ACHIEVEMENTS) {
+    if (!hcHasAch(a.id) && a.test(player) && hcGrantAch(a.id)) earned.push(a);
   }
+  if (!earned.length) return;
+  try {
+    if (earned.length <= 3) {
+      for (const a of earned) log(`${hcIcon(15)} <b style="color:var(--red-350)">Hardcore Achievement</b> — <b>${a.name}</b>: ${a.desc}`, 'important');
+    } else {
+      log(`${hcIcon(15)} <b style="color:var(--red-350)">Hardcore</b> — earned <b>${earned.length}</b> feats: ${earned.map(a => a.name).join(', ')}.`, 'important');
+    }
+  } catch (e) {}
+  try { sfx('levelup'); } catch (e) {}
 }
 
 // Lay a dead hardcore save to rest without loading it: ensure a headstone, then
@@ -26996,46 +27021,73 @@ function achBadgeHtml(a, got, isHc) {
   const tip = `<div class='ht-name'>${a.name}</div><div class='ht-line'>${a.desc}</div>${status}`;
   return `<div class="ta-badge${isHc ? ' hc' : ''} ${got ? 'earned' : 'locked'}" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span class="ta-ic">${ic}</span><span class="ta-nm">${a.name}</span></div>`;
 }
-// Build the badge popup's contents and decide whether the title screen's
-// Achievements button is worth showing. The button carries the normal-feats
-// progress count so players can see "5 / 9" without opening the popup.
+// Build one mode's grouped sections + earned tally, given an "is this feat
+// earned?" predicate. Shared by the Kitten Mode (gold) and Hardcore (crimson)
+// tabs so both list the identical achievements — only their state differs.
+function achModeHtml(isEarned, isHc) {
+  let earned = 0, sections = '';
+  for (const c of ACH_CATS) {
+    const list = ACHIEVEMENTS.filter(a => a.cat === c.key);
+    if (!list.length) continue;
+    let ce = 0;
+    const cells = list.map(a => { const got = !!isEarned(a); if (got) { earned++; ce++; } return achBadgeHtml(a, got, isHc); }).join('');
+    sections += `<div class="ta-head ta-cat">${c.label} <b>${ce}</b> / ${list.length}</div><div class="ta-row">${cells}</div>`;
+  }
+  return { earned, sections };
+}
+// Which achievements tab is showing; remembered across opens. Defaults the first
+// time to the hero's own mode (a Hardcore hero lands on the Hardcore tab).
+let _achTab = null;
+function selectAchTab(mode) {
+  _achTab = mode;
+  const body = document.getElementById('achievements-body');
+  if (!body) return;
+  body.querySelectorAll('.ach-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+  const np = document.getElementById('ach-panel-normal');
+  const hp = document.getElementById('ach-panel-hc');
+  if (np) np.style.display = mode === 'hc' ? 'none' : '';
+  if (hp) hp.style.display = mode === 'hc' ? '' : 'none';
+}
+// Build the two-tab badge popup (Kitten Mode + Hardcore) and decide whether the
+// title screen's Achievements button is worth showing. The button carries the
+// active hero's own-mode progress count so players see "5 / 100" without opening it.
 function renderTitleAchievements() {
   const btn = document.getElementById('title-achievements-btn');
   const body = document.getElementById('achievements-body');
   const p = (typeof player === 'object' && player) || {};
-  const showNormal = !!p.class;  // normal feats derive from the active run
-  // Hardcore feats persist account-wide (hcMeta.ach), so they show whenever any
-  // are earned or the active hero is hardcore — even with no current run.
-  const hcGot = id => hcHasAch(id);
-  const hcEarned = HC_ACHIEVEMENTS.filter(a => hcGot(a.id) || (p.hardcore && a.test(p)));
-  const showHc = hcEarned.length > 0 || !!p.hardcore;
-  if (!showNormal && !showHc) {  // nothing to show — hide the button entirely
+  const total = ACHIEVEMENTS.length;
+  // Kitten (non-hardcore) feats derive live from the active hero's save state.
+  const normal = achModeHtml(a => a.test(p), false);
+  // Hardcore feats persist account-wide (hcMeta.ach) and survive death; the live
+  // hardcore hero also lights up anything it currently qualifies for.
+  const hc = achModeHtml(a => hcHasAch(a.id) || (p.hardcore && !!a.test(p)), true);
+  const anyHc = hc.earned > 0 || !!p.hardcore;
+  if (!p.class && !anyHc) {  // truly fresh save — nothing earned in either mode
     if (btn) btn.style.display = 'none';
     if (body) body.innerHTML = '';
     return;
   }
-  let html = '';
-  let earned = 0;
-  if (showNormal) {
-    // Grouped into categories: an overall tally header, then one labelled
-    // section (with its own earned/total count) per category, in ACH_CATS order.
-    let sections = '';
-    for (const c of ACH_CATS) {
-      const list = ACHIEVEMENTS.filter(a => a.cat === c.key);
-      if (!list.length) continue;
-      let ce = 0;
-      const cells = list.map(a => { const got = !!a.test(p); if (got) { earned++; ce++; } return achBadgeHtml(a, got, false); }).join('');
-      sections += `<div class="ta-head ta-cat">${c.label} <b>${ce}</b> / ${list.length}</div><div class="ta-row">${cells}</div>`;
-    }
-    html += `<div class="ta-head ta-total">Achievements <b>${earned}</b> / ${ACHIEVEMENTS.length}</div>` + sections;
+  if (_achTab == null) _achTab = p.hardcore ? 'hc' : 'normal';
+  // Kitten tab wears a paw (matches the badge line-icon style); Hardcore wears the
+  // game's skull brand sprite, falling back to a shield outline before it loads.
+  const pawIc = `<span class="ach-tab-ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${AI_PAW}</svg></span>`;
+  const skullIc = `<span class="ach-tab-ic">${hcIcon(16) || `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${AI_SHIELD}</svg>`}</span>`;
+  if (body) {
+    body.innerHTML =
+      `<div class="ach-tabs">`
+      + `<button class="ach-tab" data-mode="normal" onclick="event.stopPropagation();selectAchTab('normal')">${pawIc} Kitten Mode</button>`
+      + `<button class="ach-tab hc" data-mode="hc" onclick="event.stopPropagation();selectAchTab('hc')">${skullIc} Hardcore</button>`
+      + `</div>`
+      + `<div id="ach-panel-normal"><div class="ta-head ta-total">Kitten Mode <b>${normal.earned}</b> / ${total}</div>${normal.sections}</div>`
+      + `<div id="ach-panel-hc"><div class="ta-head ta-total hc">Hardcore <b>${hc.earned}</b> / ${total}</div>${hc.sections}</div>`;
+    selectAchTab(_achTab);
   }
-  if (showHc) {
-    const cells = HC_ACHIEVEMENTS.map(a => achBadgeHtml(a, hcGot(a.id) || (p.hardcore && !!a.test(p)), true)).join('');
-    html += `<div class="ta-head hc">${hcIcon(13)} Hardcore <b>${hcEarned.length}</b> / ${HC_ACHIEVEMENTS.length}</div><div class="ta-row">${cells}</div>`;
-  }
-  if (body) body.innerHTML = html;
   if (btn) {
-    btn.innerHTML = showNormal ? `🏆 Achievements <b style="color:var(--gold)">${earned}</b> / ${ACHIEVEMENTS.length}` : '🏆 Achievements';
+    // The button carries the active hero's own mode count so progress shows at a
+    // glance without opening the popup.
+    btn.innerHTML = p.hardcore
+      ? `🏆 Achievements <b style="color:var(--red-350)">${hc.earned}</b> / ${total}`
+      : (p.class ? `🏆 Achievements <b style="color:var(--gold)">${normal.earned}</b> / ${total}` : '🏆 Achievements');
     btn.style.display = '';
   }
 }
