@@ -11229,6 +11229,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Readable floating text", by: "Claude", notes: ["Damage, gold and reward pops that fired at once now stack into a clean rising column instead of overlapping into a blob.", "Material and ingredient drops stay in the combat log only — no more duplicate on-kill floater.", "Hard cap keeps a big multi-hit burst from walling the screen with numbers."] },
   { date: "2026-07-02", size: "small", v: "Banners centre on the map", by: "Claude", notes: ["Level-up and loot banners now centre over the dungeon map, not the whole window — so they stay centred when a side drawer is open."] },
   { date: "2026-07-02", size: "small", v: "Hardcore earns all 100 feats, two tabs", by: "Claude", notes: ["Hardcore now earns the same full set of achievements as normal play, not a short curated list.", "Achievements popup splits into two tabs — Kitten Mode and Hardcore — so each mode's feats have their own grid.", "Hardcore feats still persist through death and stay earned account-wide."] },
   { date: "2026-07-02", size: "small", v: "Font consistency fix", by: "Claude", notes: ["Menu buttons that fell back to the browser's sans-serif — Ramen House chips, sell/scrap trays and more — now follow the picked UI font like the rest of the game.", "Settings tabs and the Keybindings Back button dropped a stray monospace font."] },
@@ -18460,7 +18461,19 @@ function spawnFloatingText(x, y, text, color, size) {
   // Canvas floating text can't host sprite spans, so just strip any emoji — the
   // number/word stays. (No emoji anywhere.) `size` scales the font (>1 = a big,
   // bold pop, used for crit / rampage damage numbers).
-  floatingTexts.push({ x, y, text: stripEmoji(text), color, start: Date.now(), duration: 800, size: size || 1 });
+  const now = Date.now();
+  // Anti-overlap: a kill or multi-hit can fire several floaters at almost the
+  // same spot in one frame. Rather than let them pile into an unreadable blob,
+  // start each new one higher than the ones already popping nearby so they read
+  // as a clean rising stack. They all drift up at the same rate, so the spacing
+  // holds for their whole life.
+  let stack = 0;
+  for (const ft of floatingTexts) {
+    if (now - ft.start < 350 && Math.abs(ft.x - x) < 1.1) stack++;
+  }
+  floatingTexts.push({ x, y: y - stack * 0.5, text: stripEmoji(text), color, start: now, duration: 800, size: size || 1 });
+  // Safety net: never let a big burst wall the screen with text.
+  if (floatingTexts.length > 16) floatingTexts.splice(0, floatingTexts.length - 16);
 }
 
 // ── COMBAT JUICE ────────────────────────────────────────────────────────────
@@ -20520,7 +20533,8 @@ function onEnemyDefeated(e) {
     const keys = Object.keys(gained);
     if (keys.length) {
       for (const k of keys) gainMaterial(k, gained[k]);
-      spawnFloatingText(e.x - 0.35, e.y - 0.3, keys.map(k => `+${gained[k]}${CRAFT_MATERIALS[k].emoji}`).join(' '), '#cfe8ff');
+      // Materials land in the combat log with their icons — no separate floater,
+      // to keep the on-kill pop from cluttering.
       log(`🧰 ${label} dropped ${keys.map(k => `${gained[k]} ${CRAFT_MATERIALS[k].name}`).join(', ')}.`, 'loot');
       updateBars();
     }
@@ -20540,8 +20554,8 @@ function onEnemyDefeated(e) {
         gainIngredient(k, 1);
       }
       const keys = Object.keys(got);
-      const floatTxt = keys.length === 1 ? `+${got[keys[0]]} ${INGREDIENTS[keys[0]].name}` : `+${drops} toppings`;
-      spawnFloatingText(e.x + 0.35, e.y - 0.3, floatTxt, '#cfe6b0');
+      // Ingredients land in the combat log with their icons — no separate
+      // floater, to keep the on-kill pop from cluttering.
       log(`${label} dropped ${keys.map(k => `${ingIcon(k, 13)} ${got[k]} ${INGREDIENTS[k].name}`).join(', ')}.`, 'loot');
       updateBars();
     }
