@@ -4309,15 +4309,15 @@
         <!-- Tab bar: each button swaps the visible pane below, so the menu is a
              few short lists instead of one long scroll. -->
         <div class="settings-tabs" role="tablist">
-          <button class="settings-tab-btn" data-tab="play" onclick="showSettingsTab('play')"><span class="stab-ic">🎮</span><span class="stab-lbl">Play</span></button>
+          <button class="settings-tab-btn active" data-tab="play" onclick="showSettingsTab('play')"><span class="stab-ic">🎮</span><span class="stab-lbl">Play</span></button>
           <button class="settings-tab-btn" data-tab="visuals" onclick="showSettingsTab('visuals')"><span class="stab-ic">🎨</span><span class="stab-lbl">Visuals</span></button>
-          <button class="settings-tab-btn active" data-tab="audio" onclick="showSettingsTab('audio')"><span class="stab-ic">🔊</span><span class="stab-lbl">Audio</span></button>
+          <button class="settings-tab-btn" data-tab="audio" onclick="showSettingsTab('audio')"><span class="stab-ic">🔊</span><span class="stab-lbl">Audio</span></button>
           <button class="settings-tab-btn" data-tab="progress" onclick="showSettingsTab('progress')"><span class="stab-ic">📊</span><span class="stab-lbl">Progress</span></button>
           <button class="settings-tab-btn" data-tab="about" onclick="showSettingsTab('about')"><span class="stab-ic">ℹ️</span><span class="stab-lbl">About</span></button>
         </div>
 
         <!-- ── AUDIO ── volume, vibe, and a skip-to-next-track control. -->
-        <div class="settings-pane active" data-pane="audio">
+        <div class="settings-pane" data-pane="audio">
         <button class="settings-item sound-action" id="music-action" onclick="cycleMusic()" data-tip="<div class='ht-name'>🎵 Music volume</div><div class='ht-line'>Tap to step the volume down a notch; wraps from off back to full.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon" id="music-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span><span class="action-label">MUSIC</span><span class="vol-meter" id="music-meter"></span>
         </button>
@@ -4345,7 +4345,7 @@
         </div>
 
         <!-- ── PLAY ── in-run toggles &amp; helpers. -->
-        <div class="settings-pane" data-pane="play">
+        <div class="settings-pane active" data-pane="play">
         <button class="settings-item" id="target-mode-action" onclick="cycleTargetMode()" data-tip="<div class='ht-name'>🎯 Auto-attack focus</div><div class='ht-line'>Choose which foe your auto-attack locks onto.</div><div class='ht-sub'>Click to cycle</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="1" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="1" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="23" y2="12"/></svg></span><span class="action-label" id="target-mode-label">TARGET</span>
         </button>
@@ -11064,7 +11064,7 @@ function centerSettingsCard() {
 }
 // Which settings tab is showing. Persists across opens so reopening lands where
 // you left off; keybindsBack() reopens straight onto the Play tab (where KEYS lives).
-let settingsTab = 'audio';
+let settingsTab = 'play';
 function showSettingsTab(name) {
   settingsTab = name;
   document.querySelectorAll('#settings-card .settings-tab-btn').forEach(b =>
@@ -11078,6 +11078,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Settings opens on Play", by: "Claude", notes: ["Settings now opens on the Play tab by default instead of Audio."] },
   { date: "2026-07-02", size: "small", v: "Break out of a full surround", by: "Claude", notes: ["Foes boxing you in on every side no longer pin you in place — keep pushing and the hero shoves between them toward open ground.", "A single foe still hard-blocks you; slide along it to get around."] },
   { date: "2026-07-02", size: "small", v: "Skill panel polish", by: "Claude", notes: ["Skill-slots header, hint and slot boxes are now centered.", "Skill names sit below each tile instead of overlapping the icon.", "Bigger skill-tree icons.", "Dropped the redundant lock badge — greyed-out tiles already read as locked.", "Clicking a tile now hides the hover tooltip, so it stops blocking the detail popup."] },
   { date: "2026-07-02", size: "small", v: "Settings gains a Visuals tab", by: "Claude", notes: ["UI SIZE, UI FONT and CURSOR moved out of Play into a new Visuals tab. Tab order is now Play, Visuals, Audio, Progress, About.", "UI FONT is now a collapsing dropdown showing your current face; open it for a two-column grid of options instead of one tall column."] },
