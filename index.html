@@ -10018,7 +10018,7 @@ window.gameGuide = function gameGuide(topic) {
       `Every active is either a SKILL (martial/weapon-based) or a SPELL (magic) — shown as a ⚔️ SKILL / 🔮 SPELL badge on its tree node and in gameState().skills[i].school. A SKILL scales with your weapon damage + Skill Power gear; a SPELL scales with Spirit + Spell Power gear. Gear those stats to match the actives you lean on.`,
       `Cooldowns are real seconds (spam-floored at 0.5s). Recharge is MULTIPLICATIVE haste, like attack speed: cd = base / (1 + CDR/100), and for SPELL actives times a further (1 + CastSpeed/100). There is NO cap — 60% CDR + 35% Cast Speed divides a spell's cooldown by 1.6×1.35 ≈ 2.16, and stacking more only ever approaches (never reaches) instant. +MCR likewise divides MP cost (base / (1 + MCR/100)); +Attack Speed quickens auto-attacks the same way. +CDR speeds every active, +Cast Speed spells only, and a rank-7 skill gets an extra ×1.2.`,
       `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — a big power surge, then a shorter cooldown, then wider reach — so deepening a key skill outpaces its rising mana cost.`,
-      `Learn and rank skills on the SKILLS tab (spend skill points). Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
+      `Learn and rank skills on the SKILLS tab (spend skill points). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns 1 skill point for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
       `RANGED casts need LINE OF SIGHT: a bolt, blast, beam (line), nova or chain only strikes foes you can see — a wall (or deep water / sealed door) between you and a foe blocks it, and the cast fails with "No foe in sight" if nothing visible is in range. Melee/cleave (adjacent-only) and the rare floor-wide "strike random foes" ultimate ignore walls.`,
@@ -11309,6 +11309,7 @@ const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Re-ascending costs gold", by: "Claude", notes: ["First ascension stays free — earned by reaching level 20. Switching to your class's other ascension afterwards now costs a lot of gold, scaling with level and depth, so re-specializing is a real decision. Path points still refund on switch."] },
   { date: "2026-07-02", size: "small", v: "Settings header stays put", by: "Claude", notes: ["Settings modal now anchors to the top — tab bar no longer shifts when you switch tabs; the window just grows downward for taller panes."] },
   { date: "2026-07-02", size: "small", v: "\"New Run\" renamed \"Reset Run\"", by: "Claude", notes: ["\"New Run\" is now \"Reset Run\" (Settings ▸ Progress) and \"Reset Current Run\" (title screen) — clearer that it wipes the current hero and starts over in the same slot."] },
+  { date: "2026-07-02", size: "small", v: "Shift/ctrl-click a skill to learn it", by: "Claude", notes: ["Shift-click, ctrl-click (⌘-click) or double-click a skill-tree node to learn/rank it directly — no need to open its card and press Learn. Plain click still opens details."] },
   { date: "2026-07-02", size: "small", v: "Tabbed Settings + Keybindings back button", by: "Claude", notes: ["Settings split into Audio / Play / Progress / About tabs — no more one long scroll. Reset Run now lives under Progress.", "Keybindings gained a ◀ Back button (Esc / tap-outside too) that returns to Settings instead of dropping you back into the game."] },
   { date: "2026-07-01", size: "small", v: "Materials sort commonest-first", by: "Claude", notes: ["Crafting materials now list least-rare → rarest everywhere they show — Scrap, Glimmer, Core, Chaos Orb — in the wallet strip and every forge/enchant cost."] },
   { date: "2026-07-01", size: "small", v: "No stray scrollbar on the bottom HUD", by: "Claude", notes: ["Desktop bottom bar no longer shows a phantom vertical scrollbar — the skill belt gave itself just enough room for the AUTO tile, so nothing overflows."] },
@@ -23886,9 +23887,11 @@ function renderSkills(el) {
     // Learned actives are drag handles: drag one onto a loadout-tray slot to bind it.
     const drag = (n.type === 'active' && owned) ? `draggable="true" ondragstart="skillDragStart(event,'${n.id}',-1)" ondragend="skillDragEnd()"` : '';
     // Hover = a SHORT tooltip; the full detail card opens on CLICK (see selectSkill).
-    const tipShort = `<div class='ht-name'>${n.name}</div><div class='ht-sub'>${n.type === 'active' ? '⚡ Active · ' + n.mp + ' MP · ' + n.cd + 's cd' : '🛡 Passive'} · ${touchUI() ? 'tap' : 'click'} for details</div>`;
+    // When a node is learnable on desktop, advertise the quick-learn shortcut too.
+    const learnHint = (avail && !touchUI()) ? ` · shift/ctrl-click to learn` : '';
+    const tipShort = `<div class='ht-name'>${n.name}</div><div class='ht-sub'>${n.type === 'active' ? '⚡ Active · ' + n.mp + ' MP · ' + n.cd + 's cd' : '🛡 Passive'} · ${touchUI() ? 'tap' : 'click'} for details${learnHint}</div>`;
     return `<button class="sk-tnode ${state}${n.keystone ? ' keystone' : ''}${n.type === 'active' ? ' act' : ''}${selectedSkillId === n.id ? ' sel' : ''}" id="sknode-${n.id}" ${drag}
-        style="left:${(p[0] * 100).toFixed(2)}%;top:${(p[1] * 100).toFixed(2)}%" onclick="selectSkill('${n.id}')" ondblclick="buySkill('${n.id}')"
+        style="left:${(p[0] * 100).toFixed(2)}%;top:${(p[1] * 100).toFixed(2)}%" onclick="skillNodeClick(event,'${n.id}')" ondblclick="buySkill('${n.id}')"
         data-tip="${tipShort}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
       <span class="ic">${dlIconFill(n.icon)}</span><span class="nm">${n.name}</span>${badge !== '' ? `<span class="badge">${badge}</span>` : ''}${slotMark}
     </button>`;
@@ -24276,6 +24279,15 @@ function skillTotalSummary(node, rank) {
 
 // Click a skill node to open its full detail card; click the same node again (or
 // the card body, or anywhere outside) to close it. Hover just shows a short tip.
+// A plain click on a tree node just selects it (opens the detail card). Holding
+// Shift, Ctrl or ⌘ turns the click into a quick "learn" — the same as the card's
+// Learn button or a double-click — so you can rank a skill up without opening its
+// popover. buySkill() itself no-ops with a log line when the node isn't learnable.
+function skillNodeClick(e, id) {
+  if (e && (e.ctrlKey || e.metaKey || e.shiftKey)) { buySkill(id); return; }
+  selectSkill(id);
+}
+
 function selectSkill(id) {
   hideHoverTip();  // the detail popover replaces the hover card, which otherwise blocks the view
   selectedSkillId = (selectedSkillId === id) ? null : id;
