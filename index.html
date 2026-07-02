@@ -11019,7 +11019,7 @@ const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Livelier town background", by: "Claude", notes: ["The town menu's ambient scenes got a big upgrade — each now paints a tinted, breathing sky, a moon or low sun, a silhouetted rooftop skyline with windows that wake and dim, and brighter layered particles.", "Ten distinct vignettes (dusk rooftops, starry night with shooting stars, rainy town, snowfall by moonlight, aurora, lantern festival, blossoms and more) instead of one faint, near-invisible layer."] },
   { date: "2026-07-02", size: "small", v: "Auto-Loot set-piece rule", by: "Claude", notes: ["♻ Auto-Loot picker gains a teal \"set\" row above unique — set pieces now answer to their own Keep/Scrap/Sell rule instead of inheriting the unique one, so you can keep chase sets while auto-selling plain uniques.", "Defaults to Keep; existing saves seed the new rule to Keep."] },
   { date: "2026-07-02", size: "small", v: "Twin wisps on the ENTER button", by: "Claude", notes: ["Two glints of light now circle the main button's border on opposite sides instead of one."] },
-  { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Claude", notes: ["Title hero card now left-aligns its text and stands an animated hero walking in place on the right, sized to match the text height."] },
+  { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Claude", notes: ["Title hero card now left-aligns its text and stands a big animated hero walking in place on the right."] },
   { date: "2026-07-01", size: "small", v: "Cleaner stat-abbreviation key", by: "Claude", notes: ["Loot stat-abbreviation key now groups item stats by theme (Offense, Defense, Sustain, Caster, Utility/Find), alphabetical within each group.", "Flows into two columns on desktop for easier scanning."] },
   { date: "2026-07-01", size: "medium", v: "Completed sets grant a signature power + golden aura", by: "Jeff Louie", notes: ["Completing a set (all 4 pieces) now unlocks a unique SIGNATURE POWER, not just more stats: Warden's Aegis Wall (block + damage reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), Arcanist's Arcane Overflow (cooldown reduction + mana leech).", "A completed set wraps the hero in a faint golden aura, and its \"… set\" tag turns gold with a ✦.", "Set tooltip now shows the power, a Worn n/4 count and a completion banner."] },
   { date: "2026-07-02", size: "small", v: "Punchier ENTER button", by: "Claude", notes: ["Title's main button now reads just ENTER (sword icon gone) with a pulsing golden frame and a wisp of light circling the border, so the way in pops."] },
@@ -26963,9 +26963,9 @@ function showTitle() {
       const gold = fmtGold ? fmtGold(player.gold || 0) : (player.gold || 0);
       const hcTag = player.hardcore ? `<div><span class="hc-tag">${hcIcon(11)} HARDCORE · ONE LIFE</span></div>` : '';
       // An animated walking hero sprite sits to the RIGHT of the left-aligned text,
-      // sized to stand about as tall as the stacked name/class/stats block. Falls
-      // back to the static face (then atlas tile) until the walk sheet has loaded.
-      const heroPic = heroWalkIcon(player.class, player.sex, 68) || heroFaceIcon(player.class, player.sex, 68);
+      // standing a bit taller than the stacked name/class/stats block so it reads big.
+      // Falls back to the static face (then atlas tile) until the walk sheet has loaded.
+      const heroPic = heroWalkIcon(player.class, player.sex, 102) || heroFaceIcon(player.class, player.sex, 102);
       hero.innerHTML =
         `<div class="th-info">`
         + `<div class="th-name" style="color:${cls.color || 'var(--xp)'}">${nm}</div>`
