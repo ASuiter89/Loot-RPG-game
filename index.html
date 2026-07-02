@@ -2034,7 +2034,7 @@
   .pda-stage { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 6px 0; }
   .paperdoll-anat {
     position: relative; width: 100%;
-    max-width: calc(400px * var(--ui-scale,1));
+    max-width: calc(640px * var(--ui-scale,1));
     margin: 0 auto; aspect-ratio: 3 / 4; overflow: hidden;
   }
   /* Big centred sprite — scaled past the frame so the character (not its
@@ -2050,9 +2050,11 @@
   }
   .pda-body img, .pda-body .dl-ic { display: block; height: 100%; width: auto; image-rendering: pixelated; }
   /* Each slot reuses the .pd-cell / .pd-slot chrome, pinned at its body location. */
+  /* Slots sized as a % of the doll frame, so they grow with the drawer width
+     (the frame fills the drawer) and never leave the panel looking empty. */
   .pda-wrap {
     position: absolute; transform: translate(-50%, -50%); z-index: 2;
-    width: calc(62px * var(--ui-scale,1));
+    width: 15.5%; min-width: calc(52px * var(--ui-scale,1));
   }
   .paperdoll-anat .pd-slot { max-width: none; background: color-mix(in srgb, var(--ink) 78%, transparent); }
   .paperdoll-anat .pd-cap { font-size: 1.1rem; margin-top: 2px; text-align: center; text-shadow: 0 1px 3px var(--ink); }
