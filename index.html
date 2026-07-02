@@ -1425,7 +1425,7 @@
 
   /* Sub-tabs across the three trees (passive / active / path). */
   .sk-vtabs { display: flex; gap: 4px; margin: 8px 2px 2px; }
-  .sk-vtab { flex: 1; padding: 5px 2px; border: 1px solid var(--panel); border-radius: 6px; background: var(--bg);
+  .sk-vtab { flex: 1; padding: 9px 2px; border: 1px solid var(--panel); border-radius: 6px; background: var(--bg);
     color: var(--blue-350); font-family: inherit; font-size: 1.2rem; letter-spacing: .3px; cursor: pointer;
     -webkit-tap-highlight-color: transparent; touch-action: manipulation; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sk-vtab.on { border-color: var(--interactive); background: var(--panel-raised); color: var(--purple-50); box-shadow: 0 0 8px color-mix(in srgb, var(--interactive) 40%, transparent); }
@@ -1433,10 +1433,13 @@
   /* Auto-fitting grid: tiles size to hold the full branch name and wrap onto a
      second row when they won't all fit across, so names are never cut off. */
   .sk-btabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 3px; margin: 4px 2px 0; }
-  .sk-btab { padding: 8px 3px; border: 1px solid var(--panel); border-radius: 6px; background: var(--bg);
+  .sk-btab { padding: 13px 3px; border: 1px solid var(--panel); border-radius: 6px; background: var(--bg);
     color: var(--blue-450); font-family: inherit; font-size: 1.1rem; letter-spacing: .2px; text-transform: uppercase; cursor: pointer; text-align: center;
     -webkit-tap-highlight-color: transparent; touch-action: manipulation; white-space: nowrap; }
   .sk-btab.on { border-color: var(--frame); background: var(--orange-850); color: var(--xp); box-shadow: 0 0 6px color-mix(in srgb, var(--frame) 35%, transparent); }
+  /* Blurb under the branch tabs explaining what the selected specialization is about. */
+  .sk-bdesc { margin: 5px 2px 2px; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--panel); color: var(--text-muted); font-size: 1.2rem; line-height: 1.35; text-align: center; }
   /* Per-band level markers down the left edge of the tree. */
   .sk-band { position: absolute; left: 1px; transform: translateY(-50%); font-size: 1.1rem; color: var(--btn-off);
     letter-spacing: .5px; pointer-events: none; z-index: 1; }
@@ -10998,6 +11001,7 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Punchier level-up banner", by: "Claude", notes: ["Level-up banner now flares with golden light rays and a bloom, plus a fuller, more rewarding fanfare.", "\"Spend your points\" hint shows only through level 3, then steps aside."] },
+  { date: "2026-07-02", size: "small", v: "Skill-tree tabs taller, with branch blurbs", by: "Claude", notes: ["Passive/Active/Path and specialization tabs are taller for easier clicking.", "Selecting a specialization (Slayer, Duelist, Pyro…) now shows a one-line blurb explaining what that build path is about."] },
   { date: "2026-07-02", size: "small", v: "Livelier town background", by: "Claude", notes: ["The town menu's ambient scenes got a big upgrade — each now paints a tinted, breathing sky, a moon or low sun, a silhouetted rooftop skyline with windows that wake and dim, and brighter layered particles.", "Ten distinct vignettes (dusk rooftops, starry night with shooting stars, rainy town, snowfall by moonlight, aurora, lantern festival, blossoms and more) instead of one faint, near-invisible layer."] },
   { date: "2026-07-02", size: "small", v: "Twin wisps on the ENTER button", by: "Claude", notes: ["Two glints of light now circle the main button's border on opposite sides instead of one."] },
   { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Claude", notes: ["Title hero card now left-aligns its text and stands an animated hero walking in place on the right, sized to match the text height."] },
@@ -23165,6 +23169,38 @@ const SKILL_BRANCHES = {
   mage:    ['Pyro', 'Cryo', 'Storm', 'Arcane', 'Ward'],
   templar: ['Crusade', 'Aegis', 'Wrath', 'Sacred', 'Judge'],
 };
+// One-line theme blurb per branch (same order as SKILL_BRANCHES), shown under the
+// branch tabs so a player knows what each specialization is about before diving in.
+const SKILL_BRANCH_DESC = {
+  warrior: [
+    'Tank up — pile on max health and damage reduction to shrug off punishment.',
+    'Bloody aggression — kills stoke Fury, feeding raw damage and lifesteal.',
+    'Two-handed powerhouse — massive crit damage and armor penetration.',
+    'Warlord crits — sharpen critical strikes and snowball off Fury and kills.',
+    'Shield-and-board defense — block, build Guard, and punish with thorns.',
+  ],
+  rogue: [
+    'Land crits to build Combo points, then cash them into lethal strikes.',
+    'Finesse fencing — penetration and crits with rapiers and light blades.',
+    'Slippery evasion — dodge to stack Momentum and vanish in smoke.',
+    'Poison and bleed — rot foes to death with lingering damage over time.',
+    'Ranged precision — bows and thrown blades that strike true from afar.',
+  ],
+  mage: [
+    'Burn everything — fire spells that set foes ablaze.',
+    'Chill and freeze — icy spells that lock enemies down.',
+    'Lightning and static — fast shock spells that prime your crits.',
+    'Raw arcane power — every cast stacks Power for scaling spell damage.',
+    'Defensive warding — mana shields and barriers to outlast anything.',
+  ],
+  templar: [
+    'Zeal-fueled crusade — kills stoke holy-charged melee smites.',
+    'Holy shield wall — block to build Conviction and warding.',
+    'Retaliation — reflect and thorns punish anyone who strikes you.',
+    'Divine support — regeneration and healing to simply outlast fights.',
+    'Holy caster — ranged smites and scaling divine spell power.',
+  ],
+};
 // Fraction of the tree height reserved at the top for the branch headers.
 const SK_HEADER = 0.08;
 function nodePos(n, cols, bands) {
@@ -23198,6 +23234,9 @@ function renderSkills(el) {
     if (skillBranch >= bNames.length) skillBranch = 0;
     branchTabs = `<div class="sk-btabs">${bNames.map((nm, i) =>
       `<button class="sk-btab ${skillBranch === i ? 'on' : ''}" onclick="setSkillBranch(${i})">${nm}</button>`).join('')}</div>`;
+    // Blurb for the selected branch so its theme is clear before browsing the tree.
+    const bDesc = (SKILL_BRANCH_DESC[player.class] || [])[skillBranch];
+    if (bDesc) branchTabs += `<div class="sk-bdesc">${bDesc}</div>`;
   }
 
   const header = `
