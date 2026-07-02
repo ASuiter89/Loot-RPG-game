@@ -1355,7 +1355,7 @@
   .skillbar-btn.baseline { border-color: var(--frame); background: var(--orange-850); color: var(--gold-200); }
   .skillbar-btn.baseline .sb-key { color: var(--gold); }
   .skillbar-btn.baseline.disabled { background: var(--panel); border-color: var(--panel); color: var(--btn-off); }
-  .skillbar-btn .sb-key { position: absolute; top: 2px; left: 2px; z-index: 4; font-size: 1.1rem; line-height: 1; color: var(--blue-350); background: rgba(0,0,0,0.42); border-radius: 4px; padding: 0 3px; text-shadow: 0 1px 1px #000; pointer-events: none; }
+  .skillbar-btn .sb-key { position: absolute; top: 2px; left: 2px; z-index: 4; max-width: calc(100% - 4px); overflow: hidden; white-space: nowrap; font-size: 1.1rem; line-height: 1; color: var(--blue-350); background: rgba(0,0,0,0.42); border-radius: 4px; padding: 0 3px; text-shadow: 0 1px 1px #000; pointer-events: none; }
   .skillbar-btn .sb-icon { flex: 0 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; font-size: 2rem; line-height: 1; }
   /* Spell tiles drop the MP label, so the icon grows to fill the tile (hover the
      button for MP / cooldown details). The min-height reserves the icon's line even
@@ -10573,6 +10573,7 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "medium", v: "Way more special powers, up front & glowing", by: "Jeff Louie", notes: ["A gear piece's special power (Vampiric, Brutal, Savage…) now leads its stat line and pulses with a coloured glow so it stands out at a glance, instead of trailing at the end.", "Added ~37 new build-defining powers across offense, crit, sustain, defense, casting, control, speed and fortune — so top-tier drops feel far more varied."] },
+  { date: "2026-07-01", size: "small", v: "Skill-bar key labels fit their boxes", by: "Jeff Louie", notes: ["Long key names (Space, arrow keys) show as short glyphs on the bar instead of spilling out of the box."] },
   { date: "2026-07-02", size: "small", v: "Materials tied to rarity bands", by: "Claude", notes: ["Scrap, Glimmer and Core were flooding in — dialled back and made cleaner.", "Salvage now reads by colour: grey/white give pure Scrap, green+ start giving Glimmer, blue+ Core, only epic+ shed a Chaos Orb — no more every-piece spray.", "Trimmed material kill-drops and capped the deep-floor Scrap bonus so it no longer balloons."] },
   { date: "2026-07-01", size: "small", v: "Set items fully teal", by: "Claude", notes: ["Set pieces now show the teal set colour in the chat log and the paper-doll two-hand slot too, matching the bag, drops and tooltips — no more tier orange."] },
   { date: "2026-07-02", size: "small", v: "UI SIZE scales icons too", by: "Claude", notes: ["Every menu, HUD and panel icon now grows with the UI SIZE setting alongside the text — sprites, currency and material icons, status badges, portraits, town-service art and the cursor all scale from 1x to 2x instead of staying tiny.", "Fixed some icons scaling twice and ballooning at higher UI SIZE."] },
@@ -23147,10 +23148,10 @@ function renderSkillBar() {
   const manaTip = `<div class='ht-name' style='color:var(--mp)'>🔷 Mana Potion</div><div class='ht-line'>${town ? 'Saved for the dungeon — rest in town to refill for free instead.' : 'Quaff to restore a burst of mana.'}</div><div class='ht-sub'>${manaHint}${town ? '' : ` · ${effectivePotionCd()}-second cooldown`}</div>`;
   const cdDial = (key) => `<span class="sb-cd" data-cd="${key}"></span>`;
   const healBtn = `<button class="skillbar-btn potion ${town ? 'town-locked' : (potReady && !hpFull ? 'ready' : 'empty')} ${urgent ? 'urgent' : ''} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} ${town ? '' : 'onclick="useHealthPotion()"'}>
-      <span class="sb-key">${kbLabel('healthPotion')}</span><span class="sb-icon">${HEAL_POTION_SVG}</span><span class="sb-info" id="heal-label">${pcd > 0 ? Math.ceil(pcd) + 's' : ''}</span>${cdDial('pot')}
+      <span class="sb-key">${kbShort(kbLabel('healthPotion'))}</span><span class="sb-icon">${HEAL_POTION_SVG}</span><span class="sb-info" id="heal-label">${pcd > 0 ? Math.ceil(pcd) + 's' : ''}</span>${cdDial('pot')}
     </button>`;
   const manaBtn = `<button class="skillbar-btn potion mana ${town ? 'town-locked' : (potReady && !mpFull ? 'ready' : 'empty')} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} ${town ? '' : 'onclick="useManaPotion()"'}>
-      <span class="sb-key">${kbLabel('manaPotion')}</span><span class="sb-icon">${MANA_POTION_SVG}</span><span class="sb-info">${pcd > 0 ? Math.ceil(pcd) + 's' : ''}</span>${cdDial('pot')}
+      <span class="sb-key">${kbShort(kbLabel('manaPotion'))}</span><span class="sb-icon">${MANA_POTION_SVG}</span><span class="sb-info">${pcd > 0 ? Math.ceil(pcd) + 's' : ''}</span>${cdDial('pot')}
     </button>`;
   // The four manual slots are rendered filled or empty (keys 1–4; slot 1 is the
   // gold primary). A filled slot casts on click and can be dragged to another slot
@@ -23166,7 +23167,7 @@ function renderSkillBar() {
     if (!s) {
       const tip = `<div class='ht-name'>Empty slot ${i + 1}</div><div class='ht-line'>${touchUI() ? 'Tap to assign a learned skill.' : 'Drag a learned skill here, or tap to assign one.'}</div>${key && !touchUI() ? `<div class='ht-sub'>casts with ${key}</div>` : ''}`;
       return `<button class="skillbar-btn slot-empty${i === 0 ? ' baseline' : ''}" ${dropAttrs(i)} ${hoverTip(tip)} onclick="openSlotPicker(${i})">
-      <span class="sb-key">${key}</span><span class="sb-icon big slot-plus">＋</span>
+      <span class="sb-key">${kbShort(key)}</span><span class="sb-icon big slot-plus">＋</span>
     </button>`;
     }
     const cd = skillCd(s.id);
@@ -23177,7 +23178,7 @@ function renderSkillBar() {
     const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown${castHint}</div><div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
     return `<button class="skillbar-btn ${i === 0 ? 'baseline ' : ''}${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}',${i})" ondragend="skillDragEnd()" ${dropAttrs(i)} ${hoverTip(tip)} onclick="castSkillById('${s.id}')">
-      <span class="sb-key">${key}</span><span class="sb-icon big">${dlIcon(s.icon, 30)||''}</span>${cdDial('sk:' + s.id)}
+      <span class="sb-key">${kbShort(key)}</span><span class="sb-icon big">${dlIcon(s.icon, 30)||''}</span>${cdDial('sk:' + s.id)}
     </button>`;
   };
   const skillsHtml = slots.map((id, i) => slotBtnHtml(id, i)).join('');
@@ -23222,7 +23223,7 @@ function renderSkillBar() {
       ? `<div class='ht-name'>🌀 Town Portal</div><div class='ht-line'>Opening… ${Math.ceil(portalCharge)} second${Math.ceil(portalCharge) === 1 ? '' : 's'} left. A foe's hit shatters it.</div><div class='ht-sub'>press ${kbLabel('portal')} or move to cancel</div>`
       : `<div class='ht-name'>🏰 Town Portal</div><div class='ht-line'>Open a portal to the safe hub. It channels for a few seconds — you can't act while it does — moving or a foe's hit cancels it.</div><div class='ht-sub'>press ${kbLabel('portal')}</div>`;
     townBtn = `<button class="skillbar-btn town${here ? ' town-locked' : ''}${ch ? ' channeling' : ''}" ${hoverTip(townTip)} ${here ? '' : 'onclick="enterTown()"'}>
-      <span class="sb-key">${kbLabel('portal')}</span><span class="sb-icon">${dlIcon('ui_gate',24) || '🏰'}</span><span class="sb-info">${ch ? Math.ceil(portalCharge) : ''}</span>
+      <span class="sb-key">${kbShort(kbLabel('portal'))}</span><span class="sb-icon">${dlIcon('ui_gate',24) || '🏰'}</span><span class="sb-info">${ch ? Math.ceil(portalCharge) : ''}</span>
     </button>`;
   }
   // Three sections: Town/Health/Mana left, the auto-cast slot centred, the four
@@ -24176,6 +24177,13 @@ function kbLabel(id) {
 }
 // Label for the key that casts manual skill slot n (1-based); '' past the last slot.
 function skillKeyLabel(n) { return n >= 1 && n <= SKILL_SLOTS ? kbLabel('skill' + n) : ''; }
+// Compact key label for the skill-bar's tiny corner badge — long names like
+// "Space" / "ArrowUp" won't fit, so map them to short glyphs/abbreviations.
+function kbShort(l) {
+  if (!l) return '';
+  const m = { 'Space': 'SPC', 'ArrowUp': '↑', 'ArrowDown': '↓', 'ArrowLeft': '←', 'ArrowRight': '→', 'Enter': '⏎', 'Escape': 'Esc', 'Tab': '⇥', 'Shift': '⇧', 'Control': 'Ctrl', 'Backspace': '⌫', 'Delete': 'Del' };
+  return m[l] || (l.length > 4 ? l.slice(0, 4) : l);
+}
 
 // ── Keybinding settings overlay ──
 let keybindCapture = null; // action id awaiting a keypress, or null
