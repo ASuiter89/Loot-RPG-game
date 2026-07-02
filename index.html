@@ -378,12 +378,12 @@
      reads through, mirroring the floating skill bar / d-pad. Laid out by the
      on-map #buff-overlay (positioned below, near #map-info). */
   .buff-ic { position: relative; display: inline-flex; align-items: center; justify-content: center;
-             width: calc(22px * var(--ui-scale,1)); height: calc(22px * var(--ui-scale,1)); border-radius: 5px; background: color-mix(in srgb, var(--bg) 50%, transparent);
+             width: calc(44px * var(--ui-scale,1)); height: calc(44px * var(--ui-scale,1)); border-radius: 7px; background: color-mix(in srgb, var(--bg) 50%, transparent);
              box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 70%, transparent), inset 0 0 0 1px var(--green-500); cursor: help;
              backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); pointer-events: auto; }
   .buff-ic.debuff { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 70%, transparent), inset 0 0 0 1px var(--danger); }
-  .buff-time { position: absolute; right: -3px; bottom: -4px; min-width: calc(11px * var(--ui-scale,1)); height: calc(13px * var(--ui-scale,1));
-               padding: 0 1px; font-size: 1.1rem; line-height: calc(13px * var(--ui-scale,1)); font-weight: bold; text-align: center;
+  .buff-time { position: absolute; right: -4px; bottom: -5px; min-width: calc(20px * var(--ui-scale,1)); height: calc(20px * var(--ui-scale,1));
+               padding: 0 2px; font-size: 1.4rem; line-height: calc(20px * var(--ui-scale,1)); font-weight: bold; text-align: center;
                color: var(--paper); background: var(--green-500); border: 1px solid color-mix(in srgb, var(--ink) 80%, transparent); border-radius: 6px;
                text-shadow: 0 1px 1px color-mix(in srgb, var(--ink) 60%, transparent); }
   .buff-ic.debuff .buff-time { background: var(--danger); }
@@ -421,7 +421,9 @@
      never catches the pointer, so map taps pass straight through. */
   #minimap {
     position: absolute; top: 8px; left: 8px; z-index: 40;
-    width: 108px; height: 108px;
+    /* Box size is the player's MINIMAP setting (⚙ Settings → Visuals → MINIMAP);
+       --minimap-size is set on :root by applyMinimapSize(), defaulting to small. */
+    width: var(--minimap-size, 108px); height: var(--minimap-size, 108px);
     /* This is also a <canvas>, so the generic `canvas` rules (which place the
        main map into grid column 2 on desktop) would otherwise capture it and
        shift its positioning origin. Reset that placement and sizing so it stays
@@ -720,6 +722,17 @@
      the card DOWNWARD instead of re-centring. A flex margin:auto would override
      that and re-centre on every content change. */
   #settings-menu.open { display: flex; }
+  /* The pause menu stacks the character card above the settings card. The stack
+     is the single centred child of #settings-menu — centerSettingsCard() pushes
+     it to the vertical middle on open, then it grows downward like the card did
+     before (see the note above). */
+  #settings-stack {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    width: 100%; max-width: 300px;
+  }
+  /* Same hero/journey card as the title screen, sized to the settings card and
+     with the title's bottom margin dropped (the stack's gap spaces it instead). */
+  #settings-hero { width: 100%; margin: 0; box-sizing: border-box; }
   .settings-vibe { cursor: default; }
   /* Shared native-select look — the Audio tab's music-vibe picker and the Visuals
      tab's UI FONT picker use the same dropdown chrome. */
@@ -915,7 +928,7 @@
     letter-spacing: 1px; color: var(--red-200); border: 1px solid var(--red-550); background: color-mix(in srgb, var(--red-800) 25%, transparent);
     border-radius: 4px; padding: 1px 5px; }
   .hc-tag .dl-ic { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--red-800) 50%, transparent)); }
-  #title-hero .hc-tag { margin-top: 8px; }
+  .hero-card .hc-tag { margin-top: 8px; }
   .gy-row.hc { background: linear-gradient(90deg, color-mix(in srgb, var(--red-700) 16%, transparent), transparent); }
   .gy-row.hc .gy-name { color: var(--red-200); }
   /* Hardcore achievement badges glow crimson instead of gold when earned. */
@@ -1178,6 +1191,7 @@
      states, so they light amber (the Stamina colour) to show the mode is live. */
   .sprint-action.on,
   .herobars-action.on,
+  .pathline-action.on,
   .crosshair-action.on { background: var(--orange-850); border-color: var(--gold-350); color: var(--xp); }
 
   /* Reset Run wipes the current hero, so it shouts: red-tinted and gently pulsing at
@@ -2131,7 +2145,7 @@
     font-size: 1.3rem;
     min-width: 160px;
     max-width: 240px;
-    z-index: 420; /* above every town/shop modal */
+    z-index: 630; /* above every modal it can pop from, incl. the settings/pause menu (600) and slot picker (620) — else it hides behind their scrim */
     pointer-events: none;
     line-height: 1.6;
     /* A soft drop shadow lifts it off the drawer so it reads as a floating
@@ -3127,22 +3141,24 @@
     display: inline-block; width: calc(9px * var(--ui-scale,1)); height: calc(9px * var(--ui-scale,1)); border-radius: 2px;
     margin: 0 1px; vertical-align: middle; transform: rotate(45deg);
   }
-  /* Returning-hero card above CONTINUE: who you are (left) + a walking hero
-     sprite on the right, sized to stand as tall as the stacked text. */
-  #title-hero {
+  /* Hero / journey card — the "who you're playing" panel: who you are (left) +
+     a walking hero sprite on the right, sized to stand as tall as the stacked
+     text. Shared by the title screen (#title-hero, above CONTINUE) and the
+     pause menu (#settings-hero, above Settings) via .hero-card. */
+  .hero-card {
     display: flex; align-items: center; justify-content: space-between; gap: 14px;
     margin: 0 0 14px; padding: 11px 14px; text-align: left;
     border: 1px solid var(--frame); border-radius: 10px;
     background: linear-gradient(180deg, color-mix(in srgb, var(--gold-850) 50%, transparent), color-mix(in srgb, var(--ink) 50%, transparent));
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 8%, transparent);
   }
-  #title-hero .th-info { flex: 1 1 auto; min-width: 0; }
-  #title-hero .th-portrait { flex: 0 0 auto; line-height: 0; }
-  #title-hero .th-portrait img { image-rendering: pixelated; }
-  #title-hero .th-name { font-size: 1.9rem; font-weight: bold; letter-spacing: 1px; line-height: 1.1; }
-  #title-hero .th-sub { font-size: 1.3rem; color: var(--orange-400); margin-top: 3px; letter-spacing: .5px; }
-  #title-hero .th-stats { display: flex; justify-content: flex-start; gap: 18px; margin-top: 9px; font-size: 1.4rem; color: var(--orange-400); }
-  #title-hero .th-stats b { color: var(--xp); font-weight: bold; }
+  .hero-card .th-info { flex: 1 1 auto; min-width: 0; }
+  .hero-card .th-portrait { flex: 0 0 auto; line-height: 0; }
+  .hero-card .th-portrait img { image-rendering: pixelated; }
+  .hero-card .th-name { font-size: 1.9rem; font-weight: bold; letter-spacing: 1px; line-height: 1.1; }
+  .hero-card .th-sub { font-size: 1.3rem; color: var(--orange-400); margin-top: 3px; letter-spacing: .5px; }
+  .hero-card .th-stats { display: flex; justify-content: flex-start; gap: 18px; margin-top: 9px; font-size: 1.4rem; color: var(--orange-400); }
+  .hero-card .th-stats b { color: var(--xp); font-weight: bold; }
   .title-play {
     position: relative; isolation: isolate;
     width: 100%; box-sizing: border-box; padding: 15px; margin-bottom: 10px;
@@ -3546,8 +3562,11 @@
        touch larger here since there's room and a mouse is doing the dragging. */
     .sk-loadout { display: block; margin: 2px 0 10px; }
     /* Desktop has room — the settings modal shouldn't be a cramped phone-width
-       column, so widen its card and lay the button grids out roomier. */
+       column, so widen its card and lay the button grids out roomier. The stack
+       widens to match so the card (and the character card above it) aren't
+       re-constrained to the phone-width cap. */
     #settings-card { max-width: 520px; }
+    #settings-stack { max-width: 520px; }
     /* Keep pane grids at 2 columns even on desktop: Progress's 4 tiles land as a
        clean 2×2 (a 3-wide row would strand GRAVES alone), About's 2 as one row —
        and 2-wide gives wider, easier-to-hit buttons. */
@@ -3694,9 +3713,10 @@
     #map-info {
       display: flex; flex-direction: column; gap: 4px;
       position: absolute; z-index: 50; pointer-events: none;
-      /* Sits just below the minimap (108px box + border) so the two stack
-         tidily in the corner instead of overlapping. */
-      top: 124px; left: calc(var(--log-col) + 10px);
+      /* Sits to the RIGHT of the minimap, top-aligned with it — offset by the
+         minimap's current box size (+border +gap) so the two sit side by side
+         and the pair reflows together when the MINIMAP size setting changes. */
+      top: 8px; left: calc(var(--log-col) + 10px + var(--minimap-size, 108px) + 10px);
     }
     /* On PC there's room for a bigger HUD: bump the stat / gold / chip fonts and
        bars up so health, mana, floor, level, etc. are easier to read. */
@@ -4356,6 +4376,11 @@
          RT-blocking overlay) and makes everything behind it unclickable; click
          the scrim or press Esc to close. -->
     <div id="settings-menu" onclick="if(event.target.id==='settings-menu')closeSettingsMenu()">
+      <div id="settings-stack">
+      <!-- Character info card — the same hero/journey panel from the title screen,
+           surfaced above the settings card while the game is paused. Filled by
+           renderSettingsHero() on open; hidden before a hero exists. -->
+      <div id="settings-hero" class="hero-card" style="display:none"></div>
       <div id="settings-card">
         <div class="settings-title">⚙️ Settings</div>
         <!-- Tab bar: each button swaps the visible pane below, so the menu is a
@@ -4441,12 +4466,24 @@
         <button class="settings-item herobars-action" id="herobars-action" onclick="toggleHeroBars()" data-tip="<div class='ht-name'>❤️ Hero Bars</div><div class='ht-line'>Show slim red Health &amp; blue Mana bars under your hero, appearing while that vital isn't full — just like the stamina bar.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></span><span class="action-label" id="herobars-label">HERO BARS: OFF</span>
         </button>
+        <!-- Pathing line: faint gold breadcrumbs sketching the click-to-move route
+             around walls. On by default; the pulsing destination ring is separate. -->
+        <button class="settings-item pathline-action" id="pathline-action" onclick="togglePathLine()" data-tip="<div class='ht-name'>🧭 Pathing Line</div><div class='ht-line'>Sketch faint gold breadcrumbs along the click-to-move route your hero will take around walls.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="19" r="2"/><path d="M7 19h6a3 3 0 0 0 3-3V9" stroke-dasharray="2.5 2.5"/><path d="M16 5l2.5 3.5L21 5z" fill="currentColor" stroke="none"/><circle cx="18.5" cy="6" r="0.5"/></svg></span><span class="action-label" id="pathline-label">PATHING LINE: ON</span>
+        </button>
         <!-- UI SIZE — scales the whole interface (1x–2x in 0.25 steps). Every
              label is rem-sized off the root, so this one multiplier resizes all
              menus/HUD/panels at once. Populated by renderUiScaleControls(). -->
         <div id="uiscale-settings">
           <div class="settings-dpad-label">UI SIZE</div>
           <div class="settings-dpad-row" id="uiscale-row"></div>
+        </div>
+
+        <!-- MINIMAP — the top-left floor sketch's box size (Small / Medium /
+             Large). Populated by renderMinimapSizeControls(). -->
+        <div id="minimap-size-settings">
+          <div class="settings-dpad-label">MINIMAP</div>
+          <div class="settings-dpad-row" id="minimap-size-row"></div>
         </div>
 
         <!-- UI FONT — refaces the whole interface. A native dropdown styled like
@@ -4505,6 +4542,7 @@
         </div>
         </div>
 
+      </div>
       </div>
     </div>
 
@@ -4794,7 +4832,7 @@
       <span class="tier" style="background:var(--unique)"></span>
     </div>
     <!-- Hero / journey card — shown above CONTINUE for a returning hero, filled by showTitle(). -->
-    <div id="title-hero" style="display:none"></div>
+    <div id="title-hero" class="hero-card" style="display:none"></div>
     <button class="title-play" id="title-play" onclick="titlePlay()"><span class="tp-label">ENTER</span></button>
     <button class="title-play secondary" id="title-newrun" style="display:none" onclick="titleNewRun()">↻ Reset Current Run</button>
     <!-- Achievements — full-width button (matches CONTINUE / Reset Run). Opens the
@@ -5546,6 +5584,40 @@ function renderUiScaleControls() {
 }
 applyUiScale();
 
+// ── MINIMAP SIZE — the top-left minimap box (⚙ Settings → Visuals → MINIMAP) ──
+// Three fixed box sizes; the canvas resolution is unchanged (still one device
+// pixel per tile), CSS just scales the box, so bigger = a larger, easier-to-read
+// sketch. Sets --minimap-size on :root, which #minimap reads for its width/height
+// and #map-info reads to sit just to its right. Stored per device (not the save).
+const MINIMAP_SIZE_KEY = 'dungeonLootMiniSize';
+const MINIMAP_SIZES = [
+  { id: 'small',  label: 'Small',  px: 108 },
+  { id: 'medium', label: 'Medium', px: 156 },
+  { id: 'large',  label: 'Large',  px: 208 },
+];
+let minimapSize = 'small';
+try { const _ms = localStorage.getItem(MINIMAP_SIZE_KEY); if (_ms && MINIMAP_SIZES.some(s => s.id === _ms)) minimapSize = _ms; } catch (e) {}
+function currentMinimapSize() { return MINIMAP_SIZES.find(s => s.id === minimapSize) || MINIMAP_SIZES[0]; }
+function applyMinimapSize() {
+  document.documentElement.style.setProperty('--minimap-size', currentMinimapSize().px + 'px');
+}
+function setMinimapSize(id) {
+  if (!MINIMAP_SIZES.some(s => s.id === id)) return;
+  minimapSize = id;
+  try { localStorage.setItem(MINIMAP_SIZE_KEY, id); } catch (e) {}
+  applyMinimapSize();
+  renderMinimapSizeControls();
+  if (typeof sfx === 'function') sfx('click');
+}
+function renderMinimapSizeControls() {
+  const row = document.getElementById('minimap-size-row');
+  if (!row) return;
+  row.innerHTML = MINIMAP_SIZES.map(s =>
+    `<button class="dpad-cfg-btn ${minimapSize === s.id ? 'sel' : ''}" onclick="setMinimapSize('${s.id}')">${s.label}</button>`
+  ).join('');
+}
+applyMinimapSize();
+
 // ── UI FONT ── the player picks one of the embedded faces (⚙ Settings → Visuals →
 // UI FONT). setUiFont() overrides the --font-ui custom property, which every
 // menu/HUD/panel reads, so the whole interface reface at once. Two things stay
@@ -5736,7 +5808,7 @@ for (const _k in TOWN_NPC_ART) {
 function drawTownWalk(kind, cx, footY, size) {
   const img = _townNpcImg[kind];
   if (!img || !img._ready) return false;
-  const col = Math.floor(Date.now() / 180) % 4;
+  const col = Math.floor(animNow() / 180) % 4;
   const dx = Math.round(cx - size / 2), dy = Math.round(footY - size * 0.92);
   const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false;
   ctx.drawImage(img, col * HERO_WALK_TS, 0, HERO_WALK_TS, HERO_WALK_TS, dx, dy, size, size);
@@ -5822,6 +5894,55 @@ function drawSprite(name, dx, dy, dsize) {
 function drawSpriteC(name, cx, cy, size) {
   return drawSprite(name, cx - size / 2, cy - size / 2, size);
 }
+// ── STATUS-TINT SPRITE CACHE ──
+// Enemies flash white when hit and take a coloured wash while burning/poisoned/
+// chilled/stunned/cursed/charged. Doing that with ctx.filter on every afflicted
+// foe every frame is one of the most expensive 2D-canvas operations there is —
+// each drawImage runs a whole filter pipeline. But these filters are pure
+// per-pixel colour transforms, so applying one to the 16px atlas tile ONCE and
+// caching the result is pixel-for-pixel identical to the live filter (nearest-
+// neighbour upscaling commutes with a per-pixel transform) at a fraction of the
+// cost. Keyed by sprite name + tint; the tile is tiny so the cache stays cheap.
+const TINT_FILTERS = {
+  hit:    'brightness(2.6) saturate(0.4)',
+  burn:   'grayscale(1) sepia(1) saturate(9) hue-rotate(-30deg) brightness(1.2)',
+  poison: 'grayscale(1) sepia(1) saturate(6) hue-rotate(60deg) brightness(1.05)',
+  vuln:   'grayscale(1) sepia(1) saturate(6) hue-rotate(220deg) brightness(0.92)',
+  stun:   'grayscale(1) sepia(1) saturate(7) hue-rotate(-15deg) brightness(1.25)',
+  chill:  'grayscale(1) sepia(1) saturate(6) hue-rotate(160deg) brightness(1.15)',
+  static: 'brightness(1.35) saturate(1.5)',
+};
+const _tintCache = new Map();   // `${name}|${tint}` → 16px canvas
+function tintedTile(name, tint) {
+  const key = name + '|' + tint;
+  const hit = _tintCache.get(key);
+  if (hit !== undefined) return hit;
+  const i = SPRITE_IDX[name], filt = TINT_FILTERS[tint];
+  if (i === undefined || !filt || !spriteReady) return null;   // don't cache until the atlas is ready
+  const cv = document.createElement('canvas');
+  cv.width = ATLAS_TS; cv.height = ATLAS_TS;
+  const g = cv.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.filter = filt;
+  const sx = (i % ATLAS_COLS) * ATLAS_TS, sy = ((i / ATLAS_COLS) | 0) * ATLAS_TS;
+  g.drawImage(spriteSheet, sx, sy, ATLAS_TS, ATLAS_TS, 0, 0, ATLAS_TS, ATLAS_TS);
+  _tintCache.set(key, cv);
+  return cv;
+}
+// Blit a status-tinted sprite centred on (cx,cy), mirroring drawSprite's crisp
+// whole-tile snapping exactly. Returns false (so the caller draws the plain
+// sprite) when the tinted tile isn't available yet.
+function drawSpriteTintedC(name, cx, cy, size, tint) {
+  const cv = tintedTile(name, tint);
+  if (!cv) return false;
+  const s = ATLAS_TS * Math.max(1, Math.round(size / ATLAS_TS));
+  const ox = Math.round(cx - s / 2), oy = Math.round(cy - s / 2);
+  const sm = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(cv, 0, 0, ATLAS_TS, ATLAS_TS, ox, oy, s, s);
+  ctx.imageSmoothingEnabled = sm;
+  return true;
+}
 // ── ANIMATED PORTAL ── one swirling, glowing portal used everywhere portals
 // appear: in-level teleporters (purple), the town gate channel (blue) and the
 // rainbow next-difficulty gate. Counter-rotating coloured arcs spin around a
@@ -5832,7 +5953,7 @@ const PORTAL_PALETTES = {
   rainbow:    ['#ff4d4d', '#ff9a3d', '#ffe24d', '#5de06a', '#4dc8ff', '#7a6bff', '#d24dff'],
 };
 function drawPortal(cx, cy, size, style) {
-  const t = Date.now();
+  const t = animNow();
   const pulse = 0.5 + 0.5 * Math.sin(t / 300);
   const spin = (t / 700) % (Math.PI * 2);
   const cols = PORTAL_PALETTES[style] || PORTAL_PALETTES.teleporter;
@@ -6197,7 +6318,7 @@ function drawFurnitureAt(x, y, px, py, tw, th) {
 function drawLiquid(px, py, tw, th, x, y, seed, C, kind) {
   if (lpcReady && !inTown) return; // LPC terrain pass draws water/lava
   const t = kind === 'lava' ? 7 : 6;
-  const now = Date.now();
+  const now = animNow();
   const h = Math.abs(seed);
   const jr = (n) => (((h * 131 + n * 977) >>> 4) % 1000) / 1000; // 0..1, stable per cell
   const same = (xx, yy) => xx >= 0 && yy >= 0 && xx < MAP_W && yy < MAP_H && mapData[yy][xx] === t;
@@ -9446,6 +9567,12 @@ try { if (localStorage.getItem(HERO_BARS_KEY) === '1') showHeroBars = true; } ca
 const CROSSHAIR_KEY = 'dungeonLoot_crosshair';
 let showCrosshair = true;
 try { if (localStorage.getItem(CROSSHAIR_KEY) === '0') showCrosshair = false; } catch (e) {}
+// Optional faint gold breadcrumb trail sketching the planned click-to-move route
+// around walls (see the moveTarget draw block). On by default; the pulsing
+// destination ring is unaffected. The choice is saved across sessions.
+const PATH_LINE_KEY = 'dungeonLoot_pathLine';
+let showPathLine = true;
+try { if (localStorage.getItem(PATH_LINE_KEY) === '0') showPathLine = false; } catch (e) {}
 // The foe the hero's auto-attack is currently locked onto (best in-reach target
 // under the current focus mode), recomputed each frame in updatePlayerCombat via
 // pickAutoTarget(). Declared here (with the other render state) so the draw loop's
@@ -9592,6 +9719,25 @@ let skillView = 'active';  // which SKILLS sub-tree is shown: passive | active |
 let skillBranch = 0;        // which specialization branch (column 0..4) is shown within passive/active
 let mapData = [];
 let dungeonLevel = 1;
+
+// ── ANIMATION CLOCK ──
+// Looping world animation (enemy idle pulses, portal swirls, water/lava shimmer,
+// glows, the set-aura breathe…) reads animNow() instead of Date.now() so it FREEZES
+// whenever the world clock is held by a pause/menu overlay. draw() keeps running
+// every frame (the canvas shows through the settings scrim), but this clock stops
+// advancing while paused, so the scene sits perfectly still and then resumes from
+// exactly where it stopped — no jump. It rides on the same clockPaused() test as the
+// world, so a town you're merely resting in stays alive while a real menu on top of
+// it freezes. Event-stamped transients (hit-flash, particles, floating numbers,
+// lunges, screen shake) keep using Date.now(): nothing new fires while paused, and
+// they're compared against their own Date.now() stamps. Declared up here (not beside
+// animNow) so it's initialized before the first init-time draw() ever calls animNow.
+let _animMs = 0, _animPrevTs = null;
+function tickAnimClock(ts) {
+  if (_animPrevTs != null && !clockPaused()) _animMs += ts - _animPrevTs;
+  _animPrevTs = ts;
+}
+function animNow() { return _animMs; }
 
 // ── TOWN (safe hub you can warp to) ──
 // When true, you are out of the dungeon and in the town hub — a MENU of services
@@ -9903,7 +10049,7 @@ window.gameState = function gameState(radius) {
         };
       }) : null,
     },
-    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · # wall · . floor · ~ water (blocks) · ^ lava (burns) · " spikes (stab) · , mud (slow) · _ ice (slip) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
+    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · , mud (slow) · _ ice (slip) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
     map: rows.join('\n'),
@@ -9951,7 +10097,7 @@ window.gameGuide = function gameGuide(topic) {
       `Bag / inventory: ${key('bag')} — opens the LOOT / GEAR / HERO / SKILLS tabs.`,
       `Cast hotbar skills: number keys ${key('skill1')}-${key('skill' + SKILL_SLOTS)} fire the ${SKILL_SLOTS} manual slots on the RIGHT of the bar (tap to cast). One extra skill sits in a dedicated auto-cast slot in the MIDDLE and fires itself — see the "autocast" topic.`,
       `Esc closes the top menu/overlay, or opens Settings. Settings is split into tabs (Play / Visuals / Audio / Progress / About); non-movement keys are remappable under the Play tab → KEYS (◀ Back or Esc there returns to Settings). The keys shown here are your CURRENT bindings.`,
-      `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero) and, on mouse, the CURSOR picker.`,
+      `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds MINIMAP (the top-left floor-sketch box size — Small / Medium / Large), UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker.`,
     ],
     movement: [
       `Walking, sprinting and dashing all move a free-floating body in real time (with momentum), not on a turn grid. Hold a direction; let go to stop.`,
@@ -9965,7 +10111,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     combat: [
       `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight). A red crosshair marks the foe currently locked on (Settings → Visuals → CROSSHAIR toggles it; the 🎯 TARGET focus in Settings → Play picks which foe wins).`,
-      `Weapon reach: Staff & Bow = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a wall, deep water, cracked wall or locked door between you and a foe blocks ranged auto-attacks, ranged skills and spells (both ways: foes can't shoot or hex you through walls either). Melee is unaffected; only adjacent foes are struck.`,
+      `Weapon reach: Staff & Bow = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
       `Per-hit damage is capped at roughly 1/4 of a normal foe's max HP (1/6 elite, 1/9 boss), so against bosses sustained DPS and skills (which cap higher) matter more than one big swing.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
@@ -9982,7 +10128,7 @@ window.gameGuide = function gameGuide(topic) {
       `Learn and rank skills on the SKILLS tab (spend skill points). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns 1 skill point for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
-      `RANGED casts need LINE OF SIGHT: a bolt, blast, beam (line), nova or chain only strikes foes you can see — a wall (or deep water / sealed door) between you and a foe blocks it, and the cast fails with "No foe in sight" if nothing visible is in range. Melee/cleave (adjacent-only) and the rare floor-wide "strike random foes" ultimate ignore walls.`,
+      `RANGED casts need LINE OF SIGHT: a bolt, blast, beam (line), nova or chain only strikes foes you can see — a SOLID obstruction (wall, door, boss barrier, furniture) between you and a foe blocks it, but open ground and water don't; the cast fails with "No foe in sight" if nothing visible is in range. Melee/cleave (adjacent-only) and the rare floor-wide "strike random foes" ultimate ignore walls.`,
     ],
     damage: [
       `Damage comes from THREE distinct sources, each with its own scaling lane — build into one and you don't accidentally buff the others:`,
@@ -10020,7 +10166,7 @@ window.gameGuide = function gameGuide(topic) {
       `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" (tier being any rarity or "set") then call saveGame().`,
     ],
     hazards: [
-      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable, blocks bolts), ^ lava (walkable, burns), " spikes (walkable, stab), , mud (slow), _ ice (slip), + locked vault door, % cracked wall (smash by walking into it), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
+      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), , mud (slow), _ ice (slip), + locked vault door, % cracked wall (smash by walking into it), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
       `Lava and spikes hurt but never kill outright (HP clamps to 1), and the generator never forces you across one — route around them. Mud halves speed; ice makes you slide.`,
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
@@ -10032,8 +10178,9 @@ window.gameGuide = function gameGuide(topic) {
     ],
     enemies: [
       `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), and status (e.g. ["stun"], ["slow"]).`,
-      `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls/water.`,
-      `Behaviors: chaser (steady), swift & pack (move 2 tiles/turn; wolves/packs rush when you drop below 50% HP), brute & chilled (slow — act every other turn, so kiting works), lurker (ambush), caster (ranged, fires across the room).`,
+      `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
+      `Behaviors: chaser (steady), swift & pack (move 2 tiles/turn; wolves/packs rush when you drop below 50% HP), brute & chilled (slow — act every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand).`,
+      `Ranged foes fire DODGEABLE bolts, not guaranteed hits — a bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
       `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly.`,
       `Treasure Goblins (isGoblin) flee, never attack, and do NOT block the exit — chase fast for jackpot loot (they vanish ~15 ticks after first hit) or ignore them.`,
       `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs; return to town and pick the next tier at the Gate).`,
@@ -11181,6 +11328,23 @@ function updateCrosshairButton() {
   if (btn) btn.classList.toggle('on', showCrosshair);
 }
 
+// Flip the click-to-move pathing line on and off. Persisted so the choice
+// survives reloads. Drawn as faint gold breadcrumbs along the planned route in
+// the main render loop (the destination ring is separate and always shows).
+function togglePathLine() {
+  showPathLine = !showPathLine;
+  try { localStorage.setItem(PATH_LINE_KEY, showPathLine ? '1' : '0'); } catch (e) {}
+  settingsChanged();
+  sfx('click');
+  updatePathLineButton();
+}
+function updatePathLineButton() {
+  const lbl = document.getElementById('pathline-label');
+  if (lbl) lbl.textContent = showPathLine ? 'PATHING LINE: ON' : 'PATHING LINE: OFF';
+  const btn = document.getElementById('pathline-action');
+  if (btn) btn.classList.toggle('on', showPathLine);
+}
+
 // Settings modal: a centred overlay holding sound, saves, Reset Run and options.
 // There's no on-screen button — it opens only with Esc (see handleEscape) and,
 // being an RT-blocking overlay, pausing the game while it's up. The scrim
@@ -11189,7 +11353,7 @@ function toggleSettingsMenu(e) {
   if (e) e.stopPropagation();
   const menu = document.getElementById('settings-menu');
   if (!menu) return;
-  if (menu.classList.toggle('open')) { sfx('click'); showSettingsTab(settingsTab); renderDpadControls(); renderCursorControls(); renderUiScaleControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); centerSettingsCard(); }
+  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderDpadControls(); renderCursorControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); centerSettingsCard(); }
 }
 function closeSettingsMenu() {
   const menu = document.getElementById('settings-menu');
@@ -11204,7 +11368,10 @@ function centerSettingsCard() {
   const menu = document.getElementById('settings-menu');
   const card = document.getElementById('settings-card');
   if (!menu || !card) return;
-  const top = Math.max(12, Math.round((window.innerHeight - card.offsetHeight) / 2));
+  // Centre the whole stack (character card + settings card), not just the card,
+  // so adding the hero panel keeps the group vertically middled on open.
+  const measure = document.getElementById('settings-stack') || card;
+  const top = Math.max(12, Math.round((window.innerHeight - measure.offsetHeight) / 2));
   menu.style.paddingTop = top + 'px';
 }
 // Which settings tab is showing. Persists across opens so reopening lands where
@@ -11223,6 +11390,14 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Fix: title screen wouldn't offer Continue", by: "Claude", notes: ["Settings sync could crash the boot before the title screen finished loading, so returning heroes never saw the Continue button — fixed.", "Re-applying your saved log/loot-drawer collapse state on load no longer counts as a fresh change, keeping cross-device sync timestamps accurate."] },
+  { date: "2026-07-02", size: "small", v: "Smoother big fights", by: "Claude", notes: ["Enemy status tints (burning, poisoned, chilled…), the hit-flash, elite/boss auras and threat rings now use cached art instead of rebuilding pricey per-frame effects — much smoother with lots of foes on screen.", "Elite/boss/affix auras read as a soft coloured halo."] },
+  { date: "2026-07-02", size: "small", v: "Pathing line toggle", by: "Claude", notes: ["Toggle the click-to-move breadcrumb trail in Settings → Visuals (on by default); the pulsing destination ring stays.", "Choice syncs across devices when signed in."] },
+  { date: "2026-07-02", size: "small", v: "Enemy stuns half as long", by: "Claude", notes: ["Stuns that enemies land on you now last half as long, so a bad hit roots you for far less time.", "Tenacity still shortens them further on top."] },
+  { date: "2026-07-02", size: "small", v: "Pause menu polish", by: "Claude", notes: ["Settings tooltips now sit on top of the menu instead of hiding behind its dimmed backdrop.", "Opening the pause/settings menu freezes the world — sprites, glows and portals hold still, then resume right where they left off when you close it."] },
+  { date: "2026-07-02", size: "small", v: "Character card in the pause menu", by: "Claude", notes: ["Pause menu (Esc) now shows your hero card — name, class, level, deepest floor and gold — above Settings, the same panel as the title screen."] },
+  { date: "2026-07-02", size: "small", v: "See & shoot over water and open ground", by: "Claude", notes: ["Line of sight is now blocked only by SOLID obstructions — walls, cracked walls, locked doors, boss barriers and furniture.", "Water, lava, spikes and other floor terrain no longer block shots or spells: if you can walk over (or across) it, you can see and fire over it.", "Solid furniture and boss barriers now give real cover, blocking bolts and spells like a wall."] },
+  { date: "2026-07-02", size: "small", v: "Dodge enemy ranged shots", by: "Claude", notes: ["Ranged foes now loose a real bolt aimed where you stand instead of an unavoidable hit with a cosmetic arrow.", "Sidestep the bolt's path — or break its line behind a wall — and it misses; it only hurts you if it actually reaches you.", "Damage, dodge and on-hit effects now resolve on impact, so kiting a shooter genuinely works."] },
+  { date: "2026-07-02", size: "small", v: "Minimap size + bigger status icons", by: "Claude", notes: ["New MINIMAP setting (⚙ Visuals) — pick Small, Medium or Large.", "Floor & foe count moved to the right of the minimap.", "Buff/debuff status icons in the top-right are twice as big."] },
   { date: "2026-07-02", size: "small", v: "Target crosshair + Visuals tidy-up", by: "Claude", notes: ["Red crosshair now marks the foe your auto-attack is locked onto; toggle it in Settings → Visuals (on by default).", "Hero Bars toggle moved from Play to Visuals, beside it.", "UI FONT picker is now a plain dropdown matching the music picker.", "History window is wider so names and stats no longer clip."] },
   { date: "2026-07-02", size: "small", v: "Settings sync to your account", by: "Claude", notes: ["Signed-in players carry preferences across devices — sound levels, keybinds, UI font, cursor, sprint mode, music vibe, hero bars, and panel/minimap collapse.", "Newest change wins across devices; UI scale and the touch d-pad stay per-device.", "Optional — logged-out play is unchanged and still saves only on this device."] },
   { date: "2026-07-02", size: "small", v: "Gold shows a coin icon, not a trailing g", by: "Claude", notes: ["Every money amount — HUD, shops, tooltips, buttons, logs and combat pops — now leads with the gold-coin icon instead of a trailing “g”."] },
@@ -11235,7 +11410,7 @@ const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Bigger skill tiles on the HUD", by: "Claude", notes: ["Bottom-HUD skill buttons are 50% larger with icons scaled to match.", "Even margin above and below the skill row; the HUD grows to fit."] },
   { date: "2026-07-02", size: "small", v: "Chunkier floor buttons", by: "Claude", notes: ["Dungeon Gate floor buttons are now larger, taller and squarer with bigger numerals — easier to read and click."] },
   { date: "2026-07-02", size: "small", v: "Smart click-to-move pathing", by: "Claude", notes: ["Click a spot behind a wall and the hero now routes around it instead of grinding into the corner — faint gold breadcrumbs sketch the planned path.", "Prefers safe ground, steering around lava and spikes when there's a way past.", "Works while holding the button too: drag past a wall and the route re-plans to keep chasing the cursor."] },
-  { date: "2026-07-02", size: "small", v: "Line of sight required to hit at range", by: "Claude", notes: ["Ranged skills and spells (bolt, blast, beam, nova, chain) now need a clear line to a foe — no firing through walls, deep water or sealed doors.", "Ranged summoned minions close in until they can see their target instead of shooting through walls.", "More boss tricks (firewall, firestorm, shockwave, frost nova, quake, vortex) now need line of sight, so ducking behind cover breaks them."] },
+  { date: "2026-07-02", size: "small", v: "Line of sight required to hit at range", by: "Claude", notes: ["Ranged skills and spells (bolt, blast, beam, nova, chain) now need a clear line to a foe — no firing through walls, doors or other solid obstacles.", "Ranged summoned minions close in until they can see their target instead of shooting through walls.", "More boss tricks (firewall, firestorm, shockwave, frost nova, quake, vortex) now need line of sight, so ducking behind cover breaks them."] },
   { date: "2026-07-02", size: "small", v: "Smoother pickups", by: "Claude", notes: ["Grabbing loot no longer hitches the frame — the bag rebuilds at most once per frame and only when it's on-screen, and rapid pickups save once instead of on every chest."] },
   { date: "2026-07-02", size: "small", v: "Hover stat codes on the equip-compare line", by: "Claude", notes: ["Stat abbreviations in the item-vs-equipped compare line (bag & shop) now reveal their full name on hover, like the item's own stat line."] },
   { date: "2026-07-02", size: "small", v: "Popup titles clear their nav buttons", by: "Claude", notes: ["A long popup title (e.g. Name Your Hero) no longer lets the Back/Close button spill sideways over it on a narrow window — the title now ellipsizes instead of overlapping."] },
@@ -12483,14 +12658,13 @@ function placeTraps(reach) {
 }
 
 // Does an arrow trap's firing lane pass through (x,y)? (Includes the emitter tile
-// and every tile its bolt travels until a wall/water blocks the lane.)
+// and every tile its bolt travels until a solid obstruction blocks the lane.)
 function arrowLaneHits(tr, x, y) {
   let cx = tr.x, cy = tr.y;
   for (let s = 0; s <= 6; s++) {
     if (cx === x && cy === y) return true;
     cx += tr.dx; cy += tr.dy;
-    const t = tileAtCell(cx, cy);
-    if (t === 1 || t === 6 || t === 10 || t === 11) break;
+    if (blocksShot(cx, cy)) break;
   }
   return false;
 }
@@ -12533,12 +12707,19 @@ function spawnProjectile(x, y, dx, dy, dmg, color, speed) {
   projectiles.push({ x, y, vx: dx / m * (speed || 7), vy: dy / m * (speed || 7), dmg, color: color || '#ffd24b', life: 3 });
 }
 
-// A visible bolt a ranged foe looses at the hero. The shot's damage is applied
-// instantly by the attack (see enemyRangedAttack); this bolt just SELLS it as a
-// projectile — flying from the foe and homing onto the hero — so a ranged hit is
-// obviously an incoming attack, not a mystery. Deals no damage of its own.
-function spawnEnemyShot(x, y, color) {
-  projectiles.push({ x: x + 0.5, y: y + 0.5, vx: 0, vy: 0, dmg: 0, color: color || '#c77dff', life: 1.2, cosmetic: true });
+// A real, DODGEABLE bolt a ranged foe looses at the hero. It flies in a straight
+// line toward where the hero was when fired, is stopped by walls (see
+// updateProjectiles), and only deals damage if it actually reaches the hero — so
+// sidestepping its path or ducking behind cover avoids the hit entirely. Carries
+// the firing foe `e` and its pre-rolled base damage so the hit resolves with that
+// foe's mitigation and on-hit procs when (and if) it lands.
+function spawnEnemyBolt(e, raw, color) {
+  const s = e.size || 1;
+  const ox = e.x + s / 2, oy = e.y + s / 2;          // origin: centre of the foe's footprint
+  const dx = player.fx - ox, dy = player.fy - oy, d = Math.hypot(dx, dy) || 1;
+  const SP = 8;                                        // fast enough to threaten, slow enough to sidestep
+  const life = (d + 1.5) / SP;                         // reaches the hero, overshoots a touch, then dies
+  projectiles.push({ x: ox, y: oy, vx: dx / d * SP, vy: dy / d * SP, dmg: raw, color: color || '#c77dff', life, enemyShot: true, e, label: enemyLabel(e) });
 }
 
 // Advance every bolt: move, die on a wall, or strike the hero on overlap.
@@ -12558,19 +12739,24 @@ function updateProjectiles(dt) {
       continue;
     }
     p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
-    const t = tileAtCell(Math.floor(p.x), Math.floor(p.y));
-    if (t === 1 || t === 6 || t === 10 || t === 11 || bossWallAt(Math.floor(p.x), Math.floor(p.y))) {
+    if (blocksShot(Math.floor(p.x), Math.floor(p.y))) {   // pop on a solid obstruction; flies over water/ground
       spawnParticles(p.x - 0.5, p.y - 0.5, p.color, 4, 0.06); p.life = 0; continue;
     }
     if (Math.hypot(p.x - player.fx, p.y - player.fy) < PLAYER_R + 0.18) {
-      const dmg = applyIncomingMods(absorbWithMana(mitigateDamage(p.dmg, dungeonLevel)), {});
-      player.hp = Math.max(0, player.hp - dmg);
-      notePlayerDamage(dmg, p.label || 'arrow trap');
-      sfx('hurt'); spawnFloatingText(player.x, player.y, `${dmg}`, p.color);
-      spawnParticles(player.x, player.y, p.color, 6, 0.08); addShake(3);
+      if (p.enemyShot && p.e) {
+        // A foe's aimed bolt reached the hero — resolve it with that foe's mitigation
+        // and on-hit procs (a stat-dodge roll can still avoid it inside the handler).
+        landEnemyRangedHit(p.e, p.dmg, p.color);
+      } else {
+        const dmg = applyIncomingMods(absorbWithMana(mitigateDamage(p.dmg, dungeonLevel)), {});
+        player.hp = Math.max(0, player.hp - dmg);
+        notePlayerDamage(dmg, p.label || 'arrow trap');
+        sfx('hurt'); spawnFloatingText(player.x, player.y, `${dmg}`, p.color);
+        spawnParticles(player.x, player.y, p.color, 6, 0.08); addShake(3);
+        updateBars();
+        if (player.hp === 0) handleDeath();
+      }
       p.life = 0;
-      updateBars();
-      if (player.hp === 0) handleDeath();
     }
   }
   projectiles = projectiles.filter(p => p.life > 0);
@@ -15952,7 +16138,7 @@ function drawTownBuildings(offX, offY, tw, th) {
       // block seams on the lintel
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.fillRect(x0 + w * 0.5 - 1, y0 + h * 0.02, 2, h * 0.2);
-      const tp = 0.5 + 0.5 * Math.sin(Date.now() / 300);
+      const tp = 0.5 + 0.5 * Math.sin(animNow() / 300);
       ctx.save();
       // Town portals are BLUE (in-level teleporters are purple), so the gate that
       // leads home reads at a glance as the safe one.
@@ -16028,7 +16214,7 @@ function drawTownBuildings(offX, offY, tw, th) {
 function drawTownNpcs(offX, offY, tw, th, scale) {
   townNpcs.forEach(n => {
     const px = offX + n.x * tw, py = offY + n.y * th;
-    const t = (Date.now() % 2400) / 2400;
+    const t = (animNow() % 2400) / 2400;
     const pulse = 0.18 + 0.12 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2));
     ctx.save();
     ctx.fillStyle = n.kind === 'gate' ? `rgba(150,90,255,${pulse + 0.12})` : `rgba(255,210,120,${pulse})`;
@@ -17054,7 +17240,7 @@ let _walkPhase = 0, _walkLastT = 0;
 // up to date as the hero moves (see updatePlayer). These sheets carry their own
 // left AND right rows, so they are NOT mirrored like the atlas hero.
 function drawHeroWalk(img, px, py, tw, th) {
-  const now = Date.now();
+  const now = animNow();
   let adt = _walkLastT ? (now - _walkLastT) / 1000 : 0;
   if (adt > 0.1) adt = 0.1;                  // clamp after a stall so the cycle can't jump
   _walkLastT = now;
@@ -17086,7 +17272,7 @@ function drawHeroWalk(img, px, py, tw, th) {
 // complete (see completedSets) — the prestige "you finished a set" flourish. Drawn
 // under the sprite so it haloes the feet/body. Cheap: one additive radial gradient.
 function drawSetAura(cx, cy, tw) {
-  const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 460);   // 0..1 slow breathe
+  const pulse = 0.5 + 0.5 * Math.sin(animNow() / 460);   // 0..1 slow breathe
   const R = tw * (1.12 + 0.1 * pulse);
   const gold = PALETTE.gold || '#e8c267';
   ctx.save();
@@ -17529,7 +17715,7 @@ function draw() {
         } else {
           // Cleared → highlight the way deeper with a pulsing gold ring so the
           // descent stair is unmistakable next to the (plain) up-stairs.
-          const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 320);
+          const pulse = 0.5 + 0.5 * Math.sin(animNow() / 320);
           const lw = Math.max(2, tw * 0.09), o = lw / 2 + 1;
           ctx.save();
           ctx.lineWidth = lw;
@@ -17558,7 +17744,7 @@ function draw() {
         // from a central spout into a glowing basin.
         drawFloorBase(px, py, tw, th, seed, C);
         const cx = px + tw/2, cy = py + th/2, s = tw/TILE;
-        const tNow = Date.now();
+        const tNow = animNow();
         const wp = 0.5 + 0.5*Math.sin(tNow/400);   // slow pool shimmer
         // soft ground shadow
         ctx.save();
@@ -17644,7 +17830,7 @@ function draw() {
         // behind the icon only (same radial style as a lucky chest), not a flat
         // wash over the whole tile.
         drawFloorBase(px, py, tw, th, seed, C);
-        const sp = 0.5 + 0.5*Math.sin(Date.now()/350);
+        const sp = 0.5 + 0.5*Math.sin(animNow()/350);
         if (spriteReady && SPRITE_IDX['feat_shrine'] !== undefined) {
           glowUnder(px + tw/2, py + th/2, tw*(0.34 + 0.06*sp), `rgba(216,168,255,${0.40 + 0.22*sp})`);
           drawSprite('feat_shrine', px, py, tw);
@@ -17785,7 +17971,7 @@ function draw() {
     // When routing around a wall, sketch faint gold breadcrumbs along the planned
     // route (from where the hero is now) so the path it will take reads at a glance.
     const path = moveTarget.path;
-    if (path && path.length) {
+    if (showPathLine && path && path.length) {
       ctx.save();
       ctx.strokeStyle = 'rgba(232,194,103,0.35)';
       ctx.lineWidth = Math.max(1, tw * 0.04);
@@ -17798,7 +17984,7 @@ function draw() {
       ctx.restore();
     }
     const mxp = offX + moveTarget.wx * tw, myp = offY + moveTarget.wy * th;
-    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 180);
+    const pulse = 0.5 + 0.5 * Math.sin(animNow() / 180);
     const rad = tw * (0.18 + 0.05 * pulse);
     ctx.save();
     ctx.lineWidth = Math.max(1.5, tw * 0.05);
@@ -17819,7 +18005,7 @@ function draw() {
   bossHazards.forEach(h => {
     const px = offX + h.x * tw, py = offY + h.y * th;
     const cx = px + tw/2, cy = py + th/2;
-    const wob = 0.6 + 0.4 * Math.sin(Date.now()/120 + (h.x*7 + h.y*13));
+    const wob = 0.6 + 0.4 * Math.sin(animNow()/120 + (h.x*7 + h.y*13));
     if (h.kind === 'fire') {
       glowUnder(cx, cy, tw*0.55, `rgba(255,110,40,${0.28 + 0.18*wob})`);
       if (!(spriteReady && drawSpriteC('ic_fire', cx, cy, Math.round(tw*0.92))))
@@ -17924,7 +18110,7 @@ function draw() {
     // Heavy gold glow that pulses and fades out from behind them (the same radial
     // style as pickup glows). Two layered radial fades — a broad halo plus a
     // brighter core — read as a thicker, weightier glow than a single pass.
-    const t = (Date.now() % 1800) / 1800;
+    const t = (animNow() % 1800) / 1800;
     const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2);
     const gcx = px + tw/2, gcy = py + th/2;
     glowUnder(gcx, gcy, tw * (0.92 + 0.14 * pulse), `rgba(255,198,66,${0.34 + 0.24 * pulse})`);
@@ -17947,7 +18133,7 @@ function draw() {
     // Heavy purple glow that pulses and fades — same layered radial style as the
     // merchant's, so the two roaming vendors read as a matched pair (gold vs
     // purple) and stand out boldly from the floor.
-    const t = (Date.now() % 2600) / 2600;
+    const t = (animNow() % 2600) / 2600;
     const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2);
     const gcx = px + tw/2, gcy = py + th/2;
     glowUnder(gcx, gcy, tw * (0.92 + 0.14 * pulse), `rgba(150,78,255,${0.34 + 0.24 * pulse})`);
@@ -18000,22 +18186,17 @@ function draw() {
     const cursed = eStatus.some(s => s.effect === 'vuln');
     const chilled = eStatus.some(s => s.effect === 'chill');
     const charged = eStatus.some(s => s.effect === 'static');
-    ctx.save();
-    if (e.hitAt && Date.now() - e.hitAt < 110) ctx.filter = 'brightness(2.6) saturate(0.4)';   // white hit-flash
-    else if (burning) ctx.filter = 'grayscale(1) sepia(1) saturate(9) hue-rotate(-30deg) brightness(1.2)';
-    else if (poisoned) ctx.filter = 'grayscale(1) sepia(1) saturate(6) hue-rotate(60deg) brightness(1.05)';
-    else if (cursed) ctx.filter = 'grayscale(1) sepia(1) saturate(6) hue-rotate(220deg) brightness(0.92)';
-    else if (stunned) ctx.filter = 'grayscale(1) sepia(1) saturate(7) hue-rotate(-15deg) brightness(1.25)';
-    else if (chilled) ctx.filter = 'grayscale(1) sepia(1) saturate(6) hue-rotate(160deg) brightness(1.15)';
-    else if (charged) ctx.filter = 'brightness(1.35) saturate(1.5)';
-    // Pop: a coloured glowing halo marks elites/bosses/affixed foes so they stand
-    // out. Plain foes get no halo — a dark one read as a faint square box around
-    // the sprite, so it's been removed for ordinary enemies.
-    const eAura = e.isBoss ? 'rgba(255,70,70,0.95)' : (e.isElite ? 'rgba(255,215,90,0.95)' : e.affixColor);
-    if (eAura) {
-      ctx.shadowColor = eAura;
-      ctx.shadowBlur = Math.max(2, tw * 0.26);
-    }
+    // Status tint → a cached pre-tinted sprite (was a per-frame ctx.filter, one of
+    // the priciest 2D-canvas ops; the cached tile is pixel-identical). Priority
+    // matches the old if/else chain: hit-flash first, then the elemental washes.
+    let _tint = null;
+    if (e.hitAt && Date.now() - e.hitAt < 110) _tint = 'hit';   // white hit-flash
+    else if (burning) _tint = 'burn';
+    else if (poisoned) _tint = 'poison';
+    else if (cursed) _tint = 'vuln';
+    else if (stunned) _tint = 'stun';
+    else if (chilled) _tint = 'chill';
+    else if (charged) _tint = 'static';
     // Pixel-art creature sprite (scaled to the footprint), falling back to glyph.
     // A brief attack lunge nudges only the sprite toward its target — the HP bar
     // and threat ring below stay anchored to the enemy's real tile.
@@ -18023,15 +18204,29 @@ function draw() {
     const _elx = _elunge ? _elunge.dx : 0, _ely = _elunge ? _elunge.dy : 0;
     const _esz = Math.round(cw * (e.isBoss ? 1.0 : (e.isElite ? 0.96 : 0.9)));
     const _espr = enemySprite(e);
-    if (!(spriteReady && _espr && drawSpriteC(_espr, cx + _elx, py + ch/2 + th*0.02 + _ely, _esz))) {
+    const _scx = cx + _elx, _scy = py + ch/2 + th*0.02 + _ely;
+    // Pop: a coloured halo marks elites/bosses/affixed foes so they stand out.
+    // Painted as a cached radial glow behind the sprite (was a per-frame
+    // shadowBlur on the sprite itself). Plain foes get no halo.
+    const eAura = e.isBoss ? 'rgba(255,70,70,0.95)' : (e.isElite ? 'rgba(255,215,90,0.95)' : e.affixColor);
+    if (eAura) glowUnder(_scx, _scy, cw * 0.6, eAura);
+    let _drew = false;
+    if (spriteReady && _espr) {
+      if (_tint) _drew = drawSpriteTintedC(_espr, _scx, _scy, _esz, _tint);
+      if (!_drew) _drew = drawSpriteC(_espr, _scx, _scy, _esz);   // tint not ready → plain sprite
+    }
+    if (!_drew) {
+      // Rare no-atlas fallback keeps the live filter (not a perf concern here).
+      ctx.save();
+      if (_tint) ctx.filter = TINT_FILTERS[_tint];
       if (e.mColor) {
         const _mn = (typeof MONSTERS === 'object' && MONSTERS[e.type] && MONSTERS[e.type].name) || e.name || '?';
-        drawMonsterSquare(cx + _elx, py + ch/2 + th*0.02 + _ely, _esz, e.mColor, _mn.charAt(0).toUpperCase());
+        drawMonsterSquare(_scx, _scy, _esz, e.mColor, _mn.charAt(0).toUpperCase());
       } else {
         drawEmoji(e.type, cx + _elx, py + ch/2 + th*0.04 + _ely, Math.round(cw * (e.isBoss ? 0.95 : (e.isElite ? 0.94 : 0.9))));
       }
+      ctx.restore();
     }
-    ctx.restore();
 
     // ── THREAT TELEGRAPH ── make "who can hit me, from where, right now" legible.
     // Ring any foe that can strike the hero on its next move (melee adjacent, or
@@ -18044,21 +18239,13 @@ function draw() {
       const inRange = isRanged && edist <= (ebeh.range || 4) && hasLineToPlayer(e);
       const threatens = edist <= 1 || inRange;
       if (threatens) {
-        const tp = 0.5 + 0.5 * Math.sin(Date.now() / 380);   // calm, slow pulse
+        const tp = 0.5 + 0.5 * Math.sin(animNow() / 380);   // calm, slow pulse
         const fcx = cx, fcy = py + ch / 2;
         // Threat marker: a soft red glow ring that fades out at both edges (no
-        // hard outline), echoing the radial-glow style used elsewhere.
+        // hard outline), echoing the radial-glow style used elsewhere. Cached
+        // ring texture blitted at the pulsing alpha — no per-frame gradient.
         const rr = cw * 0.52, a = 0.20 + 0.16 * tp;
-        const g = ctx.createRadialGradient(fcx, fcy, rr * 0.46, fcx, fcy, rr);
-        g.addColorStop(0, 'rgba(255,70,58,0)');
-        g.addColorStop(0.72, `rgba(255,70,58,${a})`);
-        g.addColorStop(1, 'rgba(255,70,58,0)');
-        ctx.save();
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(fcx, fcy, rr, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        ringGlow(fcx, fcy, rr, '255,70,58', a);
       }
     }
 
@@ -18097,7 +18284,7 @@ function draw() {
   if (graveMarker) {
     const gpx = offX + graveMarker.x * tw, gpy = offY + graveMarker.y * th;
     const cx = gpx + tw / 2, cy = gpy + th / 2 + th * 0.02;
-    const t = Date.now() / 300;
+    const t = animNow() / 300;
     const gsp = 0.5 + 0.5 * Math.sin(t);
     // Bright pulsing glow behind the grave sprite — a soft radial fade (the same
     // style as pickups), not a boxy shadow halo. Doubled up so it really beams.
@@ -18107,7 +18294,7 @@ function draw() {
     // Two staggered expanding "come grab me" rings that fade as they grow — an
     // animated beacon so the reclaim spot is impossible to miss.
     for (let r = 0; r < 2; r++) {
-      const ringT = ((Date.now() + r * 600) % 1200) / 1200;
+      const ringT = ((animNow() + r * 600) % 1200) / 1200;
       ctx.strokeStyle = `rgba(255,215,90,${0.6 * (1 - ringT)})`;
       ctx.lineWidth = Math.max(1.5, tw * 0.06);
       ctx.beginPath();
@@ -18120,7 +18307,7 @@ function draw() {
     // Bobbing downward chevron floating above the grave — a clear "pick this up"
     // beacon that points right at your lost loot. Drawn procedurally (UI marker).
     ctx.save();
-    const bob = Math.sin(Date.now() / 250) * th * 0.08;
+    const bob = Math.sin(animNow() / 250) * th * 0.08;
     const ay = gpy - th * 0.18 + bob, aw = tw * 0.26, ah = th * 0.2;
     ctx.fillStyle = `rgba(255,225,110,${0.75 + 0.25 * gsp})`;
     ctx.strokeStyle = 'rgba(90,55,0,0.6)';
@@ -18143,7 +18330,7 @@ function draw() {
 
   // Quest markers — NPCs, objectives, and pickups, each ringed to stand out.
   if (quest) {
-    const sp = 0.5 + 0.5*Math.sin(Date.now()/300);
+    const sp = 0.5 + 0.5*Math.sin(animNow()/300);
     const drawMark = (mx, my, emoji, ring, sprite) => {
       const dx0 = offX + mx * tw, dy0 = offY + my * th;
       ctx.textAlign = 'center';
@@ -18243,12 +18430,12 @@ function draw() {
       ctx.fillRect(tcx - tw * 0.32, tcy - th * 0.32, tw * 0.64, th * 0.64);
       const warming = !tr.on && tr.t > tr.period * (1 - tr.onFrac) - 0.5;
       if (tr.on) {
-        const f = 0.6 + 0.4 * Math.sin(Date.now() / 70 + tr.x);
+        const f = 0.6 + 0.4 * Math.sin(animNow() / 70 + tr.x);
         ctx.shadowColor = '#ff6a22'; ctx.shadowBlur = tw * 0.4;
         ctx.fillStyle = `rgba(255,${Math.round(100 + 80 * f)},40,0.88)`;
         ctx.beginPath(); ctx.arc(tcx, tcy, tw * 0.27 * f, 0, Math.PI * 2); ctx.fill();
       } else if (warming) {
-        ctx.fillStyle = `rgba(255,120,40,${0.18 + 0.2 * Math.abs(Math.sin(Date.now() / 90))})`;
+        ctx.fillStyle = `rgba(255,120,40,${0.18 + 0.2 * Math.abs(Math.sin(animNow() / 90))})`;
         ctx.beginPath(); ctx.arc(tcx, tcy, tw * 0.13, 0, Math.PI * 2); ctx.fill();
       }
     }
@@ -18334,7 +18521,7 @@ function draw() {
   // the gate charges, with the remaining-seconds count floating above so the progress
   // (and the "don't get hit" stakes) read at a glance.
   if (portalChanneling()) {
-    const pulse = 0.55 + 0.35 * Math.sin(Date.now() / 180);
+    const pulse = 0.55 + 0.35 * Math.sin(animNow() / 180);
     // The shared animated portal, tinted BLUE for the home gate (teleporters purple).
     drawPortal(px + tw / 2, py + th / 2, tw, 'town');
     ctx.save();
@@ -18586,7 +18773,7 @@ function drawStairsArrow(offX, offY, tw, th, W, H) {
   // Cleared stairs pulse gold ("descend here"); while sealed it's the same gold
   // but calmer, echoing the on-tile locked/open language. Colour is UI-semantic,
   // so it comes from the palette mirror rather than a hardcoded hex.
-  const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 320);
+  const pulse = 0.5 + 0.5 * Math.sin(animNow() / 320);
   const open = (typeof floorCleared === 'undefined') || floorCleared;
   const alpha = open ? 0.9 + 0.1 * pulse : 0.5 + 0.12 * pulse;
   const size = Math.max(16, tw * 0.9);
@@ -18696,12 +18883,51 @@ function drawActorShadow(cx, cyFeet, w) {
   ctx.restore();
 }
 
+// ── CACHED SOFT-GLOW SPRITES ──
+// A radial glow used to mean a fresh createRadialGradient every frame for every
+// glowing thing on screen (pickups, vendor auras, the grave beacon, enemy elite
+// halos, threat rings…). Instead each glow SHAPE is painted once into a small
+// offscreen canvas keyed by its solid RGB, then blitted (scaled to the requested
+// radius, with the caller's alpha applied via globalAlpha). A pulsing glow now
+// re-blits the same texture at a new alpha instead of rebuilding a gradient, and
+// the output matches the old gradient fills. Separating RGB (cache key) from
+// alpha (globalAlpha) keeps the cache tiny — one texture per colour, not per frame.
+const GLOW_TEX = 64;
+const _discGlow = new Map();   // "r,g,b" → canvas: solid centre → transparent edge
+const _ringGlow = new Map();   // "r,g,b" → canvas: transparent centre → colour → transparent edge
+function _parseRGBA(color) {
+  const m = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)/.exec(color);
+  if (m) return { rgb: `${Math.round(+m[1])},${Math.round(+m[2])},${Math.round(+m[3])}`, a: m[4] == null ? 1 : +m[4] };
+  // Hex (#rgb / #rrggbb / #rrggbbaa) — used by affix aura colours.
+  const h = /^#([0-9a-f]{3,8})$/i.exec((color || '').trim());
+  if (h) {
+    let s = h[1];
+    if (s.length === 3) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
+    const r = parseInt(s.slice(0, 2), 16), g = parseInt(s.slice(2, 4), 16), b = parseInt(s.slice(4, 6), 16);
+    const a = s.length >= 8 ? parseInt(s.slice(6, 8), 16) / 255 : 1;
+    return { rgb: `${r},${g},${b}`, a };
+  }
+  return { rgb: '255,255,255', a: 1 };
+}
+function _glowSprite(cache, rgb, ring) {
+  let cv = cache.get(rgb);
+  if (cv) return cv;
+  cv = document.createElement('canvas'); cv.width = cv.height = GLOW_TEX;
+  const g = cv.getContext('2d'), c = GLOW_TEX / 2;
+  const grd = g.createRadialGradient(c, c, ring ? c * 0.46 : 0, c, c, c);
+  if (ring) { grd.addColorStop(0, `rgba(${rgb},0)`); grd.addColorStop(0.72, `rgba(${rgb},1)`); grd.addColorStop(1, `rgba(${rgb},0)`); }
+  else      { grd.addColorStop(0, `rgba(${rgb},1)`); grd.addColorStop(1, `rgba(${rgb},0)`); }
+  g.fillStyle = grd;
+  g.beginPath(); g.arc(c, c, c, 0, Math.PI * 2); g.fill();
+  cache.set(rgb, cv);
+  return cv;
+}
 // Red targeting reticle over the auto-attack's locked-on foe. A procedural UI
 // marker (like the threat ring), not a sprite: a thin pulsing ring, four gapped
 // N/E/S/W ticks and a centre dot, so the current target reads at a glance
 // without hiding the enemy. `size` is the enemy footprint width in pixels.
 function drawTargetCrosshair(cx, cy, size) {
-  const t = 0.5 + 0.5 * Math.sin(Date.now() / 260);   // gentle "active lock" pulse
+  const t = 0.5 + 0.5 * Math.sin(animNow() / 260);   // gentle "active lock" pulse
   const r = size * 0.5;
   const red = 'rgba(255,48,58,';                       // bright targeting red
   ctx.save();
@@ -18728,17 +18954,23 @@ function drawTargetCrosshair(cx, cy, size) {
   ctx.restore();
 }
 
-// A soft CIRCULAR glow behind a pickup. (Canvas shadowBlur on a square sprite
-// renders as an ugly square halo, so we paint a radial gradient instead.)
+// A soft CIRCULAR glow behind a pickup/actor: a cached radial-glow texture tinted
+// by `color` and faded by its alpha, scaled to radius r.
 function glowUnder(cx, cy, r, color) {
-  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-  g.addColorStop(0, color);
-  g.addColorStop(1, 'transparent');
+  const { rgb, a } = _parseRGBA(color);
   ctx.save();
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.globalAlpha = a;
+  ctx.imageSmoothingEnabled = true;   // keep the upscaled glow texture soft, not blocky
+  ctx.drawImage(_glowSprite(_discGlow, rgb, false), cx - r, cy - r, r * 2, r * 2);
+  ctx.restore();
+}
+// A soft ring glow (fades at both centre and edge), used for threat telegraphs.
+// `alpha` is the peak opacity; the ring shape itself is cached per colour.
+function ringGlow(cx, cy, r, rgb, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.imageSmoothingEnabled = true;   // keep the upscaled ring texture soft, not blocky
+  ctx.drawImage(_glowSprite(_ringGlow, rgb, true), cx - r, cy - r, r * 2, r * 2);
   ctx.restore();
 }
 
@@ -19084,6 +19316,8 @@ function applyStatusEffect(target, effect, secs, source) {
   // Tenacity shortens (and, if reduced to a blink, outright shrugs off) incoming
   // crowd-control on the hero.
   if (target === 'player' && CC_EFFECTS.has(effect)) {
+    // Enemy stuns on the hero last half their listed duration.
+    if (effect === 'stun') secs *= 0.5;
     const t = playerTenacity();
     if (t > 0) secs *= (1 - t);
     if (secs < 0.4) { spawnFloatingText(player.x, player.y, 'RESIST', '#9fe8ff'); return; }
@@ -19307,7 +19541,7 @@ function updateHaloVignette() {
   if (!vig) return;
   const halos = activeHalos();
   if (!halos.length) { if (vig.style.opacity !== '0') vig.style.opacity = '0'; return; }
-  const phase = Date.now() % (halos.length * HALO_SLOT_MS);
+  const phase = animNow() % (halos.length * HALO_SLOT_MS);
   const idx = Math.floor(phase / HALO_SLOT_MS);
   const local = (phase % HALO_SLOT_MS) / HALO_SLOT_MS; // 0..1 within this colour's slot
   const fade = Math.sin(Math.PI * local);              // 0 → 1 → 0 bloom
@@ -21099,8 +21333,7 @@ function tryRangedAttack(dx, dy) {
   for (let step = 1; step <= range; step++) {
     x += dx; y += dy;
     if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) break;
-    const t = mapData[y][x];
-    if (t === 1 || t === 6 || t === 10 || t === 11) break; // wall / deep water / sealed
+    if (blocksShot(x, y)) break;            // wall / door / barrier — but shoot over water & ground
     const tgt = getEnemyAt(x, y);
     if (tgt) {
       if (mpCost) { player.mp -= mpCost; }
@@ -22087,26 +22320,35 @@ function tryChillProc(e, dmg) {
 function enemyRangedAttack(e) {
   if ((e.atkCd || 0) > 0) return;           // still reloading between shots
   e.atkCd = enemyAttackInterval(e);
-  // Arrival grace — no damage taken until you first move on a new floor.
+  // Arrival grace — no shots loosed until you first move on a new floor.
   if (entryGuard) { spawnFloatingText(player.x, player.y, '✦', '#bfe9ff'); return; }
   triggerAttackAnim(e, player.x, player.y); // quick lunge as it looses a shot
+  // Loose a real, dodgeable bolt aimed at where the hero is NOW. Damage, dodge
+  // and on-hit procs all resolve in landEnemyRangedHit — but only if the bolt
+  // actually reaches the hero, so sidestepping its path avoids the hit entirely.
+  const raw = Math.round(e.dmg * rnd(75, 110) / 100);
+  spawnEnemyBolt(e, raw, e.isBoss ? '#ff7766' : '#c77dff');
+  sfx('attack');                            // the twang of the loose; the thud plays on impact
+}
+
+// Resolve a foe's ranged bolt actually striking the hero (called from
+// updateProjectiles on overlap). The bolt's base power `raw` was rolled when it
+// was loosed; defences (a stat-dodge, Guard, mitigation, mana-shield) and on-hit
+// procs all apply here, at the moment of impact.
+function landEnemyRangedHit(e, raw, color) {
   if (rollDodge(e)) {
     spawnFloatingText(player.x, player.y, 'DODGE', '#9fe8ff');
     log(`💨 dodged ${enemyLabel(e)}`);
     fireSkillTrigger('dodge', { enemy: e });
     return;
   }
-  let raw = Math.round(e.dmg * rnd(75, 110) / 100);
   if (buffs.guard) raw = Math.round(raw * 0.6);
   const dmg = applyIncomingMods(absorbWithMana(mitigateDamage(raw, e.level)), e);
   player.hp = Math.max(0, player.hp - dmg);
   notePlayerDamage(dmg, enemyLabel(e) + ' (ranged)');
   sfx(e.isBoss ? 'boss' : 'hurt');
-  // Loose a visible bolt from the foe so the shot is unmistakable — it flies over
-  // and pops on the hero (the damage itself already landed instantly above).
-  const tcol = e.isBoss ? '#ff7766' : '#c77dff';
-  spawnEnemyShot(e.x, e.y, tcol);
-  spawnFloatingText(player.x, player.y, `${dmg}`, '#c77dff');
+  spawnFloatingText(player.x, player.y, `${dmg}`, color || '#c77dff');
+  spawnParticles(player.x, player.y, color || '#c77dff', 6, 0.08); addShake(3);
   log(`🏹 ${enemyLabel(e)} -${dmg}`);
   // Even a non-critical hit from off-screen gets a soft flash so a ranged
   // attacker chipping you from across the room never goes unsignalled.
@@ -22119,18 +22361,33 @@ function enemyRangedAttack(e) {
   if (player.hp === 0) handleDeath();
 }
 
-// Rough line of sight: step a straight line between two cells and fail if a wall
-// (or deep water / sealed door) blocks it, so nothing fires through solid rock.
-// Used both ways — foe→hero for enemy shots, hero→foe for the player's own spells
-// and summoned minions — so neither side can hit a target it can't see.
+// Does the obstacle at (x,y) block line of sight AND projectiles? Only SOLID
+// structures do — walls, cracked walls, locked doors, conjured boss barriers and
+// solid furniture. Ground terrain you can walk across (or over) never blocks a
+// shot: floor, water, lava, spikes, mud, ice. The guiding rule is "anything you
+// can walk through, you can see and shoot through" — so open ground and puddles
+// give no cover, only real obstructions do. (Creatures don't block either — bolts
+// pass over other foes.) Shared by every sight/shot check so they never diverge.
+function blocksShot(x, y) {
+  if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return true;
+  const t = mapData[y][x];
+  if (t === 1 || t === 10 || t === 11) return true;   // wall / cracked wall / locked door
+  if (bossWallAt(x, y)) return true;                  // conjured wall of force
+  if (typeof furnitureMap === 'object' && furnitureMap[y + ',' + x] !== undefined) return true; // solid furniture
+  return false;
+}
+
+// Rough line of sight: step a straight line between two cells and fail if a solid
+// obstruction (wall, door, barrier, furniture) blocks it — open ground and water
+// don't. Used both ways — foe→hero for enemy shots, hero→foe for the player's own
+// spells and summoned minions — so neither side can hit a target it can't see.
 function hasLineOfSight(ax, ay, bx, by) {
   let x = ax, y = ay, guard = 0;
   while ((x !== bx || y !== by) && guard++ < 256) {
     x += Math.sign(bx - x);
     y += Math.sign(by - y);
     if (x === bx && y === by) break;
-    const t = mapData[y][x];
-    if (t === 1 || t === 6 || t === 10 || t === 11) return false;
+    if (blocksShot(x, y)) return false;
   }
   return true;
 }
@@ -23225,7 +23482,7 @@ const COMBAT_BUFF_ORDER = ['shield', 'regen', 'defUp', 'dmgUp', 'spellUp', 'crit
 function buffChipHTML(id, remaining, unit, mag) {
   const m = STATUS_META[id];
   if (!m) return '';
-  const icon = dlIcon(m.icon, 16) || '';
+  const icon = dlIcon(m.icon, 32) || '';
   if (!icon) return ''; // atlas not ready yet — skip; the strip refreshes next tick
   let magLine = '';
   if (mag != null) {
@@ -25632,7 +25889,7 @@ function closeKeybinds() { keybindCapture = null; const o = document.getElementB
 function keybindsBack() {
   closeKeybinds();
   const m = document.getElementById('settings-menu');
-  if (m) { m.classList.add('open'); showSettingsTab('play'); centerSettingsCard(); }
+  if (m) { m.classList.add('open'); renderSettingsHero(); showSettingsTab('play'); centerSettingsCard(); }
 }
 function armKeybind(id) { keybindCapture = (keybindCapture === id ? null : id); renderKeybinds(); }
 function resetKeybinds() { for (const a of KEYBIND_ACTIONS) keybinds[a.id] = a.def; keybindCapture = null; saveKeybinds(); renderKeybinds(); if (typeof renderSkillBar === 'function') renderSkillBar(); }
@@ -27059,6 +27316,7 @@ const SETTINGS_SYNC_KEYS = [
   'dungeonLoot_sprintMode',   // sprint HOLD vs TOGGLE
   'dungeonLoot_heroBars',     // under-hero HP/MP bars on/off
   'dungeonLoot_crosshair',    // red target crosshair on/off
+  'dungeonLoot_pathLine',     // click-to-move pathing line on/off
   'dungeonLootMusic',         // music volume level (0–5)
   'dungeonLootSfx',           // sfx volume level (0–5)
   'dungeonLootTownAmb',       // town ambience on/off
@@ -27862,6 +28120,41 @@ function showAchievements() {
   if (ov) ov.classList.add('open');
 }
 function closeAchievements() { const ov = document.getElementById('achievements-overlay'); if (ov) ov.classList.remove('open'); }
+// Builds the "who you're playing" card — name, class, level, deepest floor, gold,
+// a HARDCORE tag, and a walking hero portrait. Shared by the title screen's
+// #title-hero card and the pause menu's #settings-hero card. Returns '' when
+// there's no active hero yet (a fresh save with no class chosen), so callers can
+// simply hide the element.
+function heroCardHtml() {
+  if (!(player && player.class)) return '';
+  const cls = (typeof CLASSES === 'object' && CLASSES[player.class]) || {};
+  const nm = escapeHtml(player.name || 'Adventurer');
+  const lvl = player.level || 1;
+  const deepest = player.maxFloor || 1;
+  const gold = fmtGold ? fmtGold(player.gold || 0) : (player.gold || 0);
+  const hcTag = player.hardcore ? `<div><span class="hc-tag">${hcIcon(11)} HARDCORE · ONE LIFE</span></div>` : '';
+  // An animated walking hero sprite sits to the RIGHT of the left-aligned text,
+  // standing a bit taller than the stacked name/class/stats block so it reads big.
+  // Falls back to the static face (then atlas tile) until the walk sheet has loaded.
+  const heroPic = heroWalkIcon(player.class, player.sex, 102) || heroFaceIcon(player.class, player.sex, 102);
+  return `<div class="th-info">`
+    + `<div class="th-name" style="color:${cls.color || 'var(--xp)'}">${nm}</div>`
+    + `<div class="th-sub">Level ${lvl} ${cls.name || 'Hero'}</div>`
+    + `<div class="th-stats"><span>Deepest <b>Floor ${deepest}</b></span><span><b>${gold}</b>g</span></div>`
+    + hcTag
+    + `</div>`
+    + (heroPic ? `<div class="th-portrait">${heroPic}</div>` : '');
+}
+// Paint the character card that sits above the settings card while paused. Mirrors
+// the title screen's hero card; hidden before a hero exists (e.g. Settings opened
+// from the title on a brand-new save).
+function renderSettingsHero() {
+  const el = document.getElementById('settings-hero');
+  if (!el) return;
+  const html = heroCardHtml();
+  if (html) { el.innerHTML = html; el.style.display = ''; }
+  else { el.innerHTML = ''; el.style.display = 'none'; }
+}
 function showTitle() {
   const ov = document.getElementById('title-overlay');
   if (!ov) return;
@@ -27892,29 +28185,9 @@ function showTitle() {
   // Hero / journey card — identity + how far this hero has delved.
   const hero = document.getElementById('title-hero');
   if (hero) {
-    if (resuming) {
-      const cls = (typeof CLASSES === 'object' && CLASSES[player.class]) || {};
-      const nm = escapeHtml(player.name || 'Adventurer');
-      const lvl = player.level || 1;
-      const deepest = player.maxFloor || 1;
-      const gold = fmtGold ? fmtGold(player.gold || 0) : (player.gold || 0);
-      const hcTag = player.hardcore ? `<div><span class="hc-tag">${hcIcon(11)} HARDCORE · ONE LIFE</span></div>` : '';
-      // An animated walking hero sprite sits to the RIGHT of the left-aligned text,
-      // standing a bit taller than the stacked name/class/stats block so it reads big.
-      // Falls back to the static face (then atlas tile) until the walk sheet has loaded.
-      const heroPic = heroWalkIcon(player.class, player.sex, 102) || heroFaceIcon(player.class, player.sex, 102);
-      hero.innerHTML =
-        `<div class="th-info">`
-        + `<div class="th-name" style="color:${cls.color || 'var(--xp)'}">${nm}</div>`
-        + `<div class="th-sub">Level ${lvl} ${cls.name || 'Hero'}</div>`
-        + `<div class="th-stats"><span>Deepest <b>Floor ${deepest}</b></span><span><b>${gold}</b>g</span></div>`
-        + hcTag
-        + `</div>`
-        + (heroPic ? `<div class="th-portrait">${heroPic}</div>` : '');
-      hero.style.display = '';
-    } else {
-      hero.style.display = 'none';
-    }
+    const html = heroCardHtml();
+    if (html) { hero.innerHTML = html; hero.style.display = ''; }
+    else hero.style.display = 'none';
   }
   renderTitleAchievements();
   refreshTitleToggles();
@@ -28012,6 +28285,7 @@ updateSoundButtons();
 updateSprintButton();
 updateHeroBarsButton();
 updateCrosshairButton();
+updatePathLineButton();
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
   window.addEventListener(ev, audioUnlock, { passive: true }));
 
@@ -28301,6 +28575,7 @@ function gameLoop(ts) {
   let dt = (ts - _lastTs) / 1000;
   _lastTs = ts;
   if (dt > 0.1) dt = 0.1;          // clamp after a stall so nothing teleports
+  tickAnimClock(ts);               // advance the looping-animation clock (frozen while paused)
   if (!rtPaused()) {
     safeStep('move', () => updatePlayer(dt));              // 8-dir movement may trigger stairs/town/death…
     if (!rtPaused()) safeStep('combat', () => updatePlayerCombat(dt));
