@@ -2879,6 +2879,21 @@
     cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   }
   .town-menu-btn:active { background: var(--orange-850); }
+  /* A service the hero hasn't unlocked yet — its NPC greyed and the tile dimmed,
+     with the unlock requirement in place of the blurb. Locked tiles stay visible
+     (in order) so players can see what's ahead and how to open it. The icon is
+     greyed rather than the whole tile so the amber requirement stays legible. */
+  .town-menu-btn.tm-locked {
+    cursor: default; border-color: var(--border);
+    background: color-mix(in srgb, var(--ink) 66%, transparent);
+  }
+  .town-menu-btn.tm-locked:active { background: color-mix(in srgb, var(--ink) 66%, transparent); }
+  .town-menu-btn.tm-locked .tm-icon { filter: grayscale(0.9); opacity: 0.5; }
+  .town-menu-btn.tm-locked .town-walk { animation: none; }   /* freeze the townsfolk — the tile is inert */
+  .town-menu-btn.tm-locked .tm-name { color: var(--text-muted); }
+  /* Two classes so this beats the equal-specificity .tm-desc colour below and the
+     requirement renders in the reserved amber, not the muted description colour. */
+  .town-menu-btn .tm-desc.tm-req { color: var(--warn); font-weight: bold; }
   .town-menu-btn .tm-icon { font-size: var(--fs-display-3); flex: 0 0 auto; width: calc(64px * var(--ui-scale,1)); text-align: center; }
   /* Animated walk-down sprite icon for a town service (CSS sprite step-animation). */
   .town-walk { display: inline-block; background-repeat: no-repeat; image-rendering: pixelated; vertical-align: middle; animation: townWalkStep .62s steps(4) infinite; }
@@ -4665,7 +4680,7 @@
       <div class="howto-sec"><span data-spr=ic_fire></span> Hazards</div>
       <div class="howto-line"><b>Lava</b> and <b>spikes</b> hurt more the deeper you go — step around them (you're never forced through one).</div>
       <div class="howto-sec"><span data-spr=feat_door></span> Stairs &amp; Town</div>
-      <div class="howto-line">Clear every foe to unseal the <b>glowing down-stairs</b> (the up-stairs just backtrack). In Town, visit the Merchant, Craftsman, Healer, Mystic, Ramen House and more, then take the <b>Dungeon Gate</b> back down.</div>
+      <div class="howto-line">Clear every foe to unseal the <b>glowing down-stairs</b> (the up-stairs just backtrack). In Town, visit the Healer, Merchant, Ramen House and more, then take the <b>Dungeon Gate</b> back down.</div>
     </div>
   </div>
 
@@ -10065,6 +10080,12 @@ window.gameState = function gameState(radius) {
       bagOpen: !!panelOpen,
       tab: currentTab,
       townView: inTown ? townView : null,
+      // Town hub services in on-screen order, each with whether it's unlocked and,
+      // if not, the requirement to open it (level / depth / difficulty milestone).
+      townServices: (inTown && typeof TOWN_MENU !== 'undefined') ? TOWN_MENU.map(s => {
+        const locked = !!(s.req && !s.req.ok());
+        return { kind: s.kind, name: s.name, locked, need: locked ? s.req.need : null };
+      }) : null,
       pointsToSpend: { attribute: player.attrPoints || 0, skill: player.skillPoints || 0 },
       gold: player.gold,
       materials: player.materials ? Object.assign({}, player.materials) : null,   // scrap/glimmer/core/chaos (commonest→rarest) for crafting
@@ -10252,7 +10273,8 @@ window.gameGuide = function gameGuide(topic) {
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
       `Merchant (buy gear / pay to restock); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots); Enchanter (add/reroll affixes with Glimmer+gold, Chaos at high rarity); Healer (full heal + cure for gold).`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
-      `Trainer (respec / change class / ascend); Stash Vault (bank gold & gear safe from death); Gambler (wager gold for random gear — pick a slot to guarantee the type).`,
+      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death); Gambler (wager gold for random gear — pick a slot to guarantee the type).`,
+      `Services unlock as you progress and show in a fixed order (Dungeon Gate on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically.`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
@@ -11453,6 +11475,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "medium", v: "Town shops reordered & level-gated", by: "Claude", notes: ["Town tiles now follow a fixed order: Healer, Merchant, Ramen House, then progression-gated services, with the Vault last.", "Craftsman opens at level 5; Gambler at depth 10; Trainer & Enchanter at level 10.", "Transmuter opens on reaching Hardened; Bounty Board & Mystic on unlocking Hardened; Sellsword on reaching Brutal.", "Locked services still show in order, greyed, with their unlock requirement.", "Stash Vault renamed to Vault."] },
   { date: "2026-07-02", size: "medium", v: "Uncapped hits, tankier bosses, varied foes", by: "Claude", notes: [
     "Removed the per-hit damage cap on enemies — a big swing, skill or crit now lands its full number instead of being clamped to a fraction of the target's health.",
     "Bosses have much deeper health pools and hit somewhat harder — a real, tanky fight now that raw HP (not a cap) is the limiter.",
@@ -14620,19 +14643,33 @@ function renderDpadControls() {
 // a ← back button to return here.
 // Each service shows the pixel sprite of the NPC who runs it, referenced
 // directly by its atlas key (`dl`).
+// Some services stay locked until the hero earns them. Each optional `req` reads
+// live progression state — `ok()` returns true once unlocked, `need` is the short
+// player-facing hint shown on the locked tile. "Reach X" gates on how deep the
+// hero has actually delved (all-time max depth / difficulty tier); "Unlock
+// Hardened" gates on having conquered Normal (which opens the Hardened tier).
+// Order here IS the on-screen order (the Dungeon Gate renders above this list).
 const TOWN_MENU = [
-  { kind: 'merchant',  dl: 'npc_shop',       name: 'Merchant',    desc: 'Potions & fresh gear' },
-  { kind: 'forge',     dl: 'town_craftsman', name: 'Craftsman',   desc: 'Forge blank gear from mats' },
   { kind: 'healer',    dl: 'town_healer',    name: 'Healer',      desc: 'Rest, cure & potions' },
-  { kind: 'mystic',    dl: 'npc_mage',       name: 'Mystic',      desc: 'Forge a risky pact' },
-  { kind: 'trainer',   dl: 'town_trainer',   name: 'Trainer',     desc: 'Respec & change class' },
-  { kind: 'enchanter', dl: 'town_enchanter', name: 'Enchanter',   desc: 'Add & reroll affixes' },
-  { kind: 'stash',     dl: 'town_vault',     name: 'Stash Vault', desc: 'Store gold & gear safe' },
-  { kind: 'gambler',   dl: 'npc_gambler',    name: 'Gambler',     desc: 'Wager gold for loot' },
+  { kind: 'merchant',  dl: 'npc_shop',       name: 'Merchant',    desc: 'Potions & fresh gear' },
   { kind: 'ramen',     dl: 'ramen_bowl',     name: 'Ramen House', desc: 'Cook toppings into buffs' },
-  { kind: 'sellsword', dl: 'hero_warrior',   name: 'Sellsword',   desc: 'Hire a companion' },
-  { kind: 'transmuter',dl: 'npc_mage',       name: 'Transmuter',  desc: 'Fuse 3 items into 1 rarer' },
-  { kind: 'bounty',    dl: 'npc_quest',       name: 'Bounty Board',desc: 'Take a bounty for a reward' },
+  { kind: 'forge',     dl: 'town_craftsman', name: 'Craftsman',   desc: 'Forge blank gear from mats',
+    req: { ok: () => (player.level || 1) >= 5,          need: 'Reach level 5' } },
+  { kind: 'gambler',   dl: 'npc_gambler',    name: 'Gambler',     desc: 'Wager gold for loot',
+    req: { ok: () => (player.maxFloor || 1) >= 10,      need: 'Reach depth 10' } },
+  { kind: 'trainer',   dl: 'town_trainer',   name: 'Trainer',     desc: 'Respec & change class',
+    req: { ok: () => (player.level || 1) >= 10,         need: 'Reach level 10' } },
+  { kind: 'enchanter', dl: 'town_enchanter', name: 'Enchanter',   desc: 'Add & reroll affixes',
+    req: { ok: () => (player.level || 1) >= 10,         need: 'Reach level 10' } },
+  { kind: 'transmuter',dl: 'npc_mage',       name: 'Transmuter',  desc: 'Fuse 3 items into 1 rarer',
+    req: { ok: () => diffOf(player.maxFloor || 1) >= 2, need: 'Reach Hardened' } },
+  { kind: 'bounty',    dl: 'npc_quest',      name: 'Bounty Board',desc: 'Take a bounty for a reward',
+    req: { ok: () => diffClearedCount() >= 1,           need: 'Unlock Hardened' } },
+  { kind: 'mystic',    dl: 'npc_mage',       name: 'Mystic',      desc: 'Forge a risky pact',
+    req: { ok: () => diffClearedCount() >= 1,           need: 'Unlock Hardened' } },
+  { kind: 'sellsword', dl: 'hero_warrior',   name: 'Sellsword',   desc: 'Hire a companion',
+    req: { ok: () => diffOf(player.maxFloor || 1) >= 3, need: 'Reach Brutal' } },
+  { kind: 'stash',     dl: 'town_vault',     name: 'Vault',       desc: 'Store gold & gear safe' },
 ];
 // ── TOWN AMBIENT BACKGROUND ── a different living scene drifts behind the town
 // menu each visit, so the safe haven feels alive rather than a static list. Every
@@ -14714,11 +14751,24 @@ function openTownHub() {
   townTitleEl.innerHTML = `${dlIcon('town_vault', 20)} Town`;
   document.getElementById('town-back').hidden = true;
   document.getElementById('town-overlay').classList.add('open');
-  const tiles = TOWN_MENU.map(s =>
-    `<button class="town-menu-btn" onclick="openTownService('${s.kind}')">
-       <span class="tm-icon">${townWalkIcon(s.kind, 68) || dlIcon(s.dl)}</span>
+  const tiles = TOWN_MENU.map(s => {
+    const icon = `<span class="tm-icon">${townWalkIcon(s.kind, 68) || dlIcon(s.dl)}</span>`;
+    if (s.req && !s.req.ok()) {
+      // Locked: greyed, inert, and captioned with the unlock requirement.
+      // Keep a trailing number glued to its label (e.g. "level\u00A05") so it
+      // never wraps alone; word requirements wrap naturally so they never
+      // overflow a narrow tile (the "no loners" rule).
+      const need = /\d$/.test(s.req.need) ? s.req.need.replace(/ (\d+)$/, '\u00A0$1') : s.req.need;
+      return `<button class="town-menu-btn tm-locked" type="button" disabled aria-disabled="true">
+       ${icon}
+       <span class="tm-text"><span class="tm-name">${s.name}</span><span class="tm-desc tm-req">🔒 ${need}</span></span>
+     </button>`;
+    }
+    return `<button class="town-menu-btn" onclick="openTownService('${s.kind}')">
+       ${icon}
        <span class="tm-text"><span class="tm-name">${s.name}</span><span class="tm-desc">${s.desc}</span></span>
-     </button>`).join('');
+     </button>`;
+  }).join('');
   const returnFloor = Math.max(1, dungeonReturn || player.maxFloor || 1);
   const gateTile =
     `<button class="town-menu-btn tm-gate${revivedInTown ? ' tm-gate-urgent' : ''}" onclick="openTownService('gate')">
@@ -15469,7 +15519,7 @@ function upgradePotion(kind) {
 // never spent at merchants and never lost on death, and stashed items don't
 // appear in your bag or the sell list. Deposit when you visit town, withdraw
 // when you need it.
-function openStash() { openTownModal('Stash Vault', 'ic_coffer'); renderStash(); }
+function openStash() { openTownModal('Vault', 'ic_coffer'); renderStash(); }
 function stashItemRow(item, action, btnLabel, btnClass) {
   const upg = item.upgrades ? ` <span style="color:var(--gold-350)">+${item.upgrades}</span>` : '';
   const stats = item.stats ? itemStatLine(item) : '';
@@ -27370,7 +27420,7 @@ async function stashReconcile() {
     healStashItems();
     const ov = document.getElementById('town-overlay');
     const title = document.getElementById('town-title');
-    if (ov && ov.classList.contains('open') && title && title.dataset.title === 'Stash Vault') renderStash();
+    if (ov && ov.classList.contains('open') && title && title.dataset.title === 'Vault') renderStash();
   } else if (!cloud || localTs > cloud.ts) {
     // Ours is newer, or the cloud has no stash yet — push ours up.
     await cloudPushStash();
