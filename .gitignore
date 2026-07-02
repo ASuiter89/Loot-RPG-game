@@ -4,3 +4,6 @@
 # Scratch: third-party terrain tileset candidates downloaded for evaluation.
 # These are not part of the game (the game is a single self-contained index.html).
 cand/
+
+# Node deps installed only for local headless verification (not part of the game).
+node_modules/
