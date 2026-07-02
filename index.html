@@ -1951,6 +1951,12 @@
   .loot-glossary[open] > summary::before { content: '▾ '; }
   .loot-glossary > summary:hover { color: var(--gold); }
   .gl-body { padding: 0 10px 8px; }
+  /* On desktop the long stat key flows into two balanced columns; each themed
+     group is a single unit so a header never splits from its rows. */
+  @media (min-width: 760px) {
+    .gl-body { column-count: 2; column-gap: 18px; }
+    .gl-group { break-inside: avoid; }
+  }
   .gl-sect {
     color: var(--junk);
     text-transform: uppercase;
@@ -1958,6 +1964,9 @@
     font-size: 1.2rem;
     margin: 8px 0 3px;
   }
+  /* First header in a group hugs the top of its column (the group already spaces
+     itself); rely on the group wrapper for inter-group rhythm instead. */
+  .gl-group:first-child > .gl-sect { margin-top: 0; }
   .gl-row { display: flex; gap: 8px; padding: 1px 0; line-height: 1.35; }
   .gl-code {
     flex: 0 0 42px;
@@ -10830,6 +10839,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-01", size: "small", v: "Cleaner stat-abbreviation key", by: "Claude", notes: ["Loot stat-abbreviation key now groups item stats by theme (Offense, Defense, Sustain, Caster, Utility/Find), alphabetical within each group.", "Flows into two columns on desktop for easier scanning."] },
   { date: "2026-07-01", size: "medium", v: "Completed sets grant a signature power + golden aura", by: "Jeff Louie", notes: ["Completing a set (all 4 pieces) now unlocks a unique SIGNATURE POWER, not just more stats: Warden's Aegis Wall (block + damage reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), Arcanist's Arcane Overflow (cooldown reduction + mana leech).", "A completed set wraps the hero in a faint golden aura, and its \"… set\" tag turns gold with a ✦.", "Set tooltip now shows the power, a Worn n/4 count and a completion banner."] },
   { date: "2026-07-02", size: "small", v: "Punchier ENTER button", by: "Claude", notes: ["Title's main button now reads just ENTER (sword icon gone) with a pulsing golden frame and a wisp of light circling the border, so the way in pops."] },
   { date: "2026-07-02", size: "small", v: "Pick your UI font", by: "Claude", notes: ["New UI FONT picker in ⚙ Settings → Play — choose from 11 embedded faces (Cinzel, Uncial Antiqua, MedievalSharp, Grenze Gotisch, Bangers, Fredoka, Orbitron, Press Start 2P, Pixelify Sans, Jersey 10, VT323). Each option shows its own name in its own face.", "Default is now Cinzel, an elegant Roman serif. The DUNGEON LOOT title stays Uncial Antiqua whatever you pick."] },
@@ -22632,8 +22642,28 @@ function lootRowVisible(item) {
 // hunting through tooltips. Built from STAT_SHORT/STAT_LABELS and ATTRIBUTES so
 // it can never drift out of sync with what the rows actually print.
 function lootGlossaryHTML() {
-  const statRows = Object.keys(STAT_SHORT).map(k =>
-    `<div class="gl-row"><span class="gl-code">${STAT_SHORT[k]}</span><span class="gl-mean">${STAT_LABELS[k] || k}</span></div>`
+  // Item stats split into themed buckets, alphabetical by short code within each,
+  // so the long list stays scannable (and flows into two columns on desktop).
+  // Keyed by internal stat key so it can never drift from STAT_SHORT/STAT_LABELS.
+  const STAT_GROUPS = [
+    ['Offense', ['ATK','ACC','CRIT','CRITDMG','IDMG','PEN','DBLSTRIKE','CLEAVE','EXEC','BOSSDMG','ATKSPD','BLEED','STUNPWR']],
+    ['Defense', ['DEF','HP','DR','BLOCK','DODGE','TENAC','THORNS']],
+    ['Sustain', ['REGEN','LEECH','MPLEECH','HPKILL','MPKILL']],
+    ['Caster',  ['MP','SPELLPWR','SKILLPWR','CASTSPD','CDR','MCR']],
+    ['Utility / Find', ['SPD','LCK','GOLDFIND','XPGAIN','MAGICFIND','MATFIND']],
+  ];
+  // Safety net: any stat not placed in a bucket above still appears under "Other",
+  // so a newly added stat can never silently vanish from the key.
+  const placed = new Set(STAT_GROUPS.flatMap(([, keys]) => keys));
+  const leftover = Object.keys(STAT_SHORT).filter(k => !placed.has(k));
+  if (leftover.length) STAT_GROUPS.push(['Other', leftover]);
+  const statRow = k =>
+    `<div class="gl-row"><span class="gl-code">${STAT_SHORT[k]}</span><span class="gl-mean">${STAT_LABELS[k] || k}</span></div>`;
+  const group = (name, inner) => `<div class="gl-group"><div class="gl-sect">${name}</div>${inner}</div>`;
+  const statSects = STAT_GROUPS.map(([name, keys]) =>
+    group(name, keys.slice()
+      .sort((a, b) => STAT_SHORT[a].localeCompare(STAT_SHORT[b], undefined, { numeric: true }))
+      .map(statRow).join(''))
   ).join('');
   const attrRows = ATTR_KEYS.map(k => {
     const a = ATTRIBUTES[k];
@@ -22642,8 +22672,8 @@ function lootGlossaryHTML() {
   }).join('');
   return `<details class="loot-glossary"><summary>Stat abbreviations</summary>` +
     `<div class="gl-body">` +
-    `<div class="gl-sect">Item stats</div>${statRows}` +
-    `<div class="gl-sect">Attributes</div>${attrRows}` +
+    statSects +
+    group('Attributes', attrRows) +
     `</div></details>`;
 }
 
