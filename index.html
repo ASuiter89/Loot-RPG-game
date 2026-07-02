@@ -9903,7 +9903,7 @@ window.gameState = function gameState(radius) {
         };
       }) : null,
     },
-    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · # wall · . floor · ~ water (blocks) · ^ lava (burns) · " spikes (stab) · , mud (slow) · _ ice (slip) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
+    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · , mud (slow) · _ ice (slip) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
     map: rows.join('\n'),
@@ -9965,7 +9965,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     combat: [
       `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight). A red crosshair marks the foe currently locked on (Settings → Visuals → CROSSHAIR toggles it; the 🎯 TARGET focus in Settings → Play picks which foe wins).`,
-      `Weapon reach: Staff & Bow = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a wall, deep water, cracked wall or locked door between you and a foe blocks ranged auto-attacks, ranged skills and spells (both ways: foes can't shoot or hex you through walls either). Melee is unaffected; only adjacent foes are struck.`,
+      `Weapon reach: Staff & Bow = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
       `Per-hit damage is capped at roughly 1/4 of a normal foe's max HP (1/6 elite, 1/9 boss), so against bosses sustained DPS and skills (which cap higher) matter more than one big swing.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
@@ -9982,7 +9982,7 @@ window.gameGuide = function gameGuide(topic) {
       `Learn and rank skills on the SKILLS tab (spend skill points). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns 1 skill point for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
-      `RANGED casts need LINE OF SIGHT: a bolt, blast, beam (line), nova or chain only strikes foes you can see — a wall (or deep water / sealed door) between you and a foe blocks it, and the cast fails with "No foe in sight" if nothing visible is in range. Melee/cleave (adjacent-only) and the rare floor-wide "strike random foes" ultimate ignore walls.`,
+      `RANGED casts need LINE OF SIGHT: a bolt, blast, beam (line), nova or chain only strikes foes you can see — a SOLID obstruction (wall, door, boss barrier, furniture) between you and a foe blocks it, but open ground and water don't; the cast fails with "No foe in sight" if nothing visible is in range. Melee/cleave (adjacent-only) and the rare floor-wide "strike random foes" ultimate ignore walls.`,
     ],
     damage: [
       `Damage comes from THREE distinct sources, each with its own scaling lane — build into one and you don't accidentally buff the others:`,
@@ -10020,7 +10020,7 @@ window.gameGuide = function gameGuide(topic) {
       `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" (tier being any rarity or "set") then call saveGame().`,
     ],
     hazards: [
-      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable, blocks bolts), ^ lava (walkable, burns), " spikes (walkable, stab), , mud (slow), _ ice (slip), + locked vault door, % cracked wall (smash by walking into it), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
+      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), , mud (slow), _ ice (slip), + locked vault door, % cracked wall (smash by walking into it), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
       `Lava and spikes hurt but never kill outright (HP clamps to 1), and the generator never forces you across one — route around them. Mud halves speed; ice makes you slide.`,
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
@@ -10032,8 +10032,9 @@ window.gameGuide = function gameGuide(topic) {
     ],
     enemies: [
       `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), and status (e.g. ["stun"], ["slow"]).`,
-      `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls/water.`,
-      `Behaviors: chaser (steady), swift & pack (move 2 tiles/turn; wolves/packs rush when you drop below 50% HP), brute & chilled (slow — act every other turn, so kiting works), lurker (ambush), caster (ranged, fires across the room).`,
+      `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
+      `Behaviors: chaser (steady), swift & pack (move 2 tiles/turn; wolves/packs rush when you drop below 50% HP), brute & chilled (slow — act every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand).`,
+      `Ranged foes fire DODGEABLE bolts, not guaranteed hits — a bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
       `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly.`,
       `Treasure Goblins (isGoblin) flee, never attack, and do NOT block the exit — chase fast for jackpot loot (they vanish ~15 ticks after first hit) or ignore them.`,
       `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs; return to town and pick the next tier at the Gate).`,
@@ -11222,6 +11223,8 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "See & shoot over water and open ground", by: "Claude", notes: ["Line of sight is now blocked only by SOLID obstructions — walls, cracked walls, locked doors, boss barriers and furniture.", "Water, lava, spikes and other floor terrain no longer block shots or spells: if you can walk over (or across) it, you can see and fire over it.", "Solid furniture and boss barriers now give real cover, blocking bolts and spells like a wall."] },
+  { date: "2026-07-02", size: "small", v: "Dodge enemy ranged shots", by: "Claude", notes: ["Ranged foes now loose a real bolt aimed where you stand instead of an unavoidable hit with a cosmetic arrow.", "Sidestep the bolt's path — or break its line behind a wall — and it misses; it only hurts you if it actually reaches you.", "Damage, dodge and on-hit effects now resolve on impact, so kiting a shooter genuinely works."] },
   { date: "2026-07-02", size: "small", v: "Target crosshair + Visuals tidy-up", by: "Claude", notes: ["Red crosshair now marks the foe your auto-attack is locked onto; toggle it in Settings → Visuals (on by default).", "Hero Bars toggle moved from Play to Visuals, beside it.", "UI FONT picker is now a plain dropdown matching the music picker.", "History window is wider so names and stats no longer clip."] },
   { date: "2026-07-02", size: "small", v: "Settings sync to your account", by: "Claude", notes: ["Signed-in players carry preferences across devices — sound levels, keybinds, UI font, cursor, sprint mode, music vibe, hero bars, and panel/minimap collapse.", "Newest change wins across devices; UI scale and the touch d-pad stay per-device.", "Optional — logged-out play is unchanged and still saves only on this device."] },
   { date: "2026-07-02", size: "small", v: "Gold shows a coin icon, not a trailing g", by: "Claude", notes: ["Every money amount — HUD, shops, tooltips, buttons, logs and combat pops — now leads with the gold-coin icon instead of a trailing “g”."] },
@@ -11234,7 +11237,7 @@ const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Bigger skill tiles on the HUD", by: "Claude", notes: ["Bottom-HUD skill buttons are 50% larger with icons scaled to match.", "Even margin above and below the skill row; the HUD grows to fit."] },
   { date: "2026-07-02", size: "small", v: "Chunkier floor buttons", by: "Claude", notes: ["Dungeon Gate floor buttons are now larger, taller and squarer with bigger numerals — easier to read and click."] },
   { date: "2026-07-02", size: "small", v: "Smart click-to-move pathing", by: "Claude", notes: ["Click a spot behind a wall and the hero now routes around it instead of grinding into the corner — faint gold breadcrumbs sketch the planned path.", "Prefers safe ground, steering around lava and spikes when there's a way past.", "Works while holding the button too: drag past a wall and the route re-plans to keep chasing the cursor."] },
-  { date: "2026-07-02", size: "small", v: "Line of sight required to hit at range", by: "Claude", notes: ["Ranged skills and spells (bolt, blast, beam, nova, chain) now need a clear line to a foe — no firing through walls, deep water or sealed doors.", "Ranged summoned minions close in until they can see their target instead of shooting through walls.", "More boss tricks (firewall, firestorm, shockwave, frost nova, quake, vortex) now need line of sight, so ducking behind cover breaks them."] },
+  { date: "2026-07-02", size: "small", v: "Line of sight required to hit at range", by: "Claude", notes: ["Ranged skills and spells (bolt, blast, beam, nova, chain) now need a clear line to a foe — no firing through walls, doors or other solid obstacles.", "Ranged summoned minions close in until they can see their target instead of shooting through walls.", "More boss tricks (firewall, firestorm, shockwave, frost nova, quake, vortex) now need line of sight, so ducking behind cover breaks them."] },
   { date: "2026-07-02", size: "small", v: "Smoother pickups", by: "Claude", notes: ["Grabbing loot no longer hitches the frame — the bag rebuilds at most once per frame and only when it's on-screen, and rapid pickups save once instead of on every chest."] },
   { date: "2026-07-02", size: "small", v: "Hover stat codes on the equip-compare line", by: "Claude", notes: ["Stat abbreviations in the item-vs-equipped compare line (bag & shop) now reveal their full name on hover, like the item's own stat line."] },
   { date: "2026-07-02", size: "small", v: "Popup titles clear their nav buttons", by: "Claude", notes: ["A long popup title (e.g. Name Your Hero) no longer lets the Back/Close button spill sideways over it on a narrow window — the title now ellipsizes instead of overlapping."] },
@@ -12482,14 +12485,13 @@ function placeTraps(reach) {
 }
 
 // Does an arrow trap's firing lane pass through (x,y)? (Includes the emitter tile
-// and every tile its bolt travels until a wall/water blocks the lane.)
+// and every tile its bolt travels until a solid obstruction blocks the lane.)
 function arrowLaneHits(tr, x, y) {
   let cx = tr.x, cy = tr.y;
   for (let s = 0; s <= 6; s++) {
     if (cx === x && cy === y) return true;
     cx += tr.dx; cy += tr.dy;
-    const t = tileAtCell(cx, cy);
-    if (t === 1 || t === 6 || t === 10 || t === 11) break;
+    if (blocksShot(cx, cy)) break;
   }
   return false;
 }
@@ -12532,12 +12534,19 @@ function spawnProjectile(x, y, dx, dy, dmg, color, speed) {
   projectiles.push({ x, y, vx: dx / m * (speed || 7), vy: dy / m * (speed || 7), dmg, color: color || '#ffd24b', life: 3 });
 }
 
-// A visible bolt a ranged foe looses at the hero. The shot's damage is applied
-// instantly by the attack (see enemyRangedAttack); this bolt just SELLS it as a
-// projectile — flying from the foe and homing onto the hero — so a ranged hit is
-// obviously an incoming attack, not a mystery. Deals no damage of its own.
-function spawnEnemyShot(x, y, color) {
-  projectiles.push({ x: x + 0.5, y: y + 0.5, vx: 0, vy: 0, dmg: 0, color: color || '#c77dff', life: 1.2, cosmetic: true });
+// A real, DODGEABLE bolt a ranged foe looses at the hero. It flies in a straight
+// line toward where the hero was when fired, is stopped by walls (see
+// updateProjectiles), and only deals damage if it actually reaches the hero — so
+// sidestepping its path or ducking behind cover avoids the hit entirely. Carries
+// the firing foe `e` and its pre-rolled base damage so the hit resolves with that
+// foe's mitigation and on-hit procs when (and if) it lands.
+function spawnEnemyBolt(e, raw, color) {
+  const s = e.size || 1;
+  const ox = e.x + s / 2, oy = e.y + s / 2;          // origin: centre of the foe's footprint
+  const dx = player.fx - ox, dy = player.fy - oy, d = Math.hypot(dx, dy) || 1;
+  const SP = 8;                                        // fast enough to threaten, slow enough to sidestep
+  const life = (d + 1.5) / SP;                         // reaches the hero, overshoots a touch, then dies
+  projectiles.push({ x: ox, y: oy, vx: dx / d * SP, vy: dy / d * SP, dmg: raw, color: color || '#c77dff', life, enemyShot: true, e, label: enemyLabel(e) });
 }
 
 // Advance every bolt: move, die on a wall, or strike the hero on overlap.
@@ -12557,19 +12566,24 @@ function updateProjectiles(dt) {
       continue;
     }
     p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
-    const t = tileAtCell(Math.floor(p.x), Math.floor(p.y));
-    if (t === 1 || t === 6 || t === 10 || t === 11 || bossWallAt(Math.floor(p.x), Math.floor(p.y))) {
+    if (blocksShot(Math.floor(p.x), Math.floor(p.y))) {   // pop on a solid obstruction; flies over water/ground
       spawnParticles(p.x - 0.5, p.y - 0.5, p.color, 4, 0.06); p.life = 0; continue;
     }
     if (Math.hypot(p.x - player.fx, p.y - player.fy) < PLAYER_R + 0.18) {
-      const dmg = applyIncomingMods(absorbWithMana(mitigateDamage(p.dmg, dungeonLevel)), {});
-      player.hp = Math.max(0, player.hp - dmg);
-      notePlayerDamage(dmg, p.label || 'arrow trap');
-      sfx('hurt'); spawnFloatingText(player.x, player.y, `${dmg}`, p.color);
-      spawnParticles(player.x, player.y, p.color, 6, 0.08); addShake(3);
+      if (p.enemyShot && p.e) {
+        // A foe's aimed bolt reached the hero — resolve it with that foe's mitigation
+        // and on-hit procs (a stat-dodge roll can still avoid it inside the handler).
+        landEnemyRangedHit(p.e, p.dmg, p.color);
+      } else {
+        const dmg = applyIncomingMods(absorbWithMana(mitigateDamage(p.dmg, dungeonLevel)), {});
+        player.hp = Math.max(0, player.hp - dmg);
+        notePlayerDamage(dmg, p.label || 'arrow trap');
+        sfx('hurt'); spawnFloatingText(player.x, player.y, `${dmg}`, p.color);
+        spawnParticles(player.x, player.y, p.color, 6, 0.08); addShake(3);
+        updateBars();
+        if (player.hp === 0) handleDeath();
+      }
       p.life = 0;
-      updateBars();
-      if (player.hp === 0) handleDeath();
     }
   }
   projectiles = projectiles.filter(p => p.life > 0);
@@ -21098,8 +21112,7 @@ function tryRangedAttack(dx, dy) {
   for (let step = 1; step <= range; step++) {
     x += dx; y += dy;
     if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) break;
-    const t = mapData[y][x];
-    if (t === 1 || t === 6 || t === 10 || t === 11) break; // wall / deep water / sealed
+    if (blocksShot(x, y)) break;            // wall / door / barrier — but shoot over water & ground
     const tgt = getEnemyAt(x, y);
     if (tgt) {
       if (mpCost) { player.mp -= mpCost; }
@@ -22086,26 +22099,35 @@ function tryChillProc(e, dmg) {
 function enemyRangedAttack(e) {
   if ((e.atkCd || 0) > 0) return;           // still reloading between shots
   e.atkCd = enemyAttackInterval(e);
-  // Arrival grace — no damage taken until you first move on a new floor.
+  // Arrival grace — no shots loosed until you first move on a new floor.
   if (entryGuard) { spawnFloatingText(player.x, player.y, '✦', '#bfe9ff'); return; }
   triggerAttackAnim(e, player.x, player.y); // quick lunge as it looses a shot
+  // Loose a real, dodgeable bolt aimed at where the hero is NOW. Damage, dodge
+  // and on-hit procs all resolve in landEnemyRangedHit — but only if the bolt
+  // actually reaches the hero, so sidestepping its path avoids the hit entirely.
+  const raw = Math.round(e.dmg * rnd(75, 110) / 100);
+  spawnEnemyBolt(e, raw, e.isBoss ? '#ff7766' : '#c77dff');
+  sfx('attack');                            // the twang of the loose; the thud plays on impact
+}
+
+// Resolve a foe's ranged bolt actually striking the hero (called from
+// updateProjectiles on overlap). The bolt's base power `raw` was rolled when it
+// was loosed; defences (a stat-dodge, Guard, mitigation, mana-shield) and on-hit
+// procs all apply here, at the moment of impact.
+function landEnemyRangedHit(e, raw, color) {
   if (rollDodge(e)) {
     spawnFloatingText(player.x, player.y, 'DODGE', '#9fe8ff');
     log(`💨 dodged ${enemyLabel(e)}`);
     fireSkillTrigger('dodge', { enemy: e });
     return;
   }
-  let raw = Math.round(e.dmg * rnd(75, 110) / 100);
   if (buffs.guard) raw = Math.round(raw * 0.6);
   const dmg = applyIncomingMods(absorbWithMana(mitigateDamage(raw, e.level)), e);
   player.hp = Math.max(0, player.hp - dmg);
   notePlayerDamage(dmg, enemyLabel(e) + ' (ranged)');
   sfx(e.isBoss ? 'boss' : 'hurt');
-  // Loose a visible bolt from the foe so the shot is unmistakable — it flies over
-  // and pops on the hero (the damage itself already landed instantly above).
-  const tcol = e.isBoss ? '#ff7766' : '#c77dff';
-  spawnEnemyShot(e.x, e.y, tcol);
-  spawnFloatingText(player.x, player.y, `${dmg}`, '#c77dff');
+  spawnFloatingText(player.x, player.y, `${dmg}`, color || '#c77dff');
+  spawnParticles(player.x, player.y, color || '#c77dff', 6, 0.08); addShake(3);
   log(`🏹 ${enemyLabel(e)} -${dmg}`);
   // Even a non-critical hit from off-screen gets a soft flash so a ranged
   // attacker chipping you from across the room never goes unsignalled.
@@ -22118,18 +22140,33 @@ function enemyRangedAttack(e) {
   if (player.hp === 0) handleDeath();
 }
 
-// Rough line of sight: step a straight line between two cells and fail if a wall
-// (or deep water / sealed door) blocks it, so nothing fires through solid rock.
-// Used both ways — foe→hero for enemy shots, hero→foe for the player's own spells
-// and summoned minions — so neither side can hit a target it can't see.
+// Does the obstacle at (x,y) block line of sight AND projectiles? Only SOLID
+// structures do — walls, cracked walls, locked doors, conjured boss barriers and
+// solid furniture. Ground terrain you can walk across (or over) never blocks a
+// shot: floor, water, lava, spikes, mud, ice. The guiding rule is "anything you
+// can walk through, you can see and shoot through" — so open ground and puddles
+// give no cover, only real obstructions do. (Creatures don't block either — bolts
+// pass over other foes.) Shared by every sight/shot check so they never diverge.
+function blocksShot(x, y) {
+  if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return true;
+  const t = mapData[y][x];
+  if (t === 1 || t === 10 || t === 11) return true;   // wall / cracked wall / locked door
+  if (bossWallAt(x, y)) return true;                  // conjured wall of force
+  if (typeof furnitureMap === 'object' && furnitureMap[y + ',' + x] !== undefined) return true; // solid furniture
+  return false;
+}
+
+// Rough line of sight: step a straight line between two cells and fail if a solid
+// obstruction (wall, door, barrier, furniture) blocks it — open ground and water
+// don't. Used both ways — foe→hero for enemy shots, hero→foe for the player's own
+// spells and summoned minions — so neither side can hit a target it can't see.
 function hasLineOfSight(ax, ay, bx, by) {
   let x = ax, y = ay, guard = 0;
   while ((x !== bx || y !== by) && guard++ < 256) {
     x += Math.sign(bx - x);
     y += Math.sign(by - y);
     if (x === bx && y === by) break;
-    const t = mapData[y][x];
-    if (t === 1 || t === 6 || t === 10 || t === 11) return false;
+    if (blocksShot(x, y)) return false;
   }
   return true;
 }
