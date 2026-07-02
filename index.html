@@ -3023,23 +3023,31 @@
   }
   .title-play:active { background: var(--orange-850); }
   /* Primary CTA (ENTER / CONTINUE) — the one action that starts the game, so it
-     gets extra pull: the whole frame breathes with a pulsing golden glow while a
-     bright wisp of light continuously circles the border. Scoped to #title-play
-     so the secondary title buttons stay calm. */
+     gets extra pull: the whole frame breathes with a pulsing golden glow while
+     two bright wisps of light chase each other around the border. Scoped to
+     #title-play so the secondary title buttons stay calm. */
   @property --tp-wisp { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
   #title-play { animation: titlePlayPulse 2.6s ease-in-out infinite; }
   #title-play .tp-label { position: relative; z-index: 1; }
-  /* Rotating wisp: a conic gradient with one bright hot arc, masked down to the
-     2px border ring so the light reads as travelling around the button's edge. */
+  /* Rotating wisps: a conic gradient with two bright hot arcs 180° apart, masked
+     down to the 2px border ring so the pair reads as two opposing points of light
+     travelling around the button's edge, always across from each other. */
   #title-play::before {
     content: ''; position: absolute; inset: 0; z-index: 0;
     border-radius: inherit; padding: 2px; pointer-events: none;
     background: conic-gradient(from var(--tp-wisp),
       transparent 0deg,
-      transparent 250deg,
-      color-mix(in srgb, var(--gold-350) 55%, transparent) 300deg,
-      var(--xp) 335deg,
-      color-mix(in srgb, var(--gold-350) 55%, transparent) 360deg);
+      transparent 55deg,
+      color-mix(in srgb, var(--gold-350) 55%, transparent) 75deg,
+      var(--xp) 90deg,
+      color-mix(in srgb, var(--gold-350) 55%, transparent) 105deg,
+      transparent 125deg,
+      transparent 235deg,
+      color-mix(in srgb, var(--gold-350) 55%, transparent) 255deg,
+      var(--xp) 270deg,
+      color-mix(in srgb, var(--gold-350) 55%, transparent) 285deg,
+      transparent 305deg,
+      transparent 360deg);
     -webkit-mask: linear-gradient(white 0 0) content-box, linear-gradient(white 0 0);
     -webkit-mask-composite: xor;
             mask: linear-gradient(white 0 0) content-box, linear-gradient(white 0 0);
@@ -10875,6 +10883,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Twin wisps on the ENTER button", by: "Claude", notes: ["Two glints of light now circle the main button's border on opposite sides instead of one."] },
   { date: "2026-07-01", size: "small", v: "Cleaner stat-abbreviation key", by: "Claude", notes: ["Loot stat-abbreviation key now groups item stats by theme (Offense, Defense, Sustain, Caster, Utility/Find), alphabetical within each group.", "Flows into two columns on desktop for easier scanning."] },
   { date: "2026-07-01", size: "medium", v: "Completed sets grant a signature power + golden aura", by: "Jeff Louie", notes: ["Completing a set (all 4 pieces) now unlocks a unique SIGNATURE POWER, not just more stats: Warden's Aegis Wall (block + damage reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), Arcanist's Arcane Overflow (cooldown reduction + mana leech).", "A completed set wraps the hero in a faint golden aura, and its \"… set\" tag turns gold with a ✦.", "Set tooltip now shows the power, a Worn n/4 count and a completion banner."] },
   { date: "2026-07-02", size: "small", v: "Punchier ENTER button", by: "Claude", notes: ["Title's main button now reads just ENTER (sword icon gone) with a pulsing golden frame and a wisp of light circling the border, so the way in pops."] },
