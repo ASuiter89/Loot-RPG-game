@@ -1192,6 +1192,7 @@
   .sprint-action.on,
   .herobars-action.on,
   .pathline-action.on,
+  .stairsarrow-action.on,
   .crosshair-action.on { background: var(--orange-850); border-color: var(--gold-350); color: var(--xp); }
 
   /* Reset Run wipes the current hero, so it shouts: red-tinted and gently pulsing at
@@ -4470,6 +4471,11 @@
              around walls. On by default; the pulsing destination ring is separate. -->
         <button class="settings-item pathline-action" id="pathline-action" onclick="togglePathLine()" data-tip="<div class='ht-name'>🧭 Pathing Line</div><div class='ht-line'>Sketch faint gold breadcrumbs along the click-to-move route your hero will take around walls.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="19" r="2"/><path d="M7 19h6a3 3 0 0 0 3-3V9" stroke-dasharray="2.5 2.5"/><path d="M16 5l2.5 3.5L21 5z" fill="currentColor" stroke="none"/><circle cx="18.5" cy="6" r="0.5"/></svg></span><span class="action-label" id="pathline-label">PATHING LINE: ON</span>
+        </button>
+        <!-- Stairs arrow: a gold arrow riding the map edge that points at the
+             down-stairs whenever the exit is off-screen. On by default. -->
+        <button class="settings-item stairsarrow-action" id="stairsarrow-action" onclick="toggleStairsArrow()" data-tip="<div class='ht-name'>➡️ Stairs Arrow</div><div class='ht-line'>Show a gold arrow on the map edge pointing toward the down-stairs whenever the exit is off-screen.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></span><span class="action-label" id="stairsarrow-label">STAIRS ARROW: ON</span>
         </button>
         <!-- UI SIZE — scales the whole interface (1x–2x in 0.25 steps). Every
              label is rem-sized off the root, so this one multiplier resizes all
@@ -9573,6 +9579,12 @@ try { if (localStorage.getItem(CROSSHAIR_KEY) === '0') showCrosshair = false; } 
 const PATH_LINE_KEY = 'dungeonLoot_pathLine';
 let showPathLine = true;
 try { if (localStorage.getItem(PATH_LINE_KEY) === '0') showPathLine = false; } catch (e) {}
+// Optional gold arrow that rides the map edge, pointing at the down-stairs
+// whenever the exit is off-screen (see drawStairsArrow). On by default; the
+// choice is saved across sessions.
+const STAIRS_ARROW_KEY = 'dungeonLoot_stairsArrow';
+let showStairsArrow = true;
+try { if (localStorage.getItem(STAIRS_ARROW_KEY) === '0') showStairsArrow = false; } catch (e) {}
 // The foe the hero's auto-attack is currently locked onto (best in-reach target
 // under the current focus mode), recomputed each frame in updatePlayerCombat via
 // pickAutoTarget(). Declared here (with the other render state) so the draw loop's
@@ -11345,6 +11357,22 @@ function updatePathLineButton() {
   if (btn) btn.classList.toggle('on', showPathLine);
 }
 
+// Flip the off-screen stairs arrow on and off. Persisted so the choice survives
+// reloads. Drawn along the map edge in the main render loop (see drawStairsArrow).
+function toggleStairsArrow() {
+  showStairsArrow = !showStairsArrow;
+  try { localStorage.setItem(STAIRS_ARROW_KEY, showStairsArrow ? '1' : '0'); } catch (e) {}
+  settingsChanged();
+  sfx('click');
+  updateStairsArrowButton();
+}
+function updateStairsArrowButton() {
+  const lbl = document.getElementById('stairsarrow-label');
+  if (lbl) lbl.textContent = showStairsArrow ? 'STAIRS ARROW: ON' : 'STAIRS ARROW: OFF';
+  const btn = document.getElementById('stairsarrow-action');
+  if (btn) btn.classList.toggle('on', showStairsArrow);
+}
+
 // Settings modal: a centred overlay holding sound, saves, Reset Run and options.
 // There's no on-screen button — it opens only with Esc (see handleEscape) and,
 // being an RT-blocking overlay, pausing the game while it's up. The scrim
@@ -11389,6 +11417,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Stairs arrow toggle", by: "Claude", notes: ["Toggle the off-screen down-stairs arrow in Settings → Visuals (on by default).", "Choice syncs across devices when signed in."] },
   { date: "2026-07-02", size: "small", v: "Fix: title screen wouldn't offer Continue", by: "Claude", notes: ["Settings sync could crash the boot before the title screen finished loading, so returning heroes never saw the Continue button — fixed.", "Re-applying your saved log/loot-drawer collapse state on load no longer counts as a fresh change, keeping cross-device sync timestamps accurate."] },
   { date: "2026-07-02", size: "small", v: "Smoother big fights", by: "Claude", notes: ["Enemy status tints (burning, poisoned, chilled…), the hit-flash, elite/boss auras and threat rings now use cached art instead of rebuilding pricey per-frame effects — much smoother with lots of foes on screen.", "Elite/boss/affix auras read as a soft coloured halo."] },
   { date: "2026-07-02", size: "small", v: "Pathing line toggle", by: "Claude", notes: ["Toggle the click-to-move breadcrumb trail in Settings → Visuals (on by default); the pulsing destination ring stays.", "Choice syncs across devices when signed in."] },
@@ -18740,6 +18769,7 @@ function stairsDownCell() {
 // Every position is derived from the live camera (tile size `tw`, canvas size),
 // so it tracks resolution, window size and zoom automatically.
 function drawStairsArrow(offX, offY, tw, th, W, H) {
+  if (!showStairsArrow) return;
   if (inTown || !player || !Array.isArray(mapData) || !mapData.length) return;
   const s = stairsDownCell();
   if (!s) return;
@@ -27317,6 +27347,7 @@ const SETTINGS_SYNC_KEYS = [
   'dungeonLoot_heroBars',     // under-hero HP/MP bars on/off
   'dungeonLoot_crosshair',    // red target crosshair on/off
   'dungeonLoot_pathLine',     // click-to-move pathing line on/off
+  'dungeonLoot_stairsArrow',  // off-screen stairs arrow on/off
   'dungeonLootMusic',         // music volume level (0–5)
   'dungeonLootSfx',           // sfx volume level (0–5)
   'dungeonLootTownAmb',       // town ambience on/off
@@ -28286,6 +28317,7 @@ updateSprintButton();
 updateHeroBarsButton();
 updateCrosshairButton();
 updatePathLineButton();
+updateStairsArrowButton();
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
   window.addEventListener(ev, audioUnlock, { passive: true }));
 
