@@ -3388,9 +3388,11 @@
     color: var(--xp); font-size: 1.4rem; font-weight: bold; letter-spacing: 1px;
     margin: 12px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border);
   }
-  .gate-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .gate-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
   .gate-floor {
-    padding: 10px 0; border: 1px solid var(--border); border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 64px; padding: 14px 0; border: 2px solid var(--border);
+    border-radius: var(--radius-md); font-size: var(--fs-head);
     background: var(--orange-850); color: var(--xp); font-family: var(--font-ui);
     font-weight: bold; cursor: pointer; -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
@@ -11240,6 +11242,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Chunkier floor buttons", by: "Claude", notes: ["Dungeon Gate floor buttons are now larger, taller and squarer with bigger numerals — easier to read and click."] },
   { date: "2026-07-02", size: "small", v: "Smart click-to-move pathing", by: "Claude", notes: ["Click a spot behind a wall and the hero now routes around it instead of grinding into the corner — faint gold breadcrumbs sketch the planned path.", "Prefers safe ground, steering around lava and spikes when there's a way past.", "Works while holding the button too: drag past a wall and the route re-plans to keep chasing the cursor."] },
   { date: "2026-07-02", size: "small", v: "Line of sight required to hit at range", by: "Claude", notes: ["Ranged skills and spells (bolt, blast, beam, nova, chain) now need a clear line to a foe — no firing through walls, deep water or sealed doors.", "Ranged summoned minions close in until they can see their target instead of shooting through walls.", "More boss tricks (firewall, firestorm, shockwave, frost nova, quake, vortex) now need line of sight, so ducking behind cover breaks them."] },
   { date: "2026-07-02", size: "small", v: "Smoother pickups", by: "Claude", notes: ["Grabbing loot no longer hitches the frame — the bag rebuilds at most once per frame and only when it's on-screen, and rapid pickups save once instead of on every chest."] },
