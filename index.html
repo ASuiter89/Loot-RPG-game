@@ -2083,6 +2083,9 @@
   }
   /* Item power badge — a single gold number shown alongside an item's stats. */
   .item-power { color: var(--gold-350); font-weight: bold; opacity: 0.95; margin-left: 5px; white-space: nowrap; }
+  /* The ⚡ marker before a Power number, sized a touch smaller than the digits so it
+     reads as a glyph rather than a leading digit. Shared by every power badge. */
+  .pwr-g { font-size: 0.8em; }
   .item-diff { font-size: 1.2rem; margin-top: 1px; line-height: 1.3; }
 
   /* ── TOOLTIP ── */
@@ -2265,7 +2268,7 @@
     transform: translate(-50%, -50%);
     height: 95%; width: auto;
     z-index: 0; pointer-events: none;
-    opacity: 0.5;
+    opacity: 0.38;
     filter: drop-shadow(0 3px 8px rgba(0,0,0,0.4));
   }
   .pda-body img, .pda-body .dl-ic { display: block; height: 100%; width: auto; image-rendering: pixelated; }
@@ -11077,6 +11080,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Gear-doll polish", by: "Claude", notes: ["Faded the hero body behind the GEAR paper-doll a little more so worn slots read clearer.", "Shrank the ⚡ marker beside every Power number so the digits stand out."] },
   { date: "2026-07-02", size: "small", v: "Skill panel polish", by: "Claude", notes: ["Skill-slots header, hint and slot boxes are now centered.", "Skill names sit below each tile instead of overlapping the icon.", "Bigger skill-tree icons.", "Dropped the redundant lock badge — greyed-out tiles already read as locked.", "Clicking a tile now hides the hover tooltip, so it stops blocking the detail popup."] },
   { date: "2026-07-02", size: "small", v: "Settings gains a Visuals tab", by: "Claude", notes: ["UI SIZE, UI FONT and CURSOR moved out of Play into a new Visuals tab. Tab order is now Play, Visuals, Audio, Progress, About.", "UI FONT is now a collapsing dropdown showing your current face; open it for a two-column grid of options instead of one tall column."] },
   { date: "2026-07-02", size: "small", v: "Punchier level-up banner", by: "Claude", notes: ["Level-up banner now flares with golden light rays and a bloom, plus a fuller, more rewarding fanfare.", "\"Spend your points\" hint shows only through level 3, then steps aside."] },
@@ -13340,6 +13344,10 @@ function stockPrice(s) {
 }
 
 // Compact one-line summary of an item's stats & attributes, e.g.
+// The ⚡ marker that leads a Power value. Wrapped so it renders a touch smaller than
+// the number beside it (see .pwr-g). Reused by every power badge for one consistent look.
+const PWR_GLYPH = '<span class="pwr-g">⚡</span>';
+
 // "⚡14 · 8-12 DMG · +3 ATK · +5 MIG".
 function itemStatLine(item) {
   // Each stat code is a hoverable chip — pointing at it reveals the full name.
@@ -13357,7 +13365,7 @@ function itemStatLine(item) {
   const body = parts.join(' · ');
   const powHtml = itemPowerFront(item);   // glowing special power — leads the line
   const setTag = itemSetTag(item);        // set membership — trails the line
-  const lead = item.slot ? `⚡${itemPower(item)}` : '';
+  const lead = item.slot ? `${PWR_GLYPH}${itemPower(item)}` : '';
   return [lead, powHtml, body].filter(Boolean).join(' · ') + setTag;
 }
 
@@ -13459,7 +13467,7 @@ function renderShop() {
       const equippedHere = equipped[s.item.slot];
       const delta = equipUpgradeDelta(s.item);
       isUpgrade = delta > 0;
-      sub += ` <span class="item-power">⚡${ip}</span>`;
+      sub += ` <span class="item-power">${PWR_GLYPH}${ip}</span>`;
       if (equippedHere) sub += `  ${statDiffLine(s.item)}`;
     }
     const sicon = itemIcon(s.item);
@@ -15393,7 +15401,7 @@ function renderEnchanter() {
       <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
       <div class="shop-row-info ${rarityClass(it)}">
         <div class="shop-row-name">${it.name}${craftedMark(it)}</div>
-        <div class="shop-row-sub">${slotLabel}<span class="item-power">⚡${itemPower(it)}</span></div>
+        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${itemPower(it)}</span></div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
       </div>
       <button class="act-btn" onclick="enchantPick(${g.item.id})">WORK</button>
@@ -23097,7 +23105,7 @@ function renderPanel() {
       const equippedHere = equipable ? equipped[item.slot] : null;
       const delta = equipable ? equipUpgradeDelta(item) : 0;
       const isUpgrade = equipable && delta > 0;
-      const pwr = equipable ? `<span class="item-power">⚡${ip}</span>` : '';
+      const pwr = equipable ? `<span class="item-power">${PWR_GLYPH}${ip}</span>` : '';
       const diff = equipable ? `<div class="item-diff">${statDiffLine(item)}</div>` : '';
       const lockBtn = `<button class="row-btn lock-toggle-btn ${item.locked?'on':''}" onclick="toggleLock(${i})" ${hoverTip(item.locked
         ? `<div class='ht-name'>🔒 Locked</div><div class='ht-line'>Safe from selling, scrapping &amp; auto-loot. Tap to unlock.</div>`
@@ -24152,7 +24160,7 @@ function renderDollSlot(slot, mode) {
   const pwrBadge = !item ? ''
     : inactive
       ? `<span class="item-power pd-pwr" style="background:var(--magenta-800);color:var(--red-350)">⚠</span>`
-      : `<span class="item-power pd-pwr">⚡${itemPower(item)}</span>`;
+      : `<span class="item-power pd-pwr">${PWR_GLYPH}${itemPower(item)}</span>`;
   const capHTML = !item
     ? `<div class="pd-cap">${cap}</div>`
     : inactive
@@ -24221,7 +24229,7 @@ function gearSetBarHTML() {
   return `<div class="gearset-bar">${[0, 1].map(i => {
     const set = gearSets[i];
     const n = gearSetCount(set);
-    const meta = n ? `${n} worn · ⚡${gearSetPower(set)}` : 'empty';
+    const meta = n ? `${n} worn · ${PWR_GLYPH}${gearSetPower(set)}` : 'empty';
     return `<button class="gearset-btn${i === activeGearSet ? ' active' : ''}" onclick="toggleGearSet(${i})">
       <span class="gs-name">Set ${i + 1}</span><span class="gs-meta">${meta}</span>
     </button>`;
@@ -25841,7 +25849,7 @@ const LB_SORTS = {
   floor: { col: 'max_floor', fmt: lbFloorLabel },
   level: { col: 'level',     fmt: v => 'Lv ' + v },
   gold:  { col: 'gold',      fmt: v => v + 'g' },
-  power: { col: 'power',     fmt: v => '⚡' + v },
+  power: { col: 'power',     fmt: v => PWR_GLYPH + v },
 };
 let lbTab = 'floor';
 let lbMode = 'std';       // which ladder is shown: 'std' (non-hardcore) or 'hc' (hardcore only)
