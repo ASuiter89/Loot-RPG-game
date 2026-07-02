@@ -299,6 +299,13 @@
     user-select: none;
   }
 
+  /* Form controls don't inherit font-family by default, so any button/input/
+     select/textarea that forgets to set one would fall back to the browser's
+     sans-serif — visibly wrong next to the themed --font-ui everywhere else.
+     This makes every control follow the picked UI font unless it deliberately
+     overrides (e.g. the DUNGEON LOOT title, font-picker previews). */
+  button, input, select, textarea { font-family: inherit; }
+
   /* ── HEADER ── */
   #header {
     display: flex;
@@ -817,7 +824,7 @@
     display: flex; flex-direction: column; align-items: center; gap: 3px;
     padding: 7px 1px; border: 1px solid var(--border); border-radius: 8px;
     background: var(--panel); color: var(--blue-350); cursor: pointer;
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-ui);
     -webkit-tap-highlight-color: transparent; touch-action: manipulation;
     transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
   }
@@ -837,7 +844,7 @@
   #keybind-card { background: linear-gradient(180deg, var(--panel), var(--panel)); border: 2px solid var(--frame); border-radius: 12px; max-width: 360px; width: 100%; max-height: 82vh; overflow-y: auto; padding: 16px; box-shadow: 0 8px 30px color-mix(in srgb, var(--ink) 60%, transparent); }
   /* Header row: a ◀ Back tile (returns to Settings) sits at the left, title centred. */
   .kb-head { position: relative; display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
-  .kb-back { position: absolute; left: 0; top: 50%; transform: translateY(-50%); background: var(--panel); color: var(--purple-150); border: 1px solid var(--border); border-radius: 7px; padding: 4px 12px; font-size: 1.6rem; line-height: 1; cursor: pointer; font-family: 'Courier New', monospace; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .kb-back { position: absolute; left: 0; top: 50%; transform: translateY(-50%); background: var(--panel); color: var(--purple-150); border: 1px solid var(--border); border-radius: 7px; padding: 4px 12px; font-size: 1.6rem; line-height: 1; cursor: pointer; font-family: var(--font-ui); -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .kb-back:active { background: var(--panel-raised); }
   .kb-title { color: var(--gold); font-size: 1.9rem; font-weight: bold; letter-spacing: 1px; margin-bottom: 4px; text-align: center; }
   .kb-head .kb-title { margin-bottom: 0; }
@@ -1209,9 +1216,10 @@
   /* Sound off is a real state, so it stays dimmed/greyed even at rest. */
   .sound-action.muted { background: var(--bg); border-color: var(--panel); color: var(--meta); }
 
-  /* Sprint set to TOGGLE is an active state, so it lights amber (the Stamina
-     colour) to show auto-sprint is the live mode. */
-  .sprint-action.on { background: var(--orange-850); border-color: var(--gold-350); color: var(--xp); }
+  /* Sprint set to TOGGLE — and Hero Bars switched on — are active states, so they
+     light amber (the Stamina colour) to show the mode is live. */
+  .sprint-action.on,
+  .herobars-action.on { background: var(--orange-850); border-color: var(--gold-350); color: var(--xp); }
 
   /* Reset Run wipes the current hero, so it shouts: red-tinted and gently pulsing at
      rest (top of the Settings › Progress tab), then solid red once armed/pressed. */
@@ -4390,6 +4398,11 @@
              to auto-sprint, tap again to stop), so you can sprint without holding. -->
         <button class="settings-item sprint-action" id="sprint-action" onclick="toggleSprintMode()" data-tip="<div class='ht-name'>🏃 Sprint Mode</div><div class='ht-line'><b>HOLD:</b> sprint only while Shift is down.<br><b>TOGGLE:</b> tap Shift to auto-sprint, tap again to stop — no need to hold.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 19 22 12 13 5"/><polyline points="2 19 11 12 2 5"/></svg></span><span class="action-label" id="sprint-label">SPRINT: HOLD</span>
+        </button>
+        <!-- Under-hero HP/MP bars: slim red Health &amp; blue Mana bars beneath the
+             hero, appearing (like the stamina bar) only while that vital isn't full. -->
+        <button class="settings-item herobars-action" id="herobars-action" onclick="toggleHeroBars()" data-tip="<div class='ht-name'>❤️ Hero Bars</div><div class='ht-line'>Show slim red Health &amp; blue Mana bars under your hero, appearing while that vital isn't full — just like the stamina bar.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></span><span class="action-label" id="herobars-label">HERO BARS: OFF</span>
         </button>
         <div class="settings-grid">
           <button class="settings-item" onclick="openKeybinds()">
@@ -9439,6 +9452,12 @@ const SPRINT_MODE_KEY = 'dungeonLoot_sprintMode';
 let sprintMode = 'hold';
 try { if (localStorage.getItem(SPRINT_MODE_KEY) === 'toggle') sprintMode = 'toggle'; } catch (e) {}
 let sprintLatched = false;                              // auto-sprint engaged (TOGGLE mode)
+// Optional slim HP (red) / MP (blue) bars under the hero, styled like the
+// stamina bar and popping up the same way — only while that vital isn't full.
+// Off by default; the choice is saved across sessions.
+const HERO_BARS_KEY = 'dungeonLoot_heroBars';
+let showHeroBars = false;
+try { if (localStorage.getItem(HERO_BARS_KEY) === '1') showHeroBars = true; } catch (e) {}
 // Click-to-move (desktop): a world point (in tile units, matching player.fx/fy)
 // the hero walks toward. `hold` means the button is still down, so the target
 // keeps tracking the cursor and the hero only stops when you let go. A plain
@@ -11126,6 +11145,21 @@ function updateSprintButton() {
   if (btn) btn.classList.toggle('on', sprintMode === 'toggle');
 }
 
+// Flip the under-hero HP/MP bars on and off. Persisted so the choice survives
+// reloads. Draws in the main render loop (see the vital-bars block).
+function toggleHeroBars() {
+  showHeroBars = !showHeroBars;
+  try { localStorage.setItem(HERO_BARS_KEY, showHeroBars ? '1' : '0'); } catch (e) {}
+  sfx('click');
+  updateHeroBarsButton();
+}
+function updateHeroBarsButton() {
+  const lbl = document.getElementById('herobars-label');
+  if (lbl) lbl.textContent = showHeroBars ? 'HERO BARS: ON' : 'HERO BARS: OFF';
+  const btn = document.getElementById('herobars-action');
+  if (btn) btn.classList.toggle('on', showHeroBars);
+}
+
 // Settings modal: a centred overlay holding sound, saves, Reset Run and options.
 // There's no on-screen button — it opens only with Esc (see handleEscape) and,
 // being an RT-blocking overlay, pausing the game while it's up. The scrim
@@ -11168,6 +11202,8 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Font consistency fix", by: "Claude", notes: ["Menu buttons that fell back to the browser's sans-serif — Ramen House chips, sell/scrap trays and more — now follow the picked UI font like the rest of the game.", "Settings tabs and the Keybindings Back button dropped a stray monospace font."] },
+  { date: "2026-07-02", size: "small", v: "Health & Mana bars under hero", by: "Claude", notes: ["New Settings ▸ Play toggle adds slim red Health and blue Mana bars beneath your hero.", "Each pops up only while that vital isn't full, just like the stamina bar. Off by default; saved across sessions."] },
   { date: "2026-07-02", size: "small", v: "Refund skills for gold", by: "Claude", notes: ["Skill popover gains a Refund button — hand back one rank for gold and get the skill point back to re-spend.", "Cost scales with hero level; blocked if another learned skill still needs that node (refund the dependent first).", "Surgical alternative to the Trainer’s full one-shot respec."] },
   { date: "2026-07-02", size: "small", v: "Return to Dungeon stands out", by: "Claude", notes: ["Taller Return to Dungeon button with centered text and margins above and below.", "Two glowing wisps now circle its border so the main way back to the action is unmistakable."] },
   { date: "2026-07-02", size: "small", v: "Gear-doll polish", by: "Claude", notes: ["Faded the hero body behind the GEAR paper-doll a little more so worn slots read clearer.", "Shrank the ⚡ marker beside every Power number so the digits stand out."] },
@@ -18193,13 +18229,27 @@ function draw() {
   // toward its target while leaving the stamina bar / portal glow below in place.
   const pLunge = attackLungeOffset(player, tw, th);
   drawHeroSprite(px + (pLunge ? pLunge.dx : 0), py + (pLunge ? pLunge.dy : 0), tw, th, scale);
-  // Stamina bar under the hero — only while it's not full, so it stays out of the
-  // way until you sprint/dash. Amber, draining left-to-right.
-  if (player.stamina < player.maxStamina - 0.5) {
-    const bw = tw * 0.8, bh = Math.max(2, th * 0.07), bx = px + (tw - bw) / 2, by = py + th * 0.9;
-    ctx.fillStyle = '#000'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
-    ctx.fillStyle = '#4a3a12'; ctx.fillRect(bx, by, bw, bh);
-    ctx.fillStyle = '#ffcf52'; ctx.fillRect(bx, by, bw * Math.max(0, player.stamina / player.maxStamina), bh);
+  // Vital bars under the hero — each pops up only while its vital isn't full, so
+  // they stay out of the way at full. Stamina (amber) always shows this way; the
+  // optional Hero Bars setting adds red Health and blue Mana above it. They stack
+  // just under the hero's feet, with the stamina bar at its usual spot.
+  {
+    const bw = tw * 0.8, bh = Math.max(2, th * 0.07), bx = px + (tw - bw) / 2;
+    const bars = [];   // top → bottom
+    if (showHeroBars && player.hp < player.maxHp - 0.5)
+      bars.push({ frac: player.hp / player.maxHp, track: '#3a1013', fill: PALETTE.hp });
+    if (showHeroBars && player.maxMp > 0 && player.mp < player.maxMp - 0.5)
+      bars.push({ frac: player.mp / player.maxMp, track: '#102138', fill: PALETTE.mp });
+    if (player.stamina < player.maxStamina - 0.5)
+      bars.push({ frac: player.stamina / player.maxStamina, track: '#4a3a12', fill: '#ffcf52' });
+    const rh = bh + 2;
+    let by = py + th * 0.9 - (bars.length - 1) * rh;   // bottom bar sits at the old stamina spot
+    for (const b of bars) {
+      ctx.fillStyle = '#000'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+      ctx.fillStyle = b.track; ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = b.fill; ctx.fillRect(bx, by, bw * Math.max(0, Math.min(1, b.frac)), bh);
+      by += rh;
+    }
   }
 
   // Town-portal channel: a DawnLike swirling-portal tile pulses over the hero while
@@ -27302,6 +27352,7 @@ log('🌍 Terrain tiles from "[LPC] Terrains" by bluecarrot16 & LPC contributors
 // gesture resumes the context and kicks off the looping music.
 updateSoundButtons();
 updateSprintButton();
+updateHeroBarsButton();
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
   window.addEventListener(ev, audioUnlock, { passive: true }));
 
