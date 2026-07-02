@@ -11079,6 +11079,7 @@ function showSettingsTab(name) {
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Skill panel polish", by: "Claude", notes: ["Skill-slots header, hint and slot boxes are now centered.", "Skill names sit below each tile instead of overlapping the icon.", "Bigger skill-tree icons.", "Dropped the redundant lock badge — greyed-out tiles already read as locked.", "Clicking a tile now hides the hover tooltip, so it stops blocking the detail popup."] },
   { date: "2026-07-02", size: "small", v: "Settings gains a Visuals tab", by: "Claude", notes: ["UI SIZE, UI FONT and CURSOR moved out of Play into a new Visuals tab. Tab order is now Play, Visuals, Audio, Progress, About.", "UI FONT is now a collapsing dropdown showing your current face; open it for a two-column grid of options instead of one tall column."] },
+  { date: "2026-07-02", size: "small", v: "Smoother side-panel collapse", by: "Claude", notes: ["Folding the combat log or loot drawer on desktop now slides smoothly instead of stuttering — the map re-fit no longer double-draws each frame."] },
   { date: "2026-07-02", size: "small", v: "Punchier level-up banner", by: "Claude", notes: ["Level-up banner now flares with golden light rays and a bloom, plus a fuller, more rewarding fanfare.", "\"Spend your points\" hint shows only through level 3, then steps aside."] },
   { date: "2026-07-02", size: "small", v: "Skill-tree tabs taller, with branch blurbs", by: "Claude", notes: ["Passive/Active/Path and specialization tabs are taller for easier clicking.", "Selecting a specialization (Slayer, Duelist, Pyro…) now shows a one-line blurb explaining what that build path is about."] },
   { date: "2026-07-02", size: "small", v: "Livelier town background", by: "Claude", notes: ["The town menu's ambient scenes got a big upgrade — each now paints a tinted, breathing sky, a moon or low sun, a silhouetted rooftop skyline with windows that wake and dim, and brighter layered particles.", "Ten distinct vignettes (dusk rooftops, starry night with shooting stars, rainy town, snowfall by moonlight, aurora, lantern festival, blossoms and more) instead of one faint, near-invisible layer."] },
@@ -24694,21 +24695,19 @@ function log(msg, cls='') {
 // hundred ms (see the --log-col / --panel-col transition). The map canvas fills
 // whatever width the panels yield, so its backing buffer has to be re-fit every
 // frame for the length of the slide — otherwise the fixed-size buffer would stretch
-// (soft and blurry) until the animation settled, then snap crisp. draw() already
-// runs every frame in the game loop, so re-fitting the buffer each frame is enough
-// to keep the map sharp throughout the slide. Kept in sync with the CSS duration.
+// (soft and blurry) until the animation settled, then snap crisp.
+//
+// This just opens a time window; the single game-loop RAF does the actual per-frame
+// refit (see gameLoop, which re-fits then draws in the same frame). Driving it from
+// the one loop — rather than spawning a SECOND rAF that also redraws — is what keeps
+// the slide smooth: it's one canvas re-fit + one draw per frame instead of two full
+// map redraws fighting for the frame budget, and doing the re-fit immediately before
+// the draw guarantees the map never flashes a freshly-cleared buffer. Kept in sync
+// with the CSS transition duration.
 const PANEL_SLIDE_MS = 320;
-let _slideRefitUntil = 0, _slideRefitOn = false;
+let _slideRefitUntil = 0;
 function refitMapDuringSlide() {
   _slideRefitUntil = performance.now() + PANEL_SLIDE_MS + 60;   // a touch past the transition end
-  if (_slideRefitOn) return;                                    // already looping — just extend the window
-  _slideRefitOn = true;
-  (function step() {
-    if (typeof resizeCanvas === 'function') resizeCanvas();
-    if (typeof draw === 'function') { try { draw(); } catch (e) {} }
-    if (performance.now() < _slideRefitUntil) requestAnimationFrame(step);
-    else _slideRefitOn = false;
-  })();
 }
 
 // ── COLLAPSIBLE COMBAT LOG ──
@@ -27432,6 +27431,12 @@ function gameLoop(ts) {
   safeStep('stamina', () => renderStaminaBar());   // stamina drains/refills continuously — keep the END bar live
   safeStep('cdDials', () => updateCooldownDials()); // animate the skill/potion cooldown dials in real time
   safeStep('halo', () => updateHaloVignette());     // the danger halo is a DOM overlay — pulse it every frame
+  // While a side panel is sliding open/closed its column width animates, so the
+  // map's on-screen box changes every frame. Re-fit the backing buffer right
+  // before the draw (same frame → guaranteed order, no blank flash) so the map
+  // stays crisp through the slide instead of stretching. One re-fit + one draw
+  // per frame keeps the slide smooth (see refitMapDuringSlide).
+  if (performance.now() < _slideRefitUntil) safeStep('slideRefit', () => resizeCanvas());
   safeStep('draw', () => draw());
 }
 requestAnimationFrame(gameLoop);
