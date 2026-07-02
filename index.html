@@ -1439,6 +1439,14 @@
     cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .sk-pop .pop-auto:active { background: var(--blue-800); }
   .sk-pop .pop-auto.on { background: var(--blue-800); border-color: var(--blue-300); color: var(--blue-100); box-shadow: 0 0 6px color-mix(in srgb, var(--blue-300) 50%, transparent); }
+  /* Refund a rank of an owned skill for gold (returns 1 skill point). The Trainer's
+     full respec wipes everything at once; this is the surgical, per-skill version. */
+  .sk-pop .pop-refund { width: 100%; margin-top: 5px; padding: 5px; border: 1px solid var(--frame); border-radius: 5px;
+    background: var(--tint-black); color: var(--gold); font-family: inherit; font-size: 1.2rem; font-weight: bold;
+    cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .sk-pop .pop-refund:active { background: var(--orange-850); }
+  .sk-pop .pop-refund:disabled { background: var(--panel); color: var(--junk); border-color: var(--border); cursor: not-allowed; }
+  .sk-pop .pop-refund.short { color: var(--danger); border-color: var(--danger); }
   /* Bound-to-a-hotkey chip: a small badge on the top-left corner of a learned active,
      showing the key it's cast with (or ⟳ for the auto-cast slot). Purely a positive
      marker — unbound learned actives are left fully lit, never dimmed. */
@@ -2083,6 +2091,9 @@
   }
   /* Item power badge — a single gold number shown alongside an item's stats. */
   .item-power { color: var(--gold-350); font-weight: bold; opacity: 0.95; margin-left: 5px; white-space: nowrap; }
+  /* The ⚡ marker before a Power number, sized a touch smaller than the digits so it
+     reads as a glyph rather than a leading digit. Shared by every power badge. */
+  .pwr-g { font-size: 0.8em; }
   .item-diff { font-size: 1.2rem; margin-top: 1px; line-height: 1.3; }
 
   /* ── TOOLTIP ── */
@@ -2265,7 +2276,7 @@
     transform: translate(-50%, -50%);
     height: 95%; width: auto;
     z-index: 0; pointer-events: none;
-    opacity: 0.5;
+    opacity: 0.38;
     filter: drop-shadow(0 3px 8px rgba(0,0,0,0.4));
   }
   .pda-body img, .pda-body .dl-ic { display: block; height: 100%; width: auto; image-rendering: pixelated; }
@@ -2878,16 +2889,40 @@
      at the TOP of the menu, spans the full width, and glows so it's unmistakable. */
   .town-menu-btn.tm-gate {
     grid-column: 1 / -1;
+    position: relative;           /* anchors the two orbiting wisps */
+    justify-content: center;      /* centre the icon + label group */
+    text-align: center;
+    margin: 6px 0 14px;           /* breathing room so the CTA stands apart */
     border: 2px solid var(--gold-350);
     background: linear-gradient(180deg, var(--gold-850), var(--orange-850));
     color: var(--text);
-    padding: 14px 13px;
+    padding: 22px 16px;           /* taller than a normal service row */
     animation: gatePulse 1.6s ease-in-out infinite;
   }
   .town-menu-btn.tm-gate:active { background: var(--gold-850); }
+  .town-menu-btn.tm-gate .tm-text { align-items: center; }
   .town-menu-btn.tm-gate .tm-icon { font-size: 2.8rem; width: calc(36px * var(--ui-scale,1)); }
   .town-menu-btn.tm-gate .tm-name { font-size: 1.7rem; color: var(--xp); }
   .town-menu-btn.tm-gate .tm-desc { font-size: 1.2rem; color: var(--gold-200); }
+  /* Two motes of light that circle the gate's border, so the eye is pulled to
+     the one button that takes you back into the dungeon. They ride the corners
+     of the button rectangle, so the orbit adapts to whatever width it renders. */
+  .town-menu-btn.tm-gate .gate-wisp {
+    position: absolute; left: 0; top: 0; width: 8px; height: 8px; margin: -4px;
+    border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle, var(--xp) 0%, var(--gold-350) 45%, transparent 72%);
+    box-shadow: 0 0 6px 2px color-mix(in srgb, var(--gold-350) 90%, transparent),
+                0 0 13px 4px color-mix(in srgb, var(--gold) 55%, transparent);
+    animation: gateWispOrbit 3.6s linear infinite;
+  }
+  .town-menu-btn.tm-gate .gate-wisp-b { animation-delay: -1.8s; }  /* start on the opposite corner */
+  @keyframes gateWispOrbit {
+    0%   { left: 0%;   top: 0%; }
+    25%  { left: 100%; top: 0%; }
+    50%  { left: 100%; top: 100%; }
+    75%  { left: 0%;   top: 100%; }
+    100% { left: 0%;   top: 0%; }
+  }
   @keyframes gatePulse {
     0%,100% { box-shadow: 0 0 8px color-mix(in srgb, var(--gold-350) 40%, transparent);   border-color: var(--gold); }
     50%     { box-shadow: 0 0 22px color-mix(in srgb, var(--gold) 95%, transparent); border-color: var(--xp); }
@@ -3184,6 +3219,8 @@
   }
   @media (prefers-reduced-motion: reduce) {
     #title-play, #title-play::before { animation: none; }
+    .town-menu-btn.tm-gate { animation: none; }
+    .town-menu-btn.tm-gate .gate-wisp { display: none; }
   }
   .title-play.secondary {
     padding: 11px; font-size: 1.5rem; letter-spacing: 1px; border-width: 1px;
@@ -4327,15 +4364,15 @@
         <!-- Tab bar: each button swaps the visible pane below, so the menu is a
              few short lists instead of one long scroll. -->
         <div class="settings-tabs" role="tablist">
-          <button class="settings-tab-btn" data-tab="play" onclick="showSettingsTab('play')"><span class="stab-ic">🎮</span><span class="stab-lbl">Play</span></button>
+          <button class="settings-tab-btn active" data-tab="play" onclick="showSettingsTab('play')"><span class="stab-ic">🎮</span><span class="stab-lbl">Play</span></button>
           <button class="settings-tab-btn" data-tab="visuals" onclick="showSettingsTab('visuals')"><span class="stab-ic">🎨</span><span class="stab-lbl">Visuals</span></button>
-          <button class="settings-tab-btn active" data-tab="audio" onclick="showSettingsTab('audio')"><span class="stab-ic">🔊</span><span class="stab-lbl">Audio</span></button>
+          <button class="settings-tab-btn" data-tab="audio" onclick="showSettingsTab('audio')"><span class="stab-ic">🔊</span><span class="stab-lbl">Audio</span></button>
           <button class="settings-tab-btn" data-tab="progress" onclick="showSettingsTab('progress')"><span class="stab-ic">📊</span><span class="stab-lbl">Progress</span></button>
           <button class="settings-tab-btn" data-tab="about" onclick="showSettingsTab('about')"><span class="stab-ic">ℹ️</span><span class="stab-lbl">About</span></button>
         </div>
 
         <!-- ── AUDIO ── volume, vibe, and a skip-to-next-track control. -->
-        <div class="settings-pane active" data-pane="audio">
+        <div class="settings-pane" data-pane="audio">
         <button class="settings-item sound-action" id="music-action" onclick="cycleMusic()" data-tip="<div class='ht-name'>🎵 Music volume</div><div class='ht-line'>Tap to step the volume down a notch; wraps from off back to full.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon" id="music-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span><span class="action-label">MUSIC</span><span class="vol-meter" id="music-meter"></span>
         </button>
@@ -4363,7 +4400,7 @@
         </div>
 
         <!-- ── PLAY ── in-run toggles &amp; helpers. -->
-        <div class="settings-pane" data-pane="play">
+        <div class="settings-pane active" data-pane="play">
         <button class="settings-item" id="target-mode-action" onclick="cycleTargetMode()" data-tip="<div class='ht-name'>🎯 Auto-attack focus</div><div class='ht-line'>Choose which foe your auto-attack locks onto.</div><div class='ht-sub'>Click to cycle</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="1" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="1" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="23" y2="12"/></svg></span><span class="action-label" id="target-mode-label">TARGET</span>
         </button>
@@ -9025,6 +9062,58 @@ function buySkill(id) {
   updateBars(); renderPanel(); renderSkillBar(); saveGame();
 }
 
+// ── Refund (per-skill respec) ────────────────────────────────────────────────
+// Give one rank of a learned skill back for gold, returning 1 skill point to
+// re-spend. The town Trainer's respec wipes every skill at once; this is the
+// surgical version, right in the SKILLS-tab popover. It costs gold (scaling with
+// hero level) so it stays a deliberate choice, not a free fidget.
+function skillRefundCost() { return { gold: Math.round(40 + (player.level || 1) * 10) }; }
+// Which points-pool a node belongs to, for the "spend N in this tree" keystone gate.
+function skillTreeKindOf(node) { return node.asc ? 'path' : (node.type === 'active' ? 'active' : 'passive'); }
+// Refunding one rank of `node` — would it orphan a still-learned skill? Returns the
+// blocking skill's name (so the player knows what to refund first), or null if safe.
+// Prereqs only need rank >= 1, so a hard/OR prereq only breaks when the LAST rank
+// goes; a "points in tree" keystone gate can break on any rank.
+function refundBlockedBy(node) {
+  const cur = skillRank(node.id);
+  if (cur <= 0) return null;
+  const last = (cur - 1) === 0;
+  const kind = skillTreeKindOf(node);
+  for (const n of classSkillTree()) {
+    if (n.id === node.id || skillRank(n.id) < 1) continue;   // only learned dependents matter
+    if (last && n.req && n.req.includes(node.id)) return n.name;
+    if (last && n.reqAny && n.reqAny.includes(node.id) &&
+        !n.reqAny.some(rid => rid !== node.id && skillRank(rid) >= 1)) return n.name;
+    if (n.pts && n.pts.tree === kind && pointsInTree(kind) - 1 < n.pts.n) return n.name;
+  }
+  return null;
+}
+function canRefundSkill(node) {
+  return !!node && skillRank(node.id) > 0 && !refundBlockedBy(node) && canAfford(skillRefundCost());
+}
+function refundSkill(id) {
+  const node = skillNode(id);
+  if (!node) return;
+  const rank = skillRank(id);
+  if (rank <= 0) { log('Nothing to refund there.'); sfx('denied'); return; }
+  const blocker = refundBlockedBy(node);
+  if (blocker) { log(`Can't refund ${node.name} — ${blocker} still relies on it. Refund that first.`); sfx('denied'); return; }
+  const cost = skillRefundCost();
+  if (!canAfford(cost)) { log(`💰 Not enough gold to refund — need ${cost.gold}g.`); sfx('denied'); return; }
+  spendCost(cost);
+  if (rank - 1 <= 0) delete player.skills[id]; else player.skills[id] = rank - 1;
+  player.skillPoints = (player.skillPoints || 0) + 1;
+  // A now-unlearned active must drop off the hotkey / auto-cast slots.
+  normSkillSlots(); normAutoSkill();
+  recomputeMaxStats();
+  if (player.hp > player.maxHp) player.hp = player.maxHp;
+  if (player.mp > player.maxMp) player.mp = player.maxMp;
+  sfx('shrine');
+  const newRank = skillRank(id);
+  log(`↩️ Refunded ${node.name}${(node.max || 1) > 1 ? ` (now rank ${newRank}/${node.max})` : ''} — 1 skill point returned for ${cost.gold}g.`, 'important');
+  updateBars(); renderPanel(); renderSkillBar(); saveGame();
+}
+
 // Names rolled for elite (named) enemies and mimics, so a glowing foe feels
 // like a personality rather than just a tougher sprite.
 const ELITE_NAMES = ['Grok the Render','Vossk Bonechewer','Mauler','The Gloomfang','Ssarith','Korrath','Bilewretch','Ironjaw','Nightcrawler','The Hollow King'];
@@ -9892,6 +9981,7 @@ window.gameGuide = function gameGuide(topic) {
       `Cooldowns are real seconds (spam-floored at 0.5s). Recharge is MULTIPLICATIVE haste, like attack speed: cd = base / (1 + CDR/100), and for SPELL actives times a further (1 + CastSpeed/100). There is NO cap — 60% CDR + 35% Cast Speed divides a spell's cooldown by 1.6×1.35 ≈ 2.16, and stacking more only ever approaches (never reaches) instant. +MCR likewise divides MP cost (base / (1 + MCR/100)); +Attack Speed quickens auto-attacks the same way. +CDR speeds every active, +Cast Speed spells only, and a rank-7 skill gets an extra ×1.2.`,
       `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — a big power surge, then a shorter cooldown, then wider reach — so deepening a key skill outpaces its rising mana cost.`,
       `Learn and rank skills on the SKILLS tab (spend skill points). Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
+      `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns 1 skill point for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl).`,
     ],
     damage: [
@@ -11082,7 +11172,7 @@ function centerSettingsCard() {
 }
 // Which settings tab is showing. Persists across opens so reopening lands where
 // you left off; keybindsBack() reopens straight onto the Play tab (where KEYS lives).
-let settingsTab = 'audio';
+let settingsTab = 'play';
 function showSettingsTab(name) {
   settingsTab = name;
   document.querySelectorAll('#settings-card .settings-tab-btn').forEach(b =>
@@ -11097,6 +11187,9 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Hardcore earns all 100 feats, two tabs", by: "Claude", notes: ["Hardcore now earns the same full set of achievements as normal play, not a short curated list.", "Achievements popup splits into two tabs — Kitten Mode and Hardcore — so each mode's feats have their own grid.", "Hardcore feats still persist through death and stay earned account-wide."] },
+  { date: "2026-07-02", size: "small", v: "Return to Dungeon stands out", by: "Claude", notes: ["Taller Return to Dungeon button with centered text and margins above and below.", "Two glowing wisps now circle its border so the main way back to the action is unmistakable."] },
+  { date: "2026-07-02", size: "small", v: "Gear-doll polish", by: "Claude", notes: ["Faded the hero body behind the GEAR paper-doll a little more so worn slots read clearer.", "Shrank the ⚡ marker beside every Power number so the digits stand out."] },
+  { date: "2026-07-02", size: "small", v: "Settings opens on Play", by: "Claude", notes: ["Settings now opens on the Play tab by default instead of Audio."] },
   { date: "2026-07-02", size: "small", v: "Break out of a full surround", by: "Claude", notes: ["Foes boxing you in on every side no longer pin you in place — keep pushing and the hero shoves between them toward open ground.", "A single foe still hard-blocks you; slide along it to get around."] },
   { date: "2026-07-02", size: "small", v: "Skill panel polish", by: "Claude", notes: ["Skill-slots header, hint and slot boxes are now centered.", "Skill names sit below each tile instead of overlapping the icon.", "Bigger skill-tree icons.", "Dropped the redundant lock badge — greyed-out tiles already read as locked.", "Clicking a tile now hides the hover tooltip, so it stops blocking the detail popup."] },
   { date: "2026-07-02", size: "small", v: "Settings gains a Visuals tab", by: "Claude", notes: ["UI SIZE, UI FONT and CURSOR moved out of Play into a new Visuals tab. Tab order is now Play, Visuals, Audio, Progress, About.", "UI FONT is now a collapsing dropdown showing your current face; open it for a two-column grid of options instead of one tall column."] },
@@ -13362,6 +13455,10 @@ function stockPrice(s) {
 }
 
 // Compact one-line summary of an item's stats & attributes, e.g.
+// The ⚡ marker that leads a Power value. Wrapped so it renders a touch smaller than
+// the number beside it (see .pwr-g). Reused by every power badge for one consistent look.
+const PWR_GLYPH = '<span class="pwr-g">⚡</span>';
+
 // "⚡14 · 8-12 DMG · +3 ATK · +5 MIG".
 function itemStatLine(item) {
   // Each stat code is a hoverable chip — pointing at it reveals the full name.
@@ -13379,7 +13476,7 @@ function itemStatLine(item) {
   const body = parts.join(' · ');
   const powHtml = itemPowerFront(item);   // glowing special power — leads the line
   const setTag = itemSetTag(item);        // set membership — trails the line
-  const lead = item.slot ? `⚡${itemPower(item)}` : '';
+  const lead = item.slot ? `${PWR_GLYPH}${itemPower(item)}` : '';
   return [lead, powHtml, body].filter(Boolean).join(' · ') + setTag;
 }
 
@@ -13481,7 +13578,7 @@ function renderShop() {
       const equippedHere = equipped[s.item.slot];
       const delta = equipUpgradeDelta(s.item);
       isUpgrade = delta > 0;
-      sub += ` <span class="item-power">⚡${ip}</span>`;
+      sub += ` <span class="item-power">${PWR_GLYPH}${ip}</span>`;
       if (equippedHere) sub += `  ${statDiffLine(s.item)}`;
     }
     const sicon = itemIcon(s.item);
@@ -14279,6 +14376,8 @@ function openTownHub() {
     `<button class="town-menu-btn tm-gate${revivedInTown ? ' tm-gate-urgent' : ''}" onclick="openTownService('gate')">
        <span class="tm-icon">${dlIcon('ui_gate') || '🗺'}</span>
        <span class="tm-text"><span class="tm-name">Return to Dungeon</span><span class="tm-desc">${revivedInTown ? 'Head back down to keep questing' : `Back to ${floorLabel(returnFloor)}, or pick a difficulty`}</span></span>
+       <span class="gate-wisp gate-wisp-a" aria-hidden="true"></span>
+       <span class="gate-wisp gate-wisp-b" aria-hidden="true"></span>
      </button>`;
   const blurb = revivedInTown
     ? `<div class="town-blurb town-blurb-revived">💀 You were slain and revived here in <b>Town</b>. Stock up if you like — then take <b>🌀 Return to Dungeon</b> at the top to head back down and keep questing.</div>`
@@ -15415,7 +15514,7 @@ function renderEnchanter() {
       <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
       <div class="shop-row-info ${rarityClass(it)}">
         <div class="shop-row-name">${it.name}${craftedMark(it)}</div>
-        <div class="shop-row-sub">${slotLabel}<span class="item-power">⚡${itemPower(it)}</span></div>
+        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${itemPower(it)}</span></div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
       </div>
       <button class="act-btn" onclick="enchantPick(${g.item.id})">WORK</button>
@@ -23174,7 +23273,7 @@ function renderPanel() {
       const equippedHere = equipable ? equipped[item.slot] : null;
       const delta = equipable ? equipUpgradeDelta(item) : 0;
       const isUpgrade = equipable && delta > 0;
-      const pwr = equipable ? `<span class="item-power">⚡${ip}</span>` : '';
+      const pwr = equipable ? `<span class="item-power">${PWR_GLYPH}${ip}</span>` : '';
       const diff = equipable ? `<div class="item-diff">${statDiffLine(item)}</div>` : '';
       const lockBtn = `<button class="row-btn lock-toggle-btn ${item.locked?'on':''}" onclick="toggleLock(${i})" ${hoverTip(item.locked
         ? `<div class='ht-name'>🔒 Locked</div><div class='ht-line'>Safe from selling, scrapping &amp; auto-loot. Tap to unlock.</div>`
@@ -23557,6 +23656,14 @@ function renderSkills(el) {
     const buyBtn = skillMaxed(sn)
       ? `<button class="pop-buy maxed" disabled>✓ Maxed (10/10)</button>`
       : `<button class="pop-buy" ${canBuySkill(sn) ? '' : 'disabled'} onclick="buySkill('${sn.id}')">Learn (rank ${rank + 1}/${sn.max})</button>`;
+    // Refund a rank for gold — the surgical alternative to the Trainer's full respec.
+    let refundBtn = '';
+    if (rank > 0) {
+      const rBlock = refundBlockedBy(sn);
+      const rCost = skillRefundCost();
+      if (rBlock) refundBtn = `<button class="pop-refund" disabled>↩️ Refund locked — ${rBlock} needs it</button>`;
+      else { const aff = canAfford(rCost); refundBtn = `<button class="pop-refund${aff ? '' : ' short'}" ${aff ? '' : 'disabled'} onclick="refundSkill('${sn.id}')">↩️ Refund 1 pt — ${rCost.gold}g</button>`; }
+    }
     // Owned actives can be slotted onto / pulled off the hotkey bar straight from
     // the popover (the quick path alongside dragging the node onto a tray slot).
     const slotAt = (sn.type === 'active' && rank > 0) ? skillSlotIndexOf(sn.id) : -1;
@@ -23578,6 +23685,7 @@ function renderSkills(el) {
       ${ruHtml}
       ${reqHtml}
       ${buyBtn}
+      ${refundBtn}
       ${hideBtn}
       ${autoBtn}
     </div>`;
@@ -24229,7 +24337,7 @@ function renderDollSlot(slot, mode) {
   const pwrBadge = !item ? ''
     : inactive
       ? `<span class="item-power pd-pwr" style="background:var(--magenta-800);color:var(--red-350)">⚠</span>`
-      : `<span class="item-power pd-pwr">⚡${itemPower(item)}</span>`;
+      : `<span class="item-power pd-pwr">${PWR_GLYPH}${itemPower(item)}</span>`;
   const capHTML = !item
     ? `<div class="pd-cap">${cap}</div>`
     : inactive
@@ -24298,7 +24406,7 @@ function gearSetBarHTML() {
   return `<div class="gearset-bar">${[0, 1].map(i => {
     const set = gearSets[i];
     const n = gearSetCount(set);
-    const meta = n ? `${n} worn · ⚡${gearSetPower(set)}` : 'empty';
+    const meta = n ? `${n} worn · ${PWR_GLYPH}${gearSetPower(set)}` : 'empty';
     return `<button class="gearset-btn${i === activeGearSet ? ' active' : ''}" onclick="toggleGearSet(${i})">
       <span class="gs-name">Set ${i + 1}</span><span class="gs-meta">${meta}</span>
     </button>`;
@@ -25920,7 +26028,7 @@ const LB_SORTS = {
   floor: { col: 'max_floor', fmt: lbFloorLabel },
   level: { col: 'level',     fmt: v => 'Lv ' + v },
   gold:  { col: 'gold',      fmt: v => v + 'g' },
-  power: { col: 'power',     fmt: v => '⚡' + v },
+  power: { col: 'power',     fmt: v => PWR_GLYPH + v },
 };
 let lbTab = 'floor';
 let lbMode = 'std';       // which ladder is shown: 'std' (non-hardcore) or 'hc' (hardcore only)
