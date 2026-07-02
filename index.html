@@ -3431,6 +3431,7 @@
      Craftsman's slot/base/rarity pickers. */
   .mat-strip {
     display: flex; flex-wrap: wrap; gap: 6px 10px; padding: 6px 8px; margin-bottom: 6px;
+    width: fit-content; max-width: 100%;
     background: var(--orange-850); border: 1px solid var(--border); border-radius: 6px;
     font-size: 1.4rem; line-height: 1.2;
   }
@@ -4205,14 +4206,15 @@
   .cook-active-name { color: var(--orange-250); font-weight: bold; font-size: 1.5rem; }
   .cook-active-fx { color: var(--text); font-size: 1.2rem; margin-top: 1px; }
   .cook-active-floors { color: var(--orange-400); font-size: 1.2rem; margin-top: 1px; }
-  .ing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-  .ing-chip { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; cursor: pointer; text-align: left; position: relative; color: var(--text); }
+  .ing-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  .ing-chip { display: flex; flex-direction: row; align-items: center; gap: 10px; flex: 0 0 240px; max-width: 100%; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 32px 8px 10px; cursor: pointer; text-align: left; position: relative; color: var(--text); }
   .ing-chip:active { background: var(--panel-raised); }
   .ing-chip:disabled { opacity: 0.4; cursor: default; }
-  .ing-emoji { font-size: 2rem; }
-  .ing-name { font-size: 1.2rem; color: var(--text); font-weight: bold; }
+  .ing-emoji { font-size: 2.6rem; flex: 0 0 auto; line-height: 1; display: flex; align-items: center; }
+  .ing-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .ing-name { font-size: 1.3rem; color: var(--text); font-weight: bold; }
   .ing-fx { font-size: 1.2rem; color: var(--green-350); }
-  .ing-have { position: absolute; top: 5px; right: 7px; font-size: 1.2rem; color: var(--gold); }
+  .ing-have { position: absolute; top: 6px; right: 9px; font-size: 1.3rem; color: var(--gold); font-weight: bold; }
   .pot-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px; }
   .pot-chip { background: var(--panel); border: 1px solid var(--purple-500); border-radius: 12px; color: var(--purple-50); font-size: 1.2rem; padding: 3px 8px; cursor: pointer; }
   .pot-chip .pot-x { color: var(--red-200); margin-left: 2px; }
@@ -11254,6 +11256,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Tidier Ramen toppings + wallet", by: "Claude", notes: ["Ramen topping tiles are compact cards with a much bigger topping icon, no longer stretched across the whole row.", "Crafting-materials wallet strip hugs its contents instead of spanning the full panel width."] },
   { date: "2026-07-02", size: "small", v: "Tidier foe inspect card", by: "Claude", notes: ["The tap-to-inspect creature card is more compact — smaller box and text.", "Pressing anywhere else on the map now closes it, including click-and-hold to move."] },
   { date: "2026-07-02", size: "small", v: "Consistent Power icon", by: "Claude", notes: ["Every Power number — item badges, the character panel, item tooltips, the work list — now uses the same icon as the bottom HUD, instead of a lightning glyph that was rendering as the stun icon.", "Fixed the work list showing an item's Power twice."] },
   { date: "2026-07-02", size: "small", v: "Break out when mobbed, not just fully ringed", by: "Claude", notes: ["Getting swarmed no longer freezes you: when foes plug the way you're heading and the lanes you'd slide around them, keep pushing and the hero shoves between the bodies toward open ground.", "A lone foe with any real gap beside it still hard-blocks you, and corridors stay choke points."] },
@@ -14604,9 +14607,11 @@ function renderCookingHTML() {
       if (!ingCount(k)) return '';
       const avail = ingCount(k) - (cookPot[k] || 0);
       return `<button class="ing-chip" ${avail <= 0 ? 'disabled' : ''} onclick="potAdd('${k}')">
-        <span class="ing-emoji">${ingIcon(k, 22)}</span>
-        <span class="ing-name">${INGREDIENTS[k].name}</span>
-        <span class="ing-fx">${fxDesc(INGREDIENTS[k].fx)}</span>
+        <span class="ing-emoji">${ingIcon(k, 48)}</span>
+        <span class="ing-info">
+          <span class="ing-name">${INGREDIENTS[k].name}</span>
+          <span class="ing-fx">${fxDesc(INGREDIENTS[k].fx)}</span>
+        </span>
         <span class="ing-have">×${avail}</span>
       </button>`;
     }).join('') + `</div>`;
