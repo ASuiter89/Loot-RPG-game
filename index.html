@@ -10002,7 +10002,7 @@ window.gameGuide = function gameGuide(topic) {
       `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec). The Might attribute deepens the pool and speeds its recharge. Check player.dashReady before dashing.`,
       `Terrain underfoot matters: mud ("," tile) cuts speed ~45%; ice ("_" tile) makes you accelerate sluggishly and keep gliding — both are in the map glyphs now. Don't try to fight or dodge precisely while standing on them.`,
       `Being Slowed (a debuff) halves speed; being Stunned roots you entirely (see gameState().effects).`,
-      `Foes are solid, so a single one body-blocks you — slide along it and step around. But a TOTAL surround can't pin you forever: while foes box you in on every side, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall).`,
+      `Foes are solid, so a single one body-blocks you — slide along it and step around. But a MOB can't pin you forever: when bodies plug your heading AND the lanes you'd slide into to go around them, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall, and a lone foe with any real gap beside it stays solid).`,
     ],
     combat: [
       `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight).`,
@@ -10048,7 +10048,7 @@ window.gameGuide = function gameGuide(topic) {
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too.`,
       `From the LOOT tab, tap an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
-      `The LOOT tab has a Sort button (rarity / power / slot / value / name) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
+      `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. Off-class weapons can be carried and sold but not equipped.`,
       `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them.`,
     ],
@@ -11242,6 +11242,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Break out when mobbed, not just fully ringed", by: "Claude", notes: ["Getting swarmed no longer freezes you: when foes plug the way you're heading and the lanes you'd slide around them, keep pushing and the hero shoves between the bodies toward open ground.", "A lone foe with any real gap beside it still hard-blocks you, and corridors stay choke points."] },
   { date: "2026-07-02", size: "small", v: "Chunkier floor buttons", by: "Claude", notes: ["Dungeon Gate floor buttons are now larger, taller and squarer with bigger numerals — easier to read and click."] },
   { date: "2026-07-02", size: "small", v: "Smart click-to-move pathing", by: "Claude", notes: ["Click a spot behind a wall and the hero now routes around it instead of grinding into the corner — faint gold breadcrumbs sketch the planned path.", "Prefers safe ground, steering around lava and spikes when there's a way past.", "Works while holding the button too: drag past a wall and the route re-plans to keep chasing the cursor."] },
   { date: "2026-07-02", size: "small", v: "Line of sight required to hit at range", by: "Claude", notes: ["Ranged skills and spells (bolt, blast, beam, nova, chain) now need a clear line to a foe — no firing through walls, deep water or sealed doors.", "Ranged summoned minions close in until they can see their target instead of shooting through walls.", "More boss tricks (firewall, firestorm, shockwave, frost nova, quake, vortex) now need line of sight, so ducking behind cover breaks them."] },
@@ -11266,6 +11267,7 @@ const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Livelier town background", by: "Claude", notes: ["The town menu's ambient scenes got a big upgrade — each now paints a tinted, breathing sky, a moon or low sun, a silhouetted rooftop skyline with windows that wake and dim, and brighter layered particles.", "Ten distinct vignettes (dusk rooftops, starry night with shooting stars, rainy town, snowfall by moonlight, aurora, lantern festival, blossoms and more) instead of one faint, near-invisible layer."] },
   { date: "2026-07-02", size: "small", v: "Auto-Loot set-piece rule", by: "Claude", notes: ["♻ Auto-Loot picker gains a teal \"set\" row above unique — set pieces now answer to their own Keep/Scrap/Sell rule instead of inheriting the unique one, so you can keep chase sets while auto-selling plain uniques.", "Defaults to Keep; existing saves seed the new rule to Keep."] },
   { date: "2026-07-02", size: "small", v: "Twin wisps on the ENTER button", by: "Claude", notes: ["Two glints of light now circle the main button's border on opposite sides instead of one."] },
+  { date: "2026-07-02", size: "small", v: "Tidier loot sort menu", by: "Claude", notes: ["Dropped the Name sort — order the bag by rarity, power, slot or value.", "Sort menu now stays open when you pick an option, so you can flip between orders."] },
   { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Claude", notes: ["Title hero card now left-aligns its text and stands a big animated hero walking in place on the right."] },
   { date: "2026-07-01", size: "small", v: "Cleaner stat-abbreviation key", by: "Claude", notes: ["Loot stat-abbreviation key now groups item stats by theme (Offense, Defense, Sustain, Caster, Utility/Find), alphabetical within each group.", "Flows into two columns on desktop for easier scanning."] },
   { date: "2026-07-01", size: "medium", v: "Completed sets grant a signature power + golden aura", by: "Jeff Louie", notes: ["Completing a set (all 4 pieces) now unlocks a unique SIGNATURE POWER, not just more stats: Warden's Aegis Wall (block + damage reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), Arcanist's Arcane Overflow (cooldown reduction + mana leech).", "A completed set wraps the hero in a faint golden aura, and its \"… set\" tag turns gold with a ✦.", "Set tooltip now shows the power, a Worn n/4 count and a completion banner."] },
@@ -18529,7 +18531,9 @@ function spawnParticles(x, y, color, n, speed) {
     particles.push({ x: x + 0.5, y: y + 0.5, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 0.02,
       born: now, life: 280 + Math.random() * 220, color });
   }
-  draw();
+  // No draw() here: the rAF game loop already redraws every frame, so forcing a
+  // full extra redraw on every particle burst (several per frame in a big fight)
+  // was pure duplicated work. The sparks still appear on the very next frame.
 }
 // Current camera-shake offset in pixels (decays to 0), used by draw().
 function shakeOffset() {
@@ -19915,12 +19919,13 @@ function playerBoxedIn() {
          playerSolidCell(cx, cy + 1) && playerSolidCell(cx, cy - 1);
 }
 
-// A total surround is the one time the hero may push THROUGH a foe: while pinned
-// on every side and still trying to move, it shoves toward its heading, slipping
-// between the pinning foes toward open ground at a crawl (~45% speed). The terrain
-// test still blocks walls/water/furniture, so this only ever frees a mobbed hero —
-// it can't be abused to walk through a lone body-blocking foe (playerBoxedIn is
-// false the instant any one side is open). _squeezeT keeps unstickPlayer from
+// A mob pin (see mobPinned) is the one time the hero may push THROUGH a foe: while
+// bodies plug its heading and its slide lanes and it's still trying to move, it
+// shoves toward its heading, slipping between the pinning foes toward open ground at
+// a crawl (~45% speed). The terrain test still blocks walls/water/furniture, so this
+// only ever frees a mobbed hero — it can't be abused to walk through a lone
+// body-blocking foe (mobPinned needs the slide lanes blocked by bodies too, so any
+// real "go around him" gap keeps the foe solid). _squeezeT keeps unstickPlayer from
 // yanking the hero back into the pile mid-slip.
 function squeezeThroughMob(ix, iy, dt) {
   const preX = player.x, preY = player.y;
@@ -23337,9 +23342,8 @@ const LOOT_SORTS = [
   { key: 'power',  label: 'Power'  },
   { key: 'slot',   label: 'Slot'   },
   { key: 'value',  label: 'Value'  },
-  { key: 'name',   label: 'Name'   },
 ];
-function setLootSort(k) { lootSort = k; lootSortOpen = false; renderPanel(); }
+function setLootSort(k) { lootSort = k; renderPanel(); }
 function toggleLootSortMenu() { lootSortOpen = !lootSortOpen; if (lootSortOpen) lootFilterOpen = false; renderPanel(); }
 function toggleLootFilterMenu() { lootFilterOpen = !lootFilterOpen; if (lootFilterOpen) lootSortOpen = false; renderPanel(); }
 // Toggle one stat/attribute in the LOOT stat filter (keeps the panel open so you
@@ -23481,7 +23485,7 @@ function renderPanel() {
     // options panel below the row (so nothing floats over the list on mobile).
     const sortLabel = (LOOT_SORTS.find(s => s.key === lootSort) || LOOT_SORTS[0]).label;
     const controls = `<div class="loot-controls">
-      <button class="loot-ctrl-btn ${lootSortOpen ? 'open' : ''}" onclick="toggleLootSortMenu()" ${hoverTip(`<div class='ht-name'>⇅ Sort</div><div class='ht-line'>Order the bag by rarity, power, slot, value or name.</div>`)}>⇅ Sort <span class="lc-val">${sortLabel}</span><span class="lc-caret">${lootSortOpen ? '▾' : '▸'}</span></button>
+      <button class="loot-ctrl-btn ${lootSortOpen ? 'open' : ''}" onclick="toggleLootSortMenu()" ${hoverTip(`<div class='ht-name'>⇅ Sort</div><div class='ht-line'>Order the bag by rarity, power, slot or value.</div>`)}>⇅ Sort <span class="lc-val">${sortLabel}</span><span class="lc-caret">${lootSortOpen ? '▾' : '▸'}</span></button>
       <button class="loot-ctrl-btn ${lootFilterOpen ? 'open' : ''} ${lootStatFilter.length ? 'on' : ''}" onclick="toggleLootFilterMenu()" ${hoverTip(`<div class='ht-name'>⚑ Filter</div><div class='ht-line'>Show only gear that carries the stats you pick.</div>`)}>⚑ Filter${lootStatFilter.length ? ` <span class="lc-val">${lootStatFilter.length}</span>` : ''}<span class="lc-caret">${lootFilterOpen ? '▾' : '▸'}</span></button>
     </div>`;
     const sortPop = lootSortOpen ? '<div class="loot-ctrl-pop">' + LOOT_SORTS.map(s =>
@@ -23521,8 +23525,6 @@ function renderPanel() {
           return slotOf(ia) - slotOf(ib) || tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia);
         case 'value':
           return (ib.value || 0) - (ia.value || 0) || tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia);
-        case 'name':
-          return String(ia.name).localeCompare(String(ib.name)) || tierRank(ib) - tierRank(ia);
         case 'rarity':
         default:
           // Highest rarity first (unique → junk); Power breaks ties, then slot.
