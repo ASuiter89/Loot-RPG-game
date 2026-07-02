@@ -1439,6 +1439,14 @@
     cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .sk-pop .pop-auto:active { background: var(--blue-800); }
   .sk-pop .pop-auto.on { background: var(--blue-800); border-color: var(--blue-300); color: var(--blue-100); box-shadow: 0 0 6px color-mix(in srgb, var(--blue-300) 50%, transparent); }
+  /* Refund a rank of an owned skill for gold (returns 1 skill point). The Trainer's
+     full respec wipes everything at once; this is the surgical, per-skill version. */
+  .sk-pop .pop-refund { width: 100%; margin-top: 5px; padding: 5px; border: 1px solid var(--frame); border-radius: 5px;
+    background: var(--tint-black); color: var(--gold); font-family: inherit; font-size: 1.2rem; font-weight: bold;
+    cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .sk-pop .pop-refund:active { background: var(--orange-850); }
+  .sk-pop .pop-refund:disabled { background: var(--panel); color: var(--junk); border-color: var(--border); cursor: not-allowed; }
+  .sk-pop .pop-refund.short { color: var(--danger); border-color: var(--danger); }
   /* Bound-to-a-hotkey chip: a small badge on the top-left corner of a learned active,
      showing the key it's cast with (or ⟳ for the auto-cast slot). Purely a positive
      marker — unbound learned actives are left fully lit, never dimmed. */
@@ -2881,16 +2889,40 @@
      at the TOP of the menu, spans the full width, and glows so it's unmistakable. */
   .town-menu-btn.tm-gate {
     grid-column: 1 / -1;
+    position: relative;           /* anchors the two orbiting wisps */
+    justify-content: center;      /* centre the icon + label group */
+    text-align: center;
+    margin: 6px 0 14px;           /* breathing room so the CTA stands apart */
     border: 2px solid var(--gold-350);
     background: linear-gradient(180deg, var(--gold-850), var(--orange-850));
     color: var(--text);
-    padding: 14px 13px;
+    padding: 22px 16px;           /* taller than a normal service row */
     animation: gatePulse 1.6s ease-in-out infinite;
   }
   .town-menu-btn.tm-gate:active { background: var(--gold-850); }
+  .town-menu-btn.tm-gate .tm-text { align-items: center; }
   .town-menu-btn.tm-gate .tm-icon { font-size: 2.8rem; width: calc(36px * var(--ui-scale,1)); }
   .town-menu-btn.tm-gate .tm-name { font-size: 1.7rem; color: var(--xp); }
   .town-menu-btn.tm-gate .tm-desc { font-size: 1.2rem; color: var(--gold-200); }
+  /* Two motes of light that circle the gate's border, so the eye is pulled to
+     the one button that takes you back into the dungeon. They ride the corners
+     of the button rectangle, so the orbit adapts to whatever width it renders. */
+  .town-menu-btn.tm-gate .gate-wisp {
+    position: absolute; left: 0; top: 0; width: 8px; height: 8px; margin: -4px;
+    border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle, var(--xp) 0%, var(--gold-350) 45%, transparent 72%);
+    box-shadow: 0 0 6px 2px color-mix(in srgb, var(--gold-350) 90%, transparent),
+                0 0 13px 4px color-mix(in srgb, var(--gold) 55%, transparent);
+    animation: gateWispOrbit 3.6s linear infinite;
+  }
+  .town-menu-btn.tm-gate .gate-wisp-b { animation-delay: -1.8s; }  /* start on the opposite corner */
+  @keyframes gateWispOrbit {
+    0%   { left: 0%;   top: 0%; }
+    25%  { left: 100%; top: 0%; }
+    50%  { left: 100%; top: 100%; }
+    75%  { left: 0%;   top: 100%; }
+    100% { left: 0%;   top: 0%; }
+  }
   @keyframes gatePulse {
     0%,100% { box-shadow: 0 0 8px color-mix(in srgb, var(--gold-350) 40%, transparent);   border-color: var(--gold); }
     50%     { box-shadow: 0 0 22px color-mix(in srgb, var(--gold) 95%, transparent); border-color: var(--xp); }
@@ -3187,6 +3219,8 @@
   }
   @media (prefers-reduced-motion: reduce) {
     #title-play, #title-play::before { animation: none; }
+    .town-menu-btn.tm-gate { animation: none; }
+    .town-menu-btn.tm-gate .gate-wisp { display: none; }
   }
   .title-play.secondary {
     padding: 11px; font-size: 1.5rem; letter-spacing: 1px; border-width: 1px;
@@ -9010,6 +9044,58 @@ function buySkill(id) {
   updateBars(); renderPanel(); renderSkillBar(); saveGame();
 }
 
+// ── Refund (per-skill respec) ────────────────────────────────────────────────
+// Give one rank of a learned skill back for gold, returning 1 skill point to
+// re-spend. The town Trainer's respec wipes every skill at once; this is the
+// surgical version, right in the SKILLS-tab popover. It costs gold (scaling with
+// hero level) so it stays a deliberate choice, not a free fidget.
+function skillRefundCost() { return { gold: Math.round(40 + (player.level || 1) * 10) }; }
+// Which points-pool a node belongs to, for the "spend N in this tree" keystone gate.
+function skillTreeKindOf(node) { return node.asc ? 'path' : (node.type === 'active' ? 'active' : 'passive'); }
+// Refunding one rank of `node` — would it orphan a still-learned skill? Returns the
+// blocking skill's name (so the player knows what to refund first), or null if safe.
+// Prereqs only need rank >= 1, so a hard/OR prereq only breaks when the LAST rank
+// goes; a "points in tree" keystone gate can break on any rank.
+function refundBlockedBy(node) {
+  const cur = skillRank(node.id);
+  if (cur <= 0) return null;
+  const last = (cur - 1) === 0;
+  const kind = skillTreeKindOf(node);
+  for (const n of classSkillTree()) {
+    if (n.id === node.id || skillRank(n.id) < 1) continue;   // only learned dependents matter
+    if (last && n.req && n.req.includes(node.id)) return n.name;
+    if (last && n.reqAny && n.reqAny.includes(node.id) &&
+        !n.reqAny.some(rid => rid !== node.id && skillRank(rid) >= 1)) return n.name;
+    if (n.pts && n.pts.tree === kind && pointsInTree(kind) - 1 < n.pts.n) return n.name;
+  }
+  return null;
+}
+function canRefundSkill(node) {
+  return !!node && skillRank(node.id) > 0 && !refundBlockedBy(node) && canAfford(skillRefundCost());
+}
+function refundSkill(id) {
+  const node = skillNode(id);
+  if (!node) return;
+  const rank = skillRank(id);
+  if (rank <= 0) { log('Nothing to refund there.'); sfx('denied'); return; }
+  const blocker = refundBlockedBy(node);
+  if (blocker) { log(`Can't refund ${node.name} — ${blocker} still relies on it. Refund that first.`); sfx('denied'); return; }
+  const cost = skillRefundCost();
+  if (!canAfford(cost)) { log(`💰 Not enough gold to refund — need ${cost.gold}g.`); sfx('denied'); return; }
+  spendCost(cost);
+  if (rank - 1 <= 0) delete player.skills[id]; else player.skills[id] = rank - 1;
+  player.skillPoints = (player.skillPoints || 0) + 1;
+  // A now-unlearned active must drop off the hotkey / auto-cast slots.
+  normSkillSlots(); normAutoSkill();
+  recomputeMaxStats();
+  if (player.hp > player.maxHp) player.hp = player.maxHp;
+  if (player.mp > player.maxMp) player.mp = player.maxMp;
+  sfx('shrine');
+  const newRank = skillRank(id);
+  log(`↩️ Refunded ${node.name}${(node.max || 1) > 1 ? ` (now rank ${newRank}/${node.max})` : ''} — 1 skill point returned for ${cost.gold}g.`, 'important');
+  updateBars(); renderPanel(); renderSkillBar(); saveGame();
+}
+
 // Names rolled for elite (named) enemies and mimics, so a glowing foe feels
 // like a personality rather than just a tougher sprite.
 const ELITE_NAMES = ['Grok the Render','Vossk Bonechewer','Mauler','The Gloomfang','Ssarith','Korrath','Bilewretch','Ironjaw','Nightcrawler','The Hollow King'];
@@ -9877,6 +9963,7 @@ window.gameGuide = function gameGuide(topic) {
       `Cooldowns are real seconds (spam-floored at 0.5s). Recharge is MULTIPLICATIVE haste, like attack speed: cd = base / (1 + CDR/100), and for SPELL actives times a further (1 + CastSpeed/100). There is NO cap — 60% CDR + 35% Cast Speed divides a spell's cooldown by 1.6×1.35 ≈ 2.16, and stacking more only ever approaches (never reaches) instant. +MCR likewise divides MP cost (base / (1 + MCR/100)); +Attack Speed quickens auto-attacks the same way. +CDR speeds every active, +Cast Speed spells only, and a rank-7 skill gets an extra ×1.2.`,
       `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — a big power surge, then a shorter cooldown, then wider reach — so deepening a key skill outpaces its rising mana cost.`,
       `Learn and rank skills on the SKILLS tab (spend skill points). Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
+      `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns 1 skill point for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl).`,
     ],
     damage: [
@@ -11081,6 +11168,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-02", size: "small", v: "Return to Dungeon stands out", by: "Claude", notes: ["Taller Return to Dungeon button with centered text and margins above and below.", "Two glowing wisps now circle its border so the main way back to the action is unmistakable."] },
   { date: "2026-07-02", size: "small", v: "Gear-doll polish", by: "Claude", notes: ["Faded the hero body behind the GEAR paper-doll a little more so worn slots read clearer.", "Shrank the ⚡ marker beside every Power number so the digits stand out."] },
   { date: "2026-07-02", size: "small", v: "Settings opens on Play", by: "Claude", notes: ["Settings now opens on the Play tab by default instead of Audio."] },
   { date: "2026-07-02", size: "small", v: "Break out of a full surround", by: "Claude", notes: ["Foes boxing you in on every side no longer pin you in place — keep pushing and the hero shoves between them toward open ground.", "A single foe still hard-blocks you; slide along it to get around."] },
@@ -14269,6 +14357,8 @@ function openTownHub() {
     `<button class="town-menu-btn tm-gate${revivedInTown ? ' tm-gate-urgent' : ''}" onclick="openTownService('gate')">
        <span class="tm-icon">${dlIcon('ui_gate') || '🗺'}</span>
        <span class="tm-text"><span class="tm-name">Return to Dungeon</span><span class="tm-desc">${revivedInTown ? 'Head back down to keep questing' : `Back to ${floorLabel(returnFloor)}, or pick a difficulty`}</span></span>
+       <span class="gate-wisp gate-wisp-a" aria-hidden="true"></span>
+       <span class="gate-wisp gate-wisp-b" aria-hidden="true"></span>
      </button>`;
   const blurb = revivedInTown
     ? `<div class="town-blurb town-blurb-revived">💀 You were slain and revived here in <b>Town</b>. Stock up if you like — then take <b>🌀 Return to Dungeon</b> at the top to head back down and keep questing.</div>`
@@ -23545,6 +23635,14 @@ function renderSkills(el) {
     const buyBtn = skillMaxed(sn)
       ? `<button class="pop-buy maxed" disabled>✓ Maxed (10/10)</button>`
       : `<button class="pop-buy" ${canBuySkill(sn) ? '' : 'disabled'} onclick="buySkill('${sn.id}')">Learn (rank ${rank + 1}/${sn.max})</button>`;
+    // Refund a rank for gold — the surgical alternative to the Trainer's full respec.
+    let refundBtn = '';
+    if (rank > 0) {
+      const rBlock = refundBlockedBy(sn);
+      const rCost = skillRefundCost();
+      if (rBlock) refundBtn = `<button class="pop-refund" disabled>↩️ Refund locked — ${rBlock} needs it</button>`;
+      else { const aff = canAfford(rCost); refundBtn = `<button class="pop-refund${aff ? '' : ' short'}" ${aff ? '' : 'disabled'} onclick="refundSkill('${sn.id}')">↩️ Refund 1 pt — ${rCost.gold}g</button>`; }
+    }
     // Owned actives can be slotted onto / pulled off the hotkey bar straight from
     // the popover (the quick path alongside dragging the node onto a tray slot).
     const slotAt = (sn.type === 'active' && rank > 0) ? skillSlotIndexOf(sn.id) : -1;
@@ -23566,6 +23664,7 @@ function renderSkills(el) {
       ${ruHtml}
       ${reqHtml}
       ${buyBtn}
+      ${refundBtn}
       ${hideBtn}
       ${autoBtn}
     </div>`;
