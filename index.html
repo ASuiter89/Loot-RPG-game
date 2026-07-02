@@ -4717,7 +4717,7 @@
         <span id="shop-title"><span data-spr=npc_mage></span> Wandering Merchant</span>
         <button id="shop-close" onclick="shopClose()" data-tip="<div class='ht-name'>✕ Close</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">✕</button>
       </div>
-      <div id="shop-gold">Your gold: <span id="shop-gold-count">0</span>g</div>
+      <div id="shop-gold">Your gold: <span data-spr=ic_money></span><span id="shop-gold-count">0</span></div>
       <div id="shop-tabs"><button class="shop-tab active" id="shoptab-buy" onclick="shopTab('buy')">BUY</button><button class="shop-tab" id="shoptab-sell" onclick="shopTab('sell')">SELL</button></div>
       <div id="shop-content"></div>
     </div>
@@ -4730,7 +4730,7 @@
         <span id="mystic-title"><span data-spr=ic_orb></span> Wandering Mystic</span>
         <button id="mystic-close" onclick="mysticClose()" data-tip="<div class='ht-name'>✕ Close</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">✕</button>
       </div>
-      <div id="mystic-gold">Your gold: <span id="mystic-gold-count">0</span>g</div>
+      <div id="mystic-gold">Your gold: <span data-spr=ic_money></span><span id="mystic-gold-count">0</span></div>
       <div id="mystic-active" style="display:none"></div>
       <div id="mystic-content"></div>
     </div>
@@ -4748,7 +4748,7 @@
              empty right flank balances the Back flank so the title stays centred. -->
         <span class="modal-head__flank right"></span>
       </div>
-      <div id="town-gold">Your gold: <span id="town-gold-count">0</span>g</div>
+      <div id="town-gold">Your gold: <span data-spr=ic_money></span><span id="town-gold-count">0</span></div>
       <div id="town-mats"></div>
       <div id="town-content"></div>
     </div>
@@ -19835,10 +19835,10 @@ function activateShrine(nx, ny) {
 // nudge. Cheap flavour to keep each new floor feeling a little alive.
 const FLOOR_EVENTS = [
   // ── Small windfalls & boons ──
-  () => { const g = rnd(10,25) + dungeonLevel*3; player.gold += g; log(`<span data-spr=ic_money></span> You stumble on a hidden coin cache — +${g} gold!`, 'important'); },
-  () => { const g = rnd(5,12) + dungeonLevel*2; player.gold += g; log(`<span data-spr=e_rat></span> A rat scurries off, dropping a stolen coin. +${g} gold.`, 'loot'); },
-  () => { const g = rnd(8,18) + dungeonLevel*2; player.gold += g; log(`<span data-spr=mat_glimmer></span> A vein of crystal glitters in the wall — you pry some loose. +${g} gold.`, 'loot'); },
-  () => { const g = rnd(12,28) + dungeonLevel*3; player.gold += g; log(`<span data-spr=ic_money></span> A careless adventurer left a coin pouch behind. +${g} gold!`, 'loot'); },
+  () => { const g = rnd(10,25) + dungeonLevel*3; player.gold += g; log(`<span data-spr=ic_money></span> You stumble on a hidden coin cache — +<span data-spr=ic_money></span>${g}!`, 'important'); },
+  () => { const g = rnd(5,12) + dungeonLevel*2; player.gold += g; log(`<span data-spr=e_rat></span> A rat scurries off, dropping a stolen coin. +<span data-spr=ic_money></span>${g}.`, 'loot'); },
+  () => { const g = rnd(8,18) + dungeonLevel*2; player.gold += g; log(`<span data-spr=mat_glimmer></span> A vein of crystal glitters in the wall — you pry some loose. +<span data-spr=ic_money></span>${g}.`, 'loot'); },
+  () => { const g = rnd(12,28) + dungeonLevel*3; player.gold += g; log(`<span data-spr=ic_money></span> A careless adventurer left a coin pouch behind. +<span data-spr=ic_money></span>${g}!`, 'loot'); },
   () => { const heal = Math.floor(player.maxHp*0.2); player.hp = Math.min(player.maxHp, player.hp+heal); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=ramen_scallion></span> An eerie calm settles over you — +${heal} HP.`, 'important'); },
   () => { const heal = Math.floor(player.maxHp*0.1); player.hp = Math.min(player.maxHp, player.hp+heal); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=food></span> You find a forgotten ration and eat it. +${heal} HP.`, 'loot'); },
   () => { const heal = Math.floor(player.maxHp*0.08); player.hp = Math.min(player.maxHp, player.hp+heal); log(`<span data-spr=town_healer></span> You pause to catch your breath. +${heal} HP.`, ''); },
@@ -20462,7 +20462,7 @@ function onEnterCell(nx, ny) {
     player.gold += g.amount;
     sfx('gold');
     spawnFloatingText(player.x, player.y, `+${g.amount}`, '#ffd24b', 1, true);
-    log(`<span data-spr=ic_money></span> Picked up ${g.amount} gold!`, 'loot');
+    log(`<span data-spr=ic_money></span> Picked up <span data-spr=ic_money></span>${g.amount}!`, 'loot');
     updateBars();
   }
   // Reclaim your grave — walk onto the dropped satchel to recover the whole bag.
@@ -23097,7 +23097,7 @@ function collectChestLoot(luck, ilvl, x, y) {
     if (surprise === 1) {
       const g = rnd(15, 40) + dungeonLevel * 4;
       player.gold += g;
-      log(`${fancy ? '<span data-spr=chest></span>' : '<span data-spr=chest></span>'} The chest was full of coins — +${g} gold!`, 'loot');
+      log(`${fancy ? '<span data-spr=chest></span>' : '<span data-spr=chest></span>'} The chest was full of coins — +<span data-spr=ic_money></span>${g}!`, 'loot');
     } else {
       const f = pick(FOODS);
       groundFood.push({ x, y, ...f });
@@ -27977,7 +27977,7 @@ function heroCardHtml() {
   return `<div class="th-info">`
     + `<div class="th-name" style="color:${cls.color || 'var(--xp)'}">${nm}</div>`
     + `<div class="th-sub">Level ${lvl} ${cls.name || 'Hero'}</div>`
-    + `<div class="th-stats"><span>Deepest <b>Floor ${deepest}</b></span><span><b>${gold}</b>g</span></div>`
+    + `<div class="th-stats"><span>Deepest <b>Floor ${deepest}</b></span><span><span data-spr=ic_money></span><b>${gold}</b></span></div>`
     + hcTag
     + `</div>`
     + (heroPic ? `<div class="th-portrait">${heroPic}</div>` : '');
