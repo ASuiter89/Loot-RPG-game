@@ -11257,6 +11257,7 @@ function showSettingsTab(name) {
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
   { date: "2026-07-02", size: "small", v: "Gold shows a coin icon, not a trailing g", by: "Claude", notes: ["Every money amount — HUD, shops, tooltips, buttons, logs and combat pops — now leads with the gold-coin icon instead of a trailing “g”."] },
+  { date: "2026-07-02", size: "small", v: "Off-screen stairs arrow", by: "Claude", notes: ["A gold arrow rides the edge of the map, always between you and the down-stairs and pointing straight at them, whenever the exit is off-screen.", "Slides around the border as you move and vanishes once the stairs scroll into view. Brighter once the floor is cleared."] },
   { date: "2026-07-02", size: "small", v: "Smoother combat frame rate", by: "Claude", notes: ["Screen-shake and the skill bar no longer force extra full redraws — big fights stay smoother.", "The skill bar only rebuilds when it actually changes instead of ~2.5×/sec, cutting steady background stutter."] },
   { date: "2026-07-02", size: "small", v: "Tidier Ramen toppings + wallet", by: "Claude", notes: ["Ramen topping tiles are compact cards with a much bigger topping icon, no longer stretched across the whole row.", "Crafting-materials wallet strip hugs its contents instead of spanning the full panel width."] },
   { date: "2026-07-02", size: "small", v: "Tidier foe inspect card", by: "Claude", notes: ["The tap-to-inspect creature card is more compact — smaller box and text.", "Pressing anywhere else on the map now closes it, including click-and-hold to move."] },
@@ -18462,6 +18463,10 @@ function draw() {
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, cw, ch);
 
+  // Edge indicator pointing at the off-screen down-stairs. Drawn over the
+  // vignette so it stays bright even at the darkened border.
+  drawStairsArrow(offX, offY, tw, th, W, H);
+
   drawMinimap();
 }
 
@@ -18543,6 +18548,94 @@ function drawMinimap() {
     dot(player.x, player.y, '#fff', PX + 1);
     dot(player.x, player.y, '#ffd24b', PX);
   }
+}
+
+// ── OFF-SCREEN STAIRS ARROW ───────────────────────────────────────────────────
+// The down-stairs cell for the current floor, found once and cached by
+// floorSerial — the exit never moves within a floor, so we scan mapData at most
+// once per floor instead of every frame.
+let _stairsDownCell = null, _stairsDownSerial = -1;
+function stairsDownCell() {
+  if (_stairsDownSerial === floorSerial) return _stairsDownCell;
+  _stairsDownSerial = floorSerial;
+  _stairsDownCell = null;
+  if (Array.isArray(mapData)) {
+    for (let y = 0; y < MAP_H && !_stairsDownCell; y++) {
+      const row = mapData[y]; if (!row) continue;
+      for (let x = 0; x < MAP_W; x++) {
+        if (row[x] === 2) { _stairsDownCell = { x, y }; break; }
+      }
+    }
+  }
+  return _stairsDownCell;
+}
+
+// When the down-stairs sit outside the visible map, a small arrow rides the edge
+// of the map panel — always on the ray from the hero to the stairs, so it sits
+// exactly between them and points straight at the exit. It slides radially around
+// the border as you move and vanishes the moment the stairs scroll into view.
+// Every position is derived from the live camera (tile size `tw`, canvas size),
+// so it tracks resolution, window size and zoom automatically.
+function drawStairsArrow(offX, offY, tw, th, W, H) {
+  if (inTown || !player || !Array.isArray(mapData) || !mapData.length) return;
+  const s = stairsDownCell();
+  if (!s) return;
+
+  // If any part of the stairs tile is on screen the player can already see it —
+  // no arrow needed.
+  const tileL = offX + s.x * tw, tileT = offY + s.y * th;
+  if (tileL < W && tileL + tw > 0 && tileT < H && tileT + th > 0) return;
+
+  // Hero and stairs centres, in canvas pixels, and the unit direction between.
+  const psx = offX + player.fx * tw, psy = offY + player.fy * th;
+  const stx = offX + (s.x + 0.5) * tw, sty = offY + (s.y + 0.5) * th;
+  let dx = stx - psx, dy = sty - psy;
+  const mag = Math.hypot(dx, dy);
+  if (mag < 1e-3) return;
+  dx /= mag; dy /= mag;
+
+  // Cast the hero→stairs ray out to the nearest edge of a rectangle inset far
+  // enough that the whole arrowhead (and its glow) stays inside the panel.
+  const pad = Math.max(18, tw * 0.95);
+  const minX = pad, minY = pad, maxX = W - pad, maxY = H - pad;
+  let t = Infinity;
+  if (dx > 1e-6) t = Math.min(t, (maxX - psx) / dx);
+  else if (dx < -1e-6) t = Math.min(t, (minX - psx) / dx);
+  if (dy > 1e-6) t = Math.min(t, (maxY - psy) / dy);
+  else if (dy < -1e-6) t = Math.min(t, (minY - psy) / dy);
+  if (!isFinite(t) || t < 0) t = 0;
+  const ax = Math.max(minX, Math.min(maxX, psx + dx * t));
+  const ay = Math.max(minY, Math.min(maxY, psy + dy * t));
+
+  // Cleared stairs pulse gold ("descend here"); while sealed it's the same gold
+  // but calmer, echoing the on-tile locked/open language. Colour is UI-semantic,
+  // so it comes from the palette mirror rather than a hardcoded hex.
+  const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 320);
+  const open = (typeof floorCleared === 'undefined') || floorCleared;
+  const alpha = open ? 0.9 + 0.1 * pulse : 0.5 + 0.12 * pulse;
+  const size = Math.max(16, tw * 0.9);
+
+  ctx.save();
+  ctx.translate(ax, ay);
+  ctx.rotate(Math.atan2(dy, dx));   // arrowhead points +x → toward the stairs
+  ctx.beginPath();
+  ctx.moveTo(size * 0.6, 0);
+  ctx.lineTo(-size * 0.42, size * 0.5);
+  ctx.lineTo(-size * 0.16, 0);
+  ctx.lineTo(-size * 0.42, -size * 0.5);
+  ctx.closePath();
+  ctx.shadowColor = hexA(PALETTE.gold, open ? 0.9 : 0.5);
+  ctx.shadowBlur = size * (open ? 0.4 + 0.35 * pulse : 0.25);
+  ctx.fillStyle = hexA(PALETTE.gold, alpha);
+  ctx.fill();
+  // Dark keyline (a deeply shaded gold) so the arrow reads over lava, water and
+  // bright floors alike.
+  ctx.shadowBlur = 0;
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(1.5, size * 0.06);
+  ctx.strokeStyle = shadeColor(PALETTE.gold, 0.12);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function spawnFloatingText(x, y, text, color, size, coin) {
