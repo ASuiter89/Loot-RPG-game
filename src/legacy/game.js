@@ -17,6 +17,7 @@ import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
 import { milestonePower, rankScale, skillManaCost } from '../systems/skillMath.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { CHANGELOG } from '../data/changelog.js';
+import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -22024,6 +22025,13 @@ function confirmNewGame() {
 const LB_SUPABASE_URL = 'https://imqhmqtpbvkomsusgzux.supabase.co'; // base URL, no trailing path
 const LB_SUPABASE_KEY = 'sb_publishable_SxnH6A4uxqZq5ZW_PqUeLQ_9ZKd4WfV'; // anon / publishable key (safe to be public)
 
+// All Supabase leaderboard REST goes through this repository (injected fetch).
+const _lbRepo = createLeaderboardRepo({
+  fetchImpl: (u, o) => fetch(u, o),
+  url: LB_SUPABASE_URL,
+  key: LB_SUPABASE_KEY,
+});
+
 const LB_LOCAL_KEY = 'dungeonLoot_leaderboard_v1';
 // The three ranked boards: which stored column each sorts by and how to show it.
 // Decode a stored max_floor (a CONTINUOUS depth) into a difficulty-aware label
@@ -22092,14 +22100,7 @@ function lbSubmit() {
   const entry = lbEntryFromPlayer();
   lbSubmitLocal(entry);
   if (!lbEnabled()) return;
-  try {
-    fetch(LB_SUPABASE_URL + '/rest/v1/leaderboard?on_conflict=name,hardcore', {
-      method: 'POST',
-      headers: lbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
-      body: JSON.stringify(entry),
-      keepalive: true,
-    }).catch(() => {});
-  } catch (e) {}
+  _lbRepo.submit(entry); // Supabase REST isolated in src/persistence/leaderboardRepo.js
 }
 
 // Device-local mirror of the board — keeps monotonic bests per name.
@@ -22140,31 +22141,9 @@ async function lbFetch(tab) {
   const sort = LB_SORTS[tab] || LB_SORTS.floor;
   const hcOnly = lbMode === 'hc';
   if (!lbEnabled()) return { rows: lbFetchLocal(sort.col, hcOnly), local: true };
-  const url = LB_SUPABASE_URL +
-    '/rest/v1/leaderboard?select=name,player_class,max_floor,level,gold,power,hardcore&hardcore=eq.' +
-    hcOnly + '&order=' + sort.col + '.desc';
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 12000);
-  try {
-    // Page through with Range headers: PostgREST caps each response at its
-    // server-side max-rows (commonly 1000) no matter the URL limit, so we keep
-    // requesting the next window until a short page tells us we've got them all.
-    const PAGE = 1000;
-    let rows = [];
-    for (let from = 0; ; from += PAGE) {
-      const res = await fetch(url, {
-        headers: lbHeaders({ 'Range-Unit': 'items', 'Range': from + '-' + (from + PAGE - 1) }),
-        signal: ctrl.signal,
-      });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const page = await res.json();
-      rows = rows.concat(page);
-      if (!Array.isArray(page) || page.length < PAGE) break; // last window reached
-    }
-    return { rows, local: false };
-  } finally {
-    clearTimeout(timer);
-  }
+  // Paging + Range headers + abort-timeout live in the repository.
+  const rows = await _lbRepo.fetchBoard(sort.col, hcOnly);
+  return { rows, local: false };
 }
 
 function showLeaderboard() {

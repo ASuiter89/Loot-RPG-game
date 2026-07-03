@@ -48,6 +48,21 @@ replace its definition in `game.js` with an `import`, add unit tests, and verify
 - ✅ build + smoke green (behavior identical), 108 tests, 100 % coverage over all
   extracted modules.
 
+**Increment 3 — the persistence repository seam (Supabase isolation)**
+- 📦 `src/persistence/leaderboardRepo.js` — the first repository. Pure request
+  builders (`buildSubmitRequest`, `buildFetchUrl`, `buildRangeHeaders`,
+  `restHeaders`) + `createLeaderboardRepo({ fetchImpl, url, key })` with an
+  **injected `fetch`**. game.js's `lbSubmit`/`lbFetch` now route their Supabase
+  REST through it (identical requests: same endpoints, headers, `on_conflict`,
+  Range paging, abort-timeout, error propagation) — the inline `fetch` calls are
+  gone from the leaderboard path.
+- 🧪 `test/persistence/leaderboardRepo.test.js` — 11 tests against a **mock
+  `fetch`** (never hits the backend): request shape, Standard/Hardcore filtering,
+  multi-page concatenation, non-OK throw, submit error-swallowing, and
+  timeout arm/clear via injected timer/AbortController.
+- ✅ Establishes the D8 pattern for the remaining Supabase surface (saves, auth,
+  settings). game.js parses, build + smoke green, 121 tests, 100 % coverage.
+
 ## Phase 3 — inline `<script>` → ES module + `window` bridge
 
 - 📦 **The 24.2k-line inline `<script>` moved verbatim** into
