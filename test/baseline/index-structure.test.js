@@ -42,11 +42,13 @@ describe('document shell', () => {
     expect(doc.getElementById('minimap')).toBeTruthy();
   });
 
-  it('carries an inline <style> design-token block', () => {
-    const style = doc.querySelector('style');
-    expect(style).toBeTruthy();
-    expect(style.textContent).toContain(':root');
-    expect(style.textContent).toContain('--gold');
+  it('links the externalized stylesheet with its design-token block', () => {
+    const link = doc.querySelector('link[rel="stylesheet"]');
+    expect(link).toBeTruthy();
+    expect(link.getAttribute('href')).toMatch(/styles\.css/);
+    const css = readFileSync(resolve(__dirname, '../../src/styles.css'), 'utf8');
+    expect(css).toContain(':root');
+    expect(css).toContain('--gold');
   });
 });
 

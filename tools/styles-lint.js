@@ -15,14 +15,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FILE = path.join(__dirname, '..', 'index.html');
+// The stylesheet was externalized from index.html's inline <style> into
+// src/styles.css (see docs/CHANGELOG.md); the whole file is now CSS.
+const FILE = path.join(__dirname, '..', 'src', 'styles.css');
 const src = fs.readFileSync(FILE, 'utf8');
 const lines = src.split('\n');
 
-// Locate the <style> block and the :root token block within it. Colors inside
-// :root are the token DEFINITIONS (allowed); everything else must use tokens.
-const styleStart = lines.findIndex(l => l.includes('<style>'));
-const styleEnd = lines.findIndex(l => l.includes('</style>'));
+// The whole .css file is the "style block"; the :root token block within it holds
+// the token DEFINITIONS (allowed); everything else must use tokens.
+const styleStart = -1;
+const styleEnd = lines.length;
 const rootStart = lines.findIndex((l, i) => i > styleStart && /:root\s*\{/.test(l));
 let rootEnd = rootStart;
 if (rootStart !== -1) {
@@ -74,7 +76,7 @@ lines.forEach((line, i) => {
 function report(title, list, cap) {
   if (!list.length) return;
   console.log(`\n${title} (${list.length})`);
-  list.slice(0, cap).forEach(([n, msg, ctx]) => console.log(`  index.html:${n}  ${msg}\n      ${ctx.slice(0, 120)}`));
+  list.slice(0, cap).forEach(([n, msg, ctx]) => console.log(`  src/styles.css:${n}  ${msg}\n      ${ctx.slice(0, 120)}`));
   if (list.length > cap) console.log(`  … and ${list.length - cap} more`);
 }
 

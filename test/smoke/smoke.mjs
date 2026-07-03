@@ -129,6 +129,11 @@ async function main() {
         const c = document.getElementById('canvas');
         return !!(c && c.width > 0 && c.height > 0);
       })();
+      // The externalized stylesheet must be applied before game.js's PALETTE
+      // snapshot reads getComputedStyle(:root). Confirm the token is a real
+      // colour (not the empty/fallback the snapshot would otherwise capture).
+      out.goldToken = getComputedStyle(document.documentElement)
+        .getPropertyValue('--gold').trim();
       return out;
     });
 
@@ -138,6 +143,9 @@ async function main() {
     if (!result.hasPlayer) failures.push('gameState().player missing');
     if (!result.legendIsString) failures.push('gameState().legend is not a string');
     if (!result.canvasSized) failures.push('#canvas has zero size (render did not size it)');
+    if (!/^#|rgb/.test(result.goldToken || '')) {
+      failures.push(`--gold token missing/unapplied ("${result.goldToken}") — externalized CSS may not load before PALETTE`);
+    }
 
     for (const k of EXPECTED_STATE_KEYS) {
       if (!result.stateKeys || !result.stateKeys.includes(k)) {

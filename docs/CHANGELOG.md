@@ -8,6 +8,18 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Phase 3b — externalize the CSS
+
+- 📦 The 4.3k-line inline `<style>` moved to `src/styles.css`, referenced by a
+  render-blocking `<link rel="stylesheet">` in `<head>`. index.html: 770 lines
+  (markup + head only). Vite emits a separate hashed `.css` asset in the build.
+- 🏗️ `tools/styles-lint.js` now lints `src/styles.css` (whole file = CSS; `:root`
+  = token defs).
+- 🧪 Smoke gains a `--gold` token check that proves the externalized CSS is
+  applied **before** game.js's `getComputedStyle`-based `PALETTE` snapshot runs
+  (the one real timing risk). Verified applied in both `vite build` and the dev
+  server (browser-checked `--gold` = `#e8c267`).
+
 ## Phase 4 — incremental pure-module extraction (with tests)
 
 Each increment: move a self-contained pure cluster verbatim into a `src/` module,
