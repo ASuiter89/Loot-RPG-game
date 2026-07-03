@@ -1510,6 +1510,27 @@ DECOR_INDEX.forEach((d, i) => { (DECOR_BY_TAG[d.tag] = DECOR_BY_TAG[d.tag] || []
 // shells, potted plants, floor debris) stays walkable.
 const DECOR_SOLID_TAGS = new Set(['furniture', 'barrel', 'chest', 'brazier']);
 const DECOR_SOLID = DECOR_INDEX.map((d) => d.ht >= 1.6 || DECOR_SOLID_TAGS.has(d.tag));
+// OCCLUDERS are tall, narrow things you walk BEHIND (trees): they block only their
+// trunk tile and their canopy draws over you with a see-through silhouette.
+// Everything else solid (furniture, crates, braziers, cacti) sits ON the ground —
+// it blocks its whole footprint so you can't walk through the off-anchor tiles.
+const DECOR_OCCLUDER = DECOR_INDEX.map((d) => d.tag === 'tree' || d.tag === 'tree_dead' || d.tag === 'tree_pine');
+// The tiles a solid decor object occupies for collision (anchored bottom-centre).
+function decorFootprint(id, ax, ay) {
+  const d = DECOR_INDEX[id];
+  if (!d || DECOR_OCCLUDER[id]) return [[ax, ay]];       // tree → just the trunk
+  const W = Math.max(1, Math.round(d.w / 32)), wt = d.w / 32;
+  // A FLAT piece (bed/table/sofa/rug — about as wide as it is tall, or short) rests
+  // fully on the floor → block its whole footprint. A TALL narrow piece (cabinet,
+  // wardrobe, shelf) rests only on its base → block the base row so the space
+  // behind it stays walkable.
+  const flat = d.ht <= 1.5 || wt >= d.ht * 0.85;
+  const H = flat ? Math.max(1, Math.round(d.ht)) : 1;
+  const left = ax - (W >> 1), top = ay - (H - 1);
+  const tiles = [];
+  for (let yy = top; yy <= ay; yy++) for (let xx = left; xx < left + W; xx++) tiles.push([xx, yy]);
+  return tiles;
+}
 // Blit a decor object anchored bottom-centre (its base sits on the cell). LPC art
 // is 32px/tile; crisp nearest-neighbour like the rest of the pixel art.
 function drawDecorSprite(id, cxCenter, cyBottom, tw) {
@@ -1520,10 +1541,18 @@ function drawDecorSprite(id, cxCenter, cyBottom, tw) {
   ctx.drawImage(decorSheet, d.dx, d.dy, d.w, d.h, Math.round(cxCenter - dw / 2), Math.round(cyBottom - dh), dw, dh);
   ctx.imageSmoothingEnabled = sm; return true;
 }
+// Horizontal anchor so a multi-tile sprite sits over the SAME whole-tile footprint
+// decorFootprint blocks: odd width centres on the tile, even width on its left edge
+// (a 2-wide bed spans tiles [x-1,x], not straddling the anchor's centre by half a
+// tile). Without this, wide pieces render half a tile off from where they collide.
+function decorAnchorX(id, px, tw) {
+  const W = Math.max(1, Math.round(DECOR_INDEX[id].w / 32));
+  return px + (W % 2 ? tw / 2 : 0);
+}
 function drawDecorAt(x, y, px, py, tw, th) {
   const id = decorMap[y + ',' + x];
   if (id === undefined) return;
-  drawDecorSprite(id, px + tw / 2, py + th * 0.98, tw); // feet ~ bottom of the tile
+  drawDecorSprite(id, decorAnchorX(id, px, tw), py + th * 0.98, tw); // feet ~ bottom of the tile
 }
 decorSheet.src = DECOR_ATLAS;
 
@@ -1561,11 +1590,11 @@ function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
   const sc = tw / 32, occ = [];
   for (const k in decorMap) {
     const d = DECOR_INDEX[decorMap[k]];
-    if (!d || d.ht < 1.6) continue;                       // only tall occluders
+    if (!d || !DECOR_OCCLUDER[decorMap[k]]) continue;     // only trees occlude (walk-behind)
     const c = k.split(','), tx = +c[1], ty = +c[0];
     if (tx < x0 - 2 || tx > x1 + 2 || ty < y0 - 8 || ty > y1 + 2) continue;
     const dw = Math.round(d.w * sc), dh = Math.round(d.h * sc);
-    const cxc = offX + tx * tw + tw / 2, cyb = offY + ty * th + th * 0.98;
+    const cxc = decorAnchorX(decorMap[k], offX + tx * tw, tw), cyb = offY + ty * th + th * 0.98;
     occ.push({ d, dw, dh, l: Math.round(cxc - dw / 2), t: Math.round(cyb - dh), footY: cyb });
   }
   if (!occ.length) return;
@@ -1656,8 +1685,14 @@ function placeOutdoorDecor(theme) {
     for (let placed = 0, t = 0; placed < nObs && t < nObs * 40; t++) {
       const x = 1 + ((Math.random() * (MAP_W - 2)) | 0), y = 1 + ((Math.random() * (MAP_H - 2)) | 0);
       if (!free(x, y) || openN(x, y) < 3) continue;
-      decorMap[y + ',' + x] = obstacles[(Math.random() * obstacles.length) | 0];
-      furnitureMap[y + ',' + x] = 1;
+      const id = obstacles[(Math.random() * obstacles.length) | 0];
+      // Multi-tile pieces (beds, tables, sofas) must land on an entirely clear
+      // footprint — otherwise the off-anchor tiles overlap walls/other props and
+      // leave gaps you can walk through. Trees only need their trunk tile.
+      const foot = decorFootprint(id, x, y);
+      if (!foot.every(([fx, fy]) => free(fx, fy))) continue;
+      decorMap[y + ',' + x] = id;
+      for (const [fx, fy] of foot) furnitureMap[fy + ',' + fx] = 1;
       placed++;
     }
   }
@@ -12508,6 +12543,7 @@ const INDOOR_THEMES = [
 // ordinary outdoor floors. Set in generateMap, cleared in town.
 let floorThemeOverride = null;
 let previewForceIndoor = null; // preview only: force a specific INDOOR_THEMES index
+let previewDrawSolids = false; // preview only: paint solid tiles red to verify collision
 // Themed by the DISPLAYED floor, so each difficulty replays the same visual
 // progression (floor 1 always looks like floor 1) — only the red wash deepens.
 // An indoor floor (floorThemeOverride) and the tutorial beach override this.
@@ -13921,6 +13957,7 @@ function draw() {
   // Tall decor (trees) occludes actors standing behind it, with a tinted
   // silhouette over the covered part so the hero/foes stay trackable.
   if (!inTown) drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale);
+  if (previewDrawSolids) { ctx.save(); ctx.globalAlpha = 0.38; ctx.fillStyle = '#ff2020'; for (const k in furnitureMap) { const c = k.split(','), sx = +c[1], sy = +c[0]; ctx.fillRect(offX + sx * tw, offY + sy * th, tw, th); } ctx.restore(); }
 
   // Player status effects are surfaced as full-screen coloured halos (see
   // updateHaloVignette), not as little icons over the hero sprite.
@@ -23894,6 +23931,9 @@ try {
       });
       return { biome: C.name, indoor: !!C.indoor, roles: roles.map((r) => r[0] + '=' + r[1]), img: cv.toDataURL('image/png') };
     };
+    // Debug overlay: paint each SOLID (furnitureMap) tile red over the current
+    // frame, so a screenshot shows whether collision lines up with the sprites.
+    window.__previewSolids = function (on) { previewDrawSolids = on !== false; draw(); return { solids: Object.keys(furnitureMap).length }; };
     // Force a specific built-interior theme and regenerate, so indoor floors can be
     // previewed deterministically (normally they appear ~28% of floors at random).
     window.__previewIndoor = function (idx) {

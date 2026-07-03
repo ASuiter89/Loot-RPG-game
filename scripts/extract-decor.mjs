@@ -54,8 +54,6 @@ const SOURCES = [
   { file: F + 'Sofas, Formal.png',       tag: 'furniture', minA: 800,  minH: 28, maxH: 100, maxW: 155, cap: 6 },
   { file: F + 'Beds, Single A.png',      tag: 'furniture', minA: 900,  minH: 46, maxH: 122, maxW: 90,  cap: 6 },
   { file: F + 'Beds, Single B.png',      tag: 'furniture', minA: 900,  minH: 46, maxH: 122, maxW: 90,  cap: 5 },
-  { file: F + 'Beds, Double.png',        tag: 'furniture', minA: 1200, minH: 46, maxH: 132, maxW: 132, cap: 6 },
-  { file: F + 'Beds, Childrens.png',     tag: 'furniture', minA: 700,  minH: 40, maxH: 112, maxW: 84,  cap: 4 },
   { file: F + 'Cauldron.png',            tag: 'furniture', minA: 280,  minH: 22, maxH: 62,  maxW: 44,  cap: 2 },
   { file: S + 'Cabinets.png',            tag: 'furniture', minA: 600,  minH: 34, maxH: 122, maxW: 90,  cap: 8 },
   { file: 'furniture/dark-wood_4.png',   tag: 'furniture', minA: 520,  minH: 20, maxH: 124, maxW: 132, cap: 18 },
