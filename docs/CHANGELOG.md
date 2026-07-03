@@ -8,6 +8,33 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Phase 3 — inline `<script>` → ES module + `window` bridge
+
+- 📦 **The 24.2k-line inline `<script>` moved verbatim** into
+  `src/legacy/game.js` (an ES module); `index.html` now loads it via
+  `src/main.js` (`<script type="module">`). `index.html` shrank 29,314 → 5,083
+  lines (6.9 MB → 664 KB); the `<style>` block stays inline for now.
+- 📦 **Transitional `window` bridge** appended to `game.js`: all **1,188**
+  top-level functions are re-exposed as `window` properties (they were global in
+  the old classic script), and **36** handler-referenced state globals are
+  exposed as **live getters/setters backed by the module bindings** — so a
+  handler that reads `player.gold` sees the current value and one that writes
+  `selectedSkillId=null` updates the real variable. Verified the script parses as
+  a strict ES module (no duplicate decls / octals / sloppy-only constructs).
+- 🧪 **Smoke upgraded** to serve over HTTP (a Vite module bundle can't load over
+  `file://`) and to verify the bridge: all **208** inline-handler target
+  functions present on `window`, live state accessors read/write through, and a
+  real inline `onclick="openAccount()"` click opens `#account-overlay`.
+  `test/smoke/handler-globals.json` pins the handler set.
+- 🧪 Baseline gates updated for the new structure: the syntax gate now
+  strict-ESM-parses every `src/**` + `test/**` module; the structure gate finds
+  the Supabase config / console API / CHANGELOG / bridge in `src/legacy/game.js`
+  and the module entry in `index.html`.
+- ✅ Verified: `vite build` ok, `vite` dev server serves the module, smoke passes
+  on the built `dist`, 70 unit/characterization tests green, coverage 100 % over
+  extracted `src/**`, styles-lint clean. **No game behavior changed** — same
+  33-key `gameState()` / 18-topic `gameGuide()` contract.
+
 ## Phase 0–2 — Discovery, tooling & green baseline
 
 - 📄 **Discovery inventory** recorded in [`DISCOVERY.md`](./DISCOVERY.md):

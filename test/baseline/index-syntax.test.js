@@ -1,53 +1,58 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
-import vm from 'node:vm';
+import { dirname, resolve, relative } from 'node:path';
+import { globSync } from 'node:fs';
 
 // CHARACTERIZATION / SAFETY-NET TEST.
 //
-// The game has no automated tests of its own and silently fails to load if the
-// inline <script> has a syntax error. Historically the only guard was "verify
-// the JS has no syntax errors by hand". This test automates that: it extracts
-// the big inline script from index.html and compiles it with vm.Script, which
-// PARSES (never executes) the code and throws SyntaxError on invalid JS.
-//
-// While the refactor moves code out of index.html into ES modules, this keeps
-// the monolith honest at every commit.
+// The game silently fails to load if its script has a syntax error. Since the
+// logic now lives in ES modules under src/ (loaded by Vite from index.html),
+// this gate validates that (a) index.html still references the module entry and
+// carries no stray inline game script, and (b) every src/ and test/ module
+// parses as a strict ES module (which also catches module-only errors like
+// duplicate top-level declarations that a sloppy-mode check would miss).
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const INDEX = resolve(__dirname, '../../index.html');
+const ROOT = resolve(__dirname, '../..');
 
-function extractInlineScripts(html) {
-  // Match every <script>...</script> that is NOT a module/src reference.
-  const scripts = [];
-  const re = /<script(?![^>]*\bsrc=)(?![^>]*type="module")[^>]*>([\s\S]*?)<\/script>/g;
-  let m;
-  while ((m = re.exec(html)) !== null) {
-    if (m[1].trim().length > 0) scripts.push(m[1]);
+function parsesAsModule(code) {
+  try {
+    execFileSync('node', ['--check', '--input-type=module'], { input: code, stdio: ['pipe', 'ignore', 'pipe'] });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, err: String(e.stderr || e.message).split('\n').slice(0, 4).join('\n') };
   }
-  return scripts;
 }
 
-describe('index.html inline script', () => {
-  const html = readFileSync(INDEX, 'utf8');
+describe('index.html script wiring', () => {
+  const html = readFileSync(resolve(ROOT, 'index.html'), 'utf8');
 
-  it('contains at least one substantial inline script', () => {
-    const scripts = extractInlineScripts(html);
-    const total = scripts.reduce((n, s) => n + s.length, 0);
-    // The game logic is large; if this collapses, something moved unexpectedly.
-    expect(total).toBeGreaterThan(1000);
+  it('references the ES-module entry', () => {
+    expect(html).toMatch(/<script\s+type="module"\s+src="[^"]*\/src\/main\.js"><\/script>/);
   });
 
-  it('every inline script parses without a syntax error', () => {
-    const scripts = extractInlineScripts(html);
-    expect(scripts.length).toBeGreaterThan(0);
-    for (const [i, code] of scripts.entries()) {
-      // vm.Script compiles (parses) but does not run — pure syntax gate.
-      expect(
-        () => new vm.Script(code, { filename: `index.html#inline-script-${i}` }),
-        `inline script #${i} should parse`,
-      ).not.toThrow();
-    }
+  it('carries no large inline game <script> anymore', () => {
+    const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
+      .reduce((n, m) => n + m[1].length, 0);
+    // A few tiny inline snippets are fine; the 24k-line monolith must be gone.
+    expect(inline).toBeLessThan(2000);
+  });
+});
+
+describe('every source & test module parses (strict ESM)', () => {
+  const files = globSync(
+    ['src/**/*.js', 'src/**/*.mjs', 'test/**/*.js', 'test/**/*.mjs'],
+    { cwd: ROOT },
+  ).map((f) => resolve(ROOT, f));
+
+  it('discovers the source tree', () => {
+    expect(files.length).toBeGreaterThan(3);
+  });
+
+  it.each(files)('%s parses', (file) => {
+    const res = parsesAsModule(readFileSync(file, 'utf8'));
+    expect(res.ok, `${relative(ROOT, file)} failed to parse:\n${res.err || ''}`).toBe(true);
   });
 });

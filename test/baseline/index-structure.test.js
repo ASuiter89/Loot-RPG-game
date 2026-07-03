@@ -15,12 +15,16 @@ import { JSDOM } from 'jsdom';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const INDEX = resolve(__dirname, '../../index.html');
 
+const GAME = resolve(__dirname, '../../src/legacy/game.js');
+
 let html;
 let doc;
+let game;
 
 beforeAll(() => {
   html = readFileSync(INDEX, 'utf8');
   doc = new JSDOM(html).window.document;
+  game = readFileSync(GAME, 'utf8');
 });
 
 describe('document shell', () => {
@@ -73,26 +77,35 @@ describe('critical DOM ids (markup↔script contract)', () => {
   });
 });
 
-describe('embedded configuration & console API', () => {
+describe('embedded configuration & console API (now in src/legacy/game.js)', () => {
   it('embeds the Supabase leaderboard/cloud config', () => {
-    expect(html).toMatch(/const LB_SUPABASE_URL\s*=/);
-    expect(html).toMatch(/const LB_SUPABASE_KEY\s*=/);
+    expect(game).toMatch(/const LB_SUPABASE_URL\s*=/);
+    expect(game).toMatch(/const LB_SUPABASE_KEY\s*=/);
   });
 
   it('exposes the gameState/gameGuide AI-play API on window', () => {
-    expect(html).toMatch(/window\.gameState\s*=/);
-    expect(html).toMatch(/window\.gameGuide\s*=/);
+    expect(game).toMatch(/window\.gameState\s*=/);
+    expect(game).toMatch(/window\.gameGuide\s*=/);
   });
 
   it('drives the in-game changelog from a CHANGELOG array', () => {
-    expect(html).toMatch(/const CHANGELOG\s*=\s*\[/);
+    expect(game).toMatch(/const CHANGELOG\s*=\s*\[/);
+  });
+
+  it('appends the transitional window bridge', () => {
+    expect(game).toContain('__DL_FN_BRIDGE');
+    expect(game).toMatch(/__dlLive\("player"/);
   });
 });
 
-describe('inline event-handler surface', () => {
-  it('has the large inline on*= handler surface the game relies on', () => {
+describe('index.html module wiring', () => {
+  it('loads the game as an ES module entry', () => {
+    expect(html).toMatch(/<script\s+type="module"\s+src="[^"]*\/src\/main\.js"/);
+  });
+
+  it('still carries the static inline on*= handler surface in markup', () => {
+    // JS-generated handlers moved into game.js; the static body handlers remain.
     const handlers = html.match(/\son[a-z]+="/g) || [];
-    // ~253 across the file at baseline; assert it is clearly present.
-    expect(handlers.length).toBeGreaterThan(150);
+    expect(handlers.length).toBeGreaterThan(50);
   });
 });

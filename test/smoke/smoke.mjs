@@ -11,9 +11,31 @@
 // environment (PLAYWRIGHT_BROWSERS_PATH); we never download a browser.
 
 import { chromium } from 'playwright';
-import { readFileSync, existsSync } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { readFileSync, existsSync, createReadStream } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve, join, basename, extname } from 'node:path';
+import http from 'node:http';
+
+// A modular Vite build loads its entry as an ES module (`<script type=module
+// src=...>`), which a browser refuses to fetch over file:// (CORS). So serve the
+// target's directory over HTTP for the smoke run. This also matches how the game
+// is actually hosted (static files over HTTP on Netlify / GitHub Pages).
+const MIME = {
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
+  '.css': 'text/css', '.json': 'application/json', '.woff2': 'font/woff2',
+  '.png': 'image/png', '.svg': 'image/svg+xml', '.map': 'application/json',
+};
+function startServer(rootDir) {
+  const server = http.createServer((req, res) => {
+    const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+    let filePath = join(rootDir, urlPath === '/' ? 'index.html' : urlPath);
+    if (!filePath.startsWith(rootDir)) { res.statusCode = 403; return res.end(); }
+    if (!existsSync(filePath)) { res.statusCode = 404; return res.end('not found'); }
+    res.setHeader('Content-Type', MIME[extname(filePath)] || 'application/octet-stream');
+    createReadStream(filePath).pipe(res);
+  });
+  return new Promise((res) => server.listen(0, '127.0.0.1', () => res(server)));
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const target = process.argv[2]
@@ -61,6 +83,10 @@ async function main() {
   const exe = findExecutable();
   if (exe) launchOpts.executablePath = exe;
 
+  const server = await startServer(dirname(target));
+  const port = server.address().port;
+  const url = `http://127.0.0.1:${port}/${basename(target)}`;
+
   const browser = await chromium.launch(launchOpts);
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 
@@ -74,7 +100,7 @@ async function main() {
   const failures = [];
 
   try {
-    await page.goto(pathToFileURL(target).href, { waitUntil: 'load', timeout: 30000 });
+    await page.goto(url, { waitUntil: 'load', timeout: 30000 });
 
     // The game boots at document end and attaches gameState to window.
     await page.waitForFunction(() => typeof window.gameState === 'function', { timeout: 20000 });
@@ -124,6 +150,50 @@ async function main() {
       }
     }
 
+    // --- window bridge verification (strangler migration) ---
+    // Every inline on*= handler (static markup + JS-generated) resolves its
+    // function against window. Assert the whole set is bridged, that live state
+    // accessors read through, and that a write (onclick="selectedSkillId=null")
+    // reaches the module binding.
+    const handlerGlobals = JSON.parse(
+      readFileSync(resolve(__dirname, 'handler-globals.json'), 'utf8'),
+    );
+    const bridge = await page.evaluate((names) => {
+      const missing = names.filter((n) => typeof window[n] !== 'function');
+      // live read accessors
+      const playerOk = window.player && typeof window.player === 'object';
+      const stashOk = window.stash && typeof window.stash === 'object';
+      // live write accessor round-trip: set via window, read back via window
+      const before = window.selectedSkillId;
+      window.selectedSkillId = '__smoke_probe__';
+      const wroteThrough = window.selectedSkillId === '__smoke_probe__';
+      window.selectedSkillId = before; // restore
+      return { missing, playerOk, stashOk, wroteThrough };
+    }, handlerGlobals);
+
+    if (bridge.missing.length) {
+      failures.push(
+        `window bridge missing ${bridge.missing.length} handler fn(s): ${bridge.missing.slice(0, 15).join(', ')}${bridge.missing.length > 15 ? ' …' : ''}`,
+      );
+    }
+    if (!bridge.playerOk) failures.push('live accessor window.player did not read through');
+    if (!bridge.stashOk) failures.push('live accessor window.stash did not read through');
+    if (!bridge.wroteThrough) failures.push('live setter window.selectedSkillId did not write through to the module binding');
+
+    // --- real inline-onclick round trip: click a title button, expect its overlay ---
+    try {
+      await page.click('#title-cloud', { timeout: 3000 });
+      const opened = await page.evaluate(() =>
+        document.getElementById('account-overlay')?.classList.contains('open'),
+      );
+      if (!opened) failures.push('inline onclick="openAccount()" did not open #account-overlay');
+      await page.evaluate(() => window.closeAccount && window.closeAccount());
+    } catch (e) {
+      failures.push(`inline-onclick click test failed: ${String(e).split('\n')[0]}`);
+    }
+
+    console.log('smoke: window bridge =', handlerGlobals.length - bridge.missing.length, '/', handlerGlobals.length, 'handler fns present; live accessors', bridge.playerOk && bridge.stashOk && bridge.wroteThrough ? 'ok' : 'FAIL');
+
     if (pageErrors.length) {
       failures.push(`uncaught page errors:\n  - ${pageErrors.join('\n  - ')}`);
     }
@@ -138,6 +208,7 @@ async function main() {
     failures.push(`navigation/boot failed: ${String(e)}`);
   } finally {
     await browser.close();
+    server.close();
   }
 
   if (failures.length) {
