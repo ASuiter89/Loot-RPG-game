@@ -10263,7 +10263,7 @@ window.gameGuide = function gameGuide(topic) {
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
-      `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement — don't path through it.`,
+      `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom is a full heal, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one warps you there — use it deliberately, not while fleeing.`,
       `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash by walking into them. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground; carryingKey true once held) and seal a rich vault chest.`,
@@ -11532,6 +11532,7 @@ const CHANGELOG = [
   { date: "2026-07-02", size: "medium", v: "Pixel icons everywhere — no emoji fallbacks", by: "Claude", notes: ["Every game icon — items, gear, materials, food, currencies, HP/MP, enemies, bosses, NPCs, pets, summons, class & attribute icons, world features, status markers — now renders its pixel sprite directly instead of routing through an emoji. Removed the runtime emoji-to-sprite converter and every emoji fallback: the atlas is always drawn.", "Attribute icons now fit: Might shows a power tile and Luck a shine (were a warrior and a chest).", "Purely decorative header glyphs with no matching sprite are left as-is."] },
   { date: "2026-07-02", size: "medium", v: "Material drops gated & scarcer", by: "Claude", notes: ["Kill-drops gate by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four).", "Salvage is the main early route to a material your tier can't yet drop — it sheds by the item's rarity, not difficulty.", "Rarer mats from salvage are now a lucky roll, not guaranteed, so Core/Chaos stay scarce.", "Salvage quantity scales with item level on a curve that flattens as ilvl climbs.", "Every individual item salvages a little differently — two same-rarity pieces vary in drop rate and amount."] },
   { date: "2026-07-02", size: "small", v: "Volume tiles step up", by: "Claude", notes: ["Tapping the MUSIC or SFX tile now raises the volume a notch instead of lowering it; it wraps from full back to off."] },
+  { date: "2026-07-03", size: "small", v: "Fix: foes can't walk through furniture", by: "Claude", notes: ["Enemies now collide with solid furniture (crates, shelves, plants…) just like you do — no more clipping straight through it.", "Foes path around furniture and won't squeeze a diagonal between two pieces.", "Use furniture as a chokepoint to break a chase."] },
   { date: "2026-07-02", size: "small", v: "Stairs arrow toggle", by: "Claude", notes: ["Toggle the off-screen down-stairs arrow in Settings → Visuals (on by default).", "Choice syncs across devices when signed in."] },
   { date: "2026-07-02", size: "small", v: "Fix: title screen wouldn't offer Continue", by: "Claude", notes: ["Settings sync could crash the boot before the title screen finished loading, so returning heroes never saw the Continue button — fixed.", "Re-applying your saved log/loot-drawer collapse state on load no longer counts as a fresh change, keeping cross-device sync timestamps accurate."] },
   { date: "2026-07-02", size: "small", v: "Smoother big fights", by: "Claude", notes: ["Enemy status tints (burning, poisoned, chilled…), the hit-flash, elite/boss auras and threat rings now use cached art instead of rebuilding pricey per-frame effects — much smoother with lots of foes on screen.", "Elite/boss/affix auras read as a soft coloured halo."] },
@@ -22229,6 +22230,7 @@ function runEnemyTurn() {
 function enemyTileFree(x, y) {
   if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
   if (mapData[y][x] !== 0) return false;
+  if (furnitureMap[y + ',' + x] !== undefined) return false; // solid furniture blocks foes too
   if (bossWallAt(x, y)) return false; // a conjured barrier blocks foes too
   if (x === player.x && y === player.y) return false;
   if (getEnemyAt(x, y)) return false;
@@ -22250,6 +22252,7 @@ function pathBlockedGrid() {
   if (!_pfBlocked || _pfBlocked.length !== n) _pfBlocked = new Uint8Array(n);
   const b = _pfBlocked;
   for (let y = 0; y < H; y++) { const row = mapData[y]; const base = y * W; for (let x = 0; x < W; x++) b[base + x] = row[x] !== 0 ? 1 : 0; }
+  for (const k in furnitureMap) { const c = k.split(','); const fx = +c[1], fy = +c[0]; if (fx >= 0 && fy >= 0 && fx < W && fy < H) b[fy * W + fx] = 1; } // solid furniture — route around it
   for (const h of bossHazards) if (h.kind === 'wall' && h.x >= 0 && h.y >= 0 && h.x < W && h.y < H) b[h.y * W + h.x] = 1;
   for (const o of enemies) {
     if (o.dead) continue;
@@ -22405,7 +22408,13 @@ function enemyStep(e, mx, my) {
     return true;
   }
   if (!enemyTileFree(nx, ny)) return false;
-  if (mx !== 0 && my !== 0 && mapData[e.y][e.x + mx] !== 0 && mapData[e.y + my][e.x] !== 0) return false;
+  // Don't cut a diagonal between two solid corners — a wall OR solid furniture on
+  // both flanking cells blocks the squeeze, just as the hero's box collision does.
+  if (mx !== 0 && my !== 0) {
+    const cornerX = mapData[e.y][e.x + mx] !== 0 || furnitureMap[e.y + ',' + (e.x + mx)] !== undefined;
+    const cornerY = mapData[e.y + my][e.x] !== 0 || furnitureMap[(e.y + my) + ',' + e.x] !== undefined;
+    if (cornerX && cornerY) return false;
+  }
   e.x = nx; e.y = ny;
   return true;
 }
