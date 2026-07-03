@@ -380,6 +380,26 @@ LPC: Interior Castle Tiles — Lanea Zimmerman (Sharm) — CC-BY 3.0 / CC-BY-SA 
 Home Objects — Janna/Lilius/Jannax — CC0 — https://opengameart.org/content/home-objects
 ```
 
+## [LPC] Floors
+
+Source: https://opengameart.org/content/lpc-floors  (interior floor materials —
+wood plank, parquet, stone, marble, tile, cobble)
+
+```
+"[LPC] Floors" by bluecarrot16, Lanea Zimmerman (Sharm), William Thompson (William.Thompsonj), Hyptosis, SpiderDave, Cougarmint, Stephen Challener (Redshrike), Bonsaiheldin, Tyler Olsen (Roots), Jetrel, jestan, The Open Surge team (http://opensnc.sourceforge.net), Gaurav Munjal, Reemax, Silveira Neto, bleutailfly, Casper Nilsson, NaRNeRZz, Buch, keith karnage, Arthur Carvalho, Guilherme Vieira (n2liquid), Chris Hamons (maintainer). CC-BY-SA 4.0.
+Based on LPC Base Assets (Sharm), [LPC] Arabic Elements (Sharm/Thompson), LPC Interior Castle Tiles (Sharm), and others — see the source page for the complete list.
+```
+
+## [LPC] Walls
+
+Source: https://opengameart.org/content/lpc-walls  (interior wall materials —
+wood beam, stone block, brick, panel, adobe, rough stone)
+
+```
+"[LPC] Walls" by bluecarrot16, Lanea Zimmerman (Sharm), Daniel Armstrong (HughSpectrum), William Thompson (William.Thompsonj), Hyptosis, Zabin, Daniel Cook, Guido Bos, SpiderDave, Cougarmint, Stephen Challener (Redshrike), Matthew Nash, Wolthera van Hövell tot Westerflier (TheraHedwig), Reemax, bleutailfly, NaRNeRZz, Sir Spummington, Casper Nilsson, KnoblePersona. CC-BY-SA 3.0.
+Based on LPC Base Assets (Sharm) and others — see the source page for the complete list.
+```
+
 ## [LPC] Containers
 
 Source: https://opengameart.org/content/lpc-containers

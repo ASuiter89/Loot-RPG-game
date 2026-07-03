@@ -20,6 +20,7 @@ import { CHANGELOG } from '../data/changelog.js';
 import { terrainPacksInUse } from '../data/terrainPacks.js';
 import { renderProcMap } from '../render/procTerrain.js';
 import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
+import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 
 // ══════════════════════════════════════════
@@ -1385,16 +1386,41 @@ function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
   const isLava  = (x, y) => inb(x, y) && mapData[y][x] === 7;
   const cx0 = Math.max(0, x0-1), cy0 = Math.max(0, y0-1), cx1 = Math.min(MAP_W, x1+1), cy1 = Math.min(MAP_H, y1+1);
   ctx.imageSmoothingEnabled = false;
-  lpcFill(B.wall, ox, oy, tw, cx0, cy0, cx1, cy1);
-  lpcLayer(B.floor, isFloor, ox, oy, tw, cx0, cy0, cx1, cy1);
-  // Clustered secondary / tertiary floor patches blended over the primary.
-  if (floorVariantMap && !previewFlatFloor) {
-    const fv = (x, y) => (inb(x, y) && floorVariantMap[y] ? floorVariantMap[y][x] : 0);
-    if (B.floor2) lpcLayer(B.floor2, (x, y) => isFloor(x, y) && fv(x, y) >= 1, ox, oy, tw, cx0, cy0, cx1, cy1);
-    if (B.floor3) lpcLayer(B.floor3, (x, y) => isFloor(x, y) && fv(x, y) === 2, ox, oy, tw, cx0, cy0, cx1, cy1);
+  if (C.indoor && intReady) {
+    // Built interiors get real laid materials — wood/stone/marble/brick/adobe wall
+    // and floor field tiles, a uniform tile per room (walls on wall cells, floor on
+    // the rest), instead of borrowing the outdoor ground terrains.
+    drawInteriorTerrain(C, ox, oy, tw, cx0, cy0, cx1, cy1);
+  } else {
+    lpcFill(B.wall, ox, oy, tw, cx0, cy0, cx1, cy1);
+    lpcLayer(B.floor, isFloor, ox, oy, tw, cx0, cy0, cx1, cy1);
+    // Clustered secondary / tertiary floor patches blended over the primary.
+    if (floorVariantMap && !previewFlatFloor) {
+      const fv = (x, y) => (inb(x, y) && floorVariantMap[y] ? floorVariantMap[y][x] : 0);
+      if (B.floor2) lpcLayer(B.floor2, (x, y) => isFloor(x, y) && fv(x, y) >= 1, ox, oy, tw, cx0, cy0, cx1, cy1);
+      if (B.floor3) lpcLayer(B.floor3, (x, y) => isFloor(x, y) && fv(x, y) === 2, ox, oy, tw, cx0, cy0, cx1, cy1);
+    }
   }
   if (B.water) lpcLayer(B.water, isWater, ox, oy, tw, cx0, cy0, cx1, cy1);
   lpcLayer('Lava', isLava, ox, oy, tw, cx0, cy0, cx1, cy1);
+}
+// Interior material sheet — seamless wood/stone/marble/brick/adobe field tiles for
+// built rooms (real laid walls + flooring instead of the outdoor ground terrains).
+const intSheet = new Image(); let intReady = false;
+intSheet.onload = () => { intReady = true; try { draw(); } catch (e) {} };
+intSheet.src = INTERIORS_ATLAS;
+function drawInteriorTerrain(C, ox, oy, tw, x0, y0, x1, y1) {
+  const f = INTERIORS_FLOORS[C.floorStyle] || INTERIORS_FLOORS.stone;
+  const w = INTERIORS_WALLS[C.wallStyle] || INTERIORS_WALLS.block;
+  const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false;
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const t = mapData[y][x]; if (t === 6 || t === 7) continue;   // water/lava keep their own art
+    const src = (t === 1 || t === 10) ? w : f;                   // wall cells → wall tile, else floor
+    const px = Math.round(ox + x * tw), py = Math.round(oy + y * tw);
+    const px1 = Math.round(ox + (x + 1) * tw), py1 = Math.round(oy + (y + 1) * tw);
+    ctx.drawImage(intSheet, src.dx, src.dy, 32, 32, px, py, px1 - px, py1 - py);
+  }
+  ctx.imageSmoothingEnabled = sm;
 }
 function drawFloorBase(px, py, tw, th, seed, C) {
   if ((lpcReady || PROC_TERRAIN) && !inTown) return; // terrain pass already painted the ground (indoor + outdoor)
@@ -7216,7 +7242,7 @@ function showVersionHistory() {
     const credits = `<div class="version-credits">`
       + `Pixel art from the DawnLike tileset by DragonDePlatino &amp; DawnBringer (CC-BY&nbsp;4.0).<br>`
       + `Terrain tiles from &ldquo;[LPC] Terrains&rdquo; by bluecarrot16 &amp; LPC contributors (CC-BY-SA&nbsp;4.0).<br>`
-      + `Scenery &amp; interior props from the &ldquo;[LPC]&rdquo; trees, conifers, flowers, beach/desert, wooden-furniture, base-object &amp; container packs by bluecarrot16, Lanea Zimmerman, Eliza Wyatt &amp; LPC contributors (CC-BY-SA) — see docs/asset-credits.md.`
+      + `Scenery, interior floors/walls &amp; props from the &ldquo;[LPC]&rdquo; trees, conifers, flowers, beach/desert, floors, walls, wooden-furniture, base-object &amp; container packs by bluecarrot16, Lanea Zimmerman, Eliza Wyatt &amp; LPC contributors (CC-BY-SA) — see docs/asset-credits.md.`
       + `</div>`;
     el.innerHTML = `<div class="cl-filters">${bySel}${sizeSel}${catSel}${search}</div><div id="version-list"></div>${credits}`;
     renderChangelogList();
