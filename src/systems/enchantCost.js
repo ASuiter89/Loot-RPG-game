@@ -3,11 +3,11 @@
 // pass the item's rarity RANK (its TIERS index), item level, and how many bonus
 // modifiers it already carries; nothing here reads game state, the DOM or RNG.
 //
-// Every cost is the plain { gold, glimmer, scrap?, core?, chaos? } object the
-// shared wallet helpers (canAfford / spendCost / costLabel) understand. Scrap
-// rides every enchant, Core joins on rare+ gear, and a Chaos Orb is spent on the
-// big epic+ reforge — so enchanting draws on the same materials crafting does
-// rather than draining Glimmer alone.
+// Every cost is the plain { gold, glimmer, scrap?, core? } object the shared
+// wallet helpers (canAfford / spendCost / costLabel) understand. Scrap rides
+// every enchant and Core joins on rare+ gear — so enchanting draws on the same
+// materials crafting does rather than draining Glimmer alone. (Chaos Orbs stay a
+// crafting-only material; the Enchanter never charges them.)
 import { ENCH_COST } from '../data/enchantTuning.js';
 
 // Gold + material multiplier for an item's rarity rank (0 junk … 6 unique).
@@ -52,12 +52,10 @@ export function augmentCost({ rank, ilvl = 1, affixes = 0 }) {
   return addMaterials(cost, rank, ilvl, ENCH_COST.weights.augment * slot);
 }
 
-// Reforge every bonus modifier at once — the big gamble. Epic+ also burns a Chaos Orb.
+// Reforge every bonus modifier at once — the big gamble across every slot.
 export function rerollAllCost({ rank, ilvl = 1 }) {
   const cost = { gold: goldFor(ENCH_COST.gold.rerollAll, rank, ilvl), glimmer: glimmerFor(ENCH_COST.glimmer.rerollAll, rank) };
-  addMaterials(cost, rank, ilvl, ENCH_COST.weights.rerollAll);
-  if (rank >= ENCH_COST.chaosRank) cost.chaos = 1;
-  return cost;
+  return addMaterials(cost, rank, ilvl, ENCH_COST.weights.rerollAll);
 }
 
 // Reroll a single modifier's TYPE (swap Might → Agility) — the bigger single-property gamble.

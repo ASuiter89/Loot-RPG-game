@@ -1,12 +1,13 @@
 // Enchanter cost tuning — pure values, read by src/systems/enchantCost.js.
 //
 // Enchanting is paid in Glimmer (the Enchanter's staple fuel) and gold, and now
-// in the bulk crafting materials too: Scrap on every action, a Core on rare+
-// gear, and a Chaos Orb on the big epic+ reforge. This draws enchanting on the
-// same overflowing wallet crafting spends from — so Scrap/Core/Chaos no longer
-// pile up unused while Glimmer runs dry — and ties the price to the item's
-// rarity. Augmenting additionally scales with how many modifiers the piece
-// already carries, so its final slot costs far more than its first.
+// in the bulk crafting materials too: Scrap on every action and a Core on rare+
+// gear. This draws enchanting on the same overflowing wallet crafting spends
+// from — so Scrap and Cores no longer pile up unused while Glimmer runs dry —
+// and ties the price to the item's rarity. Augmenting additionally scales with
+// how many modifiers the piece already carries, so its final slot costs far more
+// than its first. (Chaos Orbs stay a crafting-only material — the Enchanter never
+// asks for them.)
 //
 // Rarity is expressed as a RANK: the item's index in TIERS (0 junk, 1 normal,
 // 2 uncommon, 3 rare, 4 epic, 5 legendary, 6 unique).
@@ -16,9 +17,8 @@ export const ENCH_COST = {
   // Augmenting the (N+1)-th modifier costs slotGrowth^N as much as the first, so
   // a nearly-full piece's last slot is dramatically pricier than its first.
   slotGrowth: 1.6,
-  // Rarity rank at which each rarer material enters the bill.
+  // Rarity rank at which Core enters the bill (Chaos Orbs are crafting-only).
   coreRank: 3,     // rare+ gear costs Cores to enchant
-  chaosRank: 4,    // epic+ gear burns a Chaos Orb on the big Reroll-all reforge
   // Gold per action: (base + ilvl * perIlvl) * tierFactor
   // (augment is further multiplied by its slot factor).
   gold: {
@@ -44,9 +44,16 @@ export const ENCH_COST = {
     rerollValue: 0.3,
   },
   // Shared Scrap (bulk, always ≥1) + Core (rare+, charged only once it rounds to
-  // a whole unit) curve, scaling with rarity rank and item level.
+  // a whole unit) curve, scaling with rarity rank and item level. Amounts are
+  // tuned to be PROPORTIONAL to how much of each material the game hands you: you
+  // earn Scrap on every drop/salvage but Glimmer/Core far less often, so Scrap is
+  // priced ~5x the Glimmer bill (and Core ~half of it) — that way enchanting draws
+  // each material's stockpile down at a similar rate instead of leaving Scrap and
+  // Cores to pile up while Glimmer runs dry. (Income: Scrap is guaranteed on every
+  // salvage; Glimmer ~1/6 as often; Core ~0.4x Glimmer — see salvageRanges &
+  // the on-kill drop rolls.)
   materials: {
-    scrapBase: 2, scrapPerRank: 1.5, scrapIlvlStep: 0.05,
+    scrapBase: 4, scrapPerRank: 2.75, scrapIlvlStep: 0.05,
     coreBase: 1, corePerRank: 0.7, coreIlvlStep: 0.03,
   },
 };

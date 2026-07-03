@@ -53,8 +53,18 @@ describe('augmentCost', () => {
     expect(augmentCost({ rank: RARE, ilvl: 10, affixes: 0 }).core).toBeGreaterThanOrEqual(1);
   });
 
-  it('never charges a Chaos Orb (that is reserved for the big reforge)', () => {
+  it('never charges a Chaos Orb (Chaos Orbs are a crafting-only material)', () => {
     expect(augmentCost({ rank: LEGENDARY, ilvl: 20, affixes: 4 }).chaos).toBeUndefined();
+    expect(augmentCost({ rank: UNIQUE, ilvl: 30, affixes: 5 }).chaos).toBeUndefined();
+  });
+
+  it('prices Scrap well above Glimmer, proportional to how much more Scrap the game gives', () => {
+    // Income is ~6 Scrap per 1 Glimmer, so the base (first-slot) bill should lean
+    // the same way — Scrap costs several times the Glimmer, never a token amount.
+    for (const rank of [RARE, EPIC, LEGENDARY]) {
+      const c = augmentCost({ rank, ilvl: 10, affixes: 0 });
+      expect(c.scrap).toBeGreaterThanOrEqual(c.glimmer * 4);
+    }
   });
 
   it('costs strictly more gold and Scrap for each property already on the piece', () => {
@@ -111,10 +121,10 @@ describe('rerollAllCost', () => {
     expect(c.core).toBeGreaterThanOrEqual(1);
   });
 
-  it('burns exactly one Chaos Orb only at epic rank and above', () => {
-    expect(rerollAllCost({ rank: RARE, ilvl: 10 }).chaos).toBeUndefined();
-    expect(rerollAllCost({ rank: EPIC, ilvl: 10 }).chaos).toBe(1);
-    expect(rerollAllCost({ rank: UNIQUE, ilvl: 30 }).chaos).toBe(1);
+  it('never charges a Chaos Orb at any rarity (Chaos Orbs are crafting-only)', () => {
+    for (const rank of [NORMAL, RARE, EPIC, LEGENDARY, UNIQUE]) {
+      expect(rerollAllCost({ rank, ilvl: 30 }).chaos).toBeUndefined();
+    }
   });
 
   it('costs more than a single augment of the same piece (it reforges everything)', () => {
