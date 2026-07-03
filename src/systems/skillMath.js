@@ -35,3 +35,35 @@ export function skillManaCost(node, rank) {
   const r = Math.max(1, rank || 1);
   return Math.max(1, Math.round(node.mp * SKILL_MP_MULT * (1 + MANA_PER_RANK * (r - 1))));
 }
+
+// ── Skill-point economy ──────────────────────────────────────────────────────
+// Two separate pools. NORMAL skill points fund the passive + active trees: one
+// at creation plus one per level. ASCENDANCY points fund only the ascendancy
+// "path" tree: one every ASC_POINT_EVERY levels, starting at ASCEND_LEVEL — the
+// level at which a hero can first ascend. The pools are earned and spent
+// independently, so normal points can never buy path skills and vice-versa.
+export const SKILL_POINTS_PER_LEVEL = 1;
+export const SKILL_POINTS_AT_START = 1;
+export const ASCEND_LEVEL = 20; // level at which the Trainer offers ascension
+export const ASC_POINT_EVERY = 5; // one ascendancy point per this many levels
+
+/**
+ * Total NORMAL skill points a hero of the given level has earned over its
+ * lifetime (the starting point plus one per level gained). Used to grant the
+ * right pool on a new game and to reconcile older saves on load.
+ */
+export function earnedSkillPoints(level) {
+  return SKILL_POINTS_AT_START + Math.max(0, (level || 1) - 1) * SKILL_POINTS_PER_LEVEL;
+}
+
+/**
+ * Total ASCENDANCY points a hero of the given level has earned: none before
+ * ASCEND_LEVEL, then one at ASCEND_LEVEL and one more every ASC_POINT_EVERY
+ * levels after (20, 25, 30, …). Points accrue from level 20 whether or not the
+ * hero has actually ascended yet — they simply can't be spent until it has.
+ */
+export function earnedAscPoints(level) {
+  const lv = level || 1;
+  if (lv < ASCEND_LEVEL) return 0;
+  return Math.floor((lv - ASCEND_LEVEL) / ASC_POINT_EVERY) + 1;
+}
