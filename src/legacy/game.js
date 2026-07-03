@@ -20426,12 +20426,12 @@ function skillLoadoutTrayHtml() {
   };
   const manual = slots.map((id, i) => cell(id, i)).join('');
   const autoCell = cell(normAutoSkill(), AUTO_SLOT);
-  // The auto-cast slot leads on the LEFT, set off by a slim divider from the four
-  // manual slots, which sit as a tidy 2×2 block so every slot stays visible even in
-  // a narrow drawer (a single row of these larger tiles would strand one on a wrap).
+  // The auto-cast slot leads on the LEFT, set off from the four manual slots by a
+  // slim divider. It stays a single row wherever the drawer is wide enough, wrapping
+  // only when it truly can't fit.
   return `<div class="sk-loadout">
     <div class="lt-title"><span data-spr=ic_stun></span> Skill slots <span class="lt-hint">drag a learned skill in · drag to rearrange · drag out to remove · tap to edit</span></div>
-    <div class="lt-row">${autoCell}<span class="lt-sep" aria-hidden="true"></span><div class="lt-manual">${manual}</div></div>
+    <div class="lt-row">${autoCell}<span class="lt-sep" aria-hidden="true"></span>${manual}</div>
   </div>`;
 }
 

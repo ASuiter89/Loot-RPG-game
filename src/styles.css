@@ -1805,11 +1805,10 @@
   .sk-loadout { margin: 4px 0 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
   .lt-title { font-size: 1.3rem; color: var(--purple-200); margin-bottom: 5px; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; text-align: center; gap: 6px; }
   .lt-hint { font-size: 1.2rem; color: var(--blue-350); opacity: 0.85; }
-  .lt-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; --sb-size: calc(46px * var(--ui-scale,1)); }
-  /* The four manual slots sit as a 2×2 block beside the lone auto-cast slot. */
-  .lt-manual { display: grid; grid-template-columns: repeat(2, var(--sb-size, 46px)); gap: 6px; }
-  /* A slim divider between the auto-cast slot and the manual 2×2 block. */
-  .lt-sep { flex: 0 0 1px; align-self: stretch; min-height: 36px; margin: 0 3px; background: linear-gradient(180deg, transparent, var(--border) 25%, var(--border) 75%, transparent); }
+  .lt-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; --sb-size: calc(46px * var(--ui-scale,1)); }
+  /* A slim divider between the auto-cast slot and the four manual slots (the row's
+     own gap spaces it, so no extra margin — keeps the single row compact). */
+  .lt-sep { flex: 0 0 1px; align-self: stretch; min-height: 36px; background: linear-gradient(180deg, transparent, var(--border) 25%, var(--border) 75%, transparent); }
   /* Tray slots share the combat bar's tile look: each rides in an .sb-cell with a
      full-width hotkey .sb-pill above it (the auto slot's pill reads "AUTO"), and the
      icon fills the box edge-to-edge, clipped to the rounded corners. Neutral for
@@ -3688,8 +3687,10 @@
     #settings-card .settings-grid { grid-template-columns: repeat(2, 1fr); }
     /* Desktop tray tiles are enlarged so the wider "AUTO" pill fits comfortably at
        tile width (the label can't shrink below the type floor, and the pill never
-       overhangs). --sb-size drives the cell, the hotkey pill and the slot together. */
-    .sk-loadout .lt-row { --sb-size: calc(72px * var(--ui-scale,1)); }
+       overhangs). Sized so the whole row — auto slot, divider and the four manual
+       slots — still holds on one line in a normal-width drawer. --sb-size drives the
+       cell, the hotkey pill and the slot together. */
+    .sk-loadout .lt-row { --sb-size: calc(66px * var(--ui-scale,1)); }
 
     /* PANEL CHROME: the LOOT/GEAR/HERO/SKILLS tabs and the loot-filter chips are
        navigation chrome, not body copy. With the fluid type scale the body text
