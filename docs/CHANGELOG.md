@@ -38,6 +38,31 @@ Each increment: move a self-contained pure cluster verbatim into a `src/` module
 replace its definition in `game.js` with an `import`, add unit tests, and verify
 `vite build` + smoke (behavior identical) + suite green.
 
+**Increment 5 — terrain-pack pipeline (swap the ground art)**
+- 📦 `src/systems/terrainAtlas.js` — pure autotile + converter core for importing
+  a new terrain pack: `cornerMask`, `terrainHash`, `resolveTileId`, atlas
+  id math, `blobTemplateToRole` (a pack's Wang layout → the game's `{mask:id}`
+  table), `packRoleIntoAtlas` (append tiles + record pixel copies). No DOM/canvas.
+- 📦 `src/data/terrainPacks.js` — pack registry + per-biome selection
+  (`TERRAIN_PACKS`, `BIOME_PACK_OVERRIDES`, `packForBiome`, `terrainPacksInUse`).
+  Overrides empty by default ⇒ world renders byte-identically. game.js now
+  generates the terrain **credits** from this registry (import `terrainPacksInUse`),
+  so attribution stays truthful as packs are added.
+- 🧪 `test/systems/terrainAtlas.test.js` (18) incl. a fidelity round-trip that
+  rebuilds the real LPC `Grass` role id-for-id; `test/data/terrainPacks.test.js`
+  (7). 100 % lines/funcs/statements over the new modules.
+- 📄 `docs/terrain-packs.md` — evaluation + import recipe: the AI-license filter
+  (Type-1 "no training on the art" = OK vs Type-2 "no AI in the project" = out),
+  the recommended pack (Epic RPG World) + biome map, and the mechanical swap.
+- 🏗️ `src/render/procTerrain.js` + a `?terrain=proc` preview path in game.js — a
+  procedural terrain-pack renderer that paints the dungeon ground (floor/wall/
+  water/lava) via 2-corner-Wang blending, to preview a full terrain swap in the
+  real engine. Off by default (flag-gated); `scripts/terrain-preview-shot.mjs`
+  boots it in Chromium and screenshots real levels. `src/render/**` excluded from
+  coverage (canvas draw layer, characterized by smoke).
+- ✅ 151 tests, coverage 100/100/100/99, build + smoke green (208/208 handlers,
+  full gameState/gameGuide contract); normal play unaffected (flag off).
+
 **Increment 1 — pure formula/utility leaves**
 - 📦 `src/utils/color.js` ← `shadeColor`, `hexA`, `_parseRGBA` (pure colour math,
   zero deps).

@@ -35,6 +35,7 @@ export default defineConfig({
       exclude: [
         'src/legacy/**',
         'src/assets/**',
+        'src/render/**', // canvas/DOM draw layer — characterized by smoke, not unit-covered
         'src/**/*.data.js',
         'src/main.js',
       ],
