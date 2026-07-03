@@ -1,8 +1,9 @@
 # Asset credits
 
-Ground-decor art is drawn from bluecarrot16's CC-BY-SA "[LPC]" collections on
-OpenGameArt. CC-BY-SA requires reproducing the full attribution below and linking
-back to each source page. (Terrain tiles are credited separately; DawnLike sprites
+Outdoor scenery and indoor props (furniture, containers, lighting, decoration) are
+drawn from the CC-BY-SA "[LPC]" collections on OpenGameArt / the ElizaWy LPC
+project. CC-BY-SA requires reproducing the full attribution below and linking back
+to each source page. (Terrain tiles are credited separately; DawnLike sprites
 in-game.)
 
 ## [LPC] Flowers, Plants, Fungi, Wood
@@ -324,4 +325,68 @@ Old Eastern Themed Building Tiles + Tree
 Talosaurus
 CC0
 https://opengameart.org/content/old-eastern-themed-building-tiles-tree
+```
+
+## [LPC] Conifer Trees
+
+Source: https://opengameart.org/content/lpc-conifers
+
+```
+## Conifer Trees
+
+"[LPC] Conifer Trees Pack" by bluecarrot16, b_o, Lanea Zimmerman (Sharm), Johann Charlot, Yar, Jetrel, Zabin, Hyptosis, Surt, and KnoblePersona
+CC-BY-SA 3.0 / GPL 2.0 / GPL 3.0
+
+Pine Tree Tiles — b_o — CC-BY-SA 3.0 / GPL 2.0 — https://opengameart.org/content/pine-tree-tiles
+Liberated Pixel Cup (LPC) Base Assets — Lanea Zimmerman (Sharm) — CC-BY-SA 3.0 / CC-BY 3.0 / GPL 3.0 — https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+Shoot'em up graphic kit — Johann Charlot — CC-BY-SA 3.0 / GPL 3.0 — https://opengameart.org/content/shootem-up-graphic-kit
+Isometric 64x64 Outside Tileset — Yar — CC-BY 3.0 — https://opengameart.org/content/isometric-64x64-outside-tileset
+Lots of trees and plants from OGA (DB32) tilesets pack 1 — Jetrel, Zabin, Hyptosis, Surt — CC0 — https://opengameart.org/content/lots-of-trees-and-plants-from-oga-db32-tilesets-pack-1
+Pine Tree Pack — KnoblePersona — CC-BY 3.0 — https://opengameart.org/content/pine-tree-pack
+```
+
+## [LPC] Base Object Kit — furniture, storage, lighting, decoration
+
+Source: https://github.com/ElizaWy/LPC  (indoor furniture, beds, sofas, chairs,
+tables, cabinets, barrels, buckets, chests, lighting, planters, flowers, pillows,
+blankets, clutter and debris)
+
+```
+LPC Base Object Kit by Eliza Wyatt, Lanea Zimmerman, BlueCarrot16, and Hyptosis.
+
+Bedding — headboards & bases by Lanea Zimmerman and BlueCarrot16; mattresses, adjustments and recolors by Eliza Wyatt.
+Seating — bar stools, dining chairs, sofa chairs, ottomans, sofas and thrones by Lanea Zimmerman and BlueCarrot16; side/back views, adjustments and recolors by Eliza Wyatt.
+Tables, countertops, decorative furniture, cauldron, plumbing — Lanea Zimmerman and BlueCarrot16; adjustments and recolors by Eliza Wyatt.
+Storage — barrels, buckets, cabinets and chests by Lanea Zimmerman; variants and recolors by Eliza Wyatt.
+Lighting & fire — Lanea Zimmerman; recolors by Eliza Wyatt.
+Decoration — clutter by Lanea Zimmerman, Hyptosis and Eliza Wyatt; blankets, filth & debris, flowers, pillows and planters by Lanea Zimmerman and BlueCarrot16, recolors by Eliza Wyatt.
+CC-BY-SA 3.0 (see repository for full per-file terms).
+```
+
+## [LPC] Wooden Furniture
+
+Source: https://opengameart.org/content/lpc-wooden-furniture
+
+```
+"LPC Wooden Furniture" by bluecarrot16, Baŝto, Lanea Zimmerman (Sharm), William Thompson, Tuomo Untinen (Reemax), Janna/Lilius/Jannax.
+CC-BY-SA 3.0
+
+Liberated Pixel Cup (LPC) Base Assets — Lanea Zimmerman (Sharm) — CC-BY-SA 3.0 / GPL 3.0 — http://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+LPC: Modified base tiles — Lanea Zimmerman (Sharm), William Thompson — CC-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0 / OGA-BY 3.0 — http://opengameart.org/content/lpc-modified-base-tiles
+[LPC] House interior and decorations — Tuomo Untinen (Reemax) — CC-BY-SA 3.0 / GPL 3.0 / GPL 2.0 — http://opengameart.org/content/lpc-house-interior-and-decorations
+Flowers, buildings and boxes; Interior wooden tiles; some old castle stuff — Guido Bos — CC-BY-SA 3.0 / GPL 3.0 — https://opengameart.org/content/flowers-buildings-and-boxes-interior-wooden-tiles-some-old-castle-stuff
+[LPC] Dungeon Elements — Lanea Zimmerman (Sharm), William.Thompsonj — CC-BY 3.0 / GPL 3.0 / GPL 2.0 / OGA-BY 3.0 — https://opengameart.org/content/lpc-dungeon-elements
+LPC: Interior Castle Tiles — Lanea Zimmerman (Sharm) — CC-BY 3.0 / CC-BY-SA 3.0 / GPL 3.0 / OGA-BY 3.0 — https://opengameart.org/content/lpc-interior-castle-tiles
+Home Objects — Janna/Lilius/Jannax — CC0 — https://opengameart.org/content/home-objects
+```
+
+## [LPC] Containers
+
+Source: https://opengameart.org/content/lpc-containers
+
+```
+"[LPC] Containers" by bluecarrot16, Lanea Zimmerman (Sharm), William Thompson, Tuomo Untinen (Reemax), Evert, Buch, Blarumyrran, n2liquid, Jetrel, Guido Bos, Hyptosis, Bonsaiheldin, NaRNeRZz, PriorBlue, Jerom, 7Soul, and Wolthera van Hövell tot Westerflier (TheraHedwig).
+CC-BY-SA 3.0 / GPL 3.0
+
+Based on: LPC compatible Ancient Greek Architecture (Wolthera van Hövell tot Westerflier); LPC Base Assets and LPC Modified base tiles (Lanea Zimmerman, William Thompson); [LPC] House interior and decorations (Tuomo Untinen); Cute dungeon LPC edit (Evert, Buch, Sharm, William Thompson); and others — see https://opengameart.org/content/lpc-containers for the complete list.
 ```

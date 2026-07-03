@@ -1226,26 +1226,65 @@ const LPC_BIOME = {
   'the Stone Crypt':         { floor:'Stone_Tan',     floor2:'Mudstone_Gray', floor3:'Gravel_1',     wall:'Rock_Gray',   water:'Water' },
   'the Mossy Caverns':       { floor:'Grass',         floor2:'Mud_Brown',     floor3:'Gravel_1',     wall:'Rock_Dark',   water:'Water' },
   'the Lava Depths':         { floor:'Earth_Cracked', floor2:'Rock_Dark',     floor3:'Gravel_1',     wall:'Rock_Black',  water:'Water' },
-  'the Frozen Halls':        { floor:'Snow_1',        floor2:'Snow_2',        floor3:'Ice',          wall:'Stone_White', water:'Water' },
-  'the Sunken Tombs':        { floor:'Sand',          floor2:'Soil',          floor3:'Stone_Tan',    wall:'Stone_Tan',   water:'Water' },
+  'the Frozen Halls':        { floor:'Snow_1',        floor2:'Snow_2',        floor3:'Gravel_1',     wall:'Stone_White', water:'Water' },
+  'the Sunken Tombs':        { floor:'Sand',          floor2:'Stone_Tan',     floor3:'Earth_Cracked',wall:'Mudstone_Brown',water:'Water' },
   'the Void Sanctum':        { floor:'Stone_White',   floor2:'Mudstone_Gray', floor3:'Rock_Dark',    wall:'Rock_Black',  water:'Water_Purple' },
   'the Sunlit Forest':       { floor:'Grass',         floor2:'Grass_Dark',    floor3:'Dirt_Tan',     wall:'Rock_Gray',   water:'Water' },
   'the Cherry Blossom Grove':{ floor:'Grass_Light',   floor2:'Grass',         floor3:'Dirt_Tan',     wall:'Rock_Gray',   water:'Water' },
-  'the Autumn Woods':        { floor:'Grass_Dead',    floor2:'Soil',          floor3:'Dirt_Brown',   wall:'Rock_Gray',   water:'Water' },
+  'the Autumn Woods':        { floor:'Grass_Dead',    floor2:'Mud_Brown',     floor3:'Dirt_Brown',   wall:'Rock_Gray',   water:'Water' },
   'the Pine Highlands':      { floor:'Grass_Dark',    floor2:'Grass',         floor3:'Gravel_1',     wall:'Rock_Gray',   water:'Water' },
   'the Emerald Jungle':      { floor:'Grass_Dark',    floor2:'Grass',         floor3:'Mud_Brown',    wall:'Rock_Dark',   water:'Water_Green' },
-  'the Winter Frostwood':    { floor:'Snow_1',        floor2:'Snow_2',        floor3:'Ice',          wall:'Rock_White',  water:'Water' },
-  'the Wildflower Meadow':   { floor:'Grass_Light',   floor2:'Grass',         floor3:'Soil',         wall:'Rock_Gray',   water:'Water' },
-  'the Golden Savanna':      { floor:'Soil',          floor2:'Grass_Dead',    floor3:'Sand',         wall:'Rock_Gray',   water:'Water' },
-  'the Harvest Vineyard':    { floor:'Soil',          floor2:'Grass_Dead',    floor3:'Dirt_Brown',   wall:'Rock_Gray',   water:'Water' },
-  'the Lavender Fields':     { floor:'Grass',         floor2:'Grass_Light',   floor3:'Soil',         wall:'Rock_Gray',   water:'Water_Purple' },
+  'the Winter Frostwood':    { floor:'Snow_1',        floor2:'Snow_2',        floor3:'Gravel_1',     wall:'Rock_White',  water:'Water' },
+  'the Wildflower Meadow':   { floor:'Grass_Light',   floor2:'Grass',         floor3:'Dirt_Brown',   wall:'Rock_Gray',   water:'Water' },
+  'the Golden Savanna':      { floor:'Dirt_Brown',    floor2:'Grass_Dead',    floor3:'Sand',         wall:'Rock_Gray',   water:'Water' },
+  'the Harvest Vineyard':    { floor:'Mud_Brown',     floor2:'Grass_Dead',    floor3:'Dirt_Brown',   wall:'Rock_Gray',   water:'Water' },
+  'the Lavender Fields':     { floor:'Grass',         floor2:'Grass_Light',   floor3:'Dirt_Brown',   wall:'Rock_Gray',   water:'Water_Purple' },
   'the Mushroom Hollow':     { floor:'Mud_Brown',     floor2:'Dirt_Dark',     floor3:'Gravel_1',     wall:'Rock_Dark',   water:'Water_Purple' },
   'the Crystal Cavern':      { floor:'Gravel_1',      floor2:'Rock_White',    floor3:'Stone_White',  wall:'Rock_Dark',   water:'Water' },
-  'the Coral Lagoon':        { floor:'Sand',          floor2:'Soil',          floor3:'Gravel_1',     wall:'Rock_Gray',   water:'Water' },
+  'the Coral Lagoon':        { floor:'Sand',          floor2:'Dirt_Tan',      floor3:'Gravel_1',     wall:'Rock_Gray',   water:'Water' },
   'the Obsidian Wastes':     { floor:'Rock_Dark',     floor2:'Rock_Black',    floor3:'Earth_Cracked',wall:'Rock_Black',  water:'Water' },
   // The one-time beach tutorial map: sandy ground meeting the sea.
-  'the Sunlit Shore':        { floor:'Sand',          floor2:'Soil',          floor3:'Gravel_1',     wall:'Rock_Gray',   water:'Water' },
+  'the Sunlit Shore':        { floor:'Sand',          floor2:'Dirt_Tan',      floor3:'Gravel_1',     wall:'Rock_Gray',   water:'Water' },
 };
+// ── INDOOR floor/wall roles ── indoor maps route through the same LPC autotiler
+// as outdoor now (see drawLPCTerrain). Rather than give each of the 11
+// INDOOR_THEMES its own biome entry, we map its floorStyle/wallStyle to LPC
+// terrain roles here — a primary floor plus two clustered accents for depth.
+const INDOOR_ROLES = {
+  plank:  { floor: 'Dirt_Tan',       floor2: 'Dirt_Brown',    floor3: 'Dirt_Dark' },
+  marble: { floor: 'Stone_White',    floor2: 'Stone_Tan',     floor3: 'Mudstone_Gray' },
+  stone:  { floor: 'Stone_Tan',      floor2: 'Mudstone_Gray', floor3: 'Gravel_1' },
+  carpet: { floor: 'Mudstone_Brown', floor2: 'Dirt_Dark',     floor3: 'Stone_Tan' },
+  tile:   { floor: 'Stone_Tan',      floor2: 'Dirt_Tan',      floor3: 'Mudstone_Brown' },
+  cobble: { floor: 'Gravel_1',       floor2: 'Mudstone_Gray', floor3: 'Stone_Tan' },
+};
+const INDOOR_WALL = { log: 'Mudstone_Brown', block: 'Rock_Gray', panel: 'Rock_Gray', brick: 'Rock_Gray', smooth: 'Rock_White', cobble: 'Rock_Dark' };
+function indoorRoles(C) {
+  const f = INDOOR_ROLES[C.floorStyle] || INDOOR_ROLES.stone;
+  return { floor: f.floor, floor2: f.floor2, floor3: f.floor3, wall: INDOOR_WALL[C.wallStyle] || 'Rock_Gray', water: 'Water' };
+}
+// Guard against the hard-seam bug class: a terrain used as an autotiled layer
+// MUST ship a full 16-variant blob AND have transparent edges. `Soil` was
+// exported with a baked-in background (100% opaque, no alpha); `Ice`,
+// `Ice_Melting` and `Water_Shallows_Sand` ship only a single fill tile with no
+// edge pieces. All of them render as opaque squares that butt other tiles with a
+// hard grid seam, so they must never be a biome floor/accent/wall. This warns
+// loudly (dev console) if one slips back into LPC_BIOME or the indoor roles.
+const LPC_UNBLENDABLE = new Set(['Soil', 'Ice', 'Ice_Melting', 'Water_Shallows_Sand']);
+(function validateTerrainRoles() {
+  const check = (label, roles) => {
+    for (const role of ['floor', 'floor2', 'floor3', 'wall']) {
+      const t = roles[role]; if (!t) continue;
+      const tbl = LPC_TABLE.table[t];
+      // Fill-only terrains (a handful of keys, no edge pieces) hard-seam; a
+      // near-complete blob (14/16, e.g. Mudstone_Gray) only leaves a soft gap.
+      if (LPC_UNBLENDABLE.has(t) || !tbl || Object.keys(tbl).length < 10)
+        console.warn('[terrain] ' + label + ' uses unblendable terrain "' + t + '" for ' + role + ' — hard seams');
+    }
+  };
+  for (const name in LPC_BIOME) check('biome ' + name, LPC_BIOME[name]);
+  for (const s in INDOOR_ROLES) check('indoor floorStyle ' + s, INDOOR_ROLES[s]);
+})();
 const lpcSheet = new Image();
 let lpcReady = false;
 // PREVIEW ONLY — when the `?terrain=proc` flag is set, the dungeon ground is
@@ -1277,6 +1316,7 @@ function lpcHash(x, y) { let h = (Math.imul(x, 374761393) ^ Math.imul(y, 6682652
 // Per-cell floor variant (0 primary · 1 secondary · 2 tertiary), clustered so the
 // ground varies in natural patches. Rebuilt per floor by genFloorVariants().
 let floorVariantMap = null;
+let previewFlatFloor = false;    // preview A/B: force a single flat floor (no accents)
 // Smooth value noise in [0,1] for organic patch shapes.
 function fnoise(x, y) {
   const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
@@ -1285,15 +1325,19 @@ function fnoise(x, y) {
   const a = h(xi, yi), b = h(xi + 1, yi), c = h(xi, yi + 1), d = h(xi + 1, yi + 1);
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
-function genFloorVariants() {
+function genFloorVariants(blocky) {
   const ax = (Math.random() * 500) | 0, ay = (Math.random() * 500) | 0;
   const bx = (Math.random() * 500) | 0, by = (Math.random() * 500) | 0;
   floorVariantMap = [];
+  // Indoor floors read as laid flooring, so snap the accent patches to a coarse
+  // grid — rectangular blocks of one material rather than organic outdoor blobs.
+  const q = blocky ? 3 : 0;
   for (let y = 0; y < MAP_H; y++) {
     const row = new Uint8Array(MAP_W);
     for (let x = 0; x < MAP_W; x++) {
-      const n2 = fnoise((x + bx) * 0.15, (y + by) * 0.15); // tertiary blobs (rarer)
-      const n1 = fnoise((x + ax) * 0.17, (y + ay) * 0.17); // secondary blobs
+      const sx = q ? Math.floor(x / q) * q : x, sy = q ? Math.floor(y / q) * q : y;
+      const n2 = fnoise((sx + bx) * 0.15, (sy + by) * 0.15); // tertiary blobs (rarer)
+      const n1 = fnoise((sx + ax) * 0.17, (sy + ay) * 0.17); // secondary blobs
       row[x] = n2 > 0.66 ? 2 : (n1 > 0.55 ? 1 : 0);
     }
     floorVariantMap.push(row);
@@ -1333,7 +1377,7 @@ function lpcDetail(C, ox, oy, tw, x0, y0, x1, y1) {
 }
 function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
   const C = currentTheme();
-  const B = LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' };
+  const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' });
   const inb = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H;
   const solid = (x, y) => { if (!inb(x, y)) return true; const t = mapData[y][x]; return t === 1 || t === 10; };
   const isFloor = (x, y) => inb(x, y) && !solid(x, y);
@@ -1344,18 +1388,16 @@ function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
   lpcFill(B.wall, ox, oy, tw, cx0, cy0, cx1, cy1);
   lpcLayer(B.floor, isFloor, ox, oy, tw, cx0, cy0, cx1, cy1);
   // Clustered secondary / tertiary floor patches blended over the primary.
-  if (floorVariantMap) {
+  if (floorVariantMap && !previewFlatFloor) {
     const fv = (x, y) => (inb(x, y) && floorVariantMap[y] ? floorVariantMap[y][x] : 0);
     if (B.floor2) lpcLayer(B.floor2, (x, y) => isFloor(x, y) && fv(x, y) >= 1, ox, oy, tw, cx0, cy0, cx1, cy1);
     if (B.floor3) lpcLayer(B.floor3, (x, y) => isFloor(x, y) && fv(x, y) === 2, ox, oy, tw, cx0, cy0, cx1, cy1);
   }
-  // (wall drop-shadow removed)
   if (B.water) lpcLayer(B.water, isWater, ox, oy, tw, cx0, cy0, cx1, cy1);
   lpcLayer('Lava', isLava, ox, oy, tw, cx0, cy0, cx1, cy1);
 }
 function drawFloorBase(px, py, tw, th, seed, C) {
-  if (C.indoor) { drawIndoorFloor(px, py, tw, th, seed, C); return; } // built interior — never the LPC ground
-  if ((lpcReady || PROC_TERRAIN) && !inTown) return; // terrain pass already painted the ground
+  if ((lpcReady || PROC_TERRAIN) && !inTown) return; // terrain pass already painted the ground (indoor + outdoor)
   // Procedural floor that matches the surrounding tiles (the base terrain is no
   // longer drawn from the DawnLike atlas).
   ctx.fillStyle = (Math.abs(seed) % 5 === 0) ? C.floorAlt : C.floor;
@@ -1462,9 +1504,12 @@ decorSheet.onload = () => { decorReady = true; try { draw(); } catch (e) {} };
 // tag -> [DECOR_INDEX ids] so placement can pick biome-appropriate objects.
 const DECOR_BY_TAG = {};
 DECOR_INDEX.forEach((d, i) => { (DECOR_BY_TAG[d.tag] = DECOR_BY_TAG[d.tag] || []).push(i); });
-// Tall objects (trees, big cacti, boulders) are SOLID obstacles you path around;
-// short clutter (flowers, grass, mushrooms, shells) stays walkable.
-const DECOR_SOLID = DECOR_INDEX.map((d) => d.ht >= 1.6);
+// SOLID = a real obstacle you path around. Tall outdoor objects (trees, big
+// cacti) qualify by height; indoor furniture/containers/braziers are solid at ANY
+// height (you can't walk through a table). Low clutter (flowers, grass, mushrooms,
+// shells, potted plants, floor debris) stays walkable.
+const DECOR_SOLID_TAGS = new Set(['furniture', 'barrel', 'chest', 'brazier']);
+const DECOR_SOLID = DECOR_INDEX.map((d) => d.ht >= 1.6 || DECOR_SOLID_TAGS.has(d.tag));
 // Blit a decor object anchored bottom-centre (its base sits on the cell). LPC art
 // is 32px/tile; crisp nearest-neighbour like the rest of the pixel art.
 function drawDecorSprite(id, cxCenter, cyBottom, tw) {
@@ -1568,10 +1613,12 @@ function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
     ctx.drawImage(_silCanvas, 0, 0, bw, bh, bx, by, bw, bh);
   }
 }
-// Pick decor tags that suit a biome (by its theme name). Sandy/coastal biomes get
-// the desert set (cacti/shells/bones); the rest get flowers/ferns/bushes.
-function decorTagsFor(themeName) {
-  const n = (themeName || '').toLowerCase();
+// Pick decor tags that suit a theme. Built interiors get furniture/containers/
+// braziers + potted plants & clutter; sandy/coastal biomes get the desert set
+// (cacti/shells/bones); the rest get flowers/ferns/bushes (+ trees outdoors).
+function decorTagsFor(theme) {
+  if (theme && theme.indoor) return ['furniture', 'barrel', 'chest', 'brazier', 'potted', 'rug', 'debris'];
+  const n = ((theme && theme.name) || '').toLowerCase();
   // underground / dark — fungi & dead shrubs only, no full trees
   if (/crypt|cavern|void|obsidian|mushroom|crystal|lava|depth|cell|dungeon|catacomb|sewer/.test(n)) return ['plant'];
   // sandy / coastal — cacti, shells, dry scatter
@@ -1588,7 +1635,8 @@ function decorTagsFor(themeName) {
 // never on a reserved/furnished tile. decorMap is read by no solidity check, so
 // this can never block a path.
 function placeOutdoorDecor(theme) {
-  const pool = decorTagsFor(theme && theme.name).flatMap((t) => DECOR_BY_TAG[t] || []);
+  const indoor = !!(theme && theme.indoor);
+  const pool = decorTagsFor(theme).flatMap((t) => DECOR_BY_TAG[t] || []);
   if (!pool.length) return;
   const obstacles = pool.filter((id) => DECOR_SOLID[id]);
   const clutter = pool.filter((id) => !DECOR_SOLID[id]);
@@ -1597,12 +1645,14 @@ function placeOutdoorDecor(theme) {
     && !tileReserved(x, y) && (Math.abs(x - player.x) + Math.abs(y - player.y)) >= 3;
   const openN = (x, y) => (mapData[y - 1][x] === 0 ? 1 : 0) + (mapData[y + 1][x] === 0 ? 1 : 0)
     + (mapData[y][x - 1] === 0 ? 1 : 0) + (mapData[y][x + 1] === 0 ? 1 : 0);
-  // Obstacles (trees/big cacti/boulders): SPARSE and SOLID. Placed only on tiles
-  // with >=3 open neighbours so they can never seal a corridor (same guard as
-  // furniture). Marked solid in furnitureMap so every collision/path/LoS check
-  // treats them as walls; still rendered from decorMap (outdoor draws no furniture).
+  // Obstacles (trees/big cacti outdoors; furniture/containers/braziers indoors):
+  // SOLID. Placed only on tiles with >=3 open neighbours so they can never seal a
+  // corridor. Marked solid in furnitureMap so every collision/path/LoS check
+  // treats them as walls; rendered from decorMap. Interiors are furnished denser.
   if (obstacles.length) {
-    const nObs = Math.max(1, Math.min(9, Math.round(MAP_W * MAP_H / 150)));
+    const nObs = indoor
+      ? Math.max(4, Math.min(20, Math.round(MAP_W * MAP_H / 70)))
+      : Math.max(1, Math.min(9, Math.round(MAP_W * MAP_H / 150)));
     for (let placed = 0, t = 0; placed < nObs && t < nObs * 40; t++) {
       const x = 1 + ((Math.random() * (MAP_W - 2)) | 0), y = 1 + ((Math.random() * (MAP_H - 2)) | 0);
       if (!free(x, y) || openN(x, y) < 3) continue;
@@ -1611,10 +1661,12 @@ function placeOutdoorDecor(theme) {
       placed++;
     }
   }
-  // Clutter (flowers/grass/mushrooms/shells): WALKABLE, dropped in a few natural
-  // clusters rather than uniform confetti.
+  // Clutter (flowers/mushrooms/shells outdoors; potted plants/rugs/debris indoors):
+  // WALKABLE, dropped in a few natural clusters rather than uniform confetti.
   if (clutter.length) {
-    const nClusters = Math.max(2, Math.min(6, Math.round(MAP_W * MAP_H / 230)));
+    const nClusters = indoor
+      ? Math.max(3, Math.min(8, Math.round(MAP_W * MAP_H / 160)))
+      : Math.max(2, Math.min(6, Math.round(MAP_W * MAP_H / 230)));
     for (let c = 0; c < nClusters; c++) {
       let cx = 0, cy = 0, ok = false;
       for (let t = 0; t < 24 && !ok; t++) { cx = 1 + ((Math.random() * (MAP_W - 2)) | 0); cy = 1 + ((Math.random() * (MAP_H - 2)) | 0); ok = free(cx, cy); }
@@ -7128,7 +7180,8 @@ function showVersionHistory() {
     const search = `<input type="text" placeholder="Search releases…" value="${(clText || '').replace(/"/g, '&quot;')}" oninput="setClFilter('text', this.value)">`;
     const credits = `<div class="version-credits">`
       + `Pixel art from the DawnLike tileset by DragonDePlatino &amp; DawnBringer (CC-BY&nbsp;4.0).<br>`
-      + `Terrain tiles from &ldquo;[LPC] Terrains&rdquo; by bluecarrot16 &amp; LPC contributors (CC-BY-SA&nbsp;4.0).`
+      + `Terrain tiles from &ldquo;[LPC] Terrains&rdquo; by bluecarrot16 &amp; LPC contributors (CC-BY-SA&nbsp;4.0).<br>`
+      + `Scenery &amp; interior props from the &ldquo;[LPC]&rdquo; trees, conifers, flowers, beach/desert, wooden-furniture, base-object &amp; container packs by bluecarrot16, Lanea Zimmerman, Eliza Wyatt &amp; LPC contributors (CC-BY-SA) — see docs/asset-credits.md.`
       + `</div>`;
     el.innerHTML = `<div class="cl-filters">${bySel}${sizeSel}${catSel}${search}</div><div id="version-list"></div>${credits}`;
     renderChangelogList();
@@ -8284,7 +8337,8 @@ function generateMap() {
   // lodge, royal hall, crypt…) instead of an outdoor biome; furniture is dressed
   // in after the rooms are carved. Set BEFORE anything reads currentTheme().
   furnitureMap = {}; decorMap = {};
-  floorThemeOverride = (!tutorialActive && Math.random() < 0.28) ? pick(INDOOR_THEMES) : null;
+  floorThemeOverride = previewForceIndoor != null ? INDOOR_THEMES[previewForceIndoor % INDOOR_THEMES.length]
+    : ((!tutorialActive && Math.random() < 0.28) ? pick(INDOOR_THEMES) : null);
   rollFloorMod();
   // ~35% of floors get a subtle colour wash for atmosphere.
   floorTint = Math.random() < 0.35 ? pick(FLOOR_TINTS) : null;
@@ -8603,11 +8657,13 @@ function generateMap() {
   // reach something you're meant to interact with.
   clearTrapsAroundInteractables();
 
-  // ── FURNITURE ── dress an indoor floor with themed props (SOLID; you cannot walk
-  // through them). Placed last so they avoid the player, stairs, features and foes.
-  if (floorThemeOverride) placeFurniture(floorThemeOverride);
-  else placeOutdoorDecor(currentTheme()); // non-blocking ground decor on outdoor floors
-  genFloorVariants(); // clustered secondary/tertiary floor patches for this floor
+  // ── DECOR ── dress the floor with themed props from the LPC decor atlas: trees/
+  // rocks/bushes outdoors, furniture/containers/braziers indoors. Solid pieces are
+  // placed off corridors (never sealing a path); clutter scatters in clusters.
+  // Placed last so they avoid the player, stairs, features and foes.
+  const _theme = currentTheme();
+  placeOutdoorDecor(_theme);
+  genFloorVariants(_theme.indoor); // clustered floor patches — blocky indoors, organic outdoors
 
   // A hired Sellsword companion joins you on the floor (one floor of its contract).
   spawnMerc();
@@ -12451,6 +12507,7 @@ const INDOOR_THEMES = [
 // When a floor rolls indoor, this holds that floor's chosen indoor theme; null on
 // ordinary outdoor floors. Set in generateMap, cleared in town.
 let floorThemeOverride = null;
+let previewForceIndoor = null; // preview only: force a specific INDOOR_THEMES index
 // Themed by the DISPLAYED floor, so each difficulty replays the same visual
 // progression (floor 1 always looks like floor 1) — only the red wash deepens.
 // An indoor floor (floorThemeOverride) and the tutorial beach override this.
@@ -12738,7 +12795,8 @@ function isWallTile(x, y) {
 // faces exposed to open floor get lit rims / cast shadows for depth. A wall mass
 // is sunlit only along its crest (top tile), so stacked walls read as one cliff.
 function drawWall(px, py, tw, th, x, y, seed, C, cracked) {
-  if (C.indoor) { drawIndoorWall(px, py, tw, th, x, y, seed, C, cracked); return; } // built interior wall
+  // Indoor + outdoor both use the LPC autotiler now: drawLPCTerrain fills the
+  // wall mass, so here we only add the crack overlay for damaged tiles.
   if (lpcReady && !inTown) { if (cracked) lpcCrackOverlay(px, py, tw, th); return; }
   if (C.wallStyle === 'forest') { drawForestWall(px, py, tw, th, x, y, seed, C, cracked); return; }
   if (C.wallStyle === 'pine') { drawPineWall(px, py, tw, th, x, y, seed, C, cracked); return; }
@@ -12994,8 +13052,10 @@ function draw() {
   const y1 = Math.min(MAP_H, Math.ceil((camY + H) / th));
 
   // LPC terrain — real autotiled pixel ground replaces the procedural fill.
+  // Indoor maps route through the same autotiler now (via indoorRoles), so both
+  // outdoor biomes and built interiors get real tiled floors + clustered accents.
   if (PROC_TERRAIN && !inTown && !C.indoor) drawProcTerrain(offX, offY, tw); // preview: procedural terrain-pack ground
-  else if (lpcReady && !inTown && !C.indoor) drawLPCTerrain(offX, offY, tw, x0, y0, x1, y1); // indoor floors draw per-tile
+  else if (lpcReady && !inTown) drawLPCTerrain(offX, offY, tw, x0, y0, x1, y1);
 
   // Draw tiles
   for (let y = y0; y < y1; y++) {
@@ -13253,10 +13313,6 @@ function draw() {
         ctx.fillRect(px, py, tw, Math.max(1, th*0.5));
         ctx.strokeStyle = 'rgba(255,255,255,0.32)'; ctx.lineWidth = Math.max(1, tw*0.025);
         ctx.beginPath(); ctx.moveTo(px+tw*0.2, py+th*0.72); ctx.lineTo(px+tw*0.55, py+th*0.26); ctx.stroke();
-      } else if (C.indoor) {
-        // Built interior: procedural plank/tile/stone floor + any furniture prop.
-        drawIndoorFloor(px, py, tw, th, seed, C);
-        drawFurnitureAt(x, y, px, py, tw, th);
       } else if (!(lpcReady && !inTown)) {
         // Floor base — organic per-tile variation instead of a checkerboard:
         // most tiles use the base colour, a few the alt, and every tile gets a
@@ -13296,8 +13352,9 @@ function draw() {
           ctx.fillRect(px, py, Math.max(1, tw*0.14), th);
         }
       }
-      // Outdoor ground decor (non-blocking): drawn over the floor, under actors.
-      if (!inTown && !C.indoor && mapData[y][x] === 0) drawDecorAt(x, y, px, py, tw, th);
+      // Ground decor (non-blocking): drawn over the floor, under actors. Both
+      // outdoor scenery (trees/rocks/bushes) and indoor props (furniture/crates).
+      if (!inTown && mapData[y][x] === 0) drawDecorAt(x, y, px, py, tw, th);
     }
   }
 
@@ -13863,7 +13920,7 @@ function draw() {
 
   // Tall decor (trees) occludes actors standing behind it, with a tinted
   // silhouette over the covered part so the hero/foes stay trackable.
-  if (!inTown && !C.indoor) drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale);
+  if (!inTown) drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale);
 
   // Player status effects are surfaced as full-screen coloured halos (see
   // updateHaloVignette), not as little icons over the hero sprite.
@@ -23805,6 +23862,55 @@ try {
         }
       }
       draw(); return { ok: false };
+    };
+    // Preview A/B: toggle the clustered secondary/tertiary floor accents on the
+    // CURRENT map (no regen) so a capture can shoot the same layout both ways.
+    window.__previewMultiFloor = function (on) { previewFlatFloor = !on; draw(); return { multiFloor: on }; };
+    // Render the EXACT terrain autotile set the current level composites (floor +
+    // accents + wall + water + lava), straight from the live atlas — so what we
+    // inspect always matches what's on screen. Returns a labeled contact sheet.
+    window.__previewTileset = function () {
+      const C = currentTheme();
+      const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor: 'Grass', wall: 'Rock_Gray', water: 'Water' });
+      const roles = [];
+      if (B.floor)  roles.push(['floor (primary)', B.floor]);
+      if (B.floor2) roles.push(['floor accent 2', B.floor2]);
+      if (B.floor3) roles.push(['floor accent 3', B.floor3]);
+      if (B.wall)   roles.push(['WALL', B.wall]);
+      if (B.water)  roles.push(['water', B.water]);
+      roles.push(['lava', 'Lava']);
+      const A = LPC_A, NC = LPC_NCOLS, Z = 4, order = [15, 1, 2, 4, 8, 3, 5, 10, 12, 7, 11, 13, 14, 6, 9];
+      const rowH = A * Z + 26;
+      const cv = document.createElement('canvas');
+      cv.width = order.length * (A * Z + 3) + 16; cv.height = roles.length * rowH + 12;
+      const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+      g.fillStyle = '#15131b'; g.fillRect(0, 0, cv.width, cv.height);
+      roles.forEach(([label, name], ri) => {
+        const tbl = LPC_TABLE.table[name] || {};
+        const y = 10 + ri * rowH;
+        g.fillStyle = '#e8c267'; g.font = 'bold 14px monospace';
+        g.fillText(label + ':  ' + name, 10, y + 13);
+        order.forEach((m, ci) => { const id = tbl[m]; if (id == null) return; const sx = (id % NC) * A, sy = ((id / NC) | 0) * A; g.drawImage(lpcSheet, sx, sy, A, A, 10 + ci * (A * Z + 3), y + 18, A * Z, A * Z); });
+      });
+      return { biome: C.name, indoor: !!C.indoor, roles: roles.map((r) => r[0] + '=' + r[1]), img: cv.toDataURL('image/png') };
+    };
+    // Force a specific built-interior theme and regenerate, so indoor floors can be
+    // previewed deterministically (normally they appear ~28% of floors at random).
+    window.__previewIndoor = function (idx) {
+      try {
+        previewForceIndoor = (idx | 0);
+        tutorialActive = false;
+        revivedInTown = false; closeTown(); recordDepth();
+        statusEffects = []; setPlayerCell(5, 5); arrivalDir = 'down';
+        generateMap();
+        player.hp = player.maxHp = 9999999; player.mp = player.maxMp = 9999999;
+        if (typeof closeTitle === 'function') closeTitle();
+        updateBars(); draw();
+        let decor = 0, solid = 0;
+        for (const k in decorMap) { decor++; if (DECOR_SOLID[decorMap[k]]) solid++; }
+        const C = currentTheme();
+        return { theme: C.name, floorStyle: C.floorStyle, wallStyle: C.wallStyle, decor, solid };
+      } catch (e) { return { err: String(e) }; }
     };
   }
 } catch (e) {}

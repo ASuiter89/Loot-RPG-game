@@ -72,10 +72,12 @@ async function main() {
   // centred crop on the hero (camera keeps the hero at canvas centre)
   const box = await page.evaluate(() => { const c = document.getElementById('canvas').getBoundingClientRect(); return { cx: c.width / 2, cy: c.height / 2 }; });
   try { await page.locator('#canvas').screenshot({ path: join(outDir, 'preview-occlusion-zoom.png'), clip: { x: Math.max(0, box.cx - 200), y: Math.max(0, box.cy - 230), width: 400, height: 420 } }); } catch (e) {}
-  // multi-floor: high-contrast biomes (crypt stone/mudstone/gravel, tombs sand/soil/stone)
-  for (const [lvl, tag] of [[1, 'floors-crypt'], [5, 'floors-tombs'], [3, 'floors-lava']]) {
+  // multi-floor sample: sweep a range of biomes so the clustered primary/
+  // secondary/tertiary floors can be judged across contrasting palettes.
+  for (let lvl = 1; lvl <= 20; lvl++) {
     const i = await page.evaluate((l) => window.__previewFloor(l), lvl);
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(350);
+    const tag = 'biome-' + String(lvl).padStart(2, '0') + '-' + String((i && i.biome) || 'x').replace(/[^a-z0-9]+/gi, '').toLowerCase().slice(0, 16);
     files.push(await capture(page, tag, i));
   }
   console.log('preview: treeInfo=' + JSON.stringify(treeInfo) + ' behindTree=' + JSON.stringify(bt));
