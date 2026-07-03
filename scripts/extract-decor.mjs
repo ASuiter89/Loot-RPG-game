@@ -77,21 +77,39 @@ const SOURCES = [
 
 const out = await page.evaluate(async ({ port, SOURCES }) => {
   async function load(src) { const im = new Image(); im.src = `http://127.0.0.1:${port}/${src}`; await im.decode(); return im; }
-  // connected components (8-conn) over alpha>24
-  function components(data, W, H, minA) {
-    const seen = new Uint8Array(W * H); const comps = [];
-    const stack = [];
+  // Connected components (8-conn) over alpha>24, with a DILATION gap: the opaque
+  // mask is grown by `gap` px before connectivity, so fragments of ONE object (a
+  // bed's headboard + mattress, a four-poster's posts) separated by a few
+  // transparent px merge into a single whole piece instead of being extracted as
+  // partial slivers. The bounding box is still taken from the ORIGINAL opaque
+  // pixels only, so the crop stays tight around the real art.
+  function components(data, W, H, minA, gap) {
+    const op = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) op[i] = data[i * 4 + 3] > 24 ? 1 : 0;
+    let cmask = op;
+    if (gap > 0) {
+      const dil = new Uint8Array(W * H);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        if (!op[y * W + x]) continue;
+        for (let dy = -gap; dy <= gap; dy++) for (let dx = -gap; dx <= gap; dx++) {
+          const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          dil[ny * W + nx] = 1;
+        }
+      }
+      cmask = dil;
+    }
+    const seen = new Uint8Array(W * H); const comps = []; const stack = [];
     for (let i = 0; i < W * H; i++) {
-      if (seen[i] || data[i * 4 + 3] <= 24) { seen[i] = 1; continue; }
+      if (seen[i] || !cmask[i]) { seen[i] = 1; continue; }
       let minx = W, miny = H, maxx = 0, maxy = 0, area = 0;
       stack.push(i); seen[i] = 1;
       while (stack.length) {
         const p = stack.pop(); const x = p % W, y = (p / W) | 0;
-        area++; if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y;
+        if (op[p]) { area++; if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
           const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
           const np = ny * W + nx; if (seen[np]) continue; seen[np] = 1;
-          if (data[np * 4 + 3] > 24) stack.push(np); }
+          if (cmask[np]) stack.push(np); }
       }
       if (area >= minA) comps.push({ x: minx, y: miny, w: maxx - minx + 1, h: maxy - miny + 1, area });
     }
@@ -103,7 +121,11 @@ const out = await page.evaluate(async ({ port, SOURCES }) => {
     const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
     const g = c.getContext('2d'); g.drawImage(im, 0, 0);
     const data = g.getImageData(0, 0, im.width, im.height).data;
-    let comps = components(data, im.width, im.height, s.minA)
+    // Furniture fragments (bed parts, four-poster posts) sit a few px apart, so
+    // merge with a wider gap; densely-packed small decor merges only just-touching
+    // bits so distinct items aren't fused.
+    const gap = s.gap != null ? s.gap : (s.tag === 'furniture' ? 4 : 1);
+    let comps = components(data, im.width, im.height, s.minA, gap)
       .filter((b) => b.h >= s.minH && b.h <= s.maxH && b.w <= s.maxW)
       .sort((a, b) => a.y - b.y || a.x - b.x);
     // evenly sample down to the cap so we keep variety across the sheet

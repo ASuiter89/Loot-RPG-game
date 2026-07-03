@@ -1536,22 +1536,25 @@ DECOR_INDEX.forEach((d, i) => { (DECOR_BY_TAG[d.tag] = DECOR_BY_TAG[d.tag] || []
 // shells, potted plants, floor debris) stays walkable.
 const DECOR_SOLID_TAGS = new Set(['furniture', 'barrel', 'chest', 'brazier']);
 const DECOR_SOLID = DECOR_INDEX.map((d) => d.ht >= 1.6 || DECOR_SOLID_TAGS.has(d.tag));
-// OCCLUDERS are tall, narrow things you walk BEHIND (trees): they block only their
-// trunk tile and their canopy draws over you with a see-through silhouette.
-// Everything else solid (furniture, crates, braziers, cacti) sits ON the ground —
-// it blocks its whole footprint so you can't walk through the off-anchor tiles.
-const DECOR_OCCLUDER = DECOR_INDEX.map((d) => d.tag === 'tree' || d.tag === 'tree_dead' || d.tag === 'tree_pine');
+const DECOR_TREE = DECOR_INDEX.map((d) => d.tag === 'tree' || d.tag === 'tree_dead' || d.tag === 'tree_pine');
+// A FLAT piece (bed/table/sofa/rug — about as wide as it is tall, or short) rests
+// fully on the floor; a TALL piece (wardrobe, shelf, clock, tree) stands up and you
+// can walk behind it.
+const decorFlat = (d) => d.ht <= 1.5 || (d.w / 32) >= d.ht * 0.85;
+// OCCLUDERS are tall things you walk BEHIND (trees + standing furniture): they
+// block only their base and draw over you with a see-through SILHOUETTE when you're
+// behind them. Flat solid pieces (beds/tables/sofas) block their whole footprint,
+// so you're never behind them and they just draw under you.
+const DECOR_OCCLUDER = DECOR_INDEX.map((d, i) => DECOR_TREE[i] || (DECOR_SOLID[i] && !decorFlat(d)));
 // The tiles a solid decor object occupies for collision (anchored bottom-centre).
 function decorFootprint(id, ax, ay) {
   const d = DECOR_INDEX[id];
-  if (!d || DECOR_OCCLUDER[id]) return [[ax, ay]];       // tree → just the trunk
-  const W = Math.max(1, Math.round(d.w / 32)), wt = d.w / 32;
-  // A FLAT piece (bed/table/sofa/rug — about as wide as it is tall, or short) rests
-  // fully on the floor → block its whole footprint. A TALL narrow piece (cabinet,
-  // wardrobe, shelf) rests only on its base → block the base row so the space
-  // behind it stays walkable.
-  const flat = d.ht <= 1.5 || wt >= d.ht * 0.85;
-  const H = flat ? Math.max(1, Math.round(d.ht)) : 1;
+  if (!d) return [[ax, ay]];
+  if (DECOR_TREE[id]) return [[ax, ay]];                 // tree → just the trunk
+  const W = Math.max(1, Math.round(d.w / 32));
+  // Flat pieces block their whole footprint; tall standing furniture blocks only
+  // its base row (so the space behind it stays walkable — you get the silhouette).
+  const H = decorFlat(d) ? Math.max(1, Math.round(d.ht)) : 1;
   const left = ax - (W >> 1), top = ay - (H - 1);
   const tiles = [];
   for (let yy = top; yy <= ay; yy++) for (let xx = left; xx < left + W; xx++) tiles.push([xx, yy]);
