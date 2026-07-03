@@ -1569,33 +1569,37 @@
   #skill-bar .sb-left  { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 5px; justify-content: flex-start; flex-wrap: wrap; }
   #skill-bar .sb-right { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 5px; justify-content: flex-end; flex-wrap: wrap; }
   #skill-bar .sb-auto-wrap { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
-  /* The auto-cast slot looks exactly like the manual skill slots — same fill, border,
-     ready/empty/cooling states (all inherited from .skillbar-btn). The only thing that
-     sets it apart is the small ⟳ AUTO tag riding along its top edge. */
-  .skillbar-btn.autoslot .auto-tag { position: absolute; top: 2px; left: 0; right: 0; z-index: 5;
-    text-align: center; font-size: 0.95rem; letter-spacing: 0.2px; color: var(--blue-350); white-space: nowrap; overflow: hidden;
-    text-shadow: 0 1px 2px var(--ink), 0 0 3px var(--ink); pointer-events: none; }
-  /* Reserve headroom for the tag so it never overlaps the slot icon (the #skill-bar
-     selector outranks the belt's own padding rules). */
-  .skillbar-btn.autoslot, #skill-bar .skillbar-btn.autoslot { padding-top: calc(12px * var(--ui-scale,1)); }
-  .skillbar-btn.autoslot.ready .auto-tag { color: var(--gold); }
-  /* Uniform SQUARE buttons — potions, TOWN, the 4 skill slots and the auto slot
-     all share one size (--sb-size, which scales with UI SIZE). The key sits as a
-     corner chip and the caption as a bottom overlay, so the centred icon never
-     overlaps them and every button is the same box regardless of its content. */
-  .skillbar-btn { position: relative; box-sizing: border-box; width: var(--sb-size, 46px); height: var(--sb-size, 46px); min-width: 0; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; padding: 2px; border-radius: 7px; border: 1px solid var(--border); background: var(--panel-raised); color: var(--purple-200); cursor: pointer; font-family: var(--font-ui); -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  /* Every tile is now a CELL: a full-width hotkey PILL stacked directly above the
+     square icon box. The pill carries the hotkey (or the word "AUTO" for the
+     auto-cast tile); the box below holds only the edge-to-edge icon. The auto tile
+     is otherwise identical to the manual slots — same fill, border and
+     ready/empty/cooling states (all inherited from .skillbar-btn). */
+  .sb-cell { display: flex; flex-direction: column; align-items: stretch; gap: calc(3px * var(--ui-scale,1)); width: var(--sb-size, 46px); flex: 0 0 auto; }
+  .sb-pill { box-sizing: border-box; width: 100%; text-align: center; font-family: var(--font-ui); font-size: var(--fs-fine); line-height: 1; letter-spacing: 0.3px; padding: calc(3px * var(--ui-scale,1)) 3px; border-radius: var(--radius-pill); border: 1px solid var(--border); background: var(--panel-raised); color: var(--blue-350); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+  /* Pill tints echo the tile family below them: gold primary, red/blue potions,
+     green town gate, cyan auto-cast. */
+  .sb-pill.gold { border-color: var(--frame); background: var(--orange-850); color: var(--gold); }
+  .sb-pill.hp   { border-color: var(--red-550);  background: var(--red-700);  color: var(--red-150); }
+  .sb-pill.mp   { border-color: var(--blue-550); background: var(--blue-700); color: var(--info); }
+  .sb-pill.town { border-color: var(--green-600); background: var(--green-800); color: var(--green-300); }
+  .sb-pill.auto { border-color: var(--blue-300); background: var(--blue-800); color: var(--teal-250); letter-spacing: 1px; }
+  /* Uniform SQUARE tiles — potions, TOWN, the 4 skill slots and the auto slot all
+     share one size (--sb-size, which scales with UI SIZE). The icon fills the whole
+     box; overflow:hidden clips it to the rounded corners, and the cooldown dial /
+     caption overlay it. */
+  .skillbar-btn { position: relative; box-sizing: border-box; width: var(--sb-size, 46px); height: var(--sb-size, 46px); min-width: 0; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; padding: 0; overflow: hidden; border-radius: 7px; border: 1px solid var(--border); background: var(--panel-raised); color: var(--purple-200); cursor: pointer; font-family: var(--font-ui); -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   /* The hero's primary active (slot 1) is marked off in gold so it reads as the signature ability cast by the button. */
   .skillbar-btn.baseline { border-color: var(--frame); background: var(--orange-850); color: var(--gold-200); }
-  .skillbar-btn.baseline .sb-key { color: var(--gold); }
   .skillbar-btn.baseline.disabled { background: var(--panel); border-color: var(--panel); color: var(--btn-off); }
-  .skillbar-btn .sb-key { position: absolute; top: 2px; left: 2px; z-index: 4; max-width: calc(100% - 4px); overflow: hidden; white-space: nowrap; font-size: 1.1rem; line-height: 1; color: var(--blue-350); background: rgba(0,0,0,0.42); border-radius: 4px; padding: 0 3px; text-shadow: 0 1px 1px #000; pointer-events: none; }
-  .skillbar-btn .sb-icon { flex: 0 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; font-size: 2rem; line-height: 1; }
-  /* Spell tiles drop the MP label, so the icon grows to fill the tile (hover the
-     button for MP / cooldown details). The min-height reserves the icon's line even
-     when the atlas hasn't loaded yet (dlIcon returns ''), so a filled slot keeps its
-     full tile shape instead of collapsing to a thin pill. */
+  /* The icon fills the tile edge-to-edge (atlas art via dlIconFill scales to any
+     size; inline potion SVGs and the empty-slot ＋ glyph centre to match), so no
+     small glyph is left marooned in a big box. It's absolute so it fills even before
+     the atlas loads; overflow:hidden on the tile rounds off its corners. */
+  .skillbar-btn .sb-icon { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; font-size: 2rem; line-height: 1; }
+  .skillbar-btn .sb-icon .dl-ic, .skillbar-btn .sb-icon svg { width: 100%; height: 100%; }
+  /* .big only sizes the empty-slot ＋ glyph now (filled icons ignore font-size). */
   .skillbar-btn .sb-icon.big { font-size: 2.2rem; }
-  .skillbar-btn .sb-info { position: absolute; bottom: 1px; left: 0; right: 0; text-align: center; font-size: 0.95rem; line-height: 1.1; letter-spacing: 0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px var(--ink), 0 0 3px var(--ink); pointer-events: none; }
+  .skillbar-btn .sb-info { position: absolute; bottom: 1px; left: 0; right: 0; z-index: 4; text-align: center; font-size: 0.95rem; line-height: 1.1; letter-spacing: 0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px var(--ink), 0 0 3px var(--ink); pointer-events: none; }
   /* Ready to cast: brighter fill + a crisp outline that gently pulses so an
      available skill clearly stands apart from greyed/cooling-down ones. */
   .skillbar-btn.ready { background: var(--border); border-color: var(--gold); color: var(--text); animation: skillReadyGold 1.4s ease-in-out infinite; }
@@ -1623,14 +1627,12 @@
   .skillbar-btn.cooling.ready { animation: none; }
   /* Potion skills pinned to the far left of the bar — red Health flask, blue Mana flask. */
   .skillbar-btn.potion { border-color: var(--red-550); background: var(--red-700); color: var(--red-150); }
-  .skillbar-btn.potion .sb-key { color: var(--red-450); }
   .skillbar-btn.potion:active { background: var(--red-800); }
   .skillbar-btn.potion.empty { background: var(--bg); border-color: var(--magenta-750); color: var(--red-600); }
   /* Ready to drink → a soft pulsing glow so it's obvious it can be used. */
   .skillbar-btn.potion.ready { border-color: var(--red-200); animation: potReadyRed 1.5s ease-in-out infinite; }
   @keyframes potReadyRed { 0%,100% { box-shadow: 0 0 4px 1px color-mix(in srgb, var(--danger) 45%, transparent); } 50% { box-shadow: 0 0 12px 3px color-mix(in srgb, var(--danger) 90%, transparent); } }
   .skillbar-btn.potion.mana { border-color: var(--blue-550); background: var(--blue-700); color: var(--purple-50); }
-  .skillbar-btn.potion.mana .sb-key { color: var(--info); }
   .skillbar-btn.potion.mana:active { background: var(--blue-600); }
   .skillbar-btn.potion.mana.empty { background: var(--blue-800); border-color: var(--blue-800); color: var(--btn-off); }
   .skillbar-btn.potion.mana.ready { border-color: var(--blue-250); animation: potReadyBlue 1.5s ease-in-out infinite; }
@@ -1640,7 +1642,6 @@
   /* TOWN button (desktop): a green/parchment tone so it reads as "leave to the
      safe hub", distinct from the purple skills and the red/blue potions. */
   .skillbar-btn.town { border-color: var(--green-600); background: var(--green-800); color: var(--green-50); }
-  .skillbar-btn.town .sb-key { color: var(--green-300); }
   .skillbar-btn.town:active { background: var(--green-650); }
   .skillbar-btn.town.disabled { background: var(--orange-850); border-color: var(--green-800); color: var(--orange-500); }
   /* Town portal charging: a swirling cyan pulse while the gate opens over a few seconds. */
@@ -1773,10 +1774,11 @@
     #skill-bar { gap: 6px; }
     #skill-bar { --sb-size: calc(50px * var(--ui-scale,1)); }
     /* skill slots share --sb-size; no per-variant min-width */
+    /* Icons fill the tile (base .sb-icon fill rules); only the empty-slot ＋ glyph
+       reads off font-size, bumped up for the larger touch tiles. */
     #skill-bar .skillbar-btn .sb-icon { font-size: 2.2rem; }
     #skill-bar .skillbar-btn .sb-icon.big { font-size: 3.2rem; }
-    #skill-bar .skillbar-btn .sb-icon svg { width: auto; height: calc(28px * var(--ui-scale,1)); }
-    #skill-bar .skillbar-btn .sb-key { font-size: 1.2rem; }
+    #skill-bar .sb-pill { font-size: var(--fs-sub); }
     #skill-bar .skillbar-btn .sb-info { font-size: 1.1rem; }
     /* Lay the 4 skill slots out as a tidy 2x2 block, not 3-on-top-1-below. */
     #skill-bar .sb-right { display: grid; grid-template-columns: repeat(2, auto); justify-content: flex-end; justify-items: end; gap: 5px; }
@@ -3562,9 +3564,10 @@
       --panel-col: clamp(210px, 22vw, 440px); --panel-open: clamp(210px, 22vw, 440px);
       /* Bottom HUD belt is rem-based so it grows with the type (and the UI SIZE
          setting) instead of clipping the skill icons and HP/MP row when scaled.
-         Tall enough to hold the HP/MP row, the enlarged skill tiles with an even
-         margin above and below them, and the XP bar along the bottom. */
-      --dhud-h: clamp(150px, 12.5rem, 240px);
+         Tall enough to hold the HP/MP row, the enlarged skill tiles — now each with
+         a hotkey pill stacked above it — with an even margin above and below them,
+         and the XP bar along the bottom. */
+      --dhud-h: clamp(190px, 14.5rem, 280px);
     }
     /* Fold a panel to a 30px spine. Only the *-col var folds; the *-open var — the
        width the panel BODY is pinned to (see #log / #panel-body) — is governed by
@@ -3891,15 +3894,11 @@
        left/right groups stay on one row (nowrap) rather than wrapping and clipping. */
     #skill-bar { --sb-size: calc(72px * var(--ui-scale,1)); }
     #skill-bar .sb-left, #skill-bar .sb-right { flex-wrap: nowrap; }
-    /* The sprite/SVG/emoji icons scale up with the bigger tiles so each button keeps
-       the same filled look instead of a small icon marooned in a large box. */
-    #skill-bar .skillbar-btn .sb-icon { transform: scale(1.5); }
+    /* Icons fill the tile edge-to-edge (base .sb-icon fill rules); only the
+       empty-slot ＋ glyph reads off font-size, bumped up for the larger tiles. */
     #skill-bar .skillbar-btn .sb-icon { font-size: 2.4rem; }
-    /* Spell icons (no MP label) fill the larger tile here. */
     #skill-bar .skillbar-btn .sb-icon.big { font-size: 3.4rem; }
-    /* Potion flasks are inline SVGs with fixed px sizes — scale them up too. */
-    #skill-bar .skillbar-btn .sb-icon svg { width: auto; height: calc(28px * var(--ui-scale,1)); }
-    #skill-bar .skillbar-btn .sb-key { font-size: 1.2rem; }
+    #skill-bar .sb-pill { font-size: var(--fs-sub); }
     #skill-bar .skillbar-btn .sb-info { font-size: 1.2rem; }
     /* Map: the largest square that fits its cell, centered. */
     canvas {

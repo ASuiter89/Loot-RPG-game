@@ -5893,7 +5893,7 @@ window.gameGuide = function gameGuide(topic) {
       `Gear gating is thoughtful: a MELEE/RANGED weapon can only roll Skill Power & Attack Speed; a WAND/STAFF only Spell Power & Cast Speed. Gloves & rings lean martial (Skill Power); amulets & caster off-hands lean arcane (Spell/Cast). So the weapon you wield already points your build at one lane.`,
     ],
     autocast: [
-      `AUTO-CAST: exactly ONE skill auto-casts — whatever you drop into the dedicated auto-cast slot (the cyan-rimmed slot in the MIDDLE of the bar). It fires itself the instant it is available (off cooldown and affordable), no key press needed.`,
+      `AUTO-CAST: exactly ONE skill auto-casts — whatever you drop into the dedicated auto-cast slot (the tile in the MIDDLE of the bar, labelled "AUTO" on the pill above it). It fires itself the instant it is available (off cooldown and affordable), no key press needed.`,
       `Set it by dragging a learned active onto the auto-cast slot, ticking the Auto-cast toggle in a slot's assign dialog, or using the SKILLS-tab Auto-cast button. From the console: setAutoSkill("<skillId>") to arm, setAutoSkill(null) to clear. The auto-cast skill is reserved out of the manual row, so it can't also sit in a numbered slot.`,
       `There is no priority list or pacing to juggle any more — it's a single skill, so it simply fires whenever it's ready.`,
       `It is smart about waste: a damage skill only lands when a target is in range, and a pure heal waits until you are below ~85% HP. Buffs, summons and utility recast the instant they come off cooldown — but since a self-buff's cooldown runs well longer than the buff itself (~40% uptime at 0 CDR), an auto-cast buff still spends most of its time down; stacking Cooldown Reduction raises that uptime but won't hold it permanently.`,
@@ -20595,12 +20595,16 @@ function renderSkillBar() {
   const healTip = `<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health Potion</div><div class='ht-line'>${town ? 'Saved for the dungeon — rest in town to heal for free instead.' : 'Mends health <b>over a few seconds</b> — a heavy direct hit spills the rest of the sip.'}</div><div class='ht-sub'>${healHint}${town ? '' : ` · over time · ${effectivePotionCd()}-second cooldown`}</div>`;
   const manaTip = `<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana Potion</div><div class='ht-line'>${town ? 'Saved for the dungeon — rest in town to refill for free instead.' : 'Restores mana <b>over a few seconds</b>.'}</div><div class='ht-sub'>${manaHint}${town ? '' : ` · over time · ${effectivePotionCd()}-second cooldown`}</div>`;
   const cdDial = (key) => `<span class="sb-cd" data-cd="${key}"></span>`;
-  const healBtn = `<button class="skillbar-btn potion ${town ? 'town-locked' : (potReady && !hpFull ? 'ready' : 'empty')} ${urgent ? 'urgent' : ''} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} ${town ? '' : 'onclick="useHealthPotion()"'}>
-      <span class="sb-key">${kbShort(kbLabel('healthPotion'))}</span><span class="sb-icon">${HEAL_POTION_SVG}</span><span class="sb-info" id="heal-label">${pcd > 0 ? Math.ceil(pcd) + 's' : ''}</span>${cdDial('pot')}
-    </button>`;
-  const manaBtn = `<button class="skillbar-btn potion mana ${town ? 'town-locked' : (potReady && !mpFull ? 'ready' : 'empty')} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} ${town ? '' : 'onclick="useManaPotion()"'}>
-      <span class="sb-key">${kbShort(kbLabel('manaPotion'))}</span><span class="sb-icon">${MANA_POTION_SVG}</span><span class="sb-info">${pcd > 0 ? Math.ceil(pcd) + 's' : ''}</span>${cdDial('pot')}
-    </button>`;
+  // Each tile rides in a cell with its hotkey pill stacked above the button. `label`
+  // is the hotkey (or "AUTO" for the auto-cast slot); `tone` tints the pill to match
+  // the button family ('' for a plain skill slot). The icon now fills the box below.
+  const cell = (label, tone, btn) => `<div class="sb-cell"><span class="sb-pill${tone ? ' ' + tone : ''}">${label}</span>${btn}</div>`;
+  const healBtn = cell(kbShort(kbLabel('healthPotion')), 'hp', `<button class="skillbar-btn potion ${town ? 'town-locked' : (potReady && !hpFull ? 'ready' : 'empty')} ${urgent ? 'urgent' : ''} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} ${town ? '' : 'onclick="useHealthPotion()"'}>
+      <span class="sb-icon">${HEAL_POTION_SVG}</span><span class="sb-info" id="heal-label">${pcd > 0 ? Math.ceil(pcd) + 's' : ''}</span>${cdDial('pot')}
+    </button>`);
+  const manaBtn = cell(kbShort(kbLabel('manaPotion')), 'mp', `<button class="skillbar-btn potion mana ${town ? 'town-locked' : (potReady && !mpFull ? 'ready' : 'empty')} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} ${town ? '' : 'onclick="useManaPotion()"'}>
+      <span class="sb-icon">${MANA_POTION_SVG}</span><span class="sb-info">${pcd > 0 ? Math.ceil(pcd) + 's' : ''}</span>${cdDial('pot')}
+    </button>`);
   // The four manual slots are rendered filled or empty (keys 1–4; slot 1 is the
   // gold primary). A filled slot casts on click and can be dragged to another slot
   // to rearrange; an empty slot is a dashed drop target — drag a learned skill onto
@@ -20611,12 +20615,13 @@ function renderSkillBar() {
   const dropAttrs = (i) => `data-slot="${i}" ondragover="skillSlotDragOver(event)" ondrop="skillSlotDropOn(event,${typeof i === 'number' ? i : `'${i}'`})" ondragenter="skillSlotDragEnter(event,this)" ondragleave="skillSlotDragLeave(event,this)"`;
   const slotBtnHtml = (id, i) => {
     const key = skillKeyLabel(i + 1);
+    const tone = i === 0 ? 'gold' : '';   // slot 1 is the gold primary
     const s = id ? byId[id] : null;
     if (!s) {
       const tip = `<div class='ht-name'>Empty slot ${i + 1}</div><div class='ht-line'>${touchUI() ? 'Tap to assign a learned skill.' : 'Drag a learned skill here, or tap to assign one.'}</div>${key && !touchUI() ? `<div class='ht-sub'>casts with ${key}</div>` : ''}`;
-      return `<button class="skillbar-btn slot-empty${i === 0 ? ' baseline' : ''}" ${dropAttrs(i)} ${hoverTip(tip)} onclick="openSlotPicker(${i})">
-      <span class="sb-key">${kbShort(key)}</span><span class="sb-icon big slot-plus">＋</span>
-    </button>`;
+      return cell(kbShort(key), tone, `<button class="skillbar-btn slot-empty${i === 0 ? ' baseline' : ''}" ${dropAttrs(i)} ${hoverTip(tip)} onclick="openSlotPicker(${i})">
+      <span class="sb-icon big slot-plus">＋</span>
+    </button>`);
     }
     const cd = skillCd(s.id);
     const ready = cd <= 0 && player.mp >= s.mp && player.hp > 0;
@@ -20624,10 +20629,10 @@ function renderSkillBar() {
     const castHint = touchUI() ? ' · tap to cast' : (key ? ` · press ${key}` : '');
     const moveHint = touchUI() ? 'tap the SKILLS tab to re-slot' : 'drag to rearrange · drag a tree skill to swap';
     const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown${castHint}</div><div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
-    return `<button class="skillbar-btn ${i === 0 ? 'baseline ' : ''}${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
+    return cell(kbShort(key), tone, `<button class="skillbar-btn ${i === 0 ? 'baseline ' : ''}${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}',${i})" ondragend="skillDragEnd()" ${dropAttrs(i)} ${hoverTip(tip)} onclick="castSkillById('${s.id}')">
-      <span class="sb-key">${kbShort(key)}</span><span class="sb-icon big">${dlIcon(s.icon, 30)||''}</span>${cdDial('sk:' + s.id)}
-    </button>`;
+      <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
+    </button>`);
   };
   const skillsHtml = slots.map((id, i) => slotBtnHtml(id, i)).join('');
   // The lone auto-cast slot in the middle. Whatever sits here fires itself the
@@ -20638,18 +20643,18 @@ function renderSkillBar() {
   let autoCell;
   if (!autoS) {
     const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast slot</div><div class='ht-line'>${touchUI() ? 'Tap to choose' : 'Drag a learned skill here, or tap to choose'} a skill to cast automatically — it fires the instant it's ready. Best for buffs and summons.</div>`;
-    autoCell = `<button class="skillbar-btn slot-empty autoslot" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
-      <span class="sb-key auto-tag">⟳</span><span class="sb-icon big slot-plus">＋</span>
-    </button>`;
+    autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn slot-empty autoslot" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
+      <span class="sb-icon big slot-plus">＋</span>
+    </button>`);
   } else {
     const s = autoS;
     const cd = skillCd(s.id);
     const ready = cd <= 0 && player.mp >= s.mp && player.hp > 0;
     const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown · casts itself the moment it's ready</div><div class='ht-sub' style='opacity:.7'>${touchUI() ? 'tap to change or clear' : 'drag a skill here to change · tap to edit'}</div>`;
-    autoCell = `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
+    autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}','${AUTO_SLOT}')" ondragend="skillDragEnd()" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
-      <span class="sb-key auto-tag">⟳</span><span class="sb-icon big">${dlIcon(s.icon, 30)||''}</span>${cdDial('sk:' + s.id)}
-    </button>`;
+      <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
+    </button>`);
   }
   // Desktop only: a TOWN button on the far left of the bar (the header's TOWN
   // button moved here, keyed 0). Sitting before the potions keeps the keys in
@@ -20670,9 +20675,9 @@ function renderSkillBar() {
       : ch
       ? `<div class='ht-name'><span data-spr=feat_gate_red></span> Town Portal</div><div class='ht-line'>Opening… ${Math.ceil(portalCharge)} second${Math.ceil(portalCharge) === 1 ? '' : 's'} left. A foe's hit shatters it.</div><div class='ht-sub'>press ${kbLabel('portal')} or move to cancel</div>`
       : `<div class='ht-name'><span data-spr=feat_gate_red></span> Town Portal</div><div class='ht-line'>Open a portal to the safe hub. It channels for a few seconds — you can't act while it does — moving or a foe's hit cancels it.</div><div class='ht-sub'>press ${kbLabel('portal')}</div>`;
-    townBtn = `<button class="skillbar-btn town${here ? ' town-locked' : ''}${ch ? ' channeling' : ''}" ${hoverTip(townTip)} ${here ? '' : 'onclick="enterTown()"'}>
-      <span class="sb-key">${kbShort(kbLabel('portal'))}</span><span class="sb-icon">${dlIcon('feat_gate_red',24)}</span><span class="sb-info">${ch ? Math.ceil(portalCharge) : ''}</span>
-    </button>`;
+    townBtn = cell(kbShort(kbLabel('portal')), 'town', `<button class="skillbar-btn town${here ? ' town-locked' : ''}${ch ? ' channeling' : ''}" ${hoverTip(townTip)} ${here ? '' : 'onclick="enterTown()"'}>
+      <span class="sb-icon">${dlIconFill('feat_gate_red')}</span><span class="sb-info">${ch ? Math.ceil(portalCharge) : ''}</span>
+    </button>`);
   }
   // Three sections: Town/Health/Mana left, the auto-cast slot centred, the four
   // manual slots right (see the .sb-left / .sb-auto-wrap / .sb-right flex CSS).
