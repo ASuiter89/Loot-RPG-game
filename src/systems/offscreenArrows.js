@@ -46,10 +46,13 @@ export function edgeAnchor(px, py, dx, dy, W, H, pad) {
 //   mergeDist arrows landing within this many px of an already-accepted one are
 //             dropped, so a pack clustered in one direction collapses to a single
 //             arrow aimed at its nearest foe (0 → keep every off-screen target)
+//   max       hard cap on how many arrows to return, keeping the nearest ones so a
+//             floor with foes off every edge can't ring the screen (0 → no cap)
 //
 // Returns [{ x, y, angle, dist }] — anchor pixel, heading (radians, +x → target)
-// and hero→target pixel distance — nearest first, thinned by the merge spacing.
-export function offscreenArrows({ hero, targets, cam, view, pad, mergeDist = 0 }) {
+// and hero→target pixel distance — nearest first, thinned by the merge spacing and
+// the cap.
+export function offscreenArrows({ hero, targets, cam, view, pad, mergeDist = 0, max = 0 }) {
   const { offX, offY, tw, th } = cam;
   const { W, H } = view;
   const psx = offX + hero.fx * tw, psy = offY + hero.fy * th;
@@ -66,12 +69,14 @@ export function offscreenArrows({ hero, targets, cam, view, pad, mergeDist = 0 }
     const a = edgeAnchor(psx, psy, dx, dy, W, H, pad);
     cand.push({ x: a.x, y: a.y, angle: Math.atan2(dy, dx), dist: mag });
   }
-  cand.sort((p, q) => p.dist - q.dist);                                        // nearest first so merges keep the closest foe
-  if (mergeDist <= 0) return cand;
-  const out = [];
-  for (const c of cand) {
-    if (out.some(o => Math.hypot(o.x - c.x, o.y - c.y) < mergeDist)) continue;
-    out.push(c);
+  cand.sort((p, q) => p.dist - q.dist);                                        // nearest first so merges/cap keep the closest foes
+  let out = cand;
+  if (mergeDist > 0) {
+    out = [];
+    for (const c of cand) {
+      if (out.some(o => Math.hypot(o.x - c.x, o.y - c.y) < mergeDist)) continue;
+      out.push(c);
+    }
   }
-  return out;
+  return max > 0 ? out.slice(0, max) : out;                                    // cap to the nearest few so a busy floor stays readable
 }

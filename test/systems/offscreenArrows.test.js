@@ -125,6 +125,28 @@ describe('offscreenArrows', () => {
     expect(arrows[0].dist).toBeLessThan(arrows[1].dist);
   });
 
+  it('caps to the nearest `max` arrows so a busy floor stays readable', () => {
+    // Eight foes in eight distinct compass directions (edges + corners) → distinct
+    // border anchors, so none merge and each yields its own arrow.
+    const targets = [
+      { x: 40, y: 5, span: 1 },   // E
+      { x: -30, y: 5, span: 1 },  // W
+      { x: 5, y: 40, span: 1 },   // S
+      { x: 5, y: -30, span: 1 },  // N
+      { x: 40, y: -30, span: 1 }, // NE
+      { x: -30, y: -30, span: 1 },// NW
+      { x: 40, y: 40, span: 1 },  // SE
+      { x: -30, y: 40, span: 1 }, // SW
+    ];
+    const uncapped = offscreenArrows({ hero, targets, cam: CAM, view: VIEW, pad: 10, mergeDist: 20 });
+    expect(uncapped).toHaveLength(8);                       // distinct directions all survive the merge
+    const capped = offscreenArrows({ hero, targets, cam: CAM, view: VIEW, pad: 10, mergeDist: 20, max: 4 });
+    expect(capped).toHaveLength(4);
+    // Keeps the four NEAREST, dropping the farther ones (list is nearest-first).
+    expect(Math.max(...capped.map(a => a.dist))).toBeLessThanOrEqual(uncapped[4].dist);
+    expect(capped.map(a => a.dist)).toEqual(uncapped.slice(0, 4).map(a => a.dist));
+  });
+
   it('handles an empty / missing target list', () => {
     expect(offscreenArrows({ hero, targets: [], cam: CAM, view: VIEW, pad: 10 })).toEqual([]);
     expect(offscreenArrows({ hero, cam: CAM, view: VIEW, pad: 10 })).toEqual([]);

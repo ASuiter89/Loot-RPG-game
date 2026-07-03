@@ -4948,6 +4948,10 @@ try { if (localStorage.getItem(STAIRS_ARROW_KEY) === '0') showStairsArrow = fals
 const MONSTER_ARROWS_KEY = 'dungeonLoot_monsterArrows';
 let showMonsterArrows = true;
 try { if (localStorage.getItem(MONSTER_ARROWS_KEY) === '0') showMonsterArrows = false; } catch (e) {}
+// Cap on how many monster arrows ride the edge at once — a swarm floor keeps only
+// the nearest few so the border never rings solid red (the minimap + FOES counter
+// stay the complete tally).
+const MONSTER_ARROW_CAP = 8;
 // The foe the hero's auto-attack is currently locked onto (best in-reach target
 // under the current focus mode), recomputed each frame in updatePlayerCombat via
 // pickAutoTarget(). Declared here (with the other render state) so the draw loop's
@@ -13946,7 +13950,10 @@ function drawMonsterArrows(offX, offY, tw, th, W, H) {
 
   const targets = [];
   for (const e of enemies) {
-    if (e.dead) continue;
+    // Skip the dead and fleeing treasure goblins: goblins never seal the floor
+    // (see hostilesRemaining / floorCleared), so a red "threat" arrow at one would
+    // contradict the "foes sealing the stairs" intent — chase them by eye instead.
+    if (e.dead || e.isGoblin) continue;
     // e.fx/fy is the smooth footprint CENTRE (may be null before its first render
     // tick); the module falls back to the footprint centre when cx/cy are absent.
     targets.push({ x: e.x, y: e.y, span: e.size || 1, cx: e.fx, cy: e.fy });
@@ -13959,6 +13966,7 @@ function drawMonsterArrows(offX, offY, tw, th, W, H) {
     hero: { fx: player.fx, fy: player.fy },
     targets, cam: { offX, offY, tw, th }, view: { W, H },
     pad, mergeDist: size * 1.6,                  // fold a same-direction pack into one arrow
+    max: MONSTER_ARROW_CAP,                      // and never ring the whole screen (minimap has the rest)
   });
   if (!arrows.length) return;
 
@@ -22685,6 +22693,7 @@ const SETTINGS_SYNC_KEYS = [
   'dungeonLoot_crosshair',    // red target crosshair on/off
   'dungeonLoot_pathLine',     // click-to-move pathing line on/off
   'dungeonLoot_stairsArrow',  // off-screen stairs arrow on/off
+  'dungeonLoot_monsterArrows',// off-screen monster arrows on/off
   'dungeonLootMusic',         // music volume level (0–5)
   'dungeonLootSfx',           // sfx volume level (0–5)
   'dungeonLootTownAmb',       // town ambience on/off
