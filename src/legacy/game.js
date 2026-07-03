@@ -1527,61 +1527,71 @@ function lpcTile(id, dx, dy, sz) { const c = id % LPC_NCOLS, r = (id / LPC_NCOLS
 function lpcFill(name, ox, oy, tw, x0, y0, x1, y1) { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) lpcTile(lpcVariant(name, x, y), ox + x*tw, oy + y*tw, tw); }
 function lpcLayer(name, isT, ox, oy, tw, x0, y0, x1, y1) { const tbl = LPC_TABLE.table[name]; if (!tbl) return; for (let Y = y0; Y <= y1; Y++) for (let X = x0; X <= x1; X++) { let m = 0; if (isT(X-1,Y-1)) m|=8; if (isT(X,Y-1)) m|=4; if (isT(X-1,Y)) m|=2; if (isT(X,Y)) m|=1; if (!m) continue; const id = (m === 15) ? lpcVariant(name, X, Y) : tbl[m]; if (id == null) continue; lpcTile(id, ox + (X-0.5)*tw, oy + (Y-0.5)*tw, tw); } }
 // Draw the fracture on a cracked wall (tile 10) over the autotiled wall mass.
-// `sev` is 0 (freshly cracked) → 1 (barely holding); the fissure darkens, widens,
-// grows extra branches and sheds more chips as it climbs, and a warm rim brightens
-// to telegraph how close the wall is to giving. `seed` keys a per-tile jitter so a
-// given wall always fractures the same way (no shimmer frame to frame).
+// `sev` is 0 (freshly cracked) → 1 (barely holding). Every landed shove ADDS two
+// more hairline fissures fanning from a fixed impact point, so the wall reads as
+// progressively more shattered — never as one crack fattening (the lines stay a
+// constant hairline). `seed` keys a deterministic per-tile fracture: a given wall
+// always cracks the same way, and earlier fissures persist as newer ones join them.
 function lpcCrackOverlay(px, py, tw, th, sev, seed) {
   sev = Math.max(0, Math.min(1, sev || 0));
-  const h = (seed >>> 0) || 1;
-  const j = (i) => (((h >>> (i * 3)) & 7) / 7 - 0.5) * 2;   // deterministic -1..1
-  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const base = (seed >>> 0) || 0x9e3779b1;
+  // Impact origin + fan orientation for this tile — stable across damage stages.
+  let bs = base;
+  const brnd = () => { bs = (Math.imul(bs ^ (bs >>> 15), 0x2c1b3c6d) ^ (bs >>> 7)) >>> 0; return bs / 4294967296; };
+  const cx = px + tw * (0.40 + brnd() * 0.20);
+  const cy = py + th * (0.38 + brnd() * 0.22);
+  const spin = brnd() * Math.PI * 2;
+  const forks = 2 + Math.round(sev * 4);        // 2 → 4 → 6 hairline fissures
+  const lw = Math.max(1, tw * 0.025);           // hairline; constant, never thickens
+  const GOLD = 2.39996323;                      // golden angle — an even but organic fan
 
-  // Spine of the main fracture — a jagged top→bottom fissure that wanders by seed.
-  const xs = [
-    px + tw * (0.50 + 0.10 * j(0)),
-    px + tw * (0.45 + 0.12 * j(1)),
-    px + tw * (0.56 + 0.12 * j(2)),
-    px + tw * (0.49 + 0.10 * j(3)),
-  ];
-  const ys = [py + th * 0.04, py + th * 0.33, py + th * 0.63, py + th * 0.96];
-  const branches = 1 + Math.round(sev * 2);
-  const spread = tw * (0.14 + 0.12 * sev);
-  const tracePath = () => {
-    ctx.beginPath();
-    ctx.moveTo(xs[0], ys[0]); ctx.lineTo(xs[1], ys[1]); ctx.lineTo(xs[2], ys[2]); ctx.lineTo(xs[3], ys[3]);
-    for (let b = 0; b < branches; b++) {           // offshoots — more as it weakens
-      const i = 1 + (b % 3), dir = j(b + 4) >= 0 ? 1 : -1;
-      ctx.moveTo(xs[i], ys[i]);
-      ctx.lineTo(xs[i] + spread * dir, ys[i] + th * 0.14 * j(b + 5));
+  // Build each fissure from its OWN seeded stream, so fissure k is identical no
+  // matter how many exist: extra hits strictly APPEND cracks, never reshuffle them.
+  const paths = [];
+  for (let k = 0; k < forks; k++) {
+    let fs = (Math.imul(base ^ 0x85ebca6b, 0x27d4eb2f) ^ Math.imul(k + 1, 0x9e3779b1)) >>> 0;
+    const rnd = () => { fs = (Math.imul(fs ^ (fs >>> 15), 0x2c1b3c6d) ^ (fs >>> 7)) >>> 0; return fs / 4294967296; };
+    const ang = spin + k * GOLD + (rnd() - 0.5) * 0.5;
+    const reach = tw * (0.40 + rnd() * 0.26);
+    const segs = 3 + (rnd() * 3 | 0);
+    const pts = [[cx, cy]];
+    let x = cx, y = cy, a = ang, step = reach / segs;
+    for (let i = 0; i < segs; i++) { a += (rnd() - 0.5); x += Math.cos(a) * step; y += Math.sin(a) * step; pts.push([x, y]); }
+    paths.push(pts);
+    // About half the fissures throw a short offshoot off a mid vertex. The roll
+    // lives in this fissure's own stream, so it never disturbs its neighbours.
+    if (pts.length > 2 && rnd() < 0.5) {
+      const vi = 1 + (rnd() * (pts.length - 2) | 0);
+      let bx = pts[vi][0], by = pts[vi][1], ba = a + (rnd() < 0.5 ? -1 : 1) * (0.6 + rnd() * 0.5);
+      const bstep = reach * 0.2, bp = [[bx, by]];
+      for (let i = 0; i < 2; i++) { ba += (rnd() - 0.5) * 0.8; bx += Math.cos(ba) * bstep; by += Math.sin(ba) * bstep; bp.push([bx, by]); }
+      paths.push(bp);
     }
-  };
-
-  // Chiselled depth: a pale lit edge offset down-right beneath the dark crack void.
-  ctx.strokeStyle = 'rgba(255,252,244,' + (0.14 + 0.14 * sev) + ')';
-  ctx.lineWidth = Math.max(1, tw * 0.03);
-  ctx.save(); ctx.translate(Math.max(1, tw * 0.035), Math.max(1, th * 0.035)); tracePath(); ctx.stroke(); ctx.restore();
-
-  // The crack itself — darker and wider as the wall weakens.
-  ctx.strokeStyle = 'rgba(12,9,7,' + (0.72 + 0.24 * sev) + ')';
-  ctx.lineWidth = Math.max(1.5, tw * (0.055 + 0.05 * sev));
-  tracePath(); ctx.stroke();
-
-  // Knocked-loose chips scattered along the break — more and bigger as it gives.
-  const chips = Math.round(1 + sev * 4);
-  ctx.fillStyle = 'rgba(9,7,6,' + (0.42 + 0.3 * sev) + ')';
-  for (let i = 0; i < chips; i++) {
-    const cxp = px + tw * (0.24 + 0.52 * (((h >>> (i * 4 + 1)) & 7) / 7));
-    const cyp = py + th * (0.12 + 0.74 * (((h >>> (i * 4 + 2)) & 7) / 7));
-    const s = Math.max(1, tw * (0.05 + 0.055 * sev));
-    ctx.fillRect(cxp, cyp, s, s);
   }
 
-  // Breakable telegraph: a warm rim that brightens toward collapse, so how close a
-  // wall is to breaking reads at a glance (colour-only cue, no text).
-  ctx.strokeStyle = 'rgba(255,196,96,' + (0.18 + 0.5 * sev) + ')';
-  ctx.lineWidth = Math.max(1, tw * 0.03);
-  ctx.strokeRect(px + 1, py + 1, tw - 2, th - 2);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(px, py, tw, th); ctx.clip();    // fissures never bleed onto neighbours
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const trace = (p) => { ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]); for (let i = 1; i < p.length; i++) ctx.lineTo(p[i][0], p[i][1]); };
+  // Chiselled depth: a faint sunlit lip tucked just below-right of each fissure.
+  ctx.strokeStyle = 'rgba(255,250,242,' + (0.16 + 0.12 * sev) + ')';
+  ctx.lineWidth = lw;
+  ctx.save(); ctx.translate(Math.max(1, tw * 0.03), Math.max(1, th * 0.03));
+  for (const p of paths) { trace(p); ctx.stroke(); }
+  ctx.restore();
+  // The fractures themselves — thin, near-black voids, darkening a touch as it gives.
+  ctx.strokeStyle = 'rgba(14,10,8,' + (0.80 + 0.14 * sev) + ')';
+  ctx.lineWidth = lw;
+  for (const p of paths) { trace(p); ctx.stroke(); }
+  // A few chips flaked loose around the impact — a couple more as it nears collapse.
+  const chips = 1 + Math.round(sev * 3);
+  ctx.fillStyle = 'rgba(10,7,6,0.5)';
+  for (let i = 0; i < chips; i++) {
+    const cs = (Math.imul(base ^ 0x1b56c4e9, 0x27d4eb2f) ^ Math.imul(i + 1, 0x165667b1)) >>> 0;
+    const rr = (cs >>> 8 & 255) / 255 * tw * 0.22 + tw * 0.06;
+    const aa = (cs & 255) / 255 * Math.PI * 2, sq = Math.max(1, tw * 0.05);
+    ctx.fillRect(cx + Math.cos(aa) * rr, cy + Math.sin(aa) * rr, sq, sq);
+  }
   ctx.restore();
 }
 function lpcDetail(C, ox, oy, tw, x0, y0, x1, y1) {
@@ -13342,11 +13352,11 @@ function drawWall(px, py, tw, th, x, y, seed, C, cracked) {
     ctx.fillRect(px + (s % W), py + ((s >> 3) % H), Math.max(1, tw * 0.06), Math.max(1, th * 0.06));
   }
 
-  // Fissure on some tiles (always on a cracked wall, deepening as it's smashed).
-  const sev = cracked ? crackSeverity(wallCracks[y + ',' + x] || 0) : 0;
-  if (cracked || h % 4 === 0) {
-    ctx.strokeStyle = cracked ? '#15151c' : C.crack;
-    ctx.lineWidth = Math.max(1, tw * (0.05 + 0.04 * sev));
+  // Decorative hairline fissure on the odd plain wall for texture — cracked walls
+  // get the real breakable fracture from lpcCrackOverlay below instead.
+  if (!cracked && h % 4 === 0) {
+    ctx.strokeStyle = C.crack;
+    ctx.lineWidth = Math.max(1, tw * 0.03);
     const sx = px + tw * (0.3 + (h % 3) * 0.16);
     const dir = (h % 2) ? 1 : -1;
     ctx.beginPath();
@@ -13361,8 +13371,9 @@ function drawWall(px, py, tw, th, x, y, seed, C, cracked) {
   if (!isWallTile(x - 1, y)) { ctx.fillStyle = 'rgba(255,250,235,0.06)'; ctx.fillRect(px, py, Math.max(1, tw * 0.1), th); }
   if (!isWallTile(x + 1, y)) { ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(px + tw - Math.max(1, tw * 0.16), py, Math.max(1, tw * 0.16), th); }
 
-  // Subtle hint that a cracked wall is breakable — brighter as it nears collapse.
-  if (cracked) { ctx.strokeStyle = 'rgba(255,220,120,' + (0.22 + 0.45 * sev) + ')'; ctx.lineWidth = 1; ctx.strokeRect(px + 1, py + 1, tw - 2, th - 2); }
+  // Breakable fracture — the shared hairline crack overlay every wall style uses,
+  // so a cracked wall reads by its cracks alone (no box), fanning wider each shove.
+  if (cracked) lpcCrackOverlay(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed);
 }
 
 // Leafy-tree wall for the forest theme — overlapping canopies read as a thicket.
@@ -13395,7 +13406,7 @@ function drawForestWall(px, py, tw, th, x, y, seed, C, cracked) {
     const s = (h >> (i * 3 + 2));
     ctx.fillRect(px + (s % W), py + ((s >> 3) % H), Math.max(1, tw * 0.07), Math.max(1, th * 0.07));
   }
-  if (cracked) { ctx.strokeStyle = 'rgba(255,220,120,0.3)'; ctx.lineWidth = 1; ctx.strokeRect(px + 1, py + 1, tw - 2, th - 2); }
+  if (cracked) lpcCrackOverlay(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed);
 }
 
 // Conifer wall for alpine themes — stacked triangular tiers with snow-bright
@@ -13432,7 +13443,7 @@ function drawPineWall(px, py, tw, th, x, y, seed, C, cracked) {
   ctx.lineTo(cx + tw * 0.06, py + th * 0.16);
   ctx.closePath();
   ctx.fill();
-  if (cracked) { ctx.strokeStyle = 'rgba(255,220,120,0.3)'; ctx.lineWidth = 1; ctx.strokeRect(px + 1, py + 1, tw - 2, th - 2); }
+  if (cracked) lpcCrackOverlay(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed);
 }
 
 // Giant toadstool wall — a pale stalk under a spotted dome cap, for the exotic
@@ -13461,7 +13472,7 @@ function drawMushroomWall(px, py, tw, th, x, y, seed, C, cracked) {
     const dy = ((s >> 4) % 100) / 100 * ry * 0.6 - ry * 0.2;
     ctx.beginPath(); ctx.arc(sx + dx, capY + dy, tw * 0.05, 0, Math.PI * 2); ctx.fill();
   }
-  if (cracked) { ctx.strokeStyle = 'rgba(255,220,120,0.3)'; ctx.lineWidth = 1; ctx.strokeRect(px + 1, py + 1, tw - 2, th - 2); }
+  if (cracked) lpcCrackOverlay(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed);
 }
 
 // Glowing crystal cluster wall — angular shards rising from the floor, lit with
@@ -13491,7 +13502,7 @@ function drawCrystalWall(px, py, tw, th, x, y, seed, C, cracked) {
     ctx.fill();
   }
   ctx.restore();
-  if (cracked) { ctx.strokeStyle = 'rgba(255,220,120,0.3)'; ctx.lineWidth = 1; ctx.strokeRect(px + 1, py + 1, tw - 2, th - 2); }
+  if (cracked) lpcCrackOverlay(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed);
 }
 
 // ── AMBIENT EMBERS ── seed the decorative drifting motes once (see the

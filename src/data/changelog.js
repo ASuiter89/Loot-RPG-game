@@ -3,6 +3,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Cracked walls look like real cracks", by: "Claude", notes: [
+    "Dropped the box outline that framed every cracked wall — a cracked wall now reads by its cracks alone.",
+    "Redrew the fracture as thin hairline fissures fanning from an impact point instead of one fat scratch.",
+    "Each shove now ADDS more cracks rather than fattening the same one, so the wall visibly shatters further toward breaking.",
+  ] },
   { date: "2026-07-03", size: "medium", v: "New skill icons + unique skill names", by: "Claude", notes: [
     "Every skill now has its own hand-generated pixel-art icon set in a raised, class-coloured metal frame — red for Warrior, green for Rogue, yellow for Mage, blue for Templar — filling the whole tile.",
     "Keystone passives keep their octagon frame, now in the same metal look.",
