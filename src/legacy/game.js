@@ -10993,8 +10993,11 @@ function renderEnchanter() {
   setTownContent(`<div class="town-blurb">The enchanter tinkers with your gear using <span data-spr=mat_glimmer></span> <b>Glimmer</b> (and a little gold): <b>Augment</b> adds a missing property, <b>Reroll all</b> gambles every bonus property at once, and each property can be rerolled on its own — its <b>value</b> (same modifier, new number) or its <b>modifier</b> (swapped for another). Rarity sets how many properties a piece can hold. Blank pieces from the <span data-spr=ic_mallet></span> Craftsman start here.</div>${equippedHTML}${lootHTML}`);
 }
 
-function enchantPick(id) { enchantSel = id; renderEnchanter(); }
-function enchantBack()   { enchantSel = null; renderEnchanter(); }
+// Picking or backing out re-renders the whole panel, detaching the doll slot the
+// hover tooltip was anchored to — so its onmouseleave never fires. Clear the
+// floating card here or it lingers over the next screen.
+function enchantPick(id) { hideTooltip(); enchantSel = id; renderEnchanter(); }
+function enchantBack()   { hideTooltip(); enchantSel = null; renderEnchanter(); }
 
 function renderEnchantItem(item) {
   const caps = TIER_AFFIX_CAPS[item.tier] || { stat:0, attr:0 };
