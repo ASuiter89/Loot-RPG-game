@@ -7014,6 +7014,13 @@ function floorLabel(dl) {
   dl = (dl == null ? dungeonLevel : dl);
   return `${DIFFS[diffOf(dl) - 1].name} · Floor ${displayFloor(dl)}`;
 }
+// A compact "Brutal 6" tag — difficulty tier name + per-tier floor number — for
+// cards, banners and any tight spot that shows a continuous depth at a glance.
+// (floorLabel is the longer "Brutal · Floor 6" prose form for logs/prose.)
+function floorTag(dl) {
+  dl = (dl == null ? dungeonLevel : dl);
+  return `${DIFFS[diffOf(dl) - 1].name} ${displayFloor(dl)}`;
+}
 // Endless mode ramps a touch steeper than the raw depth continuation, creeping
 // up the deeper you push. A no-op (×1) for the three finite difficulties.
 function endlessBite() {
@@ -11499,6 +11506,7 @@ const CHANGELOG = [
     "Cooldown Reduction (and a rank-7 skill's faster recharge) raises uptime a lot, but permanent upkeep now takes extreme CDR.",
     "Offensive/summon skills whose buff was a rider keep their attack cadence — buff duration trimmed instead of the cooldown.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Depth shown with difficulty everywhere", by: "Claude", notes: ["Deepest-floor readouts now name the difficulty tier — the title/pause hero card shows \"Brutal 6\" instead of a raw \"Floor 56\".", "Depth-record banners, the greed gate, \"reach a floor\" bounties and the gambler blurb all read as tier + floor now.", "Depth achievements reworded to their tier (e.g. \"Reach Hardened floor 5\" for old floor 30)."] },
   { date: "2026-07-03", size: "small", v: "Fluid HP/MP recovery", by: "Claude", notes: ["Over-time HP/MP recovery now climbs the bar on a smooth slope instead of stepping up once a second — the fill eases toward true health every frame.", "Taking damage or spending mana still snaps the bar down instantly, and burst heals still fill at once."] },
   { date: "2026-07-03", size: "small", v: "Monochrome settings menu icons", by: "Claude", notes: ["Settings menu tabs (Play, Visuals, Audio, Progress, About) now use monochrome line icons instead of colored emoji, matching the action rows below them.", "Settings tooltips and the Keybindings title swap their emoji for matching line icons too."] },
   { date: "2026-07-03", size: "small", v: "Never stuck on an enemy", by: "Claude", notes: ["Fixed a lockup where a foe hopping onto the tile you're standing on trapped you in place until it died — you can now always shove free.", "Ejection follows your input, so you pop out the way you're trying to move; normal meleeing is unaffected."] },
@@ -14455,8 +14463,8 @@ function bountyPool() {
     { kind: 'slay',  title: 'Exterminator',      need: 70 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           gold: R(2.6), mat: ['core', 2],     ilvl: depth + 3 },
     { kind: 'clear', title: 'Sweep the Halls',   need: 3,                 snap: CF, desc: n => `Clear ${n} floors of foes`, gold: R(1.3), mat: ['glimmer', 2],  ilvl: depth + 2 },
     { kind: 'clear', title: 'Purge the Depths',  need: 5,                 snap: CF, desc: n => `Clear ${n} floors of foes`, gold: R(2.0), mat: ['glimmer', 3],  ilvl: depth + 3 },
-    { kind: 'delve', title: 'Press Onward',      need: depth + 2,         snap: 0,  desc: n => `Reach floor ${n}`,         gold: R(1.4), mat: ['core', 2],     ilvl: depth + 2 },
-    { kind: 'delve', title: 'Into the Deep',     need: depth + 5,         snap: 0,  desc: n => `Reach floor ${n}`,         gold: R(2.2), mat: ['core', 3],     ilvl: depth + 4 },
+    { kind: 'delve', title: 'Press Onward',      need: depth + 2,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     gold: R(1.4), mat: ['core', 2],     ilvl: depth + 2 },
+    { kind: 'delve', title: 'Into the Deep',     need: depth + 5,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     gold: R(2.2), mat: ['core', 3],     ilvl: depth + 4 },
     { kind: 'boss',  title: 'Giant Slayer',      need: 2,                 snap: BK, desc: n => `Slay ${n} bosses`,         gold: R(1.6), mat: ['core', 2],     ilvl: depth + 3 },
     { kind: 'boss',  title: 'Champion Hunter',   need: 4,                 snap: BK, desc: n => `Slay ${n} bosses`,         gold: R(2.4), mat: ['core', 3],     ilvl: depth + 4 },
     { kind: 'elite', title: 'Elite Contract',    need: 5,                 snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(1.5), mat: ['glimmer', 2],  ilvl: depth + 2 },
@@ -14481,8 +14489,8 @@ function renderBounty() {
   if (b) {
     const prog = Math.min(bountyProgress(b), b.need), done = bountyDone(b);
     const pct = Math.round(100 * prog / b.need);
-    // For "reach floor N", spell out where the hero is standing right now.
-    const cur = (b.kind === 'delve') ? `<br><span style="opacity:.85">You're currently on floor ${Math.max(1, dungeonLevel || player.maxFloor || 1)}.</span>` : '';
+    // For a "reach" bounty, spell out where the hero is standing right now.
+    const cur = (b.kind === 'delve') ? `<br><span style="opacity:.85">You're currently on ${floorLabel(Math.max(1, dungeonLevel || player.maxFloor || 1))}.</span>` : '';
     html += `<div class="town-blurb"><b>Active bounty:</b> ${b.desc.replace('{n}', b.need)}${cur}<br>
       <div class="bar-track" style="margin:6px 0"><div class="bar-fill" style="width:${pct}%;background:${done ? 'var(--uncommon)' : 'var(--gold)'}"></div></div>
       ${prog} / ${b.need} — reward: <b style="color:var(--gold)"><span data-spr=ic_money></span>${b.gold}</b> + ${b.mat[1]}${dlIcon('mat_' + b.mat[0], 16)} + a piece of gear.</div>`;
@@ -14509,7 +14517,10 @@ function renderBounty() {
 let _bountyOffers = null;
 function acceptBounty(i) {
   const offers = _bountyOffers || rollBounties(); const o = offers[i]; if (!o) return;
-  player.bounty = { kind: o.kind, need: o.need, snap: o.snap, gold: o.gold, mat: o.mat, ilvl: o.ilvl, desc: o.desc('{n}') };
+  // Store the fully-resolved description (a delve bounty's floorTag can't take a
+  // placeholder); the display sites' harmless .replace('{n}', …) still handles
+  // any older save whose desc was stored with a {n} token.
+  player.bounty = { kind: o.kind, need: o.need, snap: o.snap, gold: o.gold, mat: o.mat, ilvl: o.ilvl, desc: o.desc(o.need) };
   sfx('click');
   log(`<span data-spr=scroll></span> Bounty accepted: ${o.desc(o.need)}.`, 'important');
   renderBounty(); updateObjectiveChip(); saveGame();
@@ -16276,7 +16287,7 @@ function renderGambler() {
       </div>`;
   }
   setTownContent(`
-    <div class="town-blurb">The gambler shoves a heap of mystery loot across the table. Throw down your gold and she'll pull a random piece of gear geared near your deepest floor (${d}). Most pulls land at — or a little below — your depth at a humble rarity, but fortune is fickle: a single wager can turn up something legendary from far beyond your reach. Pick a slot to fish for a specific item type — for a steeper price.</div>
+    <div class="town-blurb">The gambler shoves a heap of mystery loot across the table. Throw down your gold and she'll pull a random piece of gear geared near your deepest floor (${floorTag(d)}). Most pulls land at — or a little below — your depth at a humble rarity, but fortune is fickle: a single wager can turn up something legendary from far beyond your reach. Pick a slot to fish for a specific item type — for a steeper price.</div>
     <div class="town-blurb" style="margin-bottom:4px">Gamble for:</div>
     <div class="cos-chips" style="margin-bottom:10px">${chips}</div>
     <div class="shop-row has-actions ${afford ? '' : 'cant-afford'}">
@@ -19751,13 +19762,13 @@ function depthMilestone(prevMax, newMax) {
   // cache's own reveal banner queues behind it via acquireLoot → lootReveal, so a
   // unique cache now reads as "NEW DEPTH RECORD" then "UNIQUE DROP", not a lone
   // context-free unique popup the instant you step onto the floor.
-  showLootBanner(`Floor ${floorHit} reached`, 'NEW DEPTH RECORD', '#7fe0ff',
+  showLootBanner(`${floorTag(floorHit)} reached`, 'NEW DEPTH RECORD', '#7fe0ff',
     () => { sfx('milestone'); screenFlash('#3aa0ff'); });
   const bonusGold = 25 * floorHit;
   player.gold += bonusGold;
   const cache = generateItem(4, newMax + 1, milestoneTier(floorHit));
-  if (acquireLoot(cache) === 'keep') log(`<span data-spr=q_relic></span> Depth ${floorHit}! +<span data-spr=ic_money></span>${bonusGold} and a cache: ${logItem(cache)}.`, 'important');
-  else log(`<span data-spr=q_relic></span> Depth ${floorHit}! +<span data-spr=ic_money></span>${bonusGold} and a bonus cache.`, 'important');
+  if (acquireLoot(cache) === 'keep') log(`<span data-spr=q_relic></span> New depth — ${floorTag(floorHit)}! +<span data-spr=ic_money></span>${bonusGold} and a cache: ${logItem(cache)}.`, 'important');
+  else log(`<span data-spr=q_relic></span> New depth — ${floorTag(floorHit)}! +<span data-spr=ic_money></span>${bonusGold} and a bonus cache.`, 'important');
   updateBars();
 }
 
@@ -19775,7 +19786,7 @@ function maybeGreedGate() {
   const el = document.getElementById('greed-overlay');
   if (!el) return;
   const body = document.getElementById('greed-body');
-  if (body) body.innerHTML = `The air turns foul. Brave floor ${dungeonLevel} for <b>doubled loot &amp; gold</b> — but the foes here hit harder and hold more life.`;
+  if (body) body.innerHTML = `The air turns foul. Brave ${floorLabel()} for <b>doubled loot &amp; gold</b> — but the foes here hit harder and hold more life.`;
   el.classList.add('open');
 }
 
@@ -27045,8 +27056,7 @@ const LB_LOCAL_KEY = 'dungeonLoot_leaderboard_v1';
 // across tiers, sorting the board by max_floor naturally ranks harder runs above
 // easier ones (Endless 1 = depth 76 outranks Normal 25 = depth 25).
 function lbFloorLabel(v) {
-  v = Math.max(1, Math.floor(Number(v) || 1));
-  return `${DIFFS[diffOf(v) - 1].name} ${displayFloor(v)}`;
+  return floorTag(Math.max(1, Math.floor(Number(v) || 1)));
 }
 const LB_SORTS = {
   floor: { col: 'max_floor', fmt: lbFloorLabel },
@@ -28148,20 +28158,20 @@ const _aEarned = p => (p.goldEarned || 0);
 // Category display order + labels live in ACH_CATS (below the list).
 const ACHIEVEMENTS = [
   // ── DEPTH ──
-  { cat: 'depth', id: 'firststeps', name: 'First Steps',      desc: 'Reach dungeon floor 2.', svg: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>', test: p => (p.maxFloor || 1) >= 2 },
-  { cat: 'depth', id: 'delver',     name: 'Delver',           desc: 'Reach floor 5.',   svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 5 },
-  { cat: 'depth', id: 'spelunker',  name: 'Spelunker',        desc: 'Reach floor 10.',  svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 10 },
-  { cat: 'depth', id: 'depth15',    name: 'Descent',          desc: 'Reach floor 15.',  svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 15 },
-  { cat: 'depth', id: 'abyssal',    name: 'Abyss Walker',     desc: 'Reach floor 20.',  svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 20 },
-  { cat: 'depth', id: 'depth25',    name: 'Deep Diver',       desc: 'Reach floor 25.',  svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 25 },
-  { cat: 'depth', id: 'depth30',    name: 'Hardened Delver',  desc: 'Reach floor 30.',  svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 30 },
-  { cat: 'depth', id: 'depth40',    name: 'The Brink',        desc: 'Reach floor 40.',  svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 40 },
-  { cat: 'depth', id: 'depth50',    name: 'Deep Dweller',     desc: 'Reach floor 50.',  svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 50 },
-  { cat: 'depth', id: 'depth60',    name: 'Chasm Born',       desc: 'Reach floor 60.',  svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 60 },
-  { cat: 'depth', id: 'depth75',    name: 'Into the Abyss',   desc: 'Reach floor 75.',  svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 75 },
-  { cat: 'depth', id: 'depth100',   name: 'Endless Wanderer', desc: 'Reach floor 100.', svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 100 },
-  { cat: 'depth', id: 'depth150',   name: 'Voidbound',        desc: 'Reach floor 150.', svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 150 },
-  { cat: 'depth', id: 'depth200',   name: 'The Deep Dark',    desc: 'Reach floor 200.', svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 200 },
+  { cat: 'depth', id: 'firststeps', name: 'First Steps',      desc: 'Reach Normal floor 2.', svg: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>', test: p => (p.maxFloor || 1) >= 2 },
+  { cat: 'depth', id: 'delver',     name: 'Delver',           desc: 'Reach Normal floor 5.',    svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 5 },
+  { cat: 'depth', id: 'spelunker',  name: 'Spelunker',        desc: 'Reach Normal floor 10.',   svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 10 },
+  { cat: 'depth', id: 'depth15',    name: 'Descent',          desc: 'Reach Normal floor 15.',   svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 15 },
+  { cat: 'depth', id: 'abyssal',    name: 'Abyss Walker',     desc: 'Reach Normal floor 20.',   svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 20 },
+  { cat: 'depth', id: 'depth25',    name: 'Deep Diver',       desc: 'Reach Normal floor 25.',   svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 25 },
+  { cat: 'depth', id: 'depth30',    name: 'Hardened Delver',  desc: 'Reach Hardened floor 5.',  svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 30 },
+  { cat: 'depth', id: 'depth40',    name: 'The Brink',        desc: 'Reach Hardened floor 15.', svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 40 },
+  { cat: 'depth', id: 'depth50',    name: 'Deep Dweller',     desc: 'Reach Hardened floor 25.', svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 50 },
+  { cat: 'depth', id: 'depth60',    name: 'Chasm Born',       desc: 'Reach Brutal floor 10.',   svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 60 },
+  { cat: 'depth', id: 'depth75',    name: 'Into the Abyss',   desc: 'Reach Brutal floor 25.',   svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 75 },
+  { cat: 'depth', id: 'depth100',   name: 'Endless Wanderer', desc: 'Reach Endless floor 25.',  svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 100 },
+  { cat: 'depth', id: 'depth150',   name: 'Voidbound',        desc: 'Reach Endless floor 75.',  svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 150 },
+  { cat: 'depth', id: 'depth200',   name: 'The Deep Dark',    desc: 'Reach Endless floor 125.', svg: AI_DOWN, test: p => (p.maxFloor || 1) >= 200 },
 
   // ── LEVEL ──
   { cat: 'level', id: 'lvl5',   name: 'Apprentice',   desc: 'Reach hero level 5.',   svg: AI_STAR, test: p => (p.level || 1) >= 5 },
@@ -28398,7 +28408,7 @@ function heroCardHtml() {
   return `<div class="th-info">`
     + `<div class="th-name" style="color:${cls.color || 'var(--xp)'}">${nm}</div>`
     + `<div class="th-sub">Level ${lvl} ${cls.name || 'Hero'}</div>`
-    + `<div class="th-stats"><span>Deepest <b>Floor ${deepest}</b></span><span><span data-spr=ic_money></span><b>${gold}</b></span></div>`
+    + `<div class="th-stats"><span>Deepest <b>${floorTag(deepest)}</b></span><span><span data-spr=ic_money></span><b>${gold}</b></span></div>`
     + hcTag
     + `</div>`
     + (heroPic ? `<div class="th-portrait">${heroPic}</div>` : '');
