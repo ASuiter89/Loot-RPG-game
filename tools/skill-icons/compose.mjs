@@ -119,7 +119,37 @@ function TILE_DRAW() {
     ctx.fillStyle = bgGrad; ctx.fillRect(ix, iy, iw, iw);
 
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, ix, iy, iw, iw);            // art fills the well edge-to-edge
+    // Trim transparent margins so the actual subject — not a big empty canvas —
+    // fills the well. Fit the alpha bounding box into the well (contain, centred)
+    // so a small centred subject expands to fill the badge without distortion.
+    let sx = 0, sy = 0, sw = img.width, sh = img.height;
+    try {
+      const off = document.createElement('canvas');
+      off.width = img.width; off.height = img.height;
+      const octx = off.getContext('2d');
+      octx.drawImage(img, 0, 0);
+      const d = octx.getImageData(0, 0, img.width, img.height).data;
+      let minX = img.width, minY = img.height, maxX = -1, maxY = -1;
+      const A = 12;                                  // alpha threshold
+      for (let y = 0; y < img.height; y++) {
+        for (let x = 0; x < img.width; x++) {
+          if (d[(y * img.width + x) * 4 + 3] > A) {
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+          }
+        }
+      }
+      // Only trim if a real (and not near-full) subject was found.
+      if (maxX >= minX && maxY >= minY && (maxX - minX) < img.width - 2 && (maxY - minY) < img.height - 2) {
+        sx = minX; sy = minY; sw = maxX - minX + 1; sh = maxY - minY + 1;
+      }
+    } catch (e) { /* tainted / unreadable — draw untrimmed */ }
+    const pad = iw * 0.02;
+    const avail = iw - pad * 2;
+    const scale = Math.min(avail / sw, avail / sh);
+    const dw = sw * scale, dh = sh * scale;
+    const dx = ix + (iw - dw) / 2, dy = iy + (iw - dh) / 2;
+    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);   // trimmed subject fills the well
 
     const vg = ctx.createRadialGradient(S / 2, iy + iw * 0.46, iw * 0.18, S / 2, iy + iw * 0.5, iw * 0.72);
     vg.addColorStop(0, 'rgba(0,0,0,0)');

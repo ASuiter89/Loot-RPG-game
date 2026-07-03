@@ -42,7 +42,10 @@ export function parseSkillIcons(gamePath = GAME) {
   return { nodes, icons: [...byIcon.values()] };
 }
 
-// The text prompt for a given icon's representative name.
+// The text prompt for a given icon's representative name. We ask for a single
+// isolated object on a plain white background (so background-removal can cleanly
+// strip it) rather than an illustrated scene — a scene has no removable backdrop
+// and leaves the subject small inside a full rectangle.
 export function iconPrompt(name) {
-  return `48x48 pixel art skill icon with no border.  skill is called ${name}`;
+  return `48x48 pixel art skill icon, no border, a single centered object filling the frame on a plain solid white background, no scenery or landscape.  skill is called ${name}`;
 }
