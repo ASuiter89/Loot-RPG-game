@@ -45,7 +45,8 @@ describe('document shell', () => {
   it('links the externalized stylesheet with its design-token block', () => {
     const link = doc.querySelector('link[rel="stylesheet"]');
     expect(link).toBeTruthy();
-    expect(link.getAttribute('href')).toMatch(/styles\.css/);
+    expect(link.getAttribute('href')).toBe('./src/styles.css'); // relative — see note above
+
     const css = readFileSync(resolve(__dirname, '../../src/styles.css'), 'utf8');
     expect(css).toContain(':root');
     expect(css).toContain('--gold');
@@ -103,8 +104,12 @@ describe('embedded configuration & console API (now in src/legacy/game.js)', () 
 });
 
 describe('index.html module wiring', () => {
-  it('loads the game as an ES module entry', () => {
-    expect(html).toMatch(/<script\s+type="module"\s+src="[^"]*\/src\/main\.js"/);
+  it('loads the game as an ES module entry via a RELATIVE path', () => {
+    // Relative paths keep the app working at any mount point — the domain root
+    // (Netlify) AND a project subpath (GitHub Pages, e.g. /Loot-RPG-game/).
+    // An absolute "/src/..." resolves to the domain root and 404s on a subpath.
+    expect(html).toMatch(/<script\s+type="module"\s+src="\.\/src\/main\.js"><\/script>/);
+    expect(html, 'asset paths must be relative (not /src/…) for GitHub Pages subpaths').not.toMatch(/(?:src|href)="\/src\//);
   });
 
   it('still carries the static inline on*= handler surface in markup', () => {

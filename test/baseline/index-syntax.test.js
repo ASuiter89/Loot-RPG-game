@@ -29,8 +29,10 @@ function parsesAsModule(code) {
 describe('index.html script wiring', () => {
   const html = readFileSync(resolve(ROOT, 'index.html'), 'utf8');
 
-  it('references the ES-module entry', () => {
-    expect(html).toMatch(/<script\s+type="module"\s+src="[^"]*\/src\/main\.js"><\/script>/);
+  it('references the ES-module entry via a relative path', () => {
+    // Relative so it works at a domain root (Netlify) and a project subpath
+    // (GitHub Pages) alike; absolute "/src/…" 404s on a subpath.
+    expect(html).toMatch(/<script\s+type="module"\s+src="\.\/src\/main\.js"><\/script>/);
   });
 
   it('carries no large inline game <script> anymore', () => {
