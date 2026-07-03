@@ -26,8 +26,12 @@ const DATA = JSON.parse(document.getElementById('data').textContent);
 const IDX = DATA.index, ATLAS = DATA.atlas, TAG_ORDER = DATA.tagOrder;
 // —— replicate the game's current placement rules exactly ——
 const isSolid = d => d.block !== 'none';
-const isOcc = d => d.block === 'base';
+const extent = d => Math.max(1,Math.round(d.w/32))*Math.max(1,Math.round(d.ht));
+const blocked = d => d.mask ? d.mask.length : (d.block==='all'?extent(d):d.block==='base'?1:0);
+const isOcc = d => isSolid(d) && blocked(d) < extent(d);
 function footprint(d){
+  if (d.block === 'none') return [];
+  if (d.mask) return d.mask;
   if (d.block !== 'all') return [[0,0]];
   const W = Math.max(1, Math.round(d.w/32)), H = Math.max(1, Math.round(d.ht));
   const left = -(W>>1); const t=[];

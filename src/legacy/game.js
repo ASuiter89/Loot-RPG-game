@@ -1536,11 +1536,18 @@ DECOR_INDEX.forEach((d, i) => { (DECOR_BY_TAG[d.tag] = DECOR_BY_TAG[d.tag] || []
 //                  draws over you with a see-through silhouette (trees, wardrobes)
 //   block 'none' → walkable clutter (flowers, rugs, mushrooms, debris)
 const DECOR_SOLID = DECOR_INDEX.map((d) => d.block !== 'none');
-const DECOR_OCCLUDER = DECOR_INDEX.map((d) => d.block === 'base');
-// The tiles a solid decor object occupies for collision (anchored bottom-centre).
+const decorExtent = (d) => Math.max(1, Math.round(d.w / 32)) * Math.max(1, Math.round(d.ht));
+const decorBlocked = (d) => d.mask ? d.mask.length : (d.block === 'all' ? decorExtent(d) : d.block === 'base' ? 1 : 0);
+// A solid piece that leaves SOME of its extent walkable (block 'base', or a custom
+// mask smaller than its footprint) is one you walk BEHIND → draw a silhouette.
+// Fully-blocked or fully-walkable pieces don't (you can't stand behind them).
+const DECOR_OCCLUDER = DECOR_INDEX.map((d) => d.block !== 'none' && decorBlocked(d) < decorExtent(d));
+// The tiles a solid decor object blocks (anchored bottom-centre).
 function decorFootprint(id, ax, ay) {
   const d = DECOR_INDEX[id];
-  if (!d || d.block !== 'all') return [[ax, ay]];        // 'base' → placement tile only
+  if (!d || d.block === 'none') return [[ax, ay]];
+  if (d.mask) return d.mask.map(([mx, my]) => [ax + mx, ay + my]); // custom collision shape
+  if (d.block !== 'all') return [[ax, ay]];                        // 'base' → placement tile only
   const W = Math.max(1, Math.round(d.w / 32)), H = Math.max(1, Math.round(d.ht));
   const left = ax - (W >> 1), top = ay - (H - 1);
   const tiles = [];
