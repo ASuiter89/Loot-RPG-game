@@ -8324,8 +8324,10 @@ function weaponBaseType(item) {
 // Might or Vitality, finesse weapons & light armour on Agility, casting gear &
 // cloth on Spirit, and fortune trinkets on Luck. A hero CAN still pick up an
 // "off-class" piece — they just have to invest that attribute first. The gate
-// scales with ilvl, so deeper gear demands a real, growing investment:
-//   need = round(8 + ilvl * 0.9 * weight)   (heavier bases carry a bigger weight)
+// scales with ilvl on a STEEPENING slope, so deeper gear demands an ever-growing
+// investment and off-class dabbling gates out harder the further you descend:
+//   need = round(8 + ilvl * slope * weight), slope = 0.9→1.35 with depth
+//   (heavier bases carry a bigger weight; see attrReqValue for the full formula)
 // Keyed by sub-type first; the bare CATEGORY keys are the legacy fallback for old
 // bare-category weapons whose name carries no sub-type word.
 const WEAPON_REQ = {
@@ -8408,14 +8410,27 @@ function armorReqDef(item) {
 }
 // The required attribute amount for an item of the given ilvl and per-type weight.
 // Clamped so a missing/odd ilvl (very old saves) can never NaN or read as zero.
-// Rarer gear demands more of its attribute at the same item level: the base
-// (ilvl x slot-weight) requirement is scaled ~8% per rarity step above normal, so
-// a legendary/unique piece gates harder than a plain one of equal ilvl.
+// TWO axes make the deepest, flashiest gear demand a real, class-defining stake:
+//   • DEPTH — the per-ilvl slope STEEPENS with item level (0.9 → 1.35, ramping
+//     across the finite tiers and capping past the deepest finite floor), so a
+//     piece's gate claims a GROWING share of your attribute budget the deeper you
+//     find it. Early gear stays broadly wearable, but deep gear can only be met by
+//     an attribute you've truly committed to — which is your class's one or two —
+//     so an off-class piece gates out ever harder the further you descend.
+//   • RARITY — the whole thing is then scaled ~8% per rarity step above normal, so
+//     a legendary/unique piece gates harder than a plain one of equal ilvl.
 function tierReqMult(tier) {
   const rank = Object.keys(TIERS).indexOf(tier);
   return 1 + 0.08 * ((rank < 0 ? 1 : rank) - 1); // normal (rank 1) = 1.0 baseline
 }
-function attrReqValue(ilvl, w, tier) { return Math.round((8 + Math.max(1, ilvl || 1) * 0.9 * w) * tierReqMult(tier)); }
+function attrReqValue(ilvl, w, tier) {
+  const lv = Math.max(1, ilvl || 1);
+  // Slope ramps 0.9 → 1.35 across the finite tiers (0.006/ilvl, capped at +0.45
+  // around the deepest finite floor), so the gate outpaces a spread-thin build the
+  // deeper you go and rewards committing points to your class's attributes.
+  const slope = 0.9 + Math.min(0.45, lv * 0.006);
+  return Math.round((8 + lv * w * slope) * tierReqMult(tier));
+}
 // The {attr, need} a piece demands to equip, or null if it carries no requirement
 // (non-gear, or an unrecognisable legacy item → fail OPEN so a save never bricks).
 function itemAttrReq(item) {
@@ -10617,7 +10632,7 @@ window.gameGuide = function gameGuide(topic) {
       `Set pieces are a distinct top-rarity class shown in teal (not the red of a unique). They drop only at the top tier — as rare as any unique — and grant escalating stat bonuses at 2 and 4 matched pieces worn. Wearing the full set (4 pieces = complete) also unlocks its SIGNATURE POWER — a unique effect, not just more stats: Warden's Aegis Wall (block + reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), or Arcanist's Arcane Overflow (cooldown reduction + mana leech). A completed set wraps the hero in a golden aura and its "… set" tag turns gold with a ✦. A piece can roll for any slot; hover/press-hold the tag to see the bonuses, the power, which slots you're wearing, and your count. gameState().sets lists worn sets, completion and active powers.`,
       `Item power is driven more by item level (ilvl, geared to current depth) than by rarity alone. gameState().menu.inventory gives brief items; read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
-      `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too.`,
+      `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
       `From the LOOT tab, tap an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
       `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. Off-class weapons can be carried and sold but not equipped.`,
@@ -11883,6 +11898,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Deep gear gates harder", by: "Claude", notes: ["Gear attribute requirements now climb on a steepening curve — the per-level slope ramps up the deeper an item is found, so a deep piece demands a real, class-defining stake in its attribute.", "Early gear is unchanged; the gate bites progressively so off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one."] },
   { date: "2026-07-03", size: "medium", v: "Dev tab — live difficulty sliders", by: "Claude", notes: ["New Settings ▸ Dev tab with 20 live sliders over the core difficulty-scaling knobs — tune balance on the fly, no reload.", "Enemy scaling: global HP/damage/count multipliers, depth-threat exponent & divisor, HP/damage/accuracy per floor.", "Bosses & elites HP/damage multipliers; run modifiers (anti-grind, conquest scar, endless ramp, hazard damage); hero power (HP per Vitality, attack per primary attribute, max HP per level, points per level).", "Hero knobs apply instantly; enemy/floor knobs preview via a Respawn-floor button. Per-slider ↺ and Reset all.", "Tuning saves across reloads; defaults leave balance unchanged."] },
   { date: "2026-07-03", size: "medium", v: "Bespoke monster & boss art", by: "Claude", notes: ["All 161 monsters and 5 bosses now use original transparent pixel-art sprites, replacing the old atlas tiles and colour-square placeholders.", "Monsters share one packed sprite sheet; bosses use a higher-res sheet."] },
   { date: "2026-07-03", size: "small", v: "\"Empty slot\" gear badge", by: "Claude", notes: ["Renamed the gold \"First Equip\" badge on an unfilled gear slot to \"Empty Slot\"."] },
