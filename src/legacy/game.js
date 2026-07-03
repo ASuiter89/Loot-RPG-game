@@ -2932,12 +2932,39 @@ function statPowerWeight(key) {
   return w;
 }
 
+// ── LOADOUT-DERIVED CACHES ──
+// activeSlots()'s fix-point, totalStat's gear sums and the item-power counts are
+// pure functions of the worn gear, the hero's base attributes and learned skills
+// (Titan's Grip changes off-hand pairing). They're read dozens of times per frame
+// on the combat / kill / render hot paths, so their results are memoized in one
+// shared bucket. The bucket is discarded whenever anything feeding it can have
+// changed: every gear / attribute / skill mutation site calls bumpLoadout()
+// (recomputeMaxStats — the canonical "loadout changed" hook — bumps too), and a
+// wholesale swap of the player/equipped object (load, gear-set switch, the window
+// bridge) is caught by identity. Caching changes nothing about the results —
+// only how often they're recomputed.
+let loadoutEpoch = 0;
+function bumpLoadout() { loadoutEpoch++; }
+let _loBucket = null;
+function loadoutCache() {
+  if (!_loBucket || _loBucket.epoch !== loadoutEpoch || _loBucket.player !== player ||
+      _loBucket.equipped !== equipped || _loBucket.cls !== player.class || _loBucket.asc !== player.ascension) {
+    _loBucket = { epoch: loadoutEpoch, player, equipped, cls: player.class, asc: player.ascension };
+  }
+  return _loBucket;
+}
+
 // Total power of a single item, AS THIS CLASS would wield it: weighted sum of its
 // stats + attributes + a rarity bonus. The same item can be worth different Power to
 // different classes (a +Might affix or a Spell Power roll lands differently), which
 // is the point — Power should track the item's real impact on this hero.
+// Cached per item object: the number is pure over (item, class), and every item
+// mutation (the Enchanter) bumps the loadout epoch, which invalidates the entry.
+const _itemPowerCache = new WeakMap();
 function itemPower(item) {
   if (!item || !item.stats) return 0;
+  const hit = _itemPowerCache.get(item);
+  if (hit && hit.epoch === loadoutEpoch && hit.cls === player.class) return hit.val;
   let p = 0;
   for (const [k, v] of Object.entries(item.stats)) {
     if (k === 'DMG') {
@@ -2953,7 +2980,9 @@ function itemPower(item) {
     if (typeof v === 'number') p += v * attrPowerWeight(k);
   }
   p += TIER_POWER_BONUS[item.tier] || 0;
-  return Math.max(0, Math.round(p));
+  const val = Math.max(0, Math.round(p));
+  _itemPowerCache.set(item, { epoch: loadoutEpoch, cls: player.class, val });
+  return val;
 }
 
 // Effective value of an attribute: the points spent (including the ATTR_BASE
@@ -3160,6 +3189,9 @@ function drFractionVs(lvl)  { return rated(playerDRRating(), drOpposition(lvl));
 function playerCritChance() { return critChanceVs({ level: curDepth() }); }
 function playerDodge() { return dodgeChanceVs({ level: curDepth() }); }
 function recomputeMaxStats() {
+  // Every gear/skill/attribute change funnels through here — drop the loadout
+  // caches first so the reads below (and everything after) see fresh values.
+  bumpLoadout();
   player.maxHp = baseMaxHp();
   player.maxMp = baseMaxMp();
   // Build-defining item powers: Stalwart deepens max HP, Attuned max MP (stacking).
@@ -3944,8 +3976,8 @@ function offhandEquipError(item, weapon) {
 // FIX-POINT: assume every worn piece active, then repeatedly drop any whose gate
 // isn't met by the attributes of the pieces STILL active (a piece never counts its
 // own +attr toward its own gate — the same rule as the equip check). Dropping only
-// removes, so it settles in at most SLOT_KEYS.length passes. Computed on demand
-// (no cache): it's only hit on player actions and panel renders, never a tight loop.
+// removes, so it settles in at most SLOT_KEYS.length passes. The live loadout's
+// result is memoized (see activeSlots / loadoutCache); hypothetical swaps are not.
 // Core resolver, parameterised by `getItem(slot)` so the SAME fix-point serves both
 // the live loadout AND a hypothetical "what if I equipped this candidate" swap (the
 // candidate occupies its slot, the piece it replaces is gone). Returns the settled
@@ -3979,7 +4011,13 @@ function resolveActive(getItem) {
   }
   return { active, attrFrom };
 }
-function activeSlots() { return resolveActive(s => equipped[s]).active; }
+// The live loadout's settled active map, memoized in the loadout cache (the
+// fix-point is re-resolved only after a gear/attribute/skill change — see
+// bumpLoadout) since combat and render paths read it many times per frame.
+function activeSlots() {
+  const c = loadoutCache();
+  return c.active || (c.active = resolveActive(s => equipped[s]).active);
+}
 // Is the piece in this slot worn AND currently counting (not red/ignored)?
 function slotActive(slot) { return !!equipped[slot] && activeSlots()[slot]; }
 // The main-hand weapon IF it currently counts, else null — so a red/ignored weapon
@@ -4559,7 +4597,17 @@ function skillTreeFor(view) {
 // Every node the hero can interact with (both base trees + the unlocked PATH
 // tree). This flat list is the single hook for skillBonus / spent / lookups, so
 // a passive anywhere is "live" the instant it's bought.
-function classSkillTree() { const t = classTrees(); return t.passive.concat(t.active, ascTree()); }
+// Memoized per (class, ascension): the tree arrays themselves are static data, so
+// the concat only changes when the hero's class or path does. Callers iterate the
+// returned array but never mutate it, so sharing one instance is safe.
+let _cstKey = null, _cstList = null;
+function classSkillTree() {
+  const key = (player.class || '') + '|' + (player.ascension || '');
+  if (_cstList && _cstKey === key) return _cstList;
+  const t = classTrees();
+  _cstKey = key;
+  return _cstList = t.passive.concat(t.active, ascTree());
+}
 function skillNode(id) { return classSkillTree().find(n => n.id === id) || null; }
 function skillRank(id) { return (player.skills && player.skills[id]) || 0; }
 // Sum a passive bonus key across every owned node rank (both trees + path). A
@@ -4789,6 +4837,10 @@ function spentSkillPoints() {
 // in tree order — each keyed by its own id for cooldowns. The first entry is the
 // hero's primary skill (cast with the button / R key).
 function activeSkillList() {
+  // Memoized in the loadout cache (rank changes bump it): auto-cast and the skill
+  // bar rebuild this list several times per frame otherwise. Callers only read it.
+  const c = loadoutCache();
+  if (c.skillList) return c.skillList;
   const list = [];
   for (const n of classSkillTree()) {
     if (n.type === 'active' && skillRank(n.id) > 0) {
@@ -4797,7 +4849,13 @@ function activeSkillList() {
       list.push({ id: n.id, name: n.name, icon: n.icon, mp: skillManaCost(n, skillRank(n.id)), cd: n.cd, desc: n.desc, node: n });
     }
   }
-  return list;
+  return c.skillList = list;
+}
+// The learned-active id set the slot normalisers probe (memoized alongside the
+// list — normAutoSkill runs per frame and was rebuilding this Set each call).
+function learnedActiveIds() {
+  const c = loadoutCache();
+  return c.learnedIds || (c.learnedIds = new Set(activeSkillList().map(s => s.id)));
 }
 // Which learned actives reach the skill bar / hotkeys is now governed by explicit
 // hotkey slots (player.skillSlots) the player fills, not an auto-filled list — see
@@ -4819,7 +4877,7 @@ const AUTO_SLOT = 'auto';
 // the learned actives and migrates legacy per-skill auto-cast flags (player.autoCast,
 // a map) into the single slot once, preferring the earliest-slotted flagged skill.
 function normAutoSkill() {
-  const learned = new Set(activeSkillList().map(s => s.id));
+  const learned = learnedActiveIds();
   let id = player.autoSkill;
   if (!id && player.autoCast && typeof player.autoCast === 'object') {
     const slots = Array.isArray(player.skillSlots) ? player.skillSlots : [];
@@ -4833,7 +4891,7 @@ function normAutoSkill() {
 // any id that's no longer a learned active and de-duping repeats (mutates + returns).
 // The auto-cast skill is reserved out of the manual row so it can't be doubled up.
 function normSkillSlots() {
-  const learned = new Set(activeSkillList().map(s => s.id));
+  const learned = learnedActiveIds();
   const src = Array.isArray(player.skillSlots) ? player.skillSlots : [];
   const out = [], seen = new Set();
   const auto = normAutoSkill();
@@ -5014,6 +5072,7 @@ function buySkill(id) {
   const firstRank = !(player.skills[id] > 0);
   player.skills[id] = (player.skills[id] || 0) + 1;
   player.skillPoints--;
+  bumpLoadout();   // skill ranks feed the cached active-skill list / gear resolve
   // A newly-learned active drops onto the first open hotkey slot so it reaches the
   // bar without a manual assign (the player can re-slot it any time).
   if (firstRank && node.type === 'active') autoSlotSkill(id);
@@ -5081,6 +5140,7 @@ function refundSkill(id) {
   spendCost(cost);
   if (rank - 1 <= 0) delete player.skills[id]; else player.skills[id] = rank - 1;
   player.skillPoints = (player.skillPoints || 0) + 1;
+  bumpLoadout();   // skill ranks feed the cached active-skill list / gear resolve
   // A now-unlearned active must drop off the hotkey / auto-cast slots.
   normSkillSlots(); normAutoSkill();
   recomputeMaxStats();
@@ -6914,16 +6974,35 @@ function mVoice(o) {
   f.connect(g); g.connect(audio.musicGain);
 }
 
+// Pre-rendered noise bursts for the snare and hat. Filling a fresh random
+// AudioBuffer on every hit costs an allocation plus thousands of Math.random()
+// calls per hit; noise is noise, so cycling a small pool of variants is
+// audibly identical. Built lazily once per AudioContext (needs its sampleRate).
+let _percBufCtx = null, _snareBufs = null, _hatBufs = null, _snareBufIdx = 0, _hatBufIdx = 0;
+function percNoiseBuf(ctx, dur, decayPow) {
+  const n = Math.max(1, Math.floor(ctx.sampleRate * dur));
+  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, decayPow);
+  return buf;
+}
+function percNoisePools(ctx) {
+  if (_percBufCtx === ctx) return;
+  _snareBufs = []; _hatBufs = [];
+  for (let v = 0; v < 4; v++) {
+    _snareBufs.push(percNoiseBuf(ctx, 0.13, 1.4));   // snare envelope: (1-i/n)^1.4
+    _hatBufs.push(percNoiseBuf(ctx, 0.05, 1));        // hat envelope: linear decay
+  }
+  _percBufCtx = ctx;
+}
+
 // A backbeat snare (noise crack + a short pitched body) so drum-driven styles
 // have an actual 2-and-4 groove instead of a straight oom-pah.
 function musicSnare(when, vol) {
   const ctx = audio.ctx;
   if (!ctx) return;
-  const n = Math.max(1, Math.floor(ctx.sampleRate * 0.13));
-  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 1.4);
-  const src = ctx.createBufferSource(); src.buffer = buf;
+  percNoisePools(ctx);
+  const src = ctx.createBufferSource(); src.buffer = _snareBufs[_snareBufIdx++ & 3];
   const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1500;
   const ng = ctx.createGain();
   ng.gain.setValueAtTime(0.0002, when);
@@ -6942,17 +7021,20 @@ function musicSnare(when, vol) {
   o.start(when); o.stop(when + 0.1);
 }
 
+// One section's contribution to a note — a top-level helper (rather than a
+// closure rebuilt inside musicVoice) so scheduling a note allocates nothing
+// beyond the voice itself.
+function musicVoiceSection(role, sec, vmul, o) {
+  if (vmul <= 0.01) return;
+  const p = MUSIC_SECTIONS[sec][role];
+  mVoice({ role, freq: o.freq, dur: o.dur, when: o.when,
+           type: p.type, vol: p.vol * vmul, detune: p.detune,
+           cutoff: p.cutoff, q: p.q, attack: o.attack });
+}
 function musicVoice(role, blend, o) {
-  const sound = (sec, vmul) => {
-    if (vmul <= 0.01) return;
-    const p = MUSIC_SECTIONS[sec][role];
-    mVoice({ role, freq: o.freq, dur: o.dur, when: o.when,
-             type: p.type, vol: p.vol * vmul, detune: p.detune,
-             cutoff: p.cutoff, q: p.q, attack: o.attack });
-  };
-  if (blend.from === blend.to) { sound(blend.from, 1); return; }
-  sound(blend.from, 1 - blend.t);
-  sound(blend.to, blend.t);
+  if (blend.from === blend.to) { musicVoiceSection(role, blend.from, 1, o); return; }
+  musicVoiceSection(role, blend.from, 1 - blend.t, o);
+  musicVoiceSection(role, blend.to, blend.t, o);
 }
 
 // A soft, pitched kick for the downbeats. `vol` scales it so quieter sections
@@ -6975,11 +7057,8 @@ function musicKick(when, vol = 1) {
 function musicHat(when, vol) {
   const ctx = audio.ctx;
   if (!ctx) return;
-  const n = Math.max(1, Math.floor(ctx.sampleRate * 0.05));
-  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
-  const src = ctx.createBufferSource(); src.buffer = buf;
+  percNoisePools(ctx);
+  const src = ctx.createBufferSource(); src.buffer = _hatBufs[_hatBufIdx++ & 3];
   const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000;
   const g = ctx.createGain(); g.gain.value = vol;
   src.connect(f); f.connect(g); g.connect(audio.musicGain);
@@ -7004,14 +7083,25 @@ function musicLeadStep(scale, chord) {
 function scheduleMusic() {
   const ctx = audio.ctx;
   if (!ctx || audio.musicLevel <= 0 || ctx.state === 'suspended') return;
+  // After a suspension (tab muted, context paused) or a long main-thread stall
+  // the audio clock keeps advancing while musicNext stands still. Replaying the
+  // backlog would schedule hundreds of past-due notes in one audible burst, so
+  // whenever we've fallen more than a look-ahead window behind, snap to "now"
+  // and let the tune simply continue from here.
+  if (musicNext < ctx.currentTime - 0.3) musicNext = ctx.currentTime + 0.02;
   if (!musicProg) musicProg = mpick(MUSIC_SECTIONS[musicStructIdx].progs);
   if (!musicSectionEndTime) {
     musicSectionEndTime = musicNext + SECTION_MIN + Math.random() * (SECTION_MAX - SECTION_MIN);
   }
+  // Whether a boss is alive can't change mid-invocation (the world only mutates
+  // between scheduler ticks), so scan the enemies list once per call rather
+  // than allocating an enemies.some() pass for every scheduled step.
+  const bossNow = typeof enemies !== 'undefined' && enemies.some(en => !en.dead && en.isBoss);
   // Schedule every step that falls inside the look-ahead window. The guard stops
   // a zero/NaN step duration (which would never advance musicNext) from spinning.
+  const horizon = ctx.currentTime + 0.3;
   let _mGuard = 0;
-  while (musicNext < ctx.currentTime + 0.3 && _mGuard++ < 512) {
+  while (musicNext < horizon && _mGuard++ < 512) {
     const when = musicNext;
     const beat = musicStep % STEPS_PER_BAR;
 
@@ -7028,8 +7118,7 @@ function scheduleMusic() {
         : when + SECTION_MIN + Math.random() * (SECTION_MAX - SECTION_MIN);
     }
     // Boss fights hijack the music: swap to the intense Boss track while a boss
-    // lives, then drift back to a normal style once the floor is clear.
-    const bossNow = typeof enemies !== 'undefined' && enemies.some(en => !en.dead && en.isBoss);
+    // lives (bossNow, checked once above), then drift back once the floor clears.
     // Entering a boss fight hijacks the music RIGHT AWAY: kick off the swap to the
     // intense Boss track the instant a boss is alive — no waiting for the next bar
     // line — and ramp it in fast so the intensity lands as you step onto the floor.
@@ -8422,6 +8511,8 @@ function spawnEnemyBolt(e, raw, color) {
 // Advance every bolt: move, die on a wall, or strike the hero on overlap.
 function updateProjectiles(dt) {
   if (!projectiles.length) return;
+  // Hoisted hit radius, compared squared so the per-bolt test needs no sqrt.
+  const hitR = PLAYER_R + 0.18, hitR2 = hitR * hitR;
   for (const p of projectiles) {
     // Cosmetic bolts: home onto a target (the hero for enemy shots, or p.tx/p.ty
     // for a player spell bolt), fast so it reads as a bolt, and pop on arrival.
@@ -8439,7 +8530,8 @@ function updateProjectiles(dt) {
     if (blocksShot(Math.floor(p.x), Math.floor(p.y))) {   // pop on a solid obstruction; flies over water/ground
       spawnParticles(p.x - 0.5, p.y - 0.5, p.color, 4, 0.06); p.life = 0; continue;
     }
-    if (Math.hypot(p.x - player.fx, p.y - player.fy) < PLAYER_R + 0.18) {
+    const hdx = p.x - player.fx, hdy = p.y - player.fy;
+    if (hdx * hdx + hdy * hdy < hitR2) {
       if (p.enemyShot && p.e) {
         // A foe's aimed bolt reached the hero — resolve it with that foe's mitigation
         // and on-hit procs (a stat-dodge roll can still avoid it inside the handler).
@@ -8456,13 +8548,18 @@ function updateProjectiles(dt) {
       p.life = 0;
     }
   }
-  projectiles = projectiles.filter(p => p.life > 0);
+  // Compact expired bolts in place — the old per-frame .filter allocated a fresh
+  // array every frame even when nothing died.
+  let w = 0;
+  for (let i = 0; i < projectiles.length; i++) { const p = projectiles[i]; if (p.life > 0) projectiles[w++] = p; }
+  projectiles.length = w;
 }
 
 // Tick the traps: arrow emitters count down and loose a bolt; fire vents cycle
 // on/off and scorch the hero while lit (a brief telegraph window precedes each
 // flare so you can step off).
 function updateTraps(dt) {
+  if (!traps.length) return;
   for (const tr of traps) {
     if (tr.kind === 'arrow') {
       tr.cd -= dt;
@@ -10190,6 +10287,9 @@ function loadDaily() {
 // Repaint the objective chip from the hero's active bounty. It only shows during
 // active dungeon play (hidden in town, on the title screen, and while no bounty is
 // taken) so it stays a quiet cue rather than clutter.
+// The chip repaints on every kill (and gold gain) but its strings rarely move, so
+// the last-written state is remembered and unchanged repaints skip the DOM writes.
+let _objChipLast = null;
 function updateObjectiveChip() {
   const chip = document.getElementById('objective-chip');
   if (!chip) return;
@@ -10197,19 +10297,26 @@ function updateObjectiveChip() {
   const b = p && p.bounty;
   const titleOv = document.getElementById('title-overlay');
   const titleOpen = !!(titleOv && titleOv.classList.contains('open'));
-  if (!b || inTown || titleOpen) { chip.style.display = 'none'; return; }
+  if (!b || inTown || titleOpen) {
+    if (_objChipLast !== 'off') { chip.style.display = 'none'; _objChipLast = 'off'; }
+    return;
+  }
   const prog = Math.min(bountyProgress(b), b.need);
   const done = bountyDone(b);
+  const icHtml = (typeof dlIcon === 'function' && dlIcon('npc_quest', 14)) || '';
+  const label = escapeHtml(b.desc.replace('{n}', b.need));
+  const txtHtml = done ? `${label} — <span class="obj-done">✓ ready to claim</span>` : `${label} — <b>${prog}</b>/${b.need}`;
+  const streakHtml = (typeof dailyStreak === 'number' && dailyStreak > 1) ? `${dlIcon('ic_fire', 14)}${dailyStreak}` : '';
+  const key = icHtml + '\x1f' + txtHtml + '\x1f' + streakHtml;
+  if (_objChipLast === key) return;   // identical strings already on screen
+  _objChipLast = key;
   const ic = document.getElementById('obj-ic');
-  if (ic && typeof dlIcon === 'function') { const s = dlIcon('npc_quest', 14); if (s) ic.innerHTML = s; }
+  if (ic && icHtml) ic.innerHTML = icHtml;
   const txt = document.getElementById('obj-text');
-  if (txt) {
-    const label = escapeHtml(b.desc.replace('{n}', b.need));
-    txt.innerHTML = done ? `${label} — <span class="obj-done">✓ ready to claim</span>` : `${label} — <b>${prog}</b>/${b.need}`;
-  }
+  if (txt) txt.innerHTML = txtHtml;
   const streakEl = document.getElementById('obj-streak');
   if (streakEl) {
-    if (typeof dailyStreak === 'number' && dailyStreak > 1) { streakEl.innerHTML = `${dlIcon('ic_fire', 14)}${dailyStreak}`; streakEl.style.display = ''; }
+    if (streakHtml) { streakEl.innerHTML = streakHtml; streakEl.style.display = ''; }
     else streakEl.style.display = 'none';
   }
   chip.style.display = '';
@@ -11499,6 +11606,7 @@ function openEnchanter() { enchantSel = null; openTownModal('Enchanter', 'ic_wan
 
 // After any enchant: refresh derived stats if the piece is worn, then re-render.
 function afterEnchant(item) {
+  bumpLoadout();   // the item's stats/attrs changed — cached power/gear sums are stale
   if (Object.values(equipped).includes(item)) { recomputeMaxStats(); if (player.hp > player.maxHp) player.hp = player.maxHp; if (player.mp > player.maxMp) player.mp = player.maxMp; }
   sfx('shrine');
   hideHoverTip(); // the hovered button is about to be re-rendered out from under it
@@ -15689,14 +15797,19 @@ const ITEM_POWERS = {
 function rollItemPower() { const ks = Object.keys(ITEM_POWERS); return ks[Math.floor(Math.random() * ks.length)]; }
 // How many active worn pieces carry a given power (so two Vampiric pieces stack).
 // Fast path: if no worn piece even carries the power, skip the active resolve.
+// Memoized per power key in the loadout cache — dealDamage probes vampiric/arcing
+// on every blow, and the answer only moves when gear does.
 function itemPowerCount(key) {
+  const c = loadoutCache();
+  const memo = c.powerN || (c.powerN = {});
+  if (memo[key] !== undefined) return memo[key];
   let raw = 0;
   for (const slot of SLOT_KEYS) { const it = equipped[slot]; if (it && it.power === key) raw++; }
-  if (!raw) return 0;
+  if (!raw) return memo[key] = 0;
   const active = activeSlots();
   let n = 0;
   for (const slot of SLOT_KEYS) { const it = equipped[slot]; if (it && it.power === key && active[slot]) n++; }
-  return n;
+  return memo[key] = n;
 }
 function hasItemPower(key) { return itemPowerCount(key) > 0; }
 // Flat stat bonuses granted by worn powers that carry a `stats` map. Percent
@@ -16261,24 +16374,36 @@ function pathStepCost(x, y) {
 // A* from cell (sx,sy) to (gx,gy) over walkable cells: 8-directional, no corner
 // cutting past walls, hazard-weighted. Returns waypoints as tile-centre world
 // points (the start cell dropped, destination last), or null if unreachable.
+// The three map-sized fields are module scratch reused across calls (click-to-
+// move replans every 0.35s, and deep floors are big) — a generation stamp marks
+// which cells this call has touched, so nothing is refilled per call.
+let _tpN = 0, _tpG = null, _tpCame = null, _tpClosed = null, _tpStamp = null, _tpGen = 0;
+const _tpHN = [], _tpHF = [];   // heap scratch, truncated per call
 function findTilePath(sx, sy, gx, gy) {
   if (gx < 0 || gy < 0 || gx >= MAP_W || gy >= MAP_H) return null;
   if (sx === gx && sy === gy) return null;
   if (pathCellBlocked(gx, gy)) return null;               // clicked into a wall — nothing to reach
   const W = MAP_W, H = MAP_H, N = W * H;
-  const g = new Float64Array(N).fill(Infinity);
-  const came = new Int32Array(N).fill(-1);
-  const closed = new Uint8Array(N);
+  if (N > _tpN) {                                         // grow-only; maps only get bigger with depth
+    _tpN = N;
+    _tpG = new Float64Array(N); _tpCame = new Int32Array(N);
+    _tpClosed = new Uint8Array(N); _tpStamp = new Int32Array(N);
+  }
+  const gen = ++_tpGen, stamp = _tpStamp;
+  // A cell is only meaningful once stamped by THIS call; unstamped reads as
+  // { g: Infinity, came: -1, closed: 0 } — identical to the old fresh arrays.
+  const g = _tpG, came = _tpCame, closed = _tpClosed;
+  const touch = (i) => { if (stamp[i] !== gen) { stamp[i] = gen; g[i] = Infinity; came[i] = -1; closed[i] = 0; } };
   const start = sy * W + sx, goal = gy * W + gx;
   const hEst = (x, y) => { const ax = Math.abs(x - gx), ay = Math.abs(y - gy); return (ax + ay) + (Math.SQRT2 - 2) * Math.min(ax, ay); }; // octile
   // Tiny binary min-heap keyed by f (each entry carries its own f, so re-pushing
   // an improved node never corrupts stale copies still in the heap).
-  const hN = [], hF = [];
+  const hN = _tpHN, hF = _tpHF; hN.length = 0; hF.length = 0;
   const swap = (i, j) => { const n = hN[i]; hN[i] = hN[j]; hN[j] = n; const f = hF[i]; hF[i] = hF[j]; hF[j] = f; };
   const push = (n, f) => { hN.push(n); hF.push(f); let i = hN.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (hF[p] <= hF[i]) break; swap(p, i); i = p; } };
   const pop = () => { const top = hN[0], ln = hN.pop(), lf = hF.pop(); if (hN.length) { hN[0] = ln; hF[0] = lf; let i = 0; for (;;) { let l = 2*i+1, r = 2*i+2, s = i; if (l < hN.length && hF[l] < hF[s]) s = l; if (r < hN.length && hF[r] < hF[s]) s = r; if (s === i) break; swap(s, i); i = s; } } return top; };
   const DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-  g[start] = 0; push(start, hEst(sx, sy));
+  touch(start); g[start] = 0; push(start, hEst(sx, sy));
   let guard = N * 8;
   while (hN.length && guard-- > 0) {
     const cur = pop();
@@ -16290,6 +16415,7 @@ function findTilePath(sx, sy, gx, gy) {
       const nx = cx + DIRS[d][0], ny = cy + DIRS[d][1];
       if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
       const ni = ny * W + nx;
+      touch(ni);
       if (closed[ni] || pathCellBlocked(nx, ny)) continue;
       const diag = DIRS[d][0] !== 0 && DIRS[d][1] !== 0;
       if (diag && (pathCellBlocked(cx + DIRS[d][0], cy) || pathCellBlocked(cx, cy + DIRS[d][1]))) continue; // never clip a wall corner
@@ -16297,7 +16423,7 @@ function findTilePath(sx, sy, gx, gy) {
       if (ng < g[ni]) { g[ni] = ng; came[ni] = cur; push(ni, ng + hEst(nx, ny)); }
     }
   }
-  if (came[goal] === -1) return null;                     // no route
+  if (stamp[goal] !== gen || came[goal] === -1) return null;   // no route
   const path = [];
   for (let n = goal; n !== start && n !== -1; n = came[n]) path.push({ x: (n % W) + 0.5, y: ((n / W) | 0) + 0.5 });
   path.reverse();
@@ -16868,7 +16994,13 @@ function getWeaponDamage() {
 // Sum a flat stat (ATK, DEF, etc.) across all equipped gear. Titan's Grip lets you
 // wield an off-hand alongside a two-hander, but at a cost: its stats count for 60%.
 // The guard is cheap (the rare 2H+off-hand combo) so skillFlag is rarely hit.
+// Memoized per stat name in the loadout cache: the sum reads only worn gear, set
+// thresholds and item-power bonuses (never buffs/status), so it only moves when
+// gear, attributes or skills do — exactly what bumpLoadout tracks.
 function totalStat(name) {
+  const c = loadoutCache();
+  const memo = c.stats || (c.stats = {});
+  if (memo[name] !== undefined) return memo[name];
   const active = activeSlots();
   let sum = 0;
   const tgPenalty = (equipped.offhand && isTwoHander(equipped.weapon) && skillFlag('titangrip')) ? 0.6 : 1;
@@ -16879,7 +17011,7 @@ function totalStat(name) {
       sum += (slot === 'offhand' && tgPenalty !== 1) ? Math.round(it.stats[name] * tgPenalty) : it.stats[name];
     }
   }
-  return sum + setStatBonus(name) + itemPowerStatBonus(name);   // set thresholds + special-power stat bonuses
+  return memo[name] = sum + setStatBonus(name) + itemPowerStatBonus(name);   // set thresholds + special-power stat bonuses
 }
 
 // Armor reduces incoming damage by a *percentage* with diminishing returns,
@@ -17300,8 +17432,10 @@ function onEnemyDefeated(e) {
     else if (quest.type === 'cleanse' && enemies.every(en => en.dead || en.isGoblin)) completeQuest('The floor is cleansed of monsters!');
   }
   checkLevelUp();
-  // Loot dropped by the foe went straight into the pack — refresh the panel.
-  renderPanel();
+  // Loot dropped by the foe went straight into the pack — refresh the panel. Via
+  // the dirty flag: the loop flushes at most one rebuild per frame, and only while
+  // the drawer is actually on-screen (a kill with the bag closed costs nothing).
+  renderPanelSoon();
   // With this foe down, the floor may now be clear — unseal the stairs if so.
   updateFloorClear();
 }
@@ -17568,6 +17702,11 @@ function autoCastWorthwhile(node) {
 // the moment it's ready — no global pacing, since there's only one to fire.
 function tickAutoCast(dt) {
   if (inTown || portalChanneling() || isPlayerStunned() || player.hp <= 0) return;
+  // Nothing in the auto-cast slot — and no legacy per-skill flag left for
+  // normAutoSkill to migrate into it — means there is nothing to fire; skip the
+  // slot normalisation (this runs every frame).
+  const ac = player.autoCast;
+  if (!player.autoSkill && !(ac && typeof ac === 'object' && Object.keys(ac).some(k => ac[k]))) return;
   const id = normAutoSkill();
   if (!id || !autoCastWorthwhile(skillNode(id))) return;
   // A silent probe: castSkillById bails (no log, no cost) if the skill is on
@@ -17592,6 +17731,18 @@ function foesInRange(range) {
   return enemies
     .filter(o => !o.dead && (Math.abs(o.x - player.x) + Math.abs(o.y - player.y)) <= range)
     .sort((a, b) => (Math.abs(a.x - player.x) + Math.abs(a.y - player.y)) - (Math.abs(b.x - player.x) + Math.abs(b.y - player.y)));
+}
+// The single nearest living foe within Manhattan `range` — one linear pass for the
+// hot callers that only need foesInRange(...)[0]. Strict `<` keeps the first foe in
+// enemy-array order on a distance tie, matching the stable sort it replaces.
+function nearestFoeInRange(range) {
+  let best = null, bestD = Infinity;
+  for (const o of enemies) {
+    if (o.dead) continue;
+    const d = Math.abs(o.x - player.x) + Math.abs(o.y - player.y);
+    if (d <= range && d < bestD) { best = o; bestD = d; }
+  }
+  return best;
 }
 // A safe, unoccupied tile adjacent to enemy e for the hero to blink onto.
 // Skips lava (7) and spikes (8) so a teleport never strands the hero on a
@@ -17682,7 +17833,7 @@ function skillSpellDamage(e, cast, mult, rank) {
 
 // Direction (cardinal) toward the nearest foe in range, for line/beam shapes.
 function nearestFoeDir(range) {
-  const f = foesInRange(range)[0];
+  const f = nearestFoeInRange(range);
   if (!f) return null;
   const dx = f.x - player.x, dy = f.y - player.y;
   if (Math.abs(dx) >= Math.abs(dy)) return [Math.sign(dx) || 1, 0];
@@ -17701,11 +17852,17 @@ function foesInLine(dir, range) {
   });
 }
 // Greedy chain: nearest unhit foe within 3 tiles of the last, up to n links.
+// Each link is a linear min-distance pass (strict `<` keeps enemy-array order on
+// ties, matching the stable filter+sort it replaces).
 function chainTargets(first, n, range) {
   const hit = [first]; let last = first;
   for (let k = 1; k < n; k++) {
-    const nxt = enemies.filter(o => !o.dead && !hit.includes(o) && (Math.abs(o.x - last.x) + Math.abs(o.y - last.y)) <= 3)
-      .sort((a, b) => (Math.abs(a.x - last.x) + Math.abs(a.y - last.y)) - (Math.abs(b.x - last.x) + Math.abs(b.y - last.y)))[0];
+    let nxt = null, nxtD = Infinity;
+    for (const o of enemies) {
+      if (o.dead || hit.includes(o)) continue;
+      const d = Math.abs(o.x - last.x) + Math.abs(o.y - last.y);
+      if (d <= 3 && d < nxtD) { nxt = o; nxtD = d; }
+    }
     if (!nxt) break;
     hit.push(nxt); last = nxt;
   }
@@ -17751,9 +17908,15 @@ function resolveCast(node, rank) {
   switch (c.shape) {
     case 'self': case 'summon': break;
     case 'melee': {
-      const adj = adjacentToPlayer().sort((a, b) => a.hp - b.hp);
-      if (!adj.length) { castMsg(`No foe within reach.`); return false; }
-      targets = [adj[0]]; center = adj[0]; break;
+      // Weakest adjacent foe — a linear min by hp (strict `<` keeps enemy-array
+      // order on an hp tie, matching the stable sort it replaces).
+      let weakest = null;
+      for (const o of enemies) {
+        if (o.dead || Math.abs(o.x - player.x) > 1 || Math.abs(o.y - player.y) > 1) continue;
+        if (!weakest || o.hp < weakest.hp) weakest = o;
+      }
+      if (!weakest) { castMsg(`No foe within reach.`); return false; }
+      targets = [weakest]; center = weakest; break;
     }
     case 'cleave': {
       targets = adjacentToPlayer();
@@ -17766,12 +17929,12 @@ function resolveCast(node, rank) {
       break;
     }
     case 'bolt': {
-      const f = foesInRange(c.range || 6)[0];
+      const f = nearestFoeInRange(c.range || 6);
       if (!f) { castMsg(`No foe within range.`); return false; }
       targets = [f]; center = f; break;
     }
     case 'blast': {
-      const f = foesInRange(c.range || 6)[0];
+      const f = nearestFoeInRange(c.range || 6);
       if (!f) { castMsg(`No foe within range.`); return false; }
       center = f; targets = enemiesNear(c.radius || 1, f.x, f.y); break;
     }
@@ -17783,12 +17946,12 @@ function resolveCast(node, rank) {
       break;
     }
     case 'chain': {
-      const first = foesInRange(c.range || 6)[0];
+      const first = nearestFoeInRange(c.range || 6);
       if (!first) { castMsg(`No foe within range.`); return false; }
       targets = chainTargets(first, c.chain || 3, c.range || 6); break;
     }
     case 'teleport': {
-      const f = foesInRange(c.range || 6)[0];
+      const f = nearestFoeInRange(c.range || 6);
       if (!f) { castMsg(`No foe within range.`); return false; }
       const spot = adjacentOpenTile(f);
       if (spot) { setPlayerCell(spot.x, spot.y); }
@@ -19610,6 +19773,7 @@ function spendAttr(key, ev) {
   const amount = Math.min(bulk ? 5 : 1, player.attrPoints);
   player.attributes[key] = (player.attributes[key] || 0) + amount;
   player.attrPoints -= amount;
+  bumpLoadout();   // attributes feed the cached gear resolve (equip gates)
   // Raising Vitality/Spirit/Might immediately grants the extra HP/MP/Stamina it unlocks.
   if (key === 'vitality') { const before = player.maxHp; recomputeMaxStats(); player.hp += (player.maxHp - before); }
   else if (key === 'spirit') { const before = player.maxMp; recomputeMaxStats(); player.mp += (player.maxMp - before); }
@@ -20131,7 +20295,9 @@ function lootRowVisible(item) {
 // rows (e.g. "+3 ATK · THN · +5 MIG"), so a new player can decode them without
 // hunting through tooltips. Built from STAT_SHORT/STAT_LABELS and ATTRIBUTES so
 // it can never drift out of sync with what the rows actually print.
+let _lootGlossaryHTML = null;   // built once — the key is pure static data
 function lootGlossaryHTML() {
+  if (_lootGlossaryHTML) return _lootGlossaryHTML;
   // Item stats split into themed buckets, alphabetical by short code within each,
   // so the long list stays scannable (and flows into two columns on desktop).
   // Keyed by internal stat key so it can never drift from STAT_SHORT/STAT_LABELS.
@@ -20159,7 +20325,7 @@ function lootGlossaryHTML() {
     const a = ATTRIBUTES[k];
     return `<div class="gl-row"><span class="gl-code">${a.short}</span><span class="gl-mean">${a.label} — ${a.desc}</span></div>`;
   }).join('');
-  return `<details class="loot-glossary"><summary>Stat abbreviations</summary>` +
+  return _lootGlossaryHTML = `<details class="loot-glossary"><summary>Stat abbreviations</summary>` +
     `<div class="gl-body">` +
     statSects +
     group('Attributes', attrRows) +
@@ -20253,40 +20419,47 @@ function renderPanel() {
     const lootCtrls = controls + sortPop + filterPop;
     // Rarity rank for sorting: junk 0 → unique 6 (higher = rarer).
     const TIER_KEYS = Object.keys(TIERS);
-    const tierRank = item => TIER_KEYS.indexOf(item.tier);
-    const powOf = it => it.slot ? itemPower(it) : -1;
-    const slotOf = it => it.slot in slotOrder ? slotOrder[it.slot] : 99;
-    // Sort comparator over {item} rows. A shared pre-pass always sinks pieces this
-    // class can't wield to the bottom; then the chosen key orders the rest.
+    // One pass over the bag: build the visible rows, decorating each with its sort
+    // keys ONCE (power, tier rank, slot rank, "can't wield" flag) so the comparator
+    // below doesn't re-derive them per comparison — and tally the bulk sell/scrap
+    // aggregates in the same sweep (locked pieces are always spared).
+    const rows = [];
+    let bulkN = 0, bulkScrapN = 0, bulkGold = 0;
+    inventory.forEach((item, i) => {
+      if (!lootRowVisible(item)) return;
+      rows.push({
+        item, i,
+        w: (item.slot && !canEquipItem(item)) ? 1 : 0,
+        pow: item.slot ? itemPower(item) : -1,
+        tr: TIER_KEYS.indexOf(item.tier),
+        so: item.slot in slotOrder ? slotOrder[item.slot] : 99,
+      });
+      if (!item.locked) {
+        bulkN++;
+        if (item.slot && TIERS[item.tier]) bulkScrapN++;
+        bulkGold += Math.max(1, Math.round(item.value * 0.5));
+      }
+    });
+    // Sort comparator over the decorated rows. A shared pre-pass always sinks
+    // pieces this class can't wield to the bottom; then the chosen key orders.
     const lootRowCompare = (a, b) => {
-      const wa = (a.item.slot && !canEquipItem(a.item)) ? 1 : 0;
-      const wb = (b.item.slot && !canEquipItem(b.item)) ? 1 : 0;
-      if (wa !== wb) return wa - wb;
-      const ia = a.item, ib = b.item;
+      if (a.w !== b.w) return a.w - b.w;
       switch (lootSort) {
         case 'power':
-          return powOf(ib) - powOf(ia) || tierRank(ib) - tierRank(ia) || slotOf(ia) - slotOf(ib);
+          return b.pow - a.pow || b.tr - a.tr || a.so - b.so;
         case 'slot':
-          return slotOf(ia) - slotOf(ib) || tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia);
+          return a.so - b.so || b.tr - a.tr || b.pow - a.pow;
         case 'value':
-          return (ib.value || 0) - (ia.value || 0) || tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia);
+          return (b.item.value || 0) - (a.item.value || 0) || b.tr - a.tr || b.pow - a.pow;
         case 'rarity':
         default:
           // Highest rarity first (unique → junk); Power breaks ties, then slot.
-          return tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia) || slotOf(ia) - slotOf(ib);
+          return b.tr - a.tr || b.pow - a.pow || a.so - b.so;
       }
     };
-    const rows = inventory
-      .map((item, i) => ({ item, i }))
-      .filter(({ item }) => lootRowVisible(item))
-      .sort(lootRowCompare);
-    // Bulk sell / scrap for everything visible under the current filter (locked
-    // pieces are always spared). Mirrors the per-item buttons on a selected row.
-    const bulkTargets = inventory.filter(it => lootRowVisible(it) && !it.locked);
-    const bulkScrapN = bulkTargets.filter(it => it.slot && TIERS[it.tier]).length;
-    const bulkGold = bulkTargets.reduce((s, it) => s + Math.max(1, Math.round(it.value * 0.5)), 0);
+    rows.sort(lootRowCompare);
     const mMoney = dlIcon('ic_money', 13), mScrap = dlIcon('mat_scrap', 13);
-    const bulkBar = bulkTargets.length ? `<div class="loot-bulk-bar">
+    const bulkBar = bulkN ? `<div class="loot-bulk-bar">
       <button class="loot-bulk-btn" onclick="bagBulk('sell')">${mMoney} Sell all · <span data-spr=ic_money></span>${bulkGold}</button>
       ${bulkScrapN ? `<button class="loot-bulk-btn" onclick="bagBulk('scrap')">${mScrap} Scrap all · ${bulkScrapN}</button>` : ''}
     </div>` : '';
@@ -21580,6 +21753,7 @@ function quickEquip(i) {
   }
   if (equipped[slot]) inventory.push(equipped[slot]); // swap old back into bag
   equipped[slot] = item;
+  bumpLoadout();   // worn gear changed — cached gear resolve/stat sums are stale
   inventory.splice(i, 1);
   selectedItem = null;
   hideTooltip();
@@ -21625,6 +21799,7 @@ function unequip(slot) {
   if (!item) return;
   inventory.push(item);
   equipped[slot] = null;
+  bumpLoadout();   // worn gear changed — cached gear resolve/stat sums are stale
   hideTooltip();
   log(`Unequipped: ${logItem(item)}`);
   // Dropping gear can lower HP/MP and Vitality/Spirit, so recompute the derived
@@ -25397,6 +25572,8 @@ const __DL_FN_BRIDGE = {
   offhandEquipError,
   resolveActive,
   activeSlots,
+  bumpLoadout,
+  loadoutCache,
   slotActive,
   activeWeapon,
   activeOffhand,
@@ -25438,6 +25615,7 @@ const __DL_FN_BRIDGE = {
   canBuySkill,
   spentSkillPoints,
   activeSkillList,
+  learnedActiveIds,
   normAutoSkill,
   normSkillSlots,
   autoSkillObj,
@@ -26026,6 +26204,7 @@ const __DL_FN_BRIDGE = {
   adjacentToPlayer,
   enemiesNear,
   foesInRange,
+  nearestFoeInRange,
   adjacentOpenTile,
   spellBase,
   milestonePower,
