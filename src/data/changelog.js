@@ -3,6 +3,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Skill-tree nodes always show their rank", by: "Claude", notes: [
+    "Every skill-tree node now shows its current rank on a redesigned corner pill in every state — learned, ready, locked or maxed — so you can always read a skill's level at a glance.",
+    "A node you can spend a point on marks it with a bright pulsing + beside the rank, instead of hiding the rank behind a lone +, so having a point to spend never masks how far you've already ranked a skill.",
+    "The rank and hotkey-slot pills are bigger and cleaner, and no longer get clipped on the octagonal keystone nodes.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Animated town-portal teleport", by: "Claude", notes: [
     "Opening a town portal now charges a blue aura over the hero instead of flashing a gate icon — the full countdown reads as an energy build-up.",
     "When it opens, the hero fades out and rockets up a beam of light off the map before you land in town.",

@@ -20261,7 +20261,14 @@ function renderSkills(el) {
     const avail = canBuySkill(n);
     const ready = !owned && !avail && skillReqMet(n);
     const state = maxd ? 'maxed' : avail ? 'avail' : owned ? 'owned' : ready ? 'ready' : 'locked';
-    const badge = maxd ? '✓' : avail ? '+' : owned ? rank : ready ? '☆' : '';
+    // The rank badge ALWAYS shows the current level, in EVERY state, so a node's
+    // rank reads at a glance whether or not you have a point to spend. "You can
+    // spend a point here now" is conveyed by the avail styling (a bright pulsing
+    // pill) plus a leading +, never by replacing the rank with a lone + / ✓ / ☆
+    // the way it used to (which hid the level in exactly the states you care about).
+    // Just the rank keeps the pill compact on the narrow nodes; the /max ceiling
+    // rides the hover title and the detail card.
+    const badge = `<span class="badge" title="Rank ${rank} / ${n.max}">${avail ? '<span class="up">+</span>' : ''}<span class="rk">${rank}</span></span>`;
     // A learned active bound to a hotkey gets a small corner chip showing where it's
     // bound — the key number for a manual slot, ⟳ for the auto-cast slot. Owned actives
     // that aren't bound stay fully lit (they're learned, just not on the bar) — no
@@ -20281,7 +20288,7 @@ function renderSkills(el) {
     return `<button class="sk-tnode ${state}${n.keystone ? ' keystone' : ''}${n.type === 'active' ? ' act' : ''}${selectedSkillId === n.id ? ' sel' : ''}" id="sknode-${n.id}" ${drag}
         style="left:${(p[0] * 100).toFixed(2)}%;top:${(p[1] * 100).toFixed(2)}%" onclick="skillNodeClick(event,'${n.id}')" ondblclick="buySkill('${n.id}')"
         data-tip="${tipShort}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
-      <span class="ic">${dlIconFill(n.icon)}</span><span class="nm">${n.name}</span>${badge !== '' ? `<span class="badge">${badge}</span>` : ''}${slotMark}
+      <span class="ic">${dlIconFill(n.icon)}</span><span class="nm">${n.name}</span>${badge}${slotMark}
     </button>`;
   }).join('');
 
