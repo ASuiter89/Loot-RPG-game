@@ -8145,11 +8145,13 @@ function generateMap() {
   // onward. Which is which depends on how you arrived:
   //   • descended / gated / loaded in → onward is DOWN (deeper), entry is UP.
   //   • climbed up from below → onward is UP (higher), entry is DOWN (back down).
-  // Floor 1 of EACH difficulty has nothing above it within its dungeon, so its
-  // "up" stair is really an exit back to TOWN (handled in the move handler) — it
-  // never climbs. Keyed on the DISPLAYED floor so it holds for Hardened/Brutal/
-  // Endless floor 1 too, not just Normal's.
-  const climbing = arrivalDir === 'up' && displayFloor() > 1;
+  // Floor 1 of EACH difficulty has nothing above it within its dungeon, so its "up"
+  // stair is really an exit back to TOWN (handled in goUpStairs). But climbing UP to
+  // floor 1 (from its floor 2) must still land you on the DOWN stair that leads back
+  // the way you came — not on the town portal — so we honour arrivalDir on floor 1
+  // too. (Arriving from town/gate/a fresh floor always sets arrivalDir='down', so it
+  // still spawns you on the portal there; only a genuine climb flips this.)
+  const climbing = arrivalDir === 'up';
   const farStair = climbing ? 12 : 2;   // the way onward
   const entryStair = climbing ? 2 : 12; // the way back, under your feet
   // The last floor of a finite difficulty (its boss floor 25) is the END of that
@@ -9157,6 +9159,12 @@ function startPortalChannel() {
   if (tutorialActive) { log('🏖️ Head north into the cave to begin your descent first.'); sfx('denied'); return; }
   if (portalCharge > 0) { cancelPortalChannel('<span data-spr=feat_portal></span> You let the town portal fade.'); return; }
   portalCharge = PORTAL_CHANNEL_SECS;
+  // Drop whatever movement opened the portal (a held key, the joystick, or the
+  // click-to-move that walked us onto the floor-1 up-stair) so the channel starts
+  // clean and can't cancel itself on the same input — a FRESH move breaks it off
+  // (see updatePlayer). Without this, a lingering click-to-move target would either
+  // instantly collapse the channel or, worse, root the hero with no way to cancel.
+  clearHeld();
   log(`<span data-spr=feat_portal></span> You begin opening a town portal — hold out ${PORTAL_CHANNEL_SECS} seconds without being hit.`, 'important');
   sfx('teleport');
   updateBars(); renderSkillBar(); draw();
@@ -15679,10 +15687,12 @@ function updatePlayer(dt) {
   unstickPlayer(dt);   // free the hero if a foe stepped into our body's space
   if (isPlayerStunned()) { player.vx = 0; player.vy = 0; player.dashT = 0; regenStamina(dt); return; }
   // Channeling a town portal roots the hero — but a deliberate step (WASD / arrows /
-  // joystick) breaks it off rather than being silently swallowed, so "walk away" cancels.
-  // With no movement input the channel just holds.
+  // joystick / a click-to-move on desktop) breaks it off rather than being silently
+  // swallowed, so "walk away" cancels. With no movement input the channel just holds.
+  // (startPortalChannel clears the input that opened it, so the very step/click that
+  // began the channel can't instantly cancel it — only a FRESH move does.)
   if (portalChanneling()) {
-    const wantsMove = heldDir('right') || heldDir('left') || heldDir('up') || heldDir('down') || (joy.active && joy.mag > 0.18);
+    const wantsMove = heldDir('right') || heldDir('left') || heldDir('up') || heldDir('down') || (joy.active && joy.mag > 0.18) || moveTarget.active;
     if (!wantsMove) { player.vx = 0; player.vy = 0; player.dashT = 0; regenStamina(dt); return; }
     resetPortal();
     log('<span data-spr=feat_portal></span> You step away and let the town portal fade.', 'important');
@@ -15920,6 +15930,7 @@ function goDownStairs(nx, ny) {
   sfx('stairs');
   log(`Descended to ${floorLabel()}! You enter ${currentTheme().name}.`, 'important');
   setPlayerCell(5, 5);
+  arrivalDir = 'down';   // spawn on the stairs UP that lead back the way you came
   generateMap();
   tickPact();   // floor just entered keeps the pact, then it counts down
   maybeFloorEvent();

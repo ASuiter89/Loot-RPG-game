@@ -3,6 +3,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Portal cancel & correct stair landings", by: "Claude", notes: [
+    "Moving now cancels a town portal for every control scheme — click-to-move on desktop used to root you in place until the portal opened; a click, keypress, or joystick nudge all break the channel now.",
+    "The step or click that opens the floor-1 exit portal no longer instantly cancels it — only a fresh move does.",
+    "Climbing the up-stairs to floor 1 now drops you on the stairs down (the way back below), not on the town portal.",
+    "Every floor transition lands you on the matching stair: on the down-stairs after climbing up, on the up-stairs after going down.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Enchanter tooltip no longer sticks", by: "Claude", notes: ["Tapping a worn piece at the Enchanter no longer leaves its gear tooltip floating over the reroll screen — the hover card clears when you pick a piece or back out."] },
   { date: "2026-07-03", size: "small", v: "Deep gear gates harder", by: "Claude", notes: ["Gear attribute requirements now climb on a steepening curve — the per-level slope ramps up the deeper an item is found, so a deep piece demands a real, class-defining stake in its attribute.", "Early gear is unchanged; the gate bites progressively so off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one."] },
   { date: "2026-07-03", size: "medium", v: "Dev tab — live difficulty sliders", by: "Claude", notes: ["New Settings ▸ Dev tab with 20 live sliders over the core difficulty-scaling knobs — tune balance on the fly, no reload.", "Enemy scaling: global HP/damage/count multipliers, depth-threat exponent & divisor, HP/damage/accuracy per floor.", "Bosses & elites HP/damage multipliers; run modifiers (anti-grind, conquest scar, endless ramp, hazard damage); hero power (HP per Vitality, attack per primary attribute, max HP per level, points per level).", "Hero knobs apply instantly; enemy/floor knobs preview via a Respawn-floor button. Per-slider ↺ and Reset all.", "Tuning saves across reloads; defaults leave balance unchanged."] },
