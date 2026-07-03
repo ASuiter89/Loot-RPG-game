@@ -8,10 +8,13 @@
  * Usage:  node tools/styles-lint.js
  * Exits non-zero if any ERROR-level violations are found.
  */
-'use strict';
-const fs = require('fs');
-const path = require('path');
+// ESM: the repo's package.json declares "type": "module", so this dev-only tool
+// is an ES module. (Run with `node tools/styles-lint.js`.)
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FILE = path.join(__dirname, '..', 'index.html');
 const src = fs.readFileSync(FILE, 'utf8');
 const lines = src.split('\n');
