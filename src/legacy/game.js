@@ -20208,10 +20208,13 @@ function skillLoadoutTrayHtml() {
   const slots = normSkillSlots();
   const byId = {}; for (const s of activeSkillList()) byId[s.id] = s;
   // A single tray cell, addressed by a manual slot index or the AUTO_SLOT sentinel.
+  // Matches the combat bar's tiles: the icon fills the box and the hotkey rides a
+  // full-width pill above it (the auto-cast slot's pill reads "AUTO").
   const cell = (id, i) => {
     const isAuto = i === AUTO_SLOT;
     const s = id ? byId[id] : null;
     const key = isAuto ? '' : skillKeyLabel(i + 1);
+    const pill = isAuto ? 'AUTO' : kbShort(key);
     const dropIdx = isAuto ? `'${AUTO_SLOT}'` : i;
     const drag = s ? `draggable="true" ondragstart="skillDragStart(event,'${s.id}',${dropIdx})" ondragend="skillDragEnd()"` : '';
     const label = isAuto ? 'auto-cast slot' : 'slot ' + (i + 1);
@@ -20220,19 +20223,21 @@ function skillLoadoutTrayHtml() {
       : isAuto
         ? `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast slot</div><div class='ht-line'>Drag a learned skill here, or tap to choose one. It fires automatically the instant it's ready.</div>`
         : `<div class='ht-name'>Empty ${label}</div><div class='ht-line'>Drag a learned skill here, or tap to assign one.</div>`;
-    const inner = s ? `<span class="lt-ic">${dlIcon(s.icon,28)||''}</span>` : `<span class="lt-plus">＋</span>`;
-    return `<div class="lt-slot${s ? '' : ' empty'}${i === 0 ? ' primary' : ''}${isAuto ? ' auto' : ''}" ${drag}
+    const inner = s ? `<span class="lt-ic">${dlIconFill(s.icon)}</span>` : `<span class="lt-plus">＋</span>`;
+    return `<div class="sb-cell"><span class="sb-pill${isAuto ? ' auto' : ''}">${pill}</span>` +
+      `<div class="lt-slot${s ? '' : ' empty'}" ${drag}
         data-slot="${isAuto ? AUTO_SLOT : i}" ondragover="skillSlotDragOver(event)" ondrop="skillSlotDropOn(event,${dropIdx})"
         ondragenter="skillSlotDragEnter(event,this)" ondragleave="skillSlotDragLeave(event,this)"
-        onclick="openSlotPicker(${dropIdx})" ${hoverTip(tip)}>
-      <span class="lt-key">${isAuto ? '⟳' : key}</span>${inner}${isAuto && s ? `<span class="lt-auto" aria-label="auto-cast">⟳</span>` : ''}
-    </div>`;
+        onclick="openSlotPicker(${dropIdx})" ${hoverTip(tip)}>${inner}</div></div>`;
   };
   const manual = slots.map((id, i) => cell(id, i)).join('');
   const autoCell = cell(normAutoSkill(), AUTO_SLOT);
+  // The auto-cast slot leads on the LEFT, set off by a slim divider from the four
+  // manual slots, which sit as a tidy 2×2 block so every slot stays visible even in
+  // a narrow drawer (a single row of these larger tiles would strand one on a wrap).
   return `<div class="sk-loadout">
     <div class="lt-title"><span data-spr=ic_stun></span> Skill slots <span class="lt-hint">drag a learned skill in · drag to rearrange · drag out to remove · tap to edit</span></div>
-    <div class="lt-row">${manual}<span class="lt-sep" aria-hidden="true"></span>${autoCell}</div>
+    <div class="lt-row">${autoCell}<span class="lt-sep" aria-hidden="true"></span><div class="lt-manual">${manual}</div></div>
   </div>`;
 }
 
@@ -20605,21 +20610,20 @@ function renderSkillBar() {
   const manaBtn = cell(kbShort(kbLabel('manaPotion')), 'mp', `<button class="skillbar-btn potion mana ${town ? 'town-locked' : (potReady && !mpFull ? 'ready' : 'empty')} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} ${town ? '' : 'onclick="useManaPotion()"'}>
       <span class="sb-icon">${MANA_POTION_SVG}</span><span class="sb-info">${pcd > 0 ? Math.ceil(pcd) + 's' : ''}</span>${cdDial('pot')}
     </button>`);
-  // The four manual slots are rendered filled or empty (keys 1–4; slot 1 is the
-  // gold primary). A filled slot casts on click and can be dragged to another slot
-  // to rearrange; an empty slot is a dashed drop target — drag a learned skill onto
-  // it, or tap to open the assign picker.
+  // The four manual slots are rendered filled or empty (keys 1–4, all styled alike).
+  // A filled slot casts on click and can be dragged to another slot to rearrange; an
+  // empty slot is a dashed drop target — drag a learned skill onto it, or tap to open
+  // the assign picker.
   const slots = normSkillSlots();
   const actives = activeSkillList();
   const byId = {}; for (const s of actives) byId[s.id] = s;
   const dropAttrs = (i) => `data-slot="${i}" ondragover="skillSlotDragOver(event)" ondrop="skillSlotDropOn(event,${typeof i === 'number' ? i : `'${i}'`})" ondragenter="skillSlotDragEnter(event,this)" ondragleave="skillSlotDragLeave(event,this)"`;
   const slotBtnHtml = (id, i) => {
     const key = skillKeyLabel(i + 1);
-    const tone = i === 0 ? 'gold' : '';   // slot 1 is the gold primary
     const s = id ? byId[id] : null;
     if (!s) {
       const tip = `<div class='ht-name'>Empty slot ${i + 1}</div><div class='ht-line'>${touchUI() ? 'Tap to assign a learned skill.' : 'Drag a learned skill here, or tap to assign one.'}</div>${key && !touchUI() ? `<div class='ht-sub'>casts with ${key}</div>` : ''}`;
-      return cell(kbShort(key), tone, `<button class="skillbar-btn slot-empty${i === 0 ? ' baseline' : ''}" ${dropAttrs(i)} ${hoverTip(tip)} onclick="openSlotPicker(${i})">
+      return cell(kbShort(key), '', `<button class="skillbar-btn slot-empty" ${dropAttrs(i)} ${hoverTip(tip)} onclick="openSlotPicker(${i})">
       <span class="sb-icon big slot-plus">＋</span>
     </button>`);
     }
@@ -20629,7 +20633,7 @@ function renderSkillBar() {
     const castHint = touchUI() ? ' · tap to cast' : (key ? ` · press ${key}` : '');
     const moveHint = touchUI() ? 'tap the SKILLS tab to re-slot' : 'drag to rearrange · drag a tree skill to swap';
     const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown${castHint}</div><div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
-    return cell(kbShort(key), tone, `<button class="skillbar-btn ${i === 0 ? 'baseline ' : ''}${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
+    return cell(kbShort(key), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}',${i})" ondragend="skillDragEnd()" ${dropAttrs(i)} ${hoverTip(tip)} onclick="castSkillById('${s.id}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
     </button>`);

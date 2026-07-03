@@ -3,10 +3,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
-  { date: "2026-07-03", size: "small", v: "Redesigned skill-bar tiles", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Redesigned skill-bar & loadout tiles", by: "Claude", notes: [
     "Every combat-bar tile — skills, potions, the town gate and the auto-cast slot — now shows its icon filling the whole box, edge to edge, with the corners rounded off.",
     "The hotkey moved out of the box corner onto a full-width pill sitting just above each tile; the auto-cast tile's pill reads \"AUTO\".",
-    "The bottom HUD grew a little taller to seat the pills; ready/cooldown highlighting is unchanged.",
+    "The SKILLS-tab slot tray gets the same look: bigger tiles with filled icons and pills above, the auto-cast slot set off on the left and the four manual slots as a 2×2 block.",
+    "Every skill slot now reads the same — the old gold marking on the first slot is gone. The ready-glow and cooldown dial are unchanged.",
+    "The bottom HUD grew taller to seat the pills, and stays clear of clipping at large UI SIZE.",
   ] },
   { date: "2026-07-03", size: "medium", v: "Furnished interiors & fuller scenery", by: "Claude", notes: ["Built interiors — lodges, halls, crypts, keeps, kitchens — now have real materials: wood-beam, stone-block, brick, panel and adobe walls over wood-plank, stone, marble, tile and cobble floors, matched to the room, in place of the old flat rooms.", "Interiors are laid out as a floor plan now — separate rectangular rooms and halls joined by corridors, rather than one merged cave.", "They're dressed with hand-made props too — tables, chairs, sofas, beds, cabinets, barrels, chests, braziers, potted plants, rugs and clutter. Solid furniture is set off the corridors so it never blocks your path; low clutter and rugs stay walkable.", "The whole prop set is far larger now — indoors and out — so floors repeat much less.", "All art is drawn from the CC-BY-SA \"[LPC]\" collections (full credits in the About notes)."] },
   { date: "2026-07-03", size: "medium", v: "Floors with depth, not one flat fill", by: "Claude", notes: ["Outdoor floors now blend two or three ground types in natural patches — think tan stone with grey mudstone and a lighter gravel path, or sand giving way to dry soil and rock — instead of a single repeated tile.", "Each biome has a primary floor plus clustered secondary and tertiary floors, with the tileset's own edges smoothing the transitions between them.", "The patches are clustered, never confetti, so the ground reads as a real place with wear and paths."] },
