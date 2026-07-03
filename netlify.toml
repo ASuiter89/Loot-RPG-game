@@ -1,0 +1,10 @@
+# Netlify build config. The game is now a Vite app: build to a static bundle and
+# publish dist/ (previously the repo served the single index.html at the root).
+# Without this, Netlify publishes the repo root and serves the raw, unminified
+# ES-module source instead of the optimized build.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
