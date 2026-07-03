@@ -5841,6 +5841,7 @@ window.gameGuide = function gameGuide(topic) {
       `Bag / inventory: ${key('bag')} — opens the LOOT / GEAR / HERO / SKILLS tabs.`,
       `Cast hotbar skills: number keys ${key('skill1')}-${key('skill' + SKILL_SLOTS)} fire the ${SKILL_SLOTS} manual slots on the RIGHT of the bar (tap to cast). One extra skill sits in a dedicated auto-cast slot in the MIDDLE and fires itself — see the "autocast" topic.`,
       `Esc closes the top menu/overlay, or opens Settings. Settings is split into tabs (Play / Visuals / Audio / Progress / About); non-movement keys are remappable under the Play tab → KEYS (◀ Back or Esc there returns to Settings). The keys shown here are your CURRENT bindings.`,
+      `The Play tab's TITLE SCREEN button (at the very top) saves your progress and returns you to the title/landing screen without abandoning the run — hit CONTINUE there to drop straight back in. (This is separate from Reset Run on the Progress tab, which wipes the hero.)`,
       `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds MINIMAP (the top-left floor-sketch box size — Small / Medium / Large), UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker.`,
     ],
     movement: [
@@ -7155,6 +7156,15 @@ function toggleSettingsMenu(e) {
 function closeSettingsMenu() {
   const menu = document.getElementById('settings-menu');
   if (menu) { menu.classList.remove('open'); menu.style.paddingTop = ''; }
+}
+// "Title Screen" button on Settings ▸ Play — snapshot progress, close the
+// settings overlay, and raise the title/landing screen. The run is NOT
+// abandoned: the title's CONTINUE (see titlePlay) resumes this exact hero right
+// where they left off; only Reset Run there wipes anything.
+function settingsToTitle() {
+  saveGame();
+  closeSettingsMenu();
+  showTitle();
 }
 // Position the card so it OPENS vertically centred, then leave the top anchored
 // there. We measure the card's initial height and push it down with the modal's
@@ -24823,6 +24833,7 @@ const __DL_FN_BRIDGE = {
   updateMonsterArrowsButton,
   toggleSettingsMenu,
   closeSettingsMenu,
+  settingsToTitle,
   centerSettingsCard,
   showSettingsTab,
   fmtChangelogDate,
