@@ -2078,7 +2078,7 @@
   .ipow { font-weight: bold; text-shadow: 0 0 5px var(--pc); animation: ipowGlow 1.7s ease-in-out infinite; }
   @keyframes ipowGlow { 0%, 100% { text-shadow: 0 0 4px var(--pc); } 50% { text-shadow: 0 0 11px var(--pc), 0 0 18px var(--pc); } }
 
-  /* "FIRST EQUIP" badge — an empty slot you've never filled. Made loud (gold
+  /* "EMPTY SLOT" badge — a gear slot you've never filled. Made loud (gold
      pill, glow, gentle pulse) so a brand-new gear slot grabs the eye. */
   .first-equip {
     display: inline-block;
@@ -11500,6 +11500,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "\"Empty slot\" gear badge", by: "Claude", notes: ["Renamed the gold \"First Equip\" badge on an unfilled gear slot to \"Empty Slot\"."] },
   { date: "2026-07-03", size: "medium", v: "Self-buffs are tactical, not sustained", by: "Claude", notes: [
     "Self-buff cooldowns now run well longer than the buff — each is up only ~40% of the time at zero Cooldown Reduction, so buffs are timed windows, not always-on auras.",
     "Baseline uptime varies by skill: cheap/weak buffs ~50%, standard buffs ~42-45%, the strongest capstones and ultimates ~38-40%.",
@@ -13893,7 +13894,7 @@ function statDiffLine(item) {
     // requirement isn't met — you can't wield it, so it isn't a "first equip".
     if (item.slot === 'offhand' && isTwoHander(equipped.weapon) && !skillFlag('titangrip')) return '';
     if (!canEquipItem(item)) return '';
-    return '<span class="first-equip">★ FIRST EQUIP</span>';
+    return '<span class="first-equip">★ EMPTY SLOT</span>';
   }
   const num = (it, k) => {
     let v = it.stats ? it.stats[k] : undefined;
