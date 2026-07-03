@@ -3,6 +3,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "medium", v: "New skill icons + unique skill names", by: "Claude", notes: [
+    "Every skill now has its own hand-generated pixel-art icon set in a raised, class-coloured metal frame — red for Warrior, green for Rogue, yellow for Mage, blue for Templar — filling the whole tile.",
+    "Keystone passives keep their octagon frame, now in the same metal look.",
+    "Renamed eight skills that shared a name with another so every skill reads uniquely: the active Rampage is now Onslaught, the crit-fury Bloodletter is Tempered Fury, the active Blood Frenzy is War Cry, the Warrior Executioner passive is Ruthless, the second Brace is Fortify, the Warrior Avatar is Titan Form, the Warrior Apocalypse is Bloodstorm, and the passive Absolute Zero is Frozen Ward.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Ascendancy skills get their own points", by: "Claude", notes: [
     "Ascendancy (path) skills now spend a SEPARATE pool of ascendancy points — normal skill points buy only passive & active skills, ascendancy points buy only path skills.",
     "Earn one ascendancy point every 5 levels starting at level 20 (20, 25, 30…) — the level you can first ascend. Points bank up even before you ascend.",
