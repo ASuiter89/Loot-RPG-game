@@ -1528,17 +1528,6 @@
   .sk-pop .pop-refund:active { background: var(--orange-850); }
   .sk-pop .pop-refund:disabled { background: var(--panel); color: var(--junk); border-color: var(--border); cursor: not-allowed; }
   .sk-pop .pop-refund.short { color: var(--danger); border-color: var(--danger); }
-  /* Bound-to-a-hotkey chip on the top-left corner of a learned active — the key it's
-     cast with, or ⟳ for the auto-cast slot. A pill sized to match the rank badge so
-     the two corners read as one set. Purely a positive marker; unbound learned actives
-     are left fully lit, never dimmed. */
-  .sk-tnode .slotmark { position: absolute; top: -9px; left: -9px; z-index: 6;
-    display: inline-flex; align-items: center; justify-content: center;
-    min-width: 21px; height: 21px; padding: 0 5px; box-sizing: border-box;
-    border-radius: 999px; font-size: 1.2rem; line-height: 1; font-weight: 700;
-    background: var(--gold); color: var(--orange-850); border: 2px solid var(--orange-850);
-    box-shadow: 0 2px 5px color-mix(in srgb, var(--ink) 55%, transparent); }
-  .sk-tnode .slotmark.auto { background: var(--panel-raised); color: var(--purple-150); border-color: var(--interactive); }
 
   /* Sub-tabs across the three trees (passive / active / path). */
   .sk-vtabs { display: flex; gap: 4px; margin: 8px 2px 2px; }
