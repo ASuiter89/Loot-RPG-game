@@ -8425,8 +8425,17 @@ function generateMap() {
     let rw = big ? rnd(indoor ? 11 : 8, indoor ? 15 : 11) : rnd(indoor ? 6 : 3, indoor ? 10 : 7);
     let rh = big ? rnd(indoor ? 9 : 7, indoor ? 12 : 9)  : rnd(indoor ? 5 : 3, indoor ? 8 : 6);
     rw = Math.min(rw, MAP_W - 2); rh = Math.min(rh, MAP_H - 2);
-    const rx = rnd(1, Math.max(1, MAP_W - rw - 1));
-    const ry = rnd(1, Math.max(1, MAP_H - rh - 1));
+    // Built interiors read as a FLOOR PLAN: rooms are kept separate (a wall gap
+    // between them), connected only by corridors — not merged into one organic
+    // blob the way overlapping outdoor caves are. Retry a few spots, else skip.
+    let rx, ry, placed = false;
+    for (let tries = 0; tries < 40 && !placed; tries++) {
+      rx = rnd(1, Math.max(1, MAP_W - rw - 1));
+      ry = rnd(1, Math.max(1, MAP_H - rh - 1));
+      if (!indoor) { placed = true; break; }
+      placed = !rooms.some((r) => rx - 2 < r.x + r.w && rx + rw + 2 > r.x && ry - 2 < r.y + r.h && ry + rh + 2 > r.y);
+    }
+    if (!placed) continue; // no clear spot for a separate room → fewer rooms this floor
     for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) mapData[y][x] = 0;
     const room = { x: rx, y: ry, w: rw, h: rh, cx: rx + (rw >> 1), cy: ry + (rh >> 1) };
     rooms.push(room);
