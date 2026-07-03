@@ -72,6 +72,12 @@ async function main() {
   // centred crop on the hero (camera keeps the hero at canvas centre)
   const box = await page.evaluate(() => { const c = document.getElementById('canvas').getBoundingClientRect(); return { cx: c.width / 2, cy: c.height / 2 }; });
   try { await page.locator('#canvas').screenshot({ path: join(outDir, 'preview-occlusion-zoom.png'), clip: { x: Math.max(0, box.cx - 200), y: Math.max(0, box.cy - 230), width: 400, height: 420 } }); } catch (e) {}
+  // multi-floor: high-contrast biomes (crypt stone/mudstone/gravel, tombs sand/soil/stone)
+  for (const [lvl, tag] of [[1, 'floors-crypt'], [5, 'floors-tombs'], [3, 'floors-lava']]) {
+    const i = await page.evaluate((l) => window.__previewFloor(l), lvl);
+    await page.waitForTimeout(400);
+    files.push(await capture(page, tag, i));
+  }
   console.log('preview: treeInfo=' + JSON.stringify(treeInfo) + ' behindTree=' + JSON.stringify(bt));
 
   if (errs.length) console.log('preview: console/page errors:\n  ' + errs.slice(0, 8).join('\n  '));

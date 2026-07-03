@@ -1218,29 +1218,33 @@ function floorSpriteName(seed) { return 'floor_' + (Math.abs(seed) % 4); }
 // the role map decoded from terrain-v7.tsx. Falls back to the procedural look
 // until the atlas image finishes loading.
 const LPC_TABLE = {"cols":32,"tile":32,"terrains":[{"name":"Dirt_Tan","anchor":97},{"name":"Dirt_Brown","anchor":100},{"name":"Dirt_Dark","anchor":103},{"name":"Rock_White","anchor":106},{"name":"Rock_Gray","anchor":109},{"name":"Rock_Dark","anchor":112},{"name":"Rock_Black","anchor":115},{"name":"Hole_Brown","anchor":118},{"name":"Hole_Black","anchor":121},{"name":"Mud_Brown","anchor":124},{"name":"Grass","anchor":321},{"name":"Grass_Light","anchor":324},{"name":"Grass_Dark","anchor":327},{"name":"Grass_Dead","anchor":330},{"name":"Soil","anchor":333},{"name":"Sand","anchor":336},{"name":"Snow_1","anchor":339},{"name":"Snow_2","anchor":342},{"name":"Gravel_1","anchor":345},{"name":"Dirt_Roots","anchor":348},{"name":"Water_Shallows_Dirt","anchor":545},{"name":"Water","anchor":548},{"name":"Water_Deep","anchor":551},{"name":"Water_Purple","anchor":554},{"name":"Water_Green","anchor":557},{"name":"Lava","anchor":560},{"name":"Water_Shallows_Sand","anchor":837},{"name":"Ice","anchor":838},{"name":"Ice_Melting","anchor":841},{"name":"Earth_Cracked","anchor":784},{"name":"Stone_White","anchor":787},{"name":"Stone_Tan","anchor":790},{"name":"Mudstone_Gray","anchor":793},{"name":"Mudstone_Brown","anchor":796}],"table":{"Dirt_Tan":{"1":64,"2":66,"3":65,"4":128,"5":96,"6":192,"7":34,"8":130,"9":193,"10":98,"11":33,"12":129,"13":2,"14":1,"15":97},"Dirt_Brown":{"1":67,"2":69,"3":68,"4":131,"5":99,"6":195,"7":37,"8":133,"9":196,"10":101,"11":36,"12":132,"13":5,"14":4,"15":100},"Dirt_Dark":{"1":70,"2":72,"3":71,"4":134,"5":102,"6":198,"7":40,"8":136,"9":199,"10":104,"11":39,"12":135,"13":8,"14":7,"15":103},"Rock_White":{"1":73,"2":75,"3":74,"4":137,"5":105,"6":201,"7":43,"8":139,"9":202,"10":107,"11":42,"12":138,"13":11,"14":10,"15":106},"Rock_Gray":{"1":76,"2":78,"3":77,"4":140,"5":108,"6":204,"7":46,"8":142,"9":205,"10":110,"11":45,"12":141,"13":14,"14":13,"15":109},"Rock_Dark":{"1":79,"2":81,"3":80,"4":143,"5":111,"6":207,"7":49,"8":145,"9":208,"10":113,"11":48,"12":144,"13":17,"14":16,"15":112},"Rock_Black":{"1":82,"2":84,"3":83,"4":146,"5":114,"6":210,"7":52,"8":148,"9":211,"10":116,"11":51,"12":147,"13":20,"14":19,"15":115},"Hole_Brown":{"1":85,"2":87,"3":86,"4":149,"5":117,"6":213,"7":55,"8":151,"9":214,"10":119,"11":54,"12":150,"13":23,"14":22,"15":118},"Hole_Black":{"1":88,"2":90,"3":89,"4":152,"5":120,"6":216,"7":58,"8":154,"9":217,"10":122,"11":57,"12":153,"13":26,"14":25,"15":121},"Mud_Brown":{"1":91,"2":93,"3":92,"4":155,"5":123,"6":219,"7":61,"8":157,"9":220,"10":125,"11":60,"12":156,"13":29,"14":28,"15":124},"Grass":{"1":288,"2":290,"3":289,"4":352,"5":320,"6":416,"7":258,"8":354,"9":417,"10":322,"11":257,"12":353,"13":226,"14":225,"15":321},"Grass_Light":{"1":291,"2":293,"3":292,"4":355,"5":323,"6":419,"7":261,"8":357,"9":420,"10":325,"11":260,"12":356,"13":229,"14":228,"15":324},"Grass_Dark":{"1":294,"2":296,"3":295,"4":358,"5":326,"6":422,"7":264,"8":360,"9":423,"10":328,"11":263,"12":359,"13":232,"14":231,"15":327},"Grass_Dead":{"1":297,"2":299,"3":298,"4":361,"5":329,"6":425,"7":267,"8":363,"9":426,"10":331,"11":266,"12":362,"13":235,"14":234,"15":330},"Soil":{"1":300,"2":302,"3":301,"4":364,"5":332,"6":428,"7":270,"8":366,"9":429,"10":334,"11":269,"12":365,"13":238,"14":237,"15":333},"Sand":{"1":303,"2":305,"3":304,"4":367,"5":335,"6":431,"7":273,"8":369,"9":432,"10":337,"11":272,"12":368,"13":241,"14":240,"15":336},"Snow_1":{"1":306,"2":308,"3":307,"4":370,"5":338,"6":434,"7":276,"8":372,"9":435,"10":340,"11":275,"12":371,"13":244,"14":243,"15":339},"Snow_2":{"1":309,"2":311,"3":310,"4":373,"5":341,"6":437,"7":279,"8":375,"9":438,"10":343,"11":278,"12":374,"13":247,"14":246,"15":342},"Gravel_1":{"1":312,"2":314,"3":313,"4":376,"5":344,"6":440,"7":282,"8":378,"9":441,"10":346,"11":281,"12":377,"13":250,"14":249,"15":345},"Dirt_Roots":{"1":315,"2":317,"3":316,"4":379,"5":347,"6":443,"7":285,"8":381,"9":444,"10":349,"11":284,"12":380,"13":253,"14":252,"15":348},"Water_Shallows_Dirt":{"1":512,"2":514,"3":513,"4":576,"5":544,"6":640,"7":482,"8":578,"9":641,"10":546,"11":481,"12":577,"13":450,"14":449,"15":545},"Water":{"1":515,"2":517,"3":516,"4":579,"5":547,"6":643,"7":485,"8":581,"9":644,"10":549,"11":484,"12":580,"13":453,"14":452,"15":548},"Water_Deep":{"1":518,"2":520,"3":519,"4":582,"5":550,"6":646,"7":488,"8":584,"9":647,"10":552,"11":487,"12":583,"13":456,"14":455,"15":551},"Water_Purple":{"1":521,"2":523,"3":522,"4":585,"5":553,"6":649,"7":491,"8":587,"9":650,"10":555,"11":490,"12":586,"13":459,"14":458,"15":554},"Water_Green":{"1":524,"2":526,"3":525,"4":588,"5":556,"6":652,"7":494,"8":590,"9":653,"10":558,"11":493,"12":589,"13":462,"14":461,"15":557},"Lava":{"1":527,"2":529,"3":528,"4":591,"5":559,"6":655,"7":497,"8":593,"9":656,"10":561,"11":496,"12":592,"13":465,"14":464,"15":560},"Water_Shallows_Sand":{"15":837},"Ice":{"15":838},"Ice_Melting":{"15":681},"Earth_Cracked":{"1":751,"2":753,"3":752,"4":815,"5":783,"6":879,"7":721,"8":817,"9":880,"10":785,"11":720,"12":816,"13":689,"14":688,"15":784},"Stone_White":{"1":754,"2":756,"3":755,"4":818,"5":786,"6":882,"7":724,"8":820,"9":883,"10":788,"11":723,"12":819,"13":692,"14":691,"15":787},"Stone_Tan":{"1":757,"2":759,"3":758,"4":821,"5":789,"6":885,"7":727,"8":823,"9":886,"10":791,"11":726,"12":822,"13":695,"14":694,"15":790},"Mudstone_Gray":{"1":760,"2":762,"3":761,"4":824,"5":792,"6":888,"7":730,"8":826,"10":794,"11":729,"12":825,"13":698,"14":697,"15":793},"Mudstone_Brown":{"1":763,"2":765,"3":764,"4":827,"5":795,"6":891,"7":733,"8":829,"9":892,"10":797,"11":732,"12":828,"13":701,"14":700,"15":796}}};
+// Each biome paints a PRIMARY floor everywhere, then blends clustered patches of
+// a SECONDARY and (optionally) TERTIARY floor over it (autotiled transitions) so
+// the ground has natural variation — e.g. dirt with lighter-dirt patches and a
+// stone path — instead of one flat fill. floor2/floor3 must be atlas roles.
 const LPC_BIOME = {
-  'the Stone Crypt':         { floor:'Stone_Tan',     wall:'Rock_Gray',   water:'Water' },
-  'the Mossy Caverns':       { floor:'Grass',         wall:'Rock_Dark',   water:'Water' },
-  'the Lava Depths':         { floor:'Earth_Cracked', wall:'Rock_Black',  water:'Water' },
-  'the Frozen Halls':        { floor:'Snow_1',        wall:'Stone_White', water:'Water' },
-  'the Sunken Tombs':        { floor:'Sand',          wall:'Stone_Tan',   water:'Water' },
-  'the Void Sanctum':        { floor:'Stone_White',   wall:'Rock_Black',  water:'Water_Purple' },
-  'the Sunlit Forest':       { floor:'Grass',         wall:'Rock_Gray',   water:'Water' },
-  'the Cherry Blossom Grove':{ floor:'Grass_Light',   wall:'Rock_Gray',   water:'Water' },
-  'the Autumn Woods':        { floor:'Grass_Dead',    wall:'Rock_Gray',   water:'Water' },
-  'the Pine Highlands':      { floor:'Grass_Dark',    wall:'Rock_Gray',   water:'Water' },
-  'the Emerald Jungle':      { floor:'Grass_Dark',    wall:'Rock_Dark',   water:'Water_Green' },
-  'the Winter Frostwood':    { floor:'Snow_1',        wall:'Rock_White',  water:'Water' },
-  'the Wildflower Meadow':   { floor:'Grass_Light',   wall:'Rock_Gray',   water:'Water' },
-  'the Golden Savanna':      { floor:'Soil',          wall:'Rock_Gray',   water:'Water' },
-  'the Harvest Vineyard':    { floor:'Soil',          wall:'Rock_Gray',   water:'Water' },
-  'the Lavender Fields':     { floor:'Grass',         wall:'Rock_Gray',   water:'Water_Purple' },
-  'the Mushroom Hollow':     { floor:'Mud_Brown',     wall:'Rock_Dark',   water:'Water_Purple' },
-  'the Crystal Cavern':      { floor:'Gravel_1',      wall:'Rock_Dark',   water:'Water' },
-  'the Coral Lagoon':        { floor:'Sand',          wall:'Rock_Gray',   water:'Water' },
-  'the Obsidian Wastes':     { floor:'Rock_Dark',     wall:'Rock_Black',  water:'Water' },
+  'the Stone Crypt':         { floor:'Stone_Tan',     floor2:'Mudstone_Gray', floor3:'Gravel_1',     wall:'Rock_Gray',   water:'Water' },
+  'the Mossy Caverns':       { floor:'Grass',         floor2:'Mud_Brown',     floor3:'Gravel_1',     wall:'Rock_Dark',   water:'Water' },
+  'the Lava Depths':         { floor:'Earth_Cracked', floor2:'Rock_Dark',     floor3:'Gravel_1',     wall:'Rock_Black',  water:'Water' },
+  'the Frozen Halls':        { floor:'Snow_1',        floor2:'Snow_2',        floor3:'Ice',          wall:'Stone_White', water:'Water' },
+  'the Sunken Tombs':        { floor:'Sand',          floor2:'Soil',          floor3:'Stone_Tan',    wall:'Stone_Tan',   water:'Water' },
+  'the Void Sanctum':        { floor:'Stone_White',   floor2:'Mudstone_Gray', floor3:'Rock_Dark',    wall:'Rock_Black',  water:'Water_Purple' },
+  'the Sunlit Forest':       { floor:'Grass',         floor2:'Grass_Dark',    floor3:'Dirt_Tan',     wall:'Rock_Gray',   water:'Water' },
+  'the Cherry Blossom Grove':{ floor:'Grass_Light',   floor2:'Grass',         floor3:'Dirt_Tan',     wall:'Rock_Gray',   water:'Water' },
+  'the Autumn Woods':        { floor:'Grass_Dead',    floor2:'Soil',          floor3:'Dirt_Brown',   wall:'Rock_Gray',   water:'Water' },
+  'the Pine Highlands':      { floor:'Grass_Dark',    floor2:'Grass',         floor3:'Gravel_1',     wall:'Rock_Gray',   water:'Water' },
+  'the Emerald Jungle':      { floor:'Grass_Dark',    floor2:'Grass',         floor3:'Mud_Brown',    wall:'Rock_Dark',   water:'Water_Green' },
+  'the Winter Frostwood':    { floor:'Snow_1',        floor2:'Snow_2',        floor3:'Ice',          wall:'Rock_White',  water:'Water' },
+  'the Wildflower Meadow':   { floor:'Grass_Light',   floor2:'Grass',         floor3:'Soil',         wall:'Rock_Gray',   water:'Water' },
+  'the Golden Savanna':      { floor:'Soil',          floor2:'Grass_Dead',    floor3:'Sand',         wall:'Rock_Gray',   water:'Water' },
+  'the Harvest Vineyard':    { floor:'Soil',          floor2:'Grass_Dead',    floor3:'Dirt_Brown',   wall:'Rock_Gray',   water:'Water' },
+  'the Lavender Fields':     { floor:'Grass',         floor2:'Grass_Light',   floor3:'Soil',         wall:'Rock_Gray',   water:'Water_Purple' },
+  'the Mushroom Hollow':     { floor:'Mud_Brown',     floor2:'Dirt_Dark',     floor3:'Gravel_1',     wall:'Rock_Dark',   water:'Water_Purple' },
+  'the Crystal Cavern':      { floor:'Gravel_1',      floor2:'Rock_White',    floor3:'Stone_White',  wall:'Rock_Dark',   water:'Water' },
+  'the Coral Lagoon':        { floor:'Sand',          floor2:'Soil',          floor3:'Gravel_1',     wall:'Rock_Gray',   water:'Water' },
+  'the Obsidian Wastes':     { floor:'Rock_Dark',     floor2:'Rock_Black',    floor3:'Earth_Cracked',wall:'Rock_Black',  water:'Water' },
   // The one-time beach tutorial map: sandy ground meeting the sea.
-  'the Sunlit Shore':        { floor:'Sand',          wall:'Rock_Gray',   water:'Water' },
+  'the Sunlit Shore':        { floor:'Sand',          floor2:'Soil',          floor3:'Gravel_1',     wall:'Rock_Gray',   water:'Water' },
 };
 const lpcSheet = new Image();
 let lpcReady = false;
@@ -1270,6 +1274,31 @@ lpcSheet.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAgACAYAAAC4vU
 const LPC_A = 32, LPC_NCOLS = LPC_TABLE.cols;
 const LPC_FILLS = {"Dirt_Tan":[97,160,161,162],"Dirt_Brown":[100,163,164,165],"Dirt_Dark":[103,166,167,168],"Rock_White":[106,169,170,171],"Rock_Gray":[109,172,173,174],"Rock_Dark":[112,175,176,177],"Rock_Black":[115,178,179,180],"Mud_Brown":[124,187,188,189],"Grass":[321,384,385,386,418],"Grass_Light":[324,387,388,389,421],"Grass_Dark":[327,390,391,392],"Grass_Dead":[330,393,394,395,427],"Soil":[333,1130],"Sand":[336,399,400,401,769,772],"Snow_1":[339,402,403,404,775,778,781],"Snow_2":[342,405,406,407],"Gravel_1":[345,408,409],"Dirt_Roots":[348,411,412,413,1369,1372],"Water_Shallows_Dirt":[545,608,609,610,663,1363,1366],"Water":[548,566,569,572,611,612,613],"Water_Deep":[551,563,614,615,616,626,627,628],"Water_Purple":[554,617,618,619],"Water_Green":[557,620,621,622],"Lava":[560,623,624,625],"Water_Shallows_Sand":[837,867,868],"Ice":[838,839,840],"Ice_Melting":[681,713,841,842,843],"Earth_Cracked":[784,847,848,849],"Stone_White":[787,850,851,852,1348],"Stone_Tan":[790,853,854,855,1351],"Mudstone_Gray":[793,856,857,858,1354],"Mudstone_Brown":[796,859,860,861,1360]};
 function lpcHash(x, y) { let h = (Math.imul(x, 374761393) ^ Math.imul(y, 668265263)) >>> 0; h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0; return (h ^ (h >>> 16)) >>> 0; }
+// Per-cell floor variant (0 primary · 1 secondary · 2 tertiary), clustered so the
+// ground varies in natural patches. Rebuilt per floor by genFloorVariants().
+let floorVariantMap = null;
+// Smooth value noise in [0,1] for organic patch shapes.
+function fnoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const h = (a, b) => lpcHash(a, b) / 4294967296;
+  const a = h(xi, yi), b = h(xi + 1, yi), c = h(xi, yi + 1), d = h(xi + 1, yi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function genFloorVariants() {
+  const ax = (Math.random() * 500) | 0, ay = (Math.random() * 500) | 0;
+  const bx = (Math.random() * 500) | 0, by = (Math.random() * 500) | 0;
+  floorVariantMap = [];
+  for (let y = 0; y < MAP_H; y++) {
+    const row = new Uint8Array(MAP_W);
+    for (let x = 0; x < MAP_W; x++) {
+      const n2 = fnoise((x + bx) * 0.15, (y + by) * 0.15); // tertiary blobs (rarer)
+      const n1 = fnoise((x + ax) * 0.17, (y + ay) * 0.17); // secondary blobs
+      row[x] = n2 > 0.66 ? 2 : (n1 > 0.55 ? 1 : 0);
+    }
+    floorVariantMap.push(row);
+  }
+}
 // Pick an interior "fill" tile variant deterministically so large open areas
 // don't repeat one tile (which reads as a grid). All variants tile seamlessly.
 function lpcVariant(name, x, y) { const v = LPC_FILLS[name]; if (!v || v.length < 2) { const tbl = LPC_TABLE.table[name] || LPC_TABLE.table['Rock_Gray']; return tbl[15]; } return v[lpcHash(x, y) % v.length]; }
@@ -1314,6 +1343,12 @@ function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
   ctx.imageSmoothingEnabled = false;
   lpcFill(B.wall, ox, oy, tw, cx0, cy0, cx1, cy1);
   lpcLayer(B.floor, isFloor, ox, oy, tw, cx0, cy0, cx1, cy1);
+  // Clustered secondary / tertiary floor patches blended over the primary.
+  if (floorVariantMap) {
+    const fv = (x, y) => (inb(x, y) && floorVariantMap[y] ? floorVariantMap[y][x] : 0);
+    if (B.floor2) lpcLayer(B.floor2, (x, y) => isFloor(x, y) && fv(x, y) >= 1, ox, oy, tw, cx0, cy0, cx1, cy1);
+    if (B.floor3) lpcLayer(B.floor3, (x, y) => isFloor(x, y) && fv(x, y) === 2, ox, oy, tw, cx0, cy0, cx1, cy1);
+  }
   // (wall drop-shadow removed)
   if (B.water) lpcLayer(B.water, isWater, ox, oy, tw, cx0, cy0, cx1, cy1);
   lpcLayer('Lava', isLava, ox, oy, tw, cx0, cy0, cx1, cy1);
@@ -8572,6 +8607,7 @@ function generateMap() {
   // through them). Placed last so they avoid the player, stairs, features and foes.
   if (floorThemeOverride) placeFurniture(floorThemeOverride);
   else placeOutdoorDecor(currentTheme()); // non-blocking ground decor on outdoor floors
+  genFloorVariants(); // clustered secondary/tertiary floor patches for this floor
 
   // A hired Sellsword companion joins you on the floor (one floor of its contract).
   spawnMerc();
