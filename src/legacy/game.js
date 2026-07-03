@@ -21248,6 +21248,11 @@ const HOVER_MQ = window.matchMedia('(hover: hover) and (pointer: fine)');
 function touchUI() { return !HOVER_MQ.matches; }
 function showHoverTip(e, el) {
   if (!HOVER_MQ.matches) return; // mouse hover only; touch uses long-press (below)
+  // A selected skill node already shows its full detail popover, so suppress the
+  // short hover card for it — otherwise the rebuild-on-select re-fires mouseenter
+  // on the freshly-inserted node under a stationary cursor and stacks the small
+  // tip back on top of the big card (which hideHoverTip in selectSkill just cleared).
+  if (el && el.id === 'sknode-' + selectedSkillId) return;
   renderHoverTip(el);
 }
 // Render the styled popup for an element and anchor it to that element. Shared by
