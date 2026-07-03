@@ -15,6 +15,12 @@ export const CHANGELOG = [
     "Returning through the Dungeon Gate plays it in reverse: a blue pillar stabs into the floor and the hero materializes out of it.",
     "You can't move or be hit during the brief teleport animation; the countdown's own rules (a foe's hit or a step cancels it) are unchanged.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Enchanting spends materials, not just Glimmer", by: "Claude", notes: [
+    "Every enchant now costs crafting materials alongside Glimmer + gold: Scrap on any action, a Core on rare gear and up, and a Chaos Orb on the epic+ Reroll-all — so the Scrap, Cores and Chaos Orbs that used to pile up unused finally get spent.",
+    "The whole bill scales with the item's rarity — enchanting a legendary costs far more than a normal.",
+    "Augmenting now costs more for each property already on the piece, so filling a nearly-full item's last slot is dramatically pricier than its first.",
+    "Rerolling a property's value or modifier now spends Scrap (and a Core on rarer gear) too, not Glimmer alone.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Wider death & skill cards", by: "Claude", notes: [
     "The You-Died screen and the skill detail popover are wider now, so the death recap and each skill's mechanics wrap far less.",
     "Clicking a skill node no longer leaves its small hover label stuck on top of the detail card.",
