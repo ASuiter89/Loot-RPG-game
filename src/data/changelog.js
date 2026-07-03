@@ -3,6 +3,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Truly smooth HP/MP fill", by: "Claude", notes: ["HP/MP over-time recovery now rises at a steady, constant rate — the fill glides up on a consistent slope instead of jumping in small steps as it heals.", "Taking damage or spending mana still snaps the bar down at once, and burst heals fill instantly."] },
   { date: "2026-07-03", size: "small", v: "Portal cancel & correct stair landings", by: "Claude", notes: [
     "Moving now cancels a town portal for every control scheme — click-to-move on desktop used to root you in place until the portal opened; a click, keypress, or joystick nudge all break the channel now.",
     "The step or click that opens the floor-1 exit portal no longer instantly cancels it — only a fresh move does.",

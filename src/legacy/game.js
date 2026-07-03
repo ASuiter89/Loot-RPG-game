@@ -15,6 +15,7 @@
 // ── Extracted modules (see docs/CHANGELOG.md) ──
 import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
 import { milestonePower, rankScale, skillManaCost } from '../systems/skillMath.js';
+import { glideVitalFill } from '../systems/vitalFill.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { CHANGELOG } from '../data/changelog.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
@@ -15121,6 +15122,11 @@ function tickPact() {
 // MOVEMENT & COMBAT
 // ══════════════════════════════════════════
 
+// Passive HP/MP regen rates (points/sec) snapshot each world beat in applyRegen, so
+// the fluid bar fill (updateVitalFills) can glide at the live rate every animation
+// frame without re-summing gear/attributes/buffs 60×/s. Zero until the first beat.
+let _hpRegenRate = 0, _mpRegenRate = 0;
+
 // Heal a little each world-clock beat based on the per-second regen rate, up to
 // max HP. Banks the per-beat share (rate × WORLD_TICK_SECONDS) so the actual heal
 // rate matches the per-second number shown on the HERO sheet.
@@ -15132,8 +15138,11 @@ function applyRegen() {
   drainPendingRecovery();
   // Vitality grants passive HP regen on top of any REGEN rolled on gear. The
   // per-beat share is fractional, so bank it in an accumulator and only ever add
-  // whole points to player.hp (keeps the HP readout a clean integer).
-  const r = hpRegenPerSec() * WORLD_TICK_SECONDS;
+  // whole points to player.hp (keeps the HP readout a clean integer). Cache the
+  // per-second rate so the fluid bar fill can glide at it every frame without
+  // recomputing the full stat sum 60×/s (see updateVitalFills).
+  _hpRegenRate = hpRegenPerSec();
+  const r = _hpRegenRate * WORLD_TICK_SECONDS;
   if (r > 0 && player.hp > 0 && player.hp < player.maxHp) {
     player._hpAcc = (player._hpAcc || 0) + r;
     const wholeHp = Math.floor(player._hpAcc);
@@ -15148,7 +15157,8 @@ function applyRegen() {
   // add whole points to player.mp (keeps the MP readout an integer). Halved while
   // in combat (see the gate above), so sustained casting genuinely drains you.
   const gate = player._combatSecs > 0 ? MANA_COMBAT_REGEN_MULT : 1;
-  const mr = mpRegenPerSec() * WORLD_TICK_SECONDS * gate;
+  _mpRegenRate = mpRegenPerSec();   // cached ungated per-second rate for the fluid fill
+  const mr = _mpRegenRate * WORLD_TICK_SECONDS * gate;
   if (player.hp > 0 && player.mp < player.maxMp && mr > 0) {
     player._mpAcc = (player._mpAcc || 0) + mr;
     const whole = Math.floor(player._mpAcc);
@@ -18680,28 +18690,47 @@ function renderStaminaBar() {
 }
 
 // ── Fluid vital bars ────────────────────────────────────────────────────────
-// The HP/MP bar FILL eases toward the hero's continuous HP/MP (see hpContinuous)
-// every animation frame, so over-time recovery — passive regen and the pending
-// pools draining — climbs on a smooth 60fps slope instead of stepping once a
-// second when a whole point finally lands. A LOSS (taking damage, spending mana)
-// snaps the fill down instantly so hits stay punchy, and a big jump UP (an instant
-// active heal, a level-up refill, a fresh load) snaps too — only the slow trickle
-// eases. This is purely how the fill is drawn; player.hp/.mp stay integers.
+// The HP/MP bar FILL glides toward the hero's continuous HP/MP (see hpContinuous)
+// every animation frame, so over-time recovery — passive regen and the pending pools
+// draining — climbs on a steady, consistent slope instead of stepping once per world
+// beat. The key is that while something is recovering the fill moves at the LIVE
+// recovery RATE (points/sec), not by easing toward a target: rising at exactly the
+// rate the real value rises, it reaches each beat's value right as the next beat lands,
+// so it's always moving and never catches up then plateaus (the old choppy step). A
+// LOSS (taking damage, spending mana) snaps the fill down instantly so hits stay
+// punchy, and a big jump UP (an instant active heal, a level-up refill, a fresh load)
+// snaps too — only the slow trickle glides. The recovery rate is the sum of passive
+// regen (cached in applyRegen) plus each pending pool draining at its capped %/s (see
+// drainPendingRecovery). This is purely how the fill is drawn; player.hp/.mp stay
+// integers. (glideVitalFill lives in systems/vitalFill.js so it can be unit-tested.)
 let _hpFillVis = null, _mpFillVis = null;   // eased visual HP/MP (null → snap on first frame)
-const VITAL_EASE_TAU = 0.14;   // seconds — ease-up time constant (~95% of the gap closed in ~0.42s)
+const VITAL_EASE_TAU = 0.14;   // seconds — ease time constant for a rate-less instant sub-burst
 const VITAL_SNAP_FRAC = 0.30;  // a gain bigger than this share of max is a burst, not a trickle → snap
-function easeVitalFill(vis, target, max, dt) {
-  if (vis == null || !(max > 0)) return target;              // first frame / no bar → snap
-  if (target <= vis) return target;                          // loss → instant (punchy)
-  if (target - vis > max * VITAL_SNAP_FRAC) return target;   // burst heal / refill / load → instant
-  const k = 1 - Math.exp(-Math.max(0, dt) / VITAL_EASE_TAU); // frame-rate independent ease
-  const next = vis + (target - vis) * k;
-  return (target - next < 0.01) ? target : next;             // latch the last hair (no forever-crawl)
+// Live HP recovery rate (points/sec): passive regen while below max, plus each pending
+// heal pool draining at HEAL_DRAIN_PCT (the potion and the leech pools drain in
+// parallel — mirror drainPendingRecovery so the fill glides at the true fill rate).
+function hpRecoveryRate() {
+  if (!(player.hp > 0) || player.hp >= player.maxHp) return 0;
+  let rate = Math.max(0, _hpRegenRate);
+  if ((player.pendingHeal || 0) > 0) rate += player.maxHp * HEAL_DRAIN_PCT;
+  if ((player.pendingPotionHeal || 0) > 0) rate += player.maxHp * HEAL_DRAIN_PCT;
+  return rate;
+}
+// Live MP recovery rate: passive regen (halved while in combat, matching applyRegen)
+// plus the mana pool draining at MANA_DRAIN_PCT.
+function mpRecoveryRate() {
+  if (!(player.hp > 0) || player.mp >= player.maxMp) return 0;
+  const gate = player._combatSecs > 0 ? MANA_COMBAT_REGEN_MULT : 1;
+  let rate = Math.max(0, _mpRegenRate) * gate;
+  if ((player.pendingMana || 0) > 0) rate += player.maxMp * MANA_DRAIN_PCT;
+  return rate;
 }
 function updateVitalFills(dt) {
   if (typeof player !== 'object' || !player || !(player.maxHp > 0)) return;
-  _hpFillVis = easeVitalFill(_hpFillVis, hpContinuous(), player.maxHp, dt);
-  _mpFillVis = easeVitalFill(_mpFillVis, mpContinuous(), player.maxMp, dt);
+  _hpFillVis = glideVitalFill({ vis: _hpFillVis, cur: hpContinuous(), max: player.maxHp,
+    rate: hpRecoveryRate(), dt, tau: VITAL_EASE_TAU, snapFrac: VITAL_SNAP_FRAC });
+  _mpFillVis = glideVitalFill({ vis: _mpFillVis, cur: mpContinuous(), max: player.maxMp,
+    rate: mpRecoveryRate(), dt, tau: VITAL_EASE_TAU, snapFrac: VITAL_SNAP_FRAC });
   const clampPct = (v, mx) => (mx > 0 ? Math.max(0, Math.min(100, v / mx * 100)) : 0);
   const hpPct = clampPct(_hpFillVis, player.maxHp), mpPct = clampPct(_mpFillVis, player.maxMp);
   const set = (id, pct) => { const el = document.getElementById(id); if (el) el.style.width = pct + '%'; };
@@ -24789,7 +24818,8 @@ const __DL_FN_BRIDGE = {
   checkLevelUp,
   spendAttr,
   renderStaminaBar,
-  easeVitalFill,
+  hpRecoveryRate,
+  mpRecoveryRate,
   updateVitalFills,
   buffChipHTML,
   renderStatusStrip,
