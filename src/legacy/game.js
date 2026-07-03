@@ -21575,9 +21575,15 @@ document.addEventListener('click', (e) => {
 // ── LOG ──
 // Log messages are HTML: icons are written inline as dlIcon(key) or <span
 // data-spr=key> (painted by the [data-spr] painter), never emoji.
+// Appended via insertAdjacentHTML — `innerHTML +=` reserializes and reparses
+// every existing line on each call (O(n²) over a session), which is what made
+// long sessions crawl. Scrollback is capped so the DOM stays bounded.
+const LOG_MAX_LINES = 200;
+let _logEl = null;   // #log is static in the markup — resolve once, lazily
 function log(msg, cls='') {
-  const el = document.getElementById('log');
-  el.innerHTML += `<div class="log-line ${cls}">${msg}</div>`;
+  const el = _logEl || (_logEl = document.getElementById('log'));
+  el.insertAdjacentHTML('beforeend', `<div class="log-line ${cls}">${msg}</div>`);
+  while (el.childElementCount > LOG_MAX_LINES) el.removeChild(el.firstElementChild);
   el.scrollTop = el.scrollHeight;
 }
 
@@ -22070,6 +22076,14 @@ function loadStash() {
   healStashItems();
 }
 
+// Bookkeeping from the last successful local save: when it happened (lets the
+// play-time heartbeat skip saves the world-tick autosave already covered), plus
+// the exact serialized string written and its embedded ts (lets cloudPushSlot
+// reuse those bytes instead of re-parsing + re-stringifying the whole save).
+let _lastSaveAt = 0;
+let _lastSavePayload = null;
+let _lastSavePayloadTs = 0;
+
 function saveGame() {
   if (_wipingSave || _switchingSlot) return; // a slot switch / wipe is mid-flight — don't clobber the target slot
   // Don't create a save for a hero who hasn't begun (no class / no progress).
@@ -22088,7 +22102,13 @@ function saveGame() {
       inTown, dungeonReturn, graveSite,
       ts: Date.now(),
     };
-    localStorage.setItem(slotKey(activeSlot), JSON.stringify(data));
+    const payload = JSON.stringify(data);
+    localStorage.setItem(slotKey(activeSlot), payload);
+    // Cache only after the write succeeds so the fast paths never trust a save
+    // that didn't actually land.
+    _lastSavePayload = payload;
+    _lastSavePayloadTs = data.ts;
+    _lastSaveAt = Date.now();
   } catch (e) {
     // localStorage unavailable (e.g. inside artifact preview) — fail silently
   }
@@ -22388,6 +22408,10 @@ function recordFallenHero() {
 // the hero that earned them (the save is destroyed on death).
 const HC_DEAD_KEY = 'dungeonLoot_hcMeta_v1';
 let hcMeta = { cids: [], ach: [], ts: 0 };
+// Set mirror of hcMeta.ach for O(1) membership tests — checkHardcoreAchievements
+// probes every achievement id on each save, so the array indexOf scan adds up.
+// Kept in sync at every point hcMeta.ach changes (load, grant, cloud merge).
+let _hcAchSet = new Set();
 function loadHcMeta() {
   try {
     const j = JSON.parse(localStorage.getItem(HC_DEAD_KEY));
@@ -22399,6 +22423,7 @@ function loadHcMeta() {
       };
     }
   } catch (e) {}
+  _hcAchSet = new Set(hcMeta.ach);
 }
 function writeHcMeta() { try { localStorage.setItem(HC_DEAD_KEY, JSON.stringify(hcMeta)); } catch (e) {} }
 function hcIsDead(cid) { return !!cid && hcMeta.cids.indexOf(cid) !== -1; }
@@ -22414,11 +22439,12 @@ function hcMarkDead(cid) {
   writeHcMeta();
   cloudScheduleHcMeta();
 }
-function hcHasAch(id) { return hcMeta.ach.indexOf(id) !== -1; }
+function hcHasAch(id) { return _hcAchSet.has(id); }
 // Record a newly-earned hardcore achievement. Returns true only the first time.
 function hcGrantAch(id) {
-  if (!id || hcMeta.ach.indexOf(id) !== -1) return false;
+  if (!id || _hcAchSet.has(id)) return false;
   hcMeta.ach.push(id);
+  _hcAchSet.add(id);
   hcMeta.ts = Date.now();
   writeHcMeta();
   cloudScheduleHcMeta();
@@ -22503,7 +22529,13 @@ function playTimeBeat() {
   if (dt > 5000) dt = 1000; // background throttle / sleep — count a nominal tick
   if (typeof player === 'object' && player) player.playMs = (player.playMs || 0) + dt;
   _ptSinceSave += dt;
-  if (_ptSinceSave >= 20000) { _ptSinceSave = 0; try { saveGame(); } catch (e) {} }
+  if (_ptSinceSave >= 20000) {
+    _ptSinceSave = 0;
+    // The world tick already autosaves every few seconds during play, so only
+    // fire the heartbeat save when nothing else persisted recently (e.g. idling
+    // on a menu). playMs still accumulates either way and rides the next save.
+    if (Date.now() - _lastSaveAt >= 15000) { try { saveGame(); } catch (e) {} }
+  }
 }
 setInterval(playTimeBeat, 1000);
 // Reset the beat clock when the tab regains focus so the hidden gap isn't billed,
@@ -23035,19 +23067,31 @@ async function cloudPushSlot(slot, opts) {
   if (!cloudEnabled() || !authState.user) return false;
   let raw; try { raw = localStorage.getItem(slotKey(slot)); } catch (e) {}
   if (!raw) return false;
-  let data; try { data = JSON.parse(raw); } catch (e) { return false; }
-  // Never upload a blank, not-yet-started hero — it would overwrite whatever real
-  // save already lives in this slot on the account.
-  if (!saveStarted(data)) return false;
+  let body;
+  if (raw === _lastSavePayload) {
+    // Fast path: saveGame() just wrote this exact string, so it's already known
+    // to be a started save and its ts is cached. Splice the bytes straight into
+    // the request body instead of JSON.parse-ing and re-stringifying the whole
+    // save — the keys below match the object literal in the slow path, so the
+    // uploaded payload is byte-identical.
+    body = '{"user_id":' + JSON.stringify(authState.user.id) + ',"slot":' + JSON.stringify(slot) +
+      ',"data":' + raw + ',"updated_at":' + JSON.stringify(new Date(_lastSavePayloadTs || Date.now()).toISOString()) + '}';
+  } else {
+    let data; try { data = JSON.parse(raw); } catch (e) { return false; }
+    // Never upload a blank, not-yet-started hero — it would overwrite whatever real
+    // save already lives in this slot on the account.
+    if (!saveStarted(data)) return false;
+    body = JSON.stringify({
+      user_id: authState.user.id, slot: slot, data: data,
+      updated_at: new Date(data.ts || Date.now()).toISOString(),
+    });
+  }
   if (!opts.keepalive) await ensureToken();
   try {
     const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?on_conflict=user_id,slot', {
       method: 'POST',
       headers: cloudRestHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
-      body: JSON.stringify({
-        user_id: authState.user.id, slot: slot, data: data,
-        updated_at: new Date(data.ts || Date.now()).toISOString(),
-      }),
+      body: body,
       keepalive: !!opts.keepalive,
     });
     return res.ok;
@@ -23105,7 +23149,7 @@ function hcMergeIn(cloud) {
   cloudCids.forEach(c => cidSet.add(c));
   cloudAch.forEach(a => achSet.add(a));
   const grew = cidSet.size !== hcMeta.cids.length || achSet.size !== hcMeta.ach.length;
-  if (grew) { hcMeta.cids = Array.from(cidSet); hcMeta.ach = Array.from(achSet); hcMeta.ts = Date.now(); writeHcMeta(); }
+  if (grew) { hcMeta.cids = Array.from(cidSet); hcMeta.ach = Array.from(achSet); _hcAchSet = achSet; hcMeta.ts = Date.now(); writeHcMeta(); }
   return cidSet.size > knownDeaths;
 }
 // Read the account's hardcore-meta row. Returns the data object, null (no row), or
@@ -24616,6 +24660,63 @@ function stepWorldClock(dt) {
   if (_worldAcc > WORLD_TICK_MS) _worldAcc = WORLD_TICK_MS;
 }
 
+// ── PERF HUD (dev tool) ──
+// Console-toggled frame profiler: type perfHud() to show/hide a small fixed
+// overlay (top-right, click-through) with fps, worst frame, and entity/DOM
+// counts. Hidden by default and, while hidden, perfFrameSample() bails on its
+// first check — zero per-frame cost for players.
+let _perfHudEl = null;
+let _perfHudOn = false;
+let _perfLastTs = 0;                     // own delta — the loop's dt is clamped, this sees real stalls
+let _perfFrames = 0, _perfDtSum = 0, _perfWorst = 0;
+let _perfWinStart = 0;                   // start of the rolling 1s sample window
+let _perfAvgMs = 0, _perfWorstMs = 0;    // last completed window's numbers
+let _perfNextPaint = 0;                  // overlay repaints at most every ~500ms
+let _perfDomCount = 0, _perfNextDomScan = 0;  // querySelectorAll('*') is pricey — at most 1/s
+// Called once per frame from gameLoop with the rAF timestamp (dt unused: the
+// loop clamps it at 100ms, which would hide exactly the stalls we're hunting).
+function perfFrameSample(ts, dt) {
+  if (!_perfHudOn) return;               // hidden → free
+  if (_perfLastTs) {
+    const ms = ts - _perfLastTs;
+    _perfFrames++; _perfDtSum += ms;
+    if (ms > _perfWorst) _perfWorst = ms;
+  } else {
+    _perfWinStart = ts;                  // first sample after toggle-on anchors the window
+  }
+  _perfLastTs = ts;
+  if (ts - _perfWinStart >= 1000) {
+    _perfAvgMs = _perfFrames ? _perfDtSum / _perfFrames : 0;
+    _perfWorstMs = _perfWorst;
+    _perfFrames = 0; _perfDtSum = 0; _perfWorst = 0; _perfWinStart = ts;
+  }
+  if (ts < _perfNextPaint) return;
+  _perfNextPaint = ts + 500;
+  if (ts >= _perfNextDomScan) {
+    _perfDomCount = document.querySelectorAll('*').length;
+    _perfNextDomScan = ts + 1000;
+  }
+  const logEl = _logEl || document.getElementById('log');
+  const fps = _perfAvgMs > 0 ? Math.round(1000 / _perfAvgMs) : 0;
+  _perfHudEl.textContent =
+    `fps ${fps}  avg ${_perfAvgMs.toFixed(1)}ms  worst ${_perfWorstMs.toFixed(1)}ms\n` +
+    `enemies ${enemies.length}  particles ${particles.length}  projectiles ${projectiles.length}\n` +
+    `log ${logEl ? logEl.childElementCount : 0}  dom ${_perfDomCount}`;
+}
+function perfHud() {
+  if (!_perfHudEl) {                     // built lazily — players never pay for it
+    _perfHudEl = document.createElement('div');
+    _perfHudEl.className = 'perf-hud';
+    document.body.appendChild(_perfHudEl);
+  }
+  _perfHudOn = !_perfHudOn;
+  _perfHudEl.style.display = _perfHudOn ? 'block' : 'none';
+  // Reset the window so a fresh toggle-on doesn't average across the gap.
+  _perfLastTs = 0; _perfFrames = 0; _perfDtSum = 0; _perfWorst = 0;
+  _perfWinStart = 0; _perfNextPaint = 0; _perfNextDomScan = 0;
+  return _perfHudOn ? 'perf HUD on' : 'perf HUD off';
+}
+
 // Run one frame step in isolation. A thrown error in any subsystem (movement,
 // combat, the world clock, draw…) must NOT cascade and freeze the whole game —
 // otherwise a single bad frame becomes a permanent hang where movement, enemy
@@ -24635,6 +24736,7 @@ function gameLoop(ts) {
   let dt = (ts - _lastTs) / 1000;
   _lastTs = ts;
   if (dt > 0.1) dt = 0.1;          // clamp after a stall so nothing teleports
+  perfFrameSample(ts, dt);         // dev perf HUD sampling — a single boolean check while hidden
   tickAnimClock(ts);               // advance the looping-animation clock (frozen while paused)
   // The teleport fade/beam animation runs on its own even while the world is paused
   // by it (rtPaused → true during transit) — it must keep playing to reach the warp.
@@ -25873,6 +25975,8 @@ const __DL_FN_BRIDGE = {
   enemyAttackInterval,
   worldTick,
   stepWorldClock,
+  perfFrameSample,
+  perfHud,
   safeStep,
   gameLoop,
 };
