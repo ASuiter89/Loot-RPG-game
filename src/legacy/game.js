@@ -16,7 +16,7 @@
 import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
 import { milestonePower, rankScale, skillManaCost } from '../systems/skillMath.js';
 import { glideVitalFill } from '../systems/vitalFill.js';
-import { offscreenArrows } from '../systems/offscreenArrows.js';
+import { offscreenArrows, tileOnScreen } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
@@ -13289,6 +13289,11 @@ function updateAmbientTint(theme) {
   host.style.setProperty('--amber', tint);
 }
 
+// The painterly vignette gradient depends only on the canvas size, so it's
+// memoized and rebuilt only on resize (building a radial gradient every frame
+// was pure repeated work — the stops never change).
+let _vignetteGrad = null, _vignetteW = 0, _vignetteH = 0;
+
 function draw() {
   const W = canvas.width, H = canvas.height;
   const C = currentTheme();
@@ -13651,6 +13656,7 @@ function draw() {
   // floor but beneath actors. Fire uses the DawnLike flame tile; the barrier is a
   // procedural magical construct (terrain-like, so procedural is fine).
   bossHazards.forEach(h => {
+    if (h.x + 1 < x0 || h.x > x1 || h.y + 1 < y0 || h.y > y1) return; // off-screen (same window as the enemy/trap loops)
     const px = offX + h.x * tw, py = offY + h.y * th;
     const cx = px + tw/2, cy = py + th/2;
     const wob = 0.6 + 0.4 * Math.sin(animNow()/120 + (h.x*7 + h.y*13));
@@ -13675,6 +13681,7 @@ function draw() {
   // Ground chests — a classic brown chest with gold trim, drawn by hand so it
   // looks the same on every device. Lucky chests glow brighter gold.
   groundItems.forEach(({ x, y, luck }) => {
+    if (x + 1 < x0 || x > x1 || y + 1 < y0 || y > y1) return; // off-screen
     const lucky = (luck || 1) > 1;
     const px = offX + x * tw, py = offY + y * th;
     const cx = px + tw/2, cy = py + th/2;
@@ -13719,6 +13726,7 @@ function draw() {
 
   // Ground food — drawn large so a rare bowl is easy to spot on the map.
   groundFood.forEach(f => {
+    if (f.x + 1 < x0 || f.x > x1 || f.y + 1 < y0 || f.y > y1) return; // off-screen
     const px = offX + f.x * tw, py = offY + f.y * th;
     const foodSize = Math.round(tw * 0.95);
     drawSpriteC(f.sprite || 'food', px + tw/2, py + th/2, foodSize);
@@ -13726,6 +13734,7 @@ function draw() {
 
   // Coin piles — a soft circular golden glow so loose gold catches the eye.
   groundGold.forEach(g => {
+    if (g.x + 1 < x0 || g.x > x1 || g.y + 1 < y0 || g.y > y1) return; // off-screen
     const px = offX + g.x * tw, py = offY + g.y * th;
     glowUnder(px + tw/2, py + th/2, tw * 0.42, 'rgba(255,224,102,0.4)');
     if (spriteReady) drawSpriteC('coins', px + tw/2, py + th/2, itemSpritePx(tw));
@@ -13788,7 +13797,6 @@ function draw() {
     if (!arr) statusByTarget.set(s.target, arr = []);
     arr.push(s);
   }
-  const NO_STATUS = [];
 
   // Enemies. Skip any whose footprint sits entirely outside the visible window
   // (with a 1-tile margin for auras/HP bars) — off-screen foes cost nothing to
@@ -13807,13 +13815,20 @@ function draw() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     // Status tint: green = poisoned, gold = stunned, orange = burning, blue = chilled.
-    const eStatus = statusByTarget.get(e) || NO_STATUS;
-    const poisoned = eStatus.some(s => s.effect === 'poison');
-    const stunned = eStatus.some(s => s.effect === 'stun');
-    const burning = eStatus.some(s => s.effect === 'burn');
-    const cursed = eStatus.some(s => s.effect === 'vuln');
-    const chilled = eStatus.some(s => s.effect === 'chill');
-    const charged = eStatus.some(s => s.effect === 'static');
+    // One pass over this foe's statuses sets all six flags at once (six
+    // .some(closure) calls per enemy per frame re-scanned the list and allocated
+    // a closure each); foes with no statuses skip the loop entirely.
+    const eStatus = statusByTarget.get(e);
+    let poisoned = false, stunned = false, burning = false, cursed = false, chilled = false, charged = false;
+    if (eStatus) for (const s of eStatus) {
+      const eff = s.effect;
+      if (eff === 'poison') poisoned = true;
+      else if (eff === 'stun') stunned = true;
+      else if (eff === 'burn') burning = true;
+      else if (eff === 'vuln') cursed = true;
+      else if (eff === 'chill') chilled = true;
+      else if (eff === 'static') charged = true;
+    }
     // Status tint → a cached pre-tinted sprite (was a per-frame ctx.filter, one of
     // the priciest 2D-canvas ops; the cached tile is pixel-identical). Priority
     // matches the old if/else chain: hit-flash first, then the elemental washes.
@@ -14012,6 +14027,7 @@ function draw() {
   // Summoned minions — autonomous allies, drawn with a soft coloured aura and a
   // thin lifespan bar so the player can read how long each will last.
   minions.forEach(m => {
+    if (m.x + 1 < x0 || m.x > x1 || m.y + 1 < y0 || m.y > y1) return; // off-screen (1-tile margin covers aura/lunge)
     const mx = offX + m.x * tw, my = offY + m.y * th;
     drawActorShadow(mx + tw/2, my + th*0.82, tw);
     ctx.save();
@@ -14199,29 +14215,40 @@ function draw() {
   // Player status effects are surfaced as full-screen coloured halos (see
   // updateHaloVignette), not as little icons over the hero sprite.
 
-  // Combat particles — hit sparks / blood that burst, drift, and fade.
+  // Combat particles — hit sparks / blood that burst, drift, and fade. A single
+  // in-place pass compacts expired sparks out (recycling them into the pool) and
+  // draws the survivors — no per-frame array copy or save/restore per spark; only
+  // globalAlpha changes, so one reset after the loop restores the context.
   const pnow = Date.now();
-  particles = particles.filter(p => pnow - p.born < p.life);
-  particles.forEach(p => {
-    const e = pnow - p.born, t = e / p.life, f = e / 16;
+  let pAlive = 0;
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    const e = pnow - p.born;
+    if (e >= p.life) { _particlePool.push(p); continue; }   // expired → recycle
+    particles[pAlive++] = p;
+    const t = e / p.life, f = e / 16;
     const wx = p.x + p.vx * f, wy = p.y + p.vy * f + 0.00006 * e * f; // light gravity
     const px = offX + wx * tw, py = offY + wy * th;
     const s = Math.max(1, tw * 0.1 * (1 - t * 0.6));
-    ctx.save();
     ctx.globalAlpha = Math.max(0, 1 - t);
     ctx.fillStyle = p.color;
     ctx.fillRect(px - s/2, py - s/2, s, s);
-    ctx.restore();
-  });
+  }
+  particles.length = pAlive;
+  ctx.globalAlpha = 1;
 
   // Ultimate-spell cinematics (meteor slam, frost nova, storm…) paint over the
   // world but beneath the floating damage numbers so hits stay readable.
   drawUltimateFx(offX, offY, tw, th);
 
-  // Floating damage numbers
+  // Floating damage numbers — compacted in place with a write index (the old
+  // per-frame .filter allocated a fresh array every frame).
   const now = Date.now();
-  floatingTexts = floatingTexts.filter(ft => now - ft.start < ft.duration);
-  floatingTexts.forEach(ft => {
+  let ftAlive = 0;
+  for (let i = 0; i < floatingTexts.length; i++) {
+    const ft = floatingTexts[i];
+    if (now - ft.start >= ft.duration) continue;   // expired → drop
+    floatingTexts[ftAlive++] = ft;
     const t = (now - ft.start) / ft.duration;
     const px = offX + ft.x * tw + tw / 2;
     const py = offY + ft.y * th - t * tw * 0.8;
@@ -14241,7 +14268,10 @@ function draw() {
     if (coinOk) {
       const cs = Math.max(16, Math.round(fsz * 1.15));
       const gap = Math.max(1, Math.round(fsz * 0.15));
-      const twd = ctx.measureText(ft.text).width;
+      // measureText is costly per frame, so the width is cached on the floater
+      // and only re-measured if its font changes (e.g. the canvas was resized).
+      if (ft._mFont !== ctx.font) { ft._mFont = ctx.font; ft._mW = ctx.measureText(ft.text).width; }
+      const twd = ft._mW;
       const left = px - (cs + gap + twd) / 2;
       const tcx = left + cs + gap + twd / 2;
       ctx.strokeText(ft.text, tcx, py);
@@ -14254,7 +14284,8 @@ function draw() {
       ctx.fillText(ft.text, px, py);
     }
     ctx.restore();
-  });
+  }
+  floatingTexts.length = ftAlive;
 
   // Atmospheric colour wash for this floor, if any.
   if (floorTint) {
@@ -14276,11 +14307,14 @@ function draw() {
   // Painterly vignette: a warm overhead light fading to shadowed edges, for
   // that Golden Sun / Tactics diorama feel.
   const cw = ctx.canvas.width, ch = ctx.canvas.height;
-  const vg = ctx.createRadialGradient(cw/2, ch*0.42, Math.min(cw, ch)*0.18, cw/2, ch*0.5, Math.max(cw, ch)*0.72);
-  vg.addColorStop(0, 'rgba(255,236,190,0.06)');
-  vg.addColorStop(0.55, 'rgba(0,0,0,0)');
-  vg.addColorStop(1, 'rgba(8,6,18,0.55)');
-  ctx.fillStyle = vg;
+  if (!_vignetteGrad || _vignetteW !== cw || _vignetteH !== ch) {
+    _vignetteW = cw; _vignetteH = ch;
+    _vignetteGrad = ctx.createRadialGradient(cw/2, ch*0.42, Math.min(cw, ch)*0.18, cw/2, ch*0.5, Math.max(cw, ch)*0.72);
+    _vignetteGrad.addColorStop(0, 'rgba(255,236,190,0.06)');
+    _vignetteGrad.addColorStop(0.55, 'rgba(0,0,0,0)');
+    _vignetteGrad.addColorStop(1, 'rgba(8,6,18,0.55)');
+  }
+  ctx.fillStyle = _vignetteGrad;
   ctx.fillRect(0, 0, cw, ch);
 
   // Edge indicators pointing at off-screen points of interest — the down-stairs
@@ -14302,6 +14336,23 @@ function draw() {
 // Hidden in town and before a floor exists. Tap it to collapse to a small corner
 // thumbnail (and tap again to expand); the choice is remembered.
 let _mmCanvas = null, _mmCtx = null;
+// Static terrain layer cache. Re-rasterizing every tile of the whole floor each
+// frame was the minimap's entire cost, but the terrain rarely changes — so it's
+// painted once into an offscreen canvas and blitted per frame. The cache key is
+// the floor identity + pixel size + a cheap rolling hash of mapData, because
+// terrain CAN change mid-floor (smashed cracked walls, unlocked vault doors,
+// spent shrines/fountains, boss wall-digging): any tile edit changes the hash
+// and forces a rebuild, so the output stays pixel-identical. The dynamic dots
+// (hero/foes/allies/loot/NPCs) keep drawing on top every frame.
+let _mmTerrain = null, _mmTerrainKey = '';
+function _mmTerrainHash() {
+  let h = 0;
+  for (let y = 0; y < MAP_H; y++) {
+    const row = mapData[y]; if (!row) continue;
+    for (let x = 0; x < MAP_W; x++) h = (h * 31 + row[x]) | 0;
+  }
+  return h;
+}
 let minimapCollapsed = false;
 try { minimapCollapsed = localStorage.getItem('dungeonLootMiniCollapsed') === '1'; } catch (e) {}
 function toggleMinimap() {
@@ -14342,16 +14393,27 @@ function drawMinimap() {
   const m = _mmCtx || (_mmCtx = el.getContext('2d'));
   m.clearRect(0, 0, w, h);
 
-  // Terrain layer.
-  for (let y = 0; y < MAP_H; y++) {
-    const row = mapData[y]; if (!row) continue;
-    for (let x = 0; x < MAP_W; x++) {
-      const c = MM_TCOL[row[x]];
-      if (!c) continue;
-      m.fillStyle = c;
-      m.fillRect(x * PX, y * PX, PX, PX);
+  // Terrain layer — blitted from the offscreen cache, rebuilt only when the
+  // floor, the canvas size, or any terrain tile changes (see _mmTerrainHash).
+  const tKey = floorSerial + ':' + w + 'x' + h + ':' + _mmTerrainHash();
+  if (!_mmTerrain || _mmTerrainKey !== tKey) {
+    _mmTerrainKey = tKey;
+    if (!_mmTerrain) _mmTerrain = document.createElement('canvas');
+    if (_mmTerrain.width !== w) _mmTerrain.width = w;
+    if (_mmTerrain.height !== h) _mmTerrain.height = h;
+    const tm = _mmTerrain.getContext('2d');
+    tm.clearRect(0, 0, w, h);
+    for (let y = 0; y < MAP_H; y++) {
+      const row = mapData[y]; if (!row) continue;
+      for (let x = 0; x < MAP_W; x++) {
+        const c = MM_TCOL[row[x]];
+        if (!c) continue;
+        tm.fillStyle = c;
+        tm.fillRect(x * PX, y * PX, PX, PX);
+      }
     }
   }
+  m.drawImage(_mmTerrain, 0, 0);
 
   // Markers, drawn a touch larger than a tile so they pop against the floor.
   const dot = (x, y, color, s) => {
@@ -14470,28 +14532,39 @@ function drawStairsArrow(offX, offY, tw, th, W, H) {
 // there". Off with the Monster Arrows setting; hidden in town. Geometry (which
 // foes are off-screen, where each arrow sits, the merge) lives in the pure
 // systems/offscreenArrows module; this just draws what it returns.
+// Scratch target list reused across frames — offscreenArrows reads it
+// synchronously and keeps no reference, so recycling the array and its slot
+// objects avoids allocating per foe per frame on a busy floor.
+const _arrowTargets = [];
 function drawMonsterArrows(offX, offY, tw, th, W, H) {
   if (!showMonsterArrows) return;
   if (inTown || !player || !Array.isArray(mapData) || !mapData.length) return;
   if (typeof enemies === 'undefined' || !enemies.length) return;
 
-  const targets = [];
+  let nT = 0;
   for (const e of enemies) {
     // Skip the dead and fleeing treasure goblins: goblins never seal the floor
     // (see hostilesRemaining / floorCleared), so a red "threat" arrow at one would
     // contradict the "foes sealing the stairs" intent — chase them by eye instead.
     if (e.dead || e.isGoblin) continue;
+    // On-screen foes get no arrow anyway (the module applies this exact test), so
+    // skip them up front and don't build target entries for them at all.
+    const span = e.size || 1;
+    if (tileOnScreen(e.x, e.y, span, offX, offY, tw, th, W, H)) continue;
     // e.fx/fy is the smooth footprint CENTRE (may be null before its first render
     // tick); the module falls back to the footprint centre when cx/cy are absent.
-    targets.push({ x: e.x, y: e.y, span: e.size || 1, cx: e.fx, cy: e.fy });
+    const t = _arrowTargets[nT] || (_arrowTargets[nT] = {});
+    t.x = e.x; t.y = e.y; t.span = span; t.cx = e.fx; t.cy = e.fy;
+    nT++;
   }
-  if (!targets.length) return;
+  _arrowTargets.length = nT;
+  if (!nT) return;
 
   const size = Math.max(9, tw * 0.42);          // ~half the stairs arrowhead
   const pad = Math.max(10, tw * 0.55);          // keep the whole head inside the panel
   const arrows = offscreenArrows({
     hero: { fx: player.fx, fy: player.fy },
-    targets, cam: { offX, offY, tw, th }, view: { W, H },
+    targets: _arrowTargets, cam: { offX, offY, tw, th }, view: { W, H },
     pad, mergeDist: size * 1.6,                  // fold a same-direction pack into one arrow
     max: MONSTER_ARROW_CAP,                      // and never ring the whole screen (minimap has the rest)
   });
@@ -14549,6 +14622,8 @@ function spawnFloatingText(x, y, text, color, size, coin) {
 // particles, and a white hit-flash on struck foes. All purely visual and
 // self-expiring; the pulse loop keeps repainting while any are live.
 let particles = [];
+const PARTICLE_CAP = 600;   // hard ceiling — past it the oldest spark is recycled, invisible in a big fight's chaos
+const _particlePool = [];   // expired spark objects, reused by spawnParticles to kill allocation churn
 let shakeMag = 0, shakeUntil = 0;
 function addShake(mag) { shakeMag = Math.max(shakeMag, mag); shakeUntil = Date.now() + 200; }  // rAF loop redraws every frame — no forced draw() needed
 // Burst of `n` little sparks at map-tile (x,y), drifting and fading.
@@ -14556,18 +14631,30 @@ function spawnParticles(x, y, color, n, speed) {
   const now = Date.now();
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, s = (0.3 + Math.random()) * (speed || 0.06);
-    particles.push({ x: x + 0.5, y: y + 0.5, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 0.02,
-      born: now, life: 280 + Math.random() * 220, color });
+    // At the cap, recycle the oldest live spark; otherwise reuse a pooled dead
+    // one (every field is reset below) before allocating fresh.
+    let p;
+    if (particles.length >= PARTICLE_CAP) p = particles.shift();
+    else p = _particlePool.pop() || {};
+    p.x = x + 0.5; p.y = y + 0.5;
+    p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s - 0.02;
+    p.born = now; p.life = 280 + Math.random() * 220; p.color = color;
+    particles.push(p);
   }
   // No draw() here: the rAF game loop already redraws every frame, so forcing a
   // full extra redraw on every particle burst (several per frame in a big fight)
   // was pure duplicated work. The sparks still appear on the very next frame.
 }
-// Current camera-shake offset in pixels (decays to 0), used by draw().
+// Current camera-shake offset in pixels (decays to 0), used by draw(). Returns a
+// reused two-slot scratch array — draw() destructures it immediately and never
+// retains it, so recycling kills the per-frame allocation.
+const _shakeXY = [0, 0];
 function shakeOffset() {
-  if (Date.now() >= shakeUntil || shakeMag <= 0) { shakeMag = 0; return [0, 0]; }
+  if (Date.now() >= shakeUntil || shakeMag <= 0) { shakeMag = 0; _shakeXY[0] = _shakeXY[1] = 0; return _shakeXY; }
   const k = (shakeUntil - Date.now()) / 200, m = shakeMag * k;
-  return [(Math.random() * 2 - 1) * m, (Math.random() * 2 - 1) * m];
+  _shakeXY[0] = (Math.random() * 2 - 1) * m;
+  _shakeXY[1] = (Math.random() * 2 - 1) * m;
+  return _shakeXY;
 }
 // A soft drop-shadow ellipse under an actor, for grounding/depth.
 // ── Attack lunge animation ────────────────────────────────────────────────
@@ -14628,6 +14715,9 @@ function _glowSprite(cache, rgb, ring) {
   else      { grd.addColorStop(0, `rgba(${rgb},1)`); grd.addColorStop(1, `rgba(${rgb},0)`); }
   g.fillStyle = grd;
   g.beginPath(); g.arc(c, c, c, 0, Math.PI * 2); g.fill();
+  // Safety cap: pathological colour churn could otherwise grow the cache without
+  // bound — reset it rather than let it pass 128 entries (rebuilds are cheap).
+  if (cache.size > 128) cache.clear();
   cache.set(rgb, cv);
   return cv;
 }
