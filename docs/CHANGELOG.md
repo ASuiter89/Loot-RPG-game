@@ -8,6 +8,18 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Fix — dual-host deploy (Netlify + GitHub Pages)
+
+- 🏗️ `index.html` now references `./src/main.js` and `./src/styles.css`
+  **relatively** (were absolute `/src/…`). Absolute paths resolve to the domain
+  root and 404 on a GitHub Pages **project subpath** (`/Loot-RPG-game/`), which
+  served the raw source unstyled. Relative paths work at a root domain (Netlify's
+  built `dist/`) **and** the subpath (Pages' raw source).
+- 🏗️ Added a root `.nojekyll` so GitHub Pages serves `src/` verbatim.
+- 🧪 Baseline gates now **require** relative asset paths (reject `/src/…`); added
+  `npm run smoke:pages` (raw source over HTTP, the Pages path) alongside
+  `npm run smoke` (built `dist/`). Both green.
+
 ## Phase 3b — externalize the CSS
 
 - 📦 The 4.3k-line inline `<style>` moved to `src/styles.css`, referenced by a

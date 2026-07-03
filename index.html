@@ -1,11 +1,14 @@
-<!-- Dungeon Loot — a single-file browser-based pixel loot RPG -->
+<!-- Dungeon Loot — a browser-based pixel loot RPG. Modular ES modules built to a
+     static bundle with Vite; this HTML is just the app shell. See README.md / CLAUDE.md. -->
+<!-- Shell entry uses RELATIVE asset paths (./src/...) so it works at a domain root
+     (Netlify's built dist/) and a project subpath (GitHub Pages). Do not use /src absolute. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Dungeon Loot</title>
-<link rel="stylesheet" href="/src/styles.css">
+<link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
 
@@ -29,7 +32,7 @@
       <span id="stam-text" style="font-size:1.2rem">100/100</span>
     </div>
   </div>
-  <div class="hud-item" id="floor-hud" data-tip="<div class='ht-name'><span data-spr=ui_floor></span> Dungeon Depth</div><div class='ht-line'>The floor you're on, and the difficulty tier. Each floor down is tougher — but the loot gets richer too. Conquer floor 25 to unlock the next, deadlier difficulty.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr=ui_floor></span> <span class="hud-val" id="floor-num">1</span><span class="floor-diff" id="floor-diff"></span></div>
+  <div class="hud-item" id="floor-hud" data-tip="<div class='ht-name'><span data-spr=feat_gate_red></span> Dungeon Depth</div><div class='ht-line'>The floor you're on, and the difficulty tier. Each floor down is tougher — but the loot gets richer too. Conquer floor 25 to unlock the next, deadlier difficulty.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr=feat_gate_red></span> <span class="hud-val" id="floor-num">1</span><span class="floor-diff" id="floor-diff"></span></div>
   <div class="hud-item" id="level-hud" data-tip="<div class='ht-name'><span data-spr=ui_level></span> Hero Level</div><div class='ht-line'>Fill the XP bar by slaying foes to level up. Each level boosts your stats and grants an attribute point.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">Lv <span class="hud-val" id="level-num">1</span>
     <div class="xp-track"><div class="xp-fill" id="xp-bar" style="width:0%"></div></div>
   </div>
@@ -56,7 +59,7 @@
          so mobile is unchanged. No lock icon: foes remaining already signals a
          sealed floor, and the pill is simply hidden once the floor is clear. -->
     <div id="map-info">
-      <div id="map-floor"><span data-spr=ui_floor></span> <span id="map-floor-num">1</span><span class="floor-diff" id="map-floor-diff"></span></div>
+      <div id="map-floor"><span data-spr=feat_gate_red></span> <span id="map-floor-num">1</span><span class="floor-diff" id="map-floor-diff"></span></div>
       <div id="map-foes"><span data-spr="ui_foes"></span> <span id="map-foes-num">0</span> foes</div>
     </div>
     <!-- Active buffs & debuffs, overlaid on the top-right of the map and kept
@@ -135,8 +138,8 @@
         <button class="action-btn skill-btn" id="skill-btn" onclick="castSkill()" style="display:none" data-tip="<div class='ht-name'><span data-spr=ic_stun></span> Primary Skill</div><div class='ht-line'>Cast your first-learned active skill.</div><div class='ht-sub'>cast your primary skill</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon" id="skill-icon"><span data-spr=ic_stun></span></span><span class="action-label" id="skill-label">SKILL</span>
         </button>
-        <button class="action-btn town-action" onclick="enterTown()" data-tip="<div class='ht-name'><span data-spr=town_vault></span> Town</div><div class='ht-line'>Step through the gate to the safe hub — shops, forge, healer, stash.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
-          <span class="action-icon"><span data-spr=town_vault></span></span><span class="action-label">TOWN</span>
+        <button class="action-btn town-action" onclick="enterTown()" data-tip="<div class='ht-name'><span data-spr=feat_gate_red></span> Town</div><div class='ht-line'>Step through the gate to the safe hub — shops, forge, healer, stash.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+          <span class="action-icon"><span data-spr=feat_gate_red></span></span><span class="action-label">TOWN</span>
         </button>
         <button class="action-btn bag-btn" onclick="togglePanel()">
           <span class="action-icon">
@@ -262,6 +265,11 @@
              down-stairs whenever the exit is off-screen. On by default. -->
         <button class="settings-item stairsarrow-action" id="stairsarrow-action" onclick="toggleStairsArrow()" data-tip="<div class='ht-name'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-2px'><polygon points='3 11 22 2 13 21 11 13 3 11'/></svg> Stairs Arrow</div><div class='ht-line'>Show a gold arrow on the map edge pointing toward the down-stairs whenever the exit is off-screen.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></span><span class="action-label" id="stairsarrow-label">STAIRS ARROW: ON</span>
+        </button>
+        <!-- Monster arrows: small red arrows riding the map edge that point at
+             each off-screen living foe. On by default. -->
+        <button class="settings-item monsterarrows-action" id="monsterarrows-action" onclick="toggleMonsterArrows()" data-tip="<div class='ht-name'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-2px'><circle cx='9' cy='12' r='1'/><circle cx='15' cy='12' r='1'/><path d='M8 20v2h8v-2'/><path d='m12.5 17-.5-1-.5 1h1z'/><path d='M16 20a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20'/></svg> Monster Arrows</div><div class='ht-line'>Show small red arrows on the map edge pointing toward foes still off-screen, so you can hunt down the last of them.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><path d="M8 20v2h8v-2"/><path d="m12.5 17-.5-1-.5 1h1z"/><path d="M16 20a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20"/></svg></span><span class="action-label" id="monsterarrows-label">MONSTER ARROWS: ON</span>
         </button>
         <!-- UI SIZE — scales the whole interface (1x–2x in 0.25 steps). Every
              label is rem-sized off the root, so this one multiplier resizes all
@@ -397,7 +405,7 @@
       <div id="conquest-title">Difficulty Conquered!</div>
       <div id="conquest-body"></div>
       <div class="conquest-actions">
-        <button class="conquest-btn" onclick="conquestToTown()"><span data-spr=town_vault></span> Return to Town</button>
+        <button class="conquest-btn" onclick="conquestToTown()"><span data-spr=feat_gate_red></span> Return to Town</button>
         <button class="conquest-btn conquest-btn-alt" onclick="closeConquest()">Stay on this floor</button>
       </div>
     </div>
@@ -765,6 +773,6 @@
   </div>
 </div>
 
-<script type="module" src="/src/main.js"></script>
+<script type="module" src="./src/main.js"></script>
 </body>
 </html>
