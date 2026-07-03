@@ -11741,6 +11741,11 @@ function enterDungeonAt(diff, floor, opts) {
   statusEffects = [];
   setPlayerCell(5, 5);
   arrivalDir = 'down';
+  // Always portal into the dungeon facing DOWN. The hero's walk facing only ever
+  // updates as it moves, so without this a re-entry keeps whatever direction it
+  // faced when it last left — it'd materialise facing sideways/up. Reset the walk
+  // sprite's facing and the dash-aim vector so both agree on "down".
+  player.faceDir = 'down'; player.faceDx = 0; player.faceDy = 1;
   generateMap();   // clears inTown and builds the chosen floor
   maybeFloorEvent();
   sfx('stairs');

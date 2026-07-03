@@ -10,6 +10,7 @@ export const CHANGELOG = [
     "Every skill slot now reads the same — the old gold marking on the first slot is gone. The ready-glow and cooldown dial are unchanged.",
     "The bottom HUD grew taller to seat the pills, and stays clear of clipping at large UI SIZE.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Portal into the dungeon facing down", by: "Claude", notes: ["The hero now always materialises facing down when you enter the dungeon through the Gate — before, it kept whatever direction it faced when it last left, so a re-entry could look like it was facing the wrong way."] },
   { date: "2026-07-03", size: "small", v: "Skill nodes drop the slot badge", by: "Claude", notes: ["Removed the small slot-number badge from the top-left corner of learned active skills in the tree — it looked just like the rank badge beside it, and the skill-slot bar right above the tree already shows what's bound where."] },
   { date: "2026-07-03", size: "small", v: "Skill-tree nodes always show their rank", by: "Claude", notes: [
     "Every skill-tree node now shows its current rank on a redesigned corner pill in every state — learned, ready, locked or maxed — so you can always read a skill's level at a glance.",
