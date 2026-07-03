@@ -3,6 +3,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Redesigned skill-bar & loadout tiles", by: "Claude", notes: [
+    "Every combat-bar tile — skills, potions, the town gate and the auto-cast slot — now shows its icon filling the whole box, edge to edge, with the corners rounded off.",
+    "The hotkey moved out of the box corner onto a full-width pill sitting just above each tile; the auto-cast tile's pill reads \"AUTO\".",
+    "The SKILLS-tab slot tray gets the same look: bigger tiles with filled icons and pills above, the auto-cast slot set off on the left and the four manual slots as a 2×2 block.",
+    "Every skill slot now reads the same — the old gold marking on the first slot is gone. The ready-glow and cooldown dial are unchanged.",
+    "The bottom HUD grew taller to seat the pills, and stays clear of clipping at large UI SIZE.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Skill nodes drop the slot badge", by: "Claude", notes: ["Removed the small slot-number badge from the top-left corner of learned active skills in the tree — it looked just like the rank badge beside it, and the skill-slot bar right above the tree already shows what's bound where."] },
   { date: "2026-07-03", size: "small", v: "Skill-tree nodes always show their rank", by: "Claude", notes: [
     "Every skill-tree node now shows its current rank on a redesigned corner pill in every state — learned, ready, locked or maxed — so you can always read a skill's level at a glance.",
