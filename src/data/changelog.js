@@ -9,6 +9,7 @@ export const CHANGELOG = [
     "Gambler jackpots, bounty and escort rewards, and transmuter fuses now pop the full banner — sting, flash and shake — when they land a legendary or unique.",
     "Lesser rewards keep their existing win cue; only the top two tiers get the banner.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Off-screen monster arrows", by: "Claude", notes: ["Small red arrows now ride the map edge pointing at foes still off-screen — track down the last stragglers sealing the stairs.", "Foes bunched in one direction merge into one arrow and only the nearest few show, kept much smaller than the gold stairs arrow so a busy floor stays readable.", "Toggle it in Settings ▸ Visuals (Monster Arrows); on by default."] },
   { date: "2026-07-03", size: "small", v: "Truly smooth HP/MP fill", by: "Claude", notes: ["HP/MP over-time recovery now rises at a steady, constant rate — the fill glides up on a consistent slope instead of jumping in small steps as it heals.", "Taking damage or spending mana still snaps the bar down at once, and burst heals fill instantly."] },
   { date: "2026-07-03", size: "small", v: "Portal cancel & correct stair landings", by: "Claude", notes: [
     "Moving now cancels a town portal for every control scheme — click-to-move on desktop used to root you in place until the portal opened; a click, keypress, or joystick nudge all break the channel now.",
