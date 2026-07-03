@@ -32,7 +32,7 @@
       <span id="stam-text" style="font-size:1.2rem">100/100</span>
     </div>
   </div>
-  <div class="hud-item" id="floor-hud" data-tip="<div class='ht-name'><span data-spr=ui_floor></span> Dungeon Depth</div><div class='ht-line'>The floor you're on, and the difficulty tier. Each floor down is tougher — but the loot gets richer too. Conquer floor 25 to unlock the next, deadlier difficulty.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr=ui_floor></span> <span class="hud-val" id="floor-num">1</span><span class="floor-diff" id="floor-diff"></span></div>
+  <div class="hud-item" id="floor-hud" data-tip="<div class='ht-name'><span data-spr=feat_gate_red></span> Dungeon Depth</div><div class='ht-line'>The floor you're on, and the difficulty tier. Each floor down is tougher — but the loot gets richer too. Conquer floor 25 to unlock the next, deadlier difficulty.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr=feat_gate_red></span> <span class="hud-val" id="floor-num">1</span><span class="floor-diff" id="floor-diff"></span></div>
   <div class="hud-item" id="level-hud" data-tip="<div class='ht-name'><span data-spr=ui_level></span> Hero Level</div><div class='ht-line'>Fill the XP bar by slaying foes to level up. Each level boosts your stats and grants an attribute point.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">Lv <span class="hud-val" id="level-num">1</span>
     <div class="xp-track"><div class="xp-fill" id="xp-bar" style="width:0%"></div></div>
   </div>
@@ -59,7 +59,7 @@
          so mobile is unchanged. No lock icon: foes remaining already signals a
          sealed floor, and the pill is simply hidden once the floor is clear. -->
     <div id="map-info">
-      <div id="map-floor"><span data-spr=ui_floor></span> <span id="map-floor-num">1</span><span class="floor-diff" id="map-floor-diff"></span></div>
+      <div id="map-floor"><span data-spr=feat_gate_red></span> <span id="map-floor-num">1</span><span class="floor-diff" id="map-floor-diff"></span></div>
       <div id="map-foes"><span data-spr="ui_foes"></span> <span id="map-foes-num">0</span> foes</div>
     </div>
     <!-- Active buffs & debuffs, overlaid on the top-right of the map and kept
@@ -138,8 +138,8 @@
         <button class="action-btn skill-btn" id="skill-btn" onclick="castSkill()" style="display:none" data-tip="<div class='ht-name'><span data-spr=ic_stun></span> Primary Skill</div><div class='ht-line'>Cast your first-learned active skill.</div><div class='ht-sub'>cast your primary skill</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon" id="skill-icon"><span data-spr=ic_stun></span></span><span class="action-label" id="skill-label">SKILL</span>
         </button>
-        <button class="action-btn town-action" onclick="enterTown()" data-tip="<div class='ht-name'><span data-spr=town_vault></span> Town</div><div class='ht-line'>Step through the gate to the safe hub — shops, forge, healer, stash.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
-          <span class="action-icon"><span data-spr=town_vault></span></span><span class="action-label">TOWN</span>
+        <button class="action-btn town-action" onclick="enterTown()" data-tip="<div class='ht-name'><span data-spr=feat_gate_red></span> Town</div><div class='ht-line'>Step through the gate to the safe hub — shops, forge, healer, stash.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+          <span class="action-icon"><span data-spr=feat_gate_red></span></span><span class="action-label">TOWN</span>
         </button>
         <button class="action-btn bag-btn" onclick="togglePanel()">
           <span class="action-icon">
@@ -405,7 +405,7 @@
       <div id="conquest-title">Difficulty Conquered!</div>
       <div id="conquest-body"></div>
       <div class="conquest-actions">
-        <button class="conquest-btn" onclick="conquestToTown()"><span data-spr=town_vault></span> Return to Town</button>
+        <button class="conquest-btn" onclick="conquestToTown()"><span data-spr=feat_gate_red></span> Return to Town</button>
         <button class="conquest-btn conquest-btn-alt" onclick="closeConquest()">Stay on this floor</button>
       </div>
     </div>
