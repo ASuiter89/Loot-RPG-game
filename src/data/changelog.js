@@ -3,6 +3,14 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Crits land on skills & spells too", by: "Claude", notes: [
+    "Critical hits now fire on every damage source — auto-attacks, martial skills and spells all roll crits, show the big crit number, and trigger your on-crit passives (combo/zeal charges, primed crits, mana refunds).",
+    "Previously only auto-attacks and guaranteed-crit skills surfaced a crit; caster and skill crit builds now pay off as their skills describe.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Leech is martial sustain", by: "Claude", notes: [
+    "Life Leech and Mana Leech now also heal from weapon-based skills, not just auto-attacks — a martial build sustains through its skills.",
+    "Spell casts never leech: Life and Mana Leech are physical-attack and skill sustain only.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Red gate for town & dungeon travel", by: "Claude", notes: [
     "The Town Portal, Return to Dungeon gate, Dungeon Gate, and the dungeon-depth readout now show a red-swirl stone gate — distinct at a glance from the purple within-floor teleporters.",
     "Every town-bound and dungeon-bound icon shares the one red gate: sidebar TOWN button, town menu, minimap, floor-1 exit, depth pill, and the log & tooltip messages.",

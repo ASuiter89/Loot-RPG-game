@@ -18,6 +18,8 @@ import { milestonePower, rankScale, skillManaCost } from '../systems/skillMath.j
 import { glideVitalFill } from '../systems/vitalFill.js';
 import { offscreenArrows } from '../systems/offscreenArrows.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
+import { isCritical } from '../systems/crit.js';
+import { castLeeches, leechAmount } from '../systems/leech.js';
 import { CHANGELOG } from '../data/changelog.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 
@@ -1880,8 +1882,8 @@ const STAT_DESC = {
   REGEN: 'Health recovered over time.',
   DMG: 'Flat bonus damage added to your hits.',
   ACC: 'Chance to hit (contested vs the foe\'s evasion).',
-  LEECH: 'Heals you for a share of the damage you deal.',
-  MPLEECH: 'Restores mana for a share of the damage you deal.',
+  LEECH: 'Heals you for a share of your physical attack and skill damage — not spells.',
+  MPLEECH: 'Restores mana for a share of your physical attack and skill damage — not spells.',
   HPKILL: 'Restores health on every kill.',
   MPKILL: 'Restores mana on every kill.',
   THORNS: 'Reflects damage back at melee attackers.',
@@ -5513,14 +5515,14 @@ window.gameGuide = function gameGuide(topic) {
       `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight). A red crosshair marks the foe currently locked on (Settings → Visuals → CROSSHAIR toggles it; the 🎯 TARGET focus in Settings → Play picks which foe wins).`,
       `Weapon reach: Staff & Bow = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
       `There is NO per-hit damage cap — a big swing, skill or crit lands its full number, so burst and crits are fully rewarded. A foe's actual HP is the only limiter: bosses carry deep HP pools (and hit harder), so they're a genuine, tanky fight rather than a one-shot.`,
-      `Crits do 2.0x base damage (more with +CRITDMG gear). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
+      `Crits do 2.0x base damage (more with +CRITDMG gear), and EVERY damage source can crit — auto-attacks, martial skills and spells all roll critical hits, land the big crit number, and fire your on-crit passives (combo/zeal charges, primed crits, mana refunds). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
       `Defense / block / damage-reduction come from gear, the Vitality attribute, and your class passive. Healing is now OVER TIME (a pending pool that fills the bar on a slope, shown as a translucent zone) — sip ${key('healthPotion')} EARLY rather than at zero; see the "healing" topic.`,
       `Swap loadouts with ${key('swapWeapon')} to switch between, say, a ranged kite set and a melee finisher.`,
     ],
     healing: [
       `RECOVERY IS OVER TIME, not instant. Most healing no longer snaps HP up — it fills a PENDING pool that pays into HP at a capped rate (~12%/s of max HP per source), so the bar climbs on a visible slope. gameState().player.pendingHeal is the HP still owed; the HP/MP bars show it as a translucent zone ahead of the solid fill.`,
-      `OVER-TIME sources STACK (a potion sip pays out on top of any pending leech): the Health Potion, all life leech / lifesteal, Scythe Reap, Vampiric, Life-on-Kill, and incidental on-kill / on-cast "sliver" heals.`,
+      `OVER-TIME sources STACK (a potion sip pays out on top of any pending leech): the Health Potion, all life leech / lifesteal (paid from your physical attacks and weapon skills — spells don't leech), Scythe Reap, Vampiric, Life-on-Kill, and incidental on-kill / on-cast "sliver" heals.`,
       `INSTANT sources land immediately, as before: deliberate active HEAL skills you cast (e.g. Divine Storm, Final Judgment, Blood Drinker) and EMERGENCY low-HP triggers (a passive that heals when you drop below 25% HP). A skill's detail card tags which kind it grants (heal — instant / leech — over time).`,
       `The Health Potion mends 35% of max HP over a few seconds (Potency raises the amount; shared 6s cooldown, down to 2s via Recharge). It is INTERRUPTIBLE: one DIRECT hit above 18% of max HP spills half the remaining sip ("SIP SPILLED"). Damage-over-time (lava/poison/burn) never interrupts it, and earned leech is never interrupted — only the potion sip is fragile.`,
       `Because you can no longer burst back to full, don't wait until you're low: sip EARLY, keep moving, and let the pending pool refill the slope while you avoid the next hit.`,
@@ -16197,14 +16199,16 @@ function thornsReflect(e) {
   }
 }
 
-// Bloodthirst (Warrior passive): heal a slice of melee damage dealt. Called from
-// basic attacks and every weapon-based active so a Cleave/Whirlwind build sustains.
+// Life & Mana Leech: heal / restore a slice of PHYSICAL damage dealt. Called from
+// basic attacks and every weapon-based active (see resolveCast) so a Cleave/
+// Whirlwind build sustains through its skills — but NOT from spell casts, which
+// never leech. `amount` is the weapon/physical damage of the swing or cast.
 function lifestealHeal(amount) {
   if (amount <= 0) return;
-  // Lifesteal is capped per swing so it no longer scales without limit on huge
-  // AoE hits: a single Cleave/Whirlwind can recover at most a slice of your max
-  // HP, so packing ten foes into one blow can't out-heal the damage they deal
-  // back. Some floors (Warded Halls) further dampen leeching via lifestealMult.
+  // Leech is capped per swing so it no longer scales without limit on huge AoE
+  // hits: a single Cleave/Whirlwind can recover at most a slice of your max HP, so
+  // packing ten foes into one blow can't out-heal the damage they deal back. Some
+  // floors (Warded Halls) further dampen leeching via lifestealMult.
   const lsMult = (floorMod && floorMod.lifestealMult) || 1;
   const lsCap = Math.max(1, Math.round(player.maxHp * 0.12));
   // Life leech: lifesteal passives + gear Life Leech % (+ any lifesteal buff).
@@ -16212,14 +16216,15 @@ function lifestealHeal(amount) {
   if (ls > 0 && player.hp < player.maxHp) {
     // Leech is a RATE, not a burst: bank the per-swing amount and let it pay out
     // over time (queueHeal), so a big AoE hit no longer snaps the bar up in one frame.
-    const got = Math.min(Math.max(1, Math.round(amount * ls)), lsCap);
+    const got = leechAmount(amount, ls, lsCap);
     if (got > 0) { queueHeal(got); spawnFloatingText(player.x, player.y, `+${got}`, '#ff6688'); }
   }
-  // Mana leech: gear Mana Leech % restores MP from damage dealt (also capped).
+  // Mana leech: gear Mana Leech % restores MP from damage dealt (also capped, and
+  // never overfilling the pool).
   const mlCap = Math.max(1, Math.round(player.maxMp * 0.12));
   const ml = totalStat('MPLEECH') / 100;
   if (ml > 0 && player.mp < player.maxMp) {
-    const got = Math.min(Math.max(1, Math.round(amount * ml)), player.maxMp - player.mp, mlCap);
+    const got = leechAmount(amount, ml, Math.min(mlCap, player.maxMp - player.mp));
     if (got > 0) { player.mp += got; spawnFloatingText(player.x, player.y - 0.3, `+${got}`, '#7fb0ff'); }
   }
 }
@@ -16265,7 +16270,7 @@ function adjacentEnemies(e) {
 function rollPlayerHit(e) {
   // A primed crit (e.g. from on-dodge "your next hit crits") is consumed here;
   // otherwise roll crit against THIS foe's level (rating-vs-level system).
-  const isCrit = skillPrimed.crit || Math.random() < critChanceVs(e);
+  const isCrit = skillPrimed.crit || isCritical(Math.random(), critChanceVs(e));
   if (skillPrimed.crit) skillPrimed.crit = false;
   let dmg = getWeaponDamage() + player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
   if (buffs.power) dmg = Math.round(dmg * 1.5);
@@ -16898,8 +16903,14 @@ function nextMilestone(rank) { return SKILL_MILESTONES.find(m => rank < m.rank) 
 function skillWeaponBase() {
   return getWeaponDamage() + player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
 }
+// Whether the LAST applyOffenseMods() blow rolled a critical. Read immediately
+// after skillPhysDamage/skillSpellDamage so a skill or spell can surface its crit
+// (feedback + on-crit triggers) — those functions return only the number.
+let _lastOffenseCrit = false;
 // Shared offense multipliers for an active's blow (class %, buffs, IDMG, boss dmg,
-// zeal, execute, crit, enemy armor / pen). Returns the modified float.
+// zeal, execute, crit, enemy armor / pen). Returns the modified float. Crit applies
+// to EVERY source — weapon actives and spells alike — and is recorded in
+// _lastOffenseCrit for the caller to react to.
 function applyOffenseMods(dmg, e, forceCrit, isSpell) {
   if (buffs.power) dmg *= 1.5;
   if (foodFx('dmgPct')) dmg *= (1 + foodFx('dmgPct')); // ramen damage buff
@@ -16911,7 +16922,8 @@ function applyOffenseMods(dmg, e, forceCrit, isSpell) {
   const zeal = skillBonus('zeal'); if (zeal && !isSpell) dmg *= (1 + zeal * (1 - player.hp / player.maxHp));
   const lowHp = skillBonus('lowHpDmg') + totalStat('EXEC') / 100;
   if (lowHp && e && e.hp < e.maxHp * 0.35) dmg *= (1 + lowHp);
-  if (forceCrit || Math.random() < critChanceVs(e)) dmg *= critDamageMult();
+  _lastOffenseCrit = forceCrit || isCritical(Math.random(), critChanceVs(e));
+  if (_lastOffenseCrit) dmg *= critDamageMult();
   const armor = enemyArmorPct(e);
   if (armor > 0) { const pen = armorPenFrac(); dmg *= (1 - armor * (1 - pen)); }
   return dmg;
@@ -17102,21 +17114,24 @@ function resolveCast(node, rank) {
 
   // Damage pass. `repeat` re-strikes the same targets for multi-hit flurries.
   let total = 0;
+  let anyCrit = false;   // did any hit this cast crit? (drives feedback + on-crit procs)
   const hits = Math.max(1, c.repeat || 1);
   for (let h = 0; h < hits; h++) {
     let i = 0;
     for (const e of targets) {
       if (e.dead) { i++; continue; }
       const falloff = (c.shape === 'chain') ? Math.pow(0.7, i) : 1;
-      let dmg = 0;
-      if (c.wpn) dmg = skillPhysDamage(e, c.wpn * falloff * synM, rank, c.crit);
-      else if (c.spell) dmg = skillSpellDamage(e, c, c.spell * falloff * synM, rank);
+      let dmg = 0, crit = false;
+      // Crit is rolled inside applyOffenseMods for weapon actives AND spells; read
+      // it back so skills and spells show the crit and fire on-crit triggers.
+      if (c.wpn) { dmg = skillPhysDamage(e, c.wpn * falloff * synM, rank, c.crit); crit = _lastOffenseCrit; }
+      else if (c.spell) { dmg = skillSpellDamage(e, c, c.spell * falloff * synM, rank); crit = _lastOffenseCrit; }
       // Execute: a wounded, non-boss foe is finished outright; bosses just bleed extra.
       if (c.execute && dmg > 0) {
         if (!e.isBoss && e.hp <= e.maxHp * c.execute) dmg = Math.max(dmg, e.hp);
         else if (e.isBoss) dmg = Math.round(dmg * 1.4);
       }
-      if (dmg > 0) { total += dmg; dealDamage(e, dmg, !!c.crit); }
+      if (dmg > 0) { total += dmg; if (crit) anyCrit = true; dealDamage(e, dmg, crit); }
       // Elemental affinity: fire ignites, lightning charges (and amps), ice chills.
       // The static amp deals a small bonus on top, shown as a pale-blue tick.
       const elemBonus = applyElementalHit(e, node, dmg);
@@ -17128,6 +17143,12 @@ function resolveCast(node, rank) {
       i++;
     }
   }
+
+  // A critical from a skill or spell cues the crit sound and fires your on-crit
+  // passives (combo/zeal charges, primed crits, mana refunds…) — the same payoff an
+  // auto-attack crit gets, so crit builds work on every damage source. Fired once
+  // per cast to avoid a multi-target nova over-proccing.
+  if (anyCrit) { sfx('crit'); fireSkillTrigger('crit', { enemy: targets[0] }); }
 
   // ── HARMONIZE: detonate marks ── a detonating cast explodes any MARKED (vuln)
   // foe it hits, bursting nearby enemies and consuming the mark. Set the mark up
@@ -17152,6 +17173,9 @@ function resolveCast(node, rank) {
     const got = Math.min(Math.round(total * c.lifesteal * lsMult), cap);
     if (got > 0) { queueHeal(got); spawnFloatingText(player.x, player.y, `+${got}`, '#ff6688'); } // active-skill leech pays out over time
   }
+  // Gear Life/Mana Leech + lifesteal passives pay out from PHYSICAL damage — your
+  // weapon-based skills, just like your auto-attacks — but never from a spell cast.
+  if (castLeeches(c) && total > 0) lifestealHeal(total);
   if (c.heal) {
     let heal = 0;
     if (c.heal.flat) heal += (c.heal.flat + player.level * (c.heal.perLevel || 0)) * rs;
