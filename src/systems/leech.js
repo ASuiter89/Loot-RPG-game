@@ -9,6 +9,15 @@ export function castLeeches(cast) {
   return !!(cast && cast.wpn);
 }
 
+// Whether a cast's detonate/secondary burst is physical (leechable). It mirrors how
+// resolveCast types the burst (`cast.spell ? spell : physical`): a spell cast bursts
+// as spell damage, so a hybrid weapon+spell cast's burst is spell-typed and must NOT
+// feed leech — even though the cast's weapon strike does. Non-spell casts burst
+// physically.
+export function detonateIsPhysical(cast) {
+  return !(cast && cast.spell);
+}
+
 // The health/mana recovered by leeching `frac` of `damage`, floored at 1 (when any
 // leech is owed) and capped. Returns 0 when there's no damage, no leech, or no cap.
 export function leechAmount(damage, frac, cap) {

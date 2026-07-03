@@ -19,7 +19,7 @@ import { glideVitalFill } from '../systems/vitalFill.js';
 import { offscreenArrows } from '../systems/offscreenArrows.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
-import { castLeeches, leechAmount } from '../systems/leech.js';
+import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { CHANGELOG } from '../data/changelog.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 
@@ -17058,6 +17058,10 @@ function resolveCast(node, rank) {
 
   // Damage pass. `repeat` re-strikes the same targets for multi-hit flurries.
   let total = 0;
+  // Physical (weapon) damage only — leech pays out from this, never from spell
+  // damage. A cast's main pass is physical iff it swings a weapon (castLeeches).
+  let physTotal = 0;
+  const physCast = castLeeches(c);
   let anyCrit = false;   // did any hit this cast crit? (drives feedback + on-crit procs)
   const hits = Math.max(1, c.repeat || 1);
   for (let h = 0; h < hits; h++) {
@@ -17075,11 +17079,11 @@ function resolveCast(node, rank) {
         if (!e.isBoss && e.hp <= e.maxHp * c.execute) dmg = Math.max(dmg, e.hp);
         else if (e.isBoss) dmg = Math.round(dmg * 1.4);
       }
-      if (dmg > 0) { total += dmg; if (crit) anyCrit = true; dealDamage(e, dmg, crit); }
+      if (dmg > 0) { total += dmg; if (physCast) physTotal += dmg; if (crit) anyCrit = true; dealDamage(e, dmg, crit); }
       // Elemental affinity: fire ignites, lightning charges (and amps), ice chills.
       // The static amp deals a small bonus on top, shown as a pale-blue tick.
       const elemBonus = applyElementalHit(e, node, dmg);
-      if (elemBonus > 0 && !e.dead) { total += elemBonus; dealDamage(e, elemBonus, false); spawnFloatingText(e.x, e.y, `+${elemBonus}`, '#bfe3ff'); }
+      if (elemBonus > 0 && !e.dead) { total += elemBonus; if (physCast) physTotal += elemBonus; dealDamage(e, elemBonus, false); spawnFloatingText(e.x, e.y, `+${elemBonus}`, '#bfe3ff'); }
       if (c.status && !e.dead) {
         const chance = Math.min(1, c.status.chance + 0.03 * (rank - 1));
         if (Math.random() < chance) applyStatusEffect(e, c.status.effect, c.status.dur + Math.floor((rank - 1) / 3), 'player');
@@ -17099,10 +17103,11 @@ function resolveCast(node, rank) {
   // with one skill (status:{effect:'vuln'}), pop it with another for a chain combo.
   if (c.detonate && targets.length) {
     let boomed = false;
+    const physBurst = detonateIsPhysical(c);   // a spell cast's burst is spell damage — no leech
     for (const e of targets.slice()) {
       if (e.dead || !statusEffects.some(s => s.target === e && s.effect === 'vuln')) continue;
       const burst = c.spell ? skillSpellDamage(e, c, c.detonate, rank) : skillPhysDamage(e, c.detonate, rank);
-      for (const o of enemiesNear(c.detRadius || 1, e.x, e.y)) { if (!o.dead) { total += burst; dealDamage(o, burst, true); spawnFloatingText(o.x, o.y, `💥${burst}`, '#ff8a3a'); } }
+      for (const o of enemiesNear(c.detRadius || 1, e.x, e.y)) { if (!o.dead) { total += burst; if (physBurst) physTotal += burst; dealDamage(o, burst, true); spawnFloatingText(o.x, o.y, `💥${burst}`, '#ff8a3a'); } }
       statusEffects = statusEffects.filter(s => !(s.target === e && s.effect === 'vuln')); // consume the mark
       spawnParticles(e.x, e.y, '#ff8a3a', 14, 0.13); boomed = true;
     }
@@ -17118,8 +17123,9 @@ function resolveCast(node, rank) {
     if (got > 0) { queueHeal(got); spawnFloatingText(player.x, player.y, `+${got}`, '#ff6688'); } // active-skill leech pays out over time
   }
   // Gear Life/Mana Leech + lifesteal passives pay out from PHYSICAL damage — your
-  // weapon-based skills, just like your auto-attacks — but never from a spell cast.
-  if (castLeeches(c) && total > 0) lifestealHeal(total);
+  // weapon-based skills, just like your auto-attacks — but never from a spell cast
+  // (physTotal excludes spell damage, incl. a hybrid cast's spell-typed detonate).
+  if (physCast && physTotal > 0) lifestealHeal(physTotal);
   if (c.heal) {
     let heal = 0;
     if (c.heal.flat) heal += (c.heal.flat + player.level * (c.heal.perLevel || 0)) * rs;
