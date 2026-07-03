@@ -21,6 +21,9 @@ import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/p
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
+import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
+  rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
+  enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
 import { CHANGELOG } from '../data/changelog.js';
 import { terrainPacksInUse } from '../data/terrainPacks.js';
 import { renderProcMap } from '../render/procTerrain.js';
@@ -6073,7 +6076,7 @@ window.gameGuide = function gameGuide(topic) {
       `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, knocked back several floors, your bag dropped as a reclaimable grave on the death floor).`,
       `Town is a menu of services; take the Dungeon Gate to drop back in (choose tier + floor). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
-      `Merchant (buy gear / pay to restock); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots); Enchanter (add/reroll affixes with Glimmer+gold, Chaos at high rarity); Healer (full heal + cure for gold).`,
+      `Merchant (buy gear / pay to restock); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death); Gambler (wager gold for random gear — pick a slot to guarantee the type).`,
       `Services unlock as you progress and show in a fixed order (Dungeon Gate on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
@@ -11341,22 +11344,28 @@ function allGear() {
 }
 function findGear(id) { return allGear().find(g => g.item.id == id) || null; }
 
-// Cost helpers scale with item level and rarity. Enchanting is now paid in
-//  Glimmer plus some gold (and a Chaos Orb for the big epic+ reforge), so
-// each returns a cost object (see canAfford / spendCost / costLabel).
+// Cost helpers scale with item level and rarity — and now with the abundant
+// crafting materials, not Glimmer alone. The pure pricing lives in
+// systems/enchantCost.js (unit-tested); these thin wrappers read the item's
+// rarity RANK, level and current modifier count and hand them over. Each returns
+// a cost object the wallet helpers understand (see canAfford / spendCost /
+// costLabel): Scrap on every enchant and a Core on rare+ gear (Chaos Orbs stay
+// crafting-only), with Scrap/Core amounts tuned to match income — plus Augment's
+// price climbing with each modifier already on the piece, so its last slot costs
+// far more than its first.
 function enchRank(item) { return Object.keys(TIERS).indexOf(item.tier); }
-function enchTierFactor(item) { return 1 + enchRank(item) * 0.3; }
-function augmentCost(item)   { return { gold: Math.round((30 + (item.ilvl||1) * 5) * enchTierFactor(item)), glimmer: 2 + Math.floor(enchRank(item) / 2) }; }
-function rerollAllCost(item) {
-  const c = { gold: Math.round((45 + (item.ilvl||1) * 7) * enchTierFactor(item)), glimmer: 3 + Math.floor(enchRank(item) / 2) };
-  if (enchRank(item) >= 4) c.chaos = 1; // epic+ reforge demands a Chaos Orb
-  return c;
+function enchTierFactor(item) { return calcEnchTierFactor(enchRank(item)); }
+function enchItemArgs(item) { return { rank: enchRank(item), ilvl: item.ilvl || 1 }; }
+function augmentCost(item) {
+  const { statN, attrN } = itemAffixCounts(item);   // modifiers already on the piece
+  return calcAugmentCost({ ...enchItemArgs(item), affixes: statN + attrN });
 }
+function rerollAllCost(item)   { return calcRerollAllCost(enchItemArgs(item)); }
 // Rerolling a single property comes in two flavours: changing the property TYPE
 // (Might → Agility) is the bigger gamble, while rerolling just its VALUE
 // (+13 Might → +18 Might) is cheaper because it can only land within the band.
-function rerollTypeCost(item)  { return { gold: Math.round((18 + (item.ilvl||1) * 3) * enchTierFactor(item)), glimmer: 1 + Math.floor(enchRank(item) / 3) }; }
-function rerollValueCost(item) { return { gold: Math.round((10 + (item.ilvl||1) * 2) * enchTierFactor(item)), glimmer: 1 }; }
+function rerollTypeCost(item)  { return calcRerollTypeCost(enchItemArgs(item)); }
+function rerollValueCost(item) { return calcRerollValueCost(enchItemArgs(item)); }
 
 // Pretty "min–max" (or single number) for a stat/attr affix at this item's
 // level & rarity, so the UI can show the value band a reroll would land in.
@@ -11536,7 +11545,7 @@ function renderEnchanter() {
     ? `<div class="ench-group"><span data-spr=w_sword></span> Equipped</div>${renderEnchantDoll()}`
     : '';
   const lootHTML = lootRows ? `<div class="ench-group"><span data-spr=chest></span> Loot</div>${lootRows}` : '';
-  setTownContent(`<div class="town-blurb">The enchanter tinkers with your gear using <span data-spr=mat_glimmer></span> <b>Glimmer</b> (and a little gold): <b>Augment</b> adds a missing property, <b>Reroll all</b> gambles every bonus property at once, and each property can be rerolled on its own — its <b>value</b> (same modifier, new number) or its <b>modifier</b> (swapped for another). Rarity sets how many properties a piece can hold. Blank pieces from the <span data-spr=ic_mallet></span> Craftsman start here.</div>${equippedHTML}${lootHTML}`);
+  setTownContent(`<div class="town-blurb">The enchanter tinkers with your gear for gold and materials — <span data-spr=mat_glimmer></span> <b>Glimmer</b> plus <span data-spr=mat_scrap></span> <b>Scrap</b>, and a <span data-spr=mat_core></span> <b>Core</b> on rare&nbsp;gear and up. Pricier the rarer the piece. <b>Augment</b> adds a missing property (and costs more for each property already on the piece, so the last slot is dear), <b>Reroll all</b> gambles every bonus property at once, and each property can be rerolled on its own — its <b>value</b> (same modifier, new number) or its <b>modifier</b> (swapped for another). Rarity sets how many properties a piece can hold. Blank pieces from the <span data-spr=ic_mallet></span> Craftsman start here.</div>${equippedHTML}${lootHTML}`);
 }
 
 // Picking or backing out re-renders the whole panel, detaching the doll slot the
