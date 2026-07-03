@@ -14,7 +14,9 @@
 
 // ── Extracted modules (see docs/CHANGELOG.md) ──
 import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
-import { milestonePower, rankScale, skillManaCost } from '../systems/skillMath.js';
+import { milestonePower, rankScale, skillManaCost,
+  earnedSkillPoints, earnedAscPoints,
+  SKILL_POINTS_PER_LEVEL, SKILL_POINTS_AT_START, ASCEND_LEVEL, ASC_POINT_EVERY } from '../systems/skillMath.js';
 import { glideVitalFill } from '../systems/vitalFill.js';
 import { offscreenArrows } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
@@ -22,6 +24,7 @@ import { footprintSealsPath } from '../systems/decorPlacement.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
+import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
@@ -1523,15 +1526,62 @@ function lpcVariant(name, x, y) { const v = LPC_FILLS[name]; if (!v || v.length 
 function lpcTile(id, dx, dy, sz) { const c = id % LPC_NCOLS, r = (id / LPC_NCOLS) | 0; const x0 = Math.round(dx), y0 = Math.round(dy), x1 = Math.round(dx + sz), y1 = Math.round(dy + sz); ctx.drawImage(lpcSheet, c*LPC_A, r*LPC_A, LPC_A, LPC_A, x0, y0, x1 - x0, y1 - y0); }
 function lpcFill(name, ox, oy, tw, x0, y0, x1, y1) { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) lpcTile(lpcVariant(name, x, y), ox + x*tw, oy + y*tw, tw); }
 function lpcLayer(name, isT, ox, oy, tw, x0, y0, x1, y1) { const tbl = LPC_TABLE.table[name]; if (!tbl) return; for (let Y = y0; Y <= y1; Y++) for (let X = x0; X <= x1; X++) { let m = 0; if (isT(X-1,Y-1)) m|=8; if (isT(X,Y-1)) m|=4; if (isT(X-1,Y)) m|=2; if (isT(X,Y)) m|=1; if (!m) continue; const id = (m === 15) ? lpcVariant(name, X, Y) : tbl[m]; if (id == null) continue; lpcTile(id, ox + (X-0.5)*tw, oy + (Y-0.5)*tw, tw); } }
-function lpcCrackOverlay(px, py, tw, th) {
-  ctx.save(); ctx.lineCap = 'round';
-  ctx.strokeStyle = 'rgba(18,14,12,0.85)'; ctx.lineWidth = Math.max(1.5, tw*0.07);
-  ctx.beginPath();
-  ctx.moveTo(px+tw*0.5, py+th*0.06); ctx.lineTo(px+tw*0.42, py+th*0.4); ctx.lineTo(px+tw*0.58, py+th*0.62); ctx.lineTo(px+tw*0.47, py+th*0.94);
-  ctx.moveTo(px+tw*0.42, py+th*0.4); ctx.lineTo(px+tw*0.18, py+th*0.5);
-  ctx.moveTo(px+tw*0.58, py+th*0.62); ctx.lineTo(px+tw*0.82, py+th*0.56);
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = Math.max(1, tw*0.03); ctx.stroke();
+// Draw the fracture on a cracked wall (tile 10) over the autotiled wall mass.
+// `sev` is 0 (freshly cracked) → 1 (barely holding); the fissure darkens, widens,
+// grows extra branches and sheds more chips as it climbs, and a warm rim brightens
+// to telegraph how close the wall is to giving. `seed` keys a per-tile jitter so a
+// given wall always fractures the same way (no shimmer frame to frame).
+function lpcCrackOverlay(px, py, tw, th, sev, seed) {
+  sev = Math.max(0, Math.min(1, sev || 0));
+  const h = (seed >>> 0) || 1;
+  const j = (i) => (((h >>> (i * 3)) & 7) / 7 - 0.5) * 2;   // deterministic -1..1
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  // Spine of the main fracture — a jagged top→bottom fissure that wanders by seed.
+  const xs = [
+    px + tw * (0.50 + 0.10 * j(0)),
+    px + tw * (0.45 + 0.12 * j(1)),
+    px + tw * (0.56 + 0.12 * j(2)),
+    px + tw * (0.49 + 0.10 * j(3)),
+  ];
+  const ys = [py + th * 0.04, py + th * 0.33, py + th * 0.63, py + th * 0.96];
+  const branches = 1 + Math.round(sev * 2);
+  const spread = tw * (0.14 + 0.12 * sev);
+  const tracePath = () => {
+    ctx.beginPath();
+    ctx.moveTo(xs[0], ys[0]); ctx.lineTo(xs[1], ys[1]); ctx.lineTo(xs[2], ys[2]); ctx.lineTo(xs[3], ys[3]);
+    for (let b = 0; b < branches; b++) {           // offshoots — more as it weakens
+      const i = 1 + (b % 3), dir = j(b + 4) >= 0 ? 1 : -1;
+      ctx.moveTo(xs[i], ys[i]);
+      ctx.lineTo(xs[i] + spread * dir, ys[i] + th * 0.14 * j(b + 5));
+    }
+  };
+
+  // Chiselled depth: a pale lit edge offset down-right beneath the dark crack void.
+  ctx.strokeStyle = 'rgba(255,252,244,' + (0.14 + 0.14 * sev) + ')';
+  ctx.lineWidth = Math.max(1, tw * 0.03);
+  ctx.save(); ctx.translate(Math.max(1, tw * 0.035), Math.max(1, th * 0.035)); tracePath(); ctx.stroke(); ctx.restore();
+
+  // The crack itself — darker and wider as the wall weakens.
+  ctx.strokeStyle = 'rgba(12,9,7,' + (0.72 + 0.24 * sev) + ')';
+  ctx.lineWidth = Math.max(1.5, tw * (0.055 + 0.05 * sev));
+  tracePath(); ctx.stroke();
+
+  // Knocked-loose chips scattered along the break — more and bigger as it gives.
+  const chips = Math.round(1 + sev * 4);
+  ctx.fillStyle = 'rgba(9,7,6,' + (0.42 + 0.3 * sev) + ')';
+  for (let i = 0; i < chips; i++) {
+    const cxp = px + tw * (0.24 + 0.52 * (((h >>> (i * 4 + 1)) & 7) / 7));
+    const cyp = py + th * (0.12 + 0.74 * (((h >>> (i * 4 + 2)) & 7) / 7));
+    const s = Math.max(1, tw * (0.05 + 0.055 * sev));
+    ctx.fillRect(cxp, cyp, s, s);
+  }
+
+  // Breakable telegraph: a warm rim that brightens toward collapse, so how close a
+  // wall is to breaking reads at a glance (colour-only cue, no text).
+  ctx.strokeStyle = 'rgba(255,196,96,' + (0.18 + 0.5 * sev) + ')';
+  ctx.lineWidth = Math.max(1, tw * 0.03);
+  ctx.strokeRect(px + 1, py + 1, tw - 2, th - 2);
   ctx.restore();
 }
 function lpcDetail(C, ox, oy, tw, x0, y0, x1, y1) {
@@ -3087,7 +3137,7 @@ function playerPower() {
   // (attrPowerWeight), exactly like a gear attribute affix, so a point is worth the
   // same Power spent or geared and a damage-stat build reads stronger than an off-stat one.
   for (const k of ATTR_KEYS) p += (player.attributes?.[k] || 0) * attrPowerWeight(k);
-  p += spentSkillPoints() * 5; // skill-tree investment shows up in Power too
+  p += spentAllSkillPoints() * 5; // skill-tree investment (both pools) shows up in Power too
   return Math.round(p);
 }
 
@@ -4141,21 +4191,17 @@ function classDmgTakenMult() {
 // raise the block cap) or pair power with a real cost (negative fx). See skillBonus
 // (folds cfx), condMet (evaluates conds), skillFlag, and pointsInTree (pts gates).
 // Ascending (see ASCENSIONS) unlocks a focused specialization "PATH" tree.
-const SKILL_POINTS_PER_LEVEL = 1;
-// Every hero begins with one skill point to spend, so a fresh character can
-// immediately learn its first active (Cleave / Backstab / Firebolt / Mend)
-// instead of being handed an always-on baseline skill.
-const SKILL_POINTS_AT_START = 1;
-// Total skill points a hero of the given level has earned over its lifetime
-// (the starting point plus one per level gained). Used to grant the right pool
-// on a new game and to reconcile older saves on load.
-function earnedSkillPoints(level) {
-  return SKILL_POINTS_AT_START + Math.max(0, (level || 1) - 1) * SKILL_POINTS_PER_LEVEL;
-}
-// band index → minimum hero level for base trees, and for ascension PATH trees.
+// The skill-point economy — SKILL_POINTS_PER_LEVEL / SKILL_POINTS_AT_START /
+// ASCEND_LEVEL / ASC_POINT_EVERY and the earnedSkillPoints / earnedAscPoints
+// helpers — lives in systems/skillMath.js (imported above) so it stays pure and
+// unit-tested. Two independent pools: NORMAL skill points (one per level) fund
+// the passive + active trees; ASCENDANCY points (one every ASC_POINT_EVERY
+// levels from ASCEND_LEVEL) fund only the ascendancy path tree.
+// band index → minimum hero level for base trees. (Ascension PATH nodes are no
+// longer level-gated — they're gated purely by the earlier skills in their tree
+// — so ASC_BANDS survives only as a cosmetic default and is never checked.)
 const SKILL_BANDS = [1, 4, 8, 13, 19, 26];
 const ASC_BANDS   = [20, 25, 31];
-const ASCEND_LEVEL = 20;   // level at which the Trainer offers ascension
 
 // Build a tree from rows of node literals: assigns band/col/type/max/lvl and a
 // default prerequisite (the node directly above in the previous row) unless the
@@ -4849,7 +4895,10 @@ function castKind(node) {
 function skillReqMet(node) {
   if (!node) return false;
   if (node.asc && player.ascension !== node.asc) return false;
-  if (player.level < (node.lvl || 1)) return false;
+  // Ascendancy (path) nodes carry no level gate — reaching the ascension itself
+  // (only possible at ASCEND_LEVEL+) plus the earlier path skills is the whole
+  // gate. Base-tree nodes keep their per-band hero-level requirement.
+  if (!node.asc && player.level < (node.lvl || 1)) return false;
   // `req` = ALL of these prerequisites (AND); `reqAny` = at least ONE (OR), which
   // is how two branches merge into a shared node; `pts` = spend N points in a tree.
   if (node.req) for (const rid of node.req) if (skillRank(rid) < 1) return false;
@@ -4858,12 +4907,28 @@ function skillReqMet(node) {
   return true;
 }
 function skillMaxed(node) { return skillRank(node.id) >= (node.max || 1); }
+// The points pool a node draws from: ascendancy (path) nodes spend ascPoints,
+// everything else spends the normal skillPoints. Keeps the two pools strictly
+// separate so a normal point can never buy a path skill and vice-versa.
+function skillPointsFor(node) {
+  return skillTreeKindOf(node) === 'path' ? (player.ascPoints || 0) : (player.skillPoints || 0);
+}
 function canBuySkill(node) {
-  return !!node && (player.skillPoints || 0) > 0 && !skillMaxed(node) && skillReqMet(node);
+  return !!node && skillPointsFor(node) > 0 && !skillMaxed(node) && skillReqMet(node);
 }
+// Normal skill points spent — passive + active trees only (the ascendancy path
+// tree draws from its own pool, counted by spentAscPoints).
 function spentSkillPoints() {
-  return classSkillTree().reduce((s, n) => s + skillRank(n.id), 0);
+  const t = classTrees();
+  return t.passive.concat(t.active).reduce((s, n) => s + skillRank(n.id), 0);
 }
+// Ascendancy points spent in the current ascension's path tree.
+function spentAscPoints() {
+  return ascTree().reduce((s, n) => s + skillRank(n.id), 0);
+}
+// Total ranks bought across every tree (both pools) — used for the full-respec
+// cost/refund and the Power score, which value all skill investment alike.
+function spentAllSkillPoints() { return spentSkillPoints() + spentAscPoints(); }
 // Castable actives: every unlocked active node (base tree or ascension path),
 // in tree order — each keyed by its own id for cooldowns. The first entry is the
 // hero's primary skill (cast with the button / R key).
@@ -5092,7 +5157,7 @@ function buySkill(id) {
   if (!player.skills) player.skills = {};
   const firstRank = !(player.skills[id] > 0);
   player.skills[id] = (player.skills[id] || 0) + 1;
-  player.skillPoints--;
+  if (skillTreeKindOf(node) === 'path') player.ascPoints--; else player.skillPoints--;
   // A newly-learned active drops onto the first open hotkey slot so it reaches the
   // bar without a manual assign (the player can re-slot it any time).
   if (firstRank && node.type === 'active') autoSlotSkill(id);
@@ -5158,8 +5223,10 @@ function refundSkill(id) {
   const cost = skillRefundCost();
   if (!canAfford(cost)) { log(`<span data-spr=ic_money></span> Not enough gold to refund — need <span data-spr=ic_money></span>${cost.gold}.`); sfx('denied'); return; }
   spendCost(cost);
+  const isPath = skillTreeKindOf(node) === 'path';
   if (rank - 1 <= 0) delete player.skills[id]; else player.skills[id] = rank - 1;
-  player.skillPoints = (player.skillPoints || 0) + 1;
+  if (isPath) player.ascPoints = (player.ascPoints || 0) + 1;
+  else player.skillPoints = (player.skillPoints || 0) + 1;
   // A now-unlearned active must drop off the hotkey / auto-cast slots.
   normSkillSlots(); normAutoSkill();
   recomputeMaxStats();
@@ -5167,7 +5234,7 @@ function refundSkill(id) {
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   sfx('shrine');
   const newRank = skillRank(id);
-  log(`↩️ Refunded ${node.name}${(node.max || 1) > 1 ? ` (now rank ${newRank}/${node.max})` : ''} — 1 skill point returned for <span data-spr=ic_money></span>${cost.gold}.`, 'important');
+  log(`↩️ Refunded ${node.name}${(node.max || 1) > 1 ? ` (now rank ${newRank}/${node.max})` : ''} — 1 ${isPath ? 'ascendancy' : 'skill'} point returned for <span data-spr=ic_money></span>${cost.gold}.`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); saveGame();
 }
 
@@ -5445,7 +5512,7 @@ let player = { x: 5, y: 5,
   // ordered row of hotkey slots (id|null per slot) the player fills on the bar.
   // `autoSkill` is the lone active dropped into the dedicated auto-cast slot — it
   // fires itself the moment it's ready (off cooldown + affordable), or null.
-  skillPoints: 0, skills: {}, skillCds: {}, skillSlots: [], autoSkill: null, targetMode: 'closest',
+  skillPoints: 0, ascPoints: 0, skills: {}, skillCds: {}, skillSlots: [], autoSkill: null, targetMode: 'closest',
   // Hero attributes — every one starts at ATTR_BASE and is raised by spending
   // points earned on level up. attrSchema marks the attribute-driven-stats model
   // (v2) so older saves can be migrated on load.
@@ -5690,6 +5757,11 @@ let skillView = 'active';  // which SKILLS sub-tree is shown: passive | active |
 let skillBranch = 0;        // which specialization branch (column 0..4) is shown within passive/active
 let mapData = [];
 let mapEpoch = 0;   // bumped whenever the map layout changes, to invalidate the wall-shadow cache
+// Per-tile shove tally for cracked walls (tile 10): "y,x" -> hits taken so far.
+// A wall absent from the map is untouched (stage 0); it's deleted when it breaks.
+// Rebuilt empty with every floor (see each `mapData = []`), never saved — the map
+// regenerates, so crack progress is intentionally per-visit.
+let wallCracks = {};
 let dungeonLevel = 1;
 
 // ── ANIMATION CLOCK ──
@@ -6027,7 +6099,7 @@ window.gameState = function gameState(radius) {
         const locked = !!(s.req && !s.req.ok());
         return { kind: s.kind, name: s.name, locked, need: locked ? s.req.need : null };
       }) : null,
-      pointsToSpend: { attribute: player.attrPoints || 0, skill: player.skillPoints || 0 },
+      pointsToSpend: { attribute: player.attrPoints || 0, skill: player.skillPoints || 0, ascendancy: player.ascPoints || 0 },
       gold: player.gold,
       materials: player.materials ? Object.assign({}, player.materials) : null,   // scrap/glimmer/core/chaos (commonest→rarest) for crafting
       materialsUnlocked: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, materialUnlocked(k)])),  // which mats the CURRENT tier can drop from kills (salvage ignores this)
@@ -6140,8 +6212,8 @@ window.gameGuide = function gameGuide(topic) {
       `Cooldowns are real seconds (spam-floored at 0.5s). Recharge is MULTIPLICATIVE haste, like attack speed: cd = base / (1 + CDR/100), and for SPELL actives times a further (1 + CastSpeed/100). There is NO cap — 60% CDR + 35% Cast Speed divides a spell's cooldown by 1.6×1.35 ≈ 2.16, and stacking more only ever approaches (never reaches) instant. +MCR likewise divides MP cost (base / (1 + MCR/100)); +Attack Speed quickens auto-attacks the same way. +CDR speeds every active, +Cast Speed spells only, and a rank-7 skill gets an extra ×1.2.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. ~50% CDR + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
       `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — a big power surge, then a shorter cooldown, then wider reach — so deepening a key skill outpaces its rising mana cost.`,
-      `Learn and rank skills on the SKILLS tab (spend skill points). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
-      `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns 1 skill point for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
+      `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
+      `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
       `RANGED casts need LINE OF SIGHT: a bolt, blast, beam (line), nova or chain only strikes foes you can see — a SOLID obstruction (wall, door, boss barrier, furniture) between you and a foe blocks it, but open ground and water don't; the cast fails with "No foe in sight" if nothing visible is in range. Melee/cleave (adjacent-only) and the rare floor-wide "strike random foes" ultimate ignore walls.`,
     ],
@@ -6183,7 +6255,7 @@ window.gameGuide = function gameGuide(topic) {
       `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" (tier being any rarity or "set") then call saveGame().`,
     ],
     hazards: [
-      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (smash by walking into it), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
+      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (shove into it from any side; a few hits to break), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
       `Lava and spikes hurt but never kill outright (HP clamps to 1), and the generator never forces you across one — route around them.`,
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
@@ -6191,7 +6263,7 @@ window.gameGuide = function gameGuide(topic) {
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom is a full heal, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one warps you there — use it deliberately, not while fleeing.`,
-      `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash by walking into them. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground; carryingKey true once held) and seal a rich vault chest.`,
+      `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground; carryingKey true once held) and seal a rich vault chest.`,
     ],
     enemies: [
       `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), and status (e.g. ["stun"], ["slow"]).`,
@@ -6208,8 +6280,8 @@ window.gameGuide = function gameGuide(topic) {
     progression: [
       `Four classes: Warrior (Might/Vitality, tanky melee), Rogue (Agility/Might, crit & dodge), Mage (Spirit/Luck, spells & big MP), Templar (Vitality/Spirit, durable hybrid). Class gates which weapons you can equip.`,
       `Five attributes (gameState().player.attributes): Might (+Attack, +Stamina), Vitality (+max HP, +Defense, +HP regen), Agility (+evasion, +accuracy, +move/attack speed), Spirit (+max MP, +MP regen, +spell power), Luck (+crit). Pump your class's two damage attributes for the most damage.`,
-      `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend). Spend attributes on the HERO tab (Shift-click = 5 at once), skills on the SKILLS tab. You can't out-level the dungeon — gear and skills matter more with depth.`,
-      `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives.`,
+      `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend). Spend attributes on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
+      `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives. From level 20 you also earn a SEPARATE ascendancy point every 5 levels (20, 25, 30…; gameState().menu.pointsToSpend.ascendancy), spent only on the ascendancy path tree. Normal skill points can't buy path skills and ascendancy points can't buy passive/active skills. Path skills carry NO level requirement — they're gated only by the earlier skills in the path tree.`,
       `Respec attributes/skills or change class at the Trainer for gold that scales with your level (points refund). Switching to your class's other ascension afterwards costs a lot of gold (also scales with level and depth; path points refund) — the first ascension stays free, but re-ascending is a deliberate, costly choice, as is retraining class. After a respec, check that worn gear still meets its attribute requirement (under-req pieces turn red and are ignored).`,
     ],
     character: [
@@ -6592,6 +6664,11 @@ function sfx(name) {
     case 'sell':    tone(494, 0.07, t, 'square', 0.35); tone(740, 0.08, t + 0.05, 'square', 0.3); break;
     case 'death':   tone(330, 0.6, t, 'sawtooth', 0.5, 55); noise(0.5, t, 0.25); break;
     case 'trap':    noise(0.3, t, 0.4); tone(140, 0.3, t, 'sawtooth', 0.4, 60); break;
+    case 'wall-hit':   // a dull stony knock — a chip taken off a cracked wall
+      tone(150, 0.07, t, 'square', 0.34, 88); noise(0.08, t, 0.3, 2600, 'lowpass'); noise(0.03, t, 0.16, 4200, 'highpass'); break;
+    case 'wall-break': // the wall gives — a low crumble with tumbling rubble
+      tone(78, 0.24, t, 'sawtooth', 0.5, 36); tone(128, 0.18, t + 0.02, 'square', 0.34, 52);
+      noise(0.3, t, 0.46, 2200, 'lowpass'); noise(0.16, t + 0.05, 0.3); break;
     case 'click':   tone(660, 0.04, t, 'square', 0.22); break;
     case 'denied':  tone(180, 0.12, t, 'square', 0.3); tone(120, 0.16, t + 0.1, 'square', 0.28); break;
     case 'teleport': tone(880, 0.18, t, 'sine', 0.35, 220); tone(440, 0.2, t + 0.06, 'sine', 0.28, 1320); noise(0.12, t, 0.18); break;
@@ -8689,7 +8766,7 @@ function generateMap() {
   bossHazards = [];
 
   // Start as solid rock; rooms and passages are carved out of it.
-  mapData = [];
+  mapData = []; wallCracks = {};
   for (let y = 0; y < MAP_H; y++) { mapData[y] = []; for (let x = 0; x < MAP_W; x++) mapData[y][x] = 1; }
 
   // ── ROOMS ── a handful of rectangles, occasionally one big grand hall.
@@ -9068,7 +9145,7 @@ function buildTutorialMap() {
 
   // Solid rock border, sandy beach up top, sea along the bottom.
   const SHORE = 12; // first row (from the top) that is water
-  mapData = [];
+  mapData = []; wallCracks = {};
   for (let y = 0; y < MAP_H; y++) {
     mapData[y] = [];
     for (let x = 0; x < MAP_W; x++) {
@@ -9919,7 +9996,7 @@ function buildTown() {
   statusEffects = statusEffects.filter(s => s.target === 'player');
 
   // Solid border wall, open plaza within.
-  mapData = [];
+  mapData = []; wallCracks = {};
   for (let y = 0; y < MAP_H; y++) {
     mapData[y] = [];
     for (let x = 0; x < MAP_W; x++) {
@@ -11336,7 +11413,7 @@ function respecCost() {
   return 120 + spent * 25 + (player.level || 1) * 20;
 }
 function skillRespecCost() {
-  return 120 + spentSkillPoints() * 30 + (player.level || 1) * 20;
+  return 120 + spentAllSkillPoints() * 30 + (player.level || 1) * 20;
 }
 function openTrainer() { openTownModal('Trainer', 'town_trainer'); renderTrainer(); }
 function renderTrainer() {
@@ -11358,8 +11435,8 @@ function renderTrainer() {
     <div class="shop-row has-actions ${player.gold >= skillRespecCost() ? '' : 'cant-afford'}">
       <span class="loot-icon"><span data-spr=mat_glimmer></span></span>
       <div class="shop-row-info"><div class="shop-row-name">Forget Skills</div>
-        <div class="shop-row-sub">Refund all ${spentSkillPoints()} spent skill point${spentSkillPoints() === 1 ? '' : 's'} to spend anew</div></div>
-      <button class="act-btn ${player.gold >= skillRespecCost() ? '' : 'short'}" ${(player.gold >= skillRespecCost() && spentSkillPoints() > 0) ? '' : 'disabled'} onclick="respecSkills()"><span data-spr=ic_money></span>${skillRespecCost()}</button>
+        <div class="shop-row-sub">Refund all ${spentAllSkillPoints()} spent point${spentAllSkillPoints() === 1 ? '' : 's'} (skill &amp; ascendancy) to spend anew</div></div>
+      <button class="act-btn ${player.gold >= skillRespecCost() ? '' : 'short'}" ${(player.gold >= skillRespecCost() && spentAllSkillPoints() > 0) ? '' : 'disabled'} onclick="respecSkills()"><span data-spr=ic_money></span>${skillRespecCost()}</button>
     </div>
     ${trainerAscensionBlock()}
     <div class="town-blurb" style="margin-top:10px">Retrain into a different class for <span data-spr=ic_money></span>${classChangeCost()}. Your attributes are kept; if your new class can't wield your weapon, it goes back in your bag.</div>
@@ -11424,13 +11501,14 @@ function ascend(key) {
   const cost = player.ascension ? ascendCost() : 0;
   if (player.gold < cost) { log('Not enough gold to switch your ascension.'); return; }
   player.gold -= cost;
-  // Refund any points spent in the previous path tree before switching.
+  // Refund any ascendancy points spent in the previous path tree before switching
+  // (they return to the ascendancy pool, not the normal skill pool).
   let refunded = 0;
   if (player.ascension && ASCENSIONS[player.ascension]) {
     for (const n of ASCENSIONS[player.ascension].tree) { refunded += skillRank(n.id); delete player.skills[n.id]; }
   }
   player.ascension = key;
-  player.skillPoints = (player.skillPoints || 0) + refunded;
+  player.ascPoints = (player.ascPoints || 0) + refunded;
   recomputeMaxStats();
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
@@ -11459,10 +11537,13 @@ function respecAttrs() {
 }
 function respecSkills() {
   const spent = spentSkillPoints();
+  const spentAsc = spentAscPoints();
   const cost = skillRespecCost();
-  if (spent <= 0 || player.gold < cost) return;
+  if ((spent + spentAsc) <= 0 || player.gold < cost) return;
   player.gold -= cost;
+  // Each pool gets its own kind of point back; the wipe clears every tree at once.
   player.skillPoints = (player.skillPoints || 0) + spent;
+  player.ascPoints = (player.ascPoints || 0) + spentAsc;
   player.skills = {};
   player.skillCds = {};
   combatBuffs = {};
@@ -11470,7 +11551,8 @@ function respecSkills() {
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   sfx('shrine');
-  log(`<span data-spr=town_trainer></span> You unlearn your skills — ${spent} skill point${spent === 1 ? '' : 's'} returned to spend.`, 'important');
+  const ascStr = spentAsc ? ` and ${spentAsc} ascendancy point${spentAsc === 1 ? '' : 's'}` : '';
+  log(`<span data-spr=town_trainer></span> You unlearn your skills — ${spent} skill point${spent === 1 ? '' : 's'}${ascStr} returned to spend.`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); renderTrainer(); saveGame();
 }
 
@@ -13222,7 +13304,7 @@ function isWallTile(x, y) {
 function drawWall(px, py, tw, th, x, y, seed, C, cracked) {
   // Indoor + outdoor both use the LPC autotiler now: drawLPCTerrain fills the
   // wall mass, so here we only add the crack overlay for damaged tiles.
-  if (lpcReady && !inTown) { if (cracked) lpcCrackOverlay(px, py, tw, th); return; }
+  if (lpcReady && !inTown) { if (cracked) lpcCrackOverlay(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed); return; }
   if (C.wallStyle === 'forest') { drawForestWall(px, py, tw, th, x, y, seed, C, cracked); return; }
   if (C.wallStyle === 'pine') { drawPineWall(px, py, tw, th, x, y, seed, C, cracked); return; }
   if (C.wallStyle === 'mushroom') { drawMushroomWall(px, py, tw, th, x, y, seed, C, cracked); return; }
@@ -13260,10 +13342,11 @@ function drawWall(px, py, tw, th, x, y, seed, C, cracked) {
     ctx.fillRect(px + (s % W), py + ((s >> 3) % H), Math.max(1, tw * 0.06), Math.max(1, th * 0.06));
   }
 
-  // Fissure on some tiles (always on a cracked wall).
+  // Fissure on some tiles (always on a cracked wall, deepening as it's smashed).
+  const sev = cracked ? crackSeverity(wallCracks[y + ',' + x] || 0) : 0;
   if (cracked || h % 4 === 0) {
     ctx.strokeStyle = cracked ? '#15151c' : C.crack;
-    ctx.lineWidth = Math.max(1, tw * 0.05);
+    ctx.lineWidth = Math.max(1, tw * (0.05 + 0.04 * sev));
     const sx = px + tw * (0.3 + (h % 3) * 0.16);
     const dir = (h % 2) ? 1 : -1;
     ctx.beginPath();
@@ -13278,8 +13361,8 @@ function drawWall(px, py, tw, th, x, y, seed, C, cracked) {
   if (!isWallTile(x - 1, y)) { ctx.fillStyle = 'rgba(255,250,235,0.06)'; ctx.fillRect(px, py, Math.max(1, tw * 0.1), th); }
   if (!isWallTile(x + 1, y)) { ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(px + tw - Math.max(1, tw * 0.16), py, Math.max(1, tw * 0.16), th); }
 
-  // Subtle hint that a cracked wall is breakable.
-  if (cracked) { ctx.strokeStyle = 'rgba(255,220,120,0.22)'; ctx.lineWidth = 1; ctx.strokeRect(px + 1, py + 1, tw - 2, th - 2); }
+  // Subtle hint that a cracked wall is breakable — brighter as it nears collapse.
+  if (cracked) { ctx.strokeStyle = 'rgba(255,220,120,' + (0.22 + 0.45 * sev) + ')'; ctx.lineWidth = 1; ctx.strokeRect(px + 1, py + 1, tw - 2, th - 2); }
 }
 
 // Leafy-tree wall for the forest theme — overlapping canopies read as a thicket.
@@ -16121,13 +16204,13 @@ function move(dx, dy) {
 
 // ── REAL-TIME PLAYER MOVEMENT & COLLISION ──
 // Is the grid cell (cx,cy) solid for the hero? Walls, deep water, boss walls,
-// town NPCs and live foes all block. A cracked wall is smashed and a locked door
-// is unlocked (consuming the key) ON CONTACT — both then become passable, so
-// pushing into one breaks through it just the way stepping into it used to.
+// town NPCs and live foes all block. A cracked wall stays solid until you shove it
+// down over several hits (trySmashWalls); a locked door is unlocked (consuming the
+// key) ON CONTACT via breakAhead — both then become passable open floor.
 function playerSolidCell(cx, cy, ignoreFoes) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return true;
   const t = mapData[cy][cx];
-  if (t === 10) return true;            // cracked wall — solid until smashed (see breakAhead)
+  if (t === 10) return true;            // cracked wall — solid until smashed (see trySmashWalls)
   if (t === 11) return true;            // locked door — solid until unlocked (see breakAhead)
   if (!isFloorPassable(t)) return true;
   if (bossWallAt(cx, cy)) return true;
@@ -16142,14 +16225,72 @@ function playerSolidCell(cx, cy, ignoreFoes) {
   if (furnitureMap[cy + ',' + cx] !== undefined) return true; // indoor furniture is solid
   return false;
 }
-// Smash a cracked wall / unlock a vault door the hero is deliberately pushing INTO
-// (an axis-blocked cell directly in the press direction). Kept out of the pure
-// collision test so a glancing corner never spends the one-time vault key.
+// Unlock a vault door the hero is deliberately pushing INTO (an axis-blocked cell
+// directly in the press direction). Kept out of the pure collision test so a
+// glancing corner never spends the one-time vault key. Cracked walls are NOT
+// smashed here anymore — they take several paced shoves from any angle, handled by
+// trySmashWalls so approach direction and momentum don't matter.
 function breakAhead(cx, cy) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
   const t = mapData[cy][cx];
-  if (t === 10) { mapData[cy][cx] = 0; mapEpoch++; log('🧱 You smash through a cracked wall!', 'loot'); }
-  else if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
+  if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
+}
+
+// Land one shove on the cracked wall at (cx,cy): chip it further, and collapse it
+// into open floor once it has taken MAX_CRACK_HITS. Every blow throws rock dust and
+// chips and bumps the camera; the final blow crumbles louder and logs the
+// breakthrough. player._smashCd (ticked down in updatePlayer) paces the blows.
+function smashCrackedWall(cx, cy) {
+  player._smashCd = SMASH_COOLDOWN;
+  const key = cy + ',' + cx;
+  const { hits, broken } = applyCrackHit(wallCracks[key] || 0);
+  addShake(broken ? 3.4 : 1.7);
+  spawnParticles(cx, cy, '#9a8b74', broken ? 11 : 5, broken ? 0.11 : 0.07); // pale dust
+  spawnParticles(cx, cy, '#544a3d', broken ? 8 : 4, broken ? 0.10 : 0.06);  // dark chips
+  if (broken) {
+    mapData[cy][cx] = 0;
+    mapEpoch++;                 // wall removed → invalidate the wall-shadow cache
+    delete wallCracks[key];
+    sfx('wall-break');
+    log('🧱 You smash through the cracked wall!', 'loot');
+  } else {
+    wallCracks[key] = hits;
+    sfx('wall-hit');
+  }
+}
+
+// Smash whichever cracked wall the hero is shoving against — from ANY heading, not
+// just dead-on. We scan the four cardinally-adjacent cells (a wall you can face and
+// press squarely into), keep the cracked ones the hero is pushing TOWARD (heading
+// aligned with the direction to that cell) and is pressed up against, and land a
+// blow on the best-aligned one. "Pressed against" means the body's near face is
+// within REACH of the wall's face: REACH spans one movement sub-step (capped at 0.3
+// tiles in movePlayerBy) so a fast press that halts a sub-step shy of flush — a DASH
+// especially, which can't re-approach once collision zeroes its velocity — still
+// registers, while a wall a whole tile away (gap ~1) never does. Pacing is owned by
+// player._smashCd (ticked down in updatePlayer): holding into a wall lands one blow
+// every SMASH_COOLDOWN.
+function trySmashWalls(pushX, pushY) {
+  if ((player._smashCd || 0) > 0) return;
+  const mag = Math.hypot(pushX, pushY);
+  if (mag < 0.05) return;
+  const dx = pushX / mag, dy = pushY / mag;
+  const cx0 = Math.floor(player.fx), cy0 = Math.floor(player.fy);
+  const REACH = 0.32;                          // a blocked press halts within a sub-step of flush
+  let bx = -1, by = -1, bestDot = 0.34;        // require a real shove toward the wall
+  for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const cx = cx0 + ox, cy = cy0 + oy;
+    if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) continue;
+    if (mapData[cy][cx] !== 10) continue;
+    const toX = (cx + 0.5) - player.fx, toY = (cy + 0.5) - player.fy;
+    const d = Math.hypot(toX, toY) || 1;
+    const dot = (toX / d) * dx + (toY / d) * dy;   // is the heading aimed at this cell?
+    if (dot <= bestDot) continue;
+    const gapInto = (ox ? Math.abs(toX) : Math.abs(toY)) - 0.5 - PLAYER_R; // face-to-face gap
+    if (gapInto > REACH) continue;
+    bestDot = dot; bx = cx; by = cy;
+  }
+  if (bx >= 0) smashCrackedWall(bx, by);
 }
 // Would the hero's body (a box of half-size PLAYER_R) overlap a solid cell when
 // its centre is at (px,py)? Tests the four corners — resolving X and Y separately
@@ -16392,9 +16533,10 @@ function squeezeThroughMob(ix, iy, dt) {
 
 // Shift the hero by (ddx,ddy) tiles this frame, resolving X then Y so the body
 // slides along walls. Sub-steps so a fast dash can't tunnel through a thin wall,
-// breaks through a cracked wall / vault door the hero is pressing into, kills the
-// velocity component on a hard stop, and fires onEnterCell ONCE if the grid cell
-// changed (so a fast diagonal can't descend two floors in a frame).
+// unlocks a vault door the hero is pressing into (cracked walls are smashed
+// separately — see trySmashWalls), kills the velocity component on a hard stop,
+// and fires onEnterCell ONCE if the grid cell changed (so a fast diagonal can't
+// descend two floors in a frame).
 function movePlayerBy(ddx, ddy) {
   const preX = player.x, preY = player.y;
   const steps = Math.max(1, Math.ceil(Math.max(Math.abs(ddx), Math.abs(ddy)) / 0.3));
@@ -16406,7 +16548,7 @@ function movePlayerBy(ddx, ddy) {
     if (!playerBoxBlocked(player.fx, player.fy + sy)) player.fy += sy;
     else { if (sy !== 0) breakAhead(player.x, player.y + Math.sign(sy));
            if (!playerBoxBlocked(player.fx, player.fy + sy)) player.fy += sy; else player.vy = 0; }
-    player.x = Math.floor(player.fx); player.y = Math.floor(player.fy); // keep cell live for breakAhead
+    player.x = Math.floor(player.fx); player.y = Math.floor(player.fy); // keep cell live for breakAhead/smash
   }
   player.fx = Math.max(0.5, Math.min(MAP_W - 0.5, player.fx));
   player.fy = Math.max(0.5, Math.min(MAP_H - 0.5, player.fy));
@@ -16478,6 +16620,7 @@ function doDash() {
 function updatePlayer(dt) {
   if (player.dashCd > 0) player.dashCd -= dt;
   if (player._squeezeT > 0) player._squeezeT -= dt;   // wind down an active mob-squeeze (see below)
+  if (player._smashCd > 0) player._smashCd -= dt;     // pace successive cracked-wall shoves
   unstickPlayer(dt);   // free the hero if a foe stepped into our body's space
   if (isPlayerStunned()) { player.vx = 0; player.vy = 0; player.dashT = 0; regenStamina(dt); return; }
   // Channeling a town portal roots the hero — but a deliberate step (WASD / arrows /
@@ -16493,8 +16636,10 @@ function updatePlayer(dt) {
     updateBars(); renderSkillBar();
     // fall through: this same input starts the hero walking this frame
   }
-  // An in-progress dash overrides normal control for its brief window.
-  if (player.dashT > 0) { player.dashT -= dt; movePlayerBy(player.vx * dt, player.vy * dt); return; }
+  // An in-progress dash overrides normal control for its brief window. A dash
+  // slammed into a cracked wall shoves it too (use the pre-collision velocity, as
+  // movePlayerBy zeroes the component that hit the wall).
+  if (player.dashT > 0) { player.dashT -= dt; const dvx = player.vx, dvy = player.vy; movePlayerBy(dvx * dt, dvy * dt); trySmashWalls(dvx, dvy); return; }
 
   // Input vector — keyboard / d-pad, or the analog joystick when it's active.
   let ix = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
@@ -16580,6 +16725,9 @@ function updatePlayer(dt) {
     if (Math.abs(player.vy) < 0.02) player.vy = 0;
   }
   if (player.vx !== 0 || player.vy !== 0) movePlayerBy(player.vx * dt, player.vy * dt);
+  // Shove any cracked wall we're pressing into — using the INPUT heading (ix,iy),
+  // not velocity, since collision has already zeroed the velocity into the wall.
+  if (moving) trySmashWalls(ix, iy);
   // A mob would otherwise pin the hero in place — normal collision can't slide out
   // when foes plug both the way ahead and the lanes it'd slide into. If the hero is
   // pinned by bodies and still trying to move, let it shove THROUGH toward open ground.
@@ -19442,6 +19590,10 @@ function checkLevelUp() {
     player.level++;
     player.attrPoints = (player.attrPoints || 0) + ATTR_POINTS_PER_LEVEL;
     player.skillPoints = (player.skillPoints || 0) + SKILL_POINTS_PER_LEVEL;
+    // One ascendancy point at level 20, then one more every ASC_POINT_EVERY levels
+    // (25, 30, …). Banked into its own pool even before the hero has ascended.
+    const ascGained = (player.level >= ASCEND_LEVEL && (player.level - ASCEND_LEVEL) % ASC_POINT_EVERY === 0) ? 1 : 0;
+    if (ascGained) player.ascPoints = (player.ascPoints || 0) + ascGained;
     recomputeMaxStats();        // level grants more base HP/MP
     // A level-up mends a chunk of HP/MP — a real relief mid-fight, but no longer
     // a free full reset, so health and mana stay finite resources you manage.
@@ -19450,7 +19602,7 @@ function checkLevelUp() {
     sfx('levelup');
     showLevelUpBanner(player.level);
     log(`<span data-spr=ui_level></span> LEVEL UP! You are now level ${player.level}!`, 'important');
-    log(`<span data-spr=mat_glimmer></span> +${ATTR_POINTS_PER_LEVEL} attribute points (HERO tab) · +${SKILL_POINTS_PER_LEVEL} skill point (SKILLS tab).`, 'important');
+    log(`<span data-spr=mat_glimmer></span> +${ATTR_POINTS_PER_LEVEL} attribute points (HERO tab) · +${SKILL_POINTS_PER_LEVEL} skill point (SKILLS tab)${ascGained ? ` · +${ascGained} ascendancy point (PATH tree)` : ''}.`, 'important');
     updateBars();
     renderPanel();
     saveGame();
@@ -19735,9 +19887,11 @@ function updateBars() {
   const invTab = document.getElementById('tab-inv');
   if (invTab) invTab.innerHTML = `LOOT<span class="tab-num ${inventory.length>=BAG_MAX?'full':''}">(${inventory.length}/${BAG_MAX})</span>`;
 
-  // Nudge the HERO / SKILLS tabs when there are unspent points to spend.
+  // Nudge the HERO / SKILLS tabs when there are unspent points to spend. The
+  // SKILLS badge combines both pools (normal skill + ascendancy), since both are
+  // spent on that tab.
   const pts = player.attrPoints || 0;
-  const sPts = player.skillPoints || 0;
+  const sPts = (player.skillPoints || 0) + (player.ascPoints || 0);
   const heroTab = document.getElementById('tab-hero');
   if (heroTab) {
     heroTab.innerHTML = pts > 0 ? `HERO<span class="tab-count">${pts}</span>` : 'HERO';
@@ -20314,7 +20468,17 @@ function treeDims(tree) {
 function renderSkills(el) {
   const cls = playerClass();
   if (!cls) { el.innerHTML = '<div class="hero-sub" style="padding:12px">Pick a class to unlock its skill tree.</div>'; selectedSkillId = null; return; }
-  const pts = player.skillPoints || 0;
+  // The PATH tab spends the separate ascendancy pool; PASSIVE / ACTIVE spend the
+  // normal skill-point pool. The header retitles itself to match the open tab.
+  const onPath = skillView === 'path';
+  const pts = onPath ? (player.ascPoints || 0) : (player.skillPoints || 0);
+  const learned = onPath ? spentAscPoints() : spentSkillPoints();
+  const ptWord = onPath ? 'ascendancy point' : 'skill point';
+  const noPtHint = onPath
+    ? ((player.level || 1) < ASCEND_LEVEL
+        ? `Reach level ${ASCEND_LEVEL} to earn ascendancy points.`
+        : `Level up to earn more ascendancy points (1 every ${ASC_POINT_EVERY} levels).`)
+    : 'Level up to earn more skill points.';
   const asc = ascData();
   // Sub-tab selector across the three trees.
   const tabBtn = (v, label) => `<button class="sk-vtab ${skillView === v ? 'on' : ''}" onclick="setSkillView('${v}')">${label}</button>`;
@@ -20335,11 +20499,11 @@ function renderSkills(el) {
 
   const header = `
     <div class="hero-power">
-      <div class="hp-label">SKILL POINTS</div>
+      <div class="hp-label">${onPath ? 'ASCENDANCY POINTS' : 'SKILL POINTS'}</div>
       <div class="hp-value">${pts}</div>
     </div>
-    <div class="hero-sub">${dlIcon(cls.icon, 16)} ${cls.name}${asc ? ` · <span style="color:${asc.color}">${dlIcon(asc.icon,16)||''} ${asc.name}</span>` : ''} · ${spentSkillPoints()} learned</div>
-    <div class="hero-points">${pts > 0 ? `${pts} point${pts > 1 ? 's' : ''} to spend!` : 'Level up to earn more skill points.'}</div>
+    <div class="hero-sub">${dlIcon(cls.icon, 16)} ${cls.name}${asc ? ` · <span style="color:${asc.color}">${dlIcon(asc.icon,16)||''} ${asc.name}</span>` : ''} · ${learned} learned</div>
+    <div class="hero-points">${pts > 0 ? `${pts} ${ptWord}${pts > 1 ? 's' : ''} to spend!` : noPtHint}</div>
     ${tabs}${branchTabs}`;
 
   // The PATH tab before ascending: a prompt and the two specialization previews.
@@ -20402,14 +20566,18 @@ function renderSkills(el) {
     if (branchNames) for (let c = 0; c < cols; c++) branchHeads += `<div class="sk-branch" style="left:${((c + 0.5) / cols * 100).toFixed(2)}%">${branchNames[c] || ''}</div>`;
   }
 
-  // Per-tier level labels down the left edge so the gating reads clearly.
+  // Per-tier level labels down the left edge so the gating reads clearly. The
+  // ascendancy path tree has no level gates (it's gated by earlier path skills),
+  // so it shows none.
   let bandLabels = '';
-  const seenBand = {};
-  for (const n of tree) {
-    if (seenBand[n.band]) continue; seenBand[n.band] = true;
-    const y = web ? (nodePos(n, cols, bands)[1] * 100).toFixed(1) : ((n.band + 0.6) / (bands + 0.1) * 100).toFixed(1);
-    const met = (player.level || 1) >= n.lvl;
-    bandLabels += `<div class="sk-band ${met ? 'met' : ''}" style="top:${y}%">Lv${n.lvl}</div>`;
+  if (!onPath) {
+    const seenBand = {};
+    for (const n of tree) {
+      if (seenBand[n.band]) continue; seenBand[n.band] = true;
+      const y = web ? (nodePos(n, cols, bands)[1] * 100).toFixed(1) : ((n.band + 0.6) / (bands + 0.1) * 100).toFixed(1);
+      const met = (player.level || 1) >= n.lvl;
+      bandLabels += `<div class="sk-band ${met ? 'met' : ''}" style="top:${y}%">Lv${n.lvl}</div>`;
+    }
   }
 
   // Node tiles. State precedence: maxed > available > owned > ready > locked.
@@ -20454,7 +20622,8 @@ function renderSkills(el) {
     const pips = sn.type === 'active' ? milestonePips(rank) : '';
     const rankTxt = ` <span style="color:var(--gold)">${rank}/${sn.max}${pips ? ' ' + pips : ''}</span>`;
     const reqRows = [];
-    if ((sn.lvl || 1) > 1) {
+    // Base-tree nodes gate on hero level; ascendancy (path) nodes never do.
+    if (!sn.asc && (sn.lvl || 1) > 1) {
       const ok = (player.level || 1) >= sn.lvl;
       reqRows.push(`<span class="${ok ? 'rqok' : 'rqno'}">${ok ? '✓' : '<span data-spr=feat_door></span>'} Hero level ${sn.lvl}${ok ? '' : ` (you're ${player.level})`}</span>`);
     }
@@ -20489,8 +20658,9 @@ function renderSkills(el) {
     }
     const reqMet = skillReqMet(sn);
     let reqHtml = reqRows.length ? `<div class="rq">${reqRows.join('<br>')}</div>` : '';
-    if (reqMet && !skillMaxed(sn) && (player.skillPoints || 0) <= 0) {
-      reqHtml += `<div class="rq-hint">☆ Ready — earn a skill point by leveling up.</div>`;
+    if (reqMet && !skillMaxed(sn) && skillPointsFor(sn) <= 0) {
+      const isPathNode = skillTreeKindOf(sn) === 'path';
+      reqHtml += `<div class="rq-hint">☆ Ready — earn ${isPathNode ? 'an ascendancy' : 'a skill'} point by leveling up.</div>`;
     }
     const buyBtn = skillMaxed(sn)
       ? `<button class="pop-buy maxed" disabled>✓ Maxed (10/10)</button>`
@@ -20535,7 +20705,7 @@ function renderSkills(el) {
   // trees, where the learned-active source nodes are co-visible to drag from.
   const loadout = (skillView === 'active' || skillView === 'path') ? skillLoadoutTrayHtml() : '';
   el.innerHTML = header + loadout + `
-    <div class="sk-tree${web ? ' web' : ''}" id="sk-tree" ondragover="skillSlotDragOver(event)" ondrop="skillTreeDropRemove(event)" onclick="if(event.target.id==='sk-tree'){selectedSkillId=null;renderPanel();}">
+    <div class="sk-tree${web ? ' web' : ''}${onPath ? ' path' : ''}" id="sk-tree" ondragover="skillSlotDragOver(event)" ondrop="skillTreeDropRemove(event)" onclick="if(event.target.id==='sk-tree'){selectedSkillId=null;renderPanel();}">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>
       ${branchHeads}
       ${bandLabels}
@@ -21116,9 +21286,11 @@ function chooseClass(key) {
   player.class = key;
   player.skillCd = 0; player.ascension = null;
   player.skills = {}; player.skillCds = {}; player.skillSlots = []; player.autoSkill = null; player.autoCast = {}; combatBuffs = {};
-  // A fresh hero owns its full lifetime pool of skill points (the starting point
-  // plus one per level) with nothing yet spent.
+  // A fresh hero owns its full lifetime pools of points (the starting skill point
+  // plus one per level, and any ascendancy points earned from level 20) with
+  // nothing yet spent.
   player.skillPoints = earnedSkillPoints(player.level);
+  player.ascPoints = earnedAscPoints(player.level);
   recomputeMaxStats();
   player.hp = player.maxHp;
   player.mp = player.maxMp;
@@ -21149,6 +21321,9 @@ function changeClass(key) {
   player.skillCd = 0; player.ascension = null;
   player.skills = {}; player.skillCds = {}; player.skillSlots = []; player.autoSkill = null; player.autoCast = {}; combatBuffs = {};
   player.skillPoints = (player.skillPoints || 0) + refunded;
+  // Retraining drops the ascension (its path tree is class-specific too), so the
+  // ascendancy pool resets to whatever this level has earned, nothing spent.
+  player.ascPoints = earnedAscPoints(player.level);
   recomputeMaxStats();
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
@@ -22341,6 +22516,9 @@ function loadGame() {
     if (player.ascension && (!ASCENSIONS[player.ascension] || ASCENSIONS[player.ascension].base !== player.class)) player.ascension = null;
     // Migrate saves that predate the skill tree.
     if (player.skillPoints == null) player.skillPoints = 0;
+    // The ascendancy pool is new; older saves default it to 0 and the
+    // reconciliation below tops it up to the level-earned amount.
+    if (player.ascPoints == null) player.ascPoints = 0;
     if (!player.skills || typeof player.skills !== 'object') player.skills = {};
     // Skill cooldowns are now tracked in seconds (older saves used world-turns);
     // start fresh on load so no stale turn-count is misread as a seconds value.
@@ -22349,16 +22527,25 @@ function loadGame() {
     // is dropped — `skillCd` is no longer read (kept on the object only so older
     // code paths don't choke on undefined).
     // Drop any skill ranks that don't belong to the current class's tree (e.g.
-    // after a class change on an older save), then top up to the hero's full
-    // lifetime pool (the starting point plus one per level) minus anything
-    // already banked or spent on valid nodes. This also retroactively grants the
-    // starting skill point to saves made before the baseline skill was removed.
+    // after a class change on an older save), then top up each pool to the hero's
+    // full lifetime earnings minus anything already banked or spent on valid nodes.
+    // This also retroactively grants the starting skill point to saves made before
+    // the baseline skill was removed.
     {
       const valid = new Set(classSkillTree().map(n => n.id));
       for (const k of Object.keys(player.skills)) if (!valid.has(k)) delete player.skills[k];
+      // NORMAL pool (passive + active). spentSkillPoints() no longer counts the
+      // ascendancy path tree, so a pre-split save that spent normal points on path
+      // skills (under the old shared pool) gets those points refunded here — the
+      // path ranks it kept are re-counted against the ascendancy pool just below.
       const earned = earnedSkillPoints(player.level);
       const have = (player.skillPoints || 0) + spentSkillPoints();
       if (have < earned) player.skillPoints += (earned - have);
+      // ASCENDANCY pool (path tree): one point every ASC_POINT_EVERY levels from
+      // ASCEND_LEVEL. Path ranks already learned count as spent ascendancy points.
+      const earnedAsc = earnedAscPoints(player.level);
+      const haveAsc = (player.ascPoints || 0) + spentAscPoints();
+      if (haveAsc < earnedAsc) player.ascPoints += (earnedAsc - haveAsc);
     }
     if (!Array.isArray(player.skillSlots)) player.skillSlots = [];
     if (!player.targetMode) player.targetMode = 'closest';   // auto-attack focus (added later)
@@ -25093,6 +25280,9 @@ const __DL_FN_BRIDGE = {
   skillMaxed,
   canBuySkill,
   spentSkillPoints,
+  spentAscPoints,
+  spentAllSkillPoints,
+  earnedAscPoints,
   activeSkillList,
   normAutoSkill,
   normSkillSlots,

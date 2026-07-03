@@ -8,6 +8,20 @@ export const CHANGELOG = [
     "Keystone passives keep their octagon frame, now in the same metal look.",
     "Renamed eight skills that shared a name with another so every skill reads uniquely: the active Rampage is now Onslaught, the crit-fury Bloodletter is Tempered Fury, the active Blood Frenzy is War Cry, the Warrior Executioner passive is Ruthless, the second Brace is Fortify, the Warrior Avatar is Titan Form, the Warrior Apocalypse is Bloodstorm, and the passive Absolute Zero is Frozen Ward.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Ascendancy skills get their own points", by: "Claude", notes: [
+    "Ascendancy (path) skills now spend a SEPARATE pool of ascendancy points — normal skill points buy only passive & active skills, ascendancy points buy only path skills.",
+    "Earn one ascendancy point every 5 levels starting at level 20 (20, 25, 30…) — the level you can first ascend. Points bank up even before you ascend.",
+    "Path skills no longer have a level requirement — they're gated only by the earlier skills in the path tree.",
+    "Path-tree nodes now show their names under their icons, matching the passive & active trees.",
+    "The SKILLS-tab header retitles to ASCENDANCY POINTS on the path tab; the Trainer's full respec refunds both point kinds.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Cracked walls take a few hits — smash from any side", by: "Claude", notes: [
+    "Shove into a cracked wall from ANY direction now — no more needing to hit it dead-on. Walk or dash into one at any angle and it registers.",
+    "Cracked walls no longer shatter in one blow: each shove chips one further and it collapses after three hits, so it half-blocks the way until you keep at it.",
+    "The wall grows visibly more fractured with each hit — the crack darkens, spreads and sheds chips, and a warm rim brightens as it nears breaking.",
+    "Redrawn crack art: a jagged, chiselled fissure with branches and rubble instead of the old thin scratch.",
+    "Each shove throws rock dust, knocks the camera and cracks; the wall giving way crumbles with a heavier thud.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Redesigned skill-bar & loadout tiles", by: "Claude", notes: [
     "Every combat-bar tile — skills, potions, the town gate and the auto-cast slot — now shows its icon filling the whole box, edge to edge, with the corners rounded off.",
     "The hotkey moved out of the box corner onto a full-width pill sitting just above each tile; the auto-cast tile's pill reads \"AUTO\".",

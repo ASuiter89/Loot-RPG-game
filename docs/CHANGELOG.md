@@ -8,6 +8,17 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — ascendancy skill points (own pool)
+
+- 📦 The skill-point **economy** moved from `src/legacy/game.js` into
+  `src/systems/skillMath.js`: `earnedSkillPoints` plus the new `earnedAscPoints`
+  and the tuning constants (`SKILL_POINTS_PER_LEVEL`, `SKILL_POINTS_AT_START`,
+  `ASCEND_LEVEL`, `ASC_POINT_EVERY`). Pure functions, imported back into the
+  monolith. Ascendancy (path) skills now spend a separate `player.ascPoints`
+  pool (one every 5 levels from level 20); path skills lost their level gate.
+- 🧪 `test/systems/skillMath.test.js` gains coverage for `earnedSkillPoints` and
+  the `earnedAscPoints` cadence.
+
 ## Fix — dual-host deploy (Netlify + GitHub Pages)
 
 - 🏗️ `index.html` now references `./src/main.js` and `./src/styles.css`
