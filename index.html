@@ -18331,8 +18331,13 @@ function draw() {
     // scripted foe carrying its own atlas key) keep their bespoke art.
     if (!e.isBoss && MONSTER_SPRITE_IDX[e.type] !== undefined) {
       if (monsterReady) {
-        if (_tint) _drew = drawMonsterTintedC(e.type, _scx, _scy, _esz, _tint);
-        if (!_drew) _drew = drawMonsterC(e.type, _scx, _scy, _esz);
+        // These bespoke sprites are full characters (like the hero/NPC walk sheets),
+        // so draw them at a matching scale, grounded a touch above centre — a plain
+        // 0.9x tile read too small next to the ~1.7x hero.
+        const _msz = Math.round(cw * (e.isElite ? 1.5 : 1.4));
+        const _mcy = _scy - th * 0.18;
+        if (_tint) _drew = drawMonsterTintedC(e.type, _scx, _mcy, _msz, _tint);
+        if (!_drew) _drew = drawMonsterC(e.type, _scx, _mcy, _msz);
       }
     } else {
       const _espr = enemySprite(e);
