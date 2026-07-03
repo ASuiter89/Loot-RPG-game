@@ -18,6 +18,7 @@ import { milestonePower, rankScale, skillManaCost } from '../systems/skillMath.j
 import { glideVitalFill } from '../systems/vitalFill.js';
 import { offscreenArrows } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
+import { footprintSealsPath } from '../systems/decorPlacement.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
@@ -1500,6 +1501,7 @@ function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
     // and floor field tiles, a uniform tile per room (walls on wall cells, floor on
     // the rest), instead of borrowing the outdoor ground terrains.
     drawInteriorTerrain(C, ox, oy, tw, cx0, cy0, cx1, cy1);
+    drawWallShadow(ox, oy, tw, cx0, cy0, cx1, cy1, B, isFloor);   // built walls read as raised too
   } else {
     lpcFill(B.wall, ox, oy, tw, cx0, cy0, cx1, cy1);
     lpcLayer(B.floor, isFloor, ox, oy, tw, cx0, cy0, cx1, cy1);
@@ -1509,9 +1511,76 @@ function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
       if (B.floor2) lpcLayer(B.floor2, (x, y) => isFloor(x, y) && fv(x, y) >= 1, ox, oy, tw, cx0, cy0, cx1, cy1);
       if (B.floor3) lpcLayer(B.floor3, (x, y) => isFloor(x, y) && fv(x, y) === 2, ox, oy, tw, cx0, cy0, cx1, cy1);
     }
+    drawWallShadow(ox, oy, tw, cx0, cy0, cx1, cy1, B, isFloor);   // walls read as raised
   }
   if (B.water) lpcLayer(B.water, isWater, ox, oy, tw, cx0, cy0, cx1, cy1);
   lpcLayer('Lava', isLava, ox, oy, tw, cx0, cy0, cx1, cy1);
+}
+// ── RAISED-WALL CAST SHADOW ────────────────────────────────────────────────
+// Outdoor walls are flat rock GROUND tiles, so nothing reads as raised. Rather
+// than swap in wall art, we let each wall mass drop a soft shadow onto the floor
+// in front of it — the single cue that sells height. Two things make it look
+// right: (1) the shadow follows the wall's REAL organic outline, taken from the
+// floor autotiler's own alpha (its curved transition edges), not the tile grid;
+// (2) it's punched out over every wall tile so it only ever darkens floor, with
+// the light fixed at top-left. Built once per floor into a full-map layer (native
+// 32px) and cached, so each frame is just a scaled blit of the visible region.
+const WALL_SHADOW = { alpha: 0.85, coreOff: 0.16, coreBlur: 0.10, ambOff: 0.36, ambBlur: 0.30 };
+// Per-biome depth override (light grounds want a gentler shadow than dark ones).
+const WALL_SHADOW_DEPTH = {
+  'the Frozen Halls': 0.55, 'the Winter Frostwood': 0.55, 'the Wildflower Meadow': 0.7,
+  'the Cherry Blossom Grove': 0.7, 'the Lavender Fields': 0.7, 'the Crystal Cavern': 0.7,
+};
+let _wsCache = null, _wsCacheKey = '';
+function wallShadowLayer(B, isFloor) {
+  if (!B || !B.floor || !lpcReady) return null;
+  const key = mapEpoch + '|' + MAP_W + 'x' + MAP_H;   // one biome + layout per floor
+  if (_wsCache && _wsCacheKey === key) return _wsCache;
+  const TS = 32, MW = MAP_W * TS, MH = MAP_H * TS;
+  if (MW <= 0 || MH <= 0 || MW * MH > 64e6) { _wsCache = null; _wsCacheKey = key; return null; }
+  // 1-2. Build the wall mask (black where wall). Built interiors use square wall
+  // TILES, so the mask is the wall cells directly; outdoor walls have organic
+  // autotiled edges, so we take the inverse of the floor layer's own alpha.
+  const wc = document.createElement('canvas'); wc.width = MW; wc.height = MH;
+  const wg = wc.getContext('2d'); wg.imageSmoothingEnabled = false;
+  wg.fillStyle = '#000';
+  if (currentTheme().indoor) {
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+      if (mapData[y][x] === 1 || mapData[y][x] === 10) wg.fillRect(x * TS, y * TS, TS, TS);
+    }
+  } else {
+    const fc = document.createElement('canvas'); fc.width = MW; fc.height = MH;
+    const fg = fc.getContext('2d'); fg.imageSmoothingEnabled = false;
+    const realCtx = ctx; ctx = fg;
+    try { lpcLayer(B.floor, isFloor, 0, 0, TS, 0, 0, MAP_W, MAP_H); } finally { ctx = realCtx; }
+    wg.fillRect(0, 0, MW, MH);
+    wg.globalCompositeOperation = 'destination-out'; wg.drawImage(fc, 0, 0);
+    wg.globalCompositeOperation = 'source-over';
+  }
+  // 3. Shadow = blurred+offset wall mask (deep core + soft falloff), then punch
+  //    the walls back out so it lands on floor only.
+  const sc = document.createElement('canvas'); sc.width = MW; sc.height = MH;
+  const sg = sc.getContext('2d');
+  sg.globalAlpha = 1;   sg.filter = `blur(${TS * WALL_SHADOW.coreBlur}px)`; sg.drawImage(wc, TS * WALL_SHADOW.coreOff, TS * WALL_SHADOW.coreOff);
+  sg.globalAlpha = 0.7; sg.filter = `blur(${TS * WALL_SHADOW.ambBlur}px)`;  sg.drawImage(wc, TS * WALL_SHADOW.ambOff, TS * WALL_SHADOW.ambOff);
+  sg.globalAlpha = 1;   sg.filter = 'none';
+  sg.globalCompositeOperation = 'destination-out'; sg.drawImage(wc, 0, 0);
+  sg.globalCompositeOperation = 'source-over';
+  _wsCache = sc; _wsCacheKey = key;
+  return sc;
+}
+function drawWallShadow(ox, oy, tw, x0, y0, x1, y1, B, isFloor) {
+  const layer = wallShadowLayer(B, isFloor);
+  if (!layer) return;
+  const TS = 32;
+  const sx = x0 * TS, sy = y0 * TS, sw = (x1 - x0) * TS, sh = (y1 - y0) * TS;
+  if (sw <= 0 || sh <= 0) return;
+  const dx = ox + x0 * tw, dy = oy + y0 * tw, dw = (x1 - x0) * tw, dh = (y1 - y0) * tw;
+  const a = ctx.globalAlpha, sm = ctx.imageSmoothingEnabled;
+  ctx.globalAlpha = WALL_SHADOW_DEPTH[currentTheme().name] || WALL_SHADOW.alpha;
+  ctx.imageSmoothingEnabled = true;   // soften the scale of the pre-blurred shadow
+  ctx.drawImage(layer, sx, sy, sw, sh, dx, dy, dw, dh);
+  ctx.globalAlpha = a; ctx.imageSmoothingEnabled = sm;
 }
 // Interior material sheet — seamless wood/stone/marble/brick/adobe field tiles for
 // built rooms (real laid walls + flooring instead of the outdoor ground terrains).
@@ -1823,6 +1892,20 @@ function placeOutdoorDecor(theme) {
       // leave gaps you can walk through. Trees only need their trunk tile.
       const foot = decorFootprint(id, x, y);
       if (!foot.every(([fx, fy]) => free(fx, fy))) continue;
+      // …and the piece must not wall off a path. The anchor's >=3-open-neighbours
+      // test only vets one tile: a wide table can plug a (2-wide) corridor with its
+      // far half, and — since it counts a furnished floor tile as "open" — a lone
+      // brazier/chest dropped beside earlier props can close the last gap of a
+      // pocket. So reject any footprint whose solid extent would disconnect the
+      // floor, treating already-placed decor as solid (that catches whichever piece
+      // completes a seal, whatever its size or placement order).
+      // A vault door (11) reads as a wall to isFloorPassable, but it's openable, so
+      // its locked interior is still "reachable" — count it passable here so decor
+      // can't wall off the sole approach to a vault and strand the key/loot inside.
+      const walk = (wx, wy) => wx >= 0 && wy >= 0 && wx < MAP_W && wy < MAP_H
+        && (isFloorPassable(mapData[wy][wx]) || mapData[wy][wx] === 11)
+        && furnitureMap[wy + ',' + wx] === undefined;
+      if (footprintSealsPath(foot, MAP_W, MAP_H, walk)) continue;
       decorMap[y + ',' + x] = id;
       for (const [fx, fy] of foot) furnitureMap[fy + ',' + fx] = 1;
       placed++;
@@ -5545,6 +5628,7 @@ let selectedSkillId = null; // skill-tree node whose detail popover is open (nul
 let skillView = 'active';  // which SKILLS sub-tree is shown: passive | active | path
 let skillBranch = 0;        // which specialization branch (column 0..4) is shown within passive/active
 let mapData = [];
+let mapEpoch = 0;   // bumped whenever the map layout changes, to invalidate the wall-shadow cache
 let dungeonLevel = 1;
 
 // ── ANIMATION CLOCK ──
@@ -8516,6 +8600,7 @@ function placeFurniture(theme) {
 
 function generateMap() {
   inTown = false;
+  mapEpoch++;         // new layout → rebuild the wall-shadow cache on next draw
   stopTownAmbient();  // leave the town's chatter behind at the dungeon door
   updateObjectiveChip();   // re-surface the bounty chip once back on a dungeon floor
   entryGuard = true; // safe on arrival until you first act
@@ -16002,7 +16087,7 @@ function playerSolidCell(cx, cy, ignoreFoes) {
 function breakAhead(cx, cy) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
   const t = mapData[cy][cx];
-  if (t === 10) { mapData[cy][cx] = 0; log('🧱 You smash through a cracked wall!', 'loot'); }
+  if (t === 10) { mapData[cy][cx] = 0; mapEpoch++; log('🧱 You smash through a cracked wall!', 'loot'); }
   else if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
 }
 // Would the hero's body (a box of half-size PLAYER_R) overlap a solid cell when
@@ -24264,7 +24349,7 @@ try {
         let w = 0, l = 0, trees = 0, decor = 0;
         for (const k in decorMap) { decor++; if (DECOR_INDEX[decorMap[k]].ht >= 2.4) trees++; }
         for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) { const t = mapData[y][x]; if (t === 6) w++; else if (t === 7) l++; }
-        return { level: lvl, biome: (currentTheme().name || ''), water: w, lava: l, trees, decor };
+        return { level: lvl, biome: (currentTheme().name || ''), indoor: !!currentTheme().indoor, water: w, lava: l, trees, decor };
       } catch (e) { return { err: String(e) }; }
     };
     // Position the hero just behind the TALLEST tree (prefer directly north) to
@@ -24335,6 +24420,21 @@ try {
         const C = currentTheme();
         return { theme: C.name, floorStyle: C.floorStyle, wallStyle: C.wallStyle, decor, solid };
       } catch (e) { return { err: String(e) }; }
+    };
+    // __AUDIT__ (temporary): flood the REAL map from the player and report floor
+    // tiles a decor piece walled off (full-map, no ASCII windowing artefacts).
+    window.__connCheck = function () {
+      const pass = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && (isFloorPassable(mapData[y][x]) || mapData[y][x] === 11) && furnitureMap[y + ',' + x] === undefined;
+      const seen = new Set([player.y + ',' + player.x]); const st = [[player.x, player.y]];
+      while (st.length) { const [x, y] = st.pop(); for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) { const nx = x+dx, ny = y+dy, k = ny+','+nx; if (seen.has(k) || !pass(nx, ny)) continue; seen.add(k); st.push([nx, ny]); } }
+      let bad = 0; const detail = [];
+      for (let y = 1; y < MAP_H-1; y++) for (let x = 1; x < MAP_W-1; x++) {
+        if (mapData[y][x] === 0 && furnitureMap[y+','+x] === undefined && !seen.has(y+','+x)) {
+          bad++;
+          if (detail.length < 4) { const nb = [[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy]) => furnitureMap[(y+dy)+','+(x+dx)] !== undefined ? 'D' : mapData[y+dy][x+dx]).join(','); detail.push({ x, y, nb }); }
+        }
+      }
+      return { bad, detail };
     };
   }
 } catch (e) {}
