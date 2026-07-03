@@ -3,6 +3,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Kraken sprite refreshed", by: "Claude", notes: ["The Kraken now uses a new bespoke pixel-art sprite in the packed monster sheet."] },
   { date: "2026-07-03", size: "small", v: "Legendary/unique banner for every source", by: "Claude", notes: [
     "The centre-screen legendary/unique loot banner now fires no matter how you get the piece, not just off kills and chests.",
     "Gambler jackpots, bounty and escort rewards, and transmuter fuses now pop the full banner — sting, flash and shake — when they land a legendary or unique.",
