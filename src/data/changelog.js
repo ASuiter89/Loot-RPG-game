@@ -3,6 +3,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Wider death & skill cards", by: "Claude", notes: [
+    "The You-Died screen and the skill detail popover are wider now, so the death recap and each skill's mechanics wrap far less.",
+    "Clicking a skill node no longer leaves its small hover label stuck on top of the detail card.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Title Screen button in Settings", by: "Claude", notes: ["New TITLE SCREEN button at the top of the Settings ▸ Play tab returns you to the title/landing screen without abandoning the run — progress is saved, and CONTINUE drops you straight back in."] },
   { date: "2026-07-03", size: "small", v: "Roomier attribute + buttons", by: "Claude", notes: ["More space between each attribute's value and its + button on the HERO tab; the description column shrinks to make room, so nothing else shifts."] },
   { date: "2026-07-03", size: "medium", v: "Furnished interiors & fuller scenery", by: "Claude", notes: ["Built interiors — lodges, halls, crypts, keeps, kitchens — now have real materials: wood-beam, stone-block, brick, panel and adobe walls over wood-plank, stone, marble, tile and cobble floors, matched to the room, in place of the old flat rooms.", "Interiors are laid out as a floor plan now — separate rectangular rooms and halls joined by corridors, rather than one merged cave.", "They're dressed with hand-made props too — tables, chairs, sofas, beds, cabinets, barrels, chests, braziers, potted plants, rugs and clutter. Solid furniture is set off the corridors so it never blocks your path; low clutter and rugs stay walkable.", "The whole prop set is far larger now — indoors and out — so floors repeat much less.", "All art is drawn from the CC-BY-SA \"[LPC]\" collections (full credits in the About notes)."] },
