@@ -30,6 +30,7 @@ import { terrainPacksInUse } from '../data/terrainPacks.js';
 import { renderProcMap } from '../render/procTerrain.js';
 import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
 import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
+import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKILL_ICON_ATLAS } from '../assets/skillIconsAtlas.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 
 // ══════════════════════════════════════════
@@ -558,6 +559,58 @@ const SPRITE_IDX = {"wall_TL":0,"wall_H":1,"wall_TR":2,"wall_V":3,"wall_iso":4,"
 const spriteSheet = new Image();
 let spriteReady = false;
 spriteSheet.onload = () => { spriteReady = true; try { document.documentElement.style.setProperty('--dl-atlas', 'url(' + spriteSheet.src + ')'); } catch (e) {} try { applyGameCursor(); } catch (e) {} try { startSprPainter(); } catch (e) {} try { draw(); } catch (e) {} try { renderSkillBar(); } catch (e) {} };
+// ── GENERATED SKILL-ICON SHEET ──────────────────────────────────────────────
+// Bespoke skill art (generated pixel art → background removed → composited into a
+// class-coloured raised metal-badge frame) packed into one sheet keyed by
+// SKILL_ICON_INDEX. Keystone passives use an octagon frame under a '<icon>@ks'
+// key. Skill icons render ONLY in the DOM (SKILLS tree, hotbar, tooltips) via the
+// dlIcon* helpers, so this sheet feeds those; a key that isn't in the index (or
+// before the sheet loads) falls back to the DawnLike atlas tile below.
+const skillSheet = new Image();
+let skillReady = false;
+// A ~3MB base64 data: URI is too long to live in a CSS custom property (browsers
+// cap custom-property value length, so `--skill-atlas` would silently compute to
+// empty). Publish the sheet as a short blob: URL and point both the <img> and the
+// CSS var at that instead.
+const SKILL_ATLAS_URL = (() => {
+  try {
+    const b64 = SKILL_ICON_ATLAS.split(',')[1];
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+  } catch (e) { return SKILL_ICON_ATLAS; }
+})();
+skillSheet.onload = () => {
+  skillReady = true;
+  try { document.documentElement.style.setProperty('--skill-atlas', 'url(' + SKILL_ATLAS_URL + ')'); } catch (e) {}
+  try { renderPanel(); } catch (e) {}
+  try { renderSkillBar(); } catch (e) {}
+};
+skillSheet.src = SKILL_ATLAS_URL;
+// Skill-badge span at an EXACT pixel size (mirrors dlIconAt's positioning maths
+// against the skill sheet). Returns '' when the badge doesn't exist yet.
+function skillIconAt(name, px) {
+  const i = SKILL_ICON_INDEX[name];
+  if (i === undefined || !skillReady) return '';
+  px = px * (uiScale || 1);
+  const cols = SKILL_ICON_COLS, ts = SKILL_ICON_TS;
+  const aw = skillSheet.naturalWidth || (cols * ts), ah = skillSheet.naturalHeight || (SKILL_ICON_ROWS * ts);
+  const col = i % cols, row = (i / cols) | 0, sc = px / ts;
+  return `<span class="dl-ic sk-badge" style="width:${px}px;height:${px}px;background-image:var(--skill-atlas);` +
+    `background-size:${aw * sc}px ${ah * sc}px;background-position:-${col * px}px -${row * px}px"></span>`;
+}
+// Skill-badge span that FILLS its parent (for skill-tree node tiles / hotbar).
+function skillIconFillSpan(name) {
+  const i = SKILL_ICON_INDEX[name];
+  if (i === undefined || !skillReady) return '';
+  const cols = SKILL_ICON_COLS, rows = SKILL_ICON_ROWS;
+  const col = i % cols, row = (i / cols) | 0;
+  const px = cols > 1 ? (col / (cols - 1) * 100).toFixed(3) : '0';
+  const py = rows > 1 ? (row / (rows - 1) * 100).toFixed(3) : '0';
+  return `<span class="dl-ic dl-fill sk-badge" style="background-image:var(--skill-atlas);` +
+    `background-size:${cols * 100}% ${rows * 100}%;background-position:${px}% ${py}%"></span>`;
+}
 // ── GENERATED MONSTER SPRITE SHEET ──────────────────────────────────────────
 // Every regular monster (the 161 in MONSTERS) renders from this one packed sheet
 // of bespoke transparent pixel-art tiles — MON_TS px per cell, MON_COLS per row,
@@ -1260,6 +1313,8 @@ function itemSpritePx(tw) {
 // Build a DawnLike atlas icon span at an EXACT pixel size (used when the icon
 // should fit a specific surrounding context rather than snap to a whole tile).
 function dlIconAt(name, px) {
+  const sk = skillIconAt(name, px);   // generated skill badge wins over the atlas tile
+  if (sk) return sk;
   const i = SPRITE_IDX[name];
   if (i === undefined || !spriteReady) return '';
   // Scale every DOM atlas icon by the UI SIZE setting so menu/HUD/panel icons
@@ -1276,6 +1331,10 @@ function dlIconAt(name, px) {
     `background-size:${aw * sc}px ${ah * sc}px;background-position:-${col * px}px -${row * px}px"></span>`;
 }
 function dlIcon(name, px) {
+  // Generated skill badges are hi-res art, not 16px tiles — render them at the
+  // requested size WITHOUT snapping to the atlas grid.
+  const sk = skillIconAt(name, px || 32);
+  if (sk) return sk;
   // Snap to a whole-number multiple of the 16px tile so the CSS-scaled sprite
   // stays crisp (a fractional scale warps the pixels just like on the canvas).
   return dlIconAt(name, ATLAS_TS * Math.max(1, Math.round((px || 32) / ATLAS_TS)));
@@ -1283,6 +1342,8 @@ function dlIcon(name, px) {
 // A sprite that FILLS its parent (percentage-based atlas positioning, so it
 // scales to any container size). Used for skill-tree node tiles.
 function dlIconFill(name) {
+  const sk = skillIconFillSpan(name);   // generated skill badge wins over the atlas tile
+  if (sk) return sk;
   const i = SPRITE_IDX[name];
   if (i === undefined || !spriteReady) return '';
   const cols = ATLAS_COLS, rows = (spriteSheet.naturalHeight || 2672) / ATLAS_TS;
@@ -20380,7 +20441,7 @@ function renderSkills(el) {
     return `<button class="sk-tnode ${state}${n.keystone ? ' keystone' : ''}${n.type === 'active' ? ' act' : ''}${selectedSkillId === n.id ? ' sel' : ''}" id="sknode-${n.id}" ${drag}
         style="left:${(p[0] * 100).toFixed(2)}%;top:${(p[1] * 100).toFixed(2)}%" onclick="skillNodeClick(event,'${n.id}')" ondblclick="buySkill('${n.id}')"
         data-tip="${tipShort}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
-      <span class="ic">${dlIconFill(n.icon)}</span><span class="nm">${n.name}</span>${badge}
+      <span class="ic">${dlIconFill(n.keystone ? n.icon + '@ks' : n.icon)}</span><span class="nm">${n.name}</span>${badge}
     </button>`;
   }).join('');
 

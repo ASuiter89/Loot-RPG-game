@@ -29,11 +29,15 @@ export function parseSkillIcons(gamePath = GAME) {
   for (const n of nodes) {
     if (!n.icon) continue;
     if (!byIcon.has(n.icon)) {
-      byIcon.set(n.icon, { icon: n.icon, cls: classForIcon(n.icon), name: n.name, names: [], ids: [] });
+      byIcon.set(n.icon, {
+        icon: n.icon, cls: classForIcon(n.icon), name: n.name,
+        names: [], ids: [], keystone: false,
+      });
     }
     const e = byIcon.get(n.icon);
     e.names.push(n.name);
     e.ids.push(n.id);
+    if (n.keystone) e.keystone = true;   // any node on this icon is a keystone
   }
   return { nodes, icons: [...byIcon.values()] };
 }

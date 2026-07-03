@@ -80,11 +80,16 @@ async function main() {
   const ok = results.filter((r) => !r.error && existsSync(r.srcPath));
   const failed = results.filter((r) => r.error || !existsSync(r.srcPath));
 
-  // 2) Compose all successful tiles.
-  const composed = await composeTiles(
-    ok.map((r) => ({ key: r.icon, srcPath: r.srcPath, cls: r.cls })),
-    { outDir: TILE_DIR, size: TILE_SIZE }
-  );
+  // 2) Compose tiles. Every icon gets a rounded-square badge; keystone icons ALSO
+  //    get an octagon variant under `<key>@ks`, matching the octagonal keystone
+  //    node in the SKILLS menu. (4 icons are used by both a keystone and a normal
+  //    skill, so both shapes must exist.)
+  const items = [];
+  for (const r of ok) {
+    items.push({ key: r.icon, srcPath: r.srcPath, cls: r.cls, shape: 'rounded' });
+    if (r.keystone) items.push({ key: r.icon + '@ks', srcPath: r.srcPath, cls: r.cls, shape: 'octagon' });
+  }
+  const composed = await composeTiles(items, { outDir: TILE_DIR, size: TILE_SIZE });
   console.log(`Composed ${composed.length} tiles into ${TILE_DIR}`);
   if (failed.length) console.log(`FAILED (${failed.length}): ${failed.map((f) => f.icon).join(', ')}`);
 

@@ -3,16 +3,21 @@
 //
 // Input:  a transparent-background PNG (the icon art, alpha-masked) + a class.
 // Output: an opaque, class-themed tile PNG:
-//           dark neutral (class-tinted) rounded-square background
-//           + the art composited on top with a soft lift shadow
-//           + a bold class-coloured border.
+//           dark neutral (class-tinted) background well
+//           + the art composited on top, filling the well edge-to-edge
+//           + a bold, raised class-coloured metal-bead border.
+//
+// The tile SHAPE is either a rounded square (normal skills) or an octagon
+// (keystone passives — matching the octagonal node frame in the SKILLS menu,
+// CSS clip-path polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)).
 //
 // Usage (as a module):
 //   import { composeTiles } from './compose.mjs'
-//   await composeTiles([{ key, srcPath, cls }], { outDir, size })
+//   await composeTiles([{ key, srcPath, cls, shape }], { outDir, size })
+//     shape: 'rounded' (default) | 'octagon'
 //
 // Usage (CLI):  node compose.mjs <manifest.json>
-//   manifest = { outDir, size?, items: [{ key, srcPath, cls }] }
+//   manifest = { outDir, size?, items: [{ key, srcPath, cls, shape }] }
 import { chromium } from 'playwright';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,7 +29,7 @@ const PAGE_HTML = `<!doctype html><meta charset=utf8><canvas id=c></canvas>`;
 // The whole tile is drawn by this function, serialised into the page. Keep it
 // self-contained (no closure refs) so page.evaluate can stringify it.
 function TILE_DRAW() {
-  window.__composeTile = async (dataUrl, size, fill, border) => {
+  window.__composeTile = async (dataUrl, size, fill, border, shape) => {
     const S = size;
     const cv = document.getElementById('c');
     cv.width = S; cv.height = S;
@@ -32,14 +37,35 @@ function TILE_DRAW() {
     const img = new Image();
     await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
 
-    const m = Math.round(S * 0.05);                     // margin for the drop shadow
+    const oct = shape === 'octagon';
+    // Badges are FULL-BLEED — they fill their slot edge-to-edge, exactly matching
+    // the footprint of the neighbouring potion / town-portal buttons. Depth comes
+    // from the raised bead frame + inset shadow, not a drop shadow with margin.
+    const m = 0;
     const W = S - m * 2;                                 // badge box size
     const ox = m, oy = m;
     const bw = Math.max(4, Math.round(S * 0.092));       // border thickness
-    const r = Math.round(S * 0.155);                     // outer corner radius
-    const ir = Math.max(2, r - bw);                      // inner corner radius
+    const r = Math.round(S * 0.155);                     // outer corner radius (rounded)
+    const ir = Math.max(2, r - bw);                      // inner corner radius (rounded)
     const ix = ox + bw, iy = oy + bw, iw = W - bw * 2;   // art well
+    const CUT = 0.30;                                     // octagon corner cut (matches CSS)
+    // Draw the tile silhouette at (x,y,w,h): a rounded rect, or an octagon whose
+    // corner cut matches the SKILLS-menu keystone clip-path. `rad` (rounded only).
     const rr = (x, y, w, h, rad) => {
+      if (oct) {
+        const cx = w * CUT, cy = h * CUT;
+        ctx.beginPath();
+        ctx.moveTo(x + cx, y);
+        ctx.lineTo(x + w - cx, y);
+        ctx.lineTo(x + w, y + cy);
+        ctx.lineTo(x + w, y + h - cy);
+        ctx.lineTo(x + w - cx, y + h);
+        ctx.lineTo(x + cx, y + h);
+        ctx.lineTo(x, y + h - cy);
+        ctx.lineTo(x, y + cy);
+        ctx.closePath();
+        return;
+      }
       rad = Math.max(0, Math.min(rad, w / 2, h / 2));
       ctx.beginPath();
       ctx.moveTo(x + rad, y);
@@ -59,16 +85,11 @@ function TILE_DRAW() {
 
     ctx.clearRect(0, 0, S, S);
 
-    // ── Drop shadow silhouette ────────────────────────────────────────────
-    // The badge casts a soft shadow so it floats like a physical medallion.
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.55)';
-    ctx.shadowBlur = S * 0.05;
-    ctx.shadowOffsetY = Math.round(S * 0.028);
+    // ── Base fill ─────────────────────────────────────────────────────────
+    // Solid base so the frame's corners/edges are covered before the bead strokes.
     rr(ox + 0.5, oy + 0.5, W - 1, W - 1, r);
     ctx.fillStyle = shade(border, -0.35);
     ctx.fill();
-    ctx.restore();
 
     // ── Rounded metal bead frame ──────────────────────────────────────────
     // Concentric strokes from the outer edge inward paint a CONVEX cross-section
@@ -145,13 +166,13 @@ export async function composeTiles(items, { outDir, size = 96 } = {}) {
     const b64 = readFileSync(it.srcPath).toString('base64');
     const srcUrl = 'data:image/png;base64,' + b64;
     const dataUrl = await page.evaluate(
-      async ([u, s, f, br]) => window.__composeTile(u, s, f, br),
-      [srcUrl, size, pal.bg, pal.border]
+      async ([u, s, f, br, sh]) => window.__composeTile(u, s, f, br, sh),
+      [srcUrl, size, pal.bg, pal.border, it.shape || 'rounded']
     );
     const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
     const file = join(outDir, it.key + '.png');
     writeFileSync(file, buf);
-    out.push({ key: it.key, cls, file, bytes: buf.length });
+    out.push({ key: it.key, cls, shape: it.shape || 'rounded', file, bytes: buf.length });
   }
   await browser.close();
   return out;
