@@ -29,18 +29,27 @@ There is no global install and no backend to run locally — the game talks to a
 hosted Supabase project for cloud saves / leaderboards, and falls back to
 `localStorage` when offline.
 
-## Deploying (Netlify / GitHub Pages)
+## Deploying
 
-The build output in `dist/` is a self-contained static site.
+The app is designed to work on **both** hosts, which serve it two different ways.
+The key is that `index.html` and the Vite build both use **relative** asset paths
+(`./src/...` / `./assets/...`, via `base: './'`), so nothing is hardcoded to a
+domain root — it works at a root domain *and* at a project subpath.
 
-- **Build command:** `npm ci && npm run build`
-- **Publish directory:** `dist`
-- **Base path:** the Vite config uses `base: './'`, so the bundle uses **relative**
-  URLs and works whether it is served from a domain root (Netlify) or a project
-  subpath (`https://user.github.io/repo/`, GitHub Pages) — no per-host base-path
-  changes needed.
+- **Netlify (runs the build).** `netlify.toml` sets `command = "npm run build"`
+  and `publish = "dist"`, so Netlify ships the optimized, hashed `dist/` bundle.
+- **GitHub Pages (serves the repo, no build).** Pages serves the committed source
+  directly at the project subpath (`https://user.github.io/Loot-RPG-game/`). Because
+  `index.html` references `./src/main.js` and `./src/styles.css` **relatively**,
+  they resolve under the subpath and the ES-module graph (all relative imports)
+  loads as-is. A root `.nojekyll` file makes Pages serve `src/` verbatim.
+  - This serves unminified source; for the optimized bundle on Pages too, add a
+    GitHub Actions workflow that runs `npm run build` and deploys `dist/` (and set
+    Pages' source to "GitHub Actions").
 
-`dist/` and `coverage/` are git-ignored; hosts build them from source on deploy.
+Verify both before deploying: `npm run smoke` (built `dist/`) and
+`npm run smoke:pages` (raw source over HTTP, the Pages path). `dist/` and
+`coverage/` are git-ignored; Netlify builds them on deploy.
 
 ---
 

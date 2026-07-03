@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "smoke": "node test/smoke/smoke.mjs",
+    "smoke:pages": "node test/smoke/smoke.mjs index.html",
     "lint:styles": "node tools/styles-lint.js"
   },
   "devDependencies": {
