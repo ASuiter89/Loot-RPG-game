@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { castLeeches, leechAmount } from '../../src/systems/leech.js';
+import { castLeeches, detonateIsPhysical, leechAmount } from '../../src/systems/leech.js';
 
 describe('castLeeches', () => {
   it('leeches from weapon (physical) casts', () => {
@@ -22,6 +22,24 @@ describe('castLeeches', () => {
   it('is safe on a missing cast', () => {
     expect(castLeeches(null)).toBe(false);
     expect(castLeeches(undefined)).toBe(false);
+  });
+});
+
+describe('detonateIsPhysical', () => {
+  it('is physical (leechable) when the cast is not a spell cast', () => {
+    expect(detonateIsPhysical({ wpn: 2, detonate: 1 })).toBe(true);
+    expect(detonateIsPhysical({ detonate: 1 })).toBe(true);
+  });
+
+  it('is not physical when the cast is a spell cast — a spell-typed burst never leeches', () => {
+    expect(detonateIsPhysical({ spell: 1.6, detonate: 1 })).toBe(false);
+    // Hybrid: the weapon strike leeches, but the spell-typed detonate burst must not.
+    expect(detonateIsPhysical({ wpn: 2, spell: 1, detonate: 1 })).toBe(false);
+  });
+
+  it('is safe on a missing cast', () => {
+    expect(detonateIsPhysical(null)).toBe(true);
+    expect(detonateIsPhysical(undefined)).toBe(true);
   });
 });
 
