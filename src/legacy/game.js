@@ -16,6 +16,7 @@
 import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
 import { milestonePower, rankScale, skillManaCost } from '../systems/skillMath.js';
 import { glideVitalFill } from '../systems/vitalFill.js';
+import { offscreenArrows } from '../systems/offscreenArrows.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { CHANGELOG } from '../data/changelog.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
@@ -4941,6 +4942,12 @@ try { if (localStorage.getItem(PATH_LINE_KEY) === '0') showPathLine = false; } c
 const STAIRS_ARROW_KEY = 'dungeonLoot_stairsArrow';
 let showStairsArrow = true;
 try { if (localStorage.getItem(STAIRS_ARROW_KEY) === '0') showStairsArrow = false; } catch (e) {}
+// Optional small red arrows riding the map edge, one per off-screen living foe
+// (see drawMonsterArrows) — the danger-coloured cousin of the stairs arrow, for
+// tracking down the last stragglers sealing the floor. On by default; saved.
+const MONSTER_ARROWS_KEY = 'dungeonLoot_monsterArrows';
+let showMonsterArrows = true;
+try { if (localStorage.getItem(MONSTER_ARROWS_KEY) === '0') showMonsterArrows = false; } catch (e) {}
 // The foe the hero's auto-attack is currently locked onto (best in-reach target
 // under the current focus mode), recomputed each frame in updatePlayerCombat via
 // pickAutoTarget(). Declared here (with the other render state) so the draw loop's
@@ -6770,6 +6777,22 @@ function updateStairsArrowButton() {
   if (lbl) lbl.textContent = showStairsArrow ? 'STAIRS ARROW: ON' : 'STAIRS ARROW: OFF';
   const btn = document.getElementById('stairsarrow-action');
   if (btn) btn.classList.toggle('on', showStairsArrow);
+}
+
+// Flip the off-screen monster arrows on and off. Persisted like the stairs arrow;
+// drawn along the map edge in the main render loop (see drawMonsterArrows).
+function toggleMonsterArrows() {
+  showMonsterArrows = !showMonsterArrows;
+  try { localStorage.setItem(MONSTER_ARROWS_KEY, showMonsterArrows ? '1' : '0'); } catch (e) {}
+  settingsChanged();
+  sfx('click');
+  updateMonsterArrowsButton();
+}
+function updateMonsterArrowsButton() {
+  const lbl = document.getElementById('monsterarrows-label');
+  if (lbl) lbl.textContent = showMonsterArrows ? 'MONSTER ARROWS: ON' : 'MONSTER ARROWS: OFF';
+  const btn = document.getElementById('monsterarrows-action');
+  if (btn) btn.classList.toggle('on', showMonsterArrows);
 }
 
 // Settings modal: a centred overlay holding sound, saves, Reset Run and options.
@@ -13729,9 +13752,11 @@ function draw() {
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, cw, ch);
 
-  // Edge indicator pointing at the off-screen down-stairs. Drawn over the
-  // vignette so it stays bright even at the darkened border.
+  // Edge indicators pointing at off-screen points of interest — the down-stairs
+  // (gold) and any remaining foes (small red). Drawn over the vignette so they
+  // stay bright even at the darkened border.
   drawStairsArrow(offX, offY, tw, th, W, H);
+  drawMonsterArrows(offX, offY, tw, th, W, H);
 
   drawMinimap();
 }
@@ -13904,6 +13929,63 @@ function drawStairsArrow(offX, offY, tw, th, W, H) {
   ctx.strokeStyle = shadeColor(PALETTE.gold, 0.12);
   ctx.stroke();
   ctx.restore();
+}
+
+// A cluster of small red arrows riding the map edge, one per off-screen living
+// foe, so you can hunt down the last stragglers sealing the floor. Deliberately
+// much smaller and calmer than the gold stairs arrow — and foes bunched in one
+// direction collapse into a single arrow aimed at the nearest — so a busy floor
+// doesn't drown in arrowheads. Danger-red (PALETTE.danger) reads as "threat over
+// there". Off with the Monster Arrows setting; hidden in town. Geometry (which
+// foes are off-screen, where each arrow sits, the merge) lives in the pure
+// systems/offscreenArrows module; this just draws what it returns.
+function drawMonsterArrows(offX, offY, tw, th, W, H) {
+  if (!showMonsterArrows) return;
+  if (inTown || !player || !Array.isArray(mapData) || !mapData.length) return;
+  if (typeof enemies === 'undefined' || !enemies.length) return;
+
+  const targets = [];
+  for (const e of enemies) {
+    if (e.dead) continue;
+    // e.fx/fy is the smooth footprint CENTRE (may be null before its first render
+    // tick); the module falls back to the footprint centre when cx/cy are absent.
+    targets.push({ x: e.x, y: e.y, span: e.size || 1, cx: e.fx, cy: e.fy });
+  }
+  if (!targets.length) return;
+
+  const size = Math.max(9, tw * 0.42);          // ~half the stairs arrowhead
+  const pad = Math.max(10, tw * 0.55);          // keep the whole head inside the panel
+  const arrows = offscreenArrows({
+    hero: { fx: player.fx, fy: player.fy },
+    targets, cam: { offX, offY, tw, th }, view: { W, H },
+    pad, mergeDist: size * 1.6,                  // fold a same-direction pack into one arrow
+  });
+  if (!arrows.length) return;
+
+  const pulse = 0.5 + 0.5 * Math.sin(animNow() / 260);
+  const alpha = 0.7 + 0.14 * pulse;
+  for (const a of arrows) {
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    ctx.rotate(a.angle);                          // arrowhead points +x → toward the foe
+    ctx.beginPath();
+    ctx.moveTo(size * 0.6, 0);
+    ctx.lineTo(-size * 0.42, size * 0.5);
+    ctx.lineTo(-size * 0.16, 0);
+    ctx.lineTo(-size * 0.42, -size * 0.5);
+    ctx.closePath();
+    ctx.shadowColor = hexA(PALETTE.danger, 0.7);
+    ctx.shadowBlur = size * 0.3;
+    ctx.fillStyle = hexA(PALETTE.danger, alpha);
+    ctx.fill();
+    // Dark keyline so the little arrow reads over lava, water and bright floors.
+    ctx.shadowBlur = 0;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(1, size * 0.06);
+    ctx.strokeStyle = shadeColor(PALETTE.danger, 0.12);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function spawnFloatingText(x, y, text, color, size, coin) {
@@ -23574,6 +23656,7 @@ updateHeroBarsButton();
 updateCrosshairButton();
 updatePathLineButton();
 updateStairsArrowButton();
+updateMonsterArrowsButton();
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
   window.addEventListener(ev, audioUnlock, { passive: true }));
 
@@ -24267,6 +24350,8 @@ const __DL_FN_BRIDGE = {
   updatePathLineButton,
   toggleStairsArrow,
   updateStairsArrowButton,
+  toggleMonsterArrows,
+  updateMonsterArrowsButton,
   toggleSettingsMenu,
   closeSettingsMenu,
   centerSettingsCard,
