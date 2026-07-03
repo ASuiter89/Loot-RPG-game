@@ -12,6 +12,10 @@
 // modules) and the file shrinks toward empty. Excluded from coverage until then.
 // =============================================================================
 
+// ── Extracted modules (see docs/CHANGELOG.md) ──
+import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
+import { milestonePower, rankScale, skillManaCost } from '../systems/skillMath.js';
+
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
 // ══════════════════════════════════════════
@@ -464,22 +468,7 @@ function iconMarkup(val, color, frame = true) {
     : '';
   return `<svg class="svg-icon" viewBox="0 0 100 100" aria-hidden="true">${rim}${paths}</svg>`;
 }
-// Scale a #rrggbb colour toward black (f<1) for shading; passes other formats through.
-function shadeColor(hex, f) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  return `rgb(${Math.round(((n>>16)&255)*f)},${Math.round(((n>>8)&255)*f)},${Math.round((n&255)*f)})`;
-}
-// Same, but returns an rgba() with an explicit alpha — used for canvas glows/auras
-// where a colour needs to fade to transparent (gradient stops). Art colour, not a
-// style token, so it stays inline here.
-function hexA(hex, a) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
-}
+// shadeColor / hexA extracted to src/utils/color.js (imported at top).
 // Draw a vector icon key onto the canvas, centred at (cx,cy) and `size` px wide.
 // Each layer is filled in its own material colour; when `color` is given it is
 // stroked first as a fat halo so the piece's rarity still reads on the hero.
@@ -14326,20 +14315,7 @@ function drawActorShadow(cx, cyFeet, w) {
 const GLOW_TEX = 64;
 const _discGlow = new Map();   // "r,g,b" → canvas: solid centre → transparent edge
 const _ringGlow = new Map();   // "r,g,b" → canvas: transparent centre → colour → transparent edge
-function _parseRGBA(color) {
-  const m = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)/.exec(color);
-  if (m) return { rgb: `${Math.round(+m[1])},${Math.round(+m[2])},${Math.round(+m[3])}`, a: m[4] == null ? 1 : +m[4] };
-  // Hex (#rgb / #rrggbb / #rrggbbaa) — used by affix aura colours.
-  const h = /^#([0-9a-f]{3,8})$/i.exec((color || '').trim());
-  if (h) {
-    let s = h[1];
-    if (s.length === 3) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
-    const r = parseInt(s.slice(0, 2), 16), g = parseInt(s.slice(2, 4), 16), b = parseInt(s.slice(4, 6), 16);
-    const a = s.length >= 8 ? parseInt(s.slice(6, 8), 16) / 255 : 1;
-    return { rgb: `${r},${g},${b}`, a };
-  }
-  return { rgb: '255,255,255', a: 1 };
-}
+// _parseRGBA extracted to src/utils/color.js (imported at top).
 function _glowSprite(cache, rgb, ring) {
   let cv = cache.get(rgb);
   if (cv) return cv;
@@ -17114,40 +17090,11 @@ const SKILL_MILESTONES = [
   { rank: 7,  pips: '✦✦',  perk: 'shorter cooldown' },
   { rank: 10, pips: '✦✦✦', perk: 'wider reach' },
 ];
-// Cumulative milestone power bump, layered on top of the steady per-rank growth.
-// Rank 3 gets an extra-large jump (its whole milestone perk is raw power now that
-// it no longer discounts mana — leveling only ever RAISES a skill's mana cost).
-function milestonePower(rank) {
-  let b = 0;
-  if (rank >= 3) b += 0.28;
-  if (rank >= 7) b += 0.20;
-  if (rank >= 10) b += 0.30;
-  return b;
-}
+// milestonePower / rankScale / skillManaCost extracted to src/systems/skillMath.js.
 // Milestone pips earned so far (for the node popover rank readout).
 function milestonePips(rank) { let p = ''; for (const m of SKILL_MILESTONES) if (rank >= m.rank) p = m.pips; return p; }
 // The next milestone the skill is climbing toward (null once all are reached).
 function nextMilestone(rank) { return SKILL_MILESTONES.find(m => rank < m.rank) || null; }
-
-// Magnitudes grow ~12% per rank, with extra power-spikes at the milestone ranks;
-// status chance/duration and summon counts grow more slowly, so a rank-10 skill
-// is strong but not absurd.
-function rankScale(rank) { return (1 + 0.12 * ((rank || 1) - 1)) * (1 + milestonePower(rank)); }
-
-// Skills cost progressively more mana the deeper you rank them: every rank past
-// the first adds a flat slice of the base cost, so pouring points into a skill is
-// a real mana commitment, not free power. The cost only ever CLIMBS with rank —
-// there's no milestone discount — but the per-rank power climb is steeper, so the
-// trade still pays off. This returns the skill's own MP cost at a given rank,
-// BEFORE gear Mana Cost Reduction (which castSkillById layers on at cast time).
-// Rank 0 (not yet learned) previews the rank-1 cost.
-const MANA_PER_RANK = 0.08; // +8% of base mana per rank above the first
-const SKILL_MP_MULT = 1.5;  // global mana-cost multiplier (mana is rationed — spells cost more)
-function skillManaCost(node, rank) {
-  if (!node || !node.mp) return 0;
-  const r = Math.max(1, rank || 1);
-  return Math.max(1, Math.round(node.mp * SKILL_MP_MULT * (1 + MANA_PER_RANK * (r - 1))));
-}
 
 // Base physical magnitude for weapon actives (a normal swing's raw number, plus
 // any flat ATK passives), before per-skill multiplier and modifiers.

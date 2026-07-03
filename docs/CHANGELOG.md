@@ -8,6 +8,22 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Phase 4 — incremental pure-module extraction (with tests)
+
+Each increment: move a self-contained pure cluster verbatim into a `src/` module,
+replace its definition in `game.js` with an `import`, add unit tests, and verify
+`vite build` + smoke (behavior identical) + suite green.
+
+**Increment 1 — pure formula/utility leaves**
+- 📦 `src/utils/color.js` ← `shadeColor`, `hexA`, `_parseRGBA` (pure colour math,
+  zero deps).
+- 📦 `src/systems/skillMath.js` ← `milestonePower`, `rankScale`, `skillManaCost`
+  (+ their private `MANA_PER_RANK` / `SKILL_MP_MULT` consts) — pure skill-rank math.
+- 🧪 Full unit tests for both (`test/utils/color.test.js`,
+  `test/systems/skillMath.test.js`); 100 % coverage over all extracted modules.
+- ✅ game.js still strict-ESM-parses; build + smoke green; 93 tests pass. The
+  `window` bridge still resolves (imported names stay in module scope).
+
 ## Phase 3 — inline `<script>` → ES module + `window` bridge
 
 - 📦 **The 24.2k-line inline `<script>` moved verbatim** into
