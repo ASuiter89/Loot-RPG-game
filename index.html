@@ -338,6 +338,10 @@
   .stat-bar { display: flex; align-items: center; gap: 4px; }
   .bar-track { width: 74px; height: 13px; background: var(--btn-off); border: 1px solid var(--ink); border-radius: 4px; box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 60%, transparent); overflow: hidden; }
   .bar-fill { height: 100%; border-radius: 3px; transition: width 0.2s; }
+  /* The HP/MP fills are eased every animation frame in JS (updateVitalFills) so
+     over-time recovery climbs on a smooth 60fps slope; they opt OUT of the CSS
+     width transition to avoid double-smoothing (which would rubber-band the fill). */
+  #hp-bar, #mp-bar, #dh-hp-fill, #dh-mp-fill { transition: none; }
   .hp-fill  { background: linear-gradient(180deg, var(--red-350), var(--hp)); box-shadow: 0 0 7px var(--hp), inset 0 1px 0 color-mix(in srgb, var(--paper) 40%, transparent); }
   .mp-fill  { background: linear-gradient(180deg, var(--blue-250), var(--mp)); box-shadow: 0 0 7px var(--mp), inset 0 1px 0 color-mix(in srgb, var(--paper) 40%, transparent); }
   /* Over-time recovery zone: a translucent band from the current fill out to
@@ -11486,6 +11490,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Fluid HP/MP recovery", by: "Claude", notes: ["Over-time HP/MP recovery now climbs the bar on a smooth slope instead of stepping up once a second — the fill eases toward true health every frame.", "Taking damage or spending mana still snaps the bar down instantly, and burst heals still fill at once."] },
   { date: "2026-07-03", size: "small", v: "Never stuck on an enemy", by: "Claude", notes: ["Fixed a lockup where a foe hopping onto the tile you're standing on trapped you in place until it died — you can now always shove free.", "Ejection follows your input, so you pop out the way you're trying to move; normal meleeing is unaffected."] },
   { date: "2026-07-03", size: "small", v: "Monochrome title settings icons", by: "Claude", notes: ["Save Slots, Leaderboards and Patch Notes now use monochrome line icons matching the rest of the settings menu, instead of colored emoji."] },
   { date: "2026-07-02", size: "small", v: "No stale sprite flash on load", by: "Claude", notes: ["Hero portraits, the in-world hero, and roaming vendors/mercenaries no longer flash a static placeholder tile before their animated sprite finishes loading — they hold a blank slot and paint the real art the instant it's ready."] },
@@ -20224,6 +20229,23 @@ function clearPendingRecovery() {
   player._healAcc = 0; player._potHealAcc = 0; player._manaAcc = 0;
 }
 
+// The hero's HP/MP as a CONTINUOUS value: the integer stat PLUS the sub-integer
+// recovery already earned but still banked in the accumulators (passive regen in
+// _hpAcc/_mpAcc, over-time-pool drain in _healAcc/_potHealAcc/_manaAcc). player.hp
+// and player.mp stay integers for combat math and the numeric readout; the BAR
+// fill reads this so it climbs smoothly between whole points instead of stepping
+// once a second at low regen. Monotonic during recovery: whenever an accumulator
+// sheds a whole point it lands on player.hp/.mp in the same beat, so int+frac never
+// jumps. Capped at max (the accumulators zero out once a bar is topped off).
+function hpContinuous() {
+  const frac = (player._hpAcc || 0) + (player._healAcc || 0) + (player._potHealAcc || 0);
+  return Math.min(player.maxHp, player.hp + Math.max(0, frac));
+}
+function mpContinuous() {
+  const frac = (player._mpAcc || 0) + (player._manaAcc || 0);
+  return Math.min(player.maxMp, player.mp + Math.max(0, frac));
+}
+
 // ══════════════════════════════════════════
 // ROBUSTNESS GUARDS — re-entrancy lock & halt switch
 // ══════════════════════════════════════════
@@ -23645,6 +23667,36 @@ function renderStaminaBar() {
     if (dhEnd) dhEnd.style.width = (st / mx * 100) + '%';
   }
 }
+
+// ── Fluid vital bars ────────────────────────────────────────────────────────
+// The HP/MP bar FILL eases toward the hero's continuous HP/MP (see hpContinuous)
+// every animation frame, so over-time recovery — passive regen and the pending
+// pools draining — climbs on a smooth 60fps slope instead of stepping once a
+// second when a whole point finally lands. A LOSS (taking damage, spending mana)
+// snaps the fill down instantly so hits stay punchy, and a big jump UP (an instant
+// active heal, a level-up refill, a fresh load) snaps too — only the slow trickle
+// eases. This is purely how the fill is drawn; player.hp/.mp stay integers.
+let _hpFillVis = null, _mpFillVis = null;   // eased visual HP/MP (null → snap on first frame)
+const VITAL_EASE_TAU = 0.14;   // seconds — ease-up time constant (~95% of the gap closed in ~0.42s)
+const VITAL_SNAP_FRAC = 0.30;  // a gain bigger than this share of max is a burst, not a trickle → snap
+function easeVitalFill(vis, target, max, dt) {
+  if (vis == null || !(max > 0)) return target;              // first frame / no bar → snap
+  if (target <= vis) return target;                          // loss → instant (punchy)
+  if (target - vis > max * VITAL_SNAP_FRAC) return target;   // burst heal / refill / load → instant
+  const k = 1 - Math.exp(-Math.max(0, dt) / VITAL_EASE_TAU); // frame-rate independent ease
+  const next = vis + (target - vis) * k;
+  return (target - next < 0.01) ? target : next;             // latch the last hair (no forever-crawl)
+}
+function updateVitalFills(dt) {
+  if (typeof player !== 'object' || !player || !(player.maxHp > 0)) return;
+  _hpFillVis = easeVitalFill(_hpFillVis, hpContinuous(), player.maxHp, dt);
+  _mpFillVis = easeVitalFill(_mpFillVis, mpContinuous(), player.maxMp, dt);
+  const clampPct = (v, mx) => (mx > 0 ? Math.max(0, Math.min(100, v / mx * 100)) : 0);
+  const hpPct = clampPct(_hpFillVis, player.maxHp), mpPct = clampPct(_mpFillVis, player.maxMp);
+  const set = (id, pct) => { const el = document.getElementById(id); if (el) el.style.width = pct + '%'; };
+  set('hp-bar', hpPct); set('mp-bar', mpPct);        // mobile / main HUD
+  set('dh-hp-fill', hpPct); set('dh-mp-fill', mpPct); // desktop bottom HUD
+}
 // ── Active buffs & debuffs HUD strip ────────────────────────────────────────
 // A little row of DawnLike status icons showing every timed effect on the hero
 // and how long it has left: combat buffs (War Cry, shields, regen …) and debuffs
@@ -23723,13 +23775,13 @@ function updateBars() {
     el.style.width = (curPct + pendPct) + '%';
   };
   const hpBar = document.getElementById('hp-bar');
-  hpBar.style.width = (player.hp/player.maxHp*100)+'%';
+  // The HP/MP fill widths are eased every frame in updateVitalFills() so over-time
+  // recovery climbs smoothly; here we only refresh the readouts and danger pulse.
   document.getElementById('hp-text').textContent = `${player.hp}/${player.maxHp}`;
   // Pulse the HP bar red when health drops to a dangerous level (≤25%, but not dead).
   const hpLow = player.hp > 0 && player.hp / player.maxHp <= 0.25;
   hpBar.classList.toggle('hp-low', hpLow);
   if (hpBar.parentElement) hpBar.parentElement.classList.toggle('hp-low-track', hpLow);
-  document.getElementById('mp-bar').style.width = (player.mp/player.maxMp*100)+'%';
   document.getElementById('mp-text').textContent = `${player.mp}/${player.maxMp}`;
   setPending('hp-pending', player.hp, player.maxHp, pendingHealTotal());
   setPending('mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
@@ -23739,11 +23791,11 @@ function updateBars() {
   // segmented XP strip, and the name / power / gold chips mirror the same data. ──
   if (isWebLayout()) {
     const dset = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    // Desktop HP/MP fill widths are eased in updateVitalFills() too — here just the
+    // danger pulse on the HP fill and the numeric readouts.
     const dhHp = document.getElementById('dh-hp-fill');
-    if (dhHp) { dhHp.style.width = Math.max(0, Math.min(100, player.hp / player.maxHp * 100)) + '%'; dhHp.classList.toggle('hp-low', hpLow); }
+    if (dhHp) dhHp.classList.toggle('hp-low', hpLow);
     dset('dh-hp-val', `${player.hp}/${player.maxHp}`);
-    const dhMp = document.getElementById('dh-mp-fill');
-    if (dhMp) dhMp.style.width = Math.max(0, Math.min(100, player.mp / player.maxMp * 100)) + '%';
     dset('dh-mp-val', `${player.mp}/${player.maxMp}`);
     setPending('dh-hp-pending', player.hp, player.maxHp, pendingHealTotal());
     setPending('dh-mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
@@ -28789,6 +28841,7 @@ function gameLoop(ts) {
   }
   safeStep('actorRender', () => updateActorRender(dt));
   safeStep('stamina', () => renderStaminaBar());   // stamina drains/refills continuously — keep the END bar live
+  safeStep('vitalBars', () => updateVitalFills(dt)); // ease HP/MP fills so over-time recovery climbs fluidly
   safeStep('cdDials', () => updateCooldownDials()); // animate the skill/potion cooldown dials in real time
   safeStep('halo', () => updateHaloVignette());     // the danger halo is a DOM overlay — pulse it every frame
   safeStep('panel', () => flushPanel());            // rebuild the bag at most once per frame, only while it's on-screen
