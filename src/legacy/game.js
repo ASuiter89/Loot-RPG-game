@@ -17,6 +17,7 @@ import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
 import { milestonePower, rankScale, skillManaCost } from '../systems/skillMath.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { CHANGELOG } from '../data/changelog.js';
+import { terrainPacksInUse } from '../data/terrainPacks.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 
 // ══════════════════════════════════════════
@@ -23499,7 +23500,10 @@ log('<span data-spr=chest></span> Foes drop crafting materials — <span data-sp
 log('<span data-spr=mat_scrap></span> Tap any loot in your <span data-spr=chest></span> BAG to Sell it for gold or Scrap it into materials — any time, no vendor needed. Use the <span data-spr=mat_scrap></span> Auto-Loot button on the LOOT tab to do it automatically by rarity on pickup.');
 log('<span data-spr=w_sword></span> Move freely in real time and auto-attack foes in reach — get surrounded and every foe piles on, so don\'t let them encircle you.');
 log('🎨 Pixel art from the DawnLike tileset by DragonDePlatino & DawnBringer (CC-BY 4.0).');
-log('🌍 Terrain tiles from "[LPC] Terrains" by bluecarrot16 & LPC contributors (CC-BY-SA 4.0).');
+// Credit every terrain pack actually painting the world (registry-driven, so
+// attribution stays truthful automatically as packs are added — see
+// src/data/terrainPacks.js and docs/terrain-packs.md).
+for (const pack of terrainPacksInUse()) log(`🌍 Terrain tiles from "${pack.label}" by ${pack.credit} (${pack.license}).`);
 
 // Reflect any saved mute preference on the SOUND button, then arm the audio:
 // browsers won't let sound start until the player interacts, so the first
