@@ -11486,6 +11486,7 @@ function showSettingsTab(name) {
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
 const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Never stuck on an enemy", by: "Claude", notes: ["Fixed a lockup where a foe hopping onto the tile you're standing on trapped you in place until it died — you can now always shove free.", "Ejection follows your input, so you pop out the way you're trying to move; normal meleeing is unaffected."] },
   { date: "2026-07-03", size: "small", v: "Monochrome title settings icons", by: "Claude", notes: ["Save Slots, Leaderboards and Patch Notes now use monochrome line icons matching the rest of the settings menu, instead of colored emoji."] },
   { date: "2026-07-02", size: "small", v: "No stale sprite flash on load", by: "Claude", notes: ["Hero portraits, the in-world hero, and roaming vendors/mercenaries no longer flash a static placeholder tile before their animated sprite finishes loading — they hold a blank slot and paint the real art the instant it's ready."] },
   { date: "2026-07-02", size: "medium", v: "Town shops reordered & level-gated", by: "Claude", notes: ["Town tiles now follow a fixed order: Healer, Merchant, Ramen House, then progression-gated services, with the Vault last.", "Craftsman opens at level 5; Gambler at depth 10; Trainer & Enchanter at level 10.", "Transmuter opens on reaching Hardened; Bounty Board & Mystic on unlocking Hardened; Sellsword on reaching Brutal.", "Locked services still show in order, greyed, with their unlock requirement.", "Stash Vault renamed to Vault."] },
@@ -20422,19 +20423,53 @@ function updateMoveTargetPath(force) {
   moveTarget._pathDX = tx; moveTarget._pathDY = ty;
 }
 
-// If the hero's body ends up genuinely overlapping a solid cell — almost always a
-// foe that stepped into the tile beside us while we hugged the boundary — nudge it
-// out toward the nearest free spot so attacking or getting mobbed can never wedge
-// the hero permanently. Flush contact is NOT overlap (see the epsilon above), so
-// this never shoves you off a foe you're meleeing.
+// If the hero's body ends up genuinely overlapping a solid cell, glide it out to
+// the nearest free spot so nothing can wedge the hero permanently. The classic
+// trap: the hero moves fluidly (continuous fx/fy) while foes hop tile-to-tile, so
+// a foe can land on the very cell the hero's box is centred in — now the whole box
+// sits inside that foe's cell, and no small step can climb out (you'd have to cross
+// a full tile-width while a corner stays inside it). Two foes plugging the cells
+// beside the hero wedge the box into the concave notch between them the same way.
+// Either way movePlayerBy stalls on its first sub-step, and the old fixed 0.05 nudge
+// was far too small to clear a 0.68-wide box out of an occupied cell — so the hero
+// was stuck until a foe moved off or died. Flush contact is NOT overlap (see the
+// epsilon above), so this never disturbs a foe you're simply meleeing.
+const UNSTICK_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+const UNSTICK_MAGS = [0.1, 0.2, 0.32, 0.46, 0.62];
 function unstickPlayer(dt) {
   if (player._squeezeT > 0) return;   // a mob-squeeze owns the hero — don't yank it back into the pile
   if (!playerBoxBlocked(player.fx, player.fy)) return;
-  const push = Math.max(0.05, PLAYER_SPEED * 0.7 * dt);
-  const cand = [[push,0],[-push,0],[0,push],[0,-push],[push,push],[push,-push],[-push,push],[-push,-push]];
-  for (const [dx, dy] of cand) {
-    if (!playerBoxBlocked(player.fx + dx, player.fy + dy)) {
-      player.fx += dx; player.fy += dy;
+  // Eject the way the hero is actively trying to go, so the shove-out follows intent
+  // instead of always popping the same direction. Unit the 8 dirs, then order them
+  // by how well they line up with the current movement input (if any).
+  let hx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
+  let hy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
+  if (joy.active && joy.mag > 0.18) { hx = joy.dx; hy = joy.dy; }
+  const dirs = UNSTICK_DIRS.map(([dx, dy]) => { const inv = Math.hypot(dx, dy) || 1; return [dx / inv, dy / inv]; });
+  if (hx || hy) { const hm = Math.hypot(hx, hy) || 1; hx /= hm; hy /= hm; dirs.sort((a, b) => (b[0]*hx + b[1]*hy) - (a[0]*hx + a[1]*hy)); }
+  const s = Math.max(0.06, PLAYER_SPEED * 1.4 * dt);
+  // 1) Glide toward the NEAREST fully-free spot (no foe, no terrain): probe growing
+  //    distances, smallest first, and step that way at a brisk depenetration pace —
+  //    but never let the step itself cross a wall (probe ignores foes for the target,
+  //    the step still respects terrain).
+  for (const mag of UNSTICK_MAGS) {
+    for (const [ux, uy] of dirs) {
+      if (playerBoxBlocked(player.fx + ux * mag, player.fy + uy * mag)) continue;
+      const move = Math.min(mag, s);
+      if (playerBoxBlockedTerrain(player.fx + ux * move, player.fy + uy * move)) continue;
+      player.fx += ux * move; player.fy += uy * move;
+      player.x = Math.floor(player.fx); player.y = Math.floor(player.fy);
+      return;
+    }
+  }
+  // 2) A foe sitting on our cell (or the hero cornered against walls with a foe on
+  //    the only open side) leaves no fully-free spot within reach: shove out THROUGH
+  //    the foe toward any terrain-free neighbour so the hero is never trapped for
+  //    good — the escape hatch squeezeThroughMob gives a mob-pin. Terrain still
+  //    blocks, so this can never cross a wall.
+  for (const [ux, uy] of dirs) {
+    if (!playerBoxBlockedTerrain(player.fx + ux * s, player.fy + uy * s)) {
+      player.fx += ux * s; player.fy += uy * s;
       player.x = Math.floor(player.fx); player.y = Math.floor(player.fy);
       return;
     }
