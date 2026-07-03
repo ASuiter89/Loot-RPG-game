@@ -124,6 +124,49 @@ Two invariants drive everything:
   `gameGuide()` 18-topic contract, the `window` handler bridge, and a live
   inline-`onclick` round-trip). Never land a red step or a state that doesn't boot.
 
+## Performance — hot-path rules (from the 2026-07 lag audit)
+
+The game lagged on deep floors and over long sessions until an audit fixed 50+
+hot-path issues. **These rules keep the lag from coming back — follow them in any
+edit that touches the frame loop, world tick, `draw()`, the HUD, or floor build.**
+
+- **Never scan the whole map per frame.** Anything static within a floor (terrain,
+  minimap terrain, decor/occluder lists) is baked once per floor to an offscreen
+  canvas / prebuilt array and blitted; per-frame loops iterate only the visible
+  tile window (`x0..x1`, `y0..y1`). A new draw pass must cull to the viewport the
+  way the enemy loop does.
+- **Invalidate, don't re-check.** The floor caches key on `floorSerial` +
+  `_mapEpoch`; the pathfinding static grid listens to `pathGridDirty()`. **Any
+  post-build `mapData`/`furnitureMap`/`decorMap` write must call `bumpMapEpoch()`
+  (visuals) and `pathGridDirty()` (AI) as appropriate** — grep the existing call
+  sites (shrine, fountain, cracked wall, vault door, spike disarm, boss carve)
+  when adding one.
+- **Never rebuild per entity what one tick can share.** Enemy AI reads the shared
+  per-tick blocked grid, occupancy index (O(1) `getEnemyAt`), and status-flag map.
+  No `enemies.find(...)` in movement/collision paths; no `statusEffects` rescans
+  per enemy. Gear-derived stats go through the `loadoutEpoch` caches — call
+  `bumpLoadout()` at every new gear/attribute mutation site.
+- **The DOM is written only on change.** Per-frame/per-tick HUD writers compare
+  against their last-rendered value and skip identical writes; element refs come
+  from the cached lookups (`hudEl()` etc.), never `getElementById` per frame.
+  Combat events call `markHudDirty()` — never `updateBars()` synchronously.
+  Volatile text (cooldown seconds) lives in dedicated spans OUTSIDE any
+  cached-innerHTML string, or the cache busts every second.
+- **The combat log is a ring buffer** (`insertAdjacentHTML` + 200-line cap in
+  `log()`). Never `innerHTML +=` onto a growing node anywhere.
+- **No unbounded collections, no per-frame allocation in hot loops.** Particles
+  are pooled and capped; caches carry size caps or per-floor replacement; arrays
+  on the frame path compact in place (write-index) instead of `.filter()`; reuse
+  module scratch buffers (BFS queue, A* fields, shake offset) rather than
+  allocating per call.
+- **Saves stay throttled and single-serialized.** The world tick autosaves;
+  the heartbeat skips when a save is fresh; the cloud push reuses
+  `_lastSavePayload`. Don't add `JSON.stringify`/`localStorage` calls to the
+  frame or tick path.
+- **Measure, don't guess:** `perfHud()` in the console toggles the frame-time /
+  entity-count overlay. Any loop-touching change should keep worst-frame times
+  flat on a deep floor before it merges.
+
 ## Design system — one source of truth for styling
 
 Styling lives in `src/styles.css` (linked from `index.html`), driven by a shared

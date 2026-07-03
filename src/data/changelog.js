@@ -3,6 +3,14 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "big", v: "Deep performance pass — the lag is gone", by: "Claude", notes: [
+    "Frame rate stays smooth on deep floors and stays smooth however long the game has been open.",
+    "Combat log keeps the newest 200 lines; endless growth was quietly slowing every message.",
+    "Ground, minimap and decoration shadows now drawn once per floor and reused, instead of rebuilt every frame.",
+    "Enemy pathfinding and collision share per-tick maps instead of each foe rescanning the whole floor.",
+    "Health bars, skill bar and menus repaint only when something actually changed.",
+    "Sparks capped and recycled; autosaves deduplicated; music no longer bursts to catch up after tabbing back in.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Redesigned skill-bar & loadout tiles", by: "Claude", notes: [
     "Every combat-bar tile — skills, potions, the town gate and the auto-cast slot — now shows its icon filling the whole box, edge to edge, with the corners rounded off.",
     "The hotkey moved out of the box corner onto a full-width pill sitting just above each tile; the auto-cast tile's pill reads \"AUTO\".",
