@@ -17,6 +17,7 @@ import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
 import { milestonePower, rankScale, skillManaCost } from '../systems/skillMath.js';
 import { glideVitalFill } from '../systems/vitalFill.js';
 import { offscreenArrows } from '../systems/offscreenArrows.js';
+import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
@@ -1123,6 +1124,107 @@ function drawPortal(cx, cy, size, style) {
     ctx.fillStyle = cols[0]; ctx.globalAlpha = 0.55;
     ctx.beginPath(); ctx.arc(cx, cy, size * 0.26, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+// ── TOWN-PORTAL CHARGING AURA ── the effect that plays over the hero for the whole
+// channel (replacing the old blue gate tile flashing). Blue energy gathers: a glow
+// that swells, counter-spinning arcs that whirl faster, and motes spiralling up
+// (hinting at the beam to come). `progress` is 0 → 1 across the channel (see
+// chargeProgress); everything intensifies as it climbs.
+const PORTAL_BLUE = PORTAL_PALETTES.town;   // [core-blue, deep-blue, pale-blue]
+function drawPortalCharge(cx, cy, size, progress) {
+  const t = animNow();
+  const p = 0.28 + 0.72 * progress;                 // baseline presence, growing with charge
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';         // additive → reads as emitted light
+  // Gathering glow centred on the hero.
+  const R = size * (0.58 + 0.4 * progress);
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  g.addColorStop(0,   hexA(PORTAL_BLUE[2], 0.3 * p));
+  g.addColorStop(0.6, hexA(PORTAL_BLUE[0], 0.14 * p));
+  g.addColorStop(1,   hexA(PORTAL_BLUE[0], 0));
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  // Counter-spinning arcs — whirl faster as the channel nears completion.
+  const spin = t / (640 - 380 * progress);
+  ctx.lineWidth = Math.max(1.4, size * 0.05);
+  for (let i = 0; i < 3; i++) {
+    ctx.strokeStyle = PORTAL_BLUE[i % PORTAL_BLUE.length];
+    ctx.globalAlpha = 0.35 + 0.45 * progress;
+    ctx.shadowColor = PORTAL_BLUE[i % PORTAL_BLUE.length];
+    ctx.shadowBlur = (2 + 4 * progress) * (size / 16);
+    const r = size * (0.5 - 0.12 * i) * (0.85 + 0.15 * Math.sin(t / 200 + i));
+    const a0 = spin * (i % 2 ? -1 : 1) + i * (Math.PI * 2 / 3);
+    ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + Math.PI * 1.3); ctx.stroke();
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  // Motes spiralling inward and rising — more of them, higher, as it charges.
+  const motes = 4 + Math.round(progress * 4);
+  for (let i = 0; i < motes; i++) {
+    const ph = ((t / 680) + i / motes) % 1;         // 0..1 rising cycle
+    const ang = spin * 1.5 + i * (Math.PI * 2 / motes);
+    const rad = size * 0.42 * (1 - ph);             // spiral inward as it rises
+    const mx = cx + Math.cos(ang) * rad;
+    const my = cy + size * 0.5 - ph * size * (0.9 + 0.6 * progress);
+    const a = (1 - ph) * (0.5 + 0.5 * progress);
+    const s = Math.max(1.5, size * 0.07 * (0.6 + 0.6 * progress));
+    ctx.fillStyle = hexA(PORTAL_BLUE[2], a);
+    ctx.beginPath(); ctx.arc(mx, my, s, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ── TELEPORT BEAM ── the shaft of light for the departure (hero rockets up and off
+// the map) and its reverse on arrival (a pillar stabs down into the floor and the
+// hero materializes). `frame` is a {beam,glow,...} envelope from portalFrame();
+// `feetY` is the hero's foot line and `H` the canvas height (so the shaft runs off
+// the top edge). `age` drives the rising shimmer. Additive so it glows.
+function drawPortalBeam(cx, feetY, w, H, frame, age) {
+  const beam = frame.beam, glow = frame.glow;
+  if (beam <= 0.002 && glow <= 0.002) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  // Glowing pool at the hero's feet where the beam meets the floor.
+  if (glow > 0.002) {
+    const R = w * (0.7 + 0.55 * glow);
+    const g = ctx.createRadialGradient(cx, feetY, 0, cx, feetY, R);
+    g.addColorStop(0,   hexA(PORTAL_BLUE[2], 0.5 * glow));
+    g.addColorStop(0.5, hexA(PORTAL_BLUE[0], 0.26 * glow));
+    g.addColorStop(1,   hexA(PORTAL_BLUE[0], 0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(cx, feetY, R, R * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // The vertical shaft, from off the top edge down to the feet.
+  if (beam > 0.002) {
+    const topY = -H * 0.12;                         // starts above the screen → "off the map"
+    const shaftH = feetY - topY;
+    const halfW = w * (0.16 + 0.36 * beam);         // widens as it intensifies
+    const soft = ctx.createLinearGradient(cx - halfW, 0, cx + halfW, 0);
+    soft.addColorStop(0,   hexA(PORTAL_BLUE[0], 0));
+    soft.addColorStop(0.5, hexA(PORTAL_BLUE[2], 0.5 * beam));
+    soft.addColorStop(1,   hexA(PORTAL_BLUE[0], 0));
+    ctx.fillStyle = soft;
+    ctx.fillRect(cx - halfW, topY, halfW * 2, shaftH);
+    // Bright white-blue core.
+    const coreW = Math.max(1.5, halfW * 0.3);
+    const core = ctx.createLinearGradient(cx - coreW, 0, cx + coreW, 0);
+    core.addColorStop(0,   hexA(PORTAL_BLUE[2], 0));
+    core.addColorStop(0.5, hexA('#ffffff', 0.72 * beam));
+    core.addColorStop(1,   hexA(PORTAL_BLUE[2], 0));
+    ctx.fillStyle = core;
+    ctx.fillRect(cx - coreW, topY, coreW * 2, shaftH);
+    // Shimmer bands riding up the shaft.
+    const bands = 5;
+    for (let i = 0; i < bands; i++) {
+      const ph = ((age / 420) + i / bands) % 1;     // 0 (feet) → 1 (top), rising
+      const by = feetY - ph * shaftH;
+      const bh = Math.max(2, w * 0.08);
+      const ba = (1 - ph) * 0.5 * beam;
+      ctx.fillStyle = hexA('#ffffff', ba);
+      ctx.fillRect(cx - coreW, by, coreW * 2, bh);
+    }
   }
   ctx.restore();
 }
@@ -5570,8 +5672,10 @@ window.gameState = function gameState(radius) {
     if (inTown) mode = 'town';
     else if (compactBag) mode = 'bag';
   }
-  // Movement only does something in the live dungeon with no menu/overlay up.
-  const canMove = (mode === 'dungeon');
+  // Movement only does something in the live dungeon with no menu/overlay up — and
+  // never mid-teleport, when the hero is off the map and can't move, act or be hit.
+  const transit = portalTransiting() ? portalFx.dir : null;   // 'out' (→town) | 'in' (→dungeon) | null
+  const canMove = (mode === 'dungeon') && !transit;
 
   // ── Derived context the agent needs but can't read off the screen ──
   // Explicit stair coordinates (scan once) so the exit is locatable even when it
@@ -5657,8 +5761,14 @@ window.gameState = function gameState(radius) {
     // What's on screen and whether walking keys work right now. If canMove is
     // false, interact with the menu/overlay instead of pressing movement keys.
     mode,            // dungeon | town | bag | title | classSelect | nameSelect | dead | shop | mystic | settings | changelog | playtime
-    canMove,         // true only when mode === 'dungeon'
+    canMove,         // true only when mode === 'dungeon' and not mid-teleport
     blockingOverlay, // DOM id of the open modal, or null
+    // Town-portal teleport ANIMATION in flight: 'out' (fading out to town) or 'in'
+    // (materializing back into the dungeon), else null. While set, the hero is off
+    // the map — it can't move, act, or be touched by any foe (you can still open a
+    // menu, which simply holds); it clears itself in under a second. (This is the
+    // post-channel animation, distinct from the channel — see player.channeling.)
+    transit,
     inTown: !!inTown,
     floor: dungeonLevel,                                                   // continuous depth (1, 2, 3, …)
     floorDisplay: (typeof displayFloor === 'function') ? displayFloor() : dungeonLevel, // 1–25 within a tier
@@ -5682,6 +5792,9 @@ window.gameState = function gameState(radius) {
       inCombat: (player._combatSecs || 0) > 0,
       stamina: Math.round(player.stamina || 0), maxStamina: Math.round(player.maxStamina || 0), // Stamina for sprint/dash
       dashReady: (player.dashCd || 0) <= 0 && (player.stamina || 0) >= (typeof DASH_COST !== 'undefined' ? DASH_COST : 35),
+      // Town-portal channel in progress: real seconds left before it opens (0 = idle).
+      // The hero is rooted while it counts down; a foe's hit or a step cancels it.
+      channeling: Math.max(0, Math.round((portalCharge || 0) * 10) / 10),
       level: player.level, xp: player.xp,
       xpToNext: (typeof xpForLevel === 'function') ? xpForLevel(player.level) : null,
       gold: player.gold, class: player.class, ascension: player.ascension,
@@ -5836,7 +5949,7 @@ window.gameGuide = function gameGuide(topic) {
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
       `Health potion: ${key('healthPotion')} · Mana potion: ${key('manaPotion')} — always available (not a hoarded consumable); they share a cooldown and both now restore OVER TIME (see the "healing" topic).`,
-      `Town Portal: ${key('portal')} — channel a portal to town (needs 3 clean turns; any enemy hit — or moving — cancels it).`,
+      `Town Portal: ${key('portal')} — channel a portal to town (needs 3 clean turns; any enemy hit — or moving — cancels it). A blue aura charges over the hero for the count; when it opens the hero fades out up a beam of light (~1s, unhittable) before you land in town — gameState().transit reads 'out' then, and 'in' when you materialize back below.`,
       `Swap weapon / gear set: ${key('swapWeapon')} — flip between loadout 1 and 2.`,
       `Bag / inventory: ${key('bag')} — opens the LOOT / GEAR / HERO / SKILLS tabs.`,
       `Cast hotbar skills: number keys ${key('skill1')}-${key('skill' + SKILL_SLOTS)} fire the ${SKILL_SLOTS} manual slots on the RIGHT of the bar (tap to cast). One extra skill sits in a dedicated auto-cast slot in the MIDDLE and fires itself — see the "autocast" topic.`,
@@ -5958,7 +6071,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     town: [
       `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, knocked back several floors, your bag dropped as a reclaimable grave on the death floor).`,
-      `Town is a menu of services; take the Dungeon Gate to drop back in (choose tier + floor). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
+      `Town is a menu of services; take the Dungeon Gate to drop back in (choose tier + floor). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
       `Merchant (buy gear / pay to restock); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots); Enchanter (add/reroll affixes with Glimmer+gold, Chaos at high rarity); Healer (full heal + cure for gold).`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
@@ -6334,6 +6447,14 @@ function sfx(name) {
     case 'click':   tone(660, 0.04, t, 'square', 0.22); break;
     case 'denied':  tone(180, 0.12, t, 'square', 0.3); tone(120, 0.16, t + 0.1, 'square', 0.28); break;
     case 'teleport': tone(880, 0.18, t, 'sine', 0.35, 220); tone(440, 0.2, t + 0.06, 'sine', 0.28, 1320); noise(0.12, t, 0.18); break;
+    // ── TOWN-PORTAL TELEPORT ── a rising swell as the hero rockets away, and a
+    // diving pitch that lands on a solid thump as they materialize back in.
+    case 'portalout': // fade-out + beam-up: energy sweeps upward and off the map
+      tone(294, 0.5, t, 'sine', 0.34, 1760); tone(588, 0.42, t + 0.05, 'triangle', 0.2, 2640);
+      noise(0.55, t, 0.22, 6000, 'highpass'); break;
+    case 'portalin':  // pillar-in + materialize: pitch dives in, then a low thump
+      tone(1760, 0.42, t, 'sine', 0.32, 294); tone(880, 0.4, t + 0.04, 'triangle', 0.18, 220);
+      noise(0.4, t, 0.2, 5200, 'highpass'); tone(120, 0.3, t + 0.24, 'sawtooth', 0.4, 60); break;
     // ── ULTIMATE CASTS ── big, cinematic capstone-spell sounds. ──
     case 'ult': // huge generic impact — a deep, room-shaking boom
       tone(70, 0.7, t, 'sawtooth', 0.6, 30); tone(110, 0.6, t + 0.04, 'square', 0.4, 45);
@@ -9523,10 +9644,48 @@ function cancelPortalChannel(reason) {
   updateBars(); renderSkillBar(); draw();
 }
 
+// ── PORTAL TELEPORT ANIMATION ──
+// When the channel finishes we don't cut to town instantly: the hero fades out and
+// rockets up a beam of light off the map (departure), then we swap to town. Coming
+// back down plays it in reverse — a pillar stabs into the floor and the hero
+// materializes (arrival). For the whole window `portalFx` is set; the world is
+// frozen around it (rtPaused/clockPaused) so the hero can't move or be hit while
+// they're mid-teleport, yet draw() keeps painting the floor so the effect shows.
+// The animation advances on the render loop's own dt (see updatePortalFx), NOT the
+// world clock — it must keep playing while the sim is paused. Timing/easing shapes
+// live in the pure systems/portalFx.js; here we just hold the phase + elapsed.
+let portalFx = null;   // { dir:'out'|'in', t:<ms elapsed>, dur:<ms> } while teleporting; null = idle
+function portalTransiting() { return !!portalFx; }
+// Begin the fade-out + beam-up once a channel completes. warpToTown fires only when
+// the animation finishes (updatePortalFx), so the dungeon stays on screen till then.
+function beginPortalDeparture() {
+  portalFx = { dir: 'out', t: 0, dur: PORTAL_FX.OUT_MS };
+  clearHeld();          // drop any held input so nothing fires the instant we land
+  sfx('portalout');
+}
+// Begin the pillar-in + materialize as the hero re-enters the dungeon from town.
+function beginPortalArrival() {
+  portalFx = { dir: 'in', t: 0, dur: PORTAL_FX.IN_MS };
+  clearHeld();
+  sfx('portalin');
+}
+// Advance the teleport animation each render frame (runs even while paused). On the
+// departure's final frame we actually warp to town; the arrival just hands control
+// back. dt is the loop's real-time delta in seconds.
+function updatePortalFx(dt) {
+  if (!portalFx) return;
+  portalFx.t += dt * 1000;
+  if (!portalDone(portalFx.t, portalFx.dur)) return;
+  const dir = portalFx.dir;
+  portalFx = null;                 // clear BEFORE the warp so town isn't rendered mid-fade
+  if (dir === 'out') warpToTown();
+}
+
 // The TOWN button / hotkey / floor-1 up-stair entry point. In town it just reopens
 // the hub menu; in the dungeon it begins the channel, or breaks off one already going.
 function startPortalChannel() {
   if (inTown) { openTownHub(); return; }
+  if (portalTransiting()) return;   // already teleporting — ignore the button
   if (tutorialActive) { log('🏖️ Head north into the cave to begin your descent first.'); sfx('denied'); return; }
   if (portalCharge > 0) { cancelPortalChannel('<span data-spr=feat_gate_red></span> You let the town portal fade.'); return; }
   portalCharge = PORTAL_CHANNEL_SECS;
@@ -9561,7 +9720,9 @@ function tickPortalChannel(hpBeforeEnemies) {
   if (player.hp < hpBeforeEnemies) { cancelPortalChannel('💥 A blow shatters your half-formed town portal!'); return; }
   const before = Math.ceil(portalCharge);
   portalCharge -= WORLD_TICK_SECONDS;
-  if (portalCharge <= 0) { resetPortal(); warpToTown(); return; }
+  // Channel done: kick off the fade-out + beam-up. The actual warp to town waits
+  // for that animation to finish (updatePortalFx), so the floor stays on screen.
+  if (portalCharge <= 0) { resetPortal(); beginPortalDeparture(); return; }
   const left = Math.ceil(portalCharge);
   if (left !== before) log(`<span data-spr=feat_gate_red></span> The town portal swirls — ${left} second${left === 1 ? '' : 's'} to go.`);
   updateBars(); renderSkillBar();
@@ -11555,7 +11716,7 @@ function renderGate() {
     <div class="town-blurb gate-tier-blurb" style="color:${meta.color}">${blurb}</div>
     <div class="gate-grid">${buttons}</div>`);
 }
-function enterDungeonAt(diff, floor) {
+function enterDungeonAt(diff, floor, opts) {
   // Back-compat: a single argument is a continuous depth — re-enter exactly where
   // you left off, splitting it back into difficulty + floor.
   if (floor == null) { const dl = Math.max(1, Math.round(diff) || 1); diff = diffOf(dl); floor = displayFloor(dl); }
@@ -11575,6 +11736,10 @@ function enterDungeonAt(diff, floor) {
   maybeFloorEvent();
   sfx('stairs');
   log(`<span data-spr=feat_gate_red></span> You step through the gate into ${floorLabel()}.`, 'important');
+  // Returning to the dungeon through the Gate plays the teleport in reverse — a blue
+  // pillar stabs into the floor and the hero materializes. The rainbow conquest
+  // portal keeps its own purple flash instead, so it opts out.
+  if (!(opts && opts.noPortalFx)) beginPortalArrival();
   updateBars(); renderSkillBar(); draw(); saveGame();
 }
 
@@ -13944,21 +14109,36 @@ function draw() {
 
   // Player (smooth float position).
   const px = offX + (player.fx - 0.5) * tw, py = offY + (player.fy - 0.5) * th;
+  // Town-portal teleport underway? Pull this frame's fade / lift / beam envelope so
+  // the hero fades and rides the beam up off the map (departure) or drops in and
+  // solidifies out of the pillar (arrival). null the rest of the time.
+  const fxHero = portalTransiting() ? portalFrame(portalFx.dir, portalFx.t, portalFx.dur) : null;
+  const heroAlpha = fxHero ? fxHero.heroAlpha : 1;
+  const heroLift = fxHero ? fxHero.heroLift * th * 2.6 : 0;   // px risen up the beam / dropping into place
   // Soft under-the-feet contact shadow grounds the hero (no coloured backing
-  // circle — matching the de-cluttered enemies).
+  // circle — matching the de-cluttered enemies). It fades out with the hero.
+  ctx.save();
+  if (fxHero) ctx.globalAlpha = heroAlpha;
   drawActorShadow(px + tw/2, py + th*0.82, tw);
-  // Golden completion aura, under the hero, when any worn set is complete.
-  if (completedSets().length) drawSetAura(px + tw/2, py + th*0.6, tw);
+  ctx.restore();
+  // Golden completion aura, under the hero, when any worn set is complete (hidden
+  // mid-teleport — the beam owns the hero's light then).
+  if (!fxHero && completedSets().length) drawSetAura(px + tw/2, py + th*0.6, tw);
   // Composite the hero — a class-specific pixel adventurer that visibly carries
   // its equipped weapon type at its side. A quick attack lunge nudges the sprite
   // toward its target while leaving the stamina bar / portal glow below in place.
+  // Mid-teleport the hero fades (heroAlpha) and rides up / drops down the beam (heroLift).
   const pLunge = attackLungeOffset(player, tw, th);
-  drawHeroSprite(px + (pLunge ? pLunge.dx : 0), py + (pLunge ? pLunge.dy : 0), tw, th, scale);
+  ctx.save();
+  if (fxHero) ctx.globalAlpha = heroAlpha;
+  drawHeroSprite(px + (pLunge ? pLunge.dx : 0), py - heroLift + (pLunge ? pLunge.dy : 0), tw, th, scale);
+  ctx.restore();
   // Vital bars under the hero — each pops up only while its vital isn't full, so
   // they stay out of the way at full. Stamina (amber) always shows this way; the
   // optional Hero Bars setting adds red Health and blue Mana above it. They stack
-  // just under the hero's feet, with the stamina bar at its usual spot.
-  {
+  // just under the hero's feet, with the stamina bar at its usual spot. Hidden
+  // while teleporting — the hero isn't really standing on the floor then.
+  if (!fxHero) {
     const bw = tw * 0.8, bh = Math.max(2, th * 0.07), bx = px + (tw - bw) / 2;
     const bars = [];   // top → bottom
     if (showHeroBars && player.hp < player.maxHp - 0.5)
@@ -13977,13 +14157,12 @@ function draw() {
     }
   }
 
-  // Town-portal channel: a DawnLike swirling-portal tile pulses over the hero while
-  // the gate charges, with the remaining-seconds count floating above so the progress
-  // (and the "don't get hit" stakes) read at a glance.
+  // Town-portal CHARGING AURA: blue energy gathers over the hero for the whole
+  // channel (0 → 1 as it completes), with the remaining-seconds count floating above
+  // so the progress (and the "don't get hit" stakes) read at a glance.
   if (portalChanneling()) {
-    const pulse = 0.55 + 0.35 * Math.sin(animNow() / 180);
-    // The shared animated portal, tinted BLUE for the home gate (teleporters purple).
-    drawPortal(px + tw / 2, py + th / 2, tw, 'town');
+    const prog = chargeProgress(portalCharge, PORTAL_CHANNEL_SECS);
+    drawPortalCharge(px + tw / 2, py + th / 2, tw, prog);
     ctx.save();
     ctx.font = `bold ${Math.max(12, Math.round(tw * 0.34))}px sans-serif`;
     ctx.textAlign = 'center';
@@ -13996,6 +14175,11 @@ function draw() {
     ctx.fillStyle = '#bfe8ff';
     ctx.fillText(portalSecsLeft, px + tw / 2, ny);
     ctx.restore();
+  } else if (fxHero) {
+    // TELEPORT BEAM: shoots up off the map (departure) or stabs in and recedes as the
+    // hero materializes (arrival). Anchored at the hero's feet so it reads as the
+    // shaft of light they ride. Drawn last so it engulfs the fading/forming hero.
+    drawPortalBeam(px + tw / 2, py + th * 0.92, tw, H, fxHero, portalFx.t);
   }
 
   // Tall decor (trees) occludes actors standing behind it, with a tinted
@@ -16104,7 +16288,7 @@ function regenStamina(dt) {
 
 // A burst of speed in the current input/facing direction, fuelled by stamina.
 function doDash() {
-  if (inTown || portalChanneling() || isPlayerStunned()) return;
+  if (inTown || portalChanneling() || portalTransiting() || isPlayerStunned()) return;
   if ((player.dashCd || 0) > 0 || player.stamina < DASH_COST) return;
   let dx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let dy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
@@ -16253,7 +16437,7 @@ function onEnterCell(nx, ny) {
     nextDiffPortal = null;
     sfx('stairs'); screenFlash('#a060ff');
     log(`🌈 You step into the rainbow portal — onward to ${(DIFFS[d - 1] || {}).name || 'the next difficulty'}!`, 'important');
-    enterDungeonAt(d, 1);
+    enterDungeonAt(d, 1, { noPortalFx: true });   // keeps its own purple flash, not the blue pillar
     return;
   }
   const tile = mapData[ny][nx];
@@ -16418,7 +16602,7 @@ function teleportPad(nx, ny) {
 // actually feels like a relocation. Only valid while exploring a dungeon floor.
 function unstuck() {
   if (inTown) { log('<span data-spr=feat_portal></span> Nothing to escape in town.'); return; }
-  if (portalChanneling()) return;   // held while a town portal channels (tap TOWN to break off)
+  if (portalChanneling() || portalTransiting()) return;   // held while a town portal channels / mid-teleport
   // Gather every plain-floor tile that isn't the player's own and has no foe.
   const spots = [];
   for (let y = 1; y < MAP_H - 1; y++) {
@@ -17079,7 +17263,7 @@ function castSkillById(id, opts) {
   const sk = activeSkillList().find(s => s.id === id);
   if (!sk) { castMsg('You haven\'t learned that skill.'); _muteCastLog = false; return false; }
   if (inTown) { castMsg('Save your skills for the dungeon.'); _muteCastLog = false; return false; }
-  if (portalChanneling()) { _muteCastLog = false; return false; }   // held while a town portal channels (tap TOWN to break off)
+  if (portalChanneling() || portalTransiting()) { _muteCastLog = false; return false; }   // channeling / mid-teleport
   if (isPlayerStunned()) { castMsg('You are stunned and can\'t cast!'); _muteCastLog = false; return false; }
   const cd = skillCd(id);
   if (cd > 0) { castMsg(`⏳ ${sk.name} is recharging (${Math.ceil(cd)}s left).`); _muteCastLog = false; return false; }
@@ -19059,7 +19243,7 @@ function pickupChestsAt(x, y) {
 // next to a merchant/mystic opens their menu (you can't walk onto them); otherwise
 // it opens any chest already underfoot (most are auto-grabbed as you walk over).
 function pickup() {
-  if (inTown || portalChanneling()) return;
+  if (inTown || portalChanneling() || portalTransiting()) return;
   if (merchant && Math.abs(merchant.x - player.x) <= 1 && Math.abs(merchant.y - player.y) <= 1) { openShop(); return; }
   if (mystic && Math.abs(mystic.x - player.x) <= 1 && Math.abs(mystic.y - player.y) <= 1) { openMystic(); return; }
   if (pickupChestsAt(player.x, player.y) > 0) { renderPanelSoon(); updateBars(); saveGameSoon(); }
@@ -19479,7 +19663,7 @@ function healPotionAmount() { return Math.max(1, Math.round(player.maxHp * potio
 function potionReady() { return (player.potionCd || 0) <= 0; }
 function useHealthPotion() {
   if (inTown) return;               // potions are locked in town (see renderSkillBar) — no free heals
-  if (portalChanneling()) return;   // held while a town portal channels (tap TOWN to break off)
+  if (portalChanneling() || portalTransiting()) return;   // channeling / mid-teleport
   if (!potionReady()) { log(`⏳ Potions recharge — ${Math.ceil(player.potionCd)}s left.`); return; }
   if (player.hp >= player.maxHp) { log('Already at full health.'); return; }
   const amt = queueHeal(healPotionAmount(), true); // over-time, interruptible sip (a heavy direct hit spills it)
@@ -19494,7 +19678,7 @@ const MANA_PERCENT = 0.40;     // a sip restores 40% of max MP, paid out OVER TI
 function manaPotionAmount() { return Math.max(10, Math.round(player.maxMp * potionManaPct())); }
 function useManaPotion() {
   if (inTown) return;               // potions are locked in town (see renderSkillBar) — no free refills
-  if (portalChanneling()) return;   // held while a town portal channels (tap TOWN to break off)
+  if (portalChanneling() || portalTransiting()) return;   // channeling / mid-teleport
   if (!potionReady()) { log(`⏳ Potions recharge — ${Math.ceil(player.potionCd)}s left.`); return; }
   if (player.mp >= player.maxMp) { log('Already at full mana.'); return; }
   const amt = queueMana(manaPotionAmount()); // over-time restore
@@ -20946,6 +21130,7 @@ function gearSetBarHTML() {
 // Swap which loadout is worn. Called with no/invalid index from the G hotkey to
 // flip to the other set; with 0/1 from the on-screen buttons to pick one.
 function toggleGearSet(idx) {
+  if (portalTransiting()) return;   // hero is mid-teleport (off the map) — no gear swaps
   const target = (idx === 0 || idx === 1) ? idx : (activeGearSet === 0 ? 1 : 0);
   hideTooltip();
   if (target === activeGearSet) return;
@@ -24186,6 +24371,7 @@ const RT_BLOCKING_OVERLAYS = ['title-overlay','name-overlay','class-overlay','hc
   'greed-overlay'];   // the risk/reward cursed-floor choice pauses the world while open
 function rtPaused() {
   if (gameHalted || inTown || player.hp <= 0) return true;
+  if (portalTransiting()) return true;   // hero is mid-teleport (off the map) — no moving/fighting/being hit
   for (const id of RT_BLOCKING_OVERLAYS) {
     const el = document.getElementById(id);
     if (el && el.classList.contains('open')) return true;
@@ -24204,6 +24390,7 @@ const TOWN_REST_OVERLAYS = ['town-overlay', 'shop-overlay', 'mystic-overlay'];
 // top of the hub, exactly as those same menus pause the world down below.
 function clockPaused() {
   if (gameHalted || player.hp <= 0) return true;
+  if (portalTransiting()) return true;   // freeze the scene (and ambient anim) while the hero teleports
   for (const id of RT_BLOCKING_OVERLAYS) {
     if (inTown && TOWN_REST_OVERLAYS.includes(id)) continue;   // resting in town → clock runs
     const el = document.getElementById(id);
@@ -24431,6 +24618,9 @@ function gameLoop(ts) {
   _lastTs = ts;
   if (dt > 0.1) dt = 0.1;          // clamp after a stall so nothing teleports
   tickAnimClock(ts);               // advance the looping-animation clock (frozen while paused)
+  // The teleport fade/beam animation runs on its own even while the world is paused
+  // by it (rtPaused → true during transit) — it must keep playing to reach the warp.
+  safeStep('portalFx', () => updatePortalFx(dt));
   if (!rtPaused()) {
     safeStep('move', () => updatePlayer(dt));              // 8-dir movement may trigger stairs/town/death…
     if (!rtPaused()) safeStep('combat', () => updatePlayerCombat(dt));

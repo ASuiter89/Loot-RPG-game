@@ -3,6 +3,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Animated town-portal teleport", by: "Claude", notes: [
+    "Opening a town portal now charges a blue aura over the hero instead of flashing a gate icon — the full countdown reads as an energy build-up.",
+    "When it opens, the hero fades out and rockets up a beam of light off the map before you land in town.",
+    "Returning through the Dungeon Gate plays it in reverse: a blue pillar stabs into the floor and the hero materializes out of it.",
+    "You can't move or be hit during the brief teleport animation; the countdown's own rules (a foe's hit or a step cancels it) are unchanged.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Wider death & skill cards", by: "Claude", notes: [
     "The You-Died screen and the skill detail popover are wider now, so the death recap and each skill's mechanics wrap far less.",
     "Clicking a skill node no longer leaves its small hover label stuck on top of the detail card.",
