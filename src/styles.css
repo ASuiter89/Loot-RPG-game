@@ -1388,7 +1388,8 @@
   .attr-name { font-size: 1.3rem; font-weight: bold; color: var(--normal); }
   .attr-desc { font-size: 1.2rem; color: var(--junk); line-height: 1.3; }
   .attr-val { font-size: 1.6rem; font-weight: bold; color: var(--gold-350); width: 24px; text-align: center; flex-shrink: 0; }
-  .attr-plus { flex-shrink: 0; width: 30px; height: 30px; border: none; border-radius: 5px; background: var(--success); color: var(--paper); font-size: 2rem; font-weight: bold; cursor: pointer; line-height: 1; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  /* margin-left buffers the + button off the value; .attr-info (flex:1) shrinks to absorb it. */
+  .attr-plus { flex-shrink: 0; margin-left: var(--space-5); width: 30px; height: 30px; border: none; border-radius: 5px; background: var(--success); color: var(--paper); font-size: 2rem; font-weight: bold; cursor: pointer; line-height: 1; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .attr-plus:active { background: var(--uncommon); }
   .attr-plus:disabled { background: var(--panel); color: var(--junk); cursor: not-allowed; }
 
