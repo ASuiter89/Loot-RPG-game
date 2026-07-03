@@ -20269,16 +20269,9 @@ function renderSkills(el) {
     // Just the rank keeps the pill compact on the narrow nodes; the /max ceiling
     // rides the hover title and the detail card.
     const badge = `<span class="badge" title="Rank ${rank} / ${n.max}">${avail ? '<span class="up">+</span>' : ''}<span class="rk">${rank}</span></span>`;
-    // A learned active bound to a hotkey gets a small corner chip showing where it's
-    // bound — the key number for a manual slot, ⟳ for the auto-cast slot. Owned actives
-    // that aren't bound stay fully lit (they're learned, just not on the bar) — no
-    // graying, so they never read as un-learned.
-    let slotMark = '';
-    if (n.type === 'active' && owned) {
-      const mi = skillSlotIndexOf(n.id);
-      if (mi >= 0) slotMark = `<span class="slotmark" title="Bound to skill slot ${mi + 1}">${skillKeyLabel(mi + 1) || (mi + 1)}</span>`;
-      else if (normAutoSkill() === n.id) slotMark = `<span class="slotmark auto" title="In the auto-cast slot">⟳</span>`;
-    }
+    // No per-node "bound to slot N" chip — the loadout tray sitting right above the
+    // tree already shows every binding (and the auto-cast slot), and a second corner
+    // pill read as a duplicate of the rank badge next to it.
     // Learned actives are drag handles: drag one onto a loadout-tray slot to bind it.
     const drag = (n.type === 'active' && owned) ? `draggable="true" ondragstart="skillDragStart(event,'${n.id}',-1)" ondragend="skillDragEnd()"` : '';
     // Hover = a SHORT tooltip; the full detail card opens on CLICK (see selectSkill).
@@ -20288,7 +20281,7 @@ function renderSkills(el) {
     return `<button class="sk-tnode ${state}${n.keystone ? ' keystone' : ''}${n.type === 'active' ? ' act' : ''}${selectedSkillId === n.id ? ' sel' : ''}" id="sknode-${n.id}" ${drag}
         style="left:${(p[0] * 100).toFixed(2)}%;top:${(p[1] * 100).toFixed(2)}%" onclick="skillNodeClick(event,'${n.id}')" ondblclick="buySkill('${n.id}')"
         data-tip="${tipShort}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
-      <span class="ic">${dlIconFill(n.icon)}</span><span class="nm">${n.name}</span>${badge}${slotMark}
+      <span class="ic">${dlIconFill(n.icon)}</span><span class="nm">${n.name}</span>${badge}
     </button>`;
   }).join('');
 

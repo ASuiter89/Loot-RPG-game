@@ -3,6 +3,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Skill nodes drop the slot badge", by: "Claude", notes: ["Removed the small slot-number badge from the top-left corner of learned active skills in the tree — it looked just like the rank badge beside it, and the skill-slot bar right above the tree already shows what's bound where."] },
   { date: "2026-07-03", size: "small", v: "Skill-tree nodes always show their rank", by: "Claude", notes: [
     "Every skill-tree node now shows its current rank on a redesigned corner pill in every state — learned, ready, locked or maxed — so you can always read a skill's level at a glance.",
     "A node you can spend a point on marks it with a bright pulsing + beside the rank, instead of hiding the rank behind a lone +, so having a point to spend never masks how far you've already ranked a skill.",
