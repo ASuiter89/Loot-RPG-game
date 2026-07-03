@@ -88,8 +88,10 @@ describe('embedded configuration & console API (now in src/legacy/game.js)', () 
     expect(game).toMatch(/window\.gameGuide\s*=/);
   });
 
-  it('drives the in-game changelog from a CHANGELOG array', () => {
-    expect(game).toMatch(/const CHANGELOG\s*=\s*\[/);
+  it('drives the in-game changelog from a CHANGELOG array (now in src/data/changelog.js)', () => {
+    const changelog = readFileSync(resolve(__dirname, '../../src/data/changelog.js'), 'utf8');
+    expect(changelog).toMatch(/export const CHANGELOG\s*=\s*\[/);
+    expect(game).toMatch(/import \{ CHANGELOG \}/);
   });
 
   it('appends the transitional window bridge', () => {

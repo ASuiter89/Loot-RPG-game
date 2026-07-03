@@ -24,6 +24,18 @@ replace its definition in `game.js` with an `import`, add unit tests, and verify
 - ✅ game.js still strict-ESM-parses; build + smoke green; 93 tests pass. The
   `window` bridge still resolves (imported names stay in module scope).
 
+**Increment 2 — a core formula + the first data module**
+- 📦 `src/systems/ratings.js` ← `rated` (the core rating→chance formula) +
+  `ratePct` + `SKILL_RATING`. Pure.
+- 📦 `src/data/changelog.js` ← the 330-entry `CHANGELOG` array (player-facing
+  patch notes) — the first `data/` extraction, per the data-driven-design rule.
+  game.js: 25,488 → 25,097 lines.
+- 🧪 `test/systems/ratings.test.js` (formula + monotonicity + asymptote) and
+  `test/data/changelog.test.js` (entry-shape validity, newest-first ordering, and
+  the "never reference another game" changelog rule as an enforced data check).
+- ✅ build + smoke green (behavior identical), 108 tests, 100 % coverage over all
+  extracted modules.
+
 ## Phase 3 — inline `<script>` → ES module + `window` bridge
 
 - 📦 **The 24.2k-line inline `<script>` moved verbatim** into
