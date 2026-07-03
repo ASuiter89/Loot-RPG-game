@@ -18,6 +18,7 @@ import { milestonePower, rankScale, skillManaCost } from '../systems/skillMath.j
 import { glideVitalFill } from '../systems/vitalFill.js';
 import { offscreenArrows } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
+import { footprintSealsPath } from '../systems/decorPlacement.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
@@ -1823,6 +1824,20 @@ function placeOutdoorDecor(theme) {
       // leave gaps you can walk through. Trees only need their trunk tile.
       const foot = decorFootprint(id, x, y);
       if (!foot.every(([fx, fy]) => free(fx, fy))) continue;
+      // …and the piece must not wall off a path. The anchor's >=3-open-neighbours
+      // test only vets one tile: a wide table can plug a (2-wide) corridor with its
+      // far half, and — since it counts a furnished floor tile as "open" — a lone
+      // brazier/chest dropped beside earlier props can close the last gap of a
+      // pocket. So reject any footprint whose solid extent would disconnect the
+      // floor, treating already-placed decor as solid (that catches whichever piece
+      // completes a seal, whatever its size or placement order).
+      // A vault door (11) reads as a wall to isFloorPassable, but it's openable, so
+      // its locked interior is still "reachable" — count it passable here so decor
+      // can't wall off the sole approach to a vault and strand the key/loot inside.
+      const walk = (wx, wy) => wx >= 0 && wy >= 0 && wx < MAP_W && wy < MAP_H
+        && (isFloorPassable(mapData[wy][wx]) || mapData[wy][wx] === 11)
+        && furnitureMap[wy + ',' + wx] === undefined;
+      if (footprintSealsPath(foot, MAP_W, MAP_H, walk)) continue;
       decorMap[y + ',' + x] = id;
       for (const [fx, fy] of foot) furnitureMap[fy + ',' + fx] = 1;
       placed++;
@@ -24335,6 +24350,21 @@ try {
         const C = currentTheme();
         return { theme: C.name, floorStyle: C.floorStyle, wallStyle: C.wallStyle, decor, solid };
       } catch (e) { return { err: String(e) }; }
+    };
+    // __AUDIT__ (temporary): flood the REAL map from the player and report floor
+    // tiles a decor piece walled off (full-map, no ASCII windowing artefacts).
+    window.__connCheck = function () {
+      const pass = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && (isFloorPassable(mapData[y][x]) || mapData[y][x] === 11) && furnitureMap[y + ',' + x] === undefined;
+      const seen = new Set([player.y + ',' + player.x]); const st = [[player.x, player.y]];
+      while (st.length) { const [x, y] = st.pop(); for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) { const nx = x+dx, ny = y+dy, k = ny+','+nx; if (seen.has(k) || !pass(nx, ny)) continue; seen.add(k); st.push([nx, ny]); } }
+      let bad = 0; const detail = [];
+      for (let y = 1; y < MAP_H-1; y++) for (let x = 1; x < MAP_W-1; x++) {
+        if (mapData[y][x] === 0 && furnitureMap[y+','+x] === undefined && !seen.has(y+','+x)) {
+          bad++;
+          if (detail.length < 4) { const nb = [[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy]) => furnitureMap[(y+dy)+','+(x+dx)] !== undefined ? 'D' : mapData[y+dy][x+dx]).join(','); detail.push({ x, y, nb }); }
+        }
+      }
+      return { bad, detail };
     };
   }
 } catch (e) {}
