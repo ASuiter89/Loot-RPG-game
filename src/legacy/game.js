@@ -1501,6 +1501,7 @@ function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
     // and floor field tiles, a uniform tile per room (walls on wall cells, floor on
     // the rest), instead of borrowing the outdoor ground terrains.
     drawInteriorTerrain(C, ox, oy, tw, cx0, cy0, cx1, cy1);
+    drawWallShadow(ox, oy, tw, cx0, cy0, cx1, cy1, B, isFloor);   // built walls read as raised too
   } else {
     lpcFill(B.wall, ox, oy, tw, cx0, cy0, cx1, cy1);
     lpcLayer(B.floor, isFloor, ox, oy, tw, cx0, cy0, cx1, cy1);
@@ -1537,17 +1538,25 @@ function wallShadowLayer(B, isFloor) {
   if (_wsCache && _wsCacheKey === key) return _wsCache;
   const TS = 32, MW = MAP_W * TS, MH = MAP_H * TS;
   if (MW <= 0 || MH <= 0 || MW * MH > 64e6) { _wsCache = null; _wsCacheKey = key; return null; }
-  // 1. Floor autotile layer → its alpha is the organic floor coverage.
-  const fc = document.createElement('canvas'); fc.width = MW; fc.height = MH;
-  const fg = fc.getContext('2d'); fg.imageSmoothingEnabled = false;
-  const realCtx = ctx; ctx = fg;
-  try { lpcLayer(B.floor, isFloor, 0, 0, TS, 0, 0, MAP_W, MAP_H); } finally { ctx = realCtx; }
-  // 2. Wall mask = solid black MINUS the floor shape (keeps the curved edge).
+  // 1-2. Build the wall mask (black where wall). Built interiors use square wall
+  // TILES, so the mask is the wall cells directly; outdoor walls have organic
+  // autotiled edges, so we take the inverse of the floor layer's own alpha.
   const wc = document.createElement('canvas'); wc.width = MW; wc.height = MH;
-  const wg = wc.getContext('2d');
-  wg.fillStyle = '#000'; wg.fillRect(0, 0, MW, MH);
-  wg.globalCompositeOperation = 'destination-out'; wg.drawImage(fc, 0, 0);
-  wg.globalCompositeOperation = 'source-over';
+  const wg = wc.getContext('2d'); wg.imageSmoothingEnabled = false;
+  wg.fillStyle = '#000';
+  if (currentTheme().indoor) {
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+      if (mapData[y][x] === 1 || mapData[y][x] === 10) wg.fillRect(x * TS, y * TS, TS, TS);
+    }
+  } else {
+    const fc = document.createElement('canvas'); fc.width = MW; fc.height = MH;
+    const fg = fc.getContext('2d'); fg.imageSmoothingEnabled = false;
+    const realCtx = ctx; ctx = fg;
+    try { lpcLayer(B.floor, isFloor, 0, 0, TS, 0, 0, MAP_W, MAP_H); } finally { ctx = realCtx; }
+    wg.fillRect(0, 0, MW, MH);
+    wg.globalCompositeOperation = 'destination-out'; wg.drawImage(fc, 0, 0);
+    wg.globalCompositeOperation = 'source-over';
+  }
   // 3. Shadow = blurred+offset wall mask (deep core + soft falloff), then punch
   //    the walls back out so it lands on floor only.
   const sc = document.createElement('canvas'); sc.width = MW; sc.height = MH;

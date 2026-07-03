@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const dir = join(root, 'scratch-shots', 'biomes');
+const sub = process.argv[2] || 'biomes';              // subdir under scratch-shots/
+const outName = process.argv[3] || (sub + '-montage.png');
+const dir = join(root, 'scratch-shots', sub);
 const files = readdirSync(dir).filter((f) => f.endsWith('.png')).sort();
 const imgs = files.map((f) => ({ name: f.replace(/^\d+-/, '').replace(/\.png$/, '').replace(/-/g, ' '), b64: readFileSync(join(dir, f)).toString('base64') }));
 
@@ -32,6 +34,6 @@ const png = await page.evaluate(async ({ imgs }) => {
   }
   return cv.toDataURL('image/png');
 }, { imgs });
-writeFileSync(join(root, 'scratch-shots', 'biomes-montage.png'), Buffer.from(png.split(',')[1], 'base64'));
+writeFileSync(join(root, 'scratch-shots', outName), Buffer.from(png.split(',')[1], 'base64'));
 console.log('wrote scratch-shots/biomes-montage.png (' + imgs.length + ' biomes)');
 await browser.close();
