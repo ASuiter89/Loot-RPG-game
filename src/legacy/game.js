@@ -7319,9 +7319,10 @@ function scheduleMusic() {
   // After a suspension (tab muted, context paused) or a long main-thread stall
   // the audio clock keeps advancing while musicNext stands still. Replaying the
   // backlog would schedule hundreds of past-due notes in one audible burst, so
-  // whenever we've fallen more than a look-ahead window behind, snap to "now"
-  // and let the tune simply continue from here.
-  if (musicNext < ctx.currentTime - 0.3) musicNext = ctx.currentTime + 0.02;
+  // after a PATHOLOGICAL gap (seconds — a suspension, not a mere long frame),
+  // snap to "now" and let the tune simply continue from here. Sub-2s hiccups
+  // keep the old brief catch-up so ordinary play sounds exactly as before.
+  if (musicNext < ctx.currentTime - 2) musicNext = ctx.currentTime + 0.02;
   if (!musicProg) musicProg = mpick(MUSIC_SECTIONS[musicStructIdx].progs);
   if (!musicSectionEndTime) {
     musicSectionEndTime = musicNext + SECTION_MIN + Math.random() * (SECTION_MAX - SECTION_MIN);
@@ -12462,9 +12463,10 @@ function spawnEnemies() {
   enemies = [];
   // Summoned minions, transient combat buffs and skill charges don't carry between floors.
   minions = []; combatBuffs = {}; clearCharges();
-  // Only the hero's own ailments/buffs cross floors (as buildTown already does) —
-  // foe-tied entries would keep ticking on the despawned foes of the old roster.
-  statusEffects = statusEffects.filter(s => s.target === 'player');
+  // Foe-tied status entries are deliberately KEPT across a descend: a DoT still
+  // ticking on a left-behind foe can finish the kill (XP/gold/loot) — longstanding
+  // behavior players can lean on. The orphaned entries expire on their own within
+  // seconds, so they're no leak. (Town/tutorial builds do clear them, as before.)
   const isBossFloor = dungeonLevel % 5 === 0;
   // Hold monster DENSITY constant as floors grow: the regular per-floor foe count
   // is scaled by how much bigger this floor is than the base 20×20 (mapAreaRatio),
@@ -18655,12 +18657,13 @@ function pathBlockedGrid() {
 // The queue is a reused flat buffer too (each cell enqueues at most once, so W*H
 // slots always suffice) — no growable array churn per pathfind.
 let _pfCame = null, _pfSeen = null, _pfQueue = null, _pfGen = 0;
-// Exploration cap: give up once the flood has dequeued far more cells than any
-// real chase needs — a foe whose true path is longer than ~4× the leash radius
-// behaves as if the hero were unreachable, matching how far it would chase anyway.
-const PF_EXPLORE_CAP = (4 * ENEMY_LEASH) * (4 * ENEMY_LEASH);
 function enemyPathStep(e, tx, ty) {
   const W = MAP_W, H = MAP_H, n = W * H;
+  // Exploration bound: BFS can never dequeue more than every cell, so capping at
+  // the map area changes NO chase (old semantics exactly) — it only names the
+  // worst case. The real unreachable-flood savings come from the cached static
+  // grid + pooled queue, not from giving up early.
+  const exploreCap = n;
   const start = e.y * W + e.x, goal = ty * W + tx;
   if (start === goal) return null;
   const blocked = pathBlockedGrid();
@@ -18674,7 +18677,7 @@ function enemyPathStep(e, tx, ty) {
   while (qi < qt) {
     const cur = queue[qi++];
     if (cur === goal) { found = true; break; }
-    if (++dequeued > PF_EXPLORE_CAP) break;   // marathon route — treat as unreachable
+    if (++dequeued > exploreCap) break;       // backstop only — cap = map area, no chase is ever cut short
     const cx = cur % W, cy = (cur - cx) / W;
     for (let d = 0; d < 8; d++) {
       const dx = ENEMY_DIR_X[d], dy = ENEMY_DIR_Y[d];
