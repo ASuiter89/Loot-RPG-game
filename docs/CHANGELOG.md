@@ -42,8 +42,14 @@ replace its definition in `game.js` with an `import`, add unit tests, and verify
 - 📄 `docs/terrain-packs.md` — evaluation + import recipe: the AI-license filter
   (Type-1 "no training on the art" = OK vs Type-2 "no AI in the project" = out),
   the recommended pack (Epic RPG World) + biome map, and the mechanical swap.
-- ✅ 150 tests, coverage 100/100/100/99, build + smoke green (208/208 handlers,
-  full gameState/gameGuide contract).
+- 🏗️ `src/render/procTerrain.js` + a `?terrain=proc` preview path in game.js — a
+  procedural terrain-pack renderer that paints the dungeon ground (floor/wall/
+  water/lava) via 2-corner-Wang blending, to preview a full terrain swap in the
+  real engine. Off by default (flag-gated); `scripts/terrain-preview-shot.mjs`
+  boots it in Chromium and screenshots real levels. `src/render/**` excluded from
+  coverage (canvas draw layer, characterized by smoke).
+- ✅ 151 tests, coverage 100/100/100/99, build + smoke green (208/208 handlers,
+  full gameState/gameGuide contract); normal play unaffected (flag off).
 
 **Increment 1 — pure formula/utility leaves**
 - 📦 `src/utils/color.js` ← `shadeColor`, `hexA`, `_parseRGBA` (pure colour math,
