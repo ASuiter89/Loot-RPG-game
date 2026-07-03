@@ -3,6 +3,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Every skill has its own icon", by: "Claude", notes: [
+    "Each skill now shows a unique icon. Before, a handful of skills shared one picture (e.g. Mana Barrier and Spell Ward), so different skills looked identical.",
+    "The ascendancy PATH skills — and the two specializations each class can ascend into — now use the same generated class-coloured badges as the rest of the tree, instead of falling back to old placeholder art.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Cracked walls look like real cracks", by: "Claude", notes: [
     "Dropped the box outline that framed every cracked wall — a cracked wall now reads by its cracks alone.",
     "Redrew the fracture as thin hairline fissures fanning from an impact point instead of one fat scratch.",
