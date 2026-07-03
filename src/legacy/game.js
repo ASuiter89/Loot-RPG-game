@@ -22,6 +22,7 @@ import { footprintSealsPath } from '../systems/decorPlacement.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
+import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
@@ -1462,15 +1463,62 @@ function lpcVariant(name, x, y) { const v = LPC_FILLS[name]; if (!v || v.length 
 function lpcTile(id, dx, dy, sz) { const c = id % LPC_NCOLS, r = (id / LPC_NCOLS) | 0; const x0 = Math.round(dx), y0 = Math.round(dy), x1 = Math.round(dx + sz), y1 = Math.round(dy + sz); ctx.drawImage(lpcSheet, c*LPC_A, r*LPC_A, LPC_A, LPC_A, x0, y0, x1 - x0, y1 - y0); }
 function lpcFill(name, ox, oy, tw, x0, y0, x1, y1) { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) lpcTile(lpcVariant(name, x, y), ox + x*tw, oy + y*tw, tw); }
 function lpcLayer(name, isT, ox, oy, tw, x0, y0, x1, y1) { const tbl = LPC_TABLE.table[name]; if (!tbl) return; for (let Y = y0; Y <= y1; Y++) for (let X = x0; X <= x1; X++) { let m = 0; if (isT(X-1,Y-1)) m|=8; if (isT(X,Y-1)) m|=4; if (isT(X-1,Y)) m|=2; if (isT(X,Y)) m|=1; if (!m) continue; const id = (m === 15) ? lpcVariant(name, X, Y) : tbl[m]; if (id == null) continue; lpcTile(id, ox + (X-0.5)*tw, oy + (Y-0.5)*tw, tw); } }
-function lpcCrackOverlay(px, py, tw, th) {
-  ctx.save(); ctx.lineCap = 'round';
-  ctx.strokeStyle = 'rgba(18,14,12,0.85)'; ctx.lineWidth = Math.max(1.5, tw*0.07);
-  ctx.beginPath();
-  ctx.moveTo(px+tw*0.5, py+th*0.06); ctx.lineTo(px+tw*0.42, py+th*0.4); ctx.lineTo(px+tw*0.58, py+th*0.62); ctx.lineTo(px+tw*0.47, py+th*0.94);
-  ctx.moveTo(px+tw*0.42, py+th*0.4); ctx.lineTo(px+tw*0.18, py+th*0.5);
-  ctx.moveTo(px+tw*0.58, py+th*0.62); ctx.lineTo(px+tw*0.82, py+th*0.56);
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = Math.max(1, tw*0.03); ctx.stroke();
+// Draw the fracture on a cracked wall (tile 10) over the autotiled wall mass.
+// `sev` is 0 (freshly cracked) → 1 (barely holding); the fissure darkens, widens,
+// grows extra branches and sheds more chips as it climbs, and a warm rim brightens
+// to telegraph how close the wall is to giving. `seed` keys a per-tile jitter so a
+// given wall always fractures the same way (no shimmer frame to frame).
+function lpcCrackOverlay(px, py, tw, th, sev, seed) {
+  sev = Math.max(0, Math.min(1, sev || 0));
+  const h = (seed >>> 0) || 1;
+  const j = (i) => (((h >>> (i * 3)) & 7) / 7 - 0.5) * 2;   // deterministic -1..1
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  // Spine of the main fracture — a jagged top→bottom fissure that wanders by seed.
+  const xs = [
+    px + tw * (0.50 + 0.10 * j(0)),
+    px + tw * (0.45 + 0.12 * j(1)),
+    px + tw * (0.56 + 0.12 * j(2)),
+    px + tw * (0.49 + 0.10 * j(3)),
+  ];
+  const ys = [py + th * 0.04, py + th * 0.33, py + th * 0.63, py + th * 0.96];
+  const branches = 1 + Math.round(sev * 2);
+  const spread = tw * (0.14 + 0.12 * sev);
+  const tracePath = () => {
+    ctx.beginPath();
+    ctx.moveTo(xs[0], ys[0]); ctx.lineTo(xs[1], ys[1]); ctx.lineTo(xs[2], ys[2]); ctx.lineTo(xs[3], ys[3]);
+    for (let b = 0; b < branches; b++) {           // offshoots — more as it weakens
+      const i = 1 + (b % 3), dir = j(b + 4) >= 0 ? 1 : -1;
+      ctx.moveTo(xs[i], ys[i]);
+      ctx.lineTo(xs[i] + spread * dir, ys[i] + th * 0.14 * j(b + 5));
+    }
+  };
+
+  // Chiselled depth: a pale lit edge offset down-right beneath the dark crack void.
+  ctx.strokeStyle = 'rgba(255,252,244,' + (0.14 + 0.14 * sev) + ')';
+  ctx.lineWidth = Math.max(1, tw * 0.03);
+  ctx.save(); ctx.translate(Math.max(1, tw * 0.035), Math.max(1, th * 0.035)); tracePath(); ctx.stroke(); ctx.restore();
+
+  // The crack itself — darker and wider as the wall weakens.
+  ctx.strokeStyle = 'rgba(12,9,7,' + (0.72 + 0.24 * sev) + ')';
+  ctx.lineWidth = Math.max(1.5, tw * (0.055 + 0.05 * sev));
+  tracePath(); ctx.stroke();
+
+  // Knocked-loose chips scattered along the break — more and bigger as it gives.
+  const chips = Math.round(1 + sev * 4);
+  ctx.fillStyle = 'rgba(9,7,6,' + (0.42 + 0.3 * sev) + ')';
+  for (let i = 0; i < chips; i++) {
+    const cxp = px + tw * (0.24 + 0.52 * (((h >>> (i * 4 + 1)) & 7) / 7));
+    const cyp = py + th * (0.12 + 0.74 * (((h >>> (i * 4 + 2)) & 7) / 7));
+    const s = Math.max(1, tw * (0.05 + 0.055 * sev));
+    ctx.fillRect(cxp, cyp, s, s);
+  }
+
+  // Breakable telegraph: a warm rim that brightens toward collapse, so how close a
+  // wall is to breaking reads at a glance (colour-only cue, no text).
+  ctx.strokeStyle = 'rgba(255,196,96,' + (0.18 + 0.5 * sev) + ')';
+  ctx.lineWidth = Math.max(1, tw * 0.03);
+  ctx.strokeRect(px + 1, py + 1, tw - 2, th - 2);
   ctx.restore();
 }
 function lpcDetail(C, ox, oy, tw, x0, y0, x1, y1) {
@@ -5629,6 +5677,11 @@ let skillView = 'active';  // which SKILLS sub-tree is shown: passive | active |
 let skillBranch = 0;        // which specialization branch (column 0..4) is shown within passive/active
 let mapData = [];
 let mapEpoch = 0;   // bumped whenever the map layout changes, to invalidate the wall-shadow cache
+// Per-tile shove tally for cracked walls (tile 10): "y,x" -> hits taken so far.
+// A wall absent from the map is untouched (stage 0); it's deleted when it breaks.
+// Rebuilt empty with every floor (see each `mapData = []`), never saved — the map
+// regenerates, so crack progress is intentionally per-visit.
+let wallCracks = {};
 let dungeonLevel = 1;
 
 // ── ANIMATION CLOCK ──
@@ -6122,7 +6175,7 @@ window.gameGuide = function gameGuide(topic) {
       `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" (tier being any rarity or "set") then call saveGame().`,
     ],
     hazards: [
-      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (smash by walking into it), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
+      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (shove into it from any side; a few hits to break), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
       `Lava and spikes hurt but never kill outright (HP clamps to 1), and the generator never forces you across one — route around them.`,
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
@@ -6130,7 +6183,7 @@ window.gameGuide = function gameGuide(topic) {
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom is a full heal, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one warps you there — use it deliberately, not while fleeing.`,
-      `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash by walking into them. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground; carryingKey true once held) and seal a rich vault chest.`,
+      `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground; carryingKey true once held) and seal a rich vault chest.`,
     ],
     enemies: [
       `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), and status (e.g. ["stun"], ["slow"]).`,
@@ -6531,6 +6584,11 @@ function sfx(name) {
     case 'sell':    tone(494, 0.07, t, 'square', 0.35); tone(740, 0.08, t + 0.05, 'square', 0.3); break;
     case 'death':   tone(330, 0.6, t, 'sawtooth', 0.5, 55); noise(0.5, t, 0.25); break;
     case 'trap':    noise(0.3, t, 0.4); tone(140, 0.3, t, 'sawtooth', 0.4, 60); break;
+    case 'wall-hit':   // a dull stony knock — a chip taken off a cracked wall
+      tone(150, 0.07, t, 'square', 0.34, 88); noise(0.08, t, 0.3, 2600, 'lowpass'); noise(0.03, t, 0.16, 4200, 'highpass'); break;
+    case 'wall-break': // the wall gives — a low crumble with tumbling rubble
+      tone(78, 0.24, t, 'sawtooth', 0.5, 36); tone(128, 0.18, t + 0.02, 'square', 0.34, 52);
+      noise(0.3, t, 0.46, 2200, 'lowpass'); noise(0.16, t + 0.05, 0.3); break;
     case 'click':   tone(660, 0.04, t, 'square', 0.22); break;
     case 'denied':  tone(180, 0.12, t, 'square', 0.3); tone(120, 0.16, t + 0.1, 'square', 0.28); break;
     case 'teleport': tone(880, 0.18, t, 'sine', 0.35, 220); tone(440, 0.2, t + 0.06, 'sine', 0.28, 1320); noise(0.12, t, 0.18); break;
@@ -8628,7 +8686,7 @@ function generateMap() {
   bossHazards = [];
 
   // Start as solid rock; rooms and passages are carved out of it.
-  mapData = [];
+  mapData = []; wallCracks = {};
   for (let y = 0; y < MAP_H; y++) { mapData[y] = []; for (let x = 0; x < MAP_W; x++) mapData[y][x] = 1; }
 
   // ── ROOMS ── a handful of rectangles, occasionally one big grand hall.
@@ -9007,7 +9065,7 @@ function buildTutorialMap() {
 
   // Solid rock border, sandy beach up top, sea along the bottom.
   const SHORE = 12; // first row (from the top) that is water
-  mapData = [];
+  mapData = []; wallCracks = {};
   for (let y = 0; y < MAP_H; y++) {
     mapData[y] = [];
     for (let x = 0; x < MAP_W; x++) {
@@ -9858,7 +9916,7 @@ function buildTown() {
   statusEffects = statusEffects.filter(s => s.target === 'player');
 
   // Solid border wall, open plaza within.
-  mapData = [];
+  mapData = []; wallCracks = {};
   for (let y = 0; y < MAP_H; y++) {
     mapData[y] = [];
     for (let x = 0; x < MAP_W; x++) {
@@ -13161,7 +13219,7 @@ function isWallTile(x, y) {
 function drawWall(px, py, tw, th, x, y, seed, C, cracked) {
   // Indoor + outdoor both use the LPC autotiler now: drawLPCTerrain fills the
   // wall mass, so here we only add the crack overlay for damaged tiles.
-  if (lpcReady && !inTown) { if (cracked) lpcCrackOverlay(px, py, tw, th); return; }
+  if (lpcReady && !inTown) { if (cracked) lpcCrackOverlay(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed); return; }
   if (C.wallStyle === 'forest') { drawForestWall(px, py, tw, th, x, y, seed, C, cracked); return; }
   if (C.wallStyle === 'pine') { drawPineWall(px, py, tw, th, x, y, seed, C, cracked); return; }
   if (C.wallStyle === 'mushroom') { drawMushroomWall(px, py, tw, th, x, y, seed, C, cracked); return; }
@@ -13199,10 +13257,11 @@ function drawWall(px, py, tw, th, x, y, seed, C, cracked) {
     ctx.fillRect(px + (s % W), py + ((s >> 3) % H), Math.max(1, tw * 0.06), Math.max(1, th * 0.06));
   }
 
-  // Fissure on some tiles (always on a cracked wall).
+  // Fissure on some tiles (always on a cracked wall, deepening as it's smashed).
+  const sev = cracked ? crackSeverity(wallCracks[y + ',' + x] || 0) : 0;
   if (cracked || h % 4 === 0) {
     ctx.strokeStyle = cracked ? '#15151c' : C.crack;
-    ctx.lineWidth = Math.max(1, tw * 0.05);
+    ctx.lineWidth = Math.max(1, tw * (0.05 + 0.04 * sev));
     const sx = px + tw * (0.3 + (h % 3) * 0.16);
     const dir = (h % 2) ? 1 : -1;
     ctx.beginPath();
@@ -13217,8 +13276,8 @@ function drawWall(px, py, tw, th, x, y, seed, C, cracked) {
   if (!isWallTile(x - 1, y)) { ctx.fillStyle = 'rgba(255,250,235,0.06)'; ctx.fillRect(px, py, Math.max(1, tw * 0.1), th); }
   if (!isWallTile(x + 1, y)) { ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(px + tw - Math.max(1, tw * 0.16), py, Math.max(1, tw * 0.16), th); }
 
-  // Subtle hint that a cracked wall is breakable.
-  if (cracked) { ctx.strokeStyle = 'rgba(255,220,120,0.22)'; ctx.lineWidth = 1; ctx.strokeRect(px + 1, py + 1, tw - 2, th - 2); }
+  // Subtle hint that a cracked wall is breakable — brighter as it nears collapse.
+  if (cracked) { ctx.strokeStyle = 'rgba(255,220,120,' + (0.22 + 0.45 * sev) + ')'; ctx.lineWidth = 1; ctx.strokeRect(px + 1, py + 1, tw - 2, th - 2); }
 }
 
 // Leafy-tree wall for the forest theme — overlapping canopies read as a thicket.
@@ -16060,13 +16119,13 @@ function move(dx, dy) {
 
 // ── REAL-TIME PLAYER MOVEMENT & COLLISION ──
 // Is the grid cell (cx,cy) solid for the hero? Walls, deep water, boss walls,
-// town NPCs and live foes all block. A cracked wall is smashed and a locked door
-// is unlocked (consuming the key) ON CONTACT — both then become passable, so
-// pushing into one breaks through it just the way stepping into it used to.
+// town NPCs and live foes all block. A cracked wall stays solid until you shove it
+// down over several hits (trySmashWalls); a locked door is unlocked (consuming the
+// key) ON CONTACT via breakAhead — both then become passable open floor.
 function playerSolidCell(cx, cy, ignoreFoes) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return true;
   const t = mapData[cy][cx];
-  if (t === 10) return true;            // cracked wall — solid until smashed (see breakAhead)
+  if (t === 10) return true;            // cracked wall — solid until smashed (see trySmashWalls)
   if (t === 11) return true;            // locked door — solid until unlocked (see breakAhead)
   if (!isFloorPassable(t)) return true;
   if (bossWallAt(cx, cy)) return true;
@@ -16081,14 +16140,72 @@ function playerSolidCell(cx, cy, ignoreFoes) {
   if (furnitureMap[cy + ',' + cx] !== undefined) return true; // indoor furniture is solid
   return false;
 }
-// Smash a cracked wall / unlock a vault door the hero is deliberately pushing INTO
-// (an axis-blocked cell directly in the press direction). Kept out of the pure
-// collision test so a glancing corner never spends the one-time vault key.
+// Unlock a vault door the hero is deliberately pushing INTO (an axis-blocked cell
+// directly in the press direction). Kept out of the pure collision test so a
+// glancing corner never spends the one-time vault key. Cracked walls are NOT
+// smashed here anymore — they take several paced shoves from any angle, handled by
+// trySmashWalls so approach direction and momentum don't matter.
 function breakAhead(cx, cy) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
   const t = mapData[cy][cx];
-  if (t === 10) { mapData[cy][cx] = 0; mapEpoch++; log('🧱 You smash through a cracked wall!', 'loot'); }
-  else if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
+  if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
+}
+
+// Land one shove on the cracked wall at (cx,cy): chip it further, and collapse it
+// into open floor once it has taken MAX_CRACK_HITS. Every blow throws rock dust and
+// chips and bumps the camera; the final blow crumbles louder and logs the
+// breakthrough. player._smashCd (ticked down in updatePlayer) paces the blows.
+function smashCrackedWall(cx, cy) {
+  player._smashCd = SMASH_COOLDOWN;
+  const key = cy + ',' + cx;
+  const { hits, broken } = applyCrackHit(wallCracks[key] || 0);
+  addShake(broken ? 3.4 : 1.7);
+  spawnParticles(cx, cy, '#9a8b74', broken ? 11 : 5, broken ? 0.11 : 0.07); // pale dust
+  spawnParticles(cx, cy, '#544a3d', broken ? 8 : 4, broken ? 0.10 : 0.06);  // dark chips
+  if (broken) {
+    mapData[cy][cx] = 0;
+    mapEpoch++;                 // wall removed → invalidate the wall-shadow cache
+    delete wallCracks[key];
+    sfx('wall-break');
+    log('🧱 You smash through the cracked wall!', 'loot');
+  } else {
+    wallCracks[key] = hits;
+    sfx('wall-hit');
+  }
+}
+
+// Smash whichever cracked wall the hero is shoving against — from ANY heading, not
+// just dead-on. We scan the four cardinally-adjacent cells (a wall you can face and
+// press squarely into), keep the cracked ones the hero is pushing TOWARD (heading
+// aligned with the direction to that cell) and is pressed up against, and land a
+// blow on the best-aligned one. "Pressed against" means the body's near face is
+// within REACH of the wall's face: REACH spans one movement sub-step (capped at 0.3
+// tiles in movePlayerBy) so a fast press that halts a sub-step shy of flush — a DASH
+// especially, which can't re-approach once collision zeroes its velocity — still
+// registers, while a wall a whole tile away (gap ~1) never does. Pacing is owned by
+// player._smashCd (ticked down in updatePlayer): holding into a wall lands one blow
+// every SMASH_COOLDOWN.
+function trySmashWalls(pushX, pushY) {
+  if ((player._smashCd || 0) > 0) return;
+  const mag = Math.hypot(pushX, pushY);
+  if (mag < 0.05) return;
+  const dx = pushX / mag, dy = pushY / mag;
+  const cx0 = Math.floor(player.fx), cy0 = Math.floor(player.fy);
+  const REACH = 0.32;                          // a blocked press halts within a sub-step of flush
+  let bx = -1, by = -1, bestDot = 0.34;        // require a real shove toward the wall
+  for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const cx = cx0 + ox, cy = cy0 + oy;
+    if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) continue;
+    if (mapData[cy][cx] !== 10) continue;
+    const toX = (cx + 0.5) - player.fx, toY = (cy + 0.5) - player.fy;
+    const d = Math.hypot(toX, toY) || 1;
+    const dot = (toX / d) * dx + (toY / d) * dy;   // is the heading aimed at this cell?
+    if (dot <= bestDot) continue;
+    const gapInto = (ox ? Math.abs(toX) : Math.abs(toY)) - 0.5 - PLAYER_R; // face-to-face gap
+    if (gapInto > REACH) continue;
+    bestDot = dot; bx = cx; by = cy;
+  }
+  if (bx >= 0) smashCrackedWall(bx, by);
 }
 // Would the hero's body (a box of half-size PLAYER_R) overlap a solid cell when
 // its centre is at (px,py)? Tests the four corners — resolving X and Y separately
@@ -16331,9 +16448,10 @@ function squeezeThroughMob(ix, iy, dt) {
 
 // Shift the hero by (ddx,ddy) tiles this frame, resolving X then Y so the body
 // slides along walls. Sub-steps so a fast dash can't tunnel through a thin wall,
-// breaks through a cracked wall / vault door the hero is pressing into, kills the
-// velocity component on a hard stop, and fires onEnterCell ONCE if the grid cell
-// changed (so a fast diagonal can't descend two floors in a frame).
+// unlocks a vault door the hero is pressing into (cracked walls are smashed
+// separately — see trySmashWalls), kills the velocity component on a hard stop,
+// and fires onEnterCell ONCE if the grid cell changed (so a fast diagonal can't
+// descend two floors in a frame).
 function movePlayerBy(ddx, ddy) {
   const preX = player.x, preY = player.y;
   const steps = Math.max(1, Math.ceil(Math.max(Math.abs(ddx), Math.abs(ddy)) / 0.3));
@@ -16345,7 +16463,7 @@ function movePlayerBy(ddx, ddy) {
     if (!playerBoxBlocked(player.fx, player.fy + sy)) player.fy += sy;
     else { if (sy !== 0) breakAhead(player.x, player.y + Math.sign(sy));
            if (!playerBoxBlocked(player.fx, player.fy + sy)) player.fy += sy; else player.vy = 0; }
-    player.x = Math.floor(player.fx); player.y = Math.floor(player.fy); // keep cell live for breakAhead
+    player.x = Math.floor(player.fx); player.y = Math.floor(player.fy); // keep cell live for breakAhead/smash
   }
   player.fx = Math.max(0.5, Math.min(MAP_W - 0.5, player.fx));
   player.fy = Math.max(0.5, Math.min(MAP_H - 0.5, player.fy));
@@ -16417,6 +16535,7 @@ function doDash() {
 function updatePlayer(dt) {
   if (player.dashCd > 0) player.dashCd -= dt;
   if (player._squeezeT > 0) player._squeezeT -= dt;   // wind down an active mob-squeeze (see below)
+  if (player._smashCd > 0) player._smashCd -= dt;     // pace successive cracked-wall shoves
   unstickPlayer(dt);   // free the hero if a foe stepped into our body's space
   if (isPlayerStunned()) { player.vx = 0; player.vy = 0; player.dashT = 0; regenStamina(dt); return; }
   // Channeling a town portal roots the hero — but a deliberate step (WASD / arrows /
@@ -16432,8 +16551,10 @@ function updatePlayer(dt) {
     updateBars(); renderSkillBar();
     // fall through: this same input starts the hero walking this frame
   }
-  // An in-progress dash overrides normal control for its brief window.
-  if (player.dashT > 0) { player.dashT -= dt; movePlayerBy(player.vx * dt, player.vy * dt); return; }
+  // An in-progress dash overrides normal control for its brief window. A dash
+  // slammed into a cracked wall shoves it too (use the pre-collision velocity, as
+  // movePlayerBy zeroes the component that hit the wall).
+  if (player.dashT > 0) { player.dashT -= dt; const dvx = player.vx, dvy = player.vy; movePlayerBy(dvx * dt, dvy * dt); trySmashWalls(dvx, dvy); return; }
 
   // Input vector — keyboard / d-pad, or the analog joystick when it's active.
   let ix = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
@@ -16519,6 +16640,9 @@ function updatePlayer(dt) {
     if (Math.abs(player.vy) < 0.02) player.vy = 0;
   }
   if (player.vx !== 0 || player.vy !== 0) movePlayerBy(player.vx * dt, player.vy * dt);
+  // Shove any cracked wall we're pressing into — using the INPUT heading (ix,iy),
+  // not velocity, since collision has already zeroed the velocity into the wall.
+  if (moving) trySmashWalls(ix, iy);
   // A mob would otherwise pin the hero in place — normal collision can't slide out
   // when foes plug both the way ahead and the lanes it'd slide into. If the hero is
   // pinned by bodies and still trying to move, let it shove THROUGH toward open ground.
