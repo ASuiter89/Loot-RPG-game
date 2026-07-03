@@ -951,7 +951,7 @@
   #death-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--magenta-800) 78%, transparent); z-index: 500; display: none; align-items: center; justify-content: center; padding: 20px; }
   #death-overlay.open { display: flex; animation: deathFade 0.35s ease; }
   @keyframes deathFade { from { opacity: 0; } to { opacity: 1; } }
-  #death-card { background: linear-gradient(180deg, var(--magenta-750), var(--ink)); border: 2px solid var(--red-800); border-radius: 12px; max-width: 320px; width: 100%; padding: 22px 18px; text-align: center; box-shadow: 0 0 40px color-mix(in srgb, var(--hp) 50%, transparent); }
+  #death-card { background: linear-gradient(180deg, var(--magenta-750), var(--ink)); border: 2px solid var(--red-800); border-radius: 12px; max-width: 400px; width: 100%; padding: 22px 18px; text-align: center; box-shadow: 0 0 40px color-mix(in srgb, var(--hp) 50%, transparent); }
   .death-title { color: var(--hp); font-size: 2.6rem; font-weight: bold; letter-spacing: 3px; text-shadow: 0 0 12px color-mix(in srgb, var(--hp) 70%, transparent); margin-bottom: 8px; }
   .death-sub { font-size: 1.4rem; color: var(--normal); line-height: 1.45; margin-bottom: 14px; }
   .death-sub b { color: var(--gold-350); }
@@ -1388,7 +1388,8 @@
   .attr-name { font-size: 1.3rem; font-weight: bold; color: var(--normal); }
   .attr-desc { font-size: 1.2rem; color: var(--junk); line-height: 1.3; }
   .attr-val { font-size: 1.6rem; font-weight: bold; color: var(--gold-350); width: 24px; text-align: center; flex-shrink: 0; }
-  .attr-plus { flex-shrink: 0; width: 30px; height: 30px; border: none; border-radius: 5px; background: var(--success); color: var(--paper); font-size: 2rem; font-weight: bold; cursor: pointer; line-height: 1; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  /* margin-left buffers the + button off the value; .attr-info (flex:1) shrinks to absorb it. */
+  .attr-plus { flex-shrink: 0; margin-left: var(--space-5); width: 30px; height: 30px; border: none; border-radius: 5px; background: var(--success); color: var(--paper); font-size: 2rem; font-weight: bold; cursor: pointer; line-height: 1; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .attr-plus:active { background: var(--uncommon); }
   .attr-plus:disabled { background: var(--panel); color: var(--junk); cursor: not-allowed; }
 
@@ -1414,36 +1415,61 @@
   .sk-tnode .pips { display: flex; gap: 2px; margin-top: 2px; }
   .sk-tnode .pip { width: 5px; height: 5px; border-radius: 50%; background: var(--btn-off); }
   .sk-tnode .pip.on { background: var(--gold); box-shadow: 0 0 3px var(--gold); }
-  .sk-tnode .badge { position: absolute; top: -7px; right: -7px; width: 18px; height: 18px; z-index: 6;
-    border-radius: 50%; font-size: 1.3rem; line-height: 18px; text-align: center; font-weight: bold; }
+  /* Rank badge (top-right): a pill that ALWAYS shows the node's current rank in
+     every state, so the level is legible whether or not you have a point to spend.
+     `.up` (a leading +) and the avail colour/pulse are the "spend a point here" cue;
+     the rank is never hidden behind them. */
+  .sk-tnode .badge { position: absolute; top: -9px; right: -9px; z-index: 6;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 21px; height: 21px; padding: 0 6px; box-sizing: border-box;
+    border-radius: 999px; border: 2px solid var(--ink);
+    font-size: 1.2rem; line-height: 1; font-weight: 700; letter-spacing: .2px;
+    background: var(--panel-raised); color: var(--text);
+    box-shadow: 0 2px 5px color-mix(in srgb, var(--ink) 55%, transparent); }
+  .sk-tnode .badge .rk { font-variant-numeric: tabular-nums; }
+  .sk-tnode .badge .up { margin-right: 2px; font-weight: 900; }
   .sk-tnode.locked { opacity: .45; filter: grayscale(.6); }
-  .sk-tnode.locked .badge { background: var(--bg); color: var(--btn-off); border: 1px solid var(--panel); }
+  .sk-tnode.locked .badge { background: var(--panel); color: var(--btn-off); border-color: var(--bg); box-shadow: none; }
   /* Prereqs + level met, just waiting on a skill point — reads as "ready", not hard-locked. */
   .sk-tnode.ready { border-color: var(--purple-500); background: var(--panel); opacity: .9; box-shadow: 0 0 6px color-mix(in srgb, var(--interactive) 28%, transparent); }
-  .sk-tnode.ready .badge { background: var(--gold); color: var(--orange-850); }
+  .sk-tnode.ready .badge { background: var(--purple-500); color: var(--purple-50); }
   .sk-tnode.avail { border-color: var(--interactive); background: var(--panel-raised); box-shadow: 0 0 10px color-mix(in srgb, var(--interactive) 55%, transparent); }
-  .sk-tnode.avail .badge { background: var(--interactive); color: var(--paper); }
+  .sk-tnode.avail .badge { background: var(--interactive); color: var(--paper); border-color: var(--ink);
+    animation: skBadgePulse 1.6s ease-in-out infinite; }
   .sk-tnode.owned { border-color: var(--gold); background: var(--panel); }
-  .sk-tnode.owned .badge { background: var(--gold); color: var(--orange-850); }
+  .sk-tnode.owned .badge { background: var(--gold); color: var(--orange-850); border-color: var(--orange-850); }
   .sk-tnode.maxed { border-color: var(--green-600); background: var(--green-800); }
-  .sk-tnode.maxed .badge { background: var(--green-650); color: var(--green-50); }
+  .sk-tnode.maxed .badge { background: var(--green-550); color: var(--green-50); border-color: var(--green-800); }
+  /* The "learn me" pulse on an affordable node's rank pill. */
+  @keyframes skBadgePulse {
+    0%, 100% { box-shadow: 0 0 3px 0 color-mix(in srgb, var(--interactive) 55%, transparent), 0 2px 5px color-mix(in srgb, var(--ink) 55%, transparent); }
+    50%      { box-shadow: 0 0 9px 2px color-mix(in srgb, var(--interactive) 80%, transparent), 0 2px 5px color-mix(in srgb, var(--ink) 55%, transparent); }
+  }
   .sk-tnode.act { box-shadow: 0 0 7px color-mix(in srgb, var(--interactive) 45%, transparent); }
   .sk-tnode.sel { outline: 2px solid var(--gold); outline-offset: 2px; z-index: 6; }
   /* Keystones are the build-defining commit points: an octagonal, gold-rimmed
-     frame sets them apart from ordinary stat nodes at a glance. */
-  .sk-tnode.keystone { border-width: 2px; border-color: var(--gold);
-    clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+     frame sets them apart from ordinary stat nodes at a glance. The octagon clip
+     lives on the ICON (with a gold ::before as its rim) rather than on the whole
+     node, so the corner rank/slot pills overhang freely instead of being sheared
+     off by the clip. */
+  .sk-tnode.keystone { border-color: transparent; background: transparent;
     box-shadow: 0 0 8px color-mix(in srgb, var(--gold) 40%, transparent); }
-  .sk-tnode.keystone .ic { border-radius: 0; }
+  .sk-tnode.keystone::before { content: ''; position: absolute; inset: 0; z-index: 0;
+    background: var(--gold);
+    clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); }
+  .sk-tnode.keystone .ic { inset: 2px; border-radius: 0;
+    clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); }
+  .sk-tnode.keystone .nm { z-index: 4; }
   .sk-tnode.keystone.owned, .sk-tnode.keystone.maxed { box-shadow: 0 0 12px color-mix(in srgb, var(--gold) 70%, transparent); }
   .sk-tnode.keystone.locked { box-shadow: none; }
+  .sk-tnode.keystone.locked::before { background: var(--btn-off); }
   /* Hover/tap a node → this popover with its full detail + a Learn button. It's a
      tooltip like any other: position:fixed and placed by placeTooltipBesideAnchor
      (see the SHARED TOOLTIP BEHAVIOUR note by #tooltip), so it pops to the SIDE of
      the node instead of over it and no longer grows the drawer's scroll height.
      Wider than the drawer column since it spills out over the map to the left; a
      very tall card scrolls inside itself rather than running off-screen. */
-  .sk-pop { position: fixed; z-index: 20; width: 300px; max-width: calc(100vw - 16px);
+  .sk-pop { position: fixed; z-index: 20; width: 360px; max-width: calc(100vw - 16px);
     max-height: calc(100vh - 16px); overflow-y: auto; background: var(--bg); border: 1px solid var(--interactive);
     border-radius: 8px; padding: 8px 9px; font-size: 1.2rem; line-height: 1.5; color: var(--purple-50);
     box-shadow: 0 6px 20px color-mix(in srgb, var(--ink) 60%, transparent); }
@@ -1502,14 +1528,6 @@
   .sk-pop .pop-refund:active { background: var(--orange-850); }
   .sk-pop .pop-refund:disabled { background: var(--panel); color: var(--junk); border-color: var(--border); cursor: not-allowed; }
   .sk-pop .pop-refund.short { color: var(--danger); border-color: var(--danger); }
-  /* Bound-to-a-hotkey chip: a small badge on the top-left corner of a learned active,
-     showing the key it's cast with (or ⟳ for the auto-cast slot). Purely a positive
-     marker — unbound learned actives are left fully lit, never dimmed. */
-  .sk-tnode .slotmark { position: absolute; top: -7px; left: -7px; min-width: 18px; height: 18px; z-index: 6;
-    padding: 0 3px; box-sizing: border-box; border-radius: 9px; font-size: 1.2rem; line-height: 18px;
-    text-align: center; font-weight: bold; background: var(--gold); color: var(--orange-850); border: 1px solid var(--orange-850);
-    box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 50%, transparent); }
-  .sk-tnode .slotmark.auto { background: var(--panel-raised); color: var(--purple-150); border-color: var(--interactive); }
 
   /* Sub-tabs across the three trees (passive / active / path). */
   .sk-vtabs { display: flex; gap: 4px; margin: 8px 2px 2px; }
@@ -1549,8 +1567,9 @@
   .sk-tnode .nm { font-size: 1.1rem; max-width: 44px; }
   .sk-tnode .pips { gap: 1px; margin-top: 1px; flex-wrap: wrap; justify-content: center; max-width: 42px; }
   .sk-tnode .pip { width: 3px; height: 3px; }
-  .sk-tnode .badge { width: 15px; height: 15px; font-size: 1.2rem; line-height: 15px; top: -6px; right: -6px; }
-  .sk-tnode .slotmark { min-width: 15px; height: 15px; font-size: 1.1rem; line-height: 15px; top: -6px; left: -6px; }
+  /* The rank badge + slot chip keep one uniform pill size across the 46px grid and
+     66px web nodes (defined once, above) — no per-density shrink, so the level text
+     never gets cramped. */
   /* Ascension preview cards shown on the PATH tab before specializing. */
   .asc-prompt { padding: 10px 6px; }
   .asc-title { color: var(--gold); font-size: 1.4rem; text-align: center; margin-bottom: 4px; }
@@ -3306,6 +3325,7 @@
     #title-play, #title-play::before { animation: none; }
     .town-menu-btn.tm-gate { animation: none; }
     .town-menu-btn.tm-gate .gate-wisp { display: none; }
+    .sk-tnode.avail .badge { animation: none; }
   }
   .title-play.secondary {
     padding: 11px; font-size: 1.5rem; letter-spacing: 1px; border-width: 1px;
