@@ -1427,6 +1427,9 @@ decorSheet.onload = () => { decorReady = true; try { draw(); } catch (e) {} };
 // tag -> [DECOR_INDEX ids] so placement can pick biome-appropriate objects.
 const DECOR_BY_TAG = {};
 DECOR_INDEX.forEach((d, i) => { (DECOR_BY_TAG[d.tag] = DECOR_BY_TAG[d.tag] || []).push(i); });
+// Tall objects (trees, big cacti, boulders) are SOLID obstacles you path around;
+// short clutter (flowers, grass, mushrooms, shells) stays walkable.
+const DECOR_SOLID = DECOR_INDEX.map((d) => d.ht >= 1.6);
 // Blit a decor object anchored bottom-centre (its base sits on the cell). LPC art
 // is 32px/tile; crisp nearest-neighbour like the rest of the pixel art.
 function drawDecorSprite(id, cxCenter, cyBottom, tw) {
@@ -1443,31 +1446,150 @@ function drawDecorAt(x, y, px, py, tw, th) {
   drawDecorSprite(id, px + tw / 2, py + th * 0.98, tw); // feet ~ bottom of the tile
 }
 decorSheet.src = DECOR_ATLAS;
+
+// Draw just an enemy's body sprite (no tint/aura/bars) at a screen position —
+// mirrors the sprite-selection in the enemy pass. Used to render silhouettes.
+function drawEnemyBody(e, px, py, cw, ch, tw, th) {
+  const scx = px + cw / 2, scy = py + ch / 2 + th * 0.02;
+  const esz = Math.round(cw * (e.isBoss ? 1.0 : (e.isElite ? 0.96 : 0.9)));
+  if (!e.isBoss && typeof MONSTER_SPRITE_IDX === 'object' && MONSTER_SPRITE_IDX[e.type] !== undefined) {
+    if (monsterReady) return drawMonsterC(e.type, scx, scy - th * 0.18, Math.round(cw * (e.isElite ? 1.5 : 1.4)));
+  } else if (e.isBoss && typeof BOSS_SPRITE_IDX === 'object' && BOSS_SPRITE_IDX[e.type] !== undefined) {
+    if (bossReady) return drawBossC(e.type, scx, scy - th * 0.1, Math.round(cw * 1.12));
+  } else {
+    const espr = enemySprite(e);
+    if (spriteReady && espr) return drawSpriteC(espr, scx, scy, esz);
+  }
+  return false;
+}
+
+// Reusable offscreen for silhouette rendering (grown as needed, never shrunk).
+let _silCanvas = null, _silCtx = null;
+function _silBuf(w, h) {
+  if (!_silCanvas) { _silCanvas = document.createElement('canvas'); _silCtx = _silCanvas.getContext('2d'); }
+  if (_silCanvas.width < w) _silCanvas.width = Math.ceil(w);
+  if (_silCanvas.height < h) _silCanvas.height = Math.ceil(h);
+  return _silCtx;
+}
+// Occlusion + tracking: when an actor stands BEHIND a tall decor object (a tree),
+// redraw the tree over the actor so it is genuinely hidden, then stamp a tinted
+// silhouette OF THE ACTOR'S ACTUAL SPRITE over only the pixels the tree covers —
+// so a half-hidden hero reads solid on the exposed half and as its own silhouette
+// on the covered half. Runs after all actors are painted.
+function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
+  if (!decorReady) return;
+  const sc = tw / 32, occ = [];
+  for (const k in decorMap) {
+    const d = DECOR_INDEX[decorMap[k]];
+    if (!d || d.ht < 1.6) continue;                       // only tall occluders
+    const c = k.split(','), tx = +c[1], ty = +c[0];
+    if (tx < x0 - 2 || tx > x1 + 2 || ty < y0 - 8 || ty > y1 + 2) continue;
+    const dw = Math.round(d.w * sc), dh = Math.round(d.h * sc);
+    const cxc = offX + tx * tw + tw / 2, cyb = offY + ty * th + th * 0.98;
+    occ.push({ d, dw, dh, l: Math.round(cxc - dw / 2), t: Math.round(cyb - dh), footY: cyb });
+  }
+  if (!occ.length) return;
+  const actors = [];
+  {
+    const px = offX + (player.fx - 0.5) * tw, py = offY + (player.fy - 0.5) * th;
+    actors.push({ footY: py + th * 0.82, l: px - tw * 0.5, t: py - th * 1.2, r: px + tw * 1.5, b: py + th * 1.15,
+      tint: 'rgba(150,220,255,0.9)', draw: () => drawHeroSprite(px, py, tw, th, scale) });
+  }
+  enemies.forEach((e) => {
+    if (e.dead) return;
+    const S = e.size || 1;
+    if (e.x + S <= x0 - 1 || e.x >= x1 + 1 || e.y + S <= y0 - 1 || e.y >= y1 + 1) return;
+    const efx = (e.fx == null ? e.x + S / 2 : e.fx), efy = (e.fy == null ? e.y + S / 2 : e.fy);
+    const px = offX + (efx - S / 2) * tw, py = offY + (efy - S / 2) * th, cw = S * tw, ch = S * th;
+    actors.push({ footY: py + ch * 0.82, l: px - cw * 0.5, t: py - ch * 0.9, r: px + cw * 1.5, b: py + ch * 1.1,
+      tint: 'rgba(255,110,110,0.9)', draw: () => drawEnemyBody(e, px, py, cw, ch, tw, th) });
+  });
+  const realCtx = ctx;
+  for (const a of actors) for (const T of occ) {
+    if (T.footY <= a.footY) continue;                     // tree not in front of actor
+    if (a.r <= T.l || a.l >= T.l + T.dw || a.b <= T.t || a.t >= T.footY) continue; // no overlap
+    // 1) re-occlude — redraw the tree clipped to the actor's box so it hides them
+    const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false;
+    ctx.save(); ctx.beginPath(); ctx.rect(a.l, a.t, a.r - a.l, a.b - a.t); ctx.clip();
+    ctx.drawImage(decorSheet, T.d.dx, T.d.dy, T.d.w, T.d.h, T.l, T.t, T.dw, T.dh);
+    ctx.restore();
+    ctx.imageSmoothingEnabled = sm;
+    // 2) render the actor's real sprite into the offscreen, flatten to a tint, mask
+    //    to the tree's opaque pixels, and blit over the covered region.
+    const bx = Math.floor(a.l), by = Math.floor(a.t), bw = Math.ceil(a.r) - bx, bh = Math.ceil(a.b) - by;
+    if (bw <= 0 || bh <= 0) continue;
+    const g = _silBuf(bw, bh);
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, bw, bh);
+    g.setTransform(1, 0, 0, 1, -bx, -by);                 // screen → offscreen
+    ctx = g;                                              // redirect sprite draws
+    try { a.draw(); } finally { ctx = realCtx; }
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'source-in';             // flatten sprite → solid tint (keep alpha shape)
+    g.fillStyle = a.tint; g.fillRect(0, 0, bw, bh);
+    g.globalCompositeOperation = 'destination-in';        // keep only where the tree covers
+    g.imageSmoothingEnabled = false;
+    g.drawImage(decorSheet, T.d.dx, T.d.dy, T.d.w, T.d.h, T.l - bx, T.t - by, T.dw, T.dh);
+    g.globalCompositeOperation = 'source-over';
+    ctx.drawImage(_silCanvas, 0, 0, bw, bh, bx, by, bw, bh);
+  }
+}
 // Pick decor tags that suit a biome (by its theme name). Sandy/coastal biomes get
 // the desert set (cacti/shells/bones); the rest get flowers/ferns/bushes.
 function decorTagsFor(themeName) {
   const n = (themeName || '').toLowerCase();
-  if (/shore|tomb|savanna|coral|lagoon|desert|dune|sand/.test(n)) return ['desert', 'plant'];
-  return ['plant', 'bush'];
+  // underground / dark — fungi & dead shrubs only, no full trees
+  if (/crypt|cavern|void|obsidian|mushroom|crystal|lava|depth|cell|dungeon|catacomb|sewer/.test(n)) return ['plant'];
+  // sandy / coastal — cacti, shells, dry scatter
+  if (/desert|tomb|savanna|dune|sand|shore|coral|lagoon|beach|vineyard/.test(n)) return ['desert', 'plant'];
+  // conifer / snow — pines (incl. snow-capped)
+  if (/pine|highland|frostwood|winter|frozen|snow|glacier/.test(n)) return ['plant', 'bush', 'tree_pine'];
+  // autumn / haunted woods — bare + turning trees
+  if (/autumn|dead|blight|haunted/.test(n)) return ['plant', 'bush', 'tree', 'tree_dead'];
+  // default green outdoor: forest / grove / meadow / jungle / lavender
+  return ['plant', 'bush', 'tree'];
 }
 // Scatter non-blocking decor across an outdoor floor. Only plain-floor tiles
 // (mapData 0 — excludes every wall/feature/hazard/stair), off the entry ring and
 // never on a reserved/furnished tile. decorMap is read by no solidity check, so
 // this can never block a path.
 function placeOutdoorDecor(theme) {
-  const ids = decorTagsFor(theme && theme.name).flatMap((t) => DECOR_BY_TAG[t] || []);
-  if (!ids.length) return;
-  const spotOK = (x, y) => mapData[y][x] === 0
-    && furnitureMap[y + ',' + x] === undefined && decorMap[y + ',' + x] === undefined
-    && !tileReserved(x, y)
-    && (Math.abs(x - player.x) + Math.abs(y - player.y)) >= 3;
-  const target = Math.max(6, Math.min(42, Math.round(MAP_W * MAP_H / 24)));
-  let placed = 0;
-  for (let t = 0; t < target * 22 && placed < target; t++) {
-    const x = 1 + ((Math.random() * (MAP_W - 2)) | 0), y = 1 + ((Math.random() * (MAP_H - 2)) | 0);
-    if (!spotOK(x, y)) continue;
-    decorMap[y + ',' + x] = ids[(Math.random() * ids.length) | 0];
-    placed++;
+  const pool = decorTagsFor(theme && theme.name).flatMap((t) => DECOR_BY_TAG[t] || []);
+  if (!pool.length) return;
+  const obstacles = pool.filter((id) => DECOR_SOLID[id]);
+  const clutter = pool.filter((id) => !DECOR_SOLID[id]);
+  const free = (x, y) => x > 0 && y > 0 && x < MAP_W - 1 && y < MAP_H - 1
+    && mapData[y][x] === 0 && furnitureMap[y + ',' + x] === undefined && decorMap[y + ',' + x] === undefined
+    && !tileReserved(x, y) && (Math.abs(x - player.x) + Math.abs(y - player.y)) >= 3;
+  const openN = (x, y) => (mapData[y - 1][x] === 0 ? 1 : 0) + (mapData[y + 1][x] === 0 ? 1 : 0)
+    + (mapData[y][x - 1] === 0 ? 1 : 0) + (mapData[y][x + 1] === 0 ? 1 : 0);
+  // Obstacles (trees/big cacti/boulders): SPARSE and SOLID. Placed only on tiles
+  // with >=3 open neighbours so they can never seal a corridor (same guard as
+  // furniture). Marked solid in furnitureMap so every collision/path/LoS check
+  // treats them as walls; still rendered from decorMap (outdoor draws no furniture).
+  if (obstacles.length) {
+    const nObs = Math.max(1, Math.min(9, Math.round(MAP_W * MAP_H / 150)));
+    for (let placed = 0, t = 0; placed < nObs && t < nObs * 40; t++) {
+      const x = 1 + ((Math.random() * (MAP_W - 2)) | 0), y = 1 + ((Math.random() * (MAP_H - 2)) | 0);
+      if (!free(x, y) || openN(x, y) < 3) continue;
+      decorMap[y + ',' + x] = obstacles[(Math.random() * obstacles.length) | 0];
+      furnitureMap[y + ',' + x] = 1;
+      placed++;
+    }
+  }
+  // Clutter (flowers/grass/mushrooms/shells): WALKABLE, dropped in a few natural
+  // clusters rather than uniform confetti.
+  if (clutter.length) {
+    const nClusters = Math.max(2, Math.min(6, Math.round(MAP_W * MAP_H / 230)));
+    for (let c = 0; c < nClusters; c++) {
+      let cx = 0, cy = 0, ok = false;
+      for (let t = 0; t < 24 && !ok; t++) { cx = 1 + ((Math.random() * (MAP_W - 2)) | 0); cy = 1 + ((Math.random() * (MAP_H - 2)) | 0); ok = free(cx, cy); }
+      if (!ok) continue;
+      const n = 3 + ((Math.random() * 5) | 0);
+      for (let k = 0; k < n; k++) {
+        const x = cx + ((Math.random() * 5) | 0) - 2, y = cy + ((Math.random() * 5) | 0) - 2;
+        if (free(x, y)) decorMap[y + ',' + x] = clutter[(Math.random() * clutter.length) | 0];
+      }
+    }
   }
 }
 // ── INDOOR ATLAS SHEETS ── high-res furniture (10x10 grid) and floor/wall
@@ -7117,7 +7239,7 @@ function closeGraveyard() { document.getElementById('graveyard-overlay').classLi
 // ══════════════════════════════════════════
 
 const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
+let ctx = canvas.getContext('2d'); // `let` so the occlusion pass can briefly redirect draws into an offscreen silhouette buffer
 
 function resizeCanvas() {
   // Match the drawing buffer to the canvas's on-screen size so the map fills its
@@ -13702,6 +13824,10 @@ function draw() {
     ctx.fillText(portalSecsLeft, px + tw / 2, ny);
     ctx.restore();
   }
+
+  // Tall decor (trees) occludes actors standing behind it, with a tinted
+  // silhouette over the covered part so the hero/foes stay trackable.
+  if (!inTown && !C.indoor) drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale);
 
   // Player status effects are surfaced as full-screen coloured halos (see
   // updateHaloVignette), not as little icons over the hero sprite.
@@ -23621,10 +23747,28 @@ try {
         player.hp = player.maxHp = 9999999; player.mp = player.maxMp = 9999999;
         if (typeof closeTitle === 'function') closeTitle();
         updateBars(); draw();
-        let w = 0, l = 0;
+        let w = 0, l = 0, trees = 0, decor = 0;
+        for (const k in decorMap) { decor++; if (DECOR_INDEX[decorMap[k]].ht >= 2.4) trees++; }
         for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) { const t = mapData[y][x]; if (t === 6) w++; else if (t === 7) l++; }
-        return { level: lvl, biome: (currentTheme().name || ''), water: w, lava: l };
+        return { level: lvl, biome: (currentTheme().name || ''), water: w, lava: l, trees, decor };
       } catch (e) { return { err: String(e) }; }
+    };
+    // Position the hero just behind the TALLEST tree (prefer directly north) to
+    // showcase occlusion. Clears the one-time depth banner for a clean shot.
+    window.__previewBehindTree = function () {
+      const open = (x, y) => mapData[y] && mapData[y][x] === 0 && furnitureMap[y + ',' + x] === undefined;
+      const trees = [];
+      for (const k in decorMap) { const d = DECOR_INDEX[decorMap[k]]; if (d && d.ht >= 2.0) { const c = k.split(','); trees.push({ tx: +c[1], ty: +c[0], ht: d.ht }); } }
+      trees.sort((a, b) => b.ht - a.ht); // tallest first
+      for (const T of trees) {
+        const hx = T.tx, hy = T.ty - 1; // directly north → under the canopy
+        if (open(hx, hy)) {
+          setPlayerCell(hx, hy); player.fx = hx + 0.5; player.fy = hy + 0.5;
+          draw();
+          return { tx: T.tx, ty: T.ty, ht: T.ht, hx, hy, ok: true };
+        }
+      }
+      draw(); return { ok: false };
     };
   }
 } catch (e) {}

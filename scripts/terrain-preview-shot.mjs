@@ -55,14 +55,24 @@ async function main() {
   await page.waitForFunction(() => { try { return window.gameState() && window.gameState().inTown === false; } catch (e) { return false; } }, { timeout: 15000 });
   await page.waitForTimeout(600);
 
-  // Grab a spread of outdoor floors so the decor shows across biomes.
+  // Find a forest floor that actually has trees, screenshot density, then put the
+  // hero behind a tree and screenshot the occlusion + silhouette.
   const files = [];
-  for (const [lvl, tag] of [[3, 'decor-1'], [8, 'decor-2'], [13, 'decor-3'], [5, 'decor-4']]) {
-    const info = await page.evaluate((l) => window.__previewFloor(l), lvl);
-    await page.waitForTimeout(500);
-    files.push(await capture(page, tag, info));
+  let treeInfo = null, bt = { ok: false };
+  for (let attempt = 0; attempt < 60 && !(bt.ok && bt.ht >= 3); attempt++) {
+    const info = await page.evaluate((l) => window.__previewFloor(l), 6 + (attempt % 16));
+    if (!info || !info.trees) continue;
+    bt = await page.evaluate(() => window.__previewBehindTree());
+    if (bt.ok && bt.ht >= 3) treeInfo = info;
   }
-  console.log('preview: captured ' + files.length + ' floors');
+  await page.waitForTimeout(2000); // let the one-time depth banner fade
+  await page.evaluate(() => window.__previewBehindTree()); // re-assert hero position + redraw
+  await page.waitForTimeout(300);
+  files.push(await capture(page, 'occlusion', bt));
+  // centred crop on the hero (camera keeps the hero at canvas centre)
+  const box = await page.evaluate(() => { const c = document.getElementById('canvas').getBoundingClientRect(); return { cx: c.width / 2, cy: c.height / 2 }; });
+  try { await page.locator('#canvas').screenshot({ path: join(outDir, 'preview-occlusion-zoom.png'), clip: { x: Math.max(0, box.cx - 200), y: Math.max(0, box.cy - 230), width: 400, height: 420 } }); } catch (e) {}
+  console.log('preview: treeInfo=' + JSON.stringify(treeInfo) + ' behindTree=' + JSON.stringify(bt));
 
   if (errs.length) console.log('preview: console/page errors:\n  ' + errs.slice(0, 8).join('\n  '));
   else console.log('preview: no page errors');

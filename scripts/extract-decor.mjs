@@ -30,10 +30,15 @@ await page.goto(`http://127.0.0.1:${port}/blank.html`);
 // increment 1 = short objects; tall trees are handled later with occlusion.
 // Ground decor: short objects (<= ~1.7 tiles tall) that read fine drawn under
 // actors. minH drops fragment noise; per-tag cap keeps a varied but bounded set.
+// Tall trees (ht >= ~2.5 tiles) are tagged tree* and get depth-sorted + occlusion.
 const SOURCES = [
-  { file: 'flowers/lpc-flowers-plants-fungi-wood/plants.png', tag: 'plant',  minA: 260, minH: 14, maxH: 56, maxW: 84, cap: 46 },
-  { file: 'beach-desert/lpc-beach-desert/beach-desert.png',   tag: 'desert', minA: 300, minH: 16, maxH: 56, maxW: 96, cap: 30 },
-  { file: 'trees/lpc-trees/trees-green.png',                  tag: 'bush',   minA: 420, minH: 20, maxH: 60, maxW: 84, cap: 12 },
+  { file: 'flowers/lpc-flowers-plants-fungi-wood/plants.png', tag: 'plant',      minA: 260,  minH: 14, maxH: 56,  maxW: 84,  cap: 46 },
+  { file: 'beach-desert/lpc-beach-desert/beach-desert.png',   tag: 'desert',     minA: 300,  minH: 16, maxH: 56,  maxW: 96,  cap: 30 },
+  { file: 'trees/lpc-trees/trees-green.png',                  tag: 'bush',       minA: 420,  minH: 20, maxH: 60,  maxW: 84,  cap: 10 },
+  { file: 'trees/lpc-trees/trees-green.png',                  tag: 'tree',       minA: 2400, minH: 80, maxH: 210, maxW: 210, cap: 6 },
+  { file: 'trees/lpc-trees/trees-orange.png',                 tag: 'tree',       minA: 2400, minH: 80, maxH: 210, maxW: 210, cap: 4 },
+  { file: 'trees/lpc-trees/trees-dead.png',                   tag: 'tree_dead',  minA: 1400, minH: 70, maxH: 210, maxW: 190, cap: 4 },
+  { file: 'conifers/lpc-conifers/conifers.png',               tag: 'tree_pine',  minA: 1800, minH: 70, maxH: 200, maxW: 160, cap: 6 },
 ];
 
 const out = await page.evaluate(async ({ port, SOURCES }) => {
