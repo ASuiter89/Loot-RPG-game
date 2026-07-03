@@ -3,6 +3,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "medium", v: "New skill icons + unique skill names", by: "Claude", notes: [
+    "Every skill now has its own hand-generated pixel-art icon set in a raised, class-coloured metal frame — red for Warrior, green for Rogue, yellow for Mage, blue for Templar — filling the whole tile.",
+    "Keystone passives keep their octagon frame, now in the same metal look.",
+    "Renamed eight skills that shared a name with another so every skill reads uniquely: the active Rampage is now Onslaught, the crit-fury Bloodletter is Tempered Fury, the active Blood Frenzy is War Cry, the Warrior Executioner passive is Ruthless, the second Brace is Fortify, the Warrior Avatar is Titan Form, the Warrior Apocalypse is Bloodstorm, and the passive Absolute Zero is Frozen Ward.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Redesigned skill-bar & loadout tiles", by: "Claude", notes: [
     "Every combat-bar tile — skills, potions, the town gate and the auto-cast slot — now shows its icon filling the whole box, edge to edge, with the corners rounded off.",
     "The hotkey moved out of the box corner onto a full-width pill sitting just above each tile; the auto-cast tile's pill reads \"AUTO\".",
