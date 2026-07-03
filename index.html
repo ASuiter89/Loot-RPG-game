@@ -856,6 +856,8 @@
     transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
   }
   .settings-tab-btn .stab-ic { font-size: 1.7rem; line-height: 1; }
+  /* Monochrome line-icon tab glyphs (tint with the tab's currentColor). */
+  .settings-tab-btn .stab-ic svg { display: block; width: calc(19px * var(--ui-scale,1)); height: calc(19px * var(--ui-scale,1)); }
   /* Labels sit on one line even at five tabs on the narrowest phones. */
   .settings-tab-btn .stab-lbl { font-size: 1.1rem; letter-spacing: 0.2px; white-space: nowrap; }
   .settings-tab-btn:active { background: var(--panel-raised); }
@@ -4421,19 +4423,19 @@
         <!-- Tab bar: each button swaps the visible pane below, so the menu is a
              few short lists instead of one long scroll. -->
         <div class="settings-tabs" role="tablist">
-          <button class="settings-tab-btn active" data-tab="play" onclick="showSettingsTab('play')"><span class="stab-ic">🎮</span><span class="stab-lbl">Play</span></button>
-          <button class="settings-tab-btn" data-tab="visuals" onclick="showSettingsTab('visuals')"><span class="stab-ic">🎨</span><span class="stab-lbl">Visuals</span></button>
-          <button class="settings-tab-btn" data-tab="audio" onclick="showSettingsTab('audio')"><span class="stab-ic">🔊</span><span class="stab-lbl">Audio</span></button>
-          <button class="settings-tab-btn" data-tab="progress" onclick="showSettingsTab('progress')"><span class="stab-ic">📊</span><span class="stab-lbl">Progress</span></button>
-          <button class="settings-tab-btn" data-tab="about" onclick="showSettingsTab('about')"><span class="stab-ic">ℹ️</span><span class="stab-lbl">About</span></button>
+          <button class="settings-tab-btn active" data-tab="play" onclick="showSettingsTab('play')"><span class="stab-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="11" y2="11"/><line x1="8" x2="8" y1="9" y2="13"/><line x1="15" x2="15.01" y1="12" y2="12"/><line x1="18" x2="18.01" y1="10" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg></span><span class="stab-lbl">Play</span></button>
+          <button class="settings-tab-btn" data-tab="visuals" onclick="showSettingsTab('visuals')"><span class="stab-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg></span><span class="stab-lbl">Visuals</span></button>
+          <button class="settings-tab-btn" data-tab="audio" onclick="showSettingsTab('audio')"><span class="stab-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg></span><span class="stab-lbl">Audio</span></button>
+          <button class="settings-tab-btn" data-tab="progress" onclick="showSettingsTab('progress')"><span class="stab-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span><span class="stab-lbl">Progress</span></button>
+          <button class="settings-tab-btn" data-tab="about" onclick="showSettingsTab('about')"><span class="stab-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span><span class="stab-lbl">About</span></button>
         </div>
 
         <!-- ── AUDIO ── volume, vibe, and a skip-to-next-track control. -->
         <div class="settings-pane" data-pane="audio">
-        <button class="settings-item sound-action" id="music-action" onclick="cycleMusic()" data-tip="<div class='ht-name'>🎵 Music volume</div><div class='ht-line'>Tap to step the volume up a notch; wraps from full back to off.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+        <button class="settings-item sound-action" id="music-action" onclick="cycleMusic()" data-tip="<div class='ht-name'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-2px'><path d='M9 18V5l12-2v13'/><circle cx='6' cy='18' r='3'/><circle cx='18' cy='16' r='3'/></svg> Music volume</div><div class='ht-line'>Tap to step the volume up a notch; wraps from full back to off.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon" id="music-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span><span class="action-label">MUSIC</span><span class="vol-meter" id="music-meter"></span>
         </button>
-        <button class="settings-item sound-action" id="sfx-action" onclick="cycleSfx()" data-tip="<div class='ht-name'>🔊 SFX volume</div><div class='ht-line'>Tap to step the volume up a notch; wraps from full back to off.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+        <button class="settings-item sound-action" id="sfx-action" onclick="cycleSfx()" data-tip="<div class='ht-name'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-2px'><polygon points='11 5 6 9 2 9 2 15 6 15 11 19 11 5'/><path d='M15.5 8.5a5 5 0 0 1 0 7'/><path d='M19 5a9 9 0 0 1 0 14'/></svg> SFX volume</div><div class='ht-line'>Tap to step the volume up a notch; wraps from full back to off.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon" id="sfx-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg></span><span class="action-label">SFX</span><span class="vol-meter" id="sfx-meter"></span>
         </button>
         <div class="settings-item settings-vibe" title="Pick the music vibe (or Shuffle through them all)">
@@ -4451,7 +4453,7 @@
             <option value="8">Music: Tide (lo-fi)</option>
           </select>
         </div>
-        <button class="settings-item skip-action" onclick="skipMusicTrack()" data-tip="<div class='ht-name'>⏭ Skip track</div><div class='ht-line'>Jump the soundtrack straight to a fresh style.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+        <button class="settings-item skip-action" onclick="skipMusicTrack()" data-tip="<div class='ht-name'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-2px'><polygon points='5 4 15 12 5 20 5 4'/><line x1='19' y1='5' x2='19' y2='19'/></svg> Skip track</div><div class='ht-line'>Jump the soundtrack straight to a fresh style.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg></span><span class="action-label">SKIP TRACK</span>
         </button>
         </div>
@@ -4463,7 +4465,7 @@
         </button>
         <!-- Sprint mode: HOLD (sprint only while Shift is down) ↔ TOGGLE (tap Shift
              to auto-sprint, tap again to stop), so you can sprint without holding. -->
-        <button class="settings-item sprint-action" id="sprint-action" onclick="toggleSprintMode()" data-tip="<div class='ht-name'>🏃 Sprint Mode</div><div class='ht-line'><b>HOLD:</b> sprint only while Shift is down.<br><b>TOGGLE:</b> tap Shift to auto-sprint, tap again to stop — no need to hold.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+        <button class="settings-item sprint-action" id="sprint-action" onclick="toggleSprintMode()" data-tip="<div class='ht-name'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-2px'><polyline points='13 19 22 12 13 5'/><polyline points='2 19 11 12 2 5'/></svg> Sprint Mode</div><div class='ht-line'><b>HOLD:</b> sprint only while Shift is down.<br><b>TOGGLE:</b> tap Shift to auto-sprint, tap again to stop — no need to hold.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 19 22 12 13 5"/><polyline points="2 19 11 12 2 5"/></svg></span><span class="action-label" id="sprint-label">SPRINT: HOLD</span>
         </button>
         <div class="settings-grid">
@@ -4503,12 +4505,12 @@
         </button>
         <!-- Pathing line: faint gold breadcrumbs sketching the click-to-move route
              around walls. On by default; the pulsing destination ring is separate. -->
-        <button class="settings-item pathline-action" id="pathline-action" onclick="togglePathLine()" data-tip="<div class='ht-name'>🧭 Pathing Line</div><div class='ht-line'>Sketch faint gold breadcrumbs along the click-to-move route your hero will take around walls.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+        <button class="settings-item pathline-action" id="pathline-action" onclick="togglePathLine()" data-tip="<div class='ht-name'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-2px'><circle cx='5' cy='19' r='2'/><path d='M7 19h6a3 3 0 0 0 3-3V9' stroke-dasharray='2.5 2.5'/><path d='M16 5l2.5 3.5L21 5z' fill='currentColor' stroke='none'/><circle cx='18.5' cy='6' r='0.5'/></svg> Pathing Line</div><div class='ht-line'>Sketch faint gold breadcrumbs along the click-to-move route your hero will take around walls.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="19" r="2"/><path d="M7 19h6a3 3 0 0 0 3-3V9" stroke-dasharray="2.5 2.5"/><path d="M16 5l2.5 3.5L21 5z" fill="currentColor" stroke="none"/><circle cx="18.5" cy="6" r="0.5"/></svg></span><span class="action-label" id="pathline-label">PATHING LINE: ON</span>
         </button>
         <!-- Stairs arrow: a gold arrow riding the map edge that points at the
              down-stairs whenever the exit is off-screen. On by default. -->
-        <button class="settings-item stairsarrow-action" id="stairsarrow-action" onclick="toggleStairsArrow()" data-tip="<div class='ht-name'>➡️ Stairs Arrow</div><div class='ht-line'>Show a gold arrow on the map edge pointing toward the down-stairs whenever the exit is off-screen.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+        <button class="settings-item stairsarrow-action" id="stairsarrow-action" onclick="toggleStairsArrow()" data-tip="<div class='ht-name'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-2px'><polygon points='3 11 22 2 13 21 11 13 3 11'/></svg> Stairs Arrow</div><div class='ht-line'>Show a gold arrow on the map edge pointing toward the down-stairs whenever the exit is off-screen.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></span><span class="action-label" id="stairsarrow-label">STAIRS ARROW: ON</span>
         </button>
         <!-- UI SIZE — scales the whole interface (1x–2x in 0.25 steps). Every
@@ -4547,7 +4549,7 @@
         <div class="settings-pane" data-pane="progress">
         <!-- Start a fresh run — destructive (wipes the current hero), so it shouts
              and pulses red. Guarded by a confirm (first click arms). -->
-        <button class="settings-item newgame-action" onclick="confirmNewGame()" data-tip="<div class='ht-name' style='color:var(--red-350)'>↻ Reset Run</div><div class='ht-line'>Wipe the current hero and start fresh. Click again to confirm.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+        <button class="settings-item newgame-action" onclick="confirmNewGame()" data-tip="<div class='ht-name' style='color:var(--red-350)'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-2px'><polyline points='23 4 23 10 17 10'/><path d='M20.5 15a9 9 0 1 1-2-9.6L23 10'/></svg> Reset Run</div><div class='ht-line'>Wipe the current hero and start fresh. Click again to confirm.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2-9.6L23 10"/></svg></span><span class="action-label">RESET RUN</span>
         </button>
         <div class="settings-grid">
@@ -4576,7 +4578,7 @@
             <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span><span class="action-label">PATCH NOTES</span>
           </button>
           <!-- Opens the spectator stream (watch.html) where you can watch Claude play. -->
-          <button class="settings-item watch-action" onclick="window.open('./watch.html','_blank')" data-tip="<div class='ht-name' style='color:var(--red-350)'>📺 Watch Live</div><div class='ht-line'>Watch Claude play Dungeon Loot live on the spectator stream.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+          <button class="settings-item watch-action" onclick="window.open('./watch.html','_blank')" data-tip="<div class='ht-name' style='color:var(--red-350)'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-2px'><rect x='2' y='7' width='20' height='15' rx='2' ry='2'/><polyline points='17 2 12 7 7 2'/></svg> Watch Live</div><div class='ht-line'>Watch Claude play Dungeon Loot live on the spectator stream.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
             <span class="action-icon"><span class="watch-live-dot"></span></span><span class="action-label">WATCH</span>
           </button>
         </div>
@@ -4591,7 +4593,7 @@
     <div id="keybind-card">
       <div class="kb-head">
         <button class="kb-back" onclick="keybindsBack()" aria-label="Back to Settings" title="Back to Settings">◀</button>
-        <div class="kb-title">⌨️ Keybindings</div>
+        <div class="kb-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/><path d="M7 16h10"/></svg> Keybindings</div>
       </div>
       <div class="kb-sub">Click an action, then press the key to bind it. Movement is always WASD / arrow keys; Shift sprints (hold, or set Sprint to TOGGLE in <span data-spr=ic_mallet></span> to auto-sprint).</div>
       <div id="keybind-list"></div>
@@ -11497,6 +11499,7 @@ const CHANGELOG = [
     "Offensive/summon skills whose buff outlasted their cooldown keep their attack cadence — buff duration trimmed instead of the cooldown.",
   ] },
   { date: "2026-07-03", size: "small", v: "Fluid HP/MP recovery", by: "Claude", notes: ["Over-time HP/MP recovery now climbs the bar on a smooth slope instead of stepping up once a second — the fill eases toward true health every frame.", "Taking damage or spending mana still snaps the bar down instantly, and burst heals still fill at once."] },
+  { date: "2026-07-03", size: "small", v: "Monochrome settings menu icons", by: "Claude", notes: ["Settings menu tabs (Play, Visuals, Audio, Progress, About) now use monochrome line icons instead of colored emoji, matching the action rows below them.", "Settings tooltips and the Keybindings title swap their emoji for matching line icons too."] },
   { date: "2026-07-03", size: "small", v: "Never stuck on an enemy", by: "Claude", notes: ["Fixed a lockup where a foe hopping onto the tile you're standing on trapped you in place until it died — you can now always shove free.", "Ejection follows your input, so you pop out the way you're trying to move; normal meleeing is unaffected."] },
   { date: "2026-07-03", size: "small", v: "Monochrome title settings icons", by: "Claude", notes: ["Save Slots, Leaderboards and Patch Notes now use monochrome line icons matching the rest of the settings menu, instead of colored emoji."] },
   { date: "2026-07-02", size: "small", v: "No stale sprite flash on load", by: "Claude", notes: ["Hero portraits, the in-world hero, and roaming vendors/mercenaries no longer flash a static placeholder tile before their animated sprite finishes loading — they hold a blank slot and paint the real art the instant it's ready."] },
