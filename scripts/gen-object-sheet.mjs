@@ -25,15 +25,11 @@ const html = `<div id="app"></div>
 const DATA = JSON.parse(document.getElementById('data').textContent);
 const IDX = DATA.index, ATLAS = DATA.atlas, TAG_ORDER = DATA.tagOrder;
 // —— replicate the game's current placement rules exactly ——
-const SOLID_TAGS = new Set(['furniture','barrel','chest','brazier']);
-const isSolid = d => d.ht >= 1.6 || SOLID_TAGS.has(d.tag);
-const isTree = d => d.tag==='tree' || d.tag==='tree_dead' || d.tag==='tree_pine';
-const isFlat = d => d.ht <= 1.5 || (d.w/32) >= d.ht*0.85;
-const isOcc = d => isTree(d) || (isSolid(d) && !isFlat(d));
+const isSolid = d => d.block !== 'none';
+const isOcc = d => d.block === 'base';
 function footprint(d){
-  if (isTree(d)) return [[0,0]];
-  const W = Math.max(1, Math.round(d.w/32));
-  const H = isFlat(d) ? Math.max(1, Math.round(d.ht)) : 1;
+  if (d.block !== 'all') return [[0,0]];
+  const W = Math.max(1, Math.round(d.w/32)), H = Math.max(1, Math.round(d.ht));
   const left = -(W>>1); const t=[];
   for (let yy=-(H-1); yy<=0; yy++) for (let xx=left; xx<left+W; xx++) t.push([xx,yy]);
   return t;
@@ -82,11 +78,11 @@ function render(){
       if (solid) solidN++; if (occ) occN++;
       const layer = occ ? 'over-you' : 'under-you';
       const layerLabel = occ ? 'over ▸ silhouette' : 'under';
-      const block = solid ? (occ ? 'blocks trunk' : 'blocks '+foot.length) : 'walkable';
+      const block = d.block==='all' ? 'blocks '+foot.length : d.block==='base' ? 'blocks 1 (behind ok)' : 'walkable';
       const wrap = document.createElement('div'); wrap.className='card';
       wrap.appendChild(cv);
       wrap.insertAdjacentHTML('beforeend',
-        '<div class="meta"><span class="id">#'+i+'</span>'
+        '<div class="meta"><span class="id">#'+(d.id!=null?d.id:i)+'</span>'
         + '<span class="dim">'+ (Math.round(d.w/32*10)/10)+'×'+d.ht+'t</span></div>'
         + '<div class="tags"><span class="pill '+(solid?'s-block':'s-walk')+'">'+block+'</span>'
         + '<span class="pill '+layer+'">'+layerLabel+'</span></div>');

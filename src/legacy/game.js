@@ -1530,31 +1530,18 @@ decorSheet.onload = () => { decorReady = true; try { draw(); } catch (e) {} };
 // tag -> [DECOR_INDEX ids] so placement can pick biome-appropriate objects.
 const DECOR_BY_TAG = {};
 DECOR_INDEX.forEach((d, i) => { (DECOR_BY_TAG[d.tag] = DECOR_BY_TAG[d.tag] || []).push(i); });
-// SOLID = a real obstacle you path around. Tall outdoor objects (trees, big
-// cacti) qualify by height; indoor furniture/containers/braziers are solid at ANY
-// height (you can't walk through a table). Low clutter (flowers, grass, mushrooms,
-// shells, potted plants, floor debris) stays walkable.
-const DECOR_SOLID_TAGS = new Set(['furniture', 'barrel', 'chest', 'brazier']);
-const DECOR_SOLID = DECOR_INDEX.map((d) => d.ht >= 1.6 || DECOR_SOLID_TAGS.has(d.tag));
-const DECOR_TREE = DECOR_INDEX.map((d) => d.tag === 'tree' || d.tag === 'tree_dead' || d.tag === 'tree_pine');
-// A FLAT piece (bed/table/sofa/rug — about as wide as it is tall, or short) rests
-// fully on the floor; a TALL piece (wardrobe, shelf, clock, tree) stands up and you
-// can walk behind it.
-const decorFlat = (d) => d.ht <= 1.5 || (d.w / 32) >= d.ht * 0.85;
-// OCCLUDERS are tall things you walk BEHIND (trees + standing furniture): they
-// block only their base and draw over you with a see-through SILHOUETTE when you're
-// behind them. Flat solid pieces (beds/tables/sofas) block their whole footprint,
-// so you're never behind them and they just draw under you.
-const DECOR_OCCLUDER = DECOR_INDEX.map((d, i) => DECOR_TREE[i] || (DECOR_SOLID[i] && !decorFlat(d)));
+// Collision is now curated PER OBJECT in the atlas (see apply-decor-corrections):
+//   block 'all'  → blocks its whole visual footprint (beds, tables, chests)
+//   block 'base' → blocks only the placement tile; you can walk BEHIND it and it
+//                  draws over you with a see-through silhouette (trees, wardrobes)
+//   block 'none' → walkable clutter (flowers, rugs, mushrooms, debris)
+const DECOR_SOLID = DECOR_INDEX.map((d) => d.block !== 'none');
+const DECOR_OCCLUDER = DECOR_INDEX.map((d) => d.block === 'base');
 // The tiles a solid decor object occupies for collision (anchored bottom-centre).
 function decorFootprint(id, ax, ay) {
   const d = DECOR_INDEX[id];
-  if (!d) return [[ax, ay]];
-  if (DECOR_TREE[id]) return [[ax, ay]];                 // tree → just the trunk
-  const W = Math.max(1, Math.round(d.w / 32));
-  // Flat pieces block their whole footprint; tall standing furniture blocks only
-  // its base row (so the space behind it stays walkable — you get the silhouette).
-  const H = decorFlat(d) ? Math.max(1, Math.round(d.ht)) : 1;
+  if (!d || d.block !== 'all') return [[ax, ay]];        // 'base' → placement tile only
+  const W = Math.max(1, Math.round(d.w / 32)), H = Math.max(1, Math.round(d.ht));
   const left = ax - (W >> 1), top = ay - (H - 1);
   const tiles = [];
   for (let yy = top; yy <= ay; yy++) for (let xx = left; xx < left + W; xx++) tiles.push([xx, yy]);
