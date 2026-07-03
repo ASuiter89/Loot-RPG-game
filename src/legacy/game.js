@@ -5501,7 +5501,27 @@ function setPlayerCell(x, y) {
 function tileAtCell(x, y) { return (x >= 0 && y >= 0 && x < MAP_W && y < MAP_H) ? mapData[y][x] : 1; }
 // A movement status — slow/snare (target 'player' or an enemy object).
 function isPlayerSlowed() { return statusEffects.some(s => s.target === 'player' && s.effect === 'slow'); }
-function isEnemySlowed(e) { return statusEffects.some(s => s.target === e && s.effect === 'slow'); }
+// Per-foe movement-status flags (stun/slow/chill), built in ONE pass over
+// statusEffects instead of a fresh .some() scan per foe per tick. Rebuilt lazily
+// whenever statusEffects changes — entries are only ever ADDED by push (length
+// grows) or REMOVED by a filter reassignment (new array identity), and never
+// retagged in place, so identity + length pin the (target, effect) pairs exactly.
+let _moveStatusMap = new Map(), _moveStatusArr = null, _moveStatusLen = -1;
+function enemyMoveStatus(e) {
+  if (_moveStatusArr !== statusEffects || _moveStatusLen !== statusEffects.length) {
+    _moveStatusMap.clear();
+    for (const s of statusEffects) {
+      if (s.target === 'player') continue;
+      if (s.effect !== 'stun' && s.effect !== 'slow' && s.effect !== 'chill') continue;
+      let f = _moveStatusMap.get(s.target);
+      if (!f) { f = { stun: false, slow: false, chill: false }; _moveStatusMap.set(s.target, f); }
+      f[s.effect] = true;
+    }
+    _moveStatusArr = statusEffects; _moveStatusLen = statusEffects.length;
+  }
+  return _moveStatusMap.get(e);
+}
+function isEnemySlowed(e) { const f = enemyMoveStatus(e); return !!(f && f.slow); }
 let inventory = [];
 // The town STASH — a safe vault, completely separate from your character, and
 // SHARED across every save slot: gold and gear banked by one hero can be
@@ -8239,7 +8259,7 @@ function ensureHostilesReachable() {
     const spot = spots.find(s => !getEnemyAt(s.x, s.y) && (Math.abs(s.x - player.x) + Math.abs(s.y - player.y)) > ENEMY_AGGRO + 1)
               || spots.find(s => !getEnemyAt(s.x, s.y));
     if (!spot) break;                                // no room left — give up
-    e.x = spot.x; e.y = spot.y;
+    e.x = spot.x; e.y = spot.y; bumpEnemyPos();
   }
 }
 
@@ -8353,7 +8373,7 @@ function clearTrapsAround(x, y) {
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     const nx = x + dx, ny = y + dy;
     if (nx < 1 || ny < 1 || nx >= MAP_W - 1 || ny >= MAP_H - 1) continue;
-    if (mapData[ny][nx] === 8) mapData[ny][nx] = 0; // spike → plain floor
+    if (mapData[ny][nx] === 8) { mapData[ny][nx] = 0; pathGridDirty(); } // spike → plain floor
   }
   if (traps && traps.length) traps = traps.filter(tr => !(tr.kind === 'arrow' && arrowLaneHits(tr, x, y)));
 }
@@ -12090,6 +12110,9 @@ function spawnEnemies() {
   enemies = [];
   // Summoned minions, transient combat buffs and skill charges don't carry between floors.
   minions = []; combatBuffs = {}; clearCharges();
+  // Only the hero's own ailments/buffs cross floors (as buildTown already does) —
+  // foe-tied entries would keep ticking on the despawned foes of the old roster.
+  statusEffects = statusEffects.filter(s => s.target === 'player');
   const isBossFloor = dungeonLevel % 5 === 0;
   // Hold monster DENSITY constant as floors grow: the regular per-floor foe count
   // is scaled by how much bigger this floor is than the base 20×20 (mapAreaRatio),
@@ -12201,6 +12224,7 @@ function spawnEnemies() {
               for (let ax = ex - pad; ax < ex + bsize + pad; ax++)
                 if (ax > 0 && ay > 0 && ax < MAP_W - 1 && ay < MAP_H - 1 && mapData[ay][ax] === 1) mapData[ay][ax] = 0;
             bumpMapEpoch();          // walls knocked out → rebake the terrain
+            pathGridDirty();         // …and refresh the pathfinding grid to match
           }
         }
         // A boss is a couple of levels above its floor, and scales primarily
@@ -15341,7 +15365,8 @@ function addStatic(e, n, spread) {
 // Ice: stack chill (slows in enemyMove); the 3rd stack flash-freezes (a brief
 // stun) and clears the chill so it has to be built back up.
 function isChilled(e) {
-  return statusEffects.some(s => s.target === e && s.effect === 'chill');
+  const f = enemyMoveStatus(e);   // one shared pass over statusEffects (see the cache)
+  return !!(f && f.chill);
 }
 function addChill(e) {
   if (e.dead || e.isGoblin) return;
@@ -15822,6 +15847,7 @@ function activateShrine(nx, ny) {
   const info = shrineData[ny+','+nx];
   mapData[ny][nx] = 0;            // shrine is spent
   bumpMapEpoch();                 // map edited → rebake the terrain
+  pathGridDirty();                // …and the opened tile joins the pathfinding grid
   delete shrineData[ny+','+nx];
   const kind = info ? info.kind : 'power';
   sfx(kind === 'blood' ? 'hurt' : 'shrine');
@@ -16174,8 +16200,8 @@ function playerSolidCell(cx, cy, ignoreFoes) {
 function breakAhead(cx, cy) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
   const t = mapData[cy][cx];
-  if (t === 10) { mapData[cy][cx] = 0; bumpMapEpoch(); log('🧱 You smash through a cracked wall!', 'loot'); }
-  else if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; bumpMapEpoch(); log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
+  if (t === 10) { mapData[cy][cx] = 0; bumpMapEpoch(); pathGridDirty(); log('🧱 You smash through a cracked wall!', 'loot'); }
+  else if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; bumpMapEpoch(); pathGridDirty(); log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
 }
 // Would the hero's body (a box of half-size PLAYER_R) overlap a solid cell when
 // its centre is at (px,py)? Tests the four corners — resolving X and Y separately
@@ -16308,9 +16334,24 @@ function updateMoveTargetPath(force) {
 // epsilon above), so this never disturbs a foe you're simply meleeing.
 const UNSTICK_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 const UNSTICK_MAGS = [0.1, 0.2, 0.32, 0.46, 0.62];
+// Last CLEAR overlap check, so the every-frame test can be skipped while nothing
+// relevant has changed: the hero hasn't moved, no world beat ran (foes hop tiles
+// and hazards spawn/expire only on the world clock or via the tracked enemy-move
+// epoch — casts that pull/knock foes around bump it between beats), no foe
+// spawned, and the floor wasn't rebuilt. Mid-floor terrain changes only ever OPEN
+// tiles, so a cached "clear" can never go stale from them. Only a clear result is
+// cached — a blocked hero's shove-out distance depends on dt, so it always reruns.
+let _usFx = NaN, _usFy = 0, _usFloor = -1, _usEpoch = -1, _usLen = -1, _usTick = -1, _usArr = null;
 function unstickPlayer(dt) {
   if (player._squeezeT > 0) return;   // a mob-squeeze owns the hero — don't yank it back into the pile
-  if (!playerBoxBlocked(player.fx, player.fy)) return;
+  if (player.fx === _usFx && player.fy === _usFy && _usFloor === floorSerial && _usArr === enemies &&
+      _usLen === enemies.length && _usEpoch === _enemyPosEpoch && _usTick === _worldTicks) return;
+  if (!playerBoxBlocked(player.fx, player.fy)) {
+    _usFx = player.fx; _usFy = player.fy; _usFloor = floorSerial; _usArr = enemies;
+    _usLen = enemies.length; _usEpoch = _enemyPosEpoch; _usTick = _worldTicks;
+    return;
+  }
+  _usFx = NaN;   // blocked — never cache this outcome
   // Eject the way the hero is actively trying to go, so the shove-out follows intent
   // instead of always popping the same direction. Unit the 8 dirs, then order them
   // by how well they line up with the current movement input (if any).
@@ -16764,6 +16805,7 @@ function useFountain(nx, ny) {
   player.potionCd = 0; // a sip also resets your potion cooldown
   mapData[ny][nx] = 0; // fountain is spent
   bumpMapEpoch();      // map edited → rebake the terrain
+  pathGridDirty();     // …and the opened tile joins the pathfinding grid
   hasFountain = false;
   sfx('potion');
   log(`<span data-spr=feat_shrine></span> The Fountain of Healing restores you to full HP and MP!`, 'important');
@@ -17091,7 +17133,7 @@ function bossFarmMult(e) {
 
 // Everything that happens when a foe falls: XP, gold, and the loot rolls.
 function onEnemyDefeated(e) {
-  e.dead = true;
+  e.dead = true; bumpEnemyPos();   // its tile is free — refresh the occupancy index
   // Summoned minions are pure threat — they drop NO XP, gold or loot, so a
   // summoner boss can't be farmed by killing the fodder it spawns endlessly.
   if (e.minion) { sfx('kill'); updateFloorClear(); return; }
@@ -17780,7 +17822,7 @@ function resolveCast(node, rank) {
   // the blow lands — turns a ranged burst into an instant gather-and-gut.
   if (c.pull && targets.length) {
     const spots = openTilesNear(player.x, player.y, targets.length + 2);
-    targets.forEach((e, k) => { const s = spots[k]; if (s && !e.isBoss) { e.x = s.x; e.y = s.y; } });
+    targets.forEach((e, k) => { const s = spots[k]; if (s && !e.isBoss) { e.x = s.x; e.y = s.y; bumpEnemyPos(); } });
   }
 
   // Feedback. Epic casts — every tree ULTIMATE capstone AND every ASCENSION-path
@@ -17906,7 +17948,7 @@ function resolveCast(node, rank) {
       for (let step = 0; step < c.knockback; step++) {
         const dx = Math.sign(e.x - center.x) || (Math.random() < 0.5 ? 1 : -1);
         const dy = Math.sign(e.y - center.y);
-        if (minionTileFree(e.x + dx, e.y + dy)) { e.x += dx; e.y += dy; } else break;
+        if (minionTileFree(e.x + dx, e.y + dy)) { e.x += dx; e.y += dy; bumpEnemyPos(); } else break;
       }
     }
   }
@@ -17990,21 +18032,29 @@ function runMinionTurn() {
   if (!minions.length) return;
   for (const m of minions) {
     if (m.ttl <= 0) continue;
-    const tgt = nearestEnemyTo(m.x, m.y);
+    // Nearest-foe memo: foes neither move nor die while THIS minion walks (the
+    // loop below only moves the minion), so nearestEnemyTo can only change when
+    // the minion itself changes tile — re-scan the roster only then.
+    let nt = nearestEnemyTo(m.x, m.y), ntX = m.x, ntY = m.y;
+    const nearestHere = () => {
+      if (m.x !== ntX || m.y !== ntY) { nt = nearestEnemyTo(m.x, m.y); ntX = m.x; ntY = m.y; }
+      return nt;
+    };
+    const tgt = nt;
     if (tgt) {
       const dist = Math.abs(tgt.x - m.x) + Math.abs(tgt.y - m.y);
       if (dist <= 1) minionAttack(m, tgt, false);
       else if (m.ranged && dist <= m.range && hasLineOfSight(m.x, m.y, tgt.x, tgt.y)) minionAttack(m, tgt, true);
       else if (m.speed > 0) {
         for (let s = 0; s < m.speed; s++) {
-          const t2 = nearestEnemyTo(m.x, m.y); if (!t2) break;
+          const t2 = nearestHere(); if (!t2) break;
           if (Math.abs(t2.x - m.x) + Math.abs(t2.y - m.y) <= 1) break;
           const step = enemyPathStep(m, t2.x, t2.y); if (!step) break;
           const nx = m.x + step[0], ny = m.y + step[1];
           if (nx === t2.x && ny === t2.y) break;
           if (minionTileFree(nx, ny)) { m.x = nx; m.y = ny; } else break;
         }
-        const t3 = nearestEnemyTo(m.x, m.y);
+        const t3 = nearestHere();
         if (t3 && Math.abs(t3.x - m.x) + Math.abs(t3.y - m.y) <= 1) minionAttack(m, t3, false);
       }
     }
@@ -18027,6 +18077,7 @@ function minionAttack(m, e, ranged) {
 // Run every nearby living enemy's turn once, bailing if the floor changes
 // mid-turn (e.g. a death warps you to the previous floor and rebuilds it).
 function runEnemyTurn() {
+  _worldTicks++;   // this is a world beat too — keep the serial honest for unstickPlayer's skip
   // (Legacy/unused path.) Combat buffs age in real seconds on the world clock now
   // (see worldTick); skill / potion cooldowns count down in real seconds too.
   for (const k in combatBuffs) { const b = combatBuffs[k]; if (b && b.secs > 0) { b.secs -= WORLD_TICK_SECONDS; if (b.secs <= 0) delete combatBuffs[k]; } }
@@ -18068,19 +18119,42 @@ function enemyTileFree(x, y) {
 }
 
 const ENEMY_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+// ENEMY_DIRS flattened into two parallel arrays (same order!) so the BFS hot loop
+// below can index them without destructuring a pair per neighbour.
+const ENEMY_DIR_X = [1, -1, 0, 0, 1, 1, -1, -1];
+const ENEMY_DIR_Y = [0, 0, 1, -1, 1, -1, 1, -1];
 
 // A snapshot grid of every tile a foe can't enter this instant — walls, conjured
 // boss barriers, town NPCs, the player's tile, and every living enemy footprint.
 // Rebuilt once per pathfind so the flood fill below can test a cell in O(1)
 // instead of re-scanning the whole enemy list (getEnemyAt) for every neighbour —
 // the difference between smooth and sluggish when a big pack is hunting you.
+//
+// The STATIC half (walls + solid furniture) is by far the expensive part of that
+// rebuild and almost never changes, so it lives in its own cached buffer: floor
+// (re)generation bumps floorSerial, and the handful of player interactions that
+// open a tile mid-floor (smashing a cracked wall, unlocking the vault door,
+// spending a shrine/fountain, disarming spikes) call pathGridDirty(). Every
+// pathfind then just memcpys the static grid and stamps the movers on top.
+let _pfStatic = null, _pfStaticFloor = -1, _pfStaticStale = true;
+function pathGridDirty() { _pfStaticStale = true; }
+function pathStaticGrid() {
+  const W = MAP_W, H = MAP_H, n = W * H;
+  if (!_pfStatic || _pfStatic.length !== n) { _pfStatic = new Uint8Array(n); _pfStaticStale = true; }
+  if (_pfStaticFloor !== floorSerial) _pfStaticStale = true;
+  if (!_pfStaticStale) return _pfStatic;
+  const b = _pfStatic;
+  for (let y = 0; y < H; y++) { const row = mapData[y]; const base = y * W; for (let x = 0; x < W; x++) b[base + x] = row[x] !== 0 ? 1 : 0; }
+  for (const k in furnitureMap) { const c = k.split(','); const fx = +c[1], fy = +c[0]; if (fx >= 0 && fy >= 0 && fx < W && fy < H) b[fy * W + fx] = 1; } // solid furniture — route around it
+  _pfStaticFloor = floorSerial; _pfStaticStale = false;
+  return b;
+}
 let _pfBlocked = null;
 function pathBlockedGrid() {
   const W = MAP_W, H = MAP_H, n = W * H;
   if (!_pfBlocked || _pfBlocked.length !== n) _pfBlocked = new Uint8Array(n);
   const b = _pfBlocked;
-  for (let y = 0; y < H; y++) { const row = mapData[y]; const base = y * W; for (let x = 0; x < W; x++) b[base + x] = row[x] !== 0 ? 1 : 0; }
-  for (const k in furnitureMap) { const c = k.split(','); const fx = +c[1], fy = +c[0]; if (fx >= 0 && fy >= 0 && fx < W && fy < H) b[fy * W + fx] = 1; } // solid furniture — route around it
+  b.set(pathStaticGrid());   // walls + furniture — one memcpy instead of a full rescan
   for (const h of bossHazards) if (h.kind === 'wall' && h.x >= 0 && h.y >= 0 && h.x < W && h.y < H) b[h.y * W + h.x] = 1;
   for (const o of enemies) {
     if (o.dead) continue;
@@ -18103,24 +18177,32 @@ function pathBlockedGrid() {
 // `came`/`seen` are reused scratch buffers stamped with a per-call generation so
 // neither needs reallocating or clearing each turn (only the rare stamp wrap
 // does), and the "is this tile free?" test reads the precomputed blocked grid.
-let _pfCame = null, _pfSeen = null, _pfGen = 0;
+// The queue is a reused flat buffer too (each cell enqueues at most once, so W*H
+// slots always suffice) — no growable array churn per pathfind.
+let _pfCame = null, _pfSeen = null, _pfQueue = null, _pfGen = 0;
+// Exploration cap: give up once the flood has dequeued far more cells than any
+// real chase needs — a foe whose true path is longer than ~4× the leash radius
+// behaves as if the hero were unreachable, matching how far it would chase anyway.
+const PF_EXPLORE_CAP = (4 * ENEMY_LEASH) * (4 * ENEMY_LEASH);
 function enemyPathStep(e, tx, ty) {
   const W = MAP_W, H = MAP_H, n = W * H;
   const start = e.y * W + e.x, goal = ty * W + tx;
   if (start === goal) return null;
   const blocked = pathBlockedGrid();
-  if (!_pfCame || _pfCame.length !== n) { _pfCame = new Int32Array(n); _pfSeen = new Uint16Array(n); _pfGen = 0; }
-  const came = _pfCame, seen = _pfSeen;
+  if (!_pfCame || _pfCame.length !== n) { _pfCame = new Int32Array(n); _pfSeen = new Uint16Array(n); _pfQueue = new Int32Array(n); _pfGen = 0; }
+  const came = _pfCame, seen = _pfSeen, queue = _pfQueue;
   if (++_pfGen === 0) { seen.fill(0); _pfGen = 1; } // stamp wrapped — clear once
   const gen = _pfGen;
-  const queue = [start];
+  queue[0] = start;
   came[start] = -1; seen[start] = gen;
-  let qi = 0, found = false;
-  while (qi < queue.length) {
+  let qi = 0, qt = 1, found = false, dequeued = 0;
+  while (qi < qt) {
     const cur = queue[qi++];
     if (cur === goal) { found = true; break; }
+    if (++dequeued > PF_EXPLORE_CAP) break;   // marathon route — treat as unreachable
     const cx = cur % W, cy = (cur - cx) / W;
-    for (const [dx, dy] of ENEMY_DIRS) {
+    for (let d = 0; d < 8; d++) {
+      const dx = ENEMY_DIR_X[d], dy = ENEMY_DIR_Y[d];
       const nx = cx + dx, ny = cy + dy;
       if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
       const ni = ny * W + nx;
@@ -18130,7 +18212,7 @@ function enemyPathStep(e, tx, ty) {
       // Don't cut diagonally through a wall corner.
       if (dx !== 0 && dy !== 0 && mapData[cy][nx] !== 0 && mapData[ny][cx] !== 0) continue;
       came[ni] = cur; seen[ni] = gen;
-      queue.push(ni);
+      queue[qt++] = ni;
     }
   }
   if (!found) return null;
@@ -18146,7 +18228,8 @@ function enemyMove(e) {
   if (e.dead) return;
   if (e.isGoblin) { goblinFlee(e); return; }
   // Stunned foes lose their turn.
-  if (statusEffects.some(s => s.target === e && s.effect === 'stun')) return;
+  const _ms = enemyMoveStatus(e);   // one shared pass over statusEffects (see the cache)
+  if (_ms && _ms.stun) return;
 
   // Neutral foes never initiate — they hold their ground (with the rare idle
   // shuffle) until the player provokes them by attacking. Once provoked they
@@ -18232,7 +18315,7 @@ function enemyStep(e, mx, my) {
       const cx = nx + dx, cy = ny + dy;
       if (!enemyTileFree(cx, cy) && getEnemyAt(cx, cy) !== e) return false;
     }
-    e.x = nx; e.y = ny;
+    e.x = nx; e.y = ny; bumpEnemyPos();
     return true;
   }
   if (!enemyTileFree(nx, ny)) return false;
@@ -18243,7 +18326,7 @@ function enemyStep(e, mx, my) {
     const cornerY = mapData[e.y + my][e.x] !== 0 || furnitureMap[(e.y + my) + ',' + e.x] !== undefined;
     if (cornerX && cornerY) return false;
   }
-  e.x = nx; e.y = ny;
+  e.x = nx; e.y = ny; bumpEnemyPos();
   return true;
 }
 
@@ -18313,7 +18396,7 @@ function stepAwayFromPlayer(e) {
 const GOBLIN_ESCAPE_SECS = 6;
 // The goblin gives up and vanishes (no loot) when its getaway timer expires.
 function goblinEscape(e) {
-  e.dead = true;
+  e.dead = true; bumpEnemyPos();   // its tile is free — refresh the occupancy index
   spawnParticles(e.x, e.y, '#ffd24b', 14, 0.13);
   spawnFloatingText(e.x, e.y, 'POOF!', '#ffd24b');
   sfx('teleport');
@@ -18714,7 +18797,7 @@ function bossBlink(e, dist) {
     for (const [bx, by] of spots) {
       if (bossBlockFits(e, bx, by)) {
         spawnParticles(e.x, e.y, '#cc66ff', 10, 0.1);
-        e.x = bx; e.y = by; e.cd = 6;
+        e.x = bx; e.y = by; e.cd = 6; bumpEnemyPos();
         spawnParticles(bx, by, '#cc66ff', 12, 0.12);
         log(`<span data-spr=feat_portal></span> ${e.name} blinks across the room!`, 'important');
         sfx('boss');
@@ -18797,7 +18880,7 @@ function bossCharge(e, dist) {
   let moved = 0;
   for (let step = 0; step < 5; step++) {
     if (!bossBlockFits(e, e.x + dx, e.y + dy)) break;
-    e.x += dx; e.y += dy; moved++;
+    e.x += dx; e.y += dy; moved++; bumpEnemyPos();
     if (footDist(e) <= 1) break;
   }
   if (moved === 0) return false;
@@ -18975,8 +19058,39 @@ function summonMinions(boss, n) {
 
 // Footprint-aware: a multi-tile boss occupies an N×N block from (e.x,e.y), so
 // any cell inside that block counts as "the boss" for collision and attacks.
+//
+// Backed by an occupancy index (tile -> foe) so the every-frame callers — the
+// hero's box-collision corner probes above all — cost one Map lookup instead of
+// scanning the whole roster. The index rebuilds lazily: spawns and floor resets
+// change the enemies array's length/identity, and everything that moves or kills
+// a foe calls bumpEnemyPos(), so a hit is never stale. Cells are stamped in
+// array order, first one wins — the same foe the old enemies.find() returned
+// when footprints ever overlap.
+let _occMap = new Map(), _occArr = null, _occLen = -1, _occStamp = -1, _occW = -1;
+let _enemyPosEpoch = 0;
+function bumpEnemyPos() { _enemyPosEpoch++; }
 function getEnemyAt(x,y) {
-  return enemies.find(e => { if (e.dead) return false; const s = e.size || 1; return x >= e.x && x < e.x + s && y >= e.y && y < e.y + s; }) || null;
+  if (_occArr !== enemies || _occLen !== enemies.length || _occStamp !== _enemyPosEpoch || _occW !== MAP_W) {
+    _occMap.clear();
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const s = e.size || 1;
+      for (let dy = 0; dy < s; dy++) for (let dx = 0; dx < s; dx++) {
+        const cx = e.x + dx, cy = e.y + dy;
+        // Skip cells outside the current map so no two tiles ever share a key
+        // (a stale cross-floor roster can briefly hold out-of-range coords mid-gen).
+        if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) continue;
+        const k = cy * MAP_W + cx;
+        if (!_occMap.has(k)) _occMap.set(k, e);
+      }
+    }
+    _occArr = enemies; _occLen = enemies.length; _occStamp = _enemyPosEpoch; _occW = MAP_W;
+  }
+  if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return null;  // no foe stands out of bounds
+  const e = _occMap.get(y * MAP_W + x);
+  if (!e || e.dead) return null;
+  const s = e.size || 1;   // re-verify the footprint — cheap insurance against a stale stamp
+  return (x >= e.x && x < e.x + s && y >= e.y && y < e.y + s) ? e : null;
 }
 // Smallest Manhattan distance from the player to any tile of an enemy's footprint.
 function footDist(e) {
@@ -24914,9 +25028,10 @@ function enemyAttackInterval(e) {
   if (e._atkJit == null) e._atkJit = 0.85 + Math.random() * 0.3;
   return ENEMY_ATK_BASE * (beh.atkMult || 1) * (e.isBoss ? 0.8 : 1) * e._atkJit;
 }
-let _worldAcc = 0, _saveTick = 0;
+let _worldAcc = 0, _saveTick = 0, _worldTicks = 0;
 // One beat of world upkeep, on a fixed real-time cadence (every WORLD_TICK_MS).
 function worldTick() {
+  _worldTicks++;   // world-beat serial — lets per-frame checks (unstickPlayer) skip re-testing a still world
   // Transient combat buffs (War Cry, Sanctuary, …) age out in real seconds on the
   // world clock. Skill and potion cooldowns burn down in real seconds too — see
   // tickCooldowns().
