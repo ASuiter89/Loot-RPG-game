@@ -5547,6 +5547,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     loot: [
       `Rarity is COLOUR ONLY (no text labels), lowest to highest: grey → white → green → blue → purple → orange → red. Higher tiers allow more bonus affixes.`,
+      `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a depth-milestone cache, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
       `Set pieces are a distinct top-rarity class shown in teal (not the red of a unique). They drop only at the top tier — as rare as any unique — and grant escalating stat bonuses at 2 and 4 matched pieces worn. Wearing the full set (4 pieces = complete) also unlocks its SIGNATURE POWER — a unique effect, not just more stats: Warden's Aegis Wall (block + reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), or Arcanist's Arcane Overflow (cooldown reduction + mana leech). A completed set wraps the hero in a golden aura and its "… set" tag turns gold with a ✦. A piece can roll for any slot; hover/press-hold the tag to see the bonuses, the power, which slots you're wearing, and your count. gameState().sets lists worn sets, completion and active powers.`,
       `Item power is driven more by item level (ilvl, geared to current depth) than by rarity alone. gameState().menu.inventory gives brief items; read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
@@ -9420,7 +9421,10 @@ function transmute(tier) {
   const ilvl = Math.max(1, (dungeonReturn || player.maxFloor || 1) + 1);
   const item = generateItem(1, ilvl, next);
   inventory.push(item);
-  sfx('levelup'); screenFlash((TIERS[next] || {}).color || '#fff');
+  // A fused legendary/unique gets the full drop banner; lesser results keep the
+  // tier-coloured flash.
+  if (isTopTierItem(item)) lootReveal(item);
+  else { sfx('levelup'); screenFlash((TIERS[next] || {}).color || '#fff'); }
   log(`<span data-spr=potion_g></span> The crucible fuses three ${tier} pieces into ${logItem(item)}!`, 'loot');
   updateBars(); renderPanel(); renderTransmuter(); saveGame();
 }
@@ -9530,7 +9534,10 @@ function claimBounty() {
   const item = generateItem(2, b.ilvl || ((player.maxFloor || 1) + 1));
   inventory.push(item);
   player.bounty = null;
-  sfx('levelup'); screenFlash('#ffd24b');
+  // A legendary/unique bounty payoff gets the full drop banner; lesser rewards keep
+  // the gold-flash fanfare.
+  if (isTopTierItem(item)) lootReveal(item);
+  else { sfx('levelup'); screenFlash('#ffd24b'); }
   log(`<span data-spr=scroll></span> Bounty complete! +<span data-spr=ic_money></span>${b.gold}, materials, and ${logItem(item)}.`, 'loot');
   updateBars(); renderPanel(); renderBounty(); updateObjectiveChip(); saveGame();
 }
@@ -11310,7 +11317,11 @@ function gambleRoll() {
   gambleLast = { item, cost };
   const rank = Object.keys(TIERS).indexOf(tier);
   const jackpot = rank >= 4; // legendary or unique
-  sfx(jackpot ? 'levelup' : 'loot');
+  // A legendary/unique pull earns the full drop-reveal banner (its sting, flash and
+  // shake ride along), so a gambled top-tier piece celebrates like any floor find;
+  // lesser pulls keep the plain win/loot cue.
+  if (isTopTierItem(item)) lootReveal(item);
+  else sfx(jackpot ? 'levelup' : 'loot');
   log(`🎲 You wager <span data-spr=ic_money></span>${cost} and the dice favor you — ${logItem(item)}!`, jackpot ? 'important' : 'loot');
   updateBars(); renderPanel(); renderGambler(); saveGame();
 }
@@ -14742,12 +14753,19 @@ function playNextLootBanner() {
   // off to the next queued banner — its own remove/reflow/add re-triggers the pop.
   lootBannerTimer = setTimeout(() => { el.classList.remove('show'); playNextLootBanner(); }, 2400);
 }
+// Legendary and unique are the two "stop the world" tiers — the ones that earn a
+// centre-screen loot banner. Shared by the drop reveal AND every reward source
+// (gambler jackpot, bounty/escort payoff, transmuter fuse) so a top-tier piece
+// celebrates the same way no matter how it was won, not just when it drops off a
+// kill or out of a chest.
+function isTopTierItem(item) { return !!item && (item.tier === 'legendary' || item.tier === 'unique'); }
+
 // Escalating sensory reward the instant a fresh item is acquired: blue/purple get
 // a bright chime + flash; orange/red stop the world with a banner, sting & shake.
 function lootReveal(item) {
   if (!item || !item.tier) return;
   const col = tierColor(item);   // set pieces flash their own colour, not unique red
-  if (item.tier === 'legendary' || item.tier === 'unique') {
+  if (isTopTierItem(item)) {
     // Sting, flash and shake ride along with the banner so they land when it shows
     // (it may be queued behind a depth banner), not the instant it's enqueued.
     showLootBanner(item.name, item.set ? 'SET PIECE' : item.tier === 'unique' ? 'UNIQUE DROP' : 'LEGENDARY DROP', col,
@@ -15922,7 +15940,10 @@ function goDownStairs(nx, ny) {
       const reward = generateItem(4, dungeonLevel + 1);
       inventory.push(reward);
       log(`✅ ${quest.npc.name} reached the stairs safely! +<span data-spr=ic_money></span>${r.gold}, +${r.xp} XP, reward: ${logItem(reward)}`, 'important');
-      screenFlash('#22cc66'); sfx('levelup'); checkLevelUp();
+      // A legendary/unique escort reward gets the full drop banner; else the green fanfare.
+      if (isTopTierItem(reward)) lootReveal(reward);
+      else { screenFlash('#22cc66'); sfx('levelup'); }
+      checkLevelUp();
     } else {
       log(`😟 You descended without ${quest.npc.name} — the escort failed.`);
     }
@@ -24625,6 +24646,7 @@ const __DL_FN_BRIDGE = {
   showLevelUpBanner,
   showLootBanner,
   playNextLootBanner,
+  isTopTierItem,
   lootReveal,
   milestoneTier,
   depthMilestone,
