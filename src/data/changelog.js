@@ -3,6 +3,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Ascendancy skills get their own points", by: "Claude", notes: [
+    "Ascendancy (path) skills now spend a SEPARATE pool of ascendancy points — normal skill points buy only passive & active skills, ascendancy points buy only path skills.",
+    "Earn one ascendancy point every 5 levels starting at level 20 (20, 25, 30…) — the level you can first ascend. Points bank up even before you ascend.",
+    "Path skills no longer have a level requirement — they're gated only by the earlier skills in the path tree.",
+    "Path-tree nodes now show their names under their icons, matching the passive & active trees.",
+    "The SKILLS-tab header retitles to ASCENDANCY POINTS on the path tab; the Trainer's full respec refunds both point kinds.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Cracked walls take a few hits — smash from any side", by: "Claude", notes: [
     "Shove into a cracked wall from ANY direction now — no more needing to hit it dead-on. Walk or dash into one at any angle and it registers.",
     "Cracked walls no longer shatter in one blow: each shove chips one further and it collapses after three hits, so it half-blocks the way until you keep at it.",

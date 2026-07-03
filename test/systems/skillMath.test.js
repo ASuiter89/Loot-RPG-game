@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { milestonePower, rankScale, skillManaCost } from '../../src/systems/skillMath.js';
+import {
+  milestonePower, rankScale, skillManaCost,
+  earnedSkillPoints, earnedAscPoints, ASCEND_LEVEL, ASC_POINT_EVERY,
+} from '../../src/systems/skillMath.js';
 
 describe('milestonePower', () => {
   it('is 0 below rank 3', () => {
@@ -51,5 +54,40 @@ describe('skillManaCost', () => {
   });
   it('never returns below 1 for a real cost', () => {
     expect(skillManaCost({ mp: 1 }, 1)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('earnedSkillPoints', () => {
+  it('grants one point at creation (level 1)', () => {
+    expect(earnedSkillPoints(1)).toBe(1);
+    expect(earnedSkillPoints(0)).toBe(1); // guards a missing/zero level
+  });
+  it('adds one per level gained', () => {
+    expect(earnedSkillPoints(2)).toBe(2);
+    expect(earnedSkillPoints(20)).toBe(20);
+    expect(earnedSkillPoints(50)).toBe(50);
+  });
+});
+
+describe('earnedAscPoints', () => {
+  it('is 0 below the ascension level', () => {
+    expect(earnedAscPoints(1)).toBe(0);
+    expect(earnedAscPoints(ASCEND_LEVEL - 1)).toBe(0);
+    expect(earnedAscPoints(0)).toBe(0);
+  });
+  it('grants the first point at the ascension level', () => {
+    expect(earnedAscPoints(ASCEND_LEVEL)).toBe(1);
+  });
+  it('adds one more every ASC_POINT_EVERY levels', () => {
+    expect(earnedAscPoints(ASCEND_LEVEL + 1)).toBe(1); // not yet the next tier
+    expect(earnedAscPoints(ASCEND_LEVEL + ASC_POINT_EVERY - 1)).toBe(1);
+    expect(earnedAscPoints(ASCEND_LEVEL + ASC_POINT_EVERY)).toBe(2);
+    expect(earnedAscPoints(ASCEND_LEVEL + 2 * ASC_POINT_EVERY)).toBe(3);
+  });
+  it('matches the intended cadence (20→1, 25→2, 30→3, 50→7)', () => {
+    expect(earnedAscPoints(20)).toBe(1);
+    expect(earnedAscPoints(25)).toBe(2);
+    expect(earnedAscPoints(30)).toBe(3);
+    expect(earnedAscPoints(50)).toBe(7);
   });
 });

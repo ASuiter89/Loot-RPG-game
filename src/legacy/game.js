@@ -14,7 +14,9 @@
 
 // ── Extracted modules (see docs/CHANGELOG.md) ──
 import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
-import { milestonePower, rankScale, skillManaCost } from '../systems/skillMath.js';
+import { milestonePower, rankScale, skillManaCost,
+  earnedSkillPoints, earnedAscPoints,
+  SKILL_POINTS_PER_LEVEL, SKILL_POINTS_AT_START, ASCEND_LEVEL, ASC_POINT_EVERY } from '../systems/skillMath.js';
 import { glideVitalFill } from '../systems/vitalFill.js';
 import { offscreenArrows } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
@@ -3074,7 +3076,7 @@ function playerPower() {
   // (attrPowerWeight), exactly like a gear attribute affix, so a point is worth the
   // same Power spent or geared and a damage-stat build reads stronger than an off-stat one.
   for (const k of ATTR_KEYS) p += (player.attributes?.[k] || 0) * attrPowerWeight(k);
-  p += spentSkillPoints() * 5; // skill-tree investment shows up in Power too
+  p += spentAllSkillPoints() * 5; // skill-tree investment (both pools) shows up in Power too
   return Math.round(p);
 }
 
@@ -4128,21 +4130,17 @@ function classDmgTakenMult() {
 // raise the block cap) or pair power with a real cost (negative fx). See skillBonus
 // (folds cfx), condMet (evaluates conds), skillFlag, and pointsInTree (pts gates).
 // Ascending (see ASCENSIONS) unlocks a focused specialization "PATH" tree.
-const SKILL_POINTS_PER_LEVEL = 1;
-// Every hero begins with one skill point to spend, so a fresh character can
-// immediately learn its first active (Cleave / Backstab / Firebolt / Mend)
-// instead of being handed an always-on baseline skill.
-const SKILL_POINTS_AT_START = 1;
-// Total skill points a hero of the given level has earned over its lifetime
-// (the starting point plus one per level gained). Used to grant the right pool
-// on a new game and to reconcile older saves on load.
-function earnedSkillPoints(level) {
-  return SKILL_POINTS_AT_START + Math.max(0, (level || 1) - 1) * SKILL_POINTS_PER_LEVEL;
-}
-// band index → minimum hero level for base trees, and for ascension PATH trees.
+// The skill-point economy — SKILL_POINTS_PER_LEVEL / SKILL_POINTS_AT_START /
+// ASCEND_LEVEL / ASC_POINT_EVERY and the earnedSkillPoints / earnedAscPoints
+// helpers — lives in systems/skillMath.js (imported above) so it stays pure and
+// unit-tested. Two independent pools: NORMAL skill points (one per level) fund
+// the passive + active trees; ASCENDANCY points (one every ASC_POINT_EVERY
+// levels from ASCEND_LEVEL) fund only the ascendancy path tree.
+// band index → minimum hero level for base trees. (Ascension PATH nodes are no
+// longer level-gated — they're gated purely by the earlier skills in their tree
+// — so ASC_BANDS survives only as a cosmetic default and is never checked.)
 const SKILL_BANDS = [1, 4, 8, 13, 19, 26];
 const ASC_BANDS   = [20, 25, 31];
-const ASCEND_LEVEL = 20;   // level at which the Trainer offers ascension
 
 // Build a tree from rows of node literals: assigns band/col/type/max/lvl and a
 // default prerequisite (the node directly above in the previous row) unless the
@@ -4836,7 +4834,10 @@ function castKind(node) {
 function skillReqMet(node) {
   if (!node) return false;
   if (node.asc && player.ascension !== node.asc) return false;
-  if (player.level < (node.lvl || 1)) return false;
+  // Ascendancy (path) nodes carry no level gate — reaching the ascension itself
+  // (only possible at ASCEND_LEVEL+) plus the earlier path skills is the whole
+  // gate. Base-tree nodes keep their per-band hero-level requirement.
+  if (!node.asc && player.level < (node.lvl || 1)) return false;
   // `req` = ALL of these prerequisites (AND); `reqAny` = at least ONE (OR), which
   // is how two branches merge into a shared node; `pts` = spend N points in a tree.
   if (node.req) for (const rid of node.req) if (skillRank(rid) < 1) return false;
@@ -4845,12 +4846,28 @@ function skillReqMet(node) {
   return true;
 }
 function skillMaxed(node) { return skillRank(node.id) >= (node.max || 1); }
+// The points pool a node draws from: ascendancy (path) nodes spend ascPoints,
+// everything else spends the normal skillPoints. Keeps the two pools strictly
+// separate so a normal point can never buy a path skill and vice-versa.
+function skillPointsFor(node) {
+  return skillTreeKindOf(node) === 'path' ? (player.ascPoints || 0) : (player.skillPoints || 0);
+}
 function canBuySkill(node) {
-  return !!node && (player.skillPoints || 0) > 0 && !skillMaxed(node) && skillReqMet(node);
+  return !!node && skillPointsFor(node) > 0 && !skillMaxed(node) && skillReqMet(node);
 }
+// Normal skill points spent — passive + active trees only (the ascendancy path
+// tree draws from its own pool, counted by spentAscPoints).
 function spentSkillPoints() {
-  return classSkillTree().reduce((s, n) => s + skillRank(n.id), 0);
+  const t = classTrees();
+  return t.passive.concat(t.active).reduce((s, n) => s + skillRank(n.id), 0);
 }
+// Ascendancy points spent in the current ascension's path tree.
+function spentAscPoints() {
+  return ascTree().reduce((s, n) => s + skillRank(n.id), 0);
+}
+// Total ranks bought across every tree (both pools) — used for the full-respec
+// cost/refund and the Power score, which value all skill investment alike.
+function spentAllSkillPoints() { return spentSkillPoints() + spentAscPoints(); }
 // Castable actives: every unlocked active node (base tree or ascension path),
 // in tree order — each keyed by its own id for cooldowns. The first entry is the
 // hero's primary skill (cast with the button / R key).
@@ -5079,7 +5096,7 @@ function buySkill(id) {
   if (!player.skills) player.skills = {};
   const firstRank = !(player.skills[id] > 0);
   player.skills[id] = (player.skills[id] || 0) + 1;
-  player.skillPoints--;
+  if (skillTreeKindOf(node) === 'path') player.ascPoints--; else player.skillPoints--;
   // A newly-learned active drops onto the first open hotkey slot so it reaches the
   // bar without a manual assign (the player can re-slot it any time).
   if (firstRank && node.type === 'active') autoSlotSkill(id);
@@ -5145,8 +5162,10 @@ function refundSkill(id) {
   const cost = skillRefundCost();
   if (!canAfford(cost)) { log(`<span data-spr=ic_money></span> Not enough gold to refund — need <span data-spr=ic_money></span>${cost.gold}.`); sfx('denied'); return; }
   spendCost(cost);
+  const isPath = skillTreeKindOf(node) === 'path';
   if (rank - 1 <= 0) delete player.skills[id]; else player.skills[id] = rank - 1;
-  player.skillPoints = (player.skillPoints || 0) + 1;
+  if (isPath) player.ascPoints = (player.ascPoints || 0) + 1;
+  else player.skillPoints = (player.skillPoints || 0) + 1;
   // A now-unlearned active must drop off the hotkey / auto-cast slots.
   normSkillSlots(); normAutoSkill();
   recomputeMaxStats();
@@ -5154,7 +5173,7 @@ function refundSkill(id) {
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   sfx('shrine');
   const newRank = skillRank(id);
-  log(`↩️ Refunded ${node.name}${(node.max || 1) > 1 ? ` (now rank ${newRank}/${node.max})` : ''} — 1 skill point returned for <span data-spr=ic_money></span>${cost.gold}.`, 'important');
+  log(`↩️ Refunded ${node.name}${(node.max || 1) > 1 ? ` (now rank ${newRank}/${node.max})` : ''} — 1 ${isPath ? 'ascendancy' : 'skill'} point returned for <span data-spr=ic_money></span>${cost.gold}.`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); saveGame();
 }
 
@@ -5432,7 +5451,7 @@ let player = { x: 5, y: 5,
   // ordered row of hotkey slots (id|null per slot) the player fills on the bar.
   // `autoSkill` is the lone active dropped into the dedicated auto-cast slot — it
   // fires itself the moment it's ready (off cooldown + affordable), or null.
-  skillPoints: 0, skills: {}, skillCds: {}, skillSlots: [], autoSkill: null, targetMode: 'closest',
+  skillPoints: 0, ascPoints: 0, skills: {}, skillCds: {}, skillSlots: [], autoSkill: null, targetMode: 'closest',
   // Hero attributes — every one starts at ATTR_BASE and is raised by spending
   // points earned on level up. attrSchema marks the attribute-driven-stats model
   // (v2) so older saves can be migrated on load.
@@ -6019,7 +6038,7 @@ window.gameState = function gameState(radius) {
         const locked = !!(s.req && !s.req.ok());
         return { kind: s.kind, name: s.name, locked, need: locked ? s.req.need : null };
       }) : null,
-      pointsToSpend: { attribute: player.attrPoints || 0, skill: player.skillPoints || 0 },
+      pointsToSpend: { attribute: player.attrPoints || 0, skill: player.skillPoints || 0, ascendancy: player.ascPoints || 0 },
       gold: player.gold,
       materials: player.materials ? Object.assign({}, player.materials) : null,   // scrap/glimmer/core/chaos (commonest→rarest) for crafting
       materialsUnlocked: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, materialUnlocked(k)])),  // which mats the CURRENT tier can drop from kills (salvage ignores this)
@@ -6132,8 +6151,8 @@ window.gameGuide = function gameGuide(topic) {
       `Cooldowns are real seconds (spam-floored at 0.5s). Recharge is MULTIPLICATIVE haste, like attack speed: cd = base / (1 + CDR/100), and for SPELL actives times a further (1 + CastSpeed/100). There is NO cap — 60% CDR + 35% Cast Speed divides a spell's cooldown by 1.6×1.35 ≈ 2.16, and stacking more only ever approaches (never reaches) instant. +MCR likewise divides MP cost (base / (1 + MCR/100)); +Attack Speed quickens auto-attacks the same way. +CDR speeds every active, +Cast Speed spells only, and a rank-7 skill gets an extra ×1.2.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. ~50% CDR + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
       `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — a big power surge, then a shorter cooldown, then wider reach — so deepening a key skill outpaces its rising mana cost.`,
-      `Learn and rank skills on the SKILLS tab (spend skill points). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
-      `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns 1 skill point for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
+      `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
+      `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
       `RANGED casts need LINE OF SIGHT: a bolt, blast, beam (line), nova or chain only strikes foes you can see — a SOLID obstruction (wall, door, boss barrier, furniture) between you and a foe blocks it, but open ground and water don't; the cast fails with "No foe in sight" if nothing visible is in range. Melee/cleave (adjacent-only) and the rare floor-wide "strike random foes" ultimate ignore walls.`,
     ],
@@ -6200,8 +6219,8 @@ window.gameGuide = function gameGuide(topic) {
     progression: [
       `Four classes: Warrior (Might/Vitality, tanky melee), Rogue (Agility/Might, crit & dodge), Mage (Spirit/Luck, spells & big MP), Templar (Vitality/Spirit, durable hybrid). Class gates which weapons you can equip.`,
       `Five attributes (gameState().player.attributes): Might (+Attack, +Stamina), Vitality (+max HP, +Defense, +HP regen), Agility (+evasion, +accuracy, +move/attack speed), Spirit (+max MP, +MP regen, +spell power), Luck (+crit). Pump your class's two damage attributes for the most damage.`,
-      `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend). Spend attributes on the HERO tab (Shift-click = 5 at once), skills on the SKILLS tab. You can't out-level the dungeon — gear and skills matter more with depth.`,
-      `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives.`,
+      `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend). Spend attributes on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
+      `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives. From level 20 you also earn a SEPARATE ascendancy point every 5 levels (20, 25, 30…; gameState().menu.pointsToSpend.ascendancy), spent only on the ascendancy path tree. Normal skill points can't buy path skills and ascendancy points can't buy passive/active skills. Path skills carry NO level requirement — they're gated only by the earlier skills in the path tree.`,
       `Respec attributes/skills or change class at the Trainer for gold that scales with your level (points refund). Switching to your class's other ascension afterwards costs a lot of gold (also scales with level and depth; path points refund) — the first ascension stays free, but re-ascending is a deliberate, costly choice, as is retraining class. After a respec, check that worn gear still meets its attribute requirement (under-req pieces turn red and are ignored).`,
     ],
     character: [
@@ -11333,7 +11352,7 @@ function respecCost() {
   return 120 + spent * 25 + (player.level || 1) * 20;
 }
 function skillRespecCost() {
-  return 120 + spentSkillPoints() * 30 + (player.level || 1) * 20;
+  return 120 + spentAllSkillPoints() * 30 + (player.level || 1) * 20;
 }
 function openTrainer() { openTownModal('Trainer', 'town_trainer'); renderTrainer(); }
 function renderTrainer() {
@@ -11355,8 +11374,8 @@ function renderTrainer() {
     <div class="shop-row has-actions ${player.gold >= skillRespecCost() ? '' : 'cant-afford'}">
       <span class="loot-icon"><span data-spr=mat_glimmer></span></span>
       <div class="shop-row-info"><div class="shop-row-name">Forget Skills</div>
-        <div class="shop-row-sub">Refund all ${spentSkillPoints()} spent skill point${spentSkillPoints() === 1 ? '' : 's'} to spend anew</div></div>
-      <button class="act-btn ${player.gold >= skillRespecCost() ? '' : 'short'}" ${(player.gold >= skillRespecCost() && spentSkillPoints() > 0) ? '' : 'disabled'} onclick="respecSkills()"><span data-spr=ic_money></span>${skillRespecCost()}</button>
+        <div class="shop-row-sub">Refund all ${spentAllSkillPoints()} spent point${spentAllSkillPoints() === 1 ? '' : 's'} (skill &amp; ascendancy) to spend anew</div></div>
+      <button class="act-btn ${player.gold >= skillRespecCost() ? '' : 'short'}" ${(player.gold >= skillRespecCost() && spentAllSkillPoints() > 0) ? '' : 'disabled'} onclick="respecSkills()"><span data-spr=ic_money></span>${skillRespecCost()}</button>
     </div>
     ${trainerAscensionBlock()}
     <div class="town-blurb" style="margin-top:10px">Retrain into a different class for <span data-spr=ic_money></span>${classChangeCost()}. Your attributes are kept; if your new class can't wield your weapon, it goes back in your bag.</div>
@@ -11421,13 +11440,14 @@ function ascend(key) {
   const cost = player.ascension ? ascendCost() : 0;
   if (player.gold < cost) { log('Not enough gold to switch your ascension.'); return; }
   player.gold -= cost;
-  // Refund any points spent in the previous path tree before switching.
+  // Refund any ascendancy points spent in the previous path tree before switching
+  // (they return to the ascendancy pool, not the normal skill pool).
   let refunded = 0;
   if (player.ascension && ASCENSIONS[player.ascension]) {
     for (const n of ASCENSIONS[player.ascension].tree) { refunded += skillRank(n.id); delete player.skills[n.id]; }
   }
   player.ascension = key;
-  player.skillPoints = (player.skillPoints || 0) + refunded;
+  player.ascPoints = (player.ascPoints || 0) + refunded;
   recomputeMaxStats();
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
@@ -11456,10 +11476,13 @@ function respecAttrs() {
 }
 function respecSkills() {
   const spent = spentSkillPoints();
+  const spentAsc = spentAscPoints();
   const cost = skillRespecCost();
-  if (spent <= 0 || player.gold < cost) return;
+  if ((spent + spentAsc) <= 0 || player.gold < cost) return;
   player.gold -= cost;
+  // Each pool gets its own kind of point back; the wipe clears every tree at once.
   player.skillPoints = (player.skillPoints || 0) + spent;
+  player.ascPoints = (player.ascPoints || 0) + spentAsc;
   player.skills = {};
   player.skillCds = {};
   combatBuffs = {};
@@ -11467,7 +11490,8 @@ function respecSkills() {
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   sfx('shrine');
-  log(`<span data-spr=town_trainer></span> You unlearn your skills — ${spent} skill point${spent === 1 ? '' : 's'} returned to spend.`, 'important');
+  const ascStr = spentAsc ? ` and ${spentAsc} ascendancy point${spentAsc === 1 ? '' : 's'}` : '';
+  log(`<span data-spr=town_trainer></span> You unlearn your skills — ${spent} skill point${spent === 1 ? '' : 's'}${ascStr} returned to spend.`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); renderTrainer(); saveGame();
 }
 
@@ -19505,6 +19529,10 @@ function checkLevelUp() {
     player.level++;
     player.attrPoints = (player.attrPoints || 0) + ATTR_POINTS_PER_LEVEL;
     player.skillPoints = (player.skillPoints || 0) + SKILL_POINTS_PER_LEVEL;
+    // One ascendancy point at level 20, then one more every ASC_POINT_EVERY levels
+    // (25, 30, …). Banked into its own pool even before the hero has ascended.
+    const ascGained = (player.level >= ASCEND_LEVEL && (player.level - ASCEND_LEVEL) % ASC_POINT_EVERY === 0) ? 1 : 0;
+    if (ascGained) player.ascPoints = (player.ascPoints || 0) + ascGained;
     recomputeMaxStats();        // level grants more base HP/MP
     // A level-up mends a chunk of HP/MP — a real relief mid-fight, but no longer
     // a free full reset, so health and mana stay finite resources you manage.
@@ -19513,7 +19541,7 @@ function checkLevelUp() {
     sfx('levelup');
     showLevelUpBanner(player.level);
     log(`<span data-spr=ui_level></span> LEVEL UP! You are now level ${player.level}!`, 'important');
-    log(`<span data-spr=mat_glimmer></span> +${ATTR_POINTS_PER_LEVEL} attribute points (HERO tab) · +${SKILL_POINTS_PER_LEVEL} skill point (SKILLS tab).`, 'important');
+    log(`<span data-spr=mat_glimmer></span> +${ATTR_POINTS_PER_LEVEL} attribute points (HERO tab) · +${SKILL_POINTS_PER_LEVEL} skill point (SKILLS tab)${ascGained ? ` · +${ascGained} ascendancy point (PATH tree)` : ''}.`, 'important');
     updateBars();
     renderPanel();
     saveGame();
@@ -19798,9 +19826,11 @@ function updateBars() {
   const invTab = document.getElementById('tab-inv');
   if (invTab) invTab.innerHTML = `LOOT<span class="tab-num ${inventory.length>=BAG_MAX?'full':''}">(${inventory.length}/${BAG_MAX})</span>`;
 
-  // Nudge the HERO / SKILLS tabs when there are unspent points to spend.
+  // Nudge the HERO / SKILLS tabs when there are unspent points to spend. The
+  // SKILLS badge combines both pools (normal skill + ascendancy), since both are
+  // spent on that tab.
   const pts = player.attrPoints || 0;
-  const sPts = player.skillPoints || 0;
+  const sPts = (player.skillPoints || 0) + (player.ascPoints || 0);
   const heroTab = document.getElementById('tab-hero');
   if (heroTab) {
     heroTab.innerHTML = pts > 0 ? `HERO<span class="tab-count">${pts}</span>` : 'HERO';
@@ -20377,7 +20407,17 @@ function treeDims(tree) {
 function renderSkills(el) {
   const cls = playerClass();
   if (!cls) { el.innerHTML = '<div class="hero-sub" style="padding:12px">Pick a class to unlock its skill tree.</div>'; selectedSkillId = null; return; }
-  const pts = player.skillPoints || 0;
+  // The PATH tab spends the separate ascendancy pool; PASSIVE / ACTIVE spend the
+  // normal skill-point pool. The header retitles itself to match the open tab.
+  const onPath = skillView === 'path';
+  const pts = onPath ? (player.ascPoints || 0) : (player.skillPoints || 0);
+  const learned = onPath ? spentAscPoints() : spentSkillPoints();
+  const ptWord = onPath ? 'ascendancy point' : 'skill point';
+  const noPtHint = onPath
+    ? ((player.level || 1) < ASCEND_LEVEL
+        ? `Reach level ${ASCEND_LEVEL} to earn ascendancy points.`
+        : `Level up to earn more ascendancy points (1 every ${ASC_POINT_EVERY} levels).`)
+    : 'Level up to earn more skill points.';
   const asc = ascData();
   // Sub-tab selector across the three trees.
   const tabBtn = (v, label) => `<button class="sk-vtab ${skillView === v ? 'on' : ''}" onclick="setSkillView('${v}')">${label}</button>`;
@@ -20398,11 +20438,11 @@ function renderSkills(el) {
 
   const header = `
     <div class="hero-power">
-      <div class="hp-label">SKILL POINTS</div>
+      <div class="hp-label">${onPath ? 'ASCENDANCY POINTS' : 'SKILL POINTS'}</div>
       <div class="hp-value">${pts}</div>
     </div>
-    <div class="hero-sub">${dlIcon(cls.icon, 16)} ${cls.name}${asc ? ` · <span style="color:${asc.color}">${dlIcon(asc.icon,16)||''} ${asc.name}</span>` : ''} · ${spentSkillPoints()} learned</div>
-    <div class="hero-points">${pts > 0 ? `${pts} point${pts > 1 ? 's' : ''} to spend!` : 'Level up to earn more skill points.'}</div>
+    <div class="hero-sub">${dlIcon(cls.icon, 16)} ${cls.name}${asc ? ` · <span style="color:${asc.color}">${dlIcon(asc.icon,16)||''} ${asc.name}</span>` : ''} · ${learned} learned</div>
+    <div class="hero-points">${pts > 0 ? `${pts} ${ptWord}${pts > 1 ? 's' : ''} to spend!` : noPtHint}</div>
     ${tabs}${branchTabs}`;
 
   // The PATH tab before ascending: a prompt and the two specialization previews.
@@ -20465,14 +20505,18 @@ function renderSkills(el) {
     if (branchNames) for (let c = 0; c < cols; c++) branchHeads += `<div class="sk-branch" style="left:${((c + 0.5) / cols * 100).toFixed(2)}%">${branchNames[c] || ''}</div>`;
   }
 
-  // Per-tier level labels down the left edge so the gating reads clearly.
+  // Per-tier level labels down the left edge so the gating reads clearly. The
+  // ascendancy path tree has no level gates (it's gated by earlier path skills),
+  // so it shows none.
   let bandLabels = '';
-  const seenBand = {};
-  for (const n of tree) {
-    if (seenBand[n.band]) continue; seenBand[n.band] = true;
-    const y = web ? (nodePos(n, cols, bands)[1] * 100).toFixed(1) : ((n.band + 0.6) / (bands + 0.1) * 100).toFixed(1);
-    const met = (player.level || 1) >= n.lvl;
-    bandLabels += `<div class="sk-band ${met ? 'met' : ''}" style="top:${y}%">Lv${n.lvl}</div>`;
+  if (!onPath) {
+    const seenBand = {};
+    for (const n of tree) {
+      if (seenBand[n.band]) continue; seenBand[n.band] = true;
+      const y = web ? (nodePos(n, cols, bands)[1] * 100).toFixed(1) : ((n.band + 0.6) / (bands + 0.1) * 100).toFixed(1);
+      const met = (player.level || 1) >= n.lvl;
+      bandLabels += `<div class="sk-band ${met ? 'met' : ''}" style="top:${y}%">Lv${n.lvl}</div>`;
+    }
   }
 
   // Node tiles. State precedence: maxed > available > owned > ready > locked.
@@ -20517,7 +20561,8 @@ function renderSkills(el) {
     const pips = sn.type === 'active' ? milestonePips(rank) : '';
     const rankTxt = ` <span style="color:var(--gold)">${rank}/${sn.max}${pips ? ' ' + pips : ''}</span>`;
     const reqRows = [];
-    if ((sn.lvl || 1) > 1) {
+    // Base-tree nodes gate on hero level; ascendancy (path) nodes never do.
+    if (!sn.asc && (sn.lvl || 1) > 1) {
       const ok = (player.level || 1) >= sn.lvl;
       reqRows.push(`<span class="${ok ? 'rqok' : 'rqno'}">${ok ? '✓' : '<span data-spr=feat_door></span>'} Hero level ${sn.lvl}${ok ? '' : ` (you're ${player.level})`}</span>`);
     }
@@ -20552,8 +20597,9 @@ function renderSkills(el) {
     }
     const reqMet = skillReqMet(sn);
     let reqHtml = reqRows.length ? `<div class="rq">${reqRows.join('<br>')}</div>` : '';
-    if (reqMet && !skillMaxed(sn) && (player.skillPoints || 0) <= 0) {
-      reqHtml += `<div class="rq-hint">☆ Ready — earn a skill point by leveling up.</div>`;
+    if (reqMet && !skillMaxed(sn) && skillPointsFor(sn) <= 0) {
+      const isPathNode = skillTreeKindOf(sn) === 'path';
+      reqHtml += `<div class="rq-hint">☆ Ready — earn ${isPathNode ? 'an ascendancy' : 'a skill'} point by leveling up.</div>`;
     }
     const buyBtn = skillMaxed(sn)
       ? `<button class="pop-buy maxed" disabled>✓ Maxed (10/10)</button>`
@@ -20598,7 +20644,7 @@ function renderSkills(el) {
   // trees, where the learned-active source nodes are co-visible to drag from.
   const loadout = (skillView === 'active' || skillView === 'path') ? skillLoadoutTrayHtml() : '';
   el.innerHTML = header + loadout + `
-    <div class="sk-tree${web ? ' web' : ''}" id="sk-tree" ondragover="skillSlotDragOver(event)" ondrop="skillTreeDropRemove(event)" onclick="if(event.target.id==='sk-tree'){selectedSkillId=null;renderPanel();}">
+    <div class="sk-tree${web ? ' web' : ''}${onPath ? ' path' : ''}" id="sk-tree" ondragover="skillSlotDragOver(event)" ondrop="skillTreeDropRemove(event)" onclick="if(event.target.id==='sk-tree'){selectedSkillId=null;renderPanel();}">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>
       ${branchHeads}
       ${bandLabels}
@@ -21179,9 +21225,11 @@ function chooseClass(key) {
   player.class = key;
   player.skillCd = 0; player.ascension = null;
   player.skills = {}; player.skillCds = {}; player.skillSlots = []; player.autoSkill = null; player.autoCast = {}; combatBuffs = {};
-  // A fresh hero owns its full lifetime pool of skill points (the starting point
-  // plus one per level) with nothing yet spent.
+  // A fresh hero owns its full lifetime pools of points (the starting skill point
+  // plus one per level, and any ascendancy points earned from level 20) with
+  // nothing yet spent.
   player.skillPoints = earnedSkillPoints(player.level);
+  player.ascPoints = earnedAscPoints(player.level);
   recomputeMaxStats();
   player.hp = player.maxHp;
   player.mp = player.maxMp;
@@ -21212,6 +21260,9 @@ function changeClass(key) {
   player.skillCd = 0; player.ascension = null;
   player.skills = {}; player.skillCds = {}; player.skillSlots = []; player.autoSkill = null; player.autoCast = {}; combatBuffs = {};
   player.skillPoints = (player.skillPoints || 0) + refunded;
+  // Retraining drops the ascension (its path tree is class-specific too), so the
+  // ascendancy pool resets to whatever this level has earned, nothing spent.
+  player.ascPoints = earnedAscPoints(player.level);
   recomputeMaxStats();
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
@@ -22404,6 +22455,9 @@ function loadGame() {
     if (player.ascension && (!ASCENSIONS[player.ascension] || ASCENSIONS[player.ascension].base !== player.class)) player.ascension = null;
     // Migrate saves that predate the skill tree.
     if (player.skillPoints == null) player.skillPoints = 0;
+    // The ascendancy pool is new; older saves default it to 0 and the
+    // reconciliation below tops it up to the level-earned amount.
+    if (player.ascPoints == null) player.ascPoints = 0;
     if (!player.skills || typeof player.skills !== 'object') player.skills = {};
     // Skill cooldowns are now tracked in seconds (older saves used world-turns);
     // start fresh on load so no stale turn-count is misread as a seconds value.
@@ -22412,16 +22466,25 @@ function loadGame() {
     // is dropped — `skillCd` is no longer read (kept on the object only so older
     // code paths don't choke on undefined).
     // Drop any skill ranks that don't belong to the current class's tree (e.g.
-    // after a class change on an older save), then top up to the hero's full
-    // lifetime pool (the starting point plus one per level) minus anything
-    // already banked or spent on valid nodes. This also retroactively grants the
-    // starting skill point to saves made before the baseline skill was removed.
+    // after a class change on an older save), then top up each pool to the hero's
+    // full lifetime earnings minus anything already banked or spent on valid nodes.
+    // This also retroactively grants the starting skill point to saves made before
+    // the baseline skill was removed.
     {
       const valid = new Set(classSkillTree().map(n => n.id));
       for (const k of Object.keys(player.skills)) if (!valid.has(k)) delete player.skills[k];
+      // NORMAL pool (passive + active). spentSkillPoints() no longer counts the
+      // ascendancy path tree, so a pre-split save that spent normal points on path
+      // skills (under the old shared pool) gets those points refunded here — the
+      // path ranks it kept are re-counted against the ascendancy pool just below.
       const earned = earnedSkillPoints(player.level);
       const have = (player.skillPoints || 0) + spentSkillPoints();
       if (have < earned) player.skillPoints += (earned - have);
+      // ASCENDANCY pool (path tree): one point every ASC_POINT_EVERY levels from
+      // ASCEND_LEVEL. Path ranks already learned count as spent ascendancy points.
+      const earnedAsc = earnedAscPoints(player.level);
+      const haveAsc = (player.ascPoints || 0) + spentAscPoints();
+      if (haveAsc < earnedAsc) player.ascPoints += (earnedAsc - haveAsc);
     }
     if (!Array.isArray(player.skillSlots)) player.skillSlots = [];
     if (!player.targetMode) player.targetMode = 'closest';   // auto-attack focus (added later)
@@ -25156,6 +25219,9 @@ const __DL_FN_BRIDGE = {
   skillMaxed,
   canBuySkill,
   spentSkillPoints,
+  spentAscPoints,
+  spentAllSkillPoints,
+  earnedAscPoints,
   activeSkillList,
   normAutoSkill,
   normSkillSlots,
