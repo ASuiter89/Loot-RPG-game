@@ -41,7 +41,7 @@ async function main() {
   const exe = findExecutable(); if (exe) launchOpts.executablePath = exe;
   const server = await startServer(root);
   const port = server.address().port;
-  const url = `http://127.0.0.1:${port}/index.html?terrain=proc&preview=1`;
+  const url = `http://127.0.0.1:${port}/index.html?preview=1`; // normal LPC terrain + decor
   const browser = await chromium.launch(launchOpts);
   const page = await browser.newPage({ viewport: { width: 1000, height: 800 } });
   const errs = [];
@@ -55,18 +55,14 @@ async function main() {
   await page.waitForFunction(() => { try { return window.gameState() && window.gameState().inTown === false; } catch (e) { return false; } }, { timeout: 15000 });
   await page.waitForTimeout(600);
 
-  // Generate floors and screenshot each the moment it has what we want (maps are
-  // random per generate, so we must capture the same map we measured).
+  // Grab a spread of outdoor floors so the decor shows across biomes.
   const files = [];
-  let basic = false, water = false, lava = false;
-  for (let lvl = 4; lvl <= 60 && !(basic && water && lava); lvl++) {
+  for (const [lvl, tag] of [[3, 'decor-1'], [8, 'decor-2'], [13, 'decor-3'], [5, 'decor-4']]) {
     const info = await page.evaluate((l) => window.__previewFloor(l), lvl);
-    await page.waitForTimeout(450);
-    if (!basic && info.water === 0 && info.lava === 0 && lvl >= 5) { files.push(await capture(page, 'a-basic', info)); basic = true; continue; }
-    if (!water && info.water > 5) { files.push(await capture(page, 'b-water', info)); water = true; continue; }
-    if (!lava && info.lava > 5) { files.push(await capture(page, 'c-lava', info)); lava = true; continue; }
+    await page.waitForTimeout(500);
+    files.push(await capture(page, tag, info));
   }
-  console.log('preview: captured basic=' + basic + ' water=' + water + ' lava=' + lava);
+  console.log('preview: captured ' + files.length + ' floors');
 
   if (errs.length) console.log('preview: console/page errors:\n  ' + errs.slice(0, 8).join('\n  '));
   else console.log('preview: no page errors');

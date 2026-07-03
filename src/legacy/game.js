@@ -19,6 +19,7 @@ import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { CHANGELOG } from '../data/changelog.js';
 import { terrainPacksInUse } from '../data/terrainPacks.js';
 import { renderProcMap } from '../render/procTerrain.js';
+import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 
 // ══════════════════════════════════════════
@@ -1415,6 +1416,60 @@ function drawIndoorWall(px, py, tw, th, x, y, seed, C, cracked) {
 }
 // Furniture props placed into indoor rooms (SOLID — the hero cannot walk through them).
 let furnitureMap = {}; // "y,x" -> furniture-sheet tile index (see furnSheet)
+// ── OUTDOOR DECOR ── non-blocking ground clutter (trees/bushes/rocks/flowers…)
+// scattered on outdoor dungeon floors. decorMap "y,x" -> DECOR_INDEX id. Unlike
+// furnitureMap it is consulted by NONE of the solidity/pathing checks, so decor
+// never blocks movement, spawns or line-of-sight — purely visual. Art is the
+// CC-BY-SA LPC decor atlas (bluecarrot16); see docs/asset-credits.md.
+let decorMap = {};
+const decorSheet = new Image(); let decorReady = false;
+decorSheet.onload = () => { decorReady = true; try { draw(); } catch (e) {} };
+// tag -> [DECOR_INDEX ids] so placement can pick biome-appropriate objects.
+const DECOR_BY_TAG = {};
+DECOR_INDEX.forEach((d, i) => { (DECOR_BY_TAG[d.tag] = DECOR_BY_TAG[d.tag] || []).push(i); });
+// Blit a decor object anchored bottom-centre (its base sits on the cell). LPC art
+// is 32px/tile; crisp nearest-neighbour like the rest of the pixel art.
+function drawDecorSprite(id, cxCenter, cyBottom, tw) {
+  if (!decorReady || id == null) return false;
+  const d = DECOR_INDEX[id]; if (!d) return false;
+  const s = tw / 32, dw = Math.round(d.w * s), dh = Math.round(d.h * s);
+  const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(decorSheet, d.dx, d.dy, d.w, d.h, Math.round(cxCenter - dw / 2), Math.round(cyBottom - dh), dw, dh);
+  ctx.imageSmoothingEnabled = sm; return true;
+}
+function drawDecorAt(x, y, px, py, tw, th) {
+  const id = decorMap[y + ',' + x];
+  if (id === undefined) return;
+  drawDecorSprite(id, px + tw / 2, py + th * 0.98, tw); // feet ~ bottom of the tile
+}
+decorSheet.src = DECOR_ATLAS;
+// Pick decor tags that suit a biome (by its theme name). Sandy/coastal biomes get
+// the desert set (cacti/shells/bones); the rest get flowers/ferns/bushes.
+function decorTagsFor(themeName) {
+  const n = (themeName || '').toLowerCase();
+  if (/shore|tomb|savanna|coral|lagoon|desert|dune|sand/.test(n)) return ['desert', 'plant'];
+  return ['plant', 'bush'];
+}
+// Scatter non-blocking decor across an outdoor floor. Only plain-floor tiles
+// (mapData 0 — excludes every wall/feature/hazard/stair), off the entry ring and
+// never on a reserved/furnished tile. decorMap is read by no solidity check, so
+// this can never block a path.
+function placeOutdoorDecor(theme) {
+  const ids = decorTagsFor(theme && theme.name).flatMap((t) => DECOR_BY_TAG[t] || []);
+  if (!ids.length) return;
+  const spotOK = (x, y) => mapData[y][x] === 0
+    && furnitureMap[y + ',' + x] === undefined && decorMap[y + ',' + x] === undefined
+    && !tileReserved(x, y)
+    && (Math.abs(x - player.x) + Math.abs(y - player.y)) >= 3;
+  const target = Math.max(6, Math.min(42, Math.round(MAP_W * MAP_H / 24)));
+  let placed = 0;
+  for (let t = 0; t < target * 22 && placed < target; t++) {
+    const x = 1 + ((Math.random() * (MAP_W - 2)) | 0), y = 1 + ((Math.random() * (MAP_H - 2)) | 0);
+    if (!spotOK(x, y)) continue;
+    decorMap[y + ',' + x] = ids[(Math.random() * ids.length) | 0];
+    placed++;
+  }
+}
 // ── INDOOR ATLAS SHEETS ── high-res furniture (10x10 grid) and floor/wall
 // textures (8x4 grid) that dress the built-interior floors (see INDOOR_THEMES).
 // Loaded as standalone images (separate from the 16px DawnLike atlas) and
@@ -8071,7 +8126,7 @@ function generateMap() {
   // ── INDOOR FLOOR? ── now and then the whole floor is a built interior (a wood
   // lodge, royal hall, crypt…) instead of an outdoor biome; furniture is dressed
   // in after the rooms are carved. Set BEFORE anything reads currentTheme().
-  furnitureMap = {};
+  furnitureMap = {}; decorMap = {};
   floorThemeOverride = (!tutorialActive && Math.random() < 0.28) ? pick(INDOOR_THEMES) : null;
   rollFloorMod();
   // ~35% of floors get a subtle colour wash for atmosphere.
@@ -8394,6 +8449,7 @@ function generateMap() {
   // ── FURNITURE ── dress an indoor floor with themed props (SOLID; you cannot walk
   // through them). Placed last so they avoid the player, stairs, features and foes.
   if (floorThemeOverride) placeFurniture(floorThemeOverride);
+  else placeOutdoorDecor(currentTheme()); // non-blocking ground decor on outdoor floors
 
   // A hired Sellsword companion joins you on the floor (one floor of its contract).
   spawnMerc();
@@ -9245,7 +9301,7 @@ function buildTown() {
   enemies = []; merchant = null; mystic = null; minions = []; combatBuffs = {};
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null; nextDiffPortal = null;
   quest = null; teleporters = {}; shrineData = {};
-  floorThemeOverride = null; furnitureMap = {}; // town is never an indoor-themed floor
+  floorThemeOverride = null; furnitureMap = {}; decorMap = {}; // town is never an indoor-themed floor
   townShopStock = null;        // fresh merchant wares each town visit
   traps = []; projectiles = []; bossHazards = []; // real-time hazards never linger into town
   hasFountain = false; groundKey = null; hasKey = false;
@@ -13082,6 +13138,8 @@ function draw() {
           ctx.fillRect(px, py, Math.max(1, tw*0.14), th);
         }
       }
+      // Outdoor ground decor (non-blocking): drawn over the floor, under actors.
+      if (!inTown && !C.indoor && mapData[y][x] === 0) drawDecorAt(x, y, px, py, tw, th);
     }
   }
 
@@ -23529,6 +23587,7 @@ log('🎨 Pixel art from the DawnLike tileset by DragonDePlatino & DawnBringer (
 // attribution stays truthful automatically as packs are added — see
 // src/data/terrainPacks.js and docs/terrain-packs.md).
 for (const pack of terrainPacksInUse()) log(`🌍 Terrain tiles from "${pack.label}" by ${pack.credit} (${pack.license}).`);
+log('🌿 Decor (trees, plants, cacti, shells) from the "[LPC]" collections by bluecarrot16 & contributors (CC-BY-SA) — full credits in docs/asset-credits.md.');
 
 // PREVIEW ONLY — `?terrain=proc` swaps the dungeon ground to the procedural
 // terrain-pack renderer; add `&preview=1` to auto-drop into a dungeon floor so
@@ -23536,16 +23595,16 @@ for (const pack of terrainPacksInUse()) log(`🌍 Terrain tiles from "${pack.lab
 // in normal play.
 try {
   const _q = new URLSearchParams(location.search);
-  if (_q.get('terrain') === 'proc') {
-    PROC_TERRAIN = true;
-    if (_q.get('preview') === '1') setTimeout(() => {
+  if (_q.get('terrain') === 'proc') PROC_TERRAIN = true;
+  if (_q.get('preview') === '1') {
+    setTimeout(() => {
       try {
         player.name = player.name || 'Preview';
         chooseClass(player.class || 'warrior');
         if (typeof closeTitle === 'function') closeTitle();
         enterDungeonAt(1, 6);
         if (typeof closeTitle === 'function') closeTitle();
-      } catch (e) { console.error('proc terrain preview bootstrap failed:', e); }
+      } catch (e) { console.error('preview bootstrap failed:', e); }
     }, 400);
     // Preview helper: jump to any raw dungeon depth (bypasses the unlock clamp)
     // and report its terrain mix, so a capture script can find water/lava floors.
