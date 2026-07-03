@@ -4791,7 +4791,7 @@ function pfx(field, dflt) { return (pact && pact.fx[field] != null) ? pact.fx[fi
 let player = { x: 5, y: 5,
   // Real-time movement: fx/fy are the hero's smooth CENTRE position in tile units
   // (the grid cell is x = floor(fx), y = floor(fy)). vx/vy is the current velocity
-  // (tiles/sec) for momentum/ice-slide. faceDx/faceDy is the last movement
+  // (tiles/sec) for movement momentum. faceDx/faceDy is the last movement
   // direction (8-way), used to aim auto-attacks. atkCd is the seconds left on the
   // auto-attack cooldown. stamina fuels sprinting/dashing. See the game loop.
   fx: 5.5, fy: 5.5, vx: 0, vy: 0, faceDx: 1, faceDy: 0, atkCd: 0, dashCd: 0,
@@ -4894,9 +4894,6 @@ const ENEMY_INTERP  = 11;      // how snappily an enemy sprite glides to its log
 const SPRINT_MULT   = 1.7;     // top speed multiplier while sprinting
 const PLAYER_ACCEL  = 26;      // how fast velocity chases the input on solid ground (snappy)
 const GROUND_FRICTION = 24;    // how fast you stop on solid ground (snappy)
-const ICE_ACCEL     = 4.5;     // sluggish control on ice…
-const ICE_FRICTION  = 0.9;     // …and you keep gliding (low friction = slide)
-const MUD_SPEED     = 0.55;    // mud / shallow water drag you to ~half speed
 // Stamina powers sprinting and dashing; it drains while sprinting and refills
 // after a short pause.
 const MAX_STAMINA   = 100;
@@ -5156,7 +5153,7 @@ let floorSerial = 0;
 //
 // Beyond the basics, the snapshot surfaces everything an agent must SEE to play
 // well but can't read off the pixels: every ground hazard (arrow traps, fire
-// vents, in-flight bolts, boss flame walls and arcane barriers, spikes/mud/ice
+// vents, in-flight bolts, boss flame walls and arcane barriers, spike
 // floors, solid furniture), the exact stair coordinates and whether the exit is
 // still sealed, the hero's Stamina/dash readiness, active buffs & debuffs, the
 // hotbar (per-skill MP cost, cooldown and auto-cast state), per-enemy aggro /
@@ -5171,9 +5168,9 @@ window.gameState = function gameState(radius) {
   const brief = it => it ? { name: it.name, slot: it.slot, tier: it.tier, stats: it.stats } : null;
 
   // ── ASCII overlay map centred on the player ──
-  // Terrain glyphs now include the three hazard floors an agent must respect:
-  // 8 spikes ("), 13 mud (,), 14 ice (_). Everything else is painted on top.
-  const sym = { 0: '.', 1: '#', 2: '>', 3: 'f', 5: '*', 6: '~', 7: '^', 8: '"', 9: 'o', 10: '%', 11: '+', 12: '<', 13: ',', 14: '_' };
+  // Terrain glyphs include the spike hazard floor (") an agent must respect;
+  // everything else is painted on top.
+  const sym = { 0: '.', 1: '#', 2: '>', 3: 'f', 5: '*', 6: '~', 7: '^', 8: '"', 9: 'o', 10: '%', 11: '+', 12: '<' };
   const cell = (x, y) => (mapData[y] && mapData[y][x] != null) ? (sym[mapData[y][x]] ?? '?') : ' ';
   const ov = {};
   const put = (x, y, c) => { if (x != null && y != null) ov[y + ',' + x] = c; };
@@ -5444,7 +5441,7 @@ window.gameState = function gameState(radius) {
         };
       }) : null,
     },
-    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · , mud (slow) · _ ice (slip) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
+    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
     // Any Dev-tab difficulty overrides currently in effect (empty when every knob
@@ -5481,7 +5478,7 @@ window.gameGuide = function gameGuide(topic) {
       `gameState() only SEES; it never ACTS. There is no move()/act() API — you drive the game by dispatching real keyboard events.`,
       `To act, dispatch synthetic events on document, e.g. document.dispatchEvent(new KeyboardEvent("keydown",{key:"w"})), then later new KeyboardEvent("keyup",{key:"w"}) to stop. Use tokens the game expects: lowercase letters, " " for Space (dash), "\`" for the town portal.`,
       `Always check gameState().canMove before sending movement. If it is false, a menu/overlay is open (see .mode and .blockingOverlay) — drive that overlay's on-screen buttons instead; movement keys do nothing or are swallowed.`,
-      `Movement is CONTINUOUS, not stepwise: hold a direction across frames to walk; send keyup to stop. One keydown does not equal one tile, and the hero keeps a little momentum after release (more on ice).`,
+      `Movement is CONTINUOUS, not stepwise: hold a direction across frames to walk; send keyup to stop. One keydown does not equal one tile, and the hero keeps a little momentum after release.`,
       `window.haltAll() freezes the game and drops held keys (use it to think while paused); window.resumeAll() continues. window.gameBusy() is true while an action resolves — don't fire a new action then.`,
       `On big floors call gameState(20) (wider radius) so the exit falls in the ASCII window — or just read gameState().stairs for exact coordinates.`,
       `Prefer the structured fields over reading the ASCII map: .stairs, .hazards, .effects, .skills, .enemies and .shrines/.teleporters give exact data the glyphs only hint at.`,
@@ -5507,7 +5504,6 @@ window.gameGuide = function gameGuide(topic) {
       `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~34/sec). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap to latch auto-sprint). On a joystick, pushing to the edge auto-sprints.`,
       `DASH (${key('dash')}) is a quick burst (costs 35 Stamina, ~0.55s cooldown). It only repositions fast — there are no i-frames and enemies are solid, so you can't dash THROUGH a foe to escape.`,
       `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec). The Might attribute deepens the pool and speeds its recharge. Check player.dashReady before dashing.`,
-      `Terrain underfoot matters: mud ("," tile) cuts speed ~45%; ice ("_" tile) makes you accelerate sluggishly and keep gliding — both are in the map glyphs now. Don't try to fight or dodge precisely while standing on them.`,
       `Being Slowed (a debuff) halves speed; being Stunned roots you entirely (see gameState().effects).`,
       `Foes are solid, so a single one body-blocks you — slide along it and step around. But a MOB can't pin you forever: when bodies plug your heading AND the lanes you'd slide into to go around them, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall, and a lone foe with any real gap beside it stays solid).`,
     ],
@@ -5580,8 +5576,8 @@ window.gameGuide = function gameGuide(topic) {
       `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" (tier being any rarity or "set") then call saveGame().`,
     ],
     hazards: [
-      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), , mud (slow), _ ice (slip), + locked vault door, % cracked wall (smash by walking into it), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
-      `Lava and spikes hurt but never kill outright (HP clamps to 1), and the generator never forces you across one — route around them. Mud halves speed; ice makes you slide.`,
+      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (smash by walking into it), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
+      `Lava and spikes hurt but never kill outright (HP clamps to 1), and the generator never forces you across one — route around them.`,
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
@@ -7489,8 +7485,7 @@ function carveCorridor(x1, y1, x2, y2, wide) {
 
 // Tiles the player can actually stand on / path through (for reachability).
 function isFloorPassable(t) {
-  // 13 = mud (drag), 14 = ice (slide) — both walkable terrain (see updatePlayer).
-  return t === 0 || t === 2 || t === 3 || t === 5 || t === 7 || t === 8 || t === 9 || t === 12 || t === 13 || t === 14;
+  return t === 0 || t === 2 || t === 3 || t === 5 || t === 7 || t === 8 || t === 9 || t === 12;
 }
 
 // Flood-fill the set of "y,x" tiles reachable from a start point.
@@ -7744,30 +7739,6 @@ function randomFloorTile(reach) {
     return { x, y };
   }
   return null;
-}
-
-// Scatter a few organic patches of special terrain across the floor: mud that
-// drags your speed and ice that you slide across. Only paints plain floor (so it
-// never clobbers stairs/shrines/water) and stays clear of the entrance.
-function scatterTerrain(reach) {
-  if (tutorialActive || inTown) return;
-  const blobs = [];
-  // Kept fairly rare so a mud/ice patch is an occasional wrinkle, not on every floor.
-  if (Math.random() < 0.22) blobs.push({ t: 13, n: 1 });   // mud
-  if (Math.random() < 0.15) blobs.push({ t: 14, n: 1 });   // ice
-  for (const b of blobs) {
-    for (let k = 0; k < b.n; k++) {
-      const c = randomFloorTile(reach);
-      if (!c || (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) < 5) continue; // keep the entrance clear
-      const r = rnd(1, 2);
-      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-        const x = c.x + dx, y = c.y + dy;
-        if (x < 1 || y < 1 || x >= MAP_W - 1 || y >= MAP_H - 1) continue;
-        if (mapData[y][x] !== 0) continue;                         // plain floor only
-        if (Math.abs(dx) + Math.abs(dy) <= r && Math.random() < 0.72) mapData[y][x] = b.t;
-      }
-    }
-  }
 }
 
 // ── REAL-TIME TRAPS ──
@@ -8291,7 +8262,6 @@ function generateMap() {
   if (floorMod.name) log(`${floorMod.name} — ${floorMod.desc}`, 'important');
   if (floorMod.prepHint) log('💡 If this floor is too tough, retreat to town: strike a pact, cook a bowl, or forge gear, then come back ready.', 'important');
 
-  scatterTerrain(reach);
   projectiles = [];
   placeTraps(reach);
   floorRooms = rooms;
@@ -13045,26 +13015,6 @@ function draw() {
           ctx.arc(px+tw*0.66, py+th*0.5, tw*0.08, 0, Math.PI*2);
           ctx.fill();
         }
-      } else if (t === 13) {
-        // Mud / shallow muck — drags your speed. Procedural (terrain stays non-DawnLike).
-        drawFloorBase(px, py, tw, th, seed, C);
-        ctx.fillStyle = 'rgba(70,52,30,0.55)';
-        ctx.fillRect(px, py, tw, th);
-        ctx.fillStyle = 'rgba(38,26,14,0.5)';
-        for (let s = 0; s < 4; s++) {
-          const sx = px + ((seed >> (s*3+1)) % tw), sy = py + ((seed >> (s*2+3)) % th);
-          ctx.beginPath(); ctx.ellipse(sx, sy, tw*0.12, th*0.07, 0, 0, Math.PI*2); ctx.fill();
-        }
-        ctx.fillStyle = 'rgba(150,130,90,0.10)'; ctx.fillRect(px, py, tw, Math.max(1, th*0.18));
-      } else if (t === 14) {
-        // Ice — slick; the hero slides across it. Procedural glassy sheen.
-        drawFloorBase(px, py, tw, th, seed, C);
-        ctx.fillStyle = 'rgba(150,210,255,0.34)';
-        ctx.fillRect(px, py, tw, th);
-        ctx.fillStyle = 'rgba(255,255,255,0.16)';
-        ctx.fillRect(px, py, tw, Math.max(1, th*0.5));
-        ctx.strokeStyle = 'rgba(255,255,255,0.32)'; ctx.lineWidth = Math.max(1, tw*0.025);
-        ctx.beginPath(); ctx.moveTo(px+tw*0.2, py+th*0.72); ctx.lineTo(px+tw*0.55, py+th*0.26); ctx.stroke();
       } else if (C.indoor) {
         // Built interior: procedural plank/tile/stone floor + any furniture prop.
         drawIndoorFloor(px, py, tw, th, seed, C);
@@ -15528,7 +15478,6 @@ function pathCellBlocked(x, y) { return playerSolidCell(x, y, true); }
 function pathStepCost(x, y) {
   const t = mapData[y][x];
   if (t === 7 || t === 8) return 8;    // lava / spikes — only if there's no way around
-  if (t === 13) return 1.6;            // mud — slow, mildly avoided
   return 1;
 }
 // A* from cell (sx,sy) to (gx,gy) over walkable cells: 8-directional, no corner
@@ -15796,11 +15745,10 @@ function doDash() {
   sfx('teleport'); spawnParticles(player.x, player.y, '#bfe3ff', 9, 0.13);
 }
 
-// Integrate one frame of free 8-directional movement with momentum. Terrain
-// changes the feel: snappy on stone, slippery on ice (you keep gliding), and
-// draggy in mud. Sprinting (Shift / joystick edge) raises top speed but burns
-// stamina; a slow status halves it. The hero is rooted while channeling a portal
-// or stunned (the world clock still ticks those down).
+// Integrate one frame of free 8-directional movement with momentum. Sprinting
+// (Shift / joystick edge) raises top speed but burns stamina; a slow status
+// halves it. The hero is rooted while channeling a portal or stunned (the world
+// clock still ticks those down).
 function updatePlayer(dt) {
   if (player.dashCd > 0) player.dashCd -= dt;
   if (player._squeezeT > 0) player._squeezeT -= dt;   // wind down an active mob-squeeze (see below)
@@ -15880,18 +15828,14 @@ function updatePlayer(dt) {
   if (wantSprint) { player.stamina = Math.max(0, player.stamina - SPRINT_DRAIN * dt); player._stamDelay = STAM_DELAY; }
   else regenStamina(dt);
 
-  // Terrain under the hero's cell shapes the feel.
-  const stand = tileAtCell(player.x, player.y);
-  const onIce = stand === 14;
-  // Agility quickens your stride on top of terrain and any MOVESPD gear.
-  let maxSpd = PLAYER_SPEED * (stand === 13 ? MUD_SPEED : 1) * (1 + totalStat('MOVESPD') / 100) * agiMoveMult();
+  // Agility quickens your stride on top of any MOVESPD gear.
+  let maxSpd = PLAYER_SPEED * (1 + totalStat('MOVESPD') / 100) * agiMoveMult();
   if (wantSprint) maxSpd *= SPRINT_MULT;
   if (isPlayerSlowed()) maxSpd *= 0.5;
 
-  // Velocity chases the desired velocity (snappy on ground, sluggish on ice); with
-  // no input, friction stops you fast on ground but lets you glide on ice.
-  const accel = onIce ? ICE_ACCEL : PLAYER_ACCEL;
-  const fric  = onIce ? ICE_FRICTION : GROUND_FRICTION;
+  // Velocity chases the desired velocity; with no input, friction stops you fast.
+  const accel = PLAYER_ACCEL;
+  const fric  = GROUND_FRICTION;
   if (moving) {
     const a = Math.min(1, accel * dt);
     player.vx += (ix * maxSpd - player.vx) * a;
@@ -17734,7 +17678,7 @@ function landEnemyRangedHit(e, raw, color) {
 // Does the obstacle at (x,y) block line of sight AND projectiles? Only SOLID
 // structures do — walls, cracked walls, locked doors, conjured boss barriers and
 // solid furniture. Ground terrain you can walk across (or over) never blocks a
-// shot: floor, water, lava, spikes, mud, ice. The guiding rule is "anything you
+// shot: floor, water, lava, spikes. The guiding rule is "anything you
 // can walk through, you can see and shoot through" — so open ground and puddles
 // give no cover, only real obstructions do. (Creatures don't block either — bolts
 // pass over other foes.) Shared by every sight/shot check so they never diverge.
@@ -24442,7 +24386,6 @@ const __DL_FN_BRIDGE = {
   ensureHostilesReachable,
   isChokePoint,
   randomFloorTile,
-  scatterTerrain,
   placeTraps,
   arrowLaneHits,
   clearTrapsAround,
