@@ -3,6 +3,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Mud & ice floors removed", by: "Claude", notes: ["Pulled the mud and ice patch terrain for now — they didn't read clearly on the map. Floors no longer slow you in mud or make you slide on ice."] },
   { date: "2026-07-03", size: "small", v: "Red gate for town & dungeon travel", by: "Claude", notes: [
     "The Town Portal, Return to Dungeon gate, Dungeon Gate, and the dungeon-depth readout now show a red-swirl stone gate — distinct at a glance from the purple within-floor teleporters.",
     "Every town-bound and dungeon-bound icon shares the one red gate: sidebar TOWN button, town menu, minimap, floor-1 exit, depth pill, and the log & tooltip messages.",
