@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Enchanter: Esc backs out one step at a time", by: "Jeff Louie", notes: [
+    "With an item picked in the Enchanter, Esc now returns to the gear screen instead of jumping all the way out to town.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Leaderboard rows show class, subclass & all stats", by: "Jeff Louie", notes: [
     "Each board row now carries a second line: the hero's specialization — their ascension (subclass) in its signature colour, or their base class — plus a sigil.",
     "Every row shows floor, level, gold and Power together, not just the ranked stat, so you can compare heroes fully whichever board you're on. Big counts abbreviate (12.3k).",

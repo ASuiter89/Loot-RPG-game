@@ -23785,7 +23785,12 @@ function handleEscape() {
   // in the dungeon, and what the header's button does on tap.
   const tov = document.getElementById('town-overlay');
   if (tov && tov.classList.contains('open')) {
-    if (townView === 'service') { townBack(); return true; }
+    if (townView === 'service') {
+      // In the Enchanter, a picked item sits one screen deeper than the paper
+      // doll — Esc backs out to the doll first, and only then to the town hub.
+      if (townServiceKind === 'enchanter' && enchantSel != null) { enchantBack(); return true; }
+      townBack(); return true;
+    }
     toggleSettingsMenu(); return true;
   }
   if (panelOpen && !isWebLayout()) { togglePanel(); return true; }
