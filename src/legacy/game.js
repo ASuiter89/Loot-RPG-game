@@ -1628,40 +1628,45 @@ function lpcDetail(C, ox, oy, tw, x0, y0, x1, y1) {
 // the bake carries a one-tile margin all round and is blitted a tile up-left —
 // nothing clips even if a liquid ever touches the map border.
 let _lpcCache = { key: null, baseKey: null, tw: 0, cv: null };
-function bakeLPCTerrain(tw) {
-  const C = currentTheme();
-  const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' });
+// The multi-pass autotile sequence over an arbitrary tile window — shared by the
+// per-floor bake (full map into an offscreen canvas) and the live over-budget
+// fallback below (visible window straight onto the frame, exactly main's old path).
+function paintLPCTerrain(C, B, ox, oy, tw, x0, y0, x1, y1) {
   const inb = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H;
   const solid = (x, y) => { if (!inb(x, y)) return true; const t = mapData[y][x]; return t === 1 || t === 10; };
   const isFloor = (x, y) => inb(x, y) && !solid(x, y);
   const isWater = (x, y) => inb(x, y) && mapData[y][x] === 6;
   const isLava  = (x, y) => inb(x, y) && mapData[y][x] === 7;
+  ctx.imageSmoothingEnabled = false;
+  if (C.indoor && intReady) {
+    // Built interiors get real laid materials — wood/stone/marble/brick/adobe wall
+    // and floor field tiles, a uniform tile per room (walls on wall cells, floor on
+    // the rest), instead of borrowing the outdoor ground terrains.
+    drawInteriorTerrain(C, ox, oy, tw, x0, y0, x1, y1);
+    drawWallShadow(ox, oy, tw, x0, y0, x1, y1, B, isFloor);   // built walls read as raised too
+  } else {
+    lpcFill(B.wall, ox, oy, tw, x0, y0, x1, y1);
+    lpcLayer(B.floor, isFloor, ox, oy, tw, x0, y0, x1, y1);
+    // Clustered secondary / tertiary floor patches blended over the primary.
+    if (floorVariantMap && !previewFlatFloor) {
+      const fv = (x, y) => (inb(x, y) && floorVariantMap[y] ? floorVariantMap[y][x] : 0);
+      if (B.floor2) lpcLayer(B.floor2, (x, y) => isFloor(x, y) && fv(x, y) >= 1, ox, oy, tw, x0, y0, x1, y1);
+      if (B.floor3) lpcLayer(B.floor3, (x, y) => isFloor(x, y) && fv(x, y) === 2, ox, oy, tw, x0, y0, x1, y1);
+    }
+    drawWallShadow(ox, oy, tw, x0, y0, x1, y1, B, isFloor);   // walls read as raised
+  }
+  if (B.water) lpcLayer(B.water, isWater, ox, oy, tw, x0, y0, x1, y1);
+  lpcLayer('Lava', isLava, ox, oy, tw, x0, y0, x1, y1);
+}
+function bakeLPCTerrain(tw) {
+  const C = currentTheme();
+  const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' });
   const cv = document.createElement('canvas');
   cv.width = (MAP_W + 2) * tw; cv.height = (MAP_H + 2) * tw;
-  const ox = tw, oy = tw;                                 // one-tile margin (see above)
   const realCtx = ctx;
   ctx = cv.getContext('2d');                              // redirect the tile draws into the bake
   try {
-    ctx.imageSmoothingEnabled = false;
-    if (C.indoor && intReady) {
-      // Built interiors get real laid materials — wood/stone/marble/brick/adobe wall
-      // and floor field tiles, a uniform tile per room (walls on wall cells, floor on
-      // the rest), instead of borrowing the outdoor ground terrains.
-      drawInteriorTerrain(C, ox, oy, tw, 0, 0, MAP_W, MAP_H);
-      drawWallShadow(ox, oy, tw, 0, 0, MAP_W, MAP_H, B, isFloor);   // built walls read as raised too
-    } else {
-      lpcFill(B.wall, ox, oy, tw, 0, 0, MAP_W, MAP_H);
-      lpcLayer(B.floor, isFloor, ox, oy, tw, 0, 0, MAP_W, MAP_H);
-      // Clustered secondary / tertiary floor patches blended over the primary.
-      if (floorVariantMap && !previewFlatFloor) {
-        const fv = (x, y) => (inb(x, y) && floorVariantMap[y] ? floorVariantMap[y][x] : 0);
-        if (B.floor2) lpcLayer(B.floor2, (x, y) => isFloor(x, y) && fv(x, y) >= 1, ox, oy, tw, 0, 0, MAP_W, MAP_H);
-        if (B.floor3) lpcLayer(B.floor3, (x, y) => isFloor(x, y) && fv(x, y) === 2, ox, oy, tw, 0, 0, MAP_W, MAP_H);
-      }
-      drawWallShadow(ox, oy, tw, 0, 0, MAP_W, MAP_H, B, isFloor);   // walls read as raised
-    }
-    if (B.water) lpcLayer(B.water, isWater, ox, oy, tw, 0, 0, MAP_W, MAP_H);
-    lpcLayer('Lava', isLava, ox, oy, tw, 0, 0, MAP_W, MAP_H);
+    paintLPCTerrain(C, B, tw, tw, tw, 0, 0, MAP_W, MAP_H); // one-tile margin (see above)
   } finally { ctx = realCtx; }
   return cv;
 }
@@ -1672,6 +1677,19 @@ function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
   // wall shadow layer bakes in too (its own cache keys on the same mapEpoch).
   const baseKey = floorSerial + '|' + mapEpoch + '|' + MAP_W + 'x' + MAP_H + '|' + intReady + '|' + previewFlatFloor;
   const key = baseKey + '|' + tw;
+  // Memory guard: the bake canvas is ((MAP_W+2)·tw)² RGBA — a 4K fullscreen on a
+  // deep Endless floor would pin hundreds of MB and re-run a full-floor bake on
+  // every cracked-wall break. Past ~4096px a side, skip the cache and paint the
+  // visible window live each frame (exactly the pre-bake path, pixel-identical).
+  if ((MAP_W + 2) * tw > 4096) {
+    if (_lpcCache.cv) _lpcCache = { key: null, baseKey: null, tw: 0, cv: null };  // release the big canvas
+    const C = currentTheme();
+    const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' });
+    const cx0 = Math.max(0, x0 - 1), cy0 = Math.max(0, y0 - 1);
+    const cx1 = Math.min(MAP_W, x1 + 1), cy1 = Math.min(MAP_H, y1 + 1);
+    paintLPCTerrain(C, B, ox, oy, tw, cx0, cy0, cx1, cy1);
+    return;
+  }
   if (_lpcCache.key !== key) {
     // A live window drag crosses a new integer tile size every ~13px of height;
     // rebaking the whole floor per step would freeze the drag. While the resize
@@ -1708,7 +1726,10 @@ const WALL_SHADOW_DEPTH = {
 let _wsCache = null, _wsCacheKey = '';
 function wallShadowLayer(B, isFloor) {
   if (!B || !B.floor || !lpcReady) return null;
-  const key = mapEpoch + '|' + MAP_W + 'x' + MAP_H;   // one biome + layout per floor
+  // floorSerial matters too: buildTutorialMap bumps only the serial (not
+  // mapEpoch), and without it a fresh hero's same-sized tutorial could reuse the
+  // previous floor's shadow layer — phantom wall shadows baked into the beach.
+  const key = floorSerial + '|' + mapEpoch + '|' + MAP_W + 'x' + MAP_H;
   if (_wsCache && _wsCacheKey === key) return _wsCache;
   const TS = 32, MW = MAP_W * TS, MH = MAP_H * TS;
   if (MW <= 0 || MH <= 0 || MW * MH > 64e6) { _wsCache = null; _wsCacheKey = key; return null; }
