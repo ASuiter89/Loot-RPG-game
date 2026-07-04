@@ -12,6 +12,21 @@ export const CHANGELOG = [
     "canMove no longer misreports: every world-pausing overlay (the greed prompt, tier-conquest banner, hardcore death, leaderboard and more) now flips it false with the right mode, so an agent never fires dead movement keys.",
     "gameGuide() corrects stale rules — per-sub-type weapon reach, the Wisdom shrine's real 50%-HP heal, pack rush, mana-cost-reduced skill costs — and adds how-tos for the Transmuter, floor quests, the greed gate and the conquest scar.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Merchant stocks rarer gear", by: "Jeff Louie", notes: [
+    "The merchant no longer lays out grey or white gear — every ware is uncommon or better, weighted toward the rarer tiers, so his table always beats a raw floor drop.",
+  ] },
+  { date: "2026-07-03", size: "large", v: "Full combat VFX overhaul", by: "Claude", notes: [
+    "Every skill, spell, weapon swing and monster attack now has its own animation, tinted to its element — fire, ice, lightning, holy, poison, blood, arcane.",
+    "Weapon swings draw on the canvas at last: a crescent slash (sword), a wide sweep (axe/scythe), a rapid double-flick (dagger), an overhead smash (mace), a reaching stab (spear).",
+    "Bows and staves finally fire something — a real arrow or magic bolt flies to the target, instead of the foe just taking damage from across the room with nothing visible.",
+    "Redrawn projectiles: crisp element sprites — fletched arrows, glowing orbs, flame-trailed fireballs, crystalline ice shards, jagged lightning, wet venom globs — replacing the old thin vector arrows. Ranged casters now sling hex orbs, not arrows.",
+    "Spells read at a glance: bolts fly and burst, novas ring outward, beams lance down a lane, lightning chains foe to foe, poison leaves a lingering cloud, buffs bloom an aura, summons open a rune circle.",
+    "Monsters animate their blows — a claw swipe each strike (a heavy ground-smash for brutes and bosses). Boss tricks get proper telegraphs: flame lines, ember rain, quake cracks, shockwave rings, frost bursts, life-siphon beams, hex and venom bolts, pull vortices. Shielded and enraged bosses now show a lasting aura.",
+    "New element-flavoured cast sounds for fired shots, weapon swings and each spell school.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Loot bag sorts by Power by default", by: "Claude", notes: [
+    "Bag now opens sorted by Power instead of Rarity — strongest gear surfaces first. Switch back to Rarity, Slot or Value any time.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Spend straight from the vault", by: "Jeff Louie", notes: [
     "Vault gold is no longer walled off from the shops. Every town service — healer, merchant, restock, craftsman, enchanter, gambler, mystic, sellsword, transmuter, trainer — spends your carried coin first, then auto-draws any shortfall from the vault, so banked gold stays useful without a trip to the Vault Keeper.",
     "Prices and buttons now count carried + vault, and each town gold pill shows a '+N in vault' hint. A drawn amount is logged. Vault gold is still safe from death.",
@@ -27,6 +42,9 @@ export const CHANGELOG = [
   { date: "2026-07-03", size: "medium", v: "A full rack of new synth instruments", by: "Claude", notes: [
     "Rebuilt the soundtrack's synth engine so styles no longer share the same three sounds. New instruments: deep round sub bass, a detuned drum-&-bass reese, a squelchy acid bass, big super-saw leads and chords, metallic FM bells, plucky bell/marimba tones, and hollow reed leads — each style now picks the ones that fit it.",
     "Fixed the bass: it used to be forced to the same punchy sawtooth in every style (the 'polka' feel). Basslines now use rounder, smoother sub tones and less on-the-beat bounce, so each style's low end has its own character.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Loading splash on startup", by: "Claude", notes: [
+    "A brief loading screen now covers the cold-start moment while the game boots. The title no longer flashes its new-game look before recognising your saved hero — you land straight on CONTINUE with your character shown.",
   ] },
   { date: "2026-07-03", size: "small", v: "Wider item tooltips", by: "Claude", notes: [
     "Item tooltips are now twice as wide, so long stat lines and the side-by-side gear compare stop wrapping mid-line and read at a glance.",
