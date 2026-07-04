@@ -91,9 +91,16 @@ export function delCloudHasAll(local, cloud) {
  *   isDead      (data) => boolean   a hardcore hero already in the death ledger.
  *   isDeleted   (data) => boolean   a hero whose cid is in the deletion ledger.
  *   lowestFree  (usedSet) => number   lowest slot index not in the Set.
+ *   saveOrder   (a, b) => number   comparator deciding which of two copies of the
+ *                                  SAME hero is newer (>0 → a newer, <0 → b newer,
+ *                                  0 → same version). Defaults to wall-clock `ts`,
+ *                                  but the game injects a clock-skew-PROOF order:
+ *                                  monotonic play-time first, `ts` only as a
+ *                                  tiebreak — so a stale copy carrying a skewed
+ *                                  future `ts` can never overwrite a more-played one.
  *
  * Returns a plan:
- *   cloudDeletes  number[]         cloud slots to DELETE (dead or tombstoned rows).
+ *   cloudDeletes  number[]         cloud slots to DELETE (dead/tombstoned rows, or a stale duplicate).
  *   localRemovals number[]         local slots to clear (scrubbed, or vacated by a move).
  *   localWrites   [{ slot, data }] local slots to (over)write with the chosen save.
  *   uploads       number[]         slots whose chosen save must be pushed to the cloud.
@@ -101,12 +108,12 @@ export function delCloudHasAll(local, cloud) {
  *   activeChanged boolean          the active slot's contents changed (caller reloads).
  *
  * Invariants that keep saves safe:
- *   • A save is only ever removed/deleted if it is DEAD or TOMBSTONED, or if the
- *     SAME hero (same identity) was moved to another slot — never merely because
- *     the cloud hasn't seen it. An unknown local hero is a NEWCOMER, appended to a
- *     free slot and pushed up, exactly as before.
- *   • Cloud characters keep their slot; last-write-wins by `ts` decides which copy
- *     of a shared hero survives. Ties keep the cloud copy (no needless write).
+ *   • A save is only ever removed/deleted if it is DEAD or TOMBSTONED, a stale
+ *     DUPLICATE of a hero also present in a newer row, or the SAME hero moved to
+ *     another slot — never merely because the cloud hasn't seen it. An unknown
+ *     local hero is a NEWCOMER, appended to a free slot and pushed up.
+ *   • Cloud characters keep their slot; `saveOrder` decides which copy of a shared
+ *     hero survives. Ties keep the cloud copy (no needless write).
  */
 export function planReconcile({
   cloudRows,
@@ -117,6 +124,7 @@ export function planReconcile({
   isDead,
   isDeleted,
   lowestFree,
+  saveOrder = (a, b) => (((a && a.ts) || 0) - ((b && b.ts) || 0)),
 }) {
   const plan = {
     cloudDeletes: [],
@@ -159,12 +167,30 @@ export function planReconcile({
 
   const idOf = (d, slot) => (cidOf(d) ? 'cid:' + cidOf(d) : 'slot:' + slot);
 
-  // 1) Anchor every cloud character at its cloud slot.
+  // 1) Anchor every cloud character at its cloud slot. If two cloud rows somehow
+  //    share an identity (a duplicate left by an earlier bug/race), keep the newer
+  //    and DELETE the stale one — a hero must never exist twice on the account.
+  //    (A legacy id-less save keys on its slot index, so distinct legacy rows never
+  //    collide; only cid-bearing rows can, and only for the same character.)
   const assign = {};
-  const cloudIds = {};
+  const cloudIds = {};        // identity key -> winning cloud slot
   for (const s of Object.keys(cloud).map(Number)) {
-    assign[s] = cloud[s];
-    cloudIds[idOf(cloud[s], s)] = s;
+    if (!cloud[s]) continue;  // a duplicate already resolved below
+    const key = idOf(cloud[s], s);
+    const prev = cloudIds[key];
+    if (prev === undefined) {
+      cloudIds[key] = s;
+      assign[s] = cloud[s];
+    } else {
+      const keep = saveOrder(cloud[s], cloud[prev]) > 0 ? s : prev;
+      const drop = keep === prev ? s : prev;
+      cloudIds[key] = keep;
+      assign[keep] = cloud[keep];
+      delete assign[drop];
+      plan.cloudDeletes.push(drop);
+      reserved.add(drop);
+      cloud[drop] = undefined; // hide the loser from downstream slot lookups
+    }
   }
 
   // 2) Fold in each local character. Same id as a cloud char → keep the newer copy
@@ -182,10 +208,10 @@ export function planReconcile({
     if (key in cloudIds) {
       const cs = cloudIds[key];
       localDest[i] = cs;
-      if ((l.ts || 0) > (assign[cs].ts || 0)) assign[cs] = l;
+      if (saveOrder(l, assign[cs]) > 0) assign[cs] = l;
     } else if (!cidOf(l) && cloud[i]) {
       localDest[i] = i;
-      if ((l.ts || 0) > (cloud[i].ts || 0)) {
+      if (saveOrder(l, cloud[i]) > 0) {
         // The newer legacy copy wins, but carry the cloud's id onto it so the hero
         // keeps a stable identity and is never duplicated. Clone rather than mutate
         // in place: the untouched `l` stays the on-disk (id-less) baseline, so the
@@ -209,7 +235,7 @@ export function planReconcile({
   // 3) Emit the plan. Cloud characters never move, so no cloud row is deleted here
   //    (only the scrubbed dead/tombstoned rows above are). Clear stale local copies
   //    left behind by a moved hero, then write/upload wherever a copy differs.
-  const sameSave = (a, b) => !!a && !!b && (a.ts || 0) === (b.ts || 0) && cidOf(a) === cidOf(b);
+  const sameSave = (a, b) => !!a && !!b && saveOrder(a, b) === 0 && cidOf(a) === cidOf(b);
   const assignedSlots = new Set(Object.keys(assign).map(Number));
   for (const i of localSlots) {
     if (local[i] && !assignedSlots.has(i)) {

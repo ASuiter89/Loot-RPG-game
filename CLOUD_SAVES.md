@@ -104,14 +104,27 @@ used by the leaderboard cover cloud saves too.
 - **Nothing gets overwritten by a different hero.** Each character carries a
   stable id (`cid`), and the cloud's slot layout is the shared source of truth.
   On sync, a character the account already has takes the **newer** of the two
-  copies (last-write-wins by timestamp) in its existing slot, while a character
-  the cloud has never seen — e.g. a different hero that happens to sit in the same
-  slot index on a second device — is **appended to the next free slot** and
-  pushed up. So if a PC holds heroes in slots 1–2 and a phone independently holds
-  two heroes in slots 1–2, syncing lands the phone's pair in slots 3–4 and the
-  account ends up with all four; signing in on the PC then pulls slots 3–4 down so
-  both devices converge. A sync never deletes a save on its own — only heroes you
-  deliberately delete are removed (see next).
+  copies in its existing slot, while a character the cloud has never seen — e.g. a
+  different hero that happens to sit in the same slot index on a second device — is
+  **appended to the next free slot** and pushed up. So if a PC holds heroes in
+  slots 1–2 and a phone independently holds two heroes in slots 1–2, syncing lands
+  the phone's pair in slots 3–4 and the account ends up with all four; signing in
+  on the PC then pulls slots 3–4 down so both devices converge. A sync never
+  deletes a save on its own — only heroes you deliberately delete are removed
+  (see next).
+- **"Newer" is decided by play-time, not the wall clock.** Which copy of the same
+  hero wins is settled by the hero's total **play-time** (a monotonic counter that
+  only ever grows), falling back to the save timestamp only to break a tie. A
+  device with a wrong or fast-running clock therefore can't stamp a stale copy with
+  a bogus "future" time and overwrite a more-played save — the more-played copy
+  always wins, so real progress is never lost to clock skew.
+- **Sync is self-healing and safe under races.** The whole merge is computed by a
+  pure, unit-tested planner and only then applied. If a hero somehow ends up in two
+  cloud rows (a leftover from an old bug or a race), the sync keeps the
+  more-advanced copy and deletes the stale duplicate, so a character never lingers
+  twice. While a newer copy is being pulled into the slot you're playing, local
+  saving is frozen until the game reloads onto it, so an in-flight autosave can't
+  clobber the copy you just pulled.
 - **Deletions sync across devices.** Deleting a hero (Save Slots → Del, Reset Run,
   or starting a New Game over a slot) records the character's `cid` in an
   append-only **deletion ledger** that mirrors to its own account row (like the
@@ -130,6 +143,15 @@ used by the leaderboard cover cloud saves too.
   never saved, pushed, or counted in a sync — so signing in on a fresh device
   pulls your existing account saves down instead of letting the empty title-screen
   slot overwrite them.
+- **Shared-stash caveat (last-writer-wins).** Unlike per-character saves, the
+  account-wide **stash** (the shared Vault) is synced as one blob by newest
+  timestamp. In normal use this is lossless — every deposit/withdraw pushes to the
+  cloud, and each device pulls the latest on boot — but if you edit the stash on
+  **two devices while both are offline** (or before the second has pulled the
+  first's change), the later-saved blob wins and the other device's stash change is
+  dropped. Per-hero saves don't have this limitation (they merge per character); a
+  full conflict-free stash merge (item-level history + a gold counter) is tracked
+  as a future enhancement.
 - **Privacy.** Only the player's own save JSON is stored, and RLS prevents anyone
   else's key from reading it. Passwords are handled entirely by Supabase Auth —
   the game never stores them.

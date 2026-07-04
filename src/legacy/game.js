@@ -24272,6 +24272,18 @@ function newCid() {
   return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 function saveCid(d) { return (d && d.player && d.player.cid) || null; }
+// Order two copies of the SAME hero, newest last (>0 → a newer, <0 → b newer, 0 →
+// same version). Play-time (player.playMs) is MONOTONIC — it only ever grows as a
+// hero is played — so it is a clock-skew-PROOF ordering signal: a stale copy left on
+// a device whose wall-clock ran fast can't out-rank a genuinely more-played save.
+// `ts` is only a tiebreak for saves with identical play-time (e.g. two rapid saves
+// in town). This is what cloudReconcile uses to decide last-write-wins.
+function saveOrder(a, b) {
+  const pa = (a && a.player && a.player.playMs) || 0;
+  const pb = (b && b.player && b.player.playMs) || 0;
+  if (pa !== pb) return pa - pb;
+  return ((a && a.ts) || 0) - ((b && b.ts) || 0);
+}
 
 // ── Shared stash (account-wide vault) ───────────────────────────────────────
 // The stash is shared across EVERY save slot rather than living inside each
@@ -25383,7 +25395,8 @@ async function renderLeaderboard() {
 // and enable Email auth (ideally with "Confirm email" off for instant sign-up).
 
 const CLOUD_SESSION_KEY = 'dungeonLoot_session_v1';
-const CLOUD_BOOT_RELOADED = 'dungeonLoot_cloudBooted'; // one-shot reload guard (sessionStorage)
+const CLOUD_BOOT_RELOADS = 'dungeonLoot_cloudBootReloads'; // per-session boot-reload counter (sessionStorage)
+const CLOUD_BOOT_RELOAD_CAP = 4; // circuit-breaker: reconcile converges in one reload, so this is only hit by a bug
 
 // Current auth session, hydrated from localStorage so a login survives reloads.
 let authState = { user: null, accessToken: null, refreshToken: null, expiresAt: 0 };
@@ -25492,15 +25505,20 @@ async function cloudPushSlot(slot, opts) {
   } catch (e) { return false; }
 }
 // Remove a slot's cloud row. Awaited by the wipe/new-game paths so a row can't
-// resurrect itself on the next boot reconcile.
+// resurrect itself on the next boot reconcile. Returns true only when the row is
+// confirmed gone (2xx) — a stale-token or transient failure returns false rather
+// than silently "succeeding", so callers/tests can tell a real delete from a no-op.
+// The deletion tombstone is the backstop: even a false here is reconciled away on
+// the next sync.
 async function cloudDeleteSlot(slot) {
-  if (!cloudEnabled() || !authState.user) return;
-  await ensureToken();
+  if (!cloudEnabled() || !authState.user) return false;
+  if (!await ensureToken()) return false; // no usable token — don't fire a doomed 401 DELETE
   try {
-    await fetch(LB_SUPABASE_URL + '/rest/v1/saves?user_id=eq.' + authState.user.id + '&slot=eq.' + slot, {
+    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?user_id=eq.' + authState.user.id + '&slot=eq.' + slot, {
       method: 'DELETE', headers: cloudRestHeaders({ 'Prefer': 'return=minimal' }),
     });
-  } catch (e) {}
+    return res.ok;
+  } catch (e) { return false; }
 }
 // Remove the cloud row(s) for a specific CHARACTER, matched by its stable id — not
 // by slot index. A hero's slot can differ across devices (reconcile relocates
@@ -25948,10 +25966,17 @@ async function cloudReconcile() {
     isDead: hcDeadSave,
     isDeleted: delIsDeleted,
     lowestFree: lowestFreeSlot,
+    saveOrder: saveOrder,
   });
 
+  // If the active slot's contents are about to change, FREEZE saves right now —
+  // before we touch its cache and before the awaited network round-trip below. The
+  // in-memory hero is now stale relative to the newer copy we're writing, so any
+  // autosave/heartbeat/teardown save that fires during this window would clobber the
+  // pulled save. The caller reloads to re-read it; until then, no save may land.
+  if (plan.activeChanged) _switchingSlot = true;
+
   // Apply the plan — the only side effects live here.
-  plan.cloudDeletes.forEach(s => { try { cloudDeleteSlot(s); } catch (e) {} });
   plan.localRemovals.forEach(s => { try { localStorage.removeItem(slotKey(s)); } catch (e) {} });
   plan.localWrites.forEach(w => { try { localStorage.setItem(slotKey(w.slot), JSON.stringify(w.data)); } catch (e) {} });
   if (plan.newActiveSlot != null) {
@@ -25959,8 +25984,12 @@ async function cloudReconcile() {
     // lands back on that character rather than an emptied slot.
     try { localStorage.setItem(ACTIVE_SLOT_KEY, String(plan.newActiveSlot)); } catch (e) {}
   }
-  const uploads = plan.uploads.map(s => cloudPushSlot(s));
-  try { await Promise.all(uploads); } catch (e) {}
+  // Await the cloud writes AND deletes so a fire-and-forget DELETE can't still be in
+  // flight when the caller re-reads on the next reconcile (which is what let a dead/
+  // duplicate row linger for an extra round before).
+  const ops = plan.uploads.map(s => cloudPushSlot(s))
+    .concat(plan.cloudDeletes.map(s => cloudDeleteSlot(s)));
+  try { await Promise.all(ops); } catch (e) {}
   result.activeChanged = plan.activeChanged;
   return result;
 }
@@ -25977,21 +26006,35 @@ async function cloudBootSync() {
   // Pull the deletion ledger next so cloudReconcile scrubs anything deleted on
   // another device instead of resurrecting it as a newcomer.
   await delReconcile();
-  const r = await cloudReconcile();
+  const r = await cloudReconcile(); // freezes saves itself the moment it changes the active slot
   await stashReconcile(); // sync the shared stash too (writes STASH_KEY before any reload)
   // Pull the account's preferences (writes the settings localStorage keys before
   // any reload, so the load-time reads pick them up). Reports whether adopting the
   // cloud copy changed a local value, so a settings-only change still reloads.
   const settingsPulled = await settingsReconcile();
-  let alreadyReloaded = false;
-  try { alreadyReloaded = sessionStorage.getItem(CLOUD_BOOT_RELOADED) === '1'; } catch (e) {}
-  if ((r.activeChanged || settingsPulled) && !alreadyReloaded) {
-    try { sessionStorage.setItem(CLOUD_BOOT_RELOADED, '1'); } catch (e) {}
-    // Freeze saves so the teardown autosave can't write the stale in-memory hero
-    // back over the newer copy we just pulled into the active slot's cache.
+  if (!(r.activeChanged || settingsPulled)) return;
+  // A newer copy landed in the active slot (or new prefs did): reload so the game
+  // re-reads it from localStorage. cloudReconcile already froze saves when it
+  // changed the active slot, so the stale in-memory hero can't clobber the pulled
+  // copy in the gap before this reload. The counter is only a circuit-breaker: a
+  // normal reconcile converges after ONE reload (local then matches cloud, so the
+  // next boot isn't activeChanged), but a genuinely newer copy arriving from a THIRD
+  // device between boots is allowed to reload again rather than being stranded — the
+  // old one-shot guard would have left that newer copy in the cache, unloaded and
+  // (without the freeze) exposed to a clobber.
+  let reloads = 0;
+  try { reloads = parseInt(sessionStorage.getItem(CLOUD_BOOT_RELOADS) || '0', 10) || 0; } catch (e) {}
+  if (reloads >= CLOUD_BOOT_RELOAD_CAP) {
+    // Unreachable unless reconcile fails to converge (a bug). Keep saves frozen so
+    // the pulled copy is never clobbered by the stale in-memory hero, and surface it
+    // rather than reloading forever.
     _switchingSlot = true;
-    location.reload();
+    try { console.error('cloudBootSync: reload cap reached; saves frozen to protect pulled data'); } catch (e) {}
+    return;
   }
+  try { sessionStorage.setItem(CLOUD_BOOT_RELOADS, String(reloads + 1)); } catch (e) {}
+  _switchingSlot = true;
+  location.reload();
 }
 
 // ── Account overlay UI ──────────────────────────────────────────────────────
@@ -26095,7 +26138,12 @@ async function doLogin() {
     applySession(j);
     acctStatus('Signed in ✓ Syncing your saves…', 'ok');
     try { saveGame(); } catch (e) {}   // persist the current local game before merging
-    await delReconcile();              // pull tombstones first so a deleted hero isn't resurrected on link
+    // Pull the hardcore death ledger and lock out an active hero that died on
+    // another device BEFORE merging, so signing in can't put a dead hardcore hero
+    // back into play (matches cloudBootSync / doSyncNow ordering).
+    const learnedDeath = await hcReconcile();
+    if (learnedDeath && hcEnforceActiveLockout(true)) return;
+    await delReconcile();              // pull tombstones next so a deleted hero isn't resurrected on link
     await cloudReconcile();
     await stashReconcile();            // merge the shared stash with the account's
     await settingsReconcile();         // merge preferences with the account's
@@ -26116,7 +26164,12 @@ async function doSignup() {
       applySession(j);
       acctStatus('Account created ✓ Syncing your saves…', 'ok');
       try { saveGame(); } catch (e) {}
-      await delReconcile();            // pull tombstones first so a deleted hero isn't resurrected on link
+      // Match the sign-in ordering: hardcore ledger + lockout, then tombstones,
+      // before the per-slot merge (a brand-new account's ledgers are empty, but a
+      // pre-existing account reached via signup still gets the correct guards).
+      const learnedDeath = await hcReconcile();
+      if (learnedDeath && hcEnforceActiveLockout(true)) return;
+      await delReconcile();            // pull tombstones next so a deleted hero isn't resurrected on link
       await cloudReconcile();
       await stashReconcile();          // merge the shared stash with the account's
       await settingsReconcile();       // merge preferences with the account's
