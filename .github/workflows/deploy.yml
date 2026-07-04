@@ -1,0 +1,86 @@
+# Build the Vite bundle and deploy it to GitHub Pages.
+#
+# Why this file exists: Pages was previously set to "Deploy from a branch", which
+# uses GitHub's auto-generated `pages-build-deployment` workflow. That workflow
+# (1) serves the raw repo root — the unbuilt, unminified ES-module source, not the
+# optimized `dist/` bundle that netlify.toml / vite.config.js treat as the real
+# artifact — and (2) has no concurrency guard, so rapid pushes to `main` create
+# overlapping Pages deployments that collide and fail with
+# "Deployment failed, try again later." on the very first status poll.
+#
+# This workflow fixes both: it runs `npm run build` and publishes `dist/`, and the
+# `concurrency` block below serializes deployments so overlapping pushes queue and
+# wait their turn instead of failing.
+#
+# IMPORTANT: for this to take effect (and to stop the old classic build from also
+# firing), set Settings -> Pages -> Source to "GitHub Actions".
+
+name: Deploy to GitHub Pages
+
+on:
+  # Deploy on every push to the default branch.
+  push:
+    branches: [main]
+  # Allow manually re-running a deploy from the Actions tab (handy for retrying a
+  # transient Pages-side failure without an empty commit).
+  workflow_dispatch:
+
+# Least-privilege token: read the repo, write to Pages, and mint the OIDC token
+# that actions/deploy-pages exchanges with the Pages service.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Serialize Pages deployments. `cancel-in-progress: false` means a new push waits
+# for the in-flight deploy to finish rather than cancelling it — no two deploys
+# race for the single `github-pages` environment, which is what caused the
+# "Deployment failed, try again later." errors.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Match netlify.toml (NODE_VERSION: 20) so both hosts build identically.
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build static bundle
+        run: npm run build
+
+      # Vite's output has no underscore-prefixed paths, but this makes doubly sure
+      # the artifact is served verbatim with no Jekyll processing.
+      - name: Disable Jekyll processing
+        run: touch dist/.nojekyll
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload build artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    # Only deploy after a successful build — never publish a broken bundle.
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
