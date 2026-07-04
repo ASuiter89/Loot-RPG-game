@@ -3,6 +3,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Gentler screen shake & flash, with on/off toggles", by: "Claude", notes: [
+    "Camera shake and the full-screen colour flash are toned down by default — hits, crits and boss beats nudge the view instead of jolting it.",
+    "Settings ▸ Visuals adds SCREEN SHAKE and SCREEN FLASH switches to turn either effect fully off.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Icons fill their space instead of floating small", by: "Claude", notes: [
     "Menu and HUD icons now size to their actual artwork instead of the whole tile, so they read as tall as the text beside them and fill their slots — no more shrunken icons stranded inside transparent padding.",
     "Most visible on the gold and crafting-material counts (Scrap, Glimmer, Core, Chaos), whose art filled as little as a third of its tile; also sharpens icons across the bag, shop, forge, enchanter, reward lines and message log.",

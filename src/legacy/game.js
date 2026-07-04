@@ -5840,6 +5840,19 @@ try { if (localStorage.getItem(STAIRS_ARROW_KEY) === '0') showStairsArrow = fals
 const MONSTER_ARROWS_KEY = 'dungeonLoot_monsterArrows';
 let showMonsterArrows = true;
 try { if (localStorage.getItem(MONSTER_ARROWS_KEY) === '0') showMonsterArrows = false; } catch (e) {}
+// Optional camera shake on hits, crits, big casts and boss beats (see addShake /
+// shakeOffset). On by default, but its amplitude is globally dialled down by
+// SHAKE_SCALE so even the biggest beats stay gentle; toggle off for a dead-still
+// view. Saved across sessions.
+const SCREEN_SHAKE_KEY = 'dungeonLoot_screenShake';
+let showScreenShake = true;
+try { if (localStorage.getItem(SCREEN_SHAKE_KEY) === '0') showScreenShake = false; } catch (e) {}
+// Optional brief full-screen colour wash on crits, low HP and big events (see
+// screenFlash). On by default; its peak opacity lives in styles.css, dialled down
+// from its old harsher value. Toggle off to keep the view clear. Saved.
+const SCREEN_FLASH_KEY = 'dungeonLoot_screenFlash';
+let showScreenFlash = true;
+try { if (localStorage.getItem(SCREEN_FLASH_KEY) === '0') showScreenFlash = false; } catch (e) {}
 // Cap on how many monster arrows ride the edge at once — a swarm floor keeps only
 // the nearest few so the border never rings solid red (the minimap + FOES counter
 // stay the complete tally).
@@ -7680,6 +7693,38 @@ function updateMonsterArrowsButton() {
   if (lbl) lbl.textContent = showMonsterArrows ? 'MONSTER ARROWS: ON' : 'MONSTER ARROWS: OFF';
   const btn = document.getElementById('monsterarrows-action');
   if (btn) btn.classList.toggle('on', showMonsterArrows);
+}
+
+// Flip camera shake on and off. Persisted; when off, shakeOffset() returns a zero
+// offset so no hit, crit, big cast or boss beat nudges the view.
+function toggleScreenShake() {
+  showScreenShake = !showScreenShake;
+  try { localStorage.setItem(SCREEN_SHAKE_KEY, showScreenShake ? '1' : '0'); } catch (e) {}
+  settingsChanged();
+  sfx('click');
+  updateScreenShakeButton();
+}
+function updateScreenShakeButton() {
+  const lbl = document.getElementById('screenshake-label');
+  if (lbl) lbl.textContent = showScreenShake ? 'SCREEN SHAKE: ON' : 'SCREEN SHAKE: OFF';
+  const btn = document.getElementById('screenshake-action');
+  if (btn) btn.classList.toggle('on', showScreenShake);
+}
+
+// Flip the full-screen colour flash on and off. Persisted; when off, screenFlash()
+// early-returns so crits, low HP and big events never wash the screen.
+function toggleScreenFlash() {
+  showScreenFlash = !showScreenFlash;
+  try { localStorage.setItem(SCREEN_FLASH_KEY, showScreenFlash ? '1' : '0'); } catch (e) {}
+  settingsChanged();
+  sfx('click');
+  updateScreenFlashButton();
+}
+function updateScreenFlashButton() {
+  const lbl = document.getElementById('screenflash-label');
+  if (lbl) lbl.textContent = showScreenFlash ? 'SCREEN FLASH: ON' : 'SCREEN FLASH: OFF';
+  const btn = document.getElementById('screenflash-action');
+  if (btn) btn.classList.toggle('on', showScreenFlash);
 }
 
 // Settings modal: a centred overlay holding sound, saves, Reset Run and options.
@@ -15153,9 +15198,13 @@ function spawnParticles(x, y, color, n, speed) {
 // reused two-slot scratch array — draw() destructures it immediately and never
 // retains it, so recycling kills the per-frame allocation.
 const _shakeXY = [0, 0];
+// Global amplitude scale for ALL camera shake — dialled down so hits, crits and
+// even boss finishers nudge the view gently instead of jolting it. One knob keeps
+// every call site's relative weight; the SCREEN SHAKE setting can zero it entirely.
+const SHAKE_SCALE = 0.55;
 function shakeOffset() {
-  if (Date.now() >= shakeUntil || shakeMag <= 0) { shakeMag = 0; _shakeXY[0] = _shakeXY[1] = 0; return _shakeXY; }
-  const k = (shakeUntil - Date.now()) / 200, m = shakeMag * k;
+  if (!showScreenShake || Date.now() >= shakeUntil || shakeMag <= 0) { shakeMag = 0; _shakeXY[0] = _shakeXY[1] = 0; return _shakeXY; }
+  const k = (shakeUntil - Date.now()) / 200, m = shakeMag * k * SHAKE_SCALE;
   _shakeXY[0] = (Math.random() * 2 - 1) * m;
   _shakeXY[1] = (Math.random() * 2 - 1) * m;
   return _shakeXY;
@@ -15906,6 +15955,7 @@ function tryPlayerStatusProc(e) {
 // Brief full-screen colour flash for crits, low HP, and big events.
 let flashTimer = null;
 function screenFlash(color) {
+  if (!showScreenFlash) return;
   const el = document.getElementById('screen-flash');
   if (!el) return;
   el.style.background = `radial-gradient(circle, transparent 30%, ${color} 100%)`;
@@ -24273,6 +24323,8 @@ const SETTINGS_SYNC_KEYS = [
   'dungeonLoot_pathLine',     // click-to-move pathing line on/off
   'dungeonLoot_stairsArrow',  // off-screen stairs arrow on/off
   'dungeonLoot_monsterArrows',// off-screen monster arrows on/off
+  'dungeonLoot_screenShake',  // camera shake on/off
+  'dungeonLoot_screenFlash',  // full-screen colour flash on/off
   'dungeonLootMusic',         // music volume level (0–5)
   'dungeonLootSfx',           // sfx volume level (0–5)
   'dungeonLootTownAmb',       // town ambience on/off
@@ -25375,6 +25427,8 @@ updateCrosshairButton();
 updatePathLineButton();
 updateStairsArrowButton();
 updateMonsterArrowsButton();
+updateScreenShakeButton();
+updateScreenFlashButton();
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
   window.addEventListener(ev, audioUnlock, { passive: true }));
 
@@ -26170,6 +26224,10 @@ const __DL_FN_BRIDGE = {
   updateStairsArrowButton,
   toggleMonsterArrows,
   updateMonsterArrowsButton,
+  toggleScreenShake,
+  updateScreenShakeButton,
+  toggleScreenFlash,
+  updateScreenFlashButton,
   toggleSettingsMenu,
   closeSettingsMenu,
   settingsToTitle,

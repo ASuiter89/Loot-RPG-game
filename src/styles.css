@@ -3590,7 +3590,9 @@
     position: fixed; inset: 0; pointer-events: none; z-index: 300;
     opacity: 0; transition: opacity 0.1s ease;
   }
-  #screen-flash.active { opacity: 0.5; }
+  /* Peak flash strength, dialled down from a harsher 0.5 so the wash reads as a
+     gentle pulse; the SCREEN FLASH setting can suppress it entirely. */
+  #screen-flash.active { opacity: 0.3; }
 
   /* ── WEB / DESKTOP LAYOUT ──
      On keyboard + mouse devices with room to spare, rearrange the play area:
