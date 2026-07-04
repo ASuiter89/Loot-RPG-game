@@ -3035,6 +3035,49 @@
     0%,100% { box-shadow: 0 0 8px color-mix(in srgb, var(--gold-350) 40%, transparent);   border-color: var(--gold); }
     50%     { box-shadow: 0 0 22px color-mix(in srgb, var(--gold) 95%, transparent); border-color: var(--xp); }
   }
+  /* Two glowing gate CTAs share the top row — Return to Last Floor + Warp to
+     Dungeon. The row spans the whole menu grid and centres the pair; the service
+     tiles flow into the grid below it. */
+  .town-menu .tm-gate-row {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+    align-items: stretch;          /* equal heights even with different label lengths */
+    flex-wrap: wrap;               /* stack on a very narrow screen, never overflow */
+    gap: var(--space-5);
+    margin: var(--space-3) auto var(--space-6);
+    max-width: 640px;
+  }
+  /* Inside the row each gate is a flex item, not a grid item: drop the span /
+     self-centre / per-button margin the standalone .tm-gate carried, and let the
+     two buttons share the width evenly (shrinking so long labels wrap, not clip). */
+  .tm-gate-row .tm-gate {
+    grid-column: auto;
+    justify-self: auto;
+    margin: 0;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: var(--space-7) var(--space-8);
+  }
+  .tm-gate-row .tm-gate .tm-name { font-size: var(--fs-head-sm); }
+  .tm-gate-row .tm-gate .tm-icon { font-size: var(--fs-display-2); }
+  /* Return to Last Floor with no held stage (you arrived by death, or reloaded):
+     darkened and inert, with the pulse AND both orbiting wisps stilled so only the
+     live button pulls the eye. Mirrors the tm-locked palette + the reduced-motion
+     orb stop; one class deeper than the base .tm-gate rules so each override wins. */
+  .town-menu-btn.tm-gate.tm-disabled {
+    cursor: default;
+    border-color: var(--border);
+    background: color-mix(in srgb, var(--ink) 66%, transparent);
+    color: var(--text-muted);
+    animation: none;
+    box-shadow: none;
+  }
+  .town-menu-btn.tm-gate.tm-disabled:active { background: color-mix(in srgb, var(--ink) 66%, transparent); }
+  .town-menu-btn.tm-gate.tm-disabled .tm-icon { filter: grayscale(0.9); opacity: 0.5; }
+  .town-menu-btn.tm-gate.tm-disabled .tm-name { color: var(--text-muted); }
+  .town-menu-btn.tm-gate.tm-disabled .tm-desc { color: var(--text-faint); }
+  .town-menu-btn.tm-gate.tm-disabled .gate-wisp { display: none; animation: none; }
   /* After dying, make it even louder so a returning player can't miss it. */
   .town-menu-btn.tm-gate-urgent {
     animation: gateUrgent 1.15s ease-in-out infinite;
@@ -3557,6 +3600,9 @@
   .town-blurb-revived { font-size: 1.4rem; color: var(--normal); background: color-mix(in srgb, var(--red-800) 18%, transparent);
     border: 1px solid color-mix(in srgb, var(--red-350) 40%, transparent); border-radius: 8px; padding: 9px 11px; }
   .town-blurb-revived b { color: var(--gold-350); }
+  /* Hub tagline relocated into the overlay header, centred under the "Town" title
+     — reads as a subtitle rather than left-aligned body copy above the menu. */
+  .town-hub-blurb { text-align: center; max-width: 640px; margin: var(--space-2) auto var(--space-4); }
   /* Stash vault — gold deposit/withdraw bar and section headings. */
   .stash-gold-bar { display: flex; gap: 6px; margin: 6px 0; align-items: stretch; }
   .stash-gold-bar input {
