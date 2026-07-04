@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "The shared Vault syncs without losing anything", by: "Claude", notes: [
+    "The account-wide Vault now merges across devices instead of one copy winning: deposit gold or gear on your phone while your PC is offline, and after syncing you keep both — no deposit is ever dropped.",
+    "Taking an item out of the Vault sticks everywhere, and a re-stored item won't vanish. Your existing Vault carries over untouched.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Cloud saves are harder to lose", by: "Claude", notes: [
     "Which copy of a hero wins a sync is now decided by total play-time, not the device clock — a phone or PC with a wrong clock can no longer overwrite your more-played save with a stale one.",
     "While a newer save is pulled onto the hero you're playing, saving pauses until the game reloads onto it, so a background autosave can't clobber the copy you just synced.",
