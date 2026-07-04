@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   elementOf, paletteFor, castArchetype, weaponArchetype, projectileElement, bossFxFor,
+  archetypeIsProjectile,
   clamp01, easeOutCubic, easeInCubic, easeInOutSine, easeOutBack, bump,
 } from '../../src/systems/vfx.js';
 
@@ -76,6 +77,39 @@ describe('archetype selectors', () => {
     expect(bossFxFor('firewall')).toEqual({ type: 'flameLine', el: 'fire' });
     expect(bossFxFor('frost').el).toBe('ice');
     expect(bossFxFor('nope')).toBeNull();
+  });
+});
+
+describe('archetypeIsProjectile', () => {
+  it('is true for the traveling-bolt archetypes (damage lands on arrival)', () => {
+    expect(archetypeIsProjectile('projectile')).toBe(true);  // bolt cast
+    expect(archetypeIsProjectile('blast')).toBe(true);       // bursting bolt cast
+    expect(archetypeIsProjectile('arrow')).toBe(true);       // bow auto-attack
+    expect(archetypeIsProjectile('magicBolt')).toBe(true);   // staff auto-attack
+  });
+  it('is false for on-the-spot archetypes (damage lands at cast)', () => {
+    for (const a of ['aura', 'slash', 'arcWide', 'nova', 'beam', 'chain',
+                     'blinkStrike', 'conjure', 'multiStrike', 'impact',
+                     'smash', 'thrust', 'slashDouble', 'scytheArc', 'jab', 'slashArc']) {
+      expect(archetypeIsProjectile(a)).toBe(false);
+    }
+  });
+  it('matches every cast SHAPE and weapon STYLE that flies a bolt', () => {
+    // The classifier must agree with the archetype each shape/style resolves to,
+    // so resolveCast / attackEnemy defer exactly the attacks that spawn a bolt.
+    expect(archetypeIsProjectile(castArchetype('bolt'))).toBe(true);
+    expect(archetypeIsProjectile(castArchetype('blast'))).toBe(true);
+    expect(archetypeIsProjectile(castArchetype('nova'))).toBe(false);
+    expect(archetypeIsProjectile(castArchetype('line'))).toBe(false);   // beam, instant
+    expect(archetypeIsProjectile(castArchetype('chain'))).toBe(false);  // arcs, instant
+    expect(archetypeIsProjectile(weaponArchetype('shot'))).toBe(true);
+    expect(archetypeIsProjectile(weaponArchetype('bolt'))).toBe(true);
+    expect(archetypeIsProjectile(weaponArchetype('slash'))).toBe(false);
+  });
+  it('is false for unknown archetypes', () => {
+    expect(archetypeIsProjectile('mystery')).toBe(false);
+    expect(archetypeIsProjectile(undefined)).toBe(false);
+    expect(archetypeIsProjectile(null)).toBe(false);
   });
 });
 

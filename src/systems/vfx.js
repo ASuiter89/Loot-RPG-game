@@ -7,8 +7,10 @@
 
 import {
   VFX_PALETTES, DEFAULT_ELEMENT, SHAPE_ARCHETYPE, WEAPON_ARCHETYPE,
-  BOSS_ABILITY_FX, PROJECTILE_ELEMENT,
+  BOSS_ABILITY_FX, PROJECTILE_ELEMENT, PROJECTILE_ARCHETYPES,
 } from '../data/vfxPalette.js';
+
+const PROJECTILE_ARCH_SET = new Set(PROJECTILE_ARCHETYPES);
 
 // Keyword patterns per element, checked in priority order against a skill's
 // icon + name. Same vocabulary the old castVisual() used, lifted into one table so
@@ -42,6 +44,11 @@ export function paletteFor(element) {
 export function castArchetype(shape) { return SHAPE_ARCHETYPE[shape] || 'impact'; }
 export function weaponArchetype(style) { return WEAPON_ARCHETYPE[style] || 'slashArc'; }
 export function projectileElement(kind) { return PROJECTILE_ELEMENT[kind] || 'physical'; }
+
+// True if an archetype flies a bolt that TRAVELS to its target, so the attack's
+// damage should land on the bolt's arrival rather than at cast time. Drives the
+// deferred-hit timing in the combat code (see resolveCast / attackEnemy).
+export function archetypeIsProjectile(archetype) { return PROJECTILE_ARCH_SET.has(archetype); }
 
 // The {type, el} animation spec for a named boss ability, or null if it has none
 // (falls back to the old generic feedback at the call site).

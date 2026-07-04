@@ -42,7 +42,7 @@ import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
 import { mercCost } from '../systems/mercPricing.js';
 import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTints.js';
 import { elementOf, paletteFor, castArchetype, weaponArchetype, projectileElement, bossFxFor,
-  clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
+  archetypeIsProjectile, clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -6569,6 +6569,7 @@ window.gameGuide = function gameGuide(topic) {
     combat: [
       `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight). A red crosshair marks the foe currently locked on (Settings → Visuals → CROSSHAIR toggles it; the 🎯 TARGET focus in Settings → Play picks which foe wins).`,
       `Weapon reach: Staff & Bow = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
+      `THROWN & FIRED attacks land ON IMPACT: a Bow/Staff auto-attack, a ranged summon's shot, and a bolt or blast spell all loose a flying bolt whose damage is dealt the instant it REACHES the foe — not when it's cast — so a target won't drop until the bolt connects (a foe reading full HP for a beat after you fire is normal). Melee swings, novas, beams and chains still resolve on the spot.`,
       `There is NO per-hit damage cap — a big swing, skill or crit lands its full number, so burst and crits are fully rewarded. A foe's actual HP is the only limiter: bosses carry deep HP pools (and hit harder), so they're a genuine, tanky fight rather than a one-shot.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear), and EVERY damage source can crit — auto-attacks, martial skills and spells all roll critical hits, land the big crit number, and fire your on-crit passives (combo/zeal charges, primed crits, mana refunds). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
@@ -16358,13 +16359,16 @@ function drawProjectileKind(p, ppx, ppy, ux, uy, tw, now) {
     default: drawArrowProj(ppx, ppy, ux, uy, tw, pal); break;   // arrow / bone
   }
 }
-// A cosmetic spell bolt from the hero to a struck foe (damage already resolved in
-// resolveCast) — element-tinted, with the arrival burst wired via projectileArrive.
+// A spell bolt from the hero to a struck foe — element-tinted, with the arrival
+// burst wired via projectileArrive. `opts.onArrive` (when given) is the deferred
+// hit: the damage/procs/leech/log resolve the instant the bolt CONNECTS, not at
+// cast, so a foe can't die before the bolt visibly reaches it.
 function spawnCastProjectile(tx, ty, element, kind, opts) {
   opts = opts || {};
   projectiles.push({ x: player.fx, y: player.fy, tx, ty, vx: 0, vy: 0, dmg: 0,
     color: paletteFor(element).glow, life: 0.75, cosmetic: true, orb: kind === 'magic',
-    kind, element, burst: !!opts.burst, burstR: opts.burstR || 1.4, _seed: Math.random() * PI2 });
+    kind, element, burst: !!opts.burst, burstR: opts.burstR || 1.4,
+    onArrive: opts.onArrive || null, _seed: Math.random() * PI2 });
 }
 // A cosmetic bolt from a monster toward the hero (its damage was already dealt by
 // the ability) — sells a ranged boss trick as a real projectile hero-ward.
@@ -16373,9 +16377,12 @@ function spawnBossProjectile(e, kind, element) {
   projectiles.push({ x: a.x + 0.5, y: a.y + 0.5, vx: 0, vy: 0, dmg: 0, color: paletteFor(element).glow,
     life: 0.6, cosmetic: true, orb: kind === 'magic', kind, element, _seed: Math.random() * PI2 });
 }
-// Fired from updateProjectiles the instant a cosmetic bolt reaches its mark: an
-// element-appropriate impact (or a radial burst for a `blast` cast).
+// Fired from updateProjectiles the instant a cosmetic bolt reaches its mark: run
+// its deferred hit (damage/procs/log) FIRST so the foe takes the blow exactly as
+// the bolt connects, then lay down an element-appropriate impact (or a radial
+// burst for a `blast` cast). Nulled after firing so a bolt can never strike twice.
 function projectileArrive(p) {
+  if (p.onArrive) { const hit = p.onArrive; p.onArrive = null; hit(); }
   const el = p.element || projectileElement(p.kind || 'magic');
   const pal = paletteFor(el);
   if (p.burst) _fxPush('nova', p.tx, p.ty, pal, { r: p.burstR || 1.4, dur: 460, shardN: 13 });
@@ -16396,13 +16403,18 @@ function castSoundFor(c, el) {
     venom: 'castvenom', arcane: 'castarcane', blood: 'castarcane' })[el] || 'castarcane';
 }
 // The whole animation + sound for one NON-epic cast (epics keep spawnUltimateFx).
-function playCastVfx(node, c, center, targets) {
+// A projectile/blast archetype flies a bolt carrying `onArrive` (the cast's
+// deferred hit) and returns true — the caller then leaves the damage to the bolt's
+// landing. Every other archetype resolves on the spot, so it returns false and the
+// caller applies the hit immediately.
+function playCastVfx(node, c, center, targets, onArrive) {
   const el = elementOf(node.name, node.icon, c.wpn ? 'physical' : 'gold');
   const pal = paletteFor(el);
   const arch = castArchetype(c.shape);
   sfx(castSoundFor(c, el));
   const px = player.x + 0.5, py = player.y + 0.5;
   const tgts = (targets || []).filter(o => o && o.x != null);
+  let deferred = false;   // did a flying bolt take ownership of onArrive?
   switch (arch) {
     case 'aura':
       _fxPush('aura', px, py, c.heal ? paletteFor('life') : pal, { variant: c.heal ? 'mend' : 'buff', dur: 700, moteN: 14 });
@@ -16427,11 +16439,18 @@ function playCastVfx(node, c, center, targets) {
       break;
     case 'projectile': {
       const dests = (c.shape === 'chain' || c.shape === 'line' || c.shape === 'random') ? tgts : [center];
-      for (const o of dests) if (o && o.x != null) spawnCastProjectile(o.x + 0.5, o.y + 0.5, el, projKindFor(el), {});
+      // One bolt carries the deferred hit for the whole cast; extra bolts are cosmetic.
+      for (const o of dests) if (o && o.x != null) {
+        spawnCastProjectile(o.x + 0.5, o.y + 0.5, el, projKindFor(el), deferred ? {} : { onArrive });
+        if (onArrive) deferred = true;
+      }
       break;
     }
     case 'blast':
-      spawnCastProjectile(center.x + 0.5, center.y + 0.5, el, projKindFor(el), { burst: true, burstR: (c.radius || 1) + 0.5 });
+      if (center && center.x != null) {
+        spawnCastProjectile(center.x + 0.5, center.y + 0.5, el, projKindFor(el), { burst: true, burstR: (c.radius || 1) + 0.5, onArrive });
+        deferred = !!onArrive;
+      }
       break;
     case 'beam': {
       let far = center;
@@ -16464,17 +16483,21 @@ function playCastVfx(node, c, center, targets) {
       _fxPush('impact', (center.x || 0) + 0.5, (center.y || 0) + 0.5, pal, { dur: 320 });
   }
   if ((c.radius || 0) >= 3 || (c.wpn || 0) >= 2.2 || (c.spell || 0) >= 1.8) screenFlash(pal.glow);
+  return deferred;
 }
 // The animation for one basic weapon attack (auto-attack / move-into / ranged poke).
-function playWeaponVfx(style, targetE, ranged) {
-  if (!targetE || targetE.x == null) return;
+// A bow/staff looses a flying bolt carrying `onArrive` (the swing's deferred hit) and
+// returns true; a melee arc resolves at once and returns false so the caller strikes
+// immediately. Returns false too if there's no target to fly a bolt toward.
+function playWeaponVfx(style, targetE, ranged, onArrive) {
+  if (!targetE || targetE.x == null) return false;
   const arch = weaponArchetype(style);
   const pal = paletteFor('physical');
   const ang = _angTo(player.x, player.y, targetE.x, targetE.y);
   const tcx = targetE.x + 0.5, tcy = targetE.y + 0.5;
   switch (arch) {
-    case 'arrow': spawnCastProjectile(tcx, tcy, 'physical', 'arrow', {}); break;
-    case 'magicBolt': spawnCastProjectile(tcx, tcy, 'arcane', 'magic', {}); break;
+    case 'arrow': spawnCastProjectile(tcx, tcy, 'physical', 'arrow', { onArrive }); return !!onArrive;
+    case 'magicBolt': spawnCastProjectile(tcx, tcy, 'arcane', 'magic', { onArrive }); return !!onArrive;
     case 'thrust':
       _fxPush('beam', player.x + 0.5, player.y + 0.5, pal, { x2: tcx, y2: tcy, dur: 240 });
       _fxPush('impact', tcx, tcy, pal, { dur: 240, power: 0.7 });
@@ -16489,6 +16512,7 @@ function playWeaponVfx(style, targetE, ranged) {
     case 'jab': _fxPush('impact', tcx, tcy, pal, { dur: 220, power: 0.6 }); break;
     default: _fxPush('slash', tcx, tcy, pal, { ang, spread: 0.95, reach: 0.72, dur: 260 });   // slashArc
   }
+  return false;   // melee arcs land on the spot — the caller resolves the hit now
 }
 // The animation for one boss / elite special (looked up by ability name). Runs
 // after the ability resolves; ranged tricks additionally loose a real bolt hero-ward.
@@ -18748,10 +18772,17 @@ function attackEnemy(e, opts = {}) {
   const style = opts.style || weaponStyle();
   const ranged = !!opts.ranged;
   const label = enemyLabel(e);
-  // Draw the swing itself: a slash/impact arc for melee, or a real fired arrow /
-  // magic bolt for a bow/staff (previously ranged attacks loosed NOTHING visible).
-  if (e) playWeaponVfx(style, e, ranged);
   const atkSnd = style === 'shot' ? 'bowshot' : style === 'bolt' ? 'magicbolt' : 'attack';
+  // A bow/staff looses a real flying bolt whose blow lands when it CONNECTS (see
+  // playWeaponVfx / projectileArrive), not at release — so a foe can't die before the
+  // bolt reaches it. The release sound fires now; the damage resolves in resolveHits.
+  const projectile = archetypeIsProjectile(weaponArchetype(style));
+  sfx(atkSnd);
+
+  // The blow's whole consequence — hit/miss rolls, damage, on-hit procs, cleave,
+  // double-strike, leech, crush-stun, reap, log and bar refresh — bundled so a
+  // fired bolt can defer it to arrival; a melee arc runs it on the spot.
+  const resolveHits = () => {
   let anyCrit = false, dealtTotal = 0;
 
   let anyMiss = false;
@@ -18776,11 +18807,10 @@ function attackEnemy(e, opts = {}) {
 
   if (style === 'flurry') {
     // Dagger: two quick lighter strikes, extra crit rolled per hit.
-    sfx(atkSnd); swing(e, 0.62); swing(e, 0.62);
+    swing(e, 0.62); swing(e, 0.62);
     if (dealtTotal > 0) log(`${anyCrit ? '💥 ' : ''}<span data-spr=w_dagger></span> ${label} -${dealtTotal}`, anyCrit ? 'important' : '');
     else log(`🌬️ ${label} dodged`);
   } else {
-    sfx(atkSnd);
     swing(e);
     const vi = style === 'shot' ? '<span data-spr=w_bow></span>' : style === 'bolt' ? '<span data-spr=ic_orb></span>'
       : style === 'thrust' ? '<span data-spr=w_spear></span>' : style === 'cleave' ? '<span data-spr=w_axe></span>'
@@ -18862,6 +18892,13 @@ function attackEnemy(e, opts = {}) {
   // so we don't saveGame() on every swing.
   tryPlayerStatusProc(e);
   updateBars();
+  };
+
+  // Draw the swing / loose the bolt, then land the blow — deferred to the bolt's
+  // arrival when playWeaponVfx flew one (returns true), else resolved on the spot.
+  let deferred = false;
+  if (e) deferred = playWeaponVfx(style, e, ranged, projectile ? resolveHits : null);
+  if (!deferred) resolveHits();
 }
 
 // Ranged & reach weapons: fired from move() when you press toward a foe with no
@@ -19298,12 +19335,13 @@ function resolveCast(node, rank) {
   // ice nova, a lightning beam, a poison cloud, a weapon slash…) plus its sound and
   // any flying projectiles — replacing the old one-orb-fits-all flying bolt.
   const _isUlt = isEpicCast(node);
-  if (_isUlt) spawnUltimateFx(node, c, center, targets);
-  else playCastVfx(node, c, center, targets);
 
-  // Summons short-circuit (no damage pass).
-  if (c.summon) { doSummon(c.summon, rank); return true; }
-
+  // The cast's on-hit consequence — damage, elemental/status procs, crit feedback,
+  // detonation, leech/heal, buffs, knockback and the log line — bundled into one
+  // thunk so a PROJECTILE cast can defer it to the bolt's arrival instead of firing
+  // it at cast time (a struck foe must not die before the bolt visibly connects).
+  // Non-projectile casts run it immediately below, exactly as before.
+  const applyStrike = () => {
   // Damage pass. `repeat` re-strikes the same targets for multi-hit flurries.
   let total = 0;
   // Physical (weapon) damage only — leech pays out from this, never from spell
@@ -19419,6 +19457,19 @@ function resolveCast(node, rank) {
   }
 
   log(`✦ ${node.name}${total > 0 ? ` -${total}` : ''}${targets.length > 1 ? ` ×${targets.length}` : ''}`, 'important');
+  };
+
+  // Lay down the animation, then resolve the hit NOW — unless a flying bolt takes
+  // ownership of it (projectile / blast archetype), in which case the blow lands
+  // the instant the bolt arrives (see projectileArrive) so the foe dies as it hits.
+  let deferred = false;
+  if (_isUlt) spawnUltimateFx(node, c, center, targets);
+  else deferred = playCastVfx(node, c, center, targets, applyStrike);
+
+  // Summons short-circuit (no damage pass).
+  if (c.summon) { doSummon(c.summon, rank); return true; }
+
+  if (!deferred) applyStrike();
   return true;
 }
 
@@ -19518,20 +19569,24 @@ function runMinionTurn() {
     return true;
   });
 }
-// Projectile look for a ranged summon's shot, by minion kind.
+// Projectile look for a ranged summon's shot, by minion kind. `onArrive` (when
+// given) is the shot's deferred hit — its damage lands when the bolt CONNECTS.
 const MINION_BOLT_KIND = { skelarcher: 'arrow', elemental: 'fire', spirit: 'holy', totem: 'spark' };
-function spawnMinionBolt(m, e) {
+function spawnMinionBolt(m, e, onArrive) {
   const kind = MINION_BOLT_KIND[m.kind] || 'magic';
   projectiles.push({ x: m.x + 0.5, y: m.y + 0.5, tx: e.x + 0.5, ty: e.y + 0.5, vx: 0, vy: 0, dmg: 0,
-    color: m.color, life: 0.55, cosmetic: true, orb: kind === 'magic', kind, element: projectileElement(kind), _seed: Math.random() * PI2 });
+    color: m.color, life: 0.55, cosmetic: true, orb: kind === 'magic', kind, element: projectileElement(kind),
+    onArrive: onArrive || null, _seed: Math.random() * PI2 });
 }
 function minionAttack(m, e, ranged) {
   let dmg = Math.round(m.dmg * rnd(85, 115) / 100);
   m.hitAt = Date.now();
   triggerAttackAnim(m, e.x, e.y); // quick lunge toward the foe it's striking
-  if (ranged) spawnMinionBolt(m, e); // a real flying bolt to the foe, not a static glyph
   dmg = Math.max(1, Math.min(dmg, Math.ceil(e.maxHp * (e.isBoss ? 0.2 : 0.5))));
-  dealDamage(e, dmg, false);
+  // A ranged summon looses a real flying bolt; its damage lands when the bolt
+  // reaches the foe, so the foe doesn't die before the shot visibly connects.
+  if (ranged) spawnMinionBolt(m, e, () => dealDamage(e, dmg, false));
+  else dealDamage(e, dmg, false);
 }
 
 // Run every nearby living enemy's turn once, bailing if the floor changes

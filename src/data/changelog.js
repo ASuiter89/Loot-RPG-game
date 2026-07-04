@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Fired attacks hit on impact, not on cast", by: "Claude", notes: [
+    "Bow and staff shots, ranged summon bolts, and bolt/blast spells now deal their damage the instant the projectile REACHES the target — a foe no longer dies (and vanishes) before the bolt visibly connects.",
+    "The release sound still fires as you loose the shot; the hit, its numbers and any crit land as the bolt arrives.",
+  ] },
   { date: "2026-07-03", size: "large", v: "Full combat VFX overhaul", by: "Claude", notes: [
     "Every skill, spell, weapon swing and monster attack now has its own animation, tinted to its element — fire, ice, lightning, holy, poison, blood, arcane.",
     "Weapon swings draw on the canvas at last: a crescent slash (sword), a wide sweep (axe/scythe), a rapid double-flick (dagger), an overhead smash (mace), a reaching stab (spear).",

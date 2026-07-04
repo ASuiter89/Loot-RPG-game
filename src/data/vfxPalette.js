@@ -96,6 +96,13 @@ export const BOSS_ABILITY_FX = {
   volley:      { type: 'volley',      el: 'gold' },
 };
 
+// Archetypes drawn as a bolt that TRAVELS from the attacker to its target — so
+// their damage lands when the bolt ARRIVES (projectileArrive), not when the attack
+// is cast. Deferring the hit stops a struck foe from dying (and the bolt then
+// flying to an empty tile) before the projectile visibly connects. Every other
+// archetype (slash, nova, beam, aura, chain…) resolves on the spot at cast time.
+export const PROJECTILE_ARCHETYPES = ['projectile', 'blast', 'arrow', 'magicBolt'];
+
 // Projectile KIND -> the element palette its renderer tints with. The projectile
 // simulation is unchanged (still dodgeable); only the look is picked from here.
 export const PROJECTILE_ELEMENT = {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   VFX_PALETTES, DEFAULT_ELEMENT, SHAPE_ARCHETYPE, WEAPON_ARCHETYPE,
-  BOSS_ABILITY_FX, PROJECTILE_ELEMENT,
+  BOSS_ABILITY_FX, PROJECTILE_ELEMENT, PROJECTILE_ARCHETYPES,
 } from '../../src/data/vfxPalette.js';
 
 const HEX = /^#[0-9a-f]{6}$/;
@@ -61,5 +61,14 @@ describe('archetype tables', () => {
     for (const [kind, el] of Object.entries(PROJECTILE_ELEMENT)) {
       expect(VFX_PALETTES[el], `${kind} -> ${el}`).toBeTruthy();
     }
+  });
+
+  it('lists only real archetypes as the deferred-hit (projectile) set', () => {
+    // Every archetype whose damage lands on arrival must be one a cast shape or
+    // weapon style actually resolves to — otherwise the deferral never triggers.
+    const produced = new Set([...Object.values(SHAPE_ARCHETYPE), ...Object.values(WEAPON_ARCHETYPE)]);
+    for (const a of PROJECTILE_ARCHETYPES) expect(produced.has(a), a).toBe(true);
+    // The four traveling-bolt archetypes: bolt/blast casts, bow/staff auto-attacks.
+    expect([...PROJECTILE_ARCHETYPES].sort()).toEqual(['arrow', 'blast', 'magicBolt', 'projectile']);
   });
 });
