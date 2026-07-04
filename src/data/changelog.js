@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Spend straight from the vault", by: "Jeff Louie", notes: [
+    "Vault gold is no longer walled off from the shops. Every town service — healer, merchant, restock, craftsman, enchanter, gambler, mystic, sellsword, transmuter, trainer — spends your carried coin first, then auto-draws any shortfall from the vault, so banked gold stays useful without a trip to the Vault Keeper.",
+    "Prices and buttons now count carried + vault, and each town gold pill shows a '+N in vault' hint. A drawn amount is logged. Vault gold is still safe from death.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Dungeon Gate flags the floor holding your lost bag", by: "Jeff Louie", notes: [
     "The floor where you died glows with a grave marker at the Dungeon Gate, and its difficulty tab gets the same badge, so you know exactly where to dive to reclaim your dropped bag.",
     "A note under the tier picker names the grave's tier and floor whatever tab you're on.",

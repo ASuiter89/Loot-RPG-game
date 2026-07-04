@@ -2680,12 +2680,12 @@ const CRAFT_MAT_KEYS = Object.keys(CRAFT_MATERIALS);
 // subset). These three helpers let the Forge and Enchanter share one currency
 // model for checking, spending, and labelling mixed gold+material prices.
 function canAfford(cost) {
-  if ((cost.gold || 0) > player.gold) return false;
+  if ((cost.gold || 0) > spendableGold()) return false;
   const m = player.materials || {};
   return CRAFT_MAT_KEYS.every(k => (cost[k] || 0) <= (m[k] || 0));
 }
 function spendCost(cost) {
-  if (cost.gold) player.gold -= cost.gold;
+  if (cost.gold) spendGold(cost.gold);
   if (!player.materials) player.materials = freshMaterials();
   for (const k of CRAFT_MAT_KEYS) if (cost[k]) player.materials[k] = Math.max(0, (player.materials[k] || 0) - cost[k]);
 }
@@ -2703,7 +2703,7 @@ function costLabelHi(cost) {
   const m = player.materials || {};
   const parts = [];
   if (cost.gold) {
-    const short = (cost.gold || 0) > player.gold;
+    const short = (cost.gold || 0) > spendableGold();
     parts.push(`<span class="${short ? 'cost-short' : ''}"><span data-spr=ic_money></span>${cost.gold}</span>`);
   }
   for (const k of CRAFT_MAT_KEYS) if (cost[k]) {
@@ -6020,8 +6020,9 @@ let inventory = [];
 // SHARED across every save slot: gold and gear banked by one hero can be
 // withdrawn by any other hero on this device (and, when signed in, on any device
 // on the account). It lives in its own localStorage key (STASH_KEY) rather than
-// inside each character's save, is never spent at merchants or lost on death, and
-// is only reachable from the Vault in town. `ts` is the last-write time, used to
+// inside each character's save, is never lost on death (though town shops may
+// draw on it to cover a purchase — see spendGold), and is only reachable from
+// the Vault in town. `ts` is the last-write time, used to
 // pick the newest copy when syncing.
 let stash = { gold: 0, items: [], ts: 0 };
 // ── GEAR SETS ── You keep TWO independent equipment loadouts and toggle between
@@ -6475,7 +6476,9 @@ window.gameState = function gameState(radius) {
         return { kind: s.kind, name: s.name, locked, need: locked ? s.req.need : null };
       }) : null,
       pointsToSpend: { attribute: player.attrPoints || 0, skill: player.skillPoints || 0, ascendancy: player.ascPoints || 0 },
-      gold: player.gold,
+      gold: player.gold,                 // coins in hand (what death loss is taken from)
+      vaultGold: (stash && stash.gold) || 0,   // banked in the town Vault — safe from death
+      spendableGold: spendableGold(),    // carried + vault: what a town shop can actually charge (shortfall auto-drawn from the vault)
       materials: player.materials ? Object.assign({}, player.materials) : null,   // scrap/glimmer/core/chaos (commonest→rarest) for crafting
       materialsUnlocked: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, materialUnlocked(k)])),  // which mats the CURRENT tier can drop from kills (salvage ignores this)
       autoLoot: player.autoLoot ? Object.assign({}, player.autoLoot) : null,       // per-rarity keep/scrap/sell
@@ -6672,7 +6675,7 @@ window.gameGuide = function gameGuide(topic) {
       `Merchant (buy gear / pay to restock); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract.`,
-      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death); Gambler (wager gold for random gear — pick a slot to guarantee the type).`,
+      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it); Gambler (wager gold for random gear — pick a slot to guarantee the type).`,
       `Services unlock as you progress and show in a fixed order (Dungeon Gate on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically.`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
@@ -9894,8 +9897,8 @@ function refreshShopCost() {
 function refreshShop() {
   if (!merchant) return;
   const cost = refreshShopCost();
-  if (player.gold < cost) { log(`<span data-spr=ic_money></span> Not enough gold to restock — need <span data-spr=ic_money></span>${cost}.`); sfx('denied'); return; }
-  player.gold -= cost;
+  if (spendableGold() < cost) { log(`<span data-spr=ic_money></span> Not enough gold to restock — need <span data-spr=ic_money></span>${cost}.`); sfx('denied'); return; }
+  spendGold(cost);
   merchant.stock = rollShopStock(merchant.ilvl || (player.maxFloor || 1) + 1, merchant.stockLo || 3, merchant.stockHi || 4);
   if (merchant.town) townShopStock = merchant.stock; // keep the persisted town wares in sync
   sfx('buy');
@@ -10054,6 +10057,7 @@ function shopClose() {
 
 function renderShop() {
   document.getElementById('shop-gold-count').textContent = fmtGold(player.gold);
+  refreshVaultNote('shop-gold-vault');
   const el = document.getElementById('shop-content');
   if (!merchant) { closeShop(); return; }
   const _bt = document.getElementById('shoptab-buy'), _st = document.getElementById('shoptab-sell');
@@ -10064,14 +10068,14 @@ function renderShop() {
   // Pay-to-restock button — re-rolls the wares for gold (the stock otherwise
   // stays put when you close and reopen).
   const rcost = refreshShopCost();
-  const refreshBtn = `<button class="shop-refresh-btn" ${player.gold >= rcost ? '' : 'disabled'} onclick="refreshShop()">🔄 Restock — <span data-spr=ic_money></span>${rcost}</button>`;
+  const refreshBtn = `<button class="shop-refresh-btn" ${spendableGold() >= rcost ? '' : 'disabled'} onclick="refreshShop()">🔄 Restock — <span data-spr=ic_money></span>${rcost}</button>`;
   if (merchant.stock.length === 0) {
     el.innerHTML = '<div class="shop-empty">Sold out! Pay to restock for fresh wares.</div>' + refreshBtn;
     return;
   }
   el.innerHTML = '<div class="shop-grid">' + merchant.stock.map((s, i) => {
     const price = stockPrice(s);
-    const afford = player.gold >= price;
+    const afford = spendableGold() >= price;
     let name, sub, cls = '', stats = '', isUpgrade = false;
     {
       name = s.item.name;
@@ -10142,9 +10146,9 @@ function buyItem(i) {
   const s = merchant.stock[i];
   if (!s) return;
   const price = stockPrice(s);
-  if (player.gold < price) return;
+  if (spendableGold() < price) return;
   if (bagFull()) { warnBagFull(); return; }
-  player.gold -= price;
+  spendGold(price);
   sfx('buy');
   inventory.push(s.item);
   recordWardrobe(s.item);
@@ -10189,6 +10193,7 @@ function mysticClose() {
 
 function renderMystic() {
   document.getElementById('mystic-gold-count').textContent = fmtGold(player.gold);
+  refreshVaultNote('mystic-gold-vault');
   // Active-pact banner.
   const active = document.getElementById('mystic-active');
   if (pact) {
@@ -10204,7 +10209,7 @@ function renderMystic() {
     const accent = p.accent || '#3ce0d2';
     const buttons = PACT_DURATIONS.map(dur => {
       const price = pactPrice(p, dur);
-      const afford = player.gold >= price;
+      const afford = spendableGold() >= price;
       const label = DUR_LABEL[dur.floors] || (dur.floors + ' floors');
       return `<button class="pact-buy-btn" ${afford ? '' : 'disabled'} onclick="buyPact(${i}, ${dur.floors})">
         <span class="pact-floors">${label}</span>
@@ -10226,8 +10231,8 @@ function buyPact(i, floors) {
   const dur = PACT_DURATIONS.find(d => d.floors === floors);
   if (!dur) return;
   const price = pactPrice(def, dur);
-  if (player.gold < price) return;
-  player.gold -= price;
+  if (spendableGold() < price) return;
+  spendGold(price);
   // `floors` counts the next N floors you descend into; tickPact() consumes one
   // after each floor is generated (see the stairs handler), so this is exact.
   pact = { id: def.id, icon: def.icon, name: def.name, desc: def.desc, floors, fx: def.fx };
@@ -10528,7 +10533,7 @@ function renderMercCamp() {
     const icon = townWalkIcon(MERC_ART[t.id], 22) || dlIcon((typeof MINION_SPRITE === 'object' && MINION_SPRITE && MINION_SPRITE[t.minion]) || 'hero_warrior', 22);
     const buttons = MERC_DURATIONS.map(dur => {
       const cost = mercCost(t.mult, depth, dur.mult);
-      const afford = player.gold >= cost;
+      const afford = spendableGold() >= cost;
       const label = dur.floors === 1 ? '1 floor' : `${dur.floors} floors`;
       return `<button class="pact-buy-btn" ${afford ? '' : 'disabled'} onclick="hireMerc('${t.id}', ${dur.floors})">
         <span class="pact-floors">${label}</span>
@@ -10548,8 +10553,8 @@ function hireMerc(id, floors) {
   const t = MERC_TYPES.find(x => x.id === id); if (!t) return;
   const dur = MERC_DURATIONS.find(d => d.floors === floors) || MERC_DURATIONS[0];
   const cost = mercCost(t.mult, player.maxFloor || 1, dur.mult);
-  if (player.gold < cost) { log('Not enough gold to hire.'); sfx('denied'); return; }
-  player.gold -= cost;
+  if (spendableGold() < cost) { log('Not enough gold to hire.'); sfx('denied'); return; }
+  spendGold(cost);
   player.merc = { kind: t.id, floors: dur.floors, mult: t.mult };
   sfx('buy');
   log(`<span data-spr=a_shield></span> You hire a ${t.name} for <span data-spr=ic_money></span>${cost.toLocaleString()} — they'll join you for ${dur.floors} floor${dur.floors === 1 ? '' : 's'}.`, 'important');
@@ -10575,7 +10580,7 @@ function renderTransmuter() {
     if (list.length < 3) continue;
     any = true;
     const cost = transmuteCost(next);
-    const afford = player.gold >= cost;
+    const afford = spendableGold() >= cost;
     const c = (TIERS[tier] || {}).color, cn = (TIERS[next] || {}).color;
     html += `<div class="shop-row has-actions">
       <span class="loot-icon"><span data-spr=potion_g></span></span>
@@ -10595,13 +10600,13 @@ function transmute(tier) {
   if (t < 0 || t >= TIER_ORDER.length - 1) return;
   const next = TIER_ORDER[t + 1];
   const cost = transmuteCost(next);
-  if (player.gold < cost) { log('Not enough gold to transmute.'); sfx('denied'); return; }
+  if (spendableGold() < cost) { log('Not enough gold to transmute.'); sfx('denied'); return; }
   // Grab the three lowest-value unlocked pieces of this rarity.
   const idxs = inventory.map((it, i) => ({ it, i }))
     .filter(o => o.it && o.it.slot && !o.it.locked && o.it.tier === tier)
     .sort((a, b) => (a.it.value || 0) - (b.it.value || 0)).slice(0, 3).map(o => o.i);
   if (idxs.length < 3) { renderTransmuter(); return; }
-  player.gold -= cost;
+  spendGold(cost);
   // Remove the three (highest index first so splices don't shift).
   idxs.sort((a, b) => b - a).forEach(i => inventory.splice(i, 1));
   const ilvl = Math.max(1, (dungeonReturn || player.maxFloor || 1) + 1);
@@ -11053,6 +11058,7 @@ function closeTown() {
 function setTownContent(html) {
   hideHoverTip(); // any hovered element is replaced; drop a lingering popup
   document.getElementById('town-gold-count').textContent = fmtGold(player.gold);
+  refreshVaultNote('town-gold-vault');
   const mt = document.getElementById('town-mats');
   if (mt) mt.innerHTML = matStripHTML();
   document.getElementById('town-content').innerHTML = html;
@@ -11676,7 +11682,7 @@ function openHealer() { openTownModal('Healer', 'town_healer'); renderHealer(); 
 function renderHealer() {
   const full = player.hp >= player.maxHp && player.mp >= player.maxMp;
   const cost = healCost();
-  const afford = player.gold >= cost;
+  const afford = spendableGold() >= cost;
   setTownContent(`
     <div class="town-blurb">The healer mends your wounds and cleanses any lingering curse before you head back down — for a fee that grows with your legend.</div>
     <div class="shop-row has-actions ${afford ? '' : 'cant-afford'}">
@@ -11691,8 +11697,8 @@ function renderHealer() {
 function restHeal() {
   if (player.hp >= player.maxHp && player.mp >= player.maxMp) return;
   const cost = healCost();
-  if (player.gold < cost) { log(`Not enough gold — the healer charges <span data-spr=ic_money></span>${cost} for a full rest.`); return; }
-  player.gold -= cost;
+  if (spendableGold() < cost) { log(`Not enough gold — the healer charges <span data-spr=ic_money></span>${cost} for a full rest.`); return; }
+  spendGold(cost);
   player.hp = player.maxHp; player.mp = player.maxMp;
   statusEffects = statusEffects.filter(s => s.target !== 'player');
   sfx('potion');
@@ -11720,7 +11726,7 @@ function potionUpgradeHTML() {
   const pLvl = potionPowerLvl(), cLvl = potionCdLvl();
   const pMax = pLvl >= POTION_POWER_MAX, cMax = cLvl >= POTION_CD_MAX;
   const pCost = potionUpgradeCost('power'), cCost = potionUpgradeCost('cd');
-  const pAfford = player.gold >= pCost, cAfford = player.gold >= cCost;
+  const pAfford = spendableGold() >= pCost, cAfford = spendableGold() >= cCost;
   const pctNow = Math.round(potionHealPct() * 100), pctNext = Math.round((potionHealPct() + POTION_PCT_PER_LVL) * 100);
   const cdNow = effectivePotionCd(), cdNext = Math.max(POTION_CD_MIN, cdNow - POTION_CD_PER_LVL);
   return `
@@ -11744,8 +11750,8 @@ function upgradePotion(kind) {
   const max = kind === 'power' ? POTION_POWER_MAX : POTION_CD_MAX;
   if (lvl >= max) return;
   const cost = potionUpgradeCost(kind);
-  if (player.gold < cost) { log(`Not enough gold — that upgrade costs <span data-spr=ic_money></span>${cost}.`); return; }
-  player.gold -= cost;
+  if (spendableGold() < cost) { log(`Not enough gold — that upgrade costs <span data-spr=ic_money></span>${cost}.`); return; }
+  spendGold(cost);
   if (kind === 'power') player.potionPowerLvl = lvl + 1; else player.potionCdLvl = lvl + 1;
   sfx('buy');
   log(`<span data-spr=potion_g></span> ${kind === 'power' ? 'Potion Potency' : 'Potion Recharge'} upgraded to Lv ${lvl + 1}.`, 'loot');
@@ -11755,9 +11761,9 @@ function upgradePotion(kind) {
 
 // ── STASH (Vault Keeper) — a safe place for gold & gear ──
 // Everything stored here lives entirely off your character: stashed gold is
-// never spent at merchants and never lost on death, and stashed items don't
-// appear in your bag or the sell list. Deposit when you visit town, withdraw
-// when you need it.
+// never lost on death, and stashed items don't appear in your bag or the sell
+// list. Vault gold IS spendable at town shops, though — a purchase auto-draws
+// any shortfall from it (see spendGold). Deposit when you visit town.
 function openStash() { openTownModal('Vault', 'ic_coffer'); renderStash(); }
 function stashItemRow(item, action, btnLabel, btnClass) {
   const upg = item.upgrades ? ` <span style="color:var(--gold-350)">+${item.upgrades}</span>` : '';
@@ -11782,7 +11788,7 @@ function renderStash() {
     ? inventory.map((it, i) => stashItemRow(it, `stashDepositItem(${i})`, 'STORE', 'shop-sell-btn')).join('')
     : '<div class="shop-empty">Your bag is empty.</div>';
   setTownContent(`
-    <div class="town-blurb">The Vault Keeper guards your fortune. Gold and gear stored here are kept completely safe — never spent at the shops and never lost when you fall in the dungeon.</div>
+    <div class="town-blurb">The Vault Keeper guards your fortune. Gold and gear stored here are safe from death — never lost when you fall in the dungeon. Town shops will draw on vault gold when your carried coin runs short, so your savings stay useful.</div>
     <div class="shop-row">
       <span class="loot-icon"><span data-spr=ic_coffer></span></span>
       <div class="shop-row-info">
@@ -11827,6 +11833,37 @@ function stashWithdrawGold(amt) {
   log(`<span data-spr=ic_coffer></span> Withdrew <span data-spr=ic_money></span>${amt} from the vault. (<span data-spr=ic_money></span>${stash.gold} stored)`, 'loot');
   updateBars(); renderStash(); saveGame(); saveStash();
 }
+// ── Spending the vault ──────────────────────────────────────────────────────
+// Town services draw on vault gold, not just the coins in hand: `spendableGold()`
+// (carried + vault) is what "can afford" means at every shop, and `spendGold()`
+// pays from carried coins first, then auto-withdraws any shortfall from the
+// vault. The vault still shields that gold from death loss — it's just no longer
+// walled off from the shops. (Dungeon costs like altar offerings stay
+// carried-only; the vault lives in town.)
+function spendableGold() { return (player.gold || 0) + ((stash && stash.gold) || 0); }
+function spendGold(amt) {
+  amt = Math.floor(amt) || 0;
+  if (amt <= 0) return true;
+  if (spendableGold() < amt) return false;
+  const carried = player.gold || 0;
+  if (amt <= carried) { player.gold = carried - amt; return true; }
+  // Carried coins run out — pull the remainder from the vault, and log the draw
+  // so it's never silent.
+  const fromVault = amt - carried;
+  player.gold = 0;
+  stash.gold = (stash.gold || 0) - fromVault;
+  log(`<span data-spr=ic_coffer></span> Drew <span data-spr=ic_money></span>${fromVault} from the vault to cover it. (<span data-spr=ic_money></span>${stash.gold} left)`, 'loot');
+  saveStash();
+  return true;
+}
+// Paint the "+N in vault" hint beside a town gold pill (empty when the vault is),
+// so a shopper can see that purchases can dip into their banked coin.
+function refreshVaultNote(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const v = (stash && stash.gold) || 0;
+  el.innerHTML = v > 0 ? ` <span class="gold-vault-note">+ <span data-spr=ic_money></span>${fmtGold(v)} in vault</span>` : '';
+}
 function stashDepositItem(i) {
   const item = inventory[i];
   if (!item) return;
@@ -11866,17 +11903,17 @@ function renderTrainer() {
   setTownContent(`
     <div class="town-blurb">The trainer can unlearn your attributes, returning all ${spent} spent point${spent === 1 ? '' : 's'} to spend anew (you have ${player.attrPoints || 0} unspent).</div>
     ${rows}
-    <div class="shop-row has-actions ${player.gold >= cost ? '' : 'cant-afford'}">
+    <div class="shop-row has-actions ${spendableGold() >= cost ? '' : 'cant-afford'}">
       <span class="loot-icon"></span>
       <div class="shop-row-info"><div class="shop-row-name">Respec Attributes</div>
         <div class="shop-row-sub">Refund every point spent above the base ${ATTR_BASE}</div></div>
-      <button class="act-btn ${player.gold >= cost ? '' : 'short'}" ${(player.gold >= cost && spent > 0) ? '' : 'disabled'} onclick="respecAttrs()"><span data-spr=ic_money></span>${cost}</button>
+      <button class="act-btn ${spendableGold() >= cost ? '' : 'short'}" ${(spendableGold() >= cost && spent > 0) ? '' : 'disabled'} onclick="respecAttrs()"><span data-spr=ic_money></span>${cost}</button>
     </div>
-    <div class="shop-row has-actions ${player.gold >= skillRespecCost() ? '' : 'cant-afford'}">
+    <div class="shop-row has-actions ${spendableGold() >= skillRespecCost() ? '' : 'cant-afford'}">
       <span class="loot-icon"><span data-spr=mat_glimmer></span></span>
       <div class="shop-row-info"><div class="shop-row-name">Forget Skills</div>
         <div class="shop-row-sub">Refund all ${spentAllSkillPoints()} spent point${spentAllSkillPoints() === 1 ? '' : 's'} (skill &amp; ascendancy) to spend anew</div></div>
-      <button class="act-btn ${player.gold >= skillRespecCost() ? '' : 'short'}" ${(player.gold >= skillRespecCost() && spentAllSkillPoints() > 0) ? '' : 'disabled'} onclick="respecSkills()"><span data-spr=ic_money></span>${skillRespecCost()}</button>
+      <button class="act-btn ${spendableGold() >= skillRespecCost() ? '' : 'short'}" ${(spendableGold() >= skillRespecCost() && spentAllSkillPoints() > 0) ? '' : 'disabled'} onclick="respecSkills()"><span data-spr=ic_money></span>${skillRespecCost()}</button>
     </div>
     ${trainerAscensionBlock()}
     <div class="town-blurb" style="margin-top:10px">Retrain into a different class for <span data-spr=ic_money></span>${classChangeCost()}. Your attributes are kept; if your new class can't wield your weapon, it goes back in your bag.</div>
@@ -11885,7 +11922,7 @@ function renderTrainer() {
       const cur = player.class === k;
       const ccost = classChangeCost();
       const sig = classSignature(k);
-      const cantAfford = !cur && player.gold < ccost;
+      const cantAfford = !cur && spendableGold() < ccost;
       const btn = cur
         ? `<button class="act-btn is-active" disabled>★ active</button>`
         : `<button class="act-btn ${cantAfford ? 'short' : ''}" ${cantAfford ? 'disabled' : ''} onclick="changeClass('${k}')"><span data-spr=ic_money></span>${ccost}</button>`;
@@ -11916,8 +11953,8 @@ function trainerAscensionBlock() {
     const a = ASCENSIONS[k];
     const cur = player.ascension === k;
     const cost = player.ascension ? ascendCost() : 0;
-    const can = ready && !cur && player.gold >= cost;
-    const goldShort = !cur && ready && cost > 0 && player.gold < cost;
+    const can = ready && !cur && spendableGold() >= cost;
+    const goldShort = !cur && ready && cost > 0 && spendableGold() < cost;
     // Same cost-in-button pattern as every other action row: current → gold
     // "★ active"; locked →; otherwise the price (Free today) on a live button.
     let btn;
@@ -11939,8 +11976,8 @@ function ascend(key) {
   if ((player.level || 1) < ASCEND_LEVEL) { log(`Ascension requires Hero level ${ASCEND_LEVEL}.`); return; }
   if (player.ascension === key) return;
   const cost = player.ascension ? ascendCost() : 0;
-  if (player.gold < cost) { log('Not enough gold to switch your ascension.'); return; }
-  player.gold -= cost;
+  if (spendableGold() < cost) { log('Not enough gold to switch your ascension.'); return; }
+  spendGold(cost);
   // Refund any ascendancy points spent in the previous path tree before switching
   // (they return to the ascendancy pool, not the normal skill pool).
   let refunded = 0;
@@ -11960,8 +11997,8 @@ function ascend(key) {
 function respecAttrs() {
   const spent = spentAttrPoints();
   const cost = respecCost();
-  if (spent <= 0 || player.gold < cost) return;
-  player.gold -= cost;
+  if (spent <= 0 || spendableGold() < cost) return;
+  spendGold(cost);
   player.attrPoints = (player.attrPoints || 0) + spent;
   player.attributes = baseAttributes();
   recomputeMaxStats();
@@ -11979,8 +12016,8 @@ function respecSkills() {
   const spent = spentSkillPoints();
   const spentAsc = spentAscPoints();
   const cost = skillRespecCost();
-  if ((spent + spentAsc) <= 0 || player.gold < cost) return;
-  player.gold -= cost;
+  if ((spent + spentAsc) <= 0 || spendableGold() < cost) return;
+  spendGold(cost);
   // Each pool gets its own kind of point back; the wipe clears every tree at once.
   player.skillPoints = (player.skillPoints || 0) + spent;
   player.ascPoints = (player.ascPoints || 0) + spentAsc;
@@ -12499,7 +12536,7 @@ function openGambler() { gambleLast = null; gambleSlot = null; openTownModal('Ga
 function renderGambler() {
   const d = gambleDeepest();
   const cost = gambleCost();
-  const afford = player.gold >= cost;
+  const afford = spendableGold() >= cost;
   // Type-selector chips: "Any" (blind pull) plus one per equipment slot. The
   // selected chip drives both the price (targeting carries a surcharge) and the
   // slot the roll is locked to.
@@ -12540,8 +12577,8 @@ function renderGambler() {
 
 function gambleRoll() {
   const cost = gambleCost();
-  if (player.gold < cost) return;
-  player.gold -= cost;
+  if (spendableGold() < cost) return;
+  spendGold(cost);
   const ilvl = gambleRollIlvl();
   const tier = weighted(GAMBLE_TIER_WEIGHTS);
   const item = generateItem(1, ilvl, tier, gambleSlot);
@@ -22262,8 +22299,8 @@ function changeClass(key) {
   const cls = CLASSES[key];
   if (!cls || player.class === key) return;
   const cost = classChangeCost();
-  if (player.gold < cost) { log('Not enough gold to retrain.'); return; }
-  player.gold -= cost;
+  if (spendableGold() < cost) { log('Not enough gold to retrain.'); return; }
+  spendGold(cost);
   // Skill trees are class-specific: refund everything spent and wipe the old
   // tree so the player can re-spec into the new class's skills from scratch.
   const refunded = spentSkillPoints();
