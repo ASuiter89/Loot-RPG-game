@@ -28,6 +28,7 @@ import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../uti
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
 import { rollDamage, spreadRange } from '../systems/damageRoll.js';
 import { spellSpreadFor } from '../data/spellSpread.js';
+import { SKILL_MILESTONES } from '../data/skillMilestones.js';
 import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/gearPower.js';
 import { GEAR_POWER } from '../data/gearPower.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
@@ -6923,8 +6924,8 @@ window.gameGuide = function gameGuide(topic) {
       `Every active is either a SKILL (martial/weapon-based) or a SPELL (magic) — shown as a SKILL / SPELL badge on its tree node and in gameState().skills[i].school. A SKILL scales with your weapon damage + Skill Power gear; a SPELL scales with Spirit + Spell Power gear. Gear those stats to match the actives you lean on.`,
       `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and a rank-7 skill adds an extra ×1.2. The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
-      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — a big power surge, then a shorter cooldown, then wider reach — so deepening a key skill outpaces its rising mana cost.`,
-      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. Its detail card shows a Surge chip, milestone pips by the rank, and the bigger jump in the on-rank-up preview. Keystones stay single-rank, so they don't surge.`,
+      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — a big power surge (Empowered), then more power + a shorter cooldown (Honed), then more power + wider reach (Mastered) — so deepening a key skill outpaces its rising mana cost. Every skill's detail card shows a "Rank bonuses" ladder listing all three, each lit green with a ✓ once your rank has earned it.`,
+      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. Its detail card shows a Surge chip, milestone pips by the rank, the bigger jump in the on-rank-up preview, and the same green-when-earned "Rank bonuses" ladder. Keystones stay single-rank, so they don't surge.`,
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
@@ -19639,17 +19640,10 @@ function spellBase(flat, perLevel) {
 // fired (false = nothing to do, so castSkillById refunds the mana).
 
 // ── ACTIVE-SKILL MILESTONES ──
-// Pouring points into one active pays off in jumps, not just a slow drip: ranks
-// 3 / 7 / 10 each grant a power spike PLUS a signature perk. Kept generic so it
-// applies to every data-driven active:
-//   ✦   rank 3  Empowered — a big power surge
-//   ✦✦  rank 7  Honed     — extra power, shorter cooldown
-//   ✦✦✦ rank 10 Mastered  — extra power, wider reach / more targets
-const SKILL_MILESTONES = [
-  { rank: 3,  pips: '✦',   perk: 'power surge' },
-  { rank: 7,  pips: '✦✦',  perk: 'shorter cooldown' },
-  { rank: 10, pips: '✦✦✦', perk: 'wider reach' },
-];
+// Ranks 3 / 7 / 10 each grant a power spike PLUS a signature perk (Empowered /
+// Honed / Mastered), generic so it applies to every data-driven skill. The table
+// (pips, names, per-type blurbs) lives in src/data/skillMilestones.js; the
+// magnitudes in src/systems/skillMath.js (milestonePower / passiveMilestonePower).
 // milestonePower / rankScale / skillManaCost extracted to src/systems/skillMath.js.
 // Milestone pips earned so far (for the node popover rank readout).
 function milestonePips(rank) { let p = ''; for (const m of SKILL_MILESTONES) if (rank >= m.rank) p = m.pips; return p; }
@@ -22945,6 +22939,8 @@ function renderSkills(el) {
           `</div>`;
       }
     }
+    // The fixed rank 3 / 7 / 10 milestone ladder — always shown, green once earned.
+    const msHtml = skillMilestonesHtml(sn, rank);
     const reqMet = skillReqMet(sn);
     let reqHtml = reqRows.length ? `<div class="rq">${reqRows.join('<br>')}</div>` : '';
     if (reqMet && !skillMaxed(sn) && skillPointsFor(sn) <= 0) {
@@ -22982,6 +22978,7 @@ function renderSkills(el) {
       <div class="ds">${skillDescHtml(sn, rank)}</div>
       ${skillMechHtml(sn, rank)}
       ${ruHtml}
+      ${msHtml}
       ${reqHtml}
       ${buyBtn}
       ${refundBtn}
@@ -23278,15 +23275,8 @@ function skillRankUpRows(node, rank) {
         rows.push([`${meta[0]} ${cl}`, rank > 0 ? `${cur} → <b>${next}</b>` : `<b>${next}</b>`]);
       }
     }
-    // Dangle the next milestone as a goal — passives surge at ranks 3/7/10 too
-    // (keystones cap at rank 1, so they never reach one).
-    if (!node.keystone) {
-      const nm = nextMilestone(rank);
-      if (nm) {
-        const hit = (rank + 1) === nm.rank;
-        rows.push([`${nm.pips} rank ${nm.rank}`, hit ? `<b>power surge!</b>` : 'power surge']);
-      }
-    }
+    // The rank 3/7/10 surges get their own always-shown section (skillMilestonesHtml)
+    // rather than a dangled next-milestone row here.
   } else if (node.type === 'active' && node.cast) {
     // Damaging actives preview the concrete base per-hit range each rank buys (what the
     // "deals X to Y" description shows); pure buff/summon/heal actives keep the abstract
@@ -23316,14 +23306,36 @@ function skillRankUpRows(node, rank) {
       const nextN = Math.min(8, base + Math.floor((rank + 1 - 1) / 4));
       if (rank === 0 || nextN > curN) rows.push(['minions', rank > 0 ? `${curN} → <b>${nextN}</b>` : `<b>${nextN}</b>`]);
     }
-    // Dangle the next milestone as a goal — and flag it when the next point hits it.
-    const nm = nextMilestone(rank);
-    if (nm) {
-      const hit = (rank + 1) === nm.rank;
-      rows.push([`${nm.pips} rank ${nm.rank}`, hit ? `<b>power + ${nm.perk}!</b>` : nm.perk]);
-    }
+    // The rank 3/7/10 milestones get their own always-shown section
+    // (skillMilestonesHtml) rather than a dangled next-milestone row here.
   }
   return rows;
+}
+// Does this node earn the fixed rank 3 / 7 / 10 power spikes? Every active does; a
+// passive does unless it's a keystone (capped at rank 1) or has no scalable fx/cfx
+// bonus to surge. Mirrors where milestonePower / passiveMilestonePower apply.
+function skillHasMilestones(node) {
+  if (!node) return false;
+  if (node.type === 'active') return !!node.cast;
+  if (node.type === 'passive') return !node.keystone && !!(node.fx || node.cfx);
+  return false;
+}
+// The rank 3 / 7 / 10 spikes as a standalone checklist for the detail card: all
+// three are ALWAYS shown (what each grants), and each lights green once this skill's
+// rank is high enough to have earned it — so you can see the whole ladder at any
+// rank, not just the next rung. Empty for skills that never milestone.
+function skillMilestonesHtml(node, rank) {
+  if (!skillHasMilestones(node)) return '';
+  const passive = node.type === 'passive';
+  const r = rank || 0;
+  const rows = SKILL_MILESTONES.map(m => {
+    const met = r >= m.rank;
+    const desc = passive ? m.passiveDesc : m.activeDesc;
+    return `<div class="ms-row${met ? ' met' : ''}">`
+      + `<span class="ms-k">${met ? '✓ ' : ''}${m.pips} Rank ${m.rank}</span>`
+      + `<span class="ms-v"><b>${m.name}</b> — ${desc}</span></div>`;
+  }).join('');
+  return `<div class="ms"><div class="ms-h">Rank bonuses</div>${rows}</div>`;
 }
 // Plain-text "new total" summary at a given rank, for the level-up log line.
 function skillTotalSummary(node, rank) {
