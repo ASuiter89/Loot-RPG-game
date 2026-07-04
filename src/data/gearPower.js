@@ -79,6 +79,10 @@ export const GEAR_POWER = {
   // (armorPen = pen/(pen+penScale)); matches enemyArmorPct's mid value and
   // armorPenFrac's 0.5 knee.
   refArmorPct: 0.10,
+  // Magic resistance the same reference foe carries; Magic Pen erodes it on the spell
+  // lane exactly as Armor Pen erodes armor on the martial lane. Same mid value, so a
+  // point of either pen is worth the same to the lane it serves.
+  refMagicResPct: 0.10,
   penScale: 0.5,
   // Situational offense stats are real but only fire in some fights, so they
   // count at a discount (fraction of their raw %). Boss damage only vs bosses,
