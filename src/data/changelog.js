@@ -17,6 +17,10 @@ export const CHANGELOG = [
     "DPS layers the randoms back on: the range averaged with your crit chance and crit damage, times hits per cast, times how often the skill can fire with your Cooldown Reduction and Cast Speed.",
     "Big numbers abbreviate (1.2k, 3.4M) so they never overflow the tooltip. Numbers reflect your current gear, attributes and skills; situational spikes (boss damage, execute, rage) stay out so the readout is a stable baseline.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Spend menus flag gear you can't equip yet", by: "Claude", notes: [
+    "Merchant wares, the Forge preview, Enchanter pieces and Gambler pulls now show an amber \"Can't equip yet — needs N ATTR\" warning when your current attributes can't wield the piece, with a matching left accent bar on the row.",
+    "It's a heads-up, not a block — you can still buy or forge the piece and raise the attribute to grow into it — so you no longer spend gold or materials on gear you can't wear without noticing.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Cloud saves are harder to lose", by: "Claude", notes: [
     "Which copy of a hero wins a sync is now decided by total play-time, not the device clock — a phone or PC with a wrong clock can no longer overwrite your more-played save with a stale one.",
     "While a newer save is pulled onto the hero you're playing, saving pauses until the game reloads onto it, so a background autosave can't clobber the copy you just synced.",
