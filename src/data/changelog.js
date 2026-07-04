@@ -3,6 +3,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Skill cards: shorter text, wider card", by: "Claude", notes: [
+    "Every passive and keystone description rewritten terse — stats first, filler words and leftover internal tags gone.",
+    "Skill detail card is wider with slightly smaller text, so each stat line fits without wrapping mid-phrase.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Loot bag: frozen controls & clearer locking", by: "Jeff Louie", notes: [
     "Bag controls (slot tabs, Sort, Filter, Auto-Loot, Sell/Scrap all, stat key) stay frozen at the top while the list scrolls.",
     "Stat changes on a row split into two lines — green gains first, red losses below.",
