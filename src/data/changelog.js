@@ -7,11 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
-  { date: "2026-07-04", size: "medium", v: "Sets have their own size and slots", by: "Claude", notes: [
-    "Each equipment set now has its own fixed number of pieces and its own list of slots — and sets vary: Herald's Fortune is 2 trinkets, Reaver's Wrath 3, Arcanist's Regalia 4, Warden's Bastion 5, and Stalker's Shroud 6.",
-    "A set piece only rolls for a slot its set actually uses, so \"Worn: n / size\" counts against the set's real size instead of every gear slot. Sets larger than four pieces grant bonus tiers beyond the four-piece mark.",
-    "Two new sets join the chase: Stalker's Shroud (Ghost Step — dodge + double-strike) and Herald's Fortune (Golden Windfall — more gold, rarer loot, richer materials).",
-    "The set tooltip is wider and lists only the slots that set has pieces for, each in the set's own colour.",
+  { date: "2026-07-04", size: "large", v: "Sets reborn — 20 hand-crafted set collections", by: "Claude", notes: [
+    "Set pieces are now pre-defined, NAMED, fixed-stat artifacts — built exactly like uniques (a fixed signature stat, six set modifiers, and their own special power, all locked on drop and never reforgeable) — instead of random gear wearing a set tag.",
+    "There are now 20 distinct sets, each a family of specific named pieces. Sets vary in size from 2 to 6 pieces: small ones complete fast, big ones are a long chase. Between them they cover every gear slot.",
+    "Each set has its own escalating worn-count bonuses AND a completion power that switches on when you wear every piece — a set-wide effect layered on top of each piece's own power, plus the golden aura.",
+    "\"Worn: n / size\" now counts against the set's real number of pieces. The wider set tooltip lists the set's named pieces and ticks the exact ones you're wearing.",
+    "Set pieces read as fixed artifacts everywhere — the Enchanter leaves them alone, and their cards and gameState() flag them as set pieces (with their set and piece ids).",
   ] },
   { date: "2026-07-04", size: "small", v: "Top upgrade row's highlight no longer clipped", by: "Claude", notes: [
     "When the first item in the bag is an upgrade, its green highlight now shows its full top edge instead of having the border and glow cut off under the frozen stat-key bar. A small gap sets the top row clear of the pinned header.",
