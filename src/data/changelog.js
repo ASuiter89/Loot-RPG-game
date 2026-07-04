@@ -11,6 +11,10 @@ export const CHANGELOG = [
     "Version History now dates each update by its Pacific calendar day — evening changes no longer jump ahead to the next day's heading.",
     "Re-dated recent entries that had rolled to the wrong day.",
   ] },
+  { date: "2026-07-03", size: "medium", v: "Five more electronic styles for the soundtrack", by: "Claude", notes: [
+    "New generative styles, each its own full kit (key, groove, instruments): Strobe (progressive house with a rolling hypnotic arp), Prism (lush, warped future bass), Summit (a warm chillwave anthem with marching tribal drums), Levels (bright, folk-tinged melodic house), and Riddim (a slow, heavy moombahton dembow).",
+    "Pick any from Settings ▸ Audio, or leave it on Shuffle to drift through them all.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Terrain & scenery fixes", by: "Claude", notes: [
     "Fixed ground that sometimes showed a hard-edged square of the base floor punching through a patch of accent ground — one terrain was missing a diagonal blend tile, so its edges broke at corners. Added the tile, and the ground now falls back to a seamless fill rather than a hard patch if any blend tile is ever absent.",
     "Tall scenery — trees, tall furniture — no longer vanishes the moment its base scrolls off the bottom of the screen; its crown keeps drawing while any part of it is still in view.",
