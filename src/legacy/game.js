@@ -5760,7 +5760,7 @@ let sprintMode = 'hold';
 try { if (localStorage.getItem(SPRINT_MODE_KEY) === 'toggle') sprintMode = 'toggle'; } catch (e) {}
 let sprintLatched = false;                              // auto-sprint engaged (TOGGLE mode)
 // Optional slim HP (red) / MP (blue) bars under the hero, styled like the
-// stamina bar and popping up the same way — only while that vital isn't full.
+// stamina bar but ALWAYS visible while the setting is on (never hidden at full).
 // Off by default; the choice is saved across sessions.
 const HERO_BARS_KEY = 'dungeonLoot_heroBars';
 let showHeroBars = false;
@@ -14572,17 +14572,18 @@ function draw() {
   if (fxHero) ctx.globalAlpha = heroAlpha;
   drawHeroSprite(px + (pLunge ? pLunge.dx : 0), py - heroLift + (pLunge ? pLunge.dy : 0), tw, th, scale);
   ctx.restore();
-  // Vital bars under the hero — each pops up only while its vital isn't full, so
-  // they stay out of the way at full. Stamina (amber) always shows this way; the
-  // optional Hero Bars setting adds red Health and blue Mana above it. They stack
-  // just under the hero's feet, with the stamina bar at its usual spot. Hidden
-  // while teleporting — the hero isn't really standing on the floor then.
+  // Vital bars under the hero. With the Hero Bars setting ON, red Health and
+  // blue Mana are ALWAYS visible (even at full — never blinking away); the
+  // stamina bar (amber) still pops up only while stamina isn't full, so it
+  // stays out of the way at rest. They stack just under the hero's feet, with
+  // the stamina bar at its usual spot. Hidden while teleporting — the hero
+  // isn't really standing on the floor then.
   if (!fxHero) {
     const bw = tw * 0.8, bh = Math.max(2, th * 0.07), bx = px + (tw - bw) / 2;
     const bars = [];   // top → bottom
-    if (showHeroBars && player.hp < player.maxHp - 0.5)
+    if (showHeroBars)
       bars.push({ frac: player.hp / player.maxHp, track: '#3a1013', fill: PALETTE.hp });
-    if (showHeroBars && player.maxMp > 0 && player.mp < player.maxMp - 0.5)
+    if (showHeroBars && player.maxMp > 0)
       bars.push({ frac: player.mp / player.maxMp, track: '#102138', fill: PALETTE.mp });
     if (player.stamina < player.maxStamina - 0.5)
       bars.push({ frac: player.stamina / player.maxStamina, track: '#4a3a12', fill: '#ffcf52' });
