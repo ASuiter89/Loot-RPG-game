@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Fired attacks hit on impact, not on cast", by: "Claude", notes: [
+    "Bow and staff shots, ranged summon bolts, and bolt/blast spells now deal their damage the instant the projectile REACHES the target — a foe no longer dies (and vanishes) before the bolt visibly connects.",
+    "The release sound still fires as you loose the shot; the hit, its numbers and any crit land as the bolt arrives.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Deleting a hero now sticks across devices", by: "Claude", notes: [
     "Fixed cloud saves letting a deleted hero come back: deleting on one device, then opening another, used to resurrect the hero — and it would ping-pong between devices forever.",
     "Deletions now sync. Removing a hero records it in a shared deletion ledger that every device merges on sign-in and Sync Now, so the character is scrubbed everywhere and never pushed back up. Delete once, it's gone on all your devices.",
