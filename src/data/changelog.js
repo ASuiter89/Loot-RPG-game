@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Top upgrade row's highlight no longer clipped", by: "Claude", notes: [
+    "When the first item in the bag is an upgrade, its green highlight now shows its full top edge instead of having the border and glow cut off under the frozen stat-key bar. A small gap sets the top row clear of the pinned header.",
+  ] },
   { date: "2026-07-04", size: "medium", v: "Desktop-only controls", by: "Claude", notes: [
     "The game is now built for mouse and keyboard only. The on-screen move pad, the floating movement stick, tap-and-swipe steering, the rotate-your-device prompt and the touch settings gear have all been removed.",
     "Nothing changes for mouse-and-keyboard play — every control works exactly as before.",
