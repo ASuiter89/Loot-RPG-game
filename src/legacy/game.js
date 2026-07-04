@@ -25,7 +25,7 @@ import { footprintSealsPath } from '../systems/decorPlacement.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
-import { castHaste, castsPerSecond, effectiveDps } from '../systems/skillDamage.js';
+import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
@@ -6412,13 +6412,15 @@ window.gameState = function gameState(radius) {
       range: c ? (c.range || null) : null,
       radius: c ? (c.radius || null) : null,
     };
-    // Damage preview: the raw per-hit range (crit excluded) and effective single-
-    // target DPS (crit + cast rate folded in) versus a typical foe at this depth —
-    // what the skill's tooltip shows. Null for non-damage actives. See the "damage"
-    // topic in gameGuide() and skillDamagePreview() for the exact model.
+    // Damage preview: the min–max a single activation deals to a foe at this depth
+    // (crit and chance procs excluded, multi-hit folded in), the effective sustained
+    // DPS (crit + cast rate factored), and the CDR-adjusted cooldown — what the
+    // skill's tooltip shows. Null for non-damage actives. See the "damage" topic in
+    // gameGuide() and skillDamagePreview() for the exact model.
     const dp = (typeof skillDamagePreview === 'function') ? skillDamagePreview(node, rank) : null;
-    o.damage = dp ? { min: dp.min, max: dp.max, hits: dp.hits } : null;
+    o.damage = dp ? { min: dp.min, max: dp.max } : null;
     o.dps = dp ? Math.round(dp.dps) : null;
+    o.cooldownFull = (typeof effectiveSkillCd === 'function') ? Math.round(effectiveSkillCd(node, rank) * 10) / 10 : (node ? node.cd : null);
     if (idx != null) {
       o.slot = idx + 1;
       o.key = (typeof skillKeyLabel === 'function') ? skillKeyLabel(idx + 1) : String(idx + 1);
@@ -6767,7 +6769,7 @@ window.gameGuide = function gameGuide(topic) {
       `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
       `So NO — Attack does not feed everything: ATK + weapon Damage power auto-attacks and martial skills only; spells ignore them and live on Spirit + Spell Power. The three % amps (IDMG / Skill Power / Spell Power) are one-per-source and never cross over.`,
       `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). gameState().player.offense reports your current skillPower / spellPower / increasedDmg / attackSpeed / castSpeed / cooldownReduction totals.`,
-      `TOOLTIP READOUT: each damage skill's tooltip (and its skill-tree card) shows two numbers versus a typical foe at your current depth — "Damage lo–hi", the raw per-hit range a single strike can roll (crit EXCLUDED, but folding in the weapon roll, ATK, your damage attributes, gear IDMG/Skill/Spell Power, the skill's coefficient & rank, synergies, and the foe's armour at this depth) — and "DPS", the effective single-target damage per second (that range averaged with your crit chance & crit damage, times hits-per-cast, times how often the skill fires with your CDR/Cast Speed). Big numbers abbreviate (1.2k, 3.4M). Situational spikes (boss damage, execute, rage, transient buffs) are left out so it stays a stable baseline. gameState() skills carry the same as { damage:{min,max,hits}, dps }.`,
+      `TOOLTIP READOUT: each damage skill's tooltip (and its skill-tree card) shows two pills versus a typical foe at your current depth. "Damage lo–hi" is the absolute min to absolute max a single ACTIVATION deals to that foe — the weapon roll, ATK, your damage attributes, gear IDMG/Skill/Spell Power, the skill's coefficient & rank, synergies and the foe's armour are all folded in, and a multi-strike skill's hits are summed into the range — but crit and other chance-only effects (status/elemental procs) and external buffs (shrines, food, war-cries) are EXCLUDED, so it's a stable floor–ceiling. "DPS" is the effective sustained damage per second: that range's midpoint, lifted by your crit chance × crit damage, times how many times a second the skill can be cast. The cooldown shown in the tooltip is the real one AFTER your Cooldown Reduction / Cast Speed. Big numbers abbreviate (1.2k, 3.4M). gameState() skills carry { damage:{min,max}, dps, cooldownFull }.`,
       `Gear gating is thoughtful: a MELEE/RANGED weapon can only roll Skill Power & Attack Speed; a WAND/STAFF only Spell Power & Cast Speed. Gloves & rings lean martial (Skill Power); amulets & caster off-hands lean arcane (Spell/Cast). So the weapon you wield already points your build at one lane.`,
     ],
     autocast: [
@@ -19627,10 +19629,11 @@ function skillDamagePreview(node, rank) {
   if (!isWeapon && !isSpellDmg) return null; // no direct damage → no readout
 
   const r = rank || 1;
-  // Rank-10 "Mastered" grants an extra strike (resolveCast bumps repeat) — the only
-  // mastery step that changes single-target damage; the rest only widen targeting.
-  let hits = Math.max(1, c.repeat || 1);
-  if ((rank || 0) >= 10 && c.repeat) hits = c.repeat + 1;
+  // Multi-strike: a cast that lands several hits on the SAME target (cast.repeat);
+  // rank-10 "Mastered" adds one more. Folded into the range below so the pill shows
+  // the whole damage ONE activation does to a foe, not a single tick of it.
+  let strikes = Math.max(1, c.repeat || 1);
+  if ((rank || 0) >= 10 && c.repeat) strikes = c.repeat + 1;
 
   const synM = synergyMult(node);
   const rs = rankScale(r);
@@ -19640,45 +19643,62 @@ function skillDamagePreview(node, rank) {
   const armor = enemyArmorPct(foe);
   const armorFactor = armor > 0 ? (1 - armor * (1 - armorPenFrac())) : 1;
 
-  let min, max;
+  // Per-strike min/max — the honest floor/ceiling of a single hit, crit and all
+  // chance-based procs (status, elemental) EXCLUDED, and transient/external buffs
+  // (shrine Power, food, war-cry) left out so the range is a stable baseline.
+  let hitMin, hitMax;
   if (isWeapon) {
     const [wLo, wHi] = weaponDmgRange();
     const flat = player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
     const mult = c.wpn * synM * rs * skillPowerMult();
-    // The always-on weapon multipliers from applyOffenseMods (crit + situational
-    // spikes deliberately excluded): class damage, difficulty scar, gear IDMG, armour.
+    // The always-on weapon multipliers from applyOffenseMods: class damage,
+    // difficulty scar, gear IDMG, armour (crit + situational spikes excluded).
     const off = classDmgDealtMult() * diffDebuffMult() * (1 + totalStat('IDMG') / 100) * armorFactor;
-    min = Math.max(1, Math.round((wLo + flat) * mult * off));
-    max = Math.max(1, Math.round((wHi + flat) * mult * off));
+    hitMin = Math.max(1, Math.round((wLo + flat) * mult * off));
+    hitMax = Math.max(1, Math.round((wHi + flat) * mult * off));
   } else {
-    // Spells have no roll — spellBase is deterministic, so min === max.
+    // Spells have no roll — spellBase is deterministic, so hitMin === hitMax.
     const base = spellBase(c.flat || 12, c.perLvl || 2) * c.spell * synM * rs;
     const off = diffDebuffMult() * armorFactor; // spells skip class-dmg & IDMG (isSpell path)
-    min = max = Math.max(1, Math.round(base * off));
+    hitMin = hitMax = Math.max(1, Math.round(base * off));
   }
+  // Fold the strikes in: the absolute min/max a single ACTIVATION deals to a foe.
+  const min = hitMin * strikes;
+  const max = hitMax * strikes;
 
   const critChance = critChanceVs(foe);
   const critMult = critDamageMult();
-  // Cast rate: base cooldown shortened by the same haste the real cast applies —
-  // CDR for every active, Cast Speed for spells (keyed off castKind, so a hybrid's
-  // spell tag still speeds it), and the rank-7 Honed factor.
-  const haste = castHaste({
-    cdr: totalStat('CDR'), castSpd: totalStat('CASTSPD'),
-    isSpell: castKind(node) === 'spell', honed: r >= 7,
-  });
-  const cps = castsPerSecond(node.cd, haste);
-  const dps = effectiveDps({ min, max, critChance, critMult, hitsPerCast: hits, castsPerSec: cps });
-  return { min, max, hits, dps, kind: isWeapon ? 'weapon' : 'spell' };
+  // Effective DPS = the range's midpoint, lifted by the expected crit multiplier,
+  // times how many times a second the skill can actually be cast (its cooldown after
+  // CDR / Cast Speed / the rank-7 Honed cut, honouring the 0.5s floor). Strikes are
+  // already in min/max, so hitsPerCast is 1 here.
+  const effCd = effectiveSkillCd(node, r);
+  const dps = effectiveDps({ min, max, critChance, critMult, hitsPerCast: 1, castsPerSec: 1 / effCd });
+  return { min, max, dps, effectiveCd: effCd };
 }
 
-// One compact tooltip line (`.ht-sub`) for a damage skill: the raw per-hit range
-// and the effective single-target DPS, both abbreviated when large. '' otherwise.
+// The recharge an active ACTUALLY has right now, in seconds: its base cooldown
+// shortened by the same haste the cast applies — Cooldown Reduction for every
+// active, Cast Speed for spells, the rank-7 Honed cut — floored at 0.5s. Works for
+// any active (buffs/heals too), so tooltips can show the real, CDR-adjusted cd.
+function effectiveSkillCd(node, rank) {
+  const haste = castHaste({
+    cdr: totalStat('CDR'), castSpd: totalStat('CASTSPD'),
+    isSpell: castKind(node) === 'spell', honed: (rank || 1) >= 7,
+  });
+  return effectiveCooldown((node && node.cd) || 0, haste);
+}
+// Round a cooldown to a tidy one-decimal seconds string ("3s", "3.2s").
+function fmtCd(secs) { return `${Math.round((secs || 0) * 10) / 10}`; }
+
+// Two tooltip pills (`.ht-sub` lines) for a damage skill: the min–max a single
+// activation deals to a foe (pre-crit), and the effective sustained DPS. Both
+// abbreviate when large. '' for a non-damage active.
 function skillDmgTipLine(node, rank) {
   const p = skillDamagePreview(node, rank);
   if (!p) return '';
-  const rng = formatDamageRange(p.min, p.max);
-  const hits = p.hits > 1 ? ` <span style="opacity:.75">×${p.hits}</span>` : '';
-  return `<div class='ht-sub'>Damage <b>${rng}</b>${hits} · DPS <b style='color:var(--gold)'>${abbreviateNumber(p.dps)}</b></div>`;
+  return `<div class='ht-sub'>Damage <b>${formatDamageRange(p.min, p.max)}</b></div>`
+    + `<div class='ht-sub'>DPS <b style='color:var(--gold)'>${abbreviateNumber(p.dps)}</b></div>`;
 }
 
 // Direction (cardinal) toward the nearest foe in range, for line/beam shapes.
@@ -22737,7 +22757,7 @@ function renderSkills(el) {
   const sn = selectedSkillId ? byId[selectedSkillId] : null;
   if (sn) {
     const rank = skillRank(sn.id);
-    const typeTxt = sn.type === 'active' ? `<span data-spr=ic_stun></span> ACTIVE · ${castKind(sn) === 'spell' ? '<span data-spr=ic_orb></span> SPELL' : '<span data-spr=w_sword></span> SKILL'} · ${skillManaCost(sn, rank)}MP · ${sn.cd}s cd · ${castShapeLabel(sn.cast)}` : 'PASSIVE';
+    const typeTxt = sn.type === 'active' ? `<span data-spr=ic_stun></span> ACTIVE · ${castKind(sn) === 'spell' ? '<span data-spr=ic_orb></span> SPELL' : '<span data-spr=w_sword></span> SKILL'} · ${skillManaCost(sn, rank)}MP · ${fmtCd(effectiveSkillCd(sn, rank))}s cd · ${castShapeLabel(sn.cast)}` : 'PASSIVE';
     const pips = (sn.type === 'active' || (sn.type === 'passive' && !sn.keystone)) ? milestonePips(rank) : '';
     const rankTxt = ` <span style="color:var(--gold)">${rank}/${sn.max}${pips ? ' ' + pips : ''}</span>`;
     const reqRows = [];
@@ -23041,14 +23061,14 @@ function skillMechList(n, rank) {
     // a player which gear stats power this ability.
     if (castKind(n) === 'spell') add('Spell', '#b08ad8', 'Magic — scales with Spell Power; Cooldown Reduction &amp; Cast Speed shorten its recharge.');
     else add('Skill', '#e0a24b', 'Martial — scales with your weapon damage &amp; Skill Power; Cooldown Reduction shortens its recharge.');
-    // Live damage readout — the raw per-hit range and the effective single-target
-    // DPS, folding in gear, attributes, rank, crit and cast rate against a foe at
-    // this depth. Only for actives that actually deal direct damage (wpn/spell).
+    // Two live readout pills — the min–max a single activation deals to a foe at
+    // this depth (gear/attributes/rank folded in, crit and chance procs excluded),
+    // and the effective sustained DPS (that range's midpoint × crit × how often it
+    // fires). Only for actives that deal direct damage (wpn/spell).
     const dp = skillDamagePreview(n, rank);
     if (dp) {
-      const rng = formatDamageRange(dp.min, dp.max);
-      const hitsTxt = dp.hits > 1 ? ` ×${dp.hits} hits` : '';
-      add('Damage', '#e05a4b', `<b>${rng}</b> per hit${hitsTxt} · about <b>${abbreviateNumber(dp.dps)}</b> DPS vs. a depth-${curDepth()} foe.`);
+      add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b> to a foe at this depth, before crit.`);
+      add('DPS', '#e0a24b', `about <b>${abbreviateNumber(dp.dps)}</b> sustained — crit chance/damage and cast rate factored in.`);
     }
     // Movement first — gap-closers/pulls/escapes are the headline of a mobility skill.
     if (c.shape === 'teleport') add('Gap-closer', '#5fc9c0', `Blink up to ${c.range || 6} tiles onto the nearest foe and strike — closes on ranged attackers.`);
@@ -23310,7 +23330,7 @@ function renderSkillBar() {
     // Desktop names the number key; touch (no keyboard, reached by long-press) says "tap to cast".
     const castHint = touchUI() ? ' · tap to cast' : (key ? ` · press ${key}` : '');
     const moveHint = touchUI() ? 'tap the SKILLS tab to re-slot' : 'drag to rearrange · drag a tree skill to swap';
-    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
+    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
     return cell(kbShort(key), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}',${i})" ondragend="skillDragEnd()" ${dropAttrs(i)} ${hoverTip(tip)} onclick="castSkillById('${s.id}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
@@ -23332,7 +23352,7 @@ function renderSkillBar() {
     const s = autoS;
     const cd = skillCd(s.id);
     const ready = cd <= 0 && player.mp >= s.mp && player.hp > 0;
-    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${touchUI() ? 'tap to change or clear' : 'drag a skill here to change · tap to edit'}</div>`;
+    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${touchUI() ? 'tap to change or clear' : 'drag a skill here to change · tap to edit'}</div>`;
     autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}','${AUTO_SLOT}')" ondragend="skillDragEnd()" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}

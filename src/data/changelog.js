@@ -17,6 +17,12 @@ export const CHANGELOG = [
   { date: "2026-07-04", size: "small", v: "Sellsword camp cards show a big mercenary portrait", by: "Claude", notes: [
     "Each Sellsword hire card now matches the hero card: name and description sit left-aligned, with the mercenary's walking sprite standing tall on the right instead of a small icon crammed beside the name.",
   ] },
+  { date: "2026-07-04", size: "small", v: "Skill damage pills: a true range, clearer DPS, real cooldown", by: "Claude", notes: [
+    "The skill tooltip's Damage pill now shows a real low–high range — the absolute minimum to absolute maximum a single cast deals to a foe at your depth. A multi-strike skill's hits are summed into the range instead of showing a confusing \"×N\" tag.",
+    "DPS is its own pill now: the range's midpoint, adjusted for your crit chance and crit damage, times how often the skill can be cast per second.",
+    "Both exclude crit and other chance-only effects (which the DPS folds back in) and external buffs like shrines, so the range is a stable floor and ceiling for the hit itself.",
+    "The cooldown shown in the tooltip is now the real one after your Cooldown Reduction and Cast Speed, not the base number.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Floating combat numbers abbreviate when big", by: "Claude", notes: [
     "The damage, heal and gold numbers that pop up on screen now abbreviate once they pass a thousand (15230 → 15k, 2500000 → 2.5M) instead of splashing the tile with a wall of digits — matching the skill tooltips and the gold in your HUD.",
     "Small numbers, crit marks and labels (BLOCK, MISS, +50 MP) read exactly as before.",
