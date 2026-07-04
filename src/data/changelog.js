@@ -14,6 +14,11 @@ export const CHANGELOG = [
     "New gear stat MAGIC PENETRATION pierces enemy magic resistance — the caster's counterpart to Armor Pen. It rolls on caster gear and enchants, and now sits on wands and staves like the Astral Needle, where armor pen never made sense.",
     "The bestiary card and gameState() now report each foe's armor and magic-resist, so you can plan your loadout around what's ahead.",
   ] },
+  { date: "2026-07-04", size: "small", v: "Touch: tap a skill to cast it, hold to read it", by: "Claude", notes: [
+    "On phones, tapping a skill, potion or action button now just fires it — it no longer pops the tooltip over the game the instant you tap.",
+    "To read what a button does, HOLD it for about half a second: its tooltip pops beside it, and that hold won't cast the skill or spend the potion.",
+    "Keyboard-and-mouse play is untouched — hover still shows tooltips exactly as before.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Boss overhaul: 15 guardians, sealed arenas, and a fully telegraphed Rat King", by: "Claude", notes: [
     "Ten all-new bosses join the roster, bringing it to fifteen. Each difficulty now has its OWN five guardians — Normal keeps the original five, while Hardened and Brutal each get five new ones, and Endless rolls any of the fifteen at random. Every newcomer is bespoke pixel art.",
     "Every boss floor is now a fixed circular arena: you enter from the stairs at the south, the guardian holds the centre, the exit is at the north, and pillars give cover. No wandering trash and no loot clutter — just you and the boss.",

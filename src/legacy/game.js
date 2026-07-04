@@ -7011,7 +7011,7 @@ window.gameGuide = function gameGuide(topic) {
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A quick key-tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
       `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
-      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right; the header holds the minimap, vitals, and the settings + bag buttons (top-right). The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
+      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right — a quick TAP on a footer button fires it (cast the skill, quaff the potion); HOLD one for ~0.5s to read its tooltip instead of firing. The header holds the minimap, vitals, and the settings + bag buttons (top-right). The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
@@ -25024,6 +25024,13 @@ function hideTooltip() { ttEl.style.display = 'none'; tooltipShowing = null; }
 // wrapper carries the handlers so it fires even when the button is disabled.
 const hoverTipEl = document.getElementById('hovertip');
 function showHoverTip(e, el) {
+  // Touch has no hover: a tap on a control synthesizes mouseenter, which would pop
+  // this card the instant you tap a skill / potion to USE it — burying the game
+  // behind a tooltip. So on touch we never raise a tip from the pointer here. A
+  // plain tap fires the button's action; a long-press raises the card instead (see
+  // the long-press handler below), and non-actionable data-tip surfaces still pop on
+  // a plain tap via the tap-to-tip fallback.
+  if (isTouchMode()) return;
   // A selected skill node already shows its full detail popover, so suppress the
   // short hover card for it — otherwise the rebuild-on-select re-fires mouseenter
   // on the freshly-inserted node under a stationary cursor and stacks the small
@@ -25034,7 +25041,7 @@ function showHoverTip(e, el) {
 // Render the styled popup for an element and anchor it to that element. Fed by the
 // hover path (showHoverTip). `htmlOverride` lets a caller promote a native `title`
 // into the same look when there's no richer data-tip.
-function renderHoverTip(el, htmlOverride) {
+function renderHoverTip(el, htmlOverride, rectOverride) {
   const html = htmlOverride || (el && el.dataset ? el.dataset.tip : '');
   if (!html) return;
   hoverTipEl.innerHTML = html;
@@ -25043,7 +25050,9 @@ function renderHoverTip(el, htmlOverride) {
   hoverTipEl.style.display = 'block';
   // Pop out beside the element like every other tooltip (see
   // placeTooltipBesideAnchor): to the side, never over the thing you're pointing at.
-  placeTooltipBesideAnchor(hoverTipEl, el.getBoundingClientRect());
+  // A caller (the touch long-press) may pass a rect captured at press time, so the
+  // card still anchors correctly even if the bar re-rendered the node out mid-hold.
+  placeTooltipBesideAnchor(hoverTipEl, rectOverride || el.getBoundingClientRect());
 }
 function hideHoverTip() { hoverTipEl.style.display = 'none'; }
 
@@ -25079,6 +25088,51 @@ document.addEventListener('click', (e) => {
 function hoverTip(html) {
   return `data-tip="${html.replace(/"/g, '&quot;')}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"`;
 }
+
+// ── TOUCH: long-press to inspect a tipped control ──
+// On touch the hover tip is suppressed (showHoverTip bails above), so a plain tap
+// on a skill / potion / action button now just fires it. Reading what a control
+// DOES therefore moves to a HOLD: press and keep still for ~0.45s and the styled
+// card pops beside it, and the click that press ends on is swallowed so inspecting
+// a skill never also casts it. A drag past the tap slop (a scroll or a slot
+// reorder) cancels the pending hold. Any data-tip element qualifies — actionable
+// ones (a tap DOES something) rely on the hold for their tip, while plain info
+// surfaces are ALSO reachable by a single tap via the tap-to-tip fallback below.
+const LONGPRESS_MS = 450;
+let _lpTimer = null, _lpEl = null, _lpRect = null, _lpX = 0, _lpY = 0, _lpFired = false, _lpShown = false;
+function _lpCancel() { if (_lpTimer !== null) { clearTimeout(_lpTimer); _lpTimer = null; } _lpEl = null; }
+document.addEventListener('pointerdown', (e) => {
+  if (!isTouchMode() || e.pointerType !== 'touch') return;
+  _lpFired = false;
+  // A fresh touch dismisses a card an earlier long-press raised (no hover to end
+  // it). The tap then proceeds normally — a quick tap on a skill still casts it.
+  if (_lpShown) { hideHoverTip(); _lpShown = false; }
+  // Any tipped control — the nearest data-tip ancestor carries the card (some
+  // actionable controls wrap their button in a data-tip span, e.g. .ench-tipwrap).
+  const btn = e.target.closest('[data-tip]');
+  if (!btn) return;
+  _lpCancel();
+  // Anchor to the rect captured now (the bar re-renders the button node every state
+  // change; the screen slot stays put, so this survives a mid-hold rebuild).
+  _lpEl = btn; _lpRect = btn.getBoundingClientRect(); _lpX = e.clientX; _lpY = e.clientY;
+  _lpTimer = setTimeout(() => {
+    _lpTimer = null;
+    if (!_lpEl) return;
+    _lpFired = _lpShown = true;                 // raise the card; swallow this press's click
+    renderHoverTip(_lpEl, null, _lpRect);
+    try { if (navigator.vibrate) navigator.vibrate(8); } catch (_) {}   // haptic where supported
+  }, LONGPRESS_MS);
+}, true);
+document.addEventListener('pointermove', (e) => {
+  if (_lpTimer !== null && (Math.abs(e.clientX - _lpX) > TAP_SLOP || Math.abs(e.clientY - _lpY) > TAP_SLOP)) _lpCancel();
+}, { capture: true, passive: true });
+document.addEventListener('pointerup', _lpCancel, true);
+document.addEventListener('pointercancel', _lpCancel, true);
+// A long-press already raised the tip — eat the click the press ends on so holding
+// to read a skill never also casts it. Capture phase, ahead of the button's onclick.
+document.addEventListener('click', (e) => {
+  if (_lpFired) { _lpFired = false; e.stopPropagation(); e.preventDefault(); }
+}, true);
 
 // Dismiss the tooltip when tapping anywhere (the tooltip, the map, the log, etc.),
 // except when tapping a loot item or gear slot (those manage it themselves).
