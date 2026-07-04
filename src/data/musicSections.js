@@ -306,6 +306,111 @@ export const MUSIC_SECTIONS = [
       kickPat: ['main', null, null, null, null, 'main', null, null],
       hatPat:  [1,1,1,1,1,1,1,1] } },
 
+  // Progressive house (deadmau5-inspired) — hypnotic A minor, ~126 BPM. The rolling
+  // arp is the whole point: it never stops evolving. Bass: a steady 8th-note pulse
+  // that ducks under the kick. Comp: long sidechained chords that swell and breathe.
+  { name: 'Strobe',  tempo: 0.238,
+    scale: [0, 2, 3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 24],
+    progs: [
+      [[0,3,7],[7,10,14],[8,12,15],[3,7,10]],      // Am  Em  F   C
+      [[5,8,12],[0,3,7],[7,10,14],[10,14,17]],      // Dm  Am  Em  G
+    ],
+    bass: { type: 'sawtooth', cutoff: 600,  q: 3, detune: 5, vol: 0.30 },
+    pad:  { type: 'sawtooth', cutoff: 1500, q: 2, detune: 6, vol: 0.12 },
+    lead: { type: 'sawtooth', cutoff: 3000, q: 1, detune: 5, vol: 0.16 },
+    leadDensity: 0.35, arpDensity: 0.7,
+    kickVol: 1.0, kickMidVol: 1.0, hatVol: 0.07,
+    groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 1, arpVel: 0.85, chordOct: 12,
+      leadLong: 0.5, leadRest: 0.25,
+      bassPat: [{d:'r',l:0.7,v:1.0}, {d:'8',l:0.5,v:0.7,p:0.7}, {d:'r',l:0.7,v:0.95}, {d:'8',l:0.5,v:0.7,p:0.7}, {d:'r',l:0.7,v:1.0}, {d:'8',l:0.5,v:0.7,p:0.7}, {d:'5',l:0.6,v:0.85,p:0.8}, {d:'n2',l:0.6,v:0.9,p:0.85}],
+      chordPat: [{l:1.4,v:0.9,voi:'open'}, null, null, null, {l:1.4,v:0.9,voi:'inv1'}, null, null, {l:0.6,v:0.75,voi:'root',p:0.6,next:true}],
+      kickPat: ['main', null, 'main', null, 'main', null, 'main', null],
+      hatPat:  [0,1,0,1,0,1,0,1] } },
+
+  // Future bass (Flume-inspired) — lush, warped C Lydian at a half-time ~95 BPM.
+  // Big detuned super-saw chord stabs bend and shimmer; the wonky syncopation is
+  // the signature. Bass: a slow, deep sub. Comp: heavy-detune stabs up in octaves.
+  { name: 'Prism',   tempo: 0.315,
+    scale: [3, 5, 7, 9, 10, 12, 14, 15, 17, 19, 21, 22, 24],
+    progs: [
+      [[3,7,10],[10,14,17],[7,10,14],[5,9,12]],    // C   G   Em  D
+      [[12,15,19],[7,10,14],[3,7,10],[5,9,12]],     // Am  Em  C   D
+    ],
+    bass: { type: 'triangle', cutoff: 560,  q: 2, detune: 4, vol: 0.28 },
+    pad:  { type: 'sawtooth', cutoff: 2400, q: 1, detune: 12, vol: 0.14 },
+    lead: { type: 'triangle', cutoff: 3400, q: 1, detune: 6, vol: 0.16 },
+    leadDensity: 0.45, arpDensity: 0.5,
+    kickVol: 0.85, kickMidVol: 0.55, hatVol: 0.08,
+    groove: { swing: 0.0, leadOct: 24, arpOct: 12, arpEvery: 2, arpVel: 0.7, chordOct: 12,
+      leadLong: 0.4, leadRest: 0.2,
+      bassPat: [{d:'r',l:2.2,v:1.0}, null, null, null, {d:'r',l:1.6,v:0.9}, null, {d:'5',l:0.9,v:0.8,p:0.7}, {d:'n2',l:0.9,v:0.85,p:0.8}],
+      chordPat: [{l:1.2,v:1.0,voi:'wide'}, null, {l:0.7,v:0.85,voi:'open',p:0.8}, {l:0.9,v:0.9,voi:'inv1'}, null, {l:0.8,v:0.85,voi:'open',p:0.75}, {l:0.7,v:0.8,voi:'inv2',p:0.7}, {l:0.9,v:0.85,voi:'open',p:0.7,next:true}],
+      kickPat: ['main', null, null, null, 'mid', null, null, null],
+      hatPat:  [0,1,1,1,0,1,1,1] } },
+
+  // Chillwave anthem (ODESZA-inspired) — warm, cinematic D major, ~95 BPM. Big
+  // marching tribal drums under euphoric swelling chords. Bass: a rounded root
+  // march. Comp: wide, uplifting chords with a bell melody chopping high above.
+  { name: 'Summit',  tempo: 0.315,
+    scale: [5, 7, 9, 10, 12, 14, 16, 17, 19, 21, 22, 24, 26],
+    progs: [
+      [[5,9,12],[10,14,17],[14,17,21],[12,16,19]],  // D   G   Bm  A
+      [[7,10,14],[12,16,19],[5,9,12],[10,14,17]],    // Em  A   D   G
+    ],
+    bass: { type: 'sawtooth', cutoff: 620,  q: 3, detune: 4, vol: 0.28 },
+    pad:  { type: 'triangle', cutoff: 2000, q: 1, detune: 6, vol: 0.13 },
+    lead: { type: 'sine',     cutoff: 4200, q: 1, detune: 3, vol: 0.17 },
+    leadDensity: 0.55, arpDensity: 0.5,
+    kickVol: 1.0, kickMidVol: 0.85, hatVol: 0.05,
+    groove: { swing: 0.0, leadOct: 24, arpOct: 12, arpEvery: 2, arpVel: 0.75, chordOct: 0,
+      leadLong: 0.45, leadRest: 0.18,
+      bassPat: [{d:'r',l:1.2,v:1.0}, null, {d:'8',l:0.8,v:0.75,p:0.8}, null, {d:'r',l:1.2,v:0.95}, null, {d:'5',l:0.7,v:0.8,p:0.8}, {d:'n1',l:0.7,v:0.82,p:0.8}],
+      chordPat: [{l:1.6,v:0.95,voi:'open'}, null, null, {l:0.7,v:0.8,voi:'inv1',p:0.7}, {l:1.6,v:0.9,voi:'wide'}, null, {l:0.7,v:0.8,voi:'inv2',p:0.7}, {l:0.7,v:0.75,voi:'open',p:0.65,next:true}],
+      kickPat: ['main', null, 'mid', null, 'main', null, 'mid', 'mid'],
+      hatPat:  [1,0,1,0,1,0,1,0] } },
+
+  // Melodic house (Avicii-inspired) — bright, folk-tinged C major, ~126 BPM. A
+  // catchy plucky lead carries the song; piano-style stabs bounce underneath. Bass:
+  // a bouncing four-on-the-floor pluck. Euphoric drop energy, straight beat.
+  { name: 'Levels',  tempo: 0.238,
+    scale: [3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 20, 22, 24],
+    progs: [
+      [[3,7,10],[10,14,17],[12,15,19],[8,12,15]],   // C   G   Am  F
+      [[8,12,15],[3,7,10],[10,14,17],[12,15,19]],    // F   C   G   Am
+    ],
+    bass: { type: 'sawtooth', cutoff: 700,  q: 3, detune: 5, vol: 0.29 },
+    pad:  { type: 'triangle', cutoff: 2600, q: 1, detune: 4, vol: 0.12 },
+    lead: { type: 'triangle', cutoff: 3600, q: 1, detune: 4, vol: 0.19 },
+    leadDensity: 0.75, arpDensity: 0.4,
+    kickVol: 1.1, kickMidVol: 1.1, hatVol: 0.08,
+    groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 2, arpVel: 0.65, chordOct: 12,
+      leadLong: 0.35, leadRest: 0.12,
+      bassPat: [{d:'r',l:0.7,v:1.0}, {d:'8',l:0.5,v:0.7,p:0.6}, null, {d:'5',l:0.6,v:0.8,p:0.8}, {d:'r',l:0.7,v:1.0}, {d:'8',l:0.5,v:0.7,p:0.6}, null, {d:'n2',l:0.6,v:0.88,p:0.85}],
+      chordPat: [{l:0.6,v:0.9,voi:'root'}, null, {l:0.5,v:0.8,voi:'inv1',p:0.8}, {l:0.5,v:0.8,voi:'open',p:0.7}, {l:0.6,v:0.9,voi:'root'}, null, {l:0.5,v:0.8,voi:'inv1',p:0.8}, {l:0.5,v:0.75,voi:'open',p:0.7,next:true}],
+      kickPat: ['main', null, 'main', null, 'main', null, 'main', null],
+      hatPat:  [0,1,0,1,0,1,0,1] } },
+
+  // Moombahton (Diplo-inspired) — a slow, heavy dancehall riddim in A minor, ~108
+  // BPM. Syncopated dembow kick with fat horn-stab chords. Bass: a fat, off-kilter
+  // synth that hits on the off-beats. Comp: short, punchy horn stabs up high.
+  { name: 'Riddim',  tempo: 0.278,
+    scale: [0, 2, 3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 24],
+    progs: [
+      [[0,3,7],[8,12,15],[7,10,14],[0,3,7]],       // Am  F   Em  Am
+      [[0,3,7],[5,8,12],[8,12,15],[7,10,14]],       // Am  Dm  F   Em
+    ],
+    bass: { type: 'sawtooth', cutoff: 560,  q: 4, detune: 6, vol: 0.31 },
+    pad:  { type: 'square',   cutoff: 1500, q: 2, detune: 5, vol: 0.11 },
+    lead: { type: 'sawtooth', cutoff: 3000, q: 1, detune: 5, vol: 0.17 },
+    leadDensity: 0.5, arpDensity: 0.3,
+    kickVol: 1.05, kickMidVol: 0.9, hatVol: 0.08,
+    groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 4, arpVel: 0.55, chordOct: 12,
+      leadLong: 0.25, leadRest: 0.14,
+      bassPat: [{d:'r',l:0.9,v:1.0}, null, null, {d:'r',l:0.8,v:0.9,p:0.9}, {d:'8',l:0.6,v:0.8,p:0.8}, null, {d:'5',l:0.7,v:0.85,p:0.85}, {d:'n2',l:0.6,v:0.9,p:0.85}],
+      chordPat: [{l:0.4,v:0.9,voi:'root'}, null, {l:0.4,v:0.8,voi:'inv1',p:0.8}, null, {l:0.4,v:0.85,voi:'open',p:0.85}, null, {l:0.4,v:0.8,voi:'inv1',p:0.8}, {l:0.4,v:0.75,voi:'root',p:0.7,next:true}],
+      kickPat: ['main', null, null, 'main', null, null, 'mid', null],
+      hatPat:  [1,0,1,1,1,0,1,1] } },
+
   // BOSS — only plays during boss fights. Fast, menacing A Phrygian-dominant with a
   // pounding kick. Bass: a relentless pounding pedal with half-step chromatic pushes
   // (the b2 is the menace). Comp: dense, driving, aggressive stabs. Kept LAST so the
