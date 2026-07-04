@@ -15,6 +15,9 @@ export const CHANGELOG = [
     "Rebuilt the soundtrack's synth engine so styles no longer share the same three sounds. New instruments: deep round sub bass, a detuned drum-&-bass reese, a squelchy acid bass, big super-saw leads and chords, metallic FM bells, plucky bell/marimba tones, and hollow reed leads — each style now picks the ones that fit it.",
     "Fixed the bass: it used to be forced to the same punchy sawtooth in every style (the 'polka' feel). Basslines now use rounder, smoother sub tones and less on-the-beat bounce, so each style's low end has its own character.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Wider item tooltips", by: "Claude", notes: [
+    "Item tooltips are now twice as wide, so long stat lines and the side-by-side gear compare stop wrapping mid-line and read at a glance.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Hidden heroes glow their class colour", by: "Claude", notes: [
     "When you slip behind a tree or tall furniture, your see-through silhouette now takes your class colour — Warrior red, Mage yellow, Templar blue, Rogue green — so you can still read who you are at a glance.",
     "Enemies hidden behind scenery now show a distinct magenta silhouette, so a lurking foe never blurs into a red Warrior.",
