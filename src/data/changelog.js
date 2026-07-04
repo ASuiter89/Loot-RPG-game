@@ -11,6 +11,16 @@ export const CHANGELOG = [
     "Version History now dates each update by its Pacific calendar day — evening changes no longer jump ahead to the next day's heading.",
     "Re-dated recent entries that had rolled to the wrong day.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Terrain & scenery fixes", by: "Claude", notes: [
+    "Fixed ground that sometimes showed a hard-edged square of the base floor punching through a patch of accent ground — one terrain was missing a diagonal blend tile, so its edges broke at corners. Added the tile, and the ground now falls back to a seamless fill rather than a hard patch if any blend tile is ever absent.",
+    "Tall scenery — trees, tall furniture — no longer vanishes the moment its base scrolls off the bottom of the screen; its crown keeps drawing while any part of it is still in view.",
+    "Monsters no longer spawn trapped inside a solid object: a tree, table or crate is never dropped onto a monster's tile, so nothing gets walled in unable to move.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Walk-through-portal teleporters", by: "Claude", notes: [
+    "Stepping onto a teleporter pad no longer snaps you across the floor. The portal now swallows you in a purple swirl, the camera pans over to the partner pad, and you step back out of it — so it reads as walking through the portal.",
+    "Fixed: a teleporter now clears your click-to-move route. Before, warping mid-walk left you auto-walking straight back toward the pad you'd clicked near.",
+    "The world holds still for the brief crossing (~0.9s) and you can't be hit during it.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Icons fill their space instead of floating small", by: "Claude", notes: [
     "Menu and HUD icons now size to their actual artwork instead of the whole tile, so they read as tall as the text beside them and fill their slots — no more shrunken icons stranded inside transparent padding.",
     "Most visible on the gold and crafting-material counts (Scrap, Glimmer, Core, Chaos), whose art filled as little as a third of its tile; also sharpens icons across the bag, shop, forge, enchanter, reward lines and message log.",
@@ -19,6 +29,12 @@ export const CHANGELOG = [
     "New generative styles: Pulse (deep house), Neon (festival EDM), Lagoon (tropical house), and Rush (drum & bass) — each a full kit with its own key, groove, and instruments.",
     "Four-on-the-floor kicks and off-beat basslines for the house styles; a fast rolling breakbeat and deep sub for drum & bass.",
     "Pick any of them from Settings ▸ Audio, or leave it on Shuffle to drift through the lot.",
+  ] },
+  { date: "2026-07-03", size: "medium", v: "Sellsword: pick your contract, pay real wages", by: "Claude", notes: [
+    "Hire a companion for 1, 10, or 30 floors — pick a contract length like a Mystic pact, instead of one fixed run.",
+    "Hiring costs far more than before and now climbs steeply with the deepest floor you've reached — a companion is a real investment, not pocket change.",
+    "Longer contracts shave a little off each floor's cost, so a long haul is a touch cheaper per floor.",
+    "Each merc gets its own hire card, matching the Mystic's pact layout.",
   ] },
   { date: "2026-07-03", size: "small", v: "Skill cards: shorter text, wider card", by: "Claude", notes: [
     "Every passive and keystone description rewritten terse — stats first, filler words and leftover internal tags gone.",

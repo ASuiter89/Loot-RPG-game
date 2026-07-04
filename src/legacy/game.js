@@ -20,6 +20,7 @@ import { milestonePower, rankScale, skillManaCost,
 import { glideVitalFill } from '../systems/vitalFill.js';
 import { offscreenArrows, tileOnScreen } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
+import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.js';
 import { footprintSealsPath } from '../systems/decorPlacement.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
@@ -37,6 +38,8 @@ import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
 import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
 import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKILL_ICON_ATLAS } from '../assets/skillIconsAtlas.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
+import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
+import { mercCost } from '../systems/mercPricing.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -1290,6 +1293,59 @@ function drawPortalBeam(cx, feetY, w, H, frame, age) {
   }
   ctx.restore();
 }
+
+// ── PORTAL SWALLOW / EMERGE ── the purple vortex that pulls the hero into an
+// in-level teleporter pad and flings it back out of the partner. The town gate
+// beams the hero UP off the map; this instead spins a whirlpool of purple energy
+// flat on the pad, so it reads as stepping THROUGH the portal. `frame` is a
+// {swirl,phase} envelope from warpFrame(); `age` (the warp's own elapsed ms, which
+// keeps ticking while the world is frozen) spins the vortex. Motes are sucked
+// INWARD as the hero is absorbed and flung OUTWARD as it emerges. Additive so it
+// glows. Colours are bespoke portal art (the teleporter-purple palette), not tokens.
+const PORTAL_PURPLE = PORTAL_PALETTES.teleporter;   // [core, deep, pale]
+function drawPortalSwallow(cx, cy, size, frame, age) {
+  const s = frame.swirl;
+  if (s <= 0.002) return;
+  const sg = size / 16;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';         // additive → reads as emitted light
+  // Glow enveloping the pad, swelling with the swirl.
+  const R = size * (0.48 + 0.5 * s);
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  g.addColorStop(0,   hexA(PORTAL_PURPLE[2], 0.5 * s));
+  g.addColorStop(0.55, hexA(PORTAL_PURPLE[0], 0.22 * s));
+  g.addColorStop(1,   hexA(PORTAL_PURPLE[0], 0));
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  // Counter-spinning arcs — a fast whirlpool.
+  const spin = age / 90;
+  ctx.lineWidth = Math.max(1.4, size * 0.055);
+  for (let i = 0; i < 3; i++) {
+    ctx.strokeStyle = PORTAL_PURPLE[i % PORTAL_PURPLE.length];
+    ctx.globalAlpha = 0.35 + 0.5 * s;
+    ctx.shadowColor = PORTAL_PURPLE[i % PORTAL_PURPLE.length];
+    ctx.shadowBlur = (3 + 4 * s) * sg;
+    const r = size * (0.5 - 0.11 * i) * (0.8 + 0.2 * s);
+    const a0 = spin * (i % 2 ? -1 : 1) + i * (Math.PI * 2 / 3);
+    ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + Math.PI * 1.4); ctx.stroke();
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  // Motes spiralling in (absorb) or out (emerge).
+  const outward = frame.phase === 'emerge';
+  const motes = 10;
+  for (let i = 0; i < motes; i++) {
+    const ph = ((age / 500) + i / motes) % 1;       // 0..1 travel cycle
+    const rad = size * 0.55 * (outward ? ph : 1 - ph);
+    const ang = spin * 1.3 + i * (Math.PI * 2 / motes);
+    const mx = cx + Math.cos(ang) * rad;
+    const my = cy + Math.sin(ang) * rad;
+    const a = (outward ? 1 - ph : ph) * s;
+    const ms = Math.max(1.4, size * 0.06);
+    ctx.fillStyle = hexA(PORTAL_PURPLE[2], a);
+    ctx.beginPath(); ctx.arc(mx, my, ms, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
 // Shared, crisp on-screen sprite sizes for world entities, each a pure function
 // of the camera tile `tw`. Routing same-class things through one of these keeps
 // them the same size as one another at every zoom and screen size.
@@ -1445,7 +1501,7 @@ function floorSpriteName(seed) { return 'floor_' + (Math.abs(seed) % 4); }
 // four corners' terrain membership (Tiled 2-corner "wang" autotiling), using
 // the role map decoded from terrain-v7.tsx. Falls back to the procedural look
 // until the atlas image finishes loading.
-const LPC_TABLE = {"cols":32,"tile":32,"terrains":[{"name":"Dirt_Tan","anchor":97},{"name":"Dirt_Brown","anchor":100},{"name":"Dirt_Dark","anchor":103},{"name":"Rock_White","anchor":106},{"name":"Rock_Gray","anchor":109},{"name":"Rock_Dark","anchor":112},{"name":"Rock_Black","anchor":115},{"name":"Hole_Brown","anchor":118},{"name":"Hole_Black","anchor":121},{"name":"Mud_Brown","anchor":124},{"name":"Grass","anchor":321},{"name":"Grass_Light","anchor":324},{"name":"Grass_Dark","anchor":327},{"name":"Grass_Dead","anchor":330},{"name":"Soil","anchor":333},{"name":"Sand","anchor":336},{"name":"Snow_1","anchor":339},{"name":"Snow_2","anchor":342},{"name":"Gravel_1","anchor":345},{"name":"Dirt_Roots","anchor":348},{"name":"Water_Shallows_Dirt","anchor":545},{"name":"Water","anchor":548},{"name":"Water_Deep","anchor":551},{"name":"Water_Purple","anchor":554},{"name":"Water_Green","anchor":557},{"name":"Lava","anchor":560},{"name":"Water_Shallows_Sand","anchor":837},{"name":"Ice","anchor":838},{"name":"Ice_Melting","anchor":841},{"name":"Earth_Cracked","anchor":784},{"name":"Stone_White","anchor":787},{"name":"Stone_Tan","anchor":790},{"name":"Mudstone_Gray","anchor":793},{"name":"Mudstone_Brown","anchor":796}],"table":{"Dirt_Tan":{"1":64,"2":66,"3":65,"4":128,"5":96,"6":192,"7":34,"8":130,"9":193,"10":98,"11":33,"12":129,"13":2,"14":1,"15":97},"Dirt_Brown":{"1":67,"2":69,"3":68,"4":131,"5":99,"6":195,"7":37,"8":133,"9":196,"10":101,"11":36,"12":132,"13":5,"14":4,"15":100},"Dirt_Dark":{"1":70,"2":72,"3":71,"4":134,"5":102,"6":198,"7":40,"8":136,"9":199,"10":104,"11":39,"12":135,"13":8,"14":7,"15":103},"Rock_White":{"1":73,"2":75,"3":74,"4":137,"5":105,"6":201,"7":43,"8":139,"9":202,"10":107,"11":42,"12":138,"13":11,"14":10,"15":106},"Rock_Gray":{"1":76,"2":78,"3":77,"4":140,"5":108,"6":204,"7":46,"8":142,"9":205,"10":110,"11":45,"12":141,"13":14,"14":13,"15":109},"Rock_Dark":{"1":79,"2":81,"3":80,"4":143,"5":111,"6":207,"7":49,"8":145,"9":208,"10":113,"11":48,"12":144,"13":17,"14":16,"15":112},"Rock_Black":{"1":82,"2":84,"3":83,"4":146,"5":114,"6":210,"7":52,"8":148,"9":211,"10":116,"11":51,"12":147,"13":20,"14":19,"15":115},"Hole_Brown":{"1":85,"2":87,"3":86,"4":149,"5":117,"6":213,"7":55,"8":151,"9":214,"10":119,"11":54,"12":150,"13":23,"14":22,"15":118},"Hole_Black":{"1":88,"2":90,"3":89,"4":152,"5":120,"6":216,"7":58,"8":154,"9":217,"10":122,"11":57,"12":153,"13":26,"14":25,"15":121},"Mud_Brown":{"1":91,"2":93,"3":92,"4":155,"5":123,"6":219,"7":61,"8":157,"9":220,"10":125,"11":60,"12":156,"13":29,"14":28,"15":124},"Grass":{"1":288,"2":290,"3":289,"4":352,"5":320,"6":416,"7":258,"8":354,"9":417,"10":322,"11":257,"12":353,"13":226,"14":225,"15":321},"Grass_Light":{"1":291,"2":293,"3":292,"4":355,"5":323,"6":419,"7":261,"8":357,"9":420,"10":325,"11":260,"12":356,"13":229,"14":228,"15":324},"Grass_Dark":{"1":294,"2":296,"3":295,"4":358,"5":326,"6":422,"7":264,"8":360,"9":423,"10":328,"11":263,"12":359,"13":232,"14":231,"15":327},"Grass_Dead":{"1":297,"2":299,"3":298,"4":361,"5":329,"6":425,"7":267,"8":363,"9":426,"10":331,"11":266,"12":362,"13":235,"14":234,"15":330},"Soil":{"1":300,"2":302,"3":301,"4":364,"5":332,"6":428,"7":270,"8":366,"9":429,"10":334,"11":269,"12":365,"13":238,"14":237,"15":333},"Sand":{"1":303,"2":305,"3":304,"4":367,"5":335,"6":431,"7":273,"8":369,"9":432,"10":337,"11":272,"12":368,"13":241,"14":240,"15":336},"Snow_1":{"1":306,"2":308,"3":307,"4":370,"5":338,"6":434,"7":276,"8":372,"9":435,"10":340,"11":275,"12":371,"13":244,"14":243,"15":339},"Snow_2":{"1":309,"2":311,"3":310,"4":373,"5":341,"6":437,"7":279,"8":375,"9":438,"10":343,"11":278,"12":374,"13":247,"14":246,"15":342},"Gravel_1":{"1":312,"2":314,"3":313,"4":376,"5":344,"6":440,"7":282,"8":378,"9":441,"10":346,"11":281,"12":377,"13":250,"14":249,"15":345},"Dirt_Roots":{"1":315,"2":317,"3":316,"4":379,"5":347,"6":443,"7":285,"8":381,"9":444,"10":349,"11":284,"12":380,"13":253,"14":252,"15":348},"Water_Shallows_Dirt":{"1":512,"2":514,"3":513,"4":576,"5":544,"6":640,"7":482,"8":578,"9":641,"10":546,"11":481,"12":577,"13":450,"14":449,"15":545},"Water":{"1":515,"2":517,"3":516,"4":579,"5":547,"6":643,"7":485,"8":581,"9":644,"10":549,"11":484,"12":580,"13":453,"14":452,"15":548},"Water_Deep":{"1":518,"2":520,"3":519,"4":582,"5":550,"6":646,"7":488,"8":584,"9":647,"10":552,"11":487,"12":583,"13":456,"14":455,"15":551},"Water_Purple":{"1":521,"2":523,"3":522,"4":585,"5":553,"6":649,"7":491,"8":587,"9":650,"10":555,"11":490,"12":586,"13":459,"14":458,"15":554},"Water_Green":{"1":524,"2":526,"3":525,"4":588,"5":556,"6":652,"7":494,"8":590,"9":653,"10":558,"11":493,"12":589,"13":462,"14":461,"15":557},"Lava":{"1":527,"2":529,"3":528,"4":591,"5":559,"6":655,"7":497,"8":593,"9":656,"10":561,"11":496,"12":592,"13":465,"14":464,"15":560},"Water_Shallows_Sand":{"15":837},"Ice":{"15":838},"Ice_Melting":{"15":681},"Earth_Cracked":{"1":751,"2":753,"3":752,"4":815,"5":783,"6":879,"7":721,"8":817,"9":880,"10":785,"11":720,"12":816,"13":689,"14":688,"15":784},"Stone_White":{"1":754,"2":756,"3":755,"4":818,"5":786,"6":882,"7":724,"8":820,"9":883,"10":788,"11":723,"12":819,"13":692,"14":691,"15":787},"Stone_Tan":{"1":757,"2":759,"3":758,"4":821,"5":789,"6":885,"7":727,"8":823,"9":886,"10":791,"11":726,"12":822,"13":695,"14":694,"15":790},"Mudstone_Gray":{"1":760,"2":762,"3":761,"4":824,"5":792,"6":888,"7":730,"8":826,"10":794,"11":729,"12":825,"13":698,"14":697,"15":793},"Mudstone_Brown":{"1":763,"2":765,"3":764,"4":827,"5":795,"6":891,"7":733,"8":829,"9":892,"10":797,"11":732,"12":828,"13":701,"14":700,"15":796}}};
+const LPC_TABLE = {"cols":32,"tile":32,"terrains":[{"name":"Dirt_Tan","anchor":97},{"name":"Dirt_Brown","anchor":100},{"name":"Dirt_Dark","anchor":103},{"name":"Rock_White","anchor":106},{"name":"Rock_Gray","anchor":109},{"name":"Rock_Dark","anchor":112},{"name":"Rock_Black","anchor":115},{"name":"Hole_Brown","anchor":118},{"name":"Hole_Black","anchor":121},{"name":"Mud_Brown","anchor":124},{"name":"Grass","anchor":321},{"name":"Grass_Light","anchor":324},{"name":"Grass_Dark","anchor":327},{"name":"Grass_Dead","anchor":330},{"name":"Soil","anchor":333},{"name":"Sand","anchor":336},{"name":"Snow_1","anchor":339},{"name":"Snow_2","anchor":342},{"name":"Gravel_1","anchor":345},{"name":"Dirt_Roots","anchor":348},{"name":"Water_Shallows_Dirt","anchor":545},{"name":"Water","anchor":548},{"name":"Water_Deep","anchor":551},{"name":"Water_Purple","anchor":554},{"name":"Water_Green","anchor":557},{"name":"Lava","anchor":560},{"name":"Water_Shallows_Sand","anchor":837},{"name":"Ice","anchor":838},{"name":"Ice_Melting","anchor":841},{"name":"Earth_Cracked","anchor":784},{"name":"Stone_White","anchor":787},{"name":"Stone_Tan","anchor":790},{"name":"Mudstone_Gray","anchor":793},{"name":"Mudstone_Brown","anchor":796}],"table":{"Dirt_Tan":{"1":64,"2":66,"3":65,"4":128,"5":96,"6":192,"7":34,"8":130,"9":193,"10":98,"11":33,"12":129,"13":2,"14":1,"15":97},"Dirt_Brown":{"1":67,"2":69,"3":68,"4":131,"5":99,"6":195,"7":37,"8":133,"9":196,"10":101,"11":36,"12":132,"13":5,"14":4,"15":100},"Dirt_Dark":{"1":70,"2":72,"3":71,"4":134,"5":102,"6":198,"7":40,"8":136,"9":199,"10":104,"11":39,"12":135,"13":8,"14":7,"15":103},"Rock_White":{"1":73,"2":75,"3":74,"4":137,"5":105,"6":201,"7":43,"8":139,"9":202,"10":107,"11":42,"12":138,"13":11,"14":10,"15":106},"Rock_Gray":{"1":76,"2":78,"3":77,"4":140,"5":108,"6":204,"7":46,"8":142,"9":205,"10":110,"11":45,"12":141,"13":14,"14":13,"15":109},"Rock_Dark":{"1":79,"2":81,"3":80,"4":143,"5":111,"6":207,"7":49,"8":145,"9":208,"10":113,"11":48,"12":144,"13":17,"14":16,"15":112},"Rock_Black":{"1":82,"2":84,"3":83,"4":146,"5":114,"6":210,"7":52,"8":148,"9":211,"10":116,"11":51,"12":147,"13":20,"14":19,"15":115},"Hole_Brown":{"1":85,"2":87,"3":86,"4":149,"5":117,"6":213,"7":55,"8":151,"9":214,"10":119,"11":54,"12":150,"13":23,"14":22,"15":118},"Hole_Black":{"1":88,"2":90,"3":89,"4":152,"5":120,"6":216,"7":58,"8":154,"9":217,"10":122,"11":57,"12":153,"13":26,"14":25,"15":121},"Mud_Brown":{"1":91,"2":93,"3":92,"4":155,"5":123,"6":219,"7":61,"8":157,"9":220,"10":125,"11":60,"12":156,"13":29,"14":28,"15":124},"Grass":{"1":288,"2":290,"3":289,"4":352,"5":320,"6":416,"7":258,"8":354,"9":417,"10":322,"11":257,"12":353,"13":226,"14":225,"15":321},"Grass_Light":{"1":291,"2":293,"3":292,"4":355,"5":323,"6":419,"7":261,"8":357,"9":420,"10":325,"11":260,"12":356,"13":229,"14":228,"15":324},"Grass_Dark":{"1":294,"2":296,"3":295,"4":358,"5":326,"6":422,"7":264,"8":360,"9":423,"10":328,"11":263,"12":359,"13":232,"14":231,"15":327},"Grass_Dead":{"1":297,"2":299,"3":298,"4":361,"5":329,"6":425,"7":267,"8":363,"9":426,"10":331,"11":266,"12":362,"13":235,"14":234,"15":330},"Soil":{"1":300,"2":302,"3":301,"4":364,"5":332,"6":428,"7":270,"8":366,"9":429,"10":334,"11":269,"12":365,"13":238,"14":237,"15":333},"Sand":{"1":303,"2":305,"3":304,"4":367,"5":335,"6":431,"7":273,"8":369,"9":432,"10":337,"11":272,"12":368,"13":241,"14":240,"15":336},"Snow_1":{"1":306,"2":308,"3":307,"4":370,"5":338,"6":434,"7":276,"8":372,"9":435,"10":340,"11":275,"12":371,"13":244,"14":243,"15":339},"Snow_2":{"1":309,"2":311,"3":310,"4":373,"5":341,"6":437,"7":279,"8":375,"9":438,"10":343,"11":278,"12":374,"13":247,"14":246,"15":342},"Gravel_1":{"1":312,"2":314,"3":313,"4":376,"5":344,"6":440,"7":282,"8":378,"9":441,"10":346,"11":281,"12":377,"13":250,"14":249,"15":345},"Dirt_Roots":{"1":315,"2":317,"3":316,"4":379,"5":347,"6":443,"7":285,"8":381,"9":444,"10":349,"11":284,"12":380,"13":253,"14":252,"15":348},"Water_Shallows_Dirt":{"1":512,"2":514,"3":513,"4":576,"5":544,"6":640,"7":482,"8":578,"9":641,"10":546,"11":481,"12":577,"13":450,"14":449,"15":545},"Water":{"1":515,"2":517,"3":516,"4":579,"5":547,"6":643,"7":485,"8":581,"9":644,"10":549,"11":484,"12":580,"13":453,"14":452,"15":548},"Water_Deep":{"1":518,"2":520,"3":519,"4":582,"5":550,"6":646,"7":488,"8":584,"9":647,"10":552,"11":487,"12":583,"13":456,"14":455,"15":551},"Water_Purple":{"1":521,"2":523,"3":522,"4":585,"5":553,"6":649,"7":491,"8":587,"9":650,"10":555,"11":490,"12":586,"13":459,"14":458,"15":554},"Water_Green":{"1":524,"2":526,"3":525,"4":588,"5":556,"6":652,"7":494,"8":590,"9":653,"10":558,"11":493,"12":589,"13":462,"14":461,"15":557},"Lava":{"1":527,"2":529,"3":528,"4":591,"5":559,"6":655,"7":497,"8":593,"9":656,"10":561,"11":496,"12":592,"13":465,"14":464,"15":560},"Water_Shallows_Sand":{"15":837},"Ice":{"15":838},"Ice_Melting":{"15":681},"Earth_Cracked":{"1":751,"2":753,"3":752,"4":815,"5":783,"6":879,"7":721,"8":817,"9":880,"10":785,"11":720,"12":816,"13":689,"14":688,"15":784},"Stone_White":{"1":754,"2":756,"3":755,"4":818,"5":786,"6":882,"7":724,"8":820,"9":883,"10":788,"11":723,"12":819,"13":692,"14":691,"15":787},"Stone_Tan":{"1":757,"2":759,"3":758,"4":821,"5":789,"6":885,"7":727,"8":823,"9":886,"10":791,"11":726,"12":822,"13":695,"14":694,"15":790},"Mudstone_Gray":{"1":760,"2":762,"3":761,"4":824,"5":792,"6":888,"7":730,"8":826,"9":889,"10":794,"11":729,"12":825,"13":698,"14":697,"15":793},"Mudstone_Brown":{"1":763,"2":765,"3":764,"4":827,"5":795,"6":891,"7":733,"8":829,"9":892,"10":797,"11":732,"12":828,"13":701,"14":700,"15":796}}};
 // Each biome paints a PRIMARY floor everywhere, then blends clustered patches of
 // a SECONDARY and (optionally) TERTIARY floor over it (autotiled transitions) so
 // the ground has natural variation — e.g. dirt with lighter-dirt patches and a
@@ -1590,7 +1646,13 @@ function lpcVariant(name, x, y) { const v = LPC_FILLS[name]; if (!v || v.length 
 // 1px seams letting the contrasting base bleed through as grid lines.
 function lpcTile(id, dx, dy, sz) { const c = id % LPC_NCOLS, r = (id / LPC_NCOLS) | 0; const x0 = Math.round(dx), y0 = Math.round(dy), x1 = Math.round(dx + sz), y1 = Math.round(dy + sz); ctx.drawImage(lpcSheet, c*LPC_A, r*LPC_A, LPC_A, LPC_A, x0, y0, x1 - x0, y1 - y0); }
 function lpcFill(name, ox, oy, tw, x0, y0, x1, y1) { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) lpcTile(lpcVariant(name, x, y), ox + x*tw, oy + y*tw, tw); }
-function lpcLayer(name, isT, ox, oy, tw, x0, y0, x1, y1) { const tbl = LPC_TABLE.table[name]; if (!tbl) return; for (let Y = y0; Y <= y1; Y++) for (let X = x0; X <= x1; X++) { let m = 0; if (isT(X-1,Y-1)) m|=8; if (isT(X,Y-1)) m|=4; if (isT(X-1,Y)) m|=2; if (isT(X,Y)) m|=1; if (!m) continue; const id = (m === 15) ? lpcVariant(name, X, Y) : tbl[m]; if (id == null) continue; lpcTile(id, ox + (X-0.5)*tw, oy + (Y-0.5)*tw, tw); } }
+// Paint one autotiled layer (base floor / accent / water). Each tile is chosen by
+// the 4-corner Wang mask of `isT`. If a blob table is MISSING a transition tile
+// (mask 1-14), fall back to the seamless interior fill instead of skipping: a skip
+// leaves a hard-edged hole showing the layer beneath (the base fill for an accent,
+// so a stray PRIMARY-floor tile) where a smooth wang edge belongs. (e.g. Mudstone_Gray
+// long shipped without its mask-9 diagonal, pocking accent patches with primary.)
+function lpcLayer(name, isT, ox, oy, tw, x0, y0, x1, y1) { const tbl = LPC_TABLE.table[name]; if (!tbl) return; for (let Y = y0; Y <= y1; Y++) for (let X = x0; X <= x1; X++) { let m = 0; if (isT(X-1,Y-1)) m|=8; if (isT(X,Y-1)) m|=4; if (isT(X-1,Y)) m|=2; if (isT(X,Y)) m|=1; if (!m) continue; let id = (m === 15) ? lpcVariant(name, X, Y) : tbl[m]; if (id == null) id = lpcVariant(name, X, Y); if (id == null) continue; lpcTile(id, ox + (X-0.5)*tw, oy + (Y-0.5)*tw, tw); } }
 // Draw the fracture on a cracked wall (tile 10) over the autotiled wall mass.
 // `sev` is 0 (freshly cracked) → 1 (barely holding). Every landed shove ADDS two
 // more hairline fissures fanning from a fixed impact point, so the wall reads as
@@ -1968,6 +2030,13 @@ const decorBlocked = (d) => d.mask ? d.mask.length : (d.block === 'all' ? decorE
 // mask smaller than its footprint) is one you walk BEHIND → draw a silhouette.
 // Fully-blocked or fully-walkable pieces don't (you can't stand behind them).
 const DECOR_OCCLUDER = DECOR_INDEX.map((d) => d.block !== 'none' && decorBlocked(d) < decorExtent(d));
+// A decor sprite is anchored by its FEET (bottom-centre) and drawn UP/OUT from
+// there, so a piece whose anchor tile has scrolled just off-screen can still poke
+// its crown (tall) or flanks (wide) back into view. These are the tallest/widest
+// sprites measured in tiles — the amount to over-scan the draw/occlusion window by
+// so such a piece is never culled to nothing (tallest tree ≈ 6 tiles, widest ≈ 5).
+const DECOR_MAX_H_TILES = Math.max(1, ...DECOR_INDEX.map((d) => Math.ceil(d.h / 32)));
+const DECOR_MAX_HALF_W = Math.max(1, ...DECOR_INDEX.map((d) => Math.ceil(d.w / 64)));
 // The tiles a solid decor object blocks (anchored bottom-centre).
 function decorFootprint(id, ax, ay) {
   const d = DECOR_INDEX[id];
@@ -2075,7 +2144,9 @@ function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
   if (!decorReady) return;
   const sc = tw / 32, occ = [];
   for (const o of occluderList()) {
-    if (o.tx < x0 - 2 || o.tx > x1 + 2 || o.ty < y0 - 8 || o.ty > y1 + 2) continue;
+    // Match the decor draw pass: a tree anchored just past the edge can still hang
+    // its canopy over an on-screen actor, so over-scan by the tallest/widest sprite.
+    if (o.tx < x0 - DECOR_MAX_HALF_W || o.tx > x1 + DECOR_MAX_HALF_W || o.ty < y0 - 1 || o.ty > y1 + DECOR_MAX_H_TILES) continue;
     const d = o.d;
     const dw = Math.round(d.w * sc), dh = Math.round(d.h * sc);
     const cxc = decorAnchorX(o.id, offX + o.tx * tw, tw), cyb = offY + o.ty * th + th * 0.98;
@@ -2155,6 +2226,7 @@ function placeOutdoorDecor(theme) {
   const clutter = pool.filter((id) => !DECOR_SOLID[id]);
   const free = (x, y) => x > 0 && y > 0 && x < MAP_W - 1 && y < MAP_H - 1
     && mapData[y][x] === 0 && furnitureMap[y + ',' + x] === undefined && decorMap[y + ',' + x] === undefined
+    && !getEnemyAt(x, y)   // never drop a piece onto a foe — a SOLID one walls it into the tile
     && !tileReserved(x, y) && (Math.abs(x - player.x) + Math.abs(y - player.y)) >= 3;
   const openN = (x, y) => (mapData[y - 1][x] === 0 ? 1 : 0) + (mapData[y + 1][x] === 0 ? 1 : 0)
     + (mapData[y][x - 1] === 0 ? 1 : 0) + (mapData[y][x + 1] === 0 ? 1 : 0);
@@ -6146,7 +6218,9 @@ window.gameState = function gameState(radius) {
   }
   // Movement only does something in the live dungeon with no menu/overlay up — and
   // never mid-teleport, when the hero is off the map and can't move, act or be hit.
-  const transit = portalTransiting() ? portalFx.dir : null;   // 'out' (→town) | 'in' (→dungeon) | null
+  // 'out' (→town) | 'in' (→dungeon) for the town gate, 'warp' while walking through
+  // an in-level teleporter pad, else null. Any of them roots the hero for its window.
+  const transit = portalTransiting() ? portalFx.dir : (mapWarping() ? 'warp' : null);
   const canMove = (mode === 'dungeon') && !transit;
 
   // ── Derived context the agent needs but can't read off the screen ──
@@ -6235,11 +6309,13 @@ window.gameState = function gameState(radius) {
     mode,            // dungeon | town | bag | title | classSelect | nameSelect | dead | shop | mystic | settings | changelog | playtime
     canMove,         // true only when mode === 'dungeon' and not mid-teleport
     blockingOverlay, // DOM id of the open modal, or null
-    // Town-portal teleport ANIMATION in flight: 'out' (fading out to town) or 'in'
-    // (materializing back into the dungeon), else null. While set, the hero is off
-    // the map — it can't move, act, or be touched by any foe (you can still open a
-    // menu, which simply holds); it clears itself in under a second. (This is the
-    // post-channel animation, distinct from the channel — see player.channeling.)
+    // Teleport ANIMATION in flight, else null. 'out' (fading out to town) or 'in'
+    // (materializing back into the dungeon) for the TOWN gate; 'warp' while walking
+    // THROUGH an in-level teleporter pad (the portal swallows the hero, the camera
+    // pans to the partner pad, the hero emerges). While set, the hero can't move,
+    // act, or be touched by any foe (you can still open a menu, which simply holds);
+    // it clears itself in under a second. (The 'out'/'in' pair is the post-channel
+    // town animation, distinct from the channel — see player.channeling.)
     transit,
     inTown: !!inTown,
     floor: dungeonLevel,                                                   // continuous depth (1, 2, 3, …)
@@ -6514,7 +6590,7 @@ window.gameGuide = function gameGuide(topic) {
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom is a full heal, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
-      `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one warps you there — use it deliberately, not while fleeing.`,
+      `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one plays a short walk-through-portal animation — the portal swallows you, the camera pans across to the partner pad, and you step out there (~0.9s, world frozen, unhittable; gameState().transit reads 'warp'). It also clears any click-to-move route, so you won't auto-walk back toward the pad you clicked. Use it deliberately, not while fleeing.`,
       `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground; carryingKey true once held) and seal a rich vault chest.`,
     ],
     enemies: [
@@ -6547,6 +6623,7 @@ window.gameGuide = function gameGuide(topic) {
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
       `Merchant (buy gear / pay to restock); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
+      `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death); Gambler (wager gold for random gear — pick a slot to guarantee the type).`,
       `Services unlock as you progress and show in a fixed order (Dungeon Gate on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically.`,
@@ -9306,6 +9383,7 @@ function generateMap() {
   // the up-stairs never re-imposes an unlock condition.
   floorCleared = false;
   resetPortal();   // a fresh floor cancels any half-formed town portal (and its timer)
+  warpFx = null;   // …and any in-flight teleporter-pad traversal (the old floor's pads are gone)
   if (player.clearedFloors && player.clearedFloors[dungeonLevel]) {
     floorCleared = true;
   } else if (hostilesRemaining() === 0) {
@@ -10112,11 +10190,44 @@ function updatePortalFx(dt) {
   if (dir === 'out') warpToTown();
 }
 
+// ── MAP-PORTAL TRAVERSAL (walk THROUGH a teleporter pad) ──
+// Stepping onto an in-level teleporter no longer snaps the hero across the floor.
+// The portal SWALLOWS the hero (spin + shrink into the swirl), the camera PANS to
+// the partner pad, and the hero is SPAT BACK OUT — distinct from the town gate's
+// beam-up. Like that gate, the world is frozen (rtPaused/clockPaused) and the fx
+// advances on the render loop's own dt, so it keeps playing while the sim is
+// paused. The hero has ALREADY been moved to the dest pad (see teleportPad), so
+// `warpFx` is purely visual: it holds both pad centres (world tile coords, matching
+// player.fx/fy) plus the elapsed time. Timing/easing shapes live in the pure
+// systems/portalTraversal.js. null = idle.
+let warpFx = null;   // { sx,sy, dx,dy, t:<ms elapsed>, dur:<ms>, arrived:bool }
+function mapWarping() { return !!warpFx; }
+// Kick off the swallow → pan → emerge over the frozen floor. `sx,sy` is the pad the
+// hero left, `dx,dy` the partner it lands on (both tile-centre world coords).
+function beginMapWarp(sx, sy, dx, dy) {
+  warpFx = { sx, sy, dx, dy, t: 0, dur: PORTAL_WARP.DUR_MS, arrived: false };
+}
+// Advance the traversal each render frame (runs even while paused). Fires the
+// arrival pop once as the hero starts emerging from the dest pad, then clears
+// itself (handing control back) when the whole window has played.
+function updateWarpFx(dt) {
+  if (!warpFx) return;
+  warpFx.t += dt * 1000;
+  if (!warpFx.arrived && warpFx.t >= warpFx.dur * PORTAL_WARP.PAN) {
+    warpFx.arrived = true;                       // one-shot: the hero bursts out of the far pad
+    sfx('teleport');
+    screenFlash('#c77dff');
+    spawnParticles(Math.floor(warpFx.dx), Math.floor(warpFx.dy), '#c77dff', 14, 0.14);
+    addShake(2);
+  }
+  if (warpDone(warpFx.t, warpFx.dur)) warpFx = null;
+}
+
 // The TOWN button / hotkey / floor-1 up-stair entry point. In town it just reopens
 // the hub menu; in the dungeon it begins the channel, or breaks off one already going.
 function startPortalChannel() {
   if (inTown) { openTownHub(); return; }
-  if (portalTransiting()) return;   // already teleporting — ignore the button
+  if (portalTransiting() || mapWarping()) return;   // already teleporting — ignore the button
   if (tutorialActive) { log('🏖️ Head north into the cave to begin your descent first.'); sfx('denied'); return; }
   if (portalCharge > 0) { cancelPortalChannel('<span data-spr=feat_gate_red></span> You let the town portal fade.'); return; }
   portalCharge = PORTAL_CHANNEL_SECS;
@@ -10265,20 +10376,8 @@ function buildTown() {
 // Classic ARPG hireling: pay gold for a companion that spawns beside you on each
 // floor of its contract and fights like a summon (but stronger, and it revives
 // between floors). player.merc = { kind, floors, mult } — saved with the hero.
-const MERC_TYPES = [
-  { id: 'blade',   name: 'Sellsword',  minion: 'shadow',    mult: 1.15, desc: 'A swift blade — fast, hits hard.' },
-  { id: 'marks',   name: 'Marksman',   minion: 'skelarcher',mult: 1.10, desc: 'Fires on foes from across the room.' },
-  { id: 'warden',  name: 'Warden',     minion: 'golem',     mult: 1.30, desc: 'A hulking tank — huge health, steady.' },
-  { id: 'hound',   name: 'Hound',      minion: 'wolf',      mult: 1.12, desc: 'A snarling hound — quick, darts in and out.' },
-  { id: 'pyre',    name: 'Flame Adept',minion: 'elemental', mult: 1.20, desc: 'Hurls fire on foes across the room.' },
-  { id: 'seer',    name: 'Acolyte',    minion: 'spirit',    mult: 1.22, desc: 'A holy spirit — smites foes from afar.' },
-];
-// Which animated town-NPC walk sprite each merc type draws with — in the hire
-// list and as the companion on the dungeon map. Types without a bespoke walk
-// sheet fall back to their (real) minion sprite in both places.
-const MERC_ART = { blade: 'sellsword', marks: 'marks', warden: 'warden' };
-const MERC_FLOORS = 5;   // floors a contract lasts
-function mercCost(t) { return Math.round((160 + (player.maxFloor || 1) * 22) * (t.mult || 1)); }
+// MERC_TYPES / MERC_ART / MERC_DURATIONS and the pricing live in the extracted
+// data + systems modules (see src/data/mercenaries.js, src/systems/mercPricing.js).
 // Spawn the hired companion beside the hero at floor start; burns one contract floor.
 function spawnMerc() {
   if (inTown || tutorialActive || !player.merc || (player.merc.floors || 0) <= 0) return;
@@ -10299,35 +10398,47 @@ function spawnMerc() {
   if (player.merc.floors <= 0) { log(`<span data-spr=a_shield></span> Your ${t.name}'s contract ends after this floor.`, 'important'); }
 }
 function openMercCamp() { openTownModal('Sellsword', 'a_shield'); renderMercCamp(); }
+// The camp reuses the Mystic's pact-card component: one card per merc type, each
+// with a button per contract length (1 / 10 / 30 floors) — so you can hire a
+// companion for a quick test or a long delve, just like sealing a pact.
 function renderMercCamp() {
   const active = player.merc && player.merc.floors > 0;
   const cur = active ? MERC_TYPES.find(x => x.id === player.merc.kind) : null;
-  let html = `<div class="town-blurb">Hire a companion to fight at your side. They join you on every floor for the length of the contract, reviving between floors — then their coin runs out.</div>`;
+  let html = `<div class="town-blurb">Hire a companion to fight at your side. They join you on every floor of the contract, reviving between floors — then their coin runs out. Sign on for a single floor, a short delve, or a long haul; the longer the contract, the less each floor costs.</div>`;
   if (active && cur) {
-    html += `<div class="town-blurb" style="color:var(--green-450)"><span data-spr=w_sword></span> <b>${cur.name}</b> is under contract — <b>${player.merc.floors}</b> floor${player.merc.floors === 1 ? '' : 's'} left. Hire again to swap or extend.</div>`;
+    html += `<div class="town-blurb" style="color:var(--green-450)"><span data-spr=w_sword></span> <b>${cur.name}</b> is under contract — <b>${player.merc.floors}</b> floor${player.merc.floors === 1 ? '' : 's'} left. Hire again to replace it.</div>`;
   }
-  html += '<div class="shop-grid">' + MERC_TYPES.map(t => {
-    const cost = mercCost(t);
-    const afford = player.gold >= cost;
-    return `<div class="shop-row has-actions">
-      <span class="loot-icon">${townWalkIcon(MERC_ART[t.id], 26) || dlIcon((typeof MINION_SPRITE === 'object' && MINION_SPRITE && MINION_SPRITE[t.minion]) || 'hero_warrior', 22)}</span>
-      <div class="shop-row-info">
-        <div class="shop-row-name">${t.name}</div>
-        <div class="shop-row-stats">${t.desc} · ${MERC_FLOORS} floors</div>
-      </div>
-      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="hireMerc('${t.id}')"><span data-spr=ic_money></span>${cost}</button>
+  const depth = player.maxFloor || 1;
+  html += '<div class="pact-grid">' + MERC_TYPES.map(t => {
+    const accent = t.accent || '#7fe0a0';
+    const icon = townWalkIcon(MERC_ART[t.id], 22) || dlIcon((typeof MINION_SPRITE === 'object' && MINION_SPRITE && MINION_SPRITE[t.minion]) || 'hero_warrior', 22);
+    const buttons = MERC_DURATIONS.map(dur => {
+      const cost = mercCost(t.mult, depth, dur.mult);
+      const afford = player.gold >= cost;
+      const label = dur.floors === 1 ? '1 floor' : `${dur.floors} floors`;
+      return `<button class="pact-buy-btn" ${afford ? '' : 'disabled'} onclick="hireMerc('${t.id}', ${dur.floors})">
+        <span class="pact-floors">${label}</span>
+        <span class="pact-cost${afford ? '' : ' cost-short'}"><span data-spr=ic_money></span>${cost.toLocaleString()}</span>
+      </button>`;
+    }).join('');
+    return `<div class="pact-card" style="--accent:${accent};--accentSoft:${hexA(accent, 0.14)}">
+      <div class="pact-head"><span class="pact-ic">${icon}</span><span class="pact-name">${t.name}</span></div>
+      <div class="pact-desc">${t.desc}</div>
+      <div class="pact-buy-label">Hire for</div>
+      <div class="pact-durations">${buttons}</div>
     </div>`;
   }).join('') + '</div>';
   setTownContent(html);
 }
-function hireMerc(id) {
+function hireMerc(id, floors) {
   const t = MERC_TYPES.find(x => x.id === id); if (!t) return;
-  const cost = mercCost(t);
+  const dur = MERC_DURATIONS.find(d => d.floors === floors) || MERC_DURATIONS[0];
+  const cost = mercCost(t.mult, player.maxFloor || 1, dur.mult);
   if (player.gold < cost) { log('Not enough gold to hire.'); sfx('denied'); return; }
   player.gold -= cost;
-  player.merc = { kind: t.id, floors: MERC_FLOORS, mult: t.mult };
+  player.merc = { kind: t.id, floors: dur.floors, mult: t.mult };
   sfx('buy');
-  log(`<span data-spr=a_shield></span> You hire a ${t.name} for <span data-spr=ic_money></span>${cost} — they'll join you for ${MERC_FLOORS} floors.`, 'important');
+  log(`<span data-spr=a_shield></span> You hire a ${t.name} for <span data-spr=ic_money></span>${cost.toLocaleString()} — they'll join you for ${dur.floors} floor${dur.floors === 1 ? '' : 's'}.`, 'important');
   updateBars(); renderMercCamp(); saveGame();
 }
 
@@ -13810,8 +13921,18 @@ function draw() {
   const th = tw;
 
   // Center the camera on the player, then clamp so we never scroll past edges.
-  let camX = player.fx * tw - W/2;
-  let camY = player.fy * th - H/2;
+  // While walking THROUGH a teleporter the camera instead glides from the pad the
+  // hero left to its partner (warpFrame.panT), so you see where you came out. On a
+  // map smaller than the viewport the clamp centres it and the pan is a no-op —
+  // both pads are already on screen.
+  let camFx = player.fx, camFy = player.fy;
+  if (warpFx) {
+    const wf = warpFrameAt(warpFx.t, warpFx.dur);
+    camFx = warpFx.sx + (warpFx.dx - warpFx.sx) * wf.panT;
+    camFy = warpFx.sy + (warpFx.dy - warpFx.sy) * wf.panT;
+  }
+  let camX = camFx * tw - W/2;
+  let camY = camFy * th - H/2;
   const maxCamX = MAP_W * tw - W;
   const maxCamY = MAP_H * th - H;
   // If the map is smaller than the viewport on an axis, center it instead.
@@ -14114,9 +14235,21 @@ function draw() {
           ctx.fillRect(px, py, Math.max(1, tw*0.14), th);
         }
       }
-      // Ground decor (non-blocking): drawn over the floor, under actors. Both
-      // outdoor scenery (trees/rocks/bushes) and indoor props (furniture/crates).
-      if (!inTown && mapData[y][x] === 0) drawDecorAt(x, y, px, py, tw, th);
+    }
+  }
+
+  // Ground decor (non-blocking): drawn over the floor, under actors. Both outdoor
+  // scenery (trees/rocks/bushes) and indoor props (furniture/crates). This runs in
+  // its OWN pass — not inside the tile loop above — because a piece is anchored by
+  // its feet and extends up/out, so one whose anchor tile sits just past the screen
+  // edge can still show its crown or flanks. Over-scan the window by the tallest/
+  // widest sprite (below + sideways; feet never rise above the anchor, so the top
+  // needs only a small pad) and iterate top→bottom so nearer pieces paint over far.
+  if (!inTown) {
+    const dx0 = Math.max(0, x0 - DECOR_MAX_HALF_W), dx1 = Math.min(MAP_W, x1 + DECOR_MAX_HALF_W);
+    const dy0 = Math.max(0, y0 - 1), dy1 = Math.min(MAP_H, y1 + DECOR_MAX_H_TILES);
+    for (let y = dy0; y < dy1; y++) for (let x = dx0; x < dx1; x++) {
+      if (mapData[y][x] === 0) drawDecorAt(x, y, offX + x * tw, offY + y * th, tw, th);
     }
   }
 
@@ -14635,39 +14768,63 @@ function draw() {
     ctx.restore();
   });
 
-  // Player (smooth float position).
-  const px = offX + (player.fx - 0.5) * tw, py = offY + (player.fy - 0.5) * th;
+  // Player (smooth float position). While walking THROUGH a teleporter the hero is
+  // drawn at the pad it LEFT while it's swallowed (spun down into the swirl), then at
+  // the partner pad as it emerges — decoupled from the follow-cam pan set up above.
+  const warpHero = warpFx ? warpFrameAt(warpFx.t, warpFx.dur) : null;
+  const heroWX = warpHero ? (warpHero.atDest ? warpFx.dx : warpFx.sx) : player.fx;
+  const heroWY = warpHero ? (warpHero.atDest ? warpFx.dy : warpFx.sy) : player.fy;
+  const px = offX + (heroWX - 0.5) * tw, py = offY + (heroWY - 0.5) * th;
   // Town-portal teleport underway? Pull this frame's fade / lift / beam envelope so
   // the hero fades and rides the beam up off the map (departure) or drops in and
   // solidifies out of the pillar (arrival). null the rest of the time.
   const fxHero = portalTransiting() ? portalFrame(portalFx.dir, portalFx.t, portalFx.dur) : null;
   const heroAlpha = fxHero ? fxHero.heroAlpha : 1;
   const heroLift = fxHero ? fxHero.heroLift * th * 2.6 : 0;   // px risen up the beam / dropping into place
+  const teleFx = fxHero || warpHero;   // either kind of teleport dims the hero and hides its bars/aura
   // Soft under-the-feet contact shadow grounds the hero (no coloured backing
-  // circle — matching the de-cluttered enemies). It fades out with the hero.
+  // circle — matching the de-cluttered enemies). It fades (and shrinks, mid-warp)
+  // out with the hero.
   ctx.save();
   if (fxHero) ctx.globalAlpha = heroAlpha;
-  drawActorShadow(px + tw/2, py + th*0.82, tw);
+  else if (warpHero) ctx.globalAlpha = warpHero.heroAlpha;
+  drawActorShadow(px + tw/2, py + th*0.82, tw * (warpHero ? Math.max(0.05, warpHero.heroScale) : 1));
   ctx.restore();
   // Golden completion aura, under the hero, when any worn set is complete (hidden
-  // mid-teleport — the beam owns the hero's light then).
-  if (!fxHero && completedSets().length) drawSetAura(px + tw/2, py + th*0.6, tw);
+  // mid-teleport — the beam / portal swirl owns the hero's light then).
+  if (!teleFx && completedSets().length) drawSetAura(px + tw/2, py + th*0.6, tw);
   // Composite the hero — a class-specific pixel adventurer that visibly carries
   // its equipped weapon type at its side. A quick attack lunge nudges the sprite
   // toward its target while leaving the stamina bar / portal glow below in place.
-  // Mid-teleport the hero fades (heroAlpha) and rides up / drops down the beam (heroLift).
+  // Mid-town-teleport the hero fades (heroAlpha) and rides up / drops down the beam
+  // (heroLift); mid-map-warp it spins and scales into / out of the pad (invisible
+  // through the camera pan, when heroScale is 0).
   const pLunge = attackLungeOffset(player, tw, th);
-  ctx.save();
-  if (fxHero) ctx.globalAlpha = heroAlpha;
-  drawHeroSprite(px + (pLunge ? pLunge.dx : 0), py - heroLift + (pLunge ? pLunge.dy : 0), tw, th, scale);
-  ctx.restore();
+  if (warpHero) {
+    if (warpHero.heroScale > 0.01) {
+      ctx.save();
+      ctx.globalAlpha = warpHero.heroAlpha;
+      const hcx = px + tw / 2, hcy = py + th / 2;
+      ctx.translate(hcx, hcy);
+      ctx.rotate(warpHero.spin);
+      ctx.scale(warpHero.heroScale, warpHero.heroScale);
+      ctx.translate(-hcx, -hcy);
+      drawHeroSprite(px, py, tw, th, scale);
+      ctx.restore();
+    }
+  } else {
+    ctx.save();
+    if (fxHero) ctx.globalAlpha = heroAlpha;
+    drawHeroSprite(px + (pLunge ? pLunge.dx : 0), py - heroLift + (pLunge ? pLunge.dy : 0), tw, th, scale);
+    ctx.restore();
+  }
   // Vital bars under the hero. With the Hero Bars setting ON, red Health and
   // blue Mana are ALWAYS visible (even at full — never blinking away); the
   // stamina bar (amber) still pops up only while stamina isn't full, so it
   // stays out of the way at rest. They stack just under the hero's feet, with
   // the stamina bar at its usual spot. Hidden while teleporting — the hero
   // isn't really standing on the floor then.
-  if (!fxHero) {
+  if (!teleFx) {
     const bw = tw * 0.8, bh = Math.max(2, th * 0.07), bx = px + (tw - bw) / 2;
     const bars = [];   // top → bottom
     if (showHeroBars)
@@ -14709,6 +14866,10 @@ function draw() {
     // hero materializes (arrival). Anchored at the hero's feet so it reads as the
     // shaft of light they ride. Drawn last so it engulfs the fading/forming hero.
     drawPortalBeam(px + tw / 2, py + th * 0.92, tw, H, fxHero, portalFx.t);
+  } else if (warpHero) {
+    // PORTAL SWALLOW / EMERGE: a purple vortex centred on the pad that pulls the hero
+    // in (absorb) or flings it out (emerge). Drawn last so it engulfs the hero.
+    drawPortalSwallow(px + tw / 2, py + th / 2, tw, warpHero, warpFx.t);
   }
 
   // Tall decor (trees) occludes actors standing behind it, with a tinted
@@ -17000,7 +17161,7 @@ function regenStamina(dt) {
 
 // A burst of speed in the current input/facing direction, fuelled by stamina.
 function doDash() {
-  if (inTown || portalChanneling() || portalTransiting() || isPlayerStunned()) return;
+  if (inTown || portalChanneling() || portalTransiting() || mapWarping() || isPlayerStunned()) return;
   if ((player.dashCd || 0) > 0 || player.stamina < DASH_COST) return;
   let dx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let dy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
@@ -17049,7 +17210,7 @@ function updatePlayer(dt) {
   // An in-progress dash overrides normal control for its brief window. A dash
   // slammed into a cracked wall shoves it too (use the pre-collision velocity, as
   // movePlayerBy zeroes the component that hit the wall).
-  if (player.dashT > 0) { player.dashT -= dt; const dvx = player.vx, dvy = player.vy; movePlayerBy(dvx * dt, dvy * dt); trySmashWalls(dvx, dvy); return; }
+  if (player.dashT > 0) { player.dashT -= dt; const dvx = player.vx, dvy = player.vy; movePlayerBy(dvx * dt, dvy * dt); if (mapWarping()) return; trySmashWalls(dvx, dvy); return; }
 
   // Input vector — keyboard / d-pad, or the analog joystick when it's active.
   let ix = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
@@ -17135,6 +17296,9 @@ function updatePlayer(dt) {
     if (Math.abs(player.vy) < 0.02) player.vy = 0;
   }
   if (player.vx !== 0 || player.vy !== 0) movePlayerBy(player.vx * dt, player.vy * dt);
+  // Stepping onto a teleporter pad above may have warped the hero (and frozen the
+  // world) mid-frame — don't run the post-move smash / squeeze at the new pad then.
+  if (mapWarping()) return;
   // Shove any cracked wall we're pressing into — using the INPUT heading (ix,iy),
   // not velocity, since collision has already zeroed the velocity into the wall.
   if (moving) trySmashWalls(ix, iy);
@@ -17305,15 +17469,24 @@ function useFountain(nx, ny) {
   saveGame();
 }
 
-// Step onto a teleporter pad → warp to its partner. onEnterCell only fires on a
-// fresh cell entry, so landing on the destination pad (set programmatically) can't
-// bounce the hero straight back.
+// Step onto a teleporter pad → walk through to its partner. onEnterCell only fires
+// on a fresh cell entry, so landing on the destination pad (set programmatically)
+// can't bounce the hero straight back. The hero is moved to the partner pad NOW
+// (over a frozen world) and beginMapWarp plays the swallow → pan → emerge purely
+// as a visual. clearHeld() drops any held key / joystick AND the click-to-move
+// route, so a warp never leaves you auto-walking back toward the pad you clicked.
 function teleportPad(nx, ny) {
   const dest = teleporters[ny + ',' + nx];
   if (!dest) return;
-  setPlayerCell(dest.x, dest.y);
-  spawnFloatingText(player.x, player.y, 'WARP', '#bb88ff');
-  log('<span data-spr=feat_portal></span> A teleporter whisks you across the floor!', 'important');
+  if (dest.x === nx && dest.y === ny) return;   // degenerate self-pad — nothing to do
+  clearHeld();                                  // cancel held input + any click-to-move path (don't walk back)
+  player.dashT = 0;                             // and end any in-progress dash — the portal took over
+  const sx = nx + 0.5, sy = ny + 0.5;           // pad the hero leaves (tile centre)
+  setPlayerCell(dest.x, dest.y);                // move now; the animation is purely visual
+  beginMapWarp(sx, sy, dest.x + 0.5, dest.y + 0.5);
+  sfx('teleport');
+  spawnParticles(nx, ny, '#c77dff', 12, 0.12);  // energy discharge as the portal swallows you
+  log('<span data-spr=feat_portal></span> You step into the teleporter — the portal whisks you across the floor!', 'important');
 }
 
 // ── UNSTUCK ──
@@ -17323,7 +17496,7 @@ function teleportPad(nx, ny) {
 // actually feels like a relocation. Only valid while exploring a dungeon floor.
 function unstuck() {
   if (inTown) { log('<span data-spr=feat_portal></span> Nothing to escape in town.'); return; }
-  if (portalChanneling() || portalTransiting()) return;   // held while a town portal channels / mid-teleport
+  if (portalChanneling() || portalTransiting() || mapWarping()) return;   // held while a town portal channels / mid-teleport
   // Gather every plain-floor tile that isn't the player's own and has no foe.
   const spots = [];
   for (let y = 1; y < MAP_H - 1; y++) {
@@ -17992,7 +18165,7 @@ function castSkillById(id, opts) {
   const sk = activeSkillList().find(s => s.id === id);
   if (!sk) { castMsg('You haven\'t learned that skill.'); _muteCastLog = false; return false; }
   if (inTown) { castMsg('Save your skills for the dungeon.'); _muteCastLog = false; return false; }
-  if (portalChanneling() || portalTransiting()) { _muteCastLog = false; return false; }   // channeling / mid-teleport
+  if (portalChanneling() || portalTransiting() || mapWarping()) { _muteCastLog = false; return false; }   // channeling / mid-teleport
   if (isPlayerStunned()) { castMsg('You are stunned and can\'t cast!'); _muteCastLog = false; return false; }
   const cd = skillCd(id);
   if (cd > 0) { castMsg(`⏳ ${sk.name} is recharging (${Math.ceil(cd)}s left).`); _muteCastLog = false; return false; }
@@ -20079,7 +20252,7 @@ function pickupChestsAt(x, y) {
 // next to a merchant/mystic opens their menu (you can't walk onto them); otherwise
 // it opens any chest already underfoot (most are auto-grabbed as you walk over).
 function pickup() {
-  if (inTown || portalChanneling() || portalTransiting()) return;
+  if (inTown || portalChanneling() || portalTransiting() || mapWarping()) return;
   if (merchant && Math.abs(merchant.x - player.x) <= 1 && Math.abs(merchant.y - player.y) <= 1) { openShop(); return; }
   if (mystic && Math.abs(mystic.x - player.x) <= 1 && Math.abs(mystic.y - player.y) <= 1) { openMystic(); return; }
   if (pickupChestsAt(player.x, player.y) > 0) { renderPanelSoon(); updateBars(); saveGameSoon(); }
@@ -20567,7 +20740,7 @@ function healPotionAmount() { return Math.max(1, Math.round(player.maxHp * potio
 function potionReady() { return (player.potionCd || 0) <= 0; }
 function useHealthPotion() {
   if (inTown) return;               // potions are locked in town (see renderSkillBar) — no free heals
-  if (portalChanneling() || portalTransiting()) return;   // channeling / mid-teleport
+  if (portalChanneling() || portalTransiting() || mapWarping()) return;   // channeling / mid-teleport
   if (!potionReady()) { log(`⏳ Potions recharge — ${Math.ceil(player.potionCd)}s left.`); return; }
   if (player.hp >= player.maxHp) { log('Already at full health.'); return; }
   const amt = queueHeal(healPotionAmount(), true); // over-time, interruptible sip (a heavy direct hit spills it)
@@ -20582,7 +20755,7 @@ const MANA_PERCENT = 0.40;     // a sip restores 40% of max MP, paid out OVER TI
 function manaPotionAmount() { return Math.max(10, Math.round(player.maxMp * potionManaPct())); }
 function useManaPotion() {
   if (inTown) return;               // potions are locked in town (see renderSkillBar) — no free refills
-  if (portalChanneling() || portalTransiting()) return;   // channeling / mid-teleport
+  if (portalChanneling() || portalTransiting() || mapWarping()) return;   // channeling / mid-teleport
   if (!potionReady()) { log(`⏳ Potions recharge — ${Math.ceil(player.potionCd)}s left.`); return; }
   if (player.mp >= player.maxMp) { log('Already at full mana.'); return; }
   const amt = queueMana(manaPotionAmount()); // over-time restore
@@ -22105,7 +22278,7 @@ function gearSetBarHTML() {
 // Swap which loadout is worn. Called with no/invalid index from the G hotkey to
 // flip to the other set; with 0/1 from the on-screen buttons to pick one.
 function toggleGearSet(idx) {
-  if (portalTransiting()) return;   // hero is mid-teleport (off the map) — no gear swaps
+  if (portalTransiting() || mapWarping()) return;   // hero is mid-teleport — no gear swaps
   const target = (idx === 0 || idx === 1) ? idx : (activeGearSet === 0 ? 1 : 0);
   hideTooltip();
   if (target === activeGearSet) return;
@@ -25437,6 +25610,7 @@ function rtOverlayEls() {
 function rtPaused() {
   if (gameHalted || inTown || player.hp <= 0) return true;
   if (portalTransiting()) return true;   // hero is mid-teleport (off the map) — no moving/fighting/being hit
+  if (mapWarping()) return true;         // walking through a teleporter pad — frozen mid-traversal
   for (const o of rtOverlayEls()) {
     if (o.el.classList.contains('open')) return true;
   }
@@ -25455,6 +25629,7 @@ const TOWN_REST_OVERLAYS = ['town-overlay', 'shop-overlay', 'mystic-overlay'];
 function clockPaused() {
   if (gameHalted || player.hp <= 0) return true;
   if (portalTransiting()) return true;   // freeze the scene (and ambient anim) while the hero teleports
+  if (mapWarping()) return true;         // freeze the scene while the hero walks through a teleporter pad
   for (const o of rtOverlayEls()) {
     if (inTown && o.townRest) continue;   // resting in town → clock runs
     if (o.el.classList.contains('open')) return true;
@@ -25753,6 +25928,10 @@ function gameLoop(ts) {
   // The teleport fade/beam animation runs on its own even while the world is paused
   // by it (rtPaused → true during transit) — it must keep playing to reach the warp.
   safeStep('portalFx', () => updatePortalFx(dt));
+  // The map-portal traversal (swallow → pan → emerge) likewise runs on its own even
+  // while it pauses the world — it must keep playing to reach the arrival and hand
+  // control back.
+  safeStep('warpFx', () => updateWarpFx(dt));
   if (!rtPaused()) {
     safeStep('move', () => updatePlayer(dt));              // 8-dir movement may trigger stairs/town/death…
     if (!rtPaused()) safeStep('combat', () => updatePlayerCombat(dt));
@@ -27037,6 +27216,7 @@ __dlLive("keybindCapture", () => keybindCapture, (v) => { keybindCapture = v; })
 __dlLive("lbMode", () => lbMode, (v) => { lbMode = v; });
 __dlLive("lbTab", () => lbTab, (v) => { lbTab = v; });
 __dlLive("merchant", () => merchant, (v) => { merchant = v; });
+__dlLive("moveTarget", () => moveTarget, undefined);   // read-only handle (a const object) — lets tests inspect the click-to-move route
 __dlLive("newGameArmed", () => newGameArmed, (v) => { newGameArmed = v; });
 __dlLive("pact", () => pact, (v) => { pact = v; });
 __dlLive("player", () => player, (v) => { player = v; });

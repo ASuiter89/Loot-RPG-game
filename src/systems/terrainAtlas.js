@@ -47,6 +47,18 @@ export function resolveTileId(table, fills, mask, x, y) {
   return id == null ? null : id;
 }
 
+// Which of the 15 Wang transition masks (1..15) a blob table is missing. A role
+// used as a biome/indoor floor, accent or wall MUST ship all 15: the renderer
+// picks one tile per mask, and a gap makes it fall back to the flat interior fill
+// — so an absent transition reads as a hard-edged patch of a NEIGHBOURING layer
+// (a stray primary-floor tile under an accent), not a smooth curved edge. This is
+// the check that keeps that class of bug out (e.g. Mudstone_Gray once lacked mask 9).
+export function blobMissingMasks(table) {
+  const missing = [];
+  for (let m = 1; m <= 15; m++) if (!table || table[m] == null) missing.push(m);
+  return missing;
+}
+
 // ── Atlas index math ── an atlas is a fixed-width grid of square cells; a tile
 // id is just its row-major position (id = row*cols + col). These convert between
 // the two so the converter can place tiles and the renderer can slice them.
