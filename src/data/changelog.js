@@ -12,6 +12,10 @@ export const CHANGELOG = [
     "All ten styles get their own groove so each sounds distinct: driving for Cavern, machine-like for Forge, martial for March, lazy and swung for Tide, ambient and still for Mist and Veil, and pounding for the boss theme.",
     "The music keeps its per-performance key, tempo, and melody variation on top, so it still never repeats note-for-note.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Hero Bars stay put", by: "Claude", notes: [
+    "With Hero Bars on, the red Health and blue Mana bars under your hero now stay visible at all times — no more vanishing when a vital fills up.",
+    "Stamina bar unchanged: still pops up only while stamina is recovering.",
+  ] },
   { date: "2026-07-03", size: "big", v: "Deep performance pass — the lag is gone", by: "Claude", notes: [
     "Frame rate stays smooth on deep floors and stays smooth however long the game has been open.",
     "Combat log keeps the newest 200 lines; endless growth was quietly slowing every message.",
