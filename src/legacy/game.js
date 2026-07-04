@@ -6838,7 +6838,9 @@ window.gameState = function gameState(radius) {
       // conquest, never after a death). `available` mirrors the button's own
       // enabled test so an agent driving the game sees the same truth.
       returnToLastFloor: inTown
-        ? { available: (heldFloor != null), floor: Math.max(1, dungeonReturn || 1), where: floorLabel(Math.max(1, dungeonReturn || 1)) }
+        ? (heldFloor != null
+            ? { available: true, floor: Math.max(1, dungeonReturn || 1), where: floorLabel(Math.max(1, dungeonReturn || 1)) }
+            : { available: false, floor: null, where: null })   // no held stage → no return target (don't report the default warp floor)
         : null,
       pointsToSpend: { attribute: player.attrPoints || 0, skill: player.skillPoints || 0, ascendancy: player.ascPoints || 0 },
       gold: player.gold,                 // coins in hand (what death loss is taken from)
@@ -10925,7 +10927,7 @@ function captureHeldFloor() {
     mapData, wallCracks, furnitureMap, decorMap, teleporters, shrineData,
     floorThemeOverride, floorTint, floorMod, floorRooms, floorMobSpec,
     hasFountain, groundKey, hasKey, startPos,
-    dungeonLevel, floorCleared,
+    dungeonLevel, floorCleared, floorGreed,
     enemies, minions, merchant, mystic, quest,
     groundItems, groundFood, groundGold, graveMarker, nextDiffPortal,
     bossHazards, traps, projectiles,
@@ -10959,6 +10961,7 @@ function returnToHeldFloor() {
   floorMod = h.floorMod; floorRooms = h.floorRooms; floorMobSpec = h.floorMobSpec;
   hasFountain = h.hasFountain; groundKey = h.groundKey; hasKey = h.hasKey;
   startPos = h.startPos; dungeonLevel = h.dungeonLevel; floorCleared = h.floorCleared;
+  floorGreed = h.floorGreed;   // greed buffs foes IN PLACE on the enemy objects we restore, so restore the multiplier too or the doubled loot/gold silently vanishes while the buffed roster stays
   enemies = h.enemies; minions = h.minions; merchant = h.merchant; mystic = h.mystic;
   quest = h.quest; groundItems = h.groundItems; groundFood = h.groundFood;
   groundGold = h.groundGold; graveMarker = h.graveMarker; nextDiffPortal = h.nextDiffPortal;
