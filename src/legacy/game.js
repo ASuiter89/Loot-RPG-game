@@ -34,6 +34,8 @@ import { forgeSections } from '../systems/forgeFlow.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
+import { fuseCount, transmuteCost as calcTransmuteCost, fusableByTier,
+  resolveTransmute } from '../systems/transmute.js';
 import { CHANGELOG } from '../data/changelog.js';
 import { MUSIC_SECTIONS } from '../data/musicSections.js';
 import { bassSemi, voiceChord, voiceSpread } from '../systems/musicGroove.js';
@@ -6865,7 +6867,7 @@ window.gameGuide = function gameGuide(topic) {
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
-      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse 3 UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost — it spends your 3 lowest-value pieces of that rarity, so lock keepers first (needs 3+ unlocked of a rarity).`,
+      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Services unlock as you progress and show in a fixed order (Dungeon Gate on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress.`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
@@ -10863,53 +10865,125 @@ function hireMerc(id, floors) {
 }
 
 // ══════════════════════════════════════════
-// TRANSMUTER (the Horadric-cube recipe — fuse 3 items into 1 of the next rarity)
+// TRANSMUTER (the crucible recipe — fuse N same-rarity pieces into 1 of the next
+// rarity up; N climbs with rarity, 2 at the bottom up to 5 legendaries for a
+// unique/set — see src/data/transmuteRecipe.js)
 // ══════════════════════════════════════════
 const TIER_ORDER = Object.keys(TIERS); // junk → … → unique
-function transmuteCost(nextTier) { return Math.round((40 + (player.maxFloor || 1) * 8) * (1 + TIER_ORDER.indexOf(nextTier) * 0.4)); }
-function openTransmuter() { openTownModal('Transmuter', 'potion_g'); renderTransmuter(); }
+function transmuteCost(nextTier) { return calcTransmuteCost(nextTier, player.maxFloor, TIER_ORDER); }
+// Result-tier label for a fuse. The top result is "unique / set": a set piece
+// rolls at the unique tier (same rarity) but chases its own class, so it's a form
+// of unique and worth calling out on its own.
+function transmuteResultLabel(next) {
+  const cn = (TIERS[next] || {}).color;
+  if (next === 'unique') return `<span style="color:${cn}">unique</span> / <span style="color:${SET_RARITY_COLOR}">set</span>`;
+  return `<span style="color:${cn}">${next}</span>`;
+}
+// Two-screen flow: `transmuteTier` null → the rarity list; a tier → its piece
+// picker, with `transmutePicks` holding the item ids chosen for the next fuse.
+let transmuteTier = null;
+let transmutePicks = [];
+function openTransmuter() { transmuteTier = null; transmutePicks = []; openTownModal('Transmuter', 'potion_g'); renderTransmuter(); }
 function renderTransmuter() {
-  // Group your UNLOCKED bag gear by rarity; any rarity with 3+ can be fused up.
-  const byTier = {};
-  inventory.forEach((it, i) => { if (it && it.slot && !it.locked) (byTier[it.tier] = byTier[it.tier] || []).push(i); });
-  let html = `<div class="town-blurb">Cast three pieces of gear into the crucible and draw out a single item of the next rarity up. Uses your <b>unlocked</b> bag gear — lock anything you want to keep. (Mythic can't be pushed higher.)</div>`;
+  // Group your UNLOCKED bag gear by rarity; a rarity with enough of one kind fuses.
+  const byTier = fusableByTier(inventory);
+  // If a rarity is picked and can still field a full crucible, show its piece
+  // picker; otherwise (e.g. a fuse just spent it below the recipe) drop to the list.
+  if (transmuteTier != null && (byTier[transmuteTier] || []).length >= fuseCount(transmuteTier)) {
+    renderTransmutePick(byTier[transmuteTier]); return;
+  }
+  transmuteTier = null; transmutePicks = [];
+  let html = `<div class="town-blurb">Cast a set of same-rarity pieces into the crucible and draw out a single item of the next rarity up. The count climbs with rarity — 2 at the bottom, up to 5 legendaries for a <b>unique/set</b>. Pick a rarity, then choose exactly which <b>unlocked</b> bag pieces to spend. Locked keepers are never touched.</div>`;
   let any = false;
   html += '<div class="shop-grid">';
   for (let t = 0; t < TIER_ORDER.length - 1; t++) {
     const tier = TIER_ORDER[t], next = TIER_ORDER[t + 1];
+    const need = fuseCount(tier);
     const list = byTier[tier] || [];
-    if (list.length < 3) continue;
+    if (!need || list.length < need) continue;
     any = true;
     const cost = transmuteCost(next);
-    const afford = spendableGold() >= cost;
-    const c = (TIERS[tier] || {}).color, cn = (TIERS[next] || {}).color;
+    const c = (TIERS[tier] || {}).color;
     html += `<div class="shop-row has-actions">
-      <span class="loot-icon"><span data-spr=potion_g></span></span>
       <div class="shop-row-info">
-        <div class="shop-row-name">3× <span style="color:${c}">${tier}</span> → 1× <span style="color:${cn}">${next}</span></div>
-        <div class="shop-row-stats">${list.length} ${tier} pieces in your bag</div>
+        <div class="shop-row-name">${need}× <span style="color:${c}">${tier}</span> → 1× ${transmuteResultLabel(next)}</div>
+        <div class="shop-row-stats">${list.length} unlocked ${tier} ${list.length === 1 ? 'piece' : 'pieces'} · <span data-spr=ic_money></span>${cost} to fuse</div>
       </div>
-      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="transmute('${tier}')"><span data-spr=ic_money></span>${cost}</button>
+      <button class="act-btn" onclick="transmuteSelectTier('${tier}')">CHOOSE</button>
     </div>`;
   }
   html += '</div>';
-  if (!any) html += `<div class="town-blurb" style="opacity:0.75">You need at least 3 unlocked pieces of the same rarity to fuse. Come back with more loot.</div>`;
+  if (!any) html += `<div class="town-blurb" style="opacity:0.75">You need enough unlocked pieces of one rarity to fuse (2–5, depending on rarity). Come back with more loot.</div>`;
   setTownContent(html);
 }
-function transmute(tier) {
+// The piece picker for one rarity: every unlocked bag piece of that tier is a
+// toggle; the fuse spends exactly the ones you tick, not an arbitrary grab.
+function renderTransmutePick(indices) {
+  const tier = transmuteTier, ti = TIER_ORDER.indexOf(tier), next = TIER_ORDER[ti + 1];
+  const need = fuseCount(tier), cost = transmuteCost(next);
+  // Drop any picks whose piece is no longer eligible (defensive across renders).
+  transmutePicks = transmutePicks.filter(id => indices.some(i => inventory[i] && inventory[i].id == id));
+  const c = (TIERS[tier] || {}).color;
+  let rows = '';
+  for (const i of indices) {
+    const it = inventory[i];
+    const on = transmutePicks.includes(it.id);
+    const slotLabel = it.slot ? SLOTS[it.slot].label : '';
+    const stats = itemStatLine(it, { noPower: true });
+    rows += `<div class="shop-row transmute-pick ${on ? 'picked' : ''}" onclick="transmuteTogglePick(${it.id})">
+      <span class="transmute-check">${on ? '✓' : ''}</span>
+      <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
+      <div class="shop-row-info ${rarityClass(it)}">
+        <div class="shop-row-name">${it.name}${craftedMark(it)}</div>
+        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${itemPower(it)}</span></div>
+        ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
+      </div>
+    </div>`;
+  }
+  const picked = transmutePicks.length, ready = picked === need;
+  const canFuse = ready && spendableGold() >= cost;
+  const blurb = `<div class="town-blurb">Choose <b>${need}</b> <span style="color:${c}">${tier}</span> pieces to fuse into <b>1×</b> ${transmuteResultLabel(next)}. Tap to add or remove.</div>`;
+  const bar = `<div class="transmute-bar">
+      <button class="modal-nav-btn" onclick="transmuteBack()">‹ Back</button>
+      <span class="transmute-count ${ready ? 'ready' : ''}">${picked} / ${need} chosen</span>
+      <button class="act-btn ${ready && spendableGold() < cost ? 'short' : ''}" ${canFuse ? '' : 'disabled'} onclick="transmuteFuse()"><span data-spr=ic_money></span>${cost} · Fuse</button>
+    </div>`;
+  setTownContent(`${blurb}<div class="shop-grid">${rows}</div>${bar}`);
+}
+function transmuteSelectTier(tier) { transmuteTier = tier; transmutePicks = []; renderTransmuter(); }
+function transmuteBack() { transmuteTier = null; transmutePicks = []; renderTransmuter(); }
+function transmuteTogglePick(id) {
+  if (transmuteTier == null) return;
+  const at = transmutePicks.indexOf(id);
+  if (at >= 0) { transmutePicks.splice(at, 1); sfx('click'); }
+  else {
+    if (transmutePicks.length >= fuseCount(transmuteTier)) { sfx('denied'); return; } // deselect one first
+    const it = inventory.find(x => x && x.id == id);
+    if (!it || !it.slot || it.locked || it.tier !== transmuteTier) { sfx('denied'); return; }
+    transmutePicks.push(id); sfx('click');
+  }
+  renderTransmuter();
+}
+function transmuteFuse() {
+  if (transmuteTier == null || transmutePicks.length !== fuseCount(transmuteTier)) { sfx('denied'); return; }
+  const tier = transmuteTier, ids = transmutePicks.slice();
+  transmutePicks = []; // consumed — the re-render inside transmute() starts fresh
+  transmute(tier, ids);
+}
+// Fuse `ids` (an explicit pick) — or, with no ids, the auto-picked lowest-value
+// pieces (keeps window.transmute(tier) / AI play working without the UI).
+function transmute(tier, ids) {
   const t = TIER_ORDER.indexOf(tier);
   if (t < 0 || t >= TIER_ORDER.length - 1) return;
   const next = TIER_ORDER[t + 1];
   const cost = transmuteCost(next);
   if (spendableGold() < cost) { log('Not enough gold to transmute.'); sfx('denied'); return; }
-  // Grab the three lowest-value unlocked pieces of this rarity.
-  const idxs = inventory.map((it, i) => ({ it, i }))
-    .filter(o => o.it && o.it.slot && !o.it.locked && o.it.tier === tier)
-    .sort((a, b) => (a.it.value || 0) - (b.it.value || 0)).slice(0, 3).map(o => o.i);
-  if (idxs.length < 3) { renderTransmuter(); return; }
+  const res = resolveTransmute(inventory, tier, ids);
+  if (!res.ok) { log(`Pick ${fuseCount(tier)} unlocked ${tier} pieces to fuse.`); sfx('denied'); renderTransmuter(); return; }
   spendGold(cost);
-  // Remove the three (highest index first so splices don't shift).
-  idxs.sort((a, b) => b - a).forEach(i => inventory.splice(i, 1));
+  const spent = res.indices.length;
+  // Remove the chosen pieces (highest index first so splices don't shift).
+  res.indices.slice().sort((a, b) => b - a).forEach(i => inventory.splice(i, 1));
   const ilvl = Math.max(1, (dungeonReturn || player.maxFloor || 1) + 1);
   const item = generateItem(1, ilvl, next);
   inventory.push(item);
@@ -10917,7 +10991,7 @@ function transmute(tier) {
   // tier-coloured flash.
   if (isTopTierItem(item)) lootReveal(item);
   else { sfx('levelup'); screenFlash((TIERS[next] || {}).color || '#fff'); }
-  log(`<span data-spr=potion_g></span> The crucible fuses three ${tier} pieces into ${logItem(item)}!`, 'loot');
+  log(`<span data-spr=potion_g></span> The crucible fuses ${spent} ${tier} pieces into ${logItem(item)}!`, 'loot');
   updateBars(); renderPanel(); renderTransmuter(); saveGame();
 }
 
@@ -24323,6 +24397,9 @@ function handleEscape() {
       // In the Enchanter, a picked item sits one screen deeper than the paper
       // doll — Esc backs out to the doll first, and only then to the town hub.
       if (townServiceKind === 'enchanter' && enchantSel != null) { enchantBack(); return true; }
+      // The Transmuter's piece picker sits one screen deeper than the rarity
+      // list — Esc backs out to the list first, then to the town hub.
+      if (townServiceKind === 'transmuter' && transmuteTier != null) { transmuteBack(); return true; }
       townBack(); return true;
     }
     toggleSettingsMenu(); return true;
@@ -28177,6 +28254,11 @@ const __DL_FN_BRIDGE = {
   transmuteCost,
   openTransmuter,
   renderTransmuter,
+  renderTransmutePick,
+  transmuteSelectTier,
+  transmuteTogglePick,
+  transmuteBack,
+  transmuteFuse,
   transmute,
   bountyKills,
   bountyProgress,
