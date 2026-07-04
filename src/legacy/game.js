@@ -23194,8 +23194,8 @@ function skillMechList(n, rank) {
     // fires). Only for actives that deal direct damage (wpn/spell).
     const dp = skillDamagePreview(n, rank);
     if (dp) {
-      add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b> to a foe at this depth, before crit.`);
-      add('DPS', '#e0a24b', `about <b>${abbreviateNumber(dp.dps)}</b> sustained — crit chance/damage and cast rate factored in.`);
+      add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b>`);
+      add('DPS', '#e0a24b', `<b>${abbreviateNumber(dp.dps)}</b>`);
     }
     // Movement first — gap-closers/pulls/escapes are the headline of a mobility skill.
     if (c.shape === 'teleport') add('Gap-closer', '#5fc9c0', `Blink up to ${c.range || 6} tiles onto the nearest foe and strike — closes on ranged attackers.`);

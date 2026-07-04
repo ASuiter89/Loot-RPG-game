@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Skill damage pill always shows its real range", by: "Claude", notes: [
+    "The Damage pill on a skill's card now always shows a low–high range. When a hit's spread is narrow next to a big number, both ends used to abbreviate to the same value and collapse to one figure — it now adds just enough decimal precision to show the true span (e.g. 16.0k–16.3k instead of a lone 16k). A fixed-damage spell still shows a single number, because it has no roll.",
+    "The Damage and DPS pills dropped their trailing explanation text — they're just the numbers now — and every pill's value is right-aligned, tag on the left.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Transmuter lets you pick which pieces to fuse", by: "Claude", notes: [
     "The Transmuter no longer grabs gear on its own. Choose a rarity, then tick exactly which unlocked pieces go in the crucible — a running count and the gold cost show before you commit, and the fuse only fires once the recipe is full.",
     "The fuse count now climbs with rarity: 2 junk or normal, 3 uncommon or rare, 4 epic, and 5 legendary to draw a unique (which may roll a set piece).",

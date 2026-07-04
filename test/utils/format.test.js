@@ -51,7 +51,7 @@ describe('formatDamageRange', () => {
     expect(formatDamageRange(1200, 1800)).toBe('1.2k–1.8k');
   });
 
-  it('collapses to a single number when both ends abbreviate alike', () => {
+  it('shows a single number only for a true point (min === max)', () => {
     expect(formatDamageRange(50, 50)).toBe('50');
     // A fixed-damage spell has min === max.
     expect(formatDamageRange(340, 340)).toBe('340');
@@ -59,6 +59,29 @@ describe('formatDamageRange', () => {
 
   it('abbreviates each end independently', () => {
     expect(formatDamageRange(900, 1500)).toBe('900–1.5k');
+  });
+
+  it('reveals a narrow range whose ends round to the same abbreviation', () => {
+    // 32000 and 32400 both round to "32k" — sharpen until they separate.
+    expect(formatDamageRange(32000, 32400)).toBe('32.0k–32.4k');
+    // A wider range needs no extra precision.
+    expect(formatDamageRange(32000, 45000)).toBe('32k–45k');
+  });
+
+  it('adds a second decimal only when one is not enough', () => {
+    expect(formatDamageRange(32000, 32040)).toBe('32.00k–32.04k');
+  });
+
+  it('falls back to a single number when ends are indistinguishable at 2 decimals', () => {
+    expect(formatDamageRange(32000, 32001)).toBe('32k');
+  });
+});
+
+describe('abbreviateNumber with forced decimals', () => {
+  it('forces the given decimals on the magnitude part', () => {
+    expect(abbreviateNumber(32000, 1)).toBe('32.0k');
+    expect(abbreviateNumber(32400, 1)).toBe('32.4k');
+    expect(abbreviateNumber(32040, 2)).toBe('32.04k');
   });
 });
 

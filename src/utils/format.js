@@ -14,24 +14,29 @@ function trimZero(s) {
 
 /**
  * Abbreviate a number for a compact readout: exact (rounded) under 1000, then a
- * magnitude suffix above — one decimal below ten of a unit (1.2k), whole above
- * (12k). Handles negatives and non-finite input (→ "0").
+ * magnitude suffix above. By default one decimal below ten of a unit (1.2k), whole
+ * above (12k). Pass `decimals` to force that many decimals on the magnitude part
+ * (e.g. 2 → "32.14k") — used to reveal a narrow range whose ends round together.
+ * Handles negatives and non-finite input (→ "0").
  * @param {number} n
+ * @param {number} [decimals] forced decimal places on the abbreviated magnitude
  * @returns {string}
  */
-export function abbreviateNumber(n) {
+export function abbreviateNumber(n, decimals) {
   if (!Number.isFinite(n)) return '0';
   const neg = n < 0;
   const v = Math.abs(n);
   let out;
   if (v < 1000) {
-    out = String(Math.round(v));
+    out = decimals != null ? v.toFixed(decimals) : String(Math.round(v));
   } else {
     out = String(Math.round(v)); // fallback (shouldn't be reached: 1e12 covers it)
     for (const [div, suf] of MAGNITUDES) {
       if (v >= div) {
         const q = v / div;
-        out = (q < 10 ? trimZero(q.toFixed(1)) : String(Math.round(q))) + suf;
+        out = (decimals != null
+          ? q.toFixed(decimals)
+          : (q < 10 ? trimZero(q.toFixed(1)) : String(Math.round(q)))) + suf;
         break;
       }
     }
@@ -40,17 +45,25 @@ export function abbreviateNumber(n) {
 }
 
 /**
- * Format a low–high damage span with an en dash, abbreviating each end. When the
- * two ends collapse to the same abbreviated value (e.g. a fixed-damage spell, or a
- * tight range that rounds together) a single number is shown instead of "N–N".
+ * Format a low–high damage span with an en dash, abbreviating each end. Always
+ * shows both ends when they differ — if the default abbreviation rounds them to the
+ * same string (a narrow range at a big magnitude, e.g. 32000–32400), it adds decimal
+ * precision until the two read as distinct ("32.0k–32.4k"). A true point (min ===
+ * max, e.g. a fixed-damage spell) shows a single number.
  * @param {number} min
  * @param {number} max
  * @returns {string}
  */
 export function formatDamageRange(min, max) {
-  const lo = abbreviateNumber(min);
-  const hi = abbreviateNumber(max);
-  return lo === hi ? lo : `${lo}–${hi}`;
+  if (min === max) return abbreviateNumber(min);
+  const lo0 = abbreviateNumber(min), hi0 = abbreviateNumber(max);
+  if (lo0 !== hi0) return `${lo0}–${hi0}`;
+  // Ends round to the same abbreviation — sharpen precision until they separate.
+  for (let d = 1; d <= 2; d++) {
+    const lo = abbreviateNumber(min, d), hi = abbreviateNumber(max, d);
+    if (lo !== hi) return `${lo}–${hi}`;
+  }
+  return lo0; // indistinguishable even at 2 decimals — effectively a point
 }
 
 /**
