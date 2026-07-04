@@ -25324,40 +25324,56 @@ function hoverTip(html) {
 // reorder) cancels the pending hold. Any data-tip element qualifies — actionable
 // ones (a tap DOES something) rely on the hold for their tip, while plain info
 // surfaces are ALSO reachable by a single tap via the tap-to-tip fallback below.
+// The press is tracked by pointerId, so a SECOND finger (steering the joystick)
+// can't cancel a hold; and the click-swallow is gated on touch mode, so a latch
+// left dangling by a hold that ended without a click never eats a later MOUSE
+// click on a hybrid touch+trackpad device.
 const LONGPRESS_MS = 450;
-let _lpTimer = null, _lpEl = null, _lpRect = null, _lpX = 0, _lpY = 0, _lpFired = false, _lpShown = false;
+let _lpTimer = null, _lpEl = null, _lpShownEl = null, _lpRect = null, _lpPointerId = -1, _lpX = 0, _lpY = 0, _lpFired = false, _lpShown = false;
 function _lpCancel() { if (_lpTimer !== null) { clearTimeout(_lpTimer); _lpTimer = null; } _lpEl = null; }
 document.addEventListener('pointerdown', (e) => {
-  if (!isTouchMode() || e.pointerType !== 'touch') return;
+  // Clear a stale swallow latch first — on mouse/pen too, so a hold that ended
+  // without a synthesized click (a pointercancel, or a swipe-off release after the
+  // timer fired) can't leave the NEXT click eaten on a hybrid device.
   _lpFired = false;
+  if (!isTouchMode() || e.pointerType !== 'touch') return;
   // A fresh touch dismisses a card an earlier long-press raised (no hover to end
-  // it). The tap then proceeds normally — a quick tap on a skill still casts it.
-  if (_lpShown) { hideHoverTip(); _lpShown = false; }
+  // it). If the tap lands back on the SAME tipped surface, swallow its click too so
+  // the tap-to-tip fallback below doesn't immediately re-raise the card we just hid.
+  if (_lpShown) {
+    hideHoverTip(); _lpShown = false;
+    if (_lpShownEl && e.target.closest('[data-tip]') === _lpShownEl) _lpFired = true;
+    _lpShownEl = null;
+  }
   // Any tipped control — the nearest data-tip ancestor carries the card (some
   // actionable controls wrap their button in a data-tip span, e.g. .ench-tipwrap).
   const btn = e.target.closest('[data-tip]');
   if (!btn) return;
   _lpCancel();
   // Anchor to the rect captured now (the bar re-renders the button node every state
-  // change; the screen slot stays put, so this survives a mid-hold rebuild).
-  _lpEl = btn; _lpRect = btn.getBoundingClientRect(); _lpX = e.clientX; _lpY = e.clientY;
+  // change; the screen slot stays put, so this survives a mid-hold rebuild). Latch
+  // this finger's pointerId so only ITS move / lift can cancel the pending hold.
+  _lpEl = btn; _lpRect = btn.getBoundingClientRect(); _lpPointerId = e.pointerId; _lpX = e.clientX; _lpY = e.clientY;
   _lpTimer = setTimeout(() => {
     _lpTimer = null;
     if (!_lpEl) return;
     _lpFired = _lpShown = true;                 // raise the card; swallow this press's click
+    _lpShownEl = _lpEl;                          // remember which surface is showing, to dismiss it
     renderHoverTip(_lpEl, null, _lpRect);
     try { if (navigator.vibrate) navigator.vibrate(8); } catch (_) {}   // haptic where supported
   }, LONGPRESS_MS);
 }, true);
 document.addEventListener('pointermove', (e) => {
-  if (_lpTimer !== null && (Math.abs(e.clientX - _lpX) > TAP_SLOP || Math.abs(e.clientY - _lpY) > TAP_SLOP)) _lpCancel();
+  if (_lpTimer !== null && e.pointerId === _lpPointerId &&
+      (Math.abs(e.clientX - _lpX) > TAP_SLOP || Math.abs(e.clientY - _lpY) > TAP_SLOP)) _lpCancel();
 }, { capture: true, passive: true });
-document.addEventListener('pointerup', _lpCancel, true);
-document.addEventListener('pointercancel', _lpCancel, true);
+document.addEventListener('pointerup', (e) => { if (e.pointerId === _lpPointerId) _lpCancel(); }, true);
+document.addEventListener('pointercancel', (e) => { if (e.pointerId === _lpPointerId) _lpCancel(); }, true);
 // A long-press already raised the tip — eat the click the press ends on so holding
 // to read a skill never also casts it. Capture phase, ahead of the button's onclick.
+// Gated on touch mode: a stale latch must never swallow a desktop mouse click.
 document.addEventListener('click', (e) => {
-  if (_lpFired) { _lpFired = false; e.stopPropagation(); e.preventDefault(); }
+  if (_lpFired) { _lpFired = false; if (isTouchMode()) { e.stopPropagation(); e.preventDefault(); } }
 }, true);
 
 // Dismiss the tooltip when tapping anywhere (the tooltip, the map, the log, etc.),
