@@ -6228,6 +6228,14 @@ window.gameState = function gameState(radius) {
   if (merchant) put(merchant.x, merchant.y, 'M');
   if (mystic) put(mystic.x, mystic.y, '?');
   if (quest && quest.npc) put(quest.npc.x, quest.npc.y, 'N');
+  // Floor-quest objective tiles (relic to fetch, tribute/grave spot, gather markers).
+  if (quest) {
+    if (quest.item && !quest.hasItem) put(quest.item.x, quest.item.y, 'Q');
+    if (quest.spot) put(quest.spot.x, quest.spot.y, 'Q');
+    if (quest.markers) quest.markers.forEach(m => { if (m && !m.done) put(m.x, m.y, 'Q'); });
+  }
+  // Rainbow conquest gate: step on it to dive into the next difficulty (floor 1).
+  if (typeof nextDiffPortal !== 'undefined' && nextDiffPortal) put(nextDiffPortal.x, nextDiffPortal.y, 'R');
   // Bolts in flight last (just under the player) — the most urgent thing to dodge.
   (typeof projectiles !== 'undefined' ? projectiles || [] : []).forEach(p => put(Math.floor(p.x), Math.floor(p.y), '!'));
   put(player.x, player.y, '@');
@@ -6246,11 +6254,17 @@ window.gameState = function gameState(radius) {
   // permanent sidebar (panelOpen is always true) and does NOT block movement, so
   // it's only treated as a menu in the compact layout.
   const ovOpen = id => { const el = document.getElementById(id); return !!(el && el.classList.contains('open')); };
+  // Every movement-blocking overlay → the mode it puts the game in. This MUST stay a
+  // superset of RT_BLOCKING_OVERLAYS (the world-freeze list rtPaused() uses): any
+  // overlay that pauses the world but is missing here makes canMove wrongly read true.
   const MODALS = [
-    ['title-overlay', 'title'], ['class-overlay', 'classSelect'], ['name-overlay', 'nameSelect'], ['death-overlay', 'dead'],
+    ['title-overlay', 'title'], ['class-overlay', 'classSelect'], ['name-overlay', 'nameSelect'],
+    ['hc-death-overlay', 'dead'], ['death-overlay', 'dead'],
     ['settings-menu', 'settings'], ['version-overlay', 'changelog'],
     ['howto-overlay', 'howto'], ['autoloot-overlay', 'autoloot'], ['keybind-overlay', 'keybinds'],
-    ['slotpick-overlay', 'slotpick'],
+    ['slotpick-overlay', 'slotpick'], ['newrun-overlay', 'newrun'], ['slots-overlay', 'slots'],
+    ['account-overlay', 'account'], ['lb-overlay', 'leaderboard'], ['graveyard-overlay', 'graveyard'],
+    ['conquest-overlay', 'conquest'], ['greed-overlay', 'greed'],
     ['shop-overlay', 'shop'], ['mystic-overlay', 'mystic'], ['town-overlay', 'town'],
   ];
   let mode = 'dungeon', blockingOverlay = null;
@@ -6307,7 +6321,12 @@ window.gameState = function gameState(radius) {
     const node = (typeof skillNode === 'function') ? skillNode(id) : null;
     const rank = (typeof skillRank === 'function') ? skillRank(id) : 0;
     const cd = (typeof skillCd === 'function') ? skillCd(id) : 0;
-    const mpCost = (node && typeof skillManaCost === 'function') ? skillManaCost(node, rank) : (node ? node.mp : null);
+    const baseMp = (node && typeof skillManaCost === 'function') ? skillManaCost(node, rank) : (node ? node.mp : null);
+    // Match the real cast: Mana Cost Reduction divides the base cost (min 1), so the
+    // reported mp — and the affordability check in `ready` — mirror what it will charge.
+    const mcr = (typeof totalStat === 'function') ? Math.max(0, totalStat('MCR')) : 0;
+    const mpCost = (baseMp == null) ? null : Math.max(1, Math.round(baseMp / (1 + mcr / 100)));
+    const c = node && node.cast;
     const o = {
       id, name: node ? node.name : id, rank,
       mp: mpCost, cooldown: Math.round(cd * 10) / 10,
@@ -6315,6 +6334,15 @@ window.gameState = function gameState(radius) {
       // 'skill' (martial: scales with weapon + Skill Power) or 'spell' (magic:
       // scales with Spell Power; also sped by Cast Speed). Null for non-actives.
       school: (node && node.cast && typeof castKind === 'function') ? castKind(node) : null,
+      // WHAT it does + its reach, so an agent can pick a skill without inspecting the
+      // node. A skill may be several at once (e.g. a nova that also heals).
+      shape: c ? (c.shape || null) : null,          // self|bolt|blast|nova|line|summon|…
+      damages: !!(c && (c.wpn != null || c.spell != null)),
+      heals: !!(c && c.heal),
+      buffs: !!(c && c.buff),
+      summons: !!(c && c.summon),
+      range: c ? (c.range || null) : null,
+      radius: c ? (c.radius || null) : null,
     };
     if (idx != null) {
       o.slot = idx + 1;
@@ -6350,7 +6378,7 @@ window.gameState = function gameState(radius) {
   return {
     // What's on screen and whether walking keys work right now. If canMove is
     // false, interact with the menu/overlay instead of pressing movement keys.
-    mode,            // dungeon | town | bag | title | classSelect | nameSelect | dead | shop | mystic | settings | changelog | playtime
+    mode,            // dungeon|town|bag|title|classSelect|nameSelect|dead|shop|mystic|settings|changelog|howto|autoloot|keybinds|slotpick|newrun|slots|account|leaderboard|graveyard|conquest|greed
     canMove,         // true only when mode === 'dungeon' and not mid-teleport
     blockingOverlay, // DOM id of the open modal, or null
     // Teleport ANIMATION in flight, else null. 'out' (fading out to town) or 'in'
@@ -6400,6 +6428,21 @@ window.gameState = function gameState(radius) {
         increasedDmg: totalStat('IDMG'),
         attackSpeed: totalStat('ATKSPD'), castSpeed: totalStat('CASTSPD'), cooldownReduction: totalStat('CDR'),
       } : null,
+      // Auto-attack reach of the equipped weapon, resolved by SUB-TYPE (a Rapier
+      // reaches 2, a Pike 3, a Longbow 5) — read this rather than guessing from category.
+      weaponReach: (typeof weaponRangeOf === 'function') ? weaponRangeOf((equipped || {}).weapon) : null,
+      // Survivability — the defensive counterpart to `offense`, mirroring the HERO sheet.
+      // The chance fields are 0..1 fractions measured against the current floor's threat.
+      defense: (typeof playerDefense === 'function') ? {
+        defense: Math.round(playerDefense()),
+        critChance: Math.round(playerCritChance() * 1000) / 1000,
+        critDamage: Math.round(critDamageMult() * 100) / 100,
+        hitChance: Math.round(hitChanceVs({ level: curDepth() }) * 1000) / 1000,
+        dodge: Math.round(playerDodge() * 1000) / 1000,
+        block: Math.round(blockChanceVs(curDepth()) * 1000) / 1000,
+        dmgReduction: Math.round(drFractionVs(curDepth()) * 1000) / 1000,
+        tenacity: (typeof playerTenacity === 'function') ? Math.round(playerTenacity() * 1000) / 1000 : null,
+      } : null,
     },
     // Buffs & debuffs currently on the hero (see effect names; turns or floors left).
     effects,
@@ -6426,6 +6469,9 @@ window.gameState = function gameState(radius) {
       ranged: !!(beh && beh.ranged), range: beh ? (beh.range || 1) : 1,
       aggro: !!e.aggro,                        // true = actively hunting you
       warded: (e.shieldT || 0) > 0,            // boss ward up → your damage is HALVED
+      enraged: !!e.enraged,                    // boss permanently hits +50% (triggers below 40% HP)
+      berserk: (e.berserkT || 0) > 0,          // boss temporary damage spike — wait it out like a ward
+      affix: e.affix || null,                  // elite-style modifier on ~22% of ordinary foes (see gameGuide "enemies")
       status: enemyStatus(e),                  // e.g. ['stun'], ['slow','poison']
     }; }),
     chests: (groundItems || []).map(g => ({ x: g.x, y: g.y })),
@@ -6463,6 +6509,35 @@ window.gameState = function gameState(radius) {
       const c = k.split(','); return { x: +c[1], y: +c[0], kind: (shrineData[k] || {}).kind }; }) : [], // power|guard|fortune|blood|wisdom
     teleporters: (typeof teleporters !== 'undefined' && teleporters) ? Object.keys(teleporters).map(k => {
       const c = k.split(','), d = teleporters[k] || {}; return { x: +c[1], y: +c[0], toX: d.x, toY: d.y }; }) : [],
+    // Active floor mini-quest (rescue/escort/hunt/fetch/tribute/forage/…). Its
+    // objective tiles are painted on the ASCII map (NPC 'N', objective 'Q'); see
+    // gameGuide("quests"). Null when the floor has no quest.
+    quest: quest ? {
+      type: quest.type, done: !!quest.done,
+      npc: quest.npc ? { name: quest.npc.name, x: quest.npc.x, y: quest.npc.y, following: !!quest.npc.following } : null,
+      item: (quest.item && !quest.hasItem) ? { x: quest.item.x, y: quest.item.y } : null,
+      hasItem: !!quest.hasItem,
+      spot: quest.spot ? { x: quest.spot.x, y: quest.spot.y } : null,
+      markers: quest.markers ? quest.markers.map(m => ({ x: m.x, y: m.y, done: !!m.done })) : null,
+      collected: (quest.collected != null) ? quest.collected : null,
+      need: (quest.need != null) ? quest.need : null,
+      cost: (quest.cost != null) ? quest.cost : null,
+      target: quest.name || null,   // 'hunt': the Wanted foe's name
+    } : null,
+    // Walk-on rainbow gate that opens on a conquered floor (glyph 'R'): step onto it
+    // to dive straight into the next difficulty at floor 1 (no town trip needed).
+    conquestGate: (typeof nextDiffPortal !== 'undefined' && nextDiffPortal) ? {
+      x: nextDiffPortal.x, y: nextDiffPortal.y,
+      toTier: (typeof DIFFS !== 'undefined') ? ((DIFFS[nextDiffPortal.diff - 1] || {}).name || null) : null,
+    } : null,
+    // Cursed-floor "greed" gate. pending → an accept/decline prompt is up (blockingOverlay
+    // 'greed-overlay'; mode 'greed'): call acceptGreed() for DOUBLED loot & gold + tougher
+    // foes, or declineGreed() to skip. active → this floor's greed bonus is already on.
+    greed: {
+      active: (typeof floorGreed !== 'undefined' ? floorGreed : 1) > 1,
+      mult: (typeof floorGreed !== 'undefined' ? floorGreed : 1),
+      pending: ovOpen('greed-overlay'),
+    },
     // Menu / DOM-panel state, so an agent never has to read the bag, shop or
     // town screen off the rendered pixels. `i` indexes into the live list.
     menu: {
@@ -6484,6 +6559,15 @@ window.gameState = function gameState(radius) {
       autoLoot: player.autoLoot ? Object.assign({}, player.autoLoot) : null,       // per-rarity keep/scrap/sell
       foodBuff: player.foodBuff ? { name: player.foodBuff.name, floors: player.foodBuff.floors } : null,
       pact: (typeof pact !== 'undefined' && pact) ? { name: pact.name, floors: pact.floors } : null,
+      merc: (player.merc && player.merc.floors > 0) ? (() => {
+        const t = (typeof MERC_TYPES !== 'undefined') ? MERC_TYPES.find(x => x.id === player.merc.kind) : null;
+        return { kind: player.merc.kind, name: t ? t.name : player.merc.kind, floors: player.merc.floors };
+      })() : null,   // hired Sellsword companion on a multi-floor contract
+      bounty: (player.bounty && typeof bountyProgress === 'function') ? {
+        kind: player.bounty.kind, desc: player.bounty.desc,
+        progress: Math.min(bountyProgress(player.bounty), player.bounty.need), need: player.bounty.need,
+        done: bountyDone(player.bounty), reward: { gold: player.bounty.gold, ilvl: player.bounty.ilvl },
+      } : null,   // accepted Bounty Board contract + live progress
       activeGearSet: (activeGearSet || 0) + 1,  // 1 or 2 — which loadout is worn
       equipped: Object.fromEntries(Object.entries(equipped || {}).map(([slot, it]) => [slot, brief(it)])),
       inventory: (inventory || []).map((it, i) => Object.assign({ i }, brief(it))),
@@ -6497,7 +6581,7 @@ window.gameState = function gameState(radius) {
         };
       }) : null,
     },
-    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
+    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
     // Any Dev-tab difficulty overrides currently in effect (empty when every knob
@@ -6566,7 +6650,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     combat: [
       `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight). A red crosshair marks the foe currently locked on (Settings → Visuals → CROSSHAIR toggles it; the 🎯 TARGET focus in Settings → Play picks which foe wins).`,
-      `Weapon reach: Staff & Bow = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
+      `Weapon reach is set by the weapon's SUB-TYPE (its name), not just its category. Category defaults: Staff & Bow = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee — but several sub-types override that: a Rapier (Sword) reaches 2, a Pike (Spear) 3, a Longbow (Bow) 5, a War Scythe (Scythe) 2. gameState().player.weaponReach reports your equipped weapon's actual reach. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
       `There is NO per-hit damage cap — a big swing, skill or crit lands its full number, so burst and crits are fully rewarded. A foe's actual HP is the only limiter: bosses carry deep HP pools (and hit harder), so they're a genuine, tanky fight rather than a one-shot.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear), and EVERY damage source can crit — auto-attacks, martial skills and spells all roll critical hits, land the big crit number, and fire your on-crit passives (combo/zeal charges, primed crits, mana refunds). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
@@ -6585,7 +6669,7 @@ window.gameGuide = function gameGuide(topic) {
     skills: [
       `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready.`,
       `The bar has ${SKILL_SLOTS} MANUAL slots (cast by hand with ${key('skill1')}-${key('skill' + SKILL_SLOTS)}) plus ONE dedicated auto-cast slot. You choose what goes where — drag a learned active onto a slot, or use the SKILLS-tab slot buttons; a freshly-learned active auto-fills the first open manual slot.`,
-      `gameState().skills lists each filled manual slot's number key, MP cost, cooldown remaining and ready flag; the auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
+      `gameState().skills lists each filled manual slot's number key, MP cost (already reduced by your Mana Cost Reduction), cooldown remaining, ready flag, and what the skill DOES — its shape, range/radius and the damages/heals/buffs/summons flags — so you can pick one without inspecting it. The auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
       `Every active is either a SKILL (martial/weapon-based) or a SPELL (magic) — shown as a SKILL / SPELL badge on its tree node and in gameState().skills[i].school. A SKILL scales with your weapon damage + Skill Power gear; a SPELL scales with Spirit + Spell Power gear. Gear those stats to match the actives you lean on.`,
       `Cooldowns are real seconds (spam-floored at 0.5s). Recharge is MULTIPLICATIVE haste, like attack speed: cd = base / (1 + CDR/100), and for SPELL actives times a further (1 + CastSpeed/100). There is NO cap — 60% CDR + 35% Cast Speed divides a spell's cooldown by 1.6×1.35 ≈ 2.16, and stacking more only ever approaches (never reaches) instant. +MCR likewise divides MP cost (base / (1 + MCR/100)); +Attack Speed quickens auto-attacks the same way. +CDR speeds every active, +Cast Speed spells only, and a rank-7 skill gets an extra ×1.2.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. ~50% CDR + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
@@ -6634,27 +6718,34 @@ window.gameGuide = function gameGuide(topic) {
       `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" (tier being any rarity or "set") then call saveGame().`,
     ],
     hazards: [
-      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (shove into it from any side; a few hits to break), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
+      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (shove into it from any side; a few hits to break), o teleporter, * shrine, f fountain, > stairs down, < stairs up, N quest npc, Q quest objective, R rainbow conquest gate.`,
       `Lava and spikes hurt but never kill outright (HP clamps to 1), and the generator never forces you across one — route around them.`,
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
-      `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom is a full heal, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
+      `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom restores 50% of max HP and refills MP to full, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one plays a short walk-through-portal animation — the portal swallows you, the camera pans across to the partner pad, and you step out there (~0.9s, world frozen, unhittable; gameState().transit reads 'warp'). It also clears any click-to-move route, so you won't auto-walk back toward the pad you clicked. Use it deliberately, not while fleeing.`,
       `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground; carryingKey true once held) and seal a rich vault chest.`,
+      `CURSED FLOOR (the "greed" gate): rarely, on descending to a non-boss floor from depth 3+, a WORLD-PAUSING prompt offers to brave the floor for DOUBLED loot & gold at the cost of tougher non-boss foes (more HP and damage). Movement freezes until you choose — gameState().greed.pending is true, mode is 'greed' and blockingOverlay is 'greed-overlay'; call acceptGreed() to take it (gameState().greed.active then reads true, mult 2) or declineGreed() to skip.`,
     ],
     enemies: [
-      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), and status (e.g. ["stun"], ["slow"]).`,
+      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), affix (an elite-style modifier), and status (e.g. ["stun"], ["slow"]).`,
       `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
-      `Behaviors: chaser (steady), swift & pack (move 2 tiles/turn; wolves/packs rush when you drop below 50% HP), brute & chilled (slow — act every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand).`,
+      `Behaviors (gameState().enemies[i].behavior): chaser (steady, 1 tile/turn), swift (2 tiles/turn), pack (1 tile/turn, but rushes to 2 when you drop below 50% HP — wolves/tigers), erratic (darts unpredictably), brute (slow — acts every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand). A foe with the ice CHILL status is likewise dragged to that half-cadence, but chill is a STATUS (it shows in enemies[i].status), not a behavior.`,
       `Each archetype also has its OWN toughness & punch, not just movement: brutes are tanky and hit hard but swing slowly; swift vermin and erratic flyers are frail and jab for less; casters are squishy but strike from range; lurkers ambush for a heavier blow; packs are individually weak but swarm. So two foes on the same floor can differ a lot — read the behavior, not just the sprite.`,
+      `ENEMY AFFIXES (gameState().enemies[i].affix): roughly a fifth of ordinary (non-elite) foes carry ONE modifier, shown by a coloured aura and a name prefix — tough (+HP), fierce (+damage), venomous (poison-on-hit), accurate (cuts through your dodge), evasive (your hits often whiff — bring Accuracy), chill (snares you on hit). Read the affix, not just the sprite.`,
       `Ranged foes fire DODGEABLE bolts, not guaranteed hits — a bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
       `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly.`,
       `Treasure Goblins (isGoblin) flee, never attack, and do NOT block the exit — chase fast for jackpot loot (they vanish ~15 ticks after first hit) or ignore them.`,
-      `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs; return to town and pick the next tier at the Gate).`,
+      `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
       `Summoned allies (gameState().allies) act before foes and soak hits, but expire after ttl turns and have capped damage — resummon and don't expect them to solo a boss.`,
       `On a fresh floor you get a brief moment of arrival immunity — use it to reposition out of a bad spawn before engaging.`,
+    ],
+    quests: [
+      `Floor mini-quests: about a third of non-boss floors (depth 2+) spawn ONE optional quest for a bonus reward (gold + XP + a gear chest). gameState().quest reports the active one (type, objective tiles, live progress) or null; its tiles are drawn on the ASCII map — 'N' a quest NPC, 'Q' an objective tile (relic to fetch, tribute/grave spot, or a gather marker).`,
+      `Kinds: rescue / jailbreak / lostpet / wounded (reach the NPC and interact); escort / courier (the freed NPC follows you — quest.npc.following — get it to the stairs alive); hunt (kill the named "Wanted" foe — quest.target); cleanse (kill every foe on the floor); forage / beacons (visit each marker — quest.markers with collected/need); fetch (carry the relic 'Q' to the quest NPC — quest.hasItem flips true once held); tribute (pay quest.cost gold at the altar spot); grave (disturb the marked grave — expect a fight).`,
+      `Quests never seal the stairs and are safe to skip, but the reward scales with depth — grab the cheap ones on your way to the exit.`,
     ],
     progression: [
       `Four classes: Warrior (Might/Vitality, tanky melee), Rogue (Agility/Might, crit & dodge), Mage (Spirit/Luck, spells & big MP), Templar (Vitality/Spirit, durable hybrid). Class gates which weapons you can equip.`,
@@ -6674,10 +6765,10 @@ window.gameGuide = function gameGuide(topic) {
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
       `Merchant (buy gear / pay to restock); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
-      `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract.`,
-      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it); Gambler (wager gold for random gear — pick a slot to guarantee the type).`,
+      `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
+      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse 3 UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost — it spends your 3 lowest-value pieces of that rarity, so lock keepers first (needs 3+ unlocked of a rarity).`,
       `Services unlock as you progress and show in a fixed order (Dungeon Gate on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
-      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically.`,
+      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress.`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
     tips: [
@@ -6705,11 +6796,12 @@ window.gameGuide = function gameGuide(topic) {
     damage: 'damage', dmg: 'damage', spell: 'damage', spells: 'damage', spellpower: 'damage', skillpower: 'damage', attackspeed: 'damage', castspeed: 'damage', cooldown: 'damage', cdr: 'damage', scaling: 'damage', attack: 'damage', autoattack: 'damage',
     autoloot: 'autoloot', autoscrap: 'autoloot', scrap: 'autoloot', sell: 'autoloot', salvage: 'autoloot', material: 'autoloot', materials: 'autoloot', mats: 'autoloot',
     item: 'loot', items: 'loot', gear: 'loot', rarity: 'loot', loots: 'loot',
-    hazard: 'hazards', trap: 'hazards', traps: 'hazards', projectile: 'hazards', barrier: 'hazards', fire: 'hazards', terrain: 'hazards', tiles: 'hazards',
-    enemy: 'enemies', boss: 'enemies', bosses: 'enemies', ai: 'enemies', minion: 'enemies', minions: 'enemies', ally: 'enemies', allies: 'enemies',
+    hazard: 'hazards', trap: 'hazards', traps: 'hazards', projectile: 'hazards', barrier: 'hazards', fire: 'hazards', terrain: 'hazards', tiles: 'hazards', greed: 'hazards', cursed: 'hazards', curse: 'hazards', shrine: 'hazards', teleporter: 'hazards', fountain: 'hazards',
+    enemy: 'enemies', boss: 'enemies', bosses: 'enemies', ai: 'enemies', minion: 'enemies', minions: 'enemies', ally: 'enemies', allies: 'enemies', affix: 'enemies', enrage: 'enemies', berserk: 'enemies', conquest: 'enemies', scar: 'enemies', rainbow: 'enemies',
+    quest: 'quests', quests: 'quests', escort: 'quests', rescue: 'quests', fetch: 'quests', tribute: 'quests', forage: 'quests', beacon: 'quests', beacons: 'quests', objective: 'quests', bounty: 'town',
     classs: 'progression', classes: 'progression', clas: 'progression', attribute: 'progression', attributes: 'progression', level: 'progression', leveling: 'progression', skilltree: 'progression', ascension: 'progression', ascend: 'progression', xp: 'progression',
     character: 'character', creation: 'character', create: 'character', sex: 'character', gender: 'character', male: 'character', female: 'character', name: 'character', naming: 'character', newgame: 'character', body: 'character',
-    shop: 'town', merchant: 'town', craft: 'town', crafting: 'town', forge: 'town', ramen: 'town', mystic: 'town', stash: 'town', portal: 'town',
+    shop: 'town', merchant: 'town', craft: 'town', crafting: 'town', forge: 'town', ramen: 'town', mystic: 'town', stash: 'town', portal: 'town', transmuter: 'town', transmute: 'town', fuse: 'town', vault: 'town', gambler: 'town', gamble: 'town', sellsword: 'town', merc: 'town', mercenary: 'town', trainer: 'town', healer: 'town', enchanter: 'town', enchant: 'town',
     control: 'controls', key: 'controls', keys: 'controls', keybind: 'controls', keybinds: 'controls', keybinding: 'controls',
     heal: 'healing', healing: 'healing', recovery: 'healing', regen: 'healing', regeneration: 'healing', potion: 'healing', potions: 'healing', mana: 'healing', mp: 'healing', leech: 'healing', lifesteal: 'healing', overtime: 'healing', pending: 'healing', hp: 'healing', hitpoints: 'healing', sustain: 'healing',
     drive: 'driving', driving: 'driving', api: 'driving', act: 'driving', acting: 'driving', input: 'driving',

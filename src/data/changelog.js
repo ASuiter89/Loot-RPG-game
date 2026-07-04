@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "medium", v: "AI-play console tools see the whole game", by: "Claude", notes: [
+    "gameState() surfaces what a console-driving agent was blind to: floor quests and their objective tiles, the cursed-floor 'greed' choice, the rainbow conquest gate, your hired Sellsword and active bounty, boss enrage/berserk phases, enemy affixes, your weapon's true reach, and a full survivability read-out (defense, crit, dodge, block, damage reduction, tenacity).",
+    "canMove no longer misreports: every world-pausing overlay (the greed prompt, tier-conquest banner, hardcore death, leaderboard and more) now flips it false with the right mode, so an agent never fires dead movement keys.",
+    "gameGuide() corrects stale rules — per-sub-type weapon reach, the Wisdom shrine's real 50%-HP heal, pack rush, mana-cost-reduced skill costs — and adds how-tos for the Transmuter, floor quests, the greed gate and the conquest scar.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Spend straight from the vault", by: "Jeff Louie", notes: [
     "Vault gold is no longer walled off from the shops. Every town service — healer, merchant, restock, craftsman, enchanter, gambler, mystic, sellsword, transmuter, trainer — spends your carried coin first, then auto-draws any shortfall from the vault, so banked gold stays useful without a trip to the Vault Keeper.",
     "Prices and buttons now count carried + vault, and each town gold pill shows a '+N in vault' hint. A drawn amount is logged. Vault gold is still safe from death.",
