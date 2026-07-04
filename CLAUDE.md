@@ -120,8 +120,8 @@ Two invariants drive everything:
   coverage and fails — that's the ratchet. Raise thresholds as coverage grows.
 - **Keep the suite green and the game bootable at every commit.** Before pushing,
   run `npm test` (unit + characterization), `npm run build`, and `npm run smoke`
-  (boots the real built game in Chromium and checks the full `gameState()` 33-key /
-  `gameGuide()` 18-topic contract, the `window` handler bridge, and a live
+  (boots the real built game in Chromium and checks the full `gameState()` 38-key /
+  `gameGuide()` 19-topic contract, the `window` handler bridge, and a live
   inline-`onclick` round-trip). Never land a red step or a state that doesn't boot.
 
 ## Performance — hot-path rules (from the 2026-07 lag audit)

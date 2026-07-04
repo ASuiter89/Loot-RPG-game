@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "medium", v: "AI-play console tools see the whole game", by: "Claude", notes: [
+    "gameState() surfaces what a console-driving agent was blind to: floor quests and their objective tiles, the cursed-floor 'greed' choice, the rainbow conquest gate, your hired Sellsword and active bounty, boss enrage/berserk phases, enemy affixes, your weapon's true reach, and a full survivability read-out (defense, crit, dodge, block, damage reduction, tenacity).",
+    "canMove no longer misreports: every world-pausing overlay (the greed prompt, tier-conquest banner, hardcore death, leaderboard and more) now flips it false with the right mode, so an agent never fires dead movement keys.",
+    "gameGuide() corrects stale rules — per-sub-type weapon reach, the Wisdom shrine's real 50%-HP heal, pack rush, mana-cost-reduced skill costs — and adds how-tos for the Transmuter, floor quests, the greed gate and the conquest scar.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Merchant stocks rarer gear", by: "Jeff Louie", notes: [
     "The merchant no longer lays out grey or white gear — every ware is uncommon or better, weighted toward the rarer tiers, so his table always beats a raw floor drop.",
   ] },
