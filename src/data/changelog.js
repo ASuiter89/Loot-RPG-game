@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "large", v: "Play on your phone — a real touch interface", by: "Claude", notes: [
+    "The game now has a full mobile layout. The first time you touch the screen it switches to a phone interface; a mouse switches it back — nothing changes for keyboard-and-mouse play.",
+    "Drag anywhere on the map to raise a floating joystick and steer the hero. A quick tap walks you there and uses whatever's there on arrival — a chest, an NPC — or chases a tapped foe. A quick flick of the joystick dashes.",
+    "A header bar holds the minimap, your health/mana/floor/foes and the settings & bag buttons; a footer bar holds a RUN toggle (auto-sprint) and the town portal over your potions, the auto-cast slot in the middle, and your four skill slots. Buffs and debuffs sit in the map's top-right corner.",
+    "The map fills the space between the two bars and stays crisp on high-resolution screens. The game is portrait-only — turned sideways it asks you to rotate back.",
+    "Menus, shops and the bag open as full-screen sheets with big tap targets, and merchant cards now open on a tap since there's no mouse hover.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Skill cards show the full rank 3 / 7 / 10 bonus ladder", by: "Claude", notes: [
     "A skill's detail card now has a \"Rank bonuses\" section listing all three milestones — Empowered (rank 3), Honed (rank 7) and Mastered (rank 10) — and what each grants, always visible at any rank.",
     "Each milestone lights up green with a ✓ once your rank in that skill is high enough to have earned it, so you can see the whole ladder ahead instead of just the next rung.",

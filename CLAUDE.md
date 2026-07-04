@@ -25,11 +25,23 @@ lives in `src/legacy/game.js` and shrinks as code is extracted.)
   runtime dependency, framework, or CDN `<script>`. Dev tooling (Vite, Vitest,
   Playwright) is fine — it never ships. Vite `base` is `'./'`; keep asset URLs
   relative so the bundle works at a domain root or a Pages subpath.
-- **Desktop-only.** This game targets desktop browsers (mouse + keyboard,
-  landscape) exclusively. There is no touch/mobile support — do not add d-pads,
-  on-screen sticks, tap/swipe steering, orientation gates, `@media (pointer:coarse)`
-  branches, or `isWebLayout()`/`touchUI()`-style layout forks. Keyboard and pointer
-  (mouse) are the only input surfaces.
+- **Desktop-first, with an additive touch layer.** Keyboard + mouse is the
+  primary surface and must stay behaviour-identical to how it is today — never
+  regress it for the sake of mobile. Touch support is an ADDITIVE layer, gated
+  entirely on a JS-toggled `body.touch` class (`setTouchMode()` in
+  `src/legacy/game.js`), revealed on the first real touch pointer and retracted on
+  a mouse/pen pointer. Rules that keep the two from bleeding into each other:
+  - **Never a UA sniff, never a media-query desktop swap.** All mobile styling
+    keys off `body.touch` (orientation reflow may use `@media (orientation:…)`
+    *scoped under* `body.touch`). A desktop machine never matches `body.touch`, so
+    it is byte-identical — the mouse-only smoke run is the guardrail that this holds.
+  - **Keyboard stays live in every mode.** The touch buttons reuse the same
+    window-bridged handlers (`doDash`, `pickup`, `castSkillById`, …); don't fork
+    game logic per input.
+  - **Pure input math is unit-tested** (`src/systems/joystickMath.js`); the DOM /
+    pointer wiring lives in `src/legacy/game.js` (coverage-excluded), never in a
+    new `src/input/` module (which the ratchet would then require ≥90% coverage on).
+  - Touch is verified end-to-end by `test/smoke/touch-controls.mjs` — keep it green.
 - **Pull latest `main` before starting; work on a branch and open a PR — never
   commit straight to `main`.** Make reasonable decisions and implement them; land
   every change through a feature branch + PR so GitHub gates the merge. Resolve

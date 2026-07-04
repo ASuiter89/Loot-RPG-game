@@ -33,6 +33,7 @@ import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/
 import { GEAR_POWER } from '../data/gearPower.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
+import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
 import { forgeSections } from '../systems/forgeFlow.js';
@@ -6188,13 +6189,44 @@ let autoAttackTarget = null;
 // position each frame and clears once it's in weapon reach or dies — clicking a
 // foe paths you straight to it (see updatePlayer / the pointerup tap handler).
 const moveTarget = { active: false, hold: false, wx: 0, wy: 0, path: null, pathIdx: 0, foe: null,
+                     interactOnArrive: false,
                      _repathT: 0, _stallT: 0, _px: 0, _py: 0, _pathDX: -1, _pathDY: -1 };
 const MOVE_ARRIVE = 0.18;   // tiles — how close counts as "reached the click point"
+// ── TOUCH JOYSTICK ──
+// On a touch device a floating on-screen stick drives the hero the same way held
+// WASD does: its analog vector is injected into updatePlayer's input vector (see
+// the joystickMath module for the pure math). `active` is true only once the
+// thumb has dragged past the tap threshold (so a quick tap still walks/inspects
+// via the normal tap path). Coordinates are client (CSS) px. `mag` (0..1) decides
+// sprint — push the stick to the rim to run. Everything here is inert until the
+// device reveals itself as touch (body.touch); desktop mouse input is untouched.
+const JOY_RADIUS = 56;   // thumb throw distance (CSS px) for a full-magnitude push
+// A quick FLICK of the stick — engage and release within this window while pushed
+// past a fair magnitude — dashes in that direction. Longer holds are just walking.
+const FLICK_MS = 260;
+const FLICK_MAG = 0.5;
+const touchStick = { pointerId: null, pending: false, active: false,
+                     ox: 0, oy: 0, cx: 0, cy: 0, ix: 0, iy: 0, mag: 0 };
+let _stickEngageAt = 0;      // performance.now() when the stick last engaged (flick timing)
+function resetTouchStick() {
+  touchStick.pointerId = null; touchStick.pending = false; touchStick.active = false;
+  touchStick.ix = 0; touchStick.iy = 0; touchStick.mag = 0;
+  hideJoyVisual();
+}
+// Touch sprint is an explicit on/off toggle (the sprint button) rather than a
+// push-to-rim gesture — it just latches the same auto-sprint the keyboard uses.
+function toggleTouchSprint() {
+  sprintLatched = !sprintLatched;
+  if (typeof sfx === 'function') sfx('click');
+  if (typeof renderSkillBar === 'function') renderSkillBar();   // repaints the RUN tile's on/off state
+}
 function heldDir(d) { return keyHeld[d]; }
 function clearHeld() {
   keyHeld.up = keyHeld.down = keyHeld.left = keyHeld.right = false;
   sprintHeld = false;
   moveTarget.active = false; moveTarget.hold = false; moveTarget.path = null; moveTarget.foe = null;
+  moveTarget.interactOnArrive = false;
+  resetTouchStick();   // drop any active on-screen stick too (blur / floor change / halt)
 }
 // Move the hero to a grid cell AND sync the smooth float position to its centre.
 // Used everywhere the hero is repositioned (spawn, stairs, teleports, blinks,
@@ -6625,6 +6657,10 @@ window.gameState = function gameState(radius) {
     // it clears itself in under a second. (The 'out'/'in' pair is the post-channel
     // town animation, distinct from the channel — see player.channeling.)
     transit,
+    // 'touch' once the mobile layer is active (floating joystick + thumb buttons),
+    // else 'mouse'. Purely informational — every action is still driveable from the
+    // keyboard/console in both modes.
+    input: (typeof document !== 'undefined' && document.body && document.body.classList.contains('touch')) ? 'touch' : 'mouse',
     inTown: !!inTown,
     floor: dungeonLevel,                                                   // continuous depth (1, 2, 3, …)
     floorDisplay: (typeof displayFloor === 'function') ? displayFloor() : dungeonLevel, // 1–25 within a tier
@@ -6877,6 +6913,7 @@ window.gameGuide = function gameGuide(topic) {
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A quick key-tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
       `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
+      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right; the header holds the minimap, vitals, and the settings + bag buttons (top-right). The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
@@ -6890,7 +6927,7 @@ window.gameGuide = function gameGuide(topic) {
       `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds MINIMAP (the top-left floor-sketch box size — Small / Medium / Large), UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker plus CURSOR SIZE (a 1x–2x multiplier that enlarges the mouse pointer on top of the UI scale; default 1x).`,
     ],
     movement: [
-      `Walking, sprinting and dashing all move a free-floating body in real time (with momentum), not on a turn grid. Hold a direction; let go to stop.`,
+      `Walking, sprinting and dashing all move a free-floating body in real time (with momentum), not on a turn grid. Hold a direction; let go to stop. On touch, the floating joystick feeds the same motion — push it to the rim to sprint (see the "controls" topic).`,
       `The hero faces and animates in the direction it walks — down/up/left/right — cycling a walk animation while moving and resting on a standing frame when still. It's purely cosmetic; gameState().player.faceDir reports the current 4-way facing.`,
       `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~34/sec). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch auto-sprint).`,
       `DASH (${key('dash')}) is a quick burst (costs 35 Stamina, ~0.55s cooldown). It only repositions fast — there are no i-frames and enemies are solid, so you can't dash THROUGH a foe to escape.`,
@@ -8539,6 +8576,9 @@ function closeGraveyard() { document.getElementById('graveyard-overlay').classLi
 const canvas = document.getElementById('canvas');
 let ctx = canvas.getContext('2d'); // `let` so the occlusion pass can briefly redirect draws into an offscreen silhouette buffer
 
+// Vertical follow-camera lift (buffer px) so the hero clears the bottom thumb
+// controls on touch. Recomputed in resizeCanvas; 0 on desktop.
+let touchCamBiasPx = 0;
 function resizeCanvas() {
   // Match the drawing buffer to the canvas's on-screen size so the map fills its
   // whole area — square or not. draw() keeps tiles square (sized off the shorter
@@ -8546,8 +8586,17 @@ function resizeCanvas() {
   // CSS handles the layout (full cell on desktop, fill-the-area on mobile).
   canvas.style.width = '';
   canvas.style.height = '';
-  canvas.width  = canvas.offsetWidth;
-  canvas.height = canvas.offsetHeight;
+  const cw = canvas.offsetWidth, ch = canvas.offsetHeight;
+  // On touch, back the buffer at device resolution (capped at 2×) so pixel art
+  // stays crisp on high-DPR phones. draw()'s camera and clientToWorld both scale
+  // off the buffer size, so nothing else needs to change. Desktop stays 1:1.
+  const touch = document.body.classList.contains('touch');
+  const dpr = touch ? Math.min(2, window.devicePixelRatio || 1) : 1;
+  canvas.width  = Math.max(1, Math.round(cw * dpr));
+  canvas.height = Math.max(1, Math.round(ch * dpr));
+  // The touch map lives in its own area between the solid header/footer bands, so
+  // the hero just centres in the canvas — no camera bias needed (0 on desktop too).
+  touchCamBiasPx = 0;
 }
 resizeCanvas();
 // The desktop panel widths are vw-based (clamp), so they shift continuously as the
@@ -8556,12 +8605,18 @@ resizeCanvas();
 // the drag, not chase it a third of a second behind — and clear the flag once the
 // drag settles.
 let _resizeAnimTimer = null;
-window.addEventListener('resize', () => {
+function onViewportResize() {
   document.body.classList.add('resizing');
   if (_resizeAnimTimer) clearTimeout(_resizeAnimTimer);
   _resizeAnimTimer = setTimeout(() => document.body.classList.remove('resizing'), 200);
   resizeCanvas(); if (inTown) syncTownBarReserve(); draw();
-});
+}
+window.addEventListener('resize', onViewportResize);
+// Foldables (fold/unfold), rotation, and the mobile URL bar showing/hiding change
+// the usable viewport without always firing a plain window 'resize' — refit on
+// those too so the full-screen canvas always matches the visible area.
+window.addEventListener('orientationchange', onViewportResize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
 
 // The loot drawer is a permanent column — always open; tapping the map never closes it.
 
@@ -8572,6 +8627,14 @@ let panelOpen = false;
 function togglePanel() {
   // The loot drawer is a permanent column — just (re)render it.
   panelOpen = true; renderPanel();
+}
+// Touch: the bag/loot drawer is a full-screen sheet toggled by the BAG button
+// (body.bag-open drives the CSS; renderPanel fills it). On desktop the drawer is a
+// permanent column, so this is only wired under body.touch.
+function toggleBag() {
+  const open = !document.body.classList.contains('bag-open');
+  document.body.classList.toggle('bag-open', open);
+  if (open) { document.body.classList.remove('panel-collapsed'); panelOpen = true; renderPanel(); }
 }
 
 // ── MAP CLICK-TO-MOVE ──
@@ -8614,6 +8677,21 @@ canvas.addEventListener('pointerdown', e => {
   // right away, so a click-and-hold / drag-to-move closes it too (a plain tap on the
   // SAME foe is left for pointerup, which toggles the card shut).
   if (enemyCardFor && enemyAtClient(e.clientX, e.clientY) !== enemyCardFor) closeEnemyCard();
+  // Touch: arm a floating joystick. We don't move yet — a drag past the tap slop
+  // engages the stick (steer the hero), while a release without dragging falls
+  // through to the normal tap (walk-to-point / chase a tapped foe). So tap-to-move
+  // lives alongside the stick. Multi-touch is fine: the stick claims THIS pointer;
+  // the skill/action buttons are separate DOM elements with their own pointers.
+  if (isTouchMode() && e.pointerType === 'touch') {
+    if (rtPaused()) return;
+    touchStick.pointerId = e.pointerId;
+    touchStick.pending = true; touchStick.active = false;
+    touchStick.ox = touchStick.cx = e.clientX;
+    touchStick.oy = touchStick.cy = e.clientY;
+    touchStick.ix = touchStick.iy = touchStick.mag = 0;
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    return;
+  }
   if (e.button !== 0 || rtPaused()) return;      // left button only; not while a menu/town/death pauses play
   clickMoveId = e.pointerId;
   moveTarget.hold = true;                         // track the cursor until the button comes up
@@ -8621,12 +8699,51 @@ canvas.addEventListener('pointerdown', e => {
   setMoveTargetFromClient(e.clientX, e.clientY);
 });
 canvas.addEventListener('pointermove', e => {
+  // Touch joystick drag: engage once the thumb clears the tap slop, then feed the
+  // analog vector (with a sliding origin) to updatePlayer via touchStick.
+  if (touchStick.pointerId === e.pointerId) {
+    touchStick.cx = e.clientX; touchStick.cy = e.clientY;
+    if (!touchStick.active &&
+        (Math.abs(e.clientX - touchStick.ox) > TAP_SLOP || Math.abs(e.clientY - touchStick.oy) > TAP_SLOP)) {
+      touchStick.active = true; touchStick.pending = false;
+      _stickEngageAt = performance.now();   // start the flick timer
+    }
+    if (touchStick.active) {
+      const o = slideOrigin({ x: touchStick.ox, y: touchStick.oy }, { x: e.clientX, y: e.clientY }, JOY_RADIUS);
+      touchStick.ox = o.x; touchStick.oy = o.y;
+      const v = joystickVector(o, { x: e.clientX, y: e.clientY }, JOY_RADIUS, JOY_DEFAULTS.deadZone);
+      touchStick.ix = v.ix; touchStick.iy = v.iy; touchStick.mag = v.mag;
+      showJoyVisual();
+    }
+    return;
+  }
   // While the button is held, keep the move target glued to the cursor.
   if (clickMoveId === e.pointerId) { if (moveTarget.hold) setMoveTargetFromClient(e.clientX, e.clientY); return; }
   // Hover-to-inspect: pointing at a foe pops its codex card under the map.
   updateHoverCard(e.clientX, e.clientY);
 });
 function endJoy(e, isUp) {
+  // Touch joystick release/cancel. A stick that never dragged past the slop was a
+  // tap → run the normal tap path (chase a tapped foe, else walk to the point).
+  if (touchStick.pointerId === e.pointerId) {
+    const wasTap = !touchStick.active;
+    // Flick-to-dash: a quick engage-and-release while the stick is pushed dashes in
+    // that direction. doDash reads touchStick.ix/iy, so fire it BEFORE the reset.
+    if (isUp && touchStick.active && (performance.now() - _stickEngageAt) < FLICK_MS && touchStick.mag > FLICK_MAG) {
+      doDash();
+    }
+    resetTouchStick();
+    gestureStart = null;
+    if (isUp && wasTap && !rtPaused()) {
+      const foe = (gestureFoe && !gestureFoe.dead) ? gestureFoe : enemyAtClient(e.clientX, e.clientY);
+      if (foe) { moveTarget.foe = foe; moveTarget.active = true; moveTarget.interactOnArrive = false; updateMoveTargetPath(true); }
+      // Tap-to-move doubles as tap-to-USE on touch: walk to the spot and, on
+      // arrival, run pickup() (opens a chest underfoot / talks to an adjacent NPC;
+      // most loot is auto-grabbed on walk-over anyway).
+      else { setMoveTargetFromClient(e.clientX, e.clientY); moveTarget.interactOnArrive = true; }
+    }
+    return;
+  }
   const wasClickMove = clickMoveId === e.pointerId;
   // Tap detection: the press barely moved from its pointerdown anchor.
   const moved = gestureStart && (Math.abs(e.clientX - gestureStart.x) > TAP_SLOP || Math.abs(e.clientY - gestureStart.y) > TAP_SLOP);
@@ -8659,6 +8776,88 @@ canvas.addEventListener('pointercancel', e => endJoy(e, false));
 canvas.addEventListener('pointerleave', () => {
   if (clickMoveId === null && enemyCardFor) closeEnemyCard();
 });
+
+// ── TOUCH MODE DETECTION ──────────────────────────────────────────────────────
+// Touch is an ADDITIVE layer keyed entirely off body.touch — never a UA sniff and
+// never a media-query layout swap, so a desktop machine is byte-identical to
+// before and keyboard/mouse stay live in every mode. We reveal the touch UI on the
+// first genuine touch pointer and retract it on a real mouse/pen pointer, so a
+// hybrid device (touch laptop + mouse) tracks whatever the player last used.
+// Compatibility mouse events (the legacy mousedown/mousemove a tap synthesizes)
+// are NOT PointerEvents, so keying detection on pointerType avoids the classic
+// "touch immediately looks like a mouse" trap.
+function isTouchMode() { return document.body.classList.contains('touch'); }
+// Dungeon Loot is portrait-only on touch: in landscape we cover the game with the
+// rotate notice (CSS) AND pause play (this flag feeds rtPaused) so nothing happens
+// behind it. Desktop never sets body.touch, so it's never blocked.
+let touchLandscapeBlock = false;
+function updateOrientationBlock() {
+  let land = false;
+  try { land = matchMedia('(orientation: landscape)').matches; } catch (_) {}
+  touchLandscapeBlock = isTouchMode() && land;
+}
+try { matchMedia('(orientation: landscape)').addEventListener('change', () => { updateOrientationBlock(); clearHeld(); }); } catch (_) {}
+function setTouchMode(on) {
+  if (isTouchMode() === on) return;
+  document.body.classList.toggle('touch', on);
+  if (!on) resetTouchStick();
+  updateOrientationBlock();
+  try { resizeCanvas(); } catch (_) {}
+  try { syncHudLayout(); } catch (_) {}
+  try { renderSkillBar(); } catch (_) {}
+  try { markHudDirty(); } catch (_) {}
+}
+// Initial hint: a coarse, hover-less PRIMARY pointer is almost certainly a phone /
+// tablet. Confirmed (or overridden) by the first real pointer event below.
+try {
+  if (matchMedia('(pointer: coarse)').matches && matchMedia('(hover: none)').matches) setTouchMode(true);
+} catch (_) {}
+window.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch') setTouchMode(true);
+  else if (e.pointerType === 'mouse' || e.pointerType === 'pen') setTouchMode(false);
+}, true);   // capture: settle the mode before the canvas handler reads isTouchMode()
+window.addEventListener('pointermove', e => {
+  if (e.pointerType === 'mouse') setTouchMode(false);   // a mouse hovering ⇒ desktop
+}, { capture: true, passive: true });
+
+// ── FLOATING JOYSTICK VISUAL ──
+// Two DOM rings (base = origin, knob = thumb) positioned in viewport px, so the
+// render loop (draw()) never touches them. Shown only while the stick is engaged;
+// body.joy-on fades them in. Coordinates are client px (== viewport px for the
+// position:fixed rings).
+let _joyBaseEl = null, _joyKnobEl = null;
+function _joyEls() {
+  if (!_joyBaseEl) _joyBaseEl = document.getElementById('joy-base');
+  if (!_joyKnobEl) _joyKnobEl = document.getElementById('joy-knob');
+  return _joyBaseEl && _joyKnobEl;
+}
+function showJoyVisual() {
+  if (!_joyEls()) return;
+  _joyBaseEl.style.left = touchStick.ox + 'px';
+  _joyBaseEl.style.top  = touchStick.oy + 'px';
+  let dx = touchStick.cx - touchStick.ox, dy = touchStick.cy - touchStick.oy;
+  const d = Math.hypot(dx, dy);
+  if (d > JOY_RADIUS) { dx = dx / d * JOY_RADIUS; dy = dy / d * JOY_RADIUS; }   // clamp knob to the rim
+  _joyKnobEl.style.left = (touchStick.ox + dx) + 'px';
+  _joyKnobEl.style.top  = (touchStick.oy + dy) + 'px';
+  document.body.classList.add('joy-on');
+}
+function hideJoyVisual() { document.body.classList.remove('joy-on'); }
+
+// Home the shared #skill-bar element in the right container for the layout: the
+// bottom-HUD belt on desktop, or the touch thumb-cluster on touch (re-homing the
+// live element, not duplicating it, so every id-based updater keeps working — same
+// pattern as syncDesktopHud).
+function syncHudLayout() {
+  const bar = document.getElementById('skill-bar');
+  if (!bar) return;
+  if (isTouchMode()) {
+    const cluster = document.getElementById('touch-cluster');
+    if (cluster && bar.parentNode !== cluster) cluster.appendChild(bar);   // after the sprint toggle
+  } else {
+    syncDesktopHud();
+  }
+}
 
 // ── INSPECT: enemy codex card ──
 // A concise stat card for a foe: hovering one on desktop pops it (clicking a foe
@@ -8821,7 +9020,7 @@ function syncDesktopHud() {
     if (d && el.parentNode !== d) d.appendChild(el);
   }
 }
-syncDesktopHud();
+syncHudLayout();   // route the skill bar to the desktop belt or the touch cluster
 
 // ══════════════════════════════════════════
 // MAP GENERATION
@@ -9878,7 +10077,7 @@ function finishTutorial() {
 // nudge as the new player progresses (move → fight → enter the cave). Tapping it
 // opens the full How to Play menu (wired on the element's onclick).
 function tutorialStage(stage) {
-  const moveHow = 'WASD / arrows';
+  const moveHow = isTouchMode() ? 'the joystick (drag the map)' : 'WASD / arrows';
   if (stage === 'move') {
     setTutorialHint(`Use <b>${moveHow}</b> to move. Walk into the <b>skeleton</b> to attack it.`);
   } else if (stage === 'cave') {
@@ -10396,7 +10595,7 @@ function renderShop() {
     // size for every piece), and every following line — slot/power, stats, the
     // can't-equip note — is left-aligned to the card edge (see .shop-card in CSS).
     return `<div class="shop-row shop-card has-actions ${isUpgrade?'upgrade':''} ${afford?'':'cant-afford'} ${reqBadge?'cant-equip':''}">
-      <div class="shop-row-info ${cls}" onmouseenter="showShopTooltip(event,${i})" onmouseleave="hideTooltip()">
+      <div class="shop-row-info ${cls}" data-shop-idx="${i}" onmouseenter="showShopTooltip(event,${i})" onmouseleave="hideTooltip()">
         <div class="shop-row-name"><span class="loot-icon">${iconMarkup(sicon, scolor, true, 20)}</span>${name}</div>
         <div class="shop-row-sub">${sub}</div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
@@ -14628,7 +14827,10 @@ function draw() {
     camFy = warpFx.sy + (warpFx.dy - warpFx.sy) * wf.panT;
   }
   let camX = camFx * tw - W/2;
-  let camY = camFy * th - H/2;
+  // On touch, lift the hero above the bottom control band (joystick / skill
+  // cluster) so the thumbs never cover it. touchCamBiasPx is device px, recomputed
+  // per resize/orientation; 0 on desktop, so this line is a no-op there.
+  let camY = camFy * th - H/2 + touchCamBiasPx;
   const maxCamX = MAP_W * tw - W;
   const maxCamY = MAP_H * th - H;
   // If the map is smaller than the viewport on an axis, center it instead.
@@ -18453,6 +18655,9 @@ function doDash() {
   if ((player.dashCd || 0) > 0 || player.stamina < DASH_COST) return;
   let dx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let dy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
+  // Touch: dash in the joystick's current push direction (a double-tap-drag on the
+  // stick triggers this — see the pointer handlers).
+  if (dx === 0 && dy === 0 && touchStick.active && touchStick.mag > 0) { dx = touchStick.ix; dy = touchStick.iy; }
   // Click-to-move: with no manual direction, dash toward the target — or, when a
   // route around a wall is planned, toward the next waypoint so we don't dash into it.
   if (dx === 0 && dy === 0 && moveTarget.active) {
@@ -18502,6 +18707,9 @@ function updatePlayer(dt) {
   // Input vector — keyboard (WASD / arrows).
   let ix = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let iy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
+  // Touch joystick overrides the keyboard vector while it's engaged. It reads as
+  // "manual input" below, so it cancels any click-to-move the same way a key does.
+  if (touchStick.active && touchStick.mag > 0) { ix = touchStick.ix; iy = touchStick.iy; }
   // Click-to-move: with no keyboard input, steer toward the click target.
   // Any manual input cancels it (you take back the wheel). While the button is held
   // the target tracks the cursor, so the hero keeps walking toward it; a plain click
@@ -18552,6 +18760,8 @@ function updatePlayer(dt) {
       const finalDist = Math.hypot(moveTarget.wx - player.fx, moveTarget.wy - player.fy);
       if (!moveTarget.hold && onFinalLeg && finalDist <= MOVE_ARRIVE) {
         moveTarget.active = false; moveTarget.path = null; moveTarget.foe = null;   // reached the point — stop
+        // Tap-to-use: on arrival, open a chest underfoot / talk to an adjacent NPC.
+        if (moveTarget.interactOnArrive) { moveTarget.interactOnArrive = false; if (typeof pickup === 'function') pickup(); }
       } else if (Math.hypot(tdx, tdy) > 0.02) {
         [ix, iy] = steerToward(tdx, tdy);      // head for the waypoint; slide along any wall
         // Give up only when truly stuck: no real ground covered for a beat (a wall or
@@ -22172,11 +22382,14 @@ function updateBars() {
   // The tab glow only shows once the bag is open, so also surface a pulsing badge
   // on the always-visible BAG button (combining attribute + skill points).
   const bagBadge = document.getElementById('bag-points-badge');
+  const totalPts = pts + sPts;
   if (bagBadge) {
-    const totalPts = pts + sPts;
     bagBadge.textContent = totalPts;
     bagBadge.classList.toggle('show', totalPts > 0);
   }
+  // Mirror the unspent-points count onto the touch BAG button's badge.
+  const tbBagBadge = document.getElementById('tb-bag-badge');
+  if (tbBagBadge) tbBagBadge.textContent = totalPts > 0 ? String(totalPts) : '';
   // Plain item count in brackets next to the BAG label — same font, no glow.
   const bagCount = document.getElementById('bag-count');
   if (bagCount) {
@@ -23550,9 +23763,17 @@ function renderSkillBar() {
       <span class="sb-icon">${dlIconFill('feat_gate_red')}</span><span class="sb-info sb-cd-text" data-cdt="portal"></span>
     </button>`);
   }
+  // On touch a RUN (sprint) toggle leads the left group, so the bottom bar reads
+  // as a 2×2 (RUN/Town over HP/MP) · AUTO · 2×2 (skills). It's a plain toggle, not
+  // a skill; it lights up while auto-sprint is latched. Absent on desktop.
+  const sprintCell = isTouchMode()
+    ? cell('RUN', 'sprint', `<button class="skillbar-btn sprint-btn${sprintLatched ? ' on' : ''}" onclick="toggleTouchSprint()" aria-label="Toggle sprint">
+      <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg></span>
+    </button>`)
+    : '';
   // Three sections: Town/Health/Mana left, the auto-cast slot centred, the four
   // manual slots right (see the .sb-left / .sb-auto-wrap / .sb-right flex CSS).
-  const html = `<div class="sb-left">${townBtn}${healBtn}${manaBtn}</div>`
+  const html = `<div class="sb-left">${sprintCell}${townBtn}${healBtn}${manaBtn}</div>`
     + `<div class="sb-auto-wrap">${autoCell}</div>`
     + `<div class="sb-right">${skillsHtml}</div>`;
   if (html !== _lastSkillBarHtml) {   // identical markup — skip the DOM teardown + reflow
@@ -24193,6 +24414,32 @@ function renderHoverTip(el, htmlOverride) {
 }
 function hideHoverTip() { hoverTipEl.style.display = 'none'; }
 
+// ── TOUCH: tap-to-tip fallback ──
+// There's no hover on touch, so the onmouseenter tips (merchant item cards, and
+// the styled data-tip popups) would be invisible. On touch, a tap on an
+// info-only surface pops the same card; a second tap (or a tap elsewhere) hides
+// it. Bubble phase, so an actionable element's own onclick still fires first —
+// and we skip buttons so tapping an action doesn't also flash a tip over it.
+document.addEventListener('click', (e) => {
+  if (!isTouchMode()) return;
+  // Merchant buy cards: tap the info column (not the BUY button) to see the item.
+  const shopInfo = e.target.closest('.shop-row-info[data-shop-idx]');
+  if (shopInfo && !e.target.closest('.act-btn')) {
+    const i = +shopInfo.getAttribute('data-shop-idx');
+    if (typeof merchant !== 'undefined' && merchant && merchant.stock && merchant.stock[i]) {
+      if (ttEl.style.display === 'block') hideTooltip();
+      else showTooltipForItem(merchant.stock[i].item, shopInfo);
+    }
+    return;
+  }
+  // Generic info-only data-tip surfaces (never a button/actionable control).
+  const tipEl = e.target.closest('[data-tip]');
+  if (tipEl && !e.target.closest('button, .act-btn, .settings-item, .skillbar-btn, .tab-btn')) {
+    if (hoverTipEl.style.display === 'block') hideHoverTip();
+    else renderHoverTip(tipEl);
+  }
+});
+
 // Build the data-tip + handlers for a styled hover popup (the gear-card look),
 // so JS-rendered buttons share the same hover UI as everything else instead of
 // the native browser title box. Pass inner HTML built from ht-name/ht-line/ht-sub.
@@ -24298,6 +24545,9 @@ function setPanelCollapsed(collapsed, persist = true) {
   refitMapDuringSlide();
 }
 function togglePanelCollapse() {
+  // On touch the drawer is a full-screen sheet, so the spine/close button just
+  // toggles it shut instead of folding a column.
+  if (isTouchMode()) { toggleBag(); if (typeof sfx === 'function') sfx('click'); return; }
   setPanelCollapsed(!document.body.classList.contains('panel-collapsed'));
   if (typeof sfx === 'function') sfx('click');
 }
@@ -27321,6 +27571,7 @@ function rtOverlayEls() {
 }
 function rtPaused() {
   if (gameHalted || inTown || player.hp <= 0) return true;
+  if (touchLandscapeBlock) return true;  // portrait-only on touch — frozen while the rotate notice is up
   if (portalTransiting()) return true;   // hero is mid-teleport (off the map) — no moving/fighting/being hit
   if (mapWarping()) return true;         // walking through a teleporter pad — frozen mid-traversal
   for (const o of rtOverlayEls()) {
@@ -28085,6 +28336,8 @@ const __DL_FN_BRIDGE = {
   closeGraveyard,
   resizeCanvas,
   togglePanel,
+  toggleBag,
+  toggleTouchSprint,
   setMoveTargetFromClient,
   endJoy,
   bestiaryKey,
