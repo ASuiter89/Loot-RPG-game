@@ -2637,6 +2637,17 @@
   .shop-price.short { color: var(--danger); }
   .shop-row.cant-afford > .loot-icon,
   .shop-row.cant-afford > .shop-row-info { opacity: 0.42; filter: grayscale(0.8); }
+  /* "Can't equip yet" — a specific piece in a SPEND menu (merchant shop, Forge
+     preview, Enchanter, a gambler pull) whose attribute gate your current stats
+     don't meet. Amber caution, NOT an error (that's --danger): you can still buy
+     or forge it and grow into the requirement. Paired with a left accent bar on
+     the row so it reads at a glance without dimming the wares. */
+  .req-warn {
+    display: flex; align-items: center; gap: 4px;
+    margin-top: 3px; font-size: 1.2rem; font-weight: bold; color: var(--warn);
+  }
+  .req-warn [data-spr] { flex: none; }
+  .shop-row.cant-equip { box-shadow: inset 3px 0 0 var(--warn); }
   .shop-sell-btn { background: var(--orange-550); }
   /* Enchanter: two compact reroll buttons per property (value vs modifier). */
   .ench-btn { padding: 7px 8px; font-size: 1.2rem; background: var(--blue-650); }

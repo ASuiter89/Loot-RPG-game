@@ -29,6 +29,7 @@ import { castHaste, castsPerSecond, effectiveDps } from '../systems/skillDamage.
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
+import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
@@ -4365,8 +4366,7 @@ function itemAttrReq(item) {
 function attrReqStatus(item) {
   const r = itemAttrReq(item);
   if (!r) return null;
-  const have = reqAttrAvail(item, r.attr);
-  return { attr: r.attr, need: r.need, have, ok: have >= r.need };
+  return equipReqStatus(r, reqAttrAvail(item, r.attr));
 }
 // A short reason a piece's stat gate isn't met (for the lock tooltip / log), or null.
 function attrReqError(item) {
@@ -4494,6 +4494,19 @@ function equipLockReason(item) {
   if (item.slot === 'offhand') return offhandEquipError(item, equipped.weapon) || attrReqError(item) || '';
   // Weapon, armour and jewelry: the attribute requirement is the only equip lock.
   return attrReqError(item) || '';
+}
+// A compact, always-visible "can't equip yet" warning for the menus where you
+// SPEND gold or materials on a specific piece (merchant shop, Forge preview,
+// Enchanter, a gambler pull). Fires only when the piece's attribute gate is
+// unmet by your CURRENT stats — the same gate that turns worn gear red/ignored
+// (attrReqStatus) — so you don't sink resources into gear you can't yet wield.
+// Amber, not a block: you can still buy/forge it and grow into the requirement.
+// '' when the piece is equippable or carries no attribute gate. Uses the door
+// (lock) sprite, matching the loot list's "Can't Equip" affordance.
+function equipReqBadge(item) {
+  const s = attrReqStatus(item);
+  const label = s ? equipReqShort(s, ATTRIBUTES[s.attr].short) : '';
+  return label ? `<div class="req-warn"><span data-spr=feat_door></span> ${label}</div>` : '';
 }
 
 // Combat passives keyed off the chosen class — now also folding in any damage
@@ -6636,6 +6649,10 @@ window.gameState = function gameState(radius) {
           i, kind: row.kind || (it && it.slot ? 'gear' : 'item'),
           name: it && it.name, slot: it && it.slot, tier: it && it.tier,
           price: (raw != null && merchant.sale) ? Math.round(raw * merchant.sale) : raw,
+          // Whether the loadout can equip it right now (canEquipItem). The shop row
+          // shows an amber "can't equip yet" flag whenever your CURRENT STATS fall
+          // short — the usual reason — so an agent sees the same signal here.
+          canEquip: (it && it.slot) ? canEquipItem(it) : true,
         };
       }) : null,
     },
@@ -6825,6 +6842,7 @@ window.gameGuide = function gameGuide(topic) {
       `Town is a menu of services; take the Dungeon Gate to drop back in (choose tier + floor). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and is re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
+      `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse 3 UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost — it spends your 3 lowest-value pieces of that rarity, so lock keepers first (needs 3+ unlocked of a rarity).`,
@@ -10290,12 +10308,16 @@ function renderShop() {
     }
     const sicon = itemIcon(s.item);
     const scolor = tierColor(s.item);
-    return `<div class="shop-row has-actions ${isUpgrade?'upgrade':''} ${afford?'':'cant-afford'}">
+    // Flag wares your current attributes can't yet wield so the warning is right
+    // on the row you'd buy from — not just in the hover card (see equipReqBadge).
+    const reqBadge = equipReqBadge(s.item);
+    return `<div class="shop-row has-actions ${isUpgrade?'upgrade':''} ${afford?'':'cant-afford'} ${reqBadge?'cant-equip':''}">
       <span class="loot-icon">${iconMarkup(sicon, scolor)}</span>
       <div class="shop-row-info ${cls}" onmouseenter="showShopTooltip(event,${i})" onmouseleave="hideTooltip()">
         <div class="shop-row-name">${name}</div>
         <div class="shop-row-sub">${sub}</div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
+        ${reqBadge}
       </div>
       <button class="act-btn ${afford?'':'short'}" ${afford?'':'disabled'} onclick="buyItem(${i})"><span data-spr=ic_money></span>${price}</button>
     </div>`;
@@ -11630,9 +11652,12 @@ function renderForge() {
   // forge gear you can't yet wield — invest the stat and grow into it — so this is an
   // amber heads-up when unmet, not a hard block.
   const fStatus = attrReqStatus(preview);
-  const forgeReqLine = fStatus
-    ? `<div class="shop-row-sub" style="color:${fStatus.ok ? 'var(--green-450)' : 'var(--gold)'}">Requires ${fStatus.need} ${ATTRIBUTES[fStatus.attr].short} to equip · you have ${fStatus.have}</div>`
-    : '';
+  // Unmet → the same amber "can't equip yet" badge the shop/enchanter show, so
+  // forging gear beyond your stats reads the same everywhere; met → a quiet green
+  // confirmation you can wield what you're about to pay for.
+  const forgeReqLine = !fStatus ? ''
+    : equipReqBadge(preview)
+      || `<div class="shop-row-sub" style="color:var(--green-450)">Meets equip requirement · ${fStatus.need} ${ATTRIBUTES[fStatus.attr].short} (you have ${fStatus.have})</div>`;
 
   setTownContent(`
     <div class="town-blurb">The Craftsman forges a <b>blank</b> piece at your current depth (ilvl ${craftIlvl()}) — its base damage or defense set by the base you pick, with empty modifier slots. Take it to the <span data-spr=ic_wand></span> Enchanter to fill them in. Rarity sets how many modifiers it can hold. Heftier bases drink more materials; finer ones bill more for the delicate&nbsp;labour.</div>
@@ -12440,12 +12465,14 @@ function renderEnchanter() {
     const it = g.item;
     const slotLabel = it.slot ? SLOTS[it.slot].label : '';
     const stats = itemStatLine(it, {noPower:true}); // power shown on its own line below
-    lootRows += `<div class="shop-row has-actions">
+    const reqBadge = equipReqBadge(it);
+    lootRows += `<div class="shop-row has-actions ${reqBadge?'cant-equip':''}">
       <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
       <div class="shop-row-info ${rarityClass(it)}">
         <div class="shop-row-name">${it.name}${craftedMark(it)}</div>
         <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${itemPower(it)}</span></div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
+        ${reqBadge}
       </div>
       <button class="act-btn" onclick="enchantPick(${g.item.id})">WORK</button>
     </div>`;
@@ -12559,7 +12586,7 @@ function renderEnchantItem(item) {
   setTownContent(`
     <div class="shop-row has-actions"><button class="modal-nav-btn" onclick="enchantBack()">‹ Back</button>
       <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${item.name}${craftedMark(item)}</div>
-      <div class="shop-row-sub">${SLOTS[item.slot].label} · ilvl ${item.ilvl} · ${statN}/${caps.stat} stats · ${attrN}/${caps.attr} attrs</div></div></div>
+      <div class="shop-row-sub">${SLOTS[item.slot].label} · ilvl ${item.ilvl} · ${statN}/${caps.stat} stats · ${attrN}/${caps.attr} attrs</div>${equipReqBadge(item)}</div></div>
     <div class="ench-legend">Value rerolls the number · Type swaps the modifier · ${touchUI() ? 'press &amp; hold a button for details' : 'hover a button for details'}</div>
     ${lockRows}
     ${empty}${statRows}${attrRows}
@@ -12786,12 +12813,14 @@ function renderGambler() {
   if (gambleLast) {
     const it = gambleLast.item;
     const above = (it.ilvl > d) ? ' <span style="color:var(--gold-350)">(above your depth!)</span>' : '';
+    const reqBadge = equipReqBadge(it);
     resultRow = `<div class="town-blurb" style="margin-top:10px">Your last wager (<span data-spr=ic_money></span>${gambleLast.cost}) turned up:</div>
-      <div class="shop-row">
+      <div class="shop-row ${reqBadge?'cant-equip':''}">
         <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
         <div class="shop-row-info ${rarityClass(it)}">
           <div class="shop-row-name">${it.name}</div>
           <div class="shop-row-stats">ilvl ${it.ilvl}${above} · ${itemStatLine(it)}</div>
+          ${reqBadge}
         </div>
       </div>`;
   }
