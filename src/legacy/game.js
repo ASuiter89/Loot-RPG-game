@@ -6112,8 +6112,8 @@ let currentTab = 'inv';
 // Which gear slot the LOOT tab is filtered to ('all', a SLOT_KEYS value, or
 // 'other' for non-equipable items like potions).
 let lootFilter = 'all';
-// How the LOOT list is ordered: 'rarity' (default) | 'power' | 'slot' | 'value' | 'name'.
-let lootSort = 'rarity';
+// How the LOOT list is ordered: 'power' (default) | 'rarity' | 'slot' | 'value' | 'name'.
+let lootSort = 'power';
 // Stat/attribute keys the LOOT list is narrowed to (empty = no stat filter). An
 // item shows if it carries ANY selected stat, so builds can surface relevant gear.
 let lootStatFilter = [];
