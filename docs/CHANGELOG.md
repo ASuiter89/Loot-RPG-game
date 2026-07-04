@@ -8,6 +8,34 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — equipment sets reborn as fixed named artifacts (20 sets)
+
+- 📦 The set **roster** lives in `src/data/itemSets.js` (`ITEM_SETS`) — now 20
+  sets, each a family of pre-defined, NAMED `pieces` shaped exactly like a unique
+  (`{id, base, slot, name, native, mods[6], power, flavor}`) plus set-level
+  `bonus` tiers and a completion `power`. Pure helpers live in
+  `src/systems/itemSets.js`: `setPieceCount`, `setTopTier`, `setComplete`,
+  `setStatContribution`, `setSlots`, `setPiecePool`, `rollSetPiece`,
+  `setsCoverAllSlots`.
+- 🏗️ `buildUnique` was refactored into a shared `buildFixedArtifact(def, lvl,
+  membership)`; `buildSetPiece` reuses it, stamping `item.set`/`item.setPiece`
+  (instead of `item.unique`) so a set piece is a fixed artifact (native + six
+  mods + its own power + `baseStats`, `fixed:true`) that ALSO feeds the
+  worn-count set bonuses. `generateItem`'s red-tier branch now short-circuits to
+  `buildSetPiece(pickSetPiece(forceSlot), lvl)` or `buildUnique(...)`; the old
+  random-affix-plus-`item.set`-tag path is gone.
+- Set pieces now inherit unique treatment everywhere: the Enchanter leaves them
+  read-only (set-aware "Set piece — properties fixed on drop" copy in the detail
+  card + fixed-enchant view), the loot banner still reads "SET PIECE" in teal, and
+  `gameState()`'s brief item surfaces `set`/`setPiece`/`fixed`. The wider set
+  tooltip lists the set's named pieces and ticks the ones you wear. `gameGuide`
+  loot/autoloot topics rewritten.
+- 🧪 `test/systems/itemSets.test.js` (piece counts, completion, contribution,
+  slots, pool, slot-scoped piece rolls, coverage) and a rebuilt
+  `test/data/itemSets.test.js` that mirrors the unique conventions per piece
+  (native/headline/6-mods/caster-martial/power/flavor/distinct-signature) plus
+  set-level shape, varied sizes and full slot coverage.
+
 ## Feature — fractional damage rolls + spell damage ranges + per-hit tooltips
 
 - 📦 Pure **damage-roll math** extracted to `src/systems/damageRoll.js`:

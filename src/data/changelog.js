@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "large", v: "Sets reborn — 20 hand-crafted set collections", by: "Claude", notes: [
+    "Set pieces are now pre-defined, NAMED, fixed-stat artifacts — built exactly like uniques (a fixed signature stat, six set modifiers, and their own special power, all locked on drop and never reforgeable) — instead of random gear wearing a set tag.",
+    "There are now 20 distinct sets, each a family of specific named pieces. Sets vary in size from 2 to 6 pieces: small ones complete fast, big ones are a long chase. Between them they cover every gear slot.",
+    "Each set has its own escalating worn-count bonuses AND a completion power that switches on when you wear every piece — a set-wide effect layered on top of each piece's own power, plus the golden aura.",
+    "\"Worn: n / size\" now counts against the set's real number of pieces. The wider set tooltip lists the set's named pieces and ticks the exact ones you're wearing.",
+    "Set pieces read as fixed artifacts everywhere — the Enchanter leaves them alone, and their cards and gameState() flag them as set pieces (with their set and piece ids).",
+  ] },
   { date: "2026-07-04", size: "small", v: "Skill descriptions read their damage inline", by: "Claude", notes: [
     "Every damage skill's description now weaves its damage range into the sentence — e.g. \"Hurl a bolt of flame that deals 16k–22k damage and sets a foe ablaze\" — instead of tacking it on as a separate trailing line.",
     "A multi-strike skill shows a (×N) badge right after the range, and the Damage pill reads \"per hit (×3)\" so the single-hit number and the strike count stay clearly separate.",
