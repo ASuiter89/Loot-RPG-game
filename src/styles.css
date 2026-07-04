@@ -361,6 +361,14 @@
     0%, 100% { box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 60%, transparent); }
     50%      { box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 60%, transparent), 0 0 9px 2px var(--unique); }
   }
+  /* No-mana flash — a brief, one-shot brightness pulse toggled on the MP fill
+     (either layout) by flashManaBar() when a cast is denied for lack of mana.
+     Two quick beats then rest, so a failed cast reads on the bar, not just the log. */
+  .mp-fill.mp-nomana, .dh-vital-fill.mp.mp-nomana { animation: mp-nomana-flash 0.42s ease-in-out 2; }
+  @keyframes mp-nomana-flash {
+    0%, 100% { filter: brightness(1); }
+    50%      { filter: brightness(1.85) saturate(1.25); }
+  }
   #gold-display { color: var(--gold); font-size: 1.3rem; }
 
   /* "Watch" settings button → spectator stream page (watch.html). Row keeps the
@@ -3363,6 +3371,7 @@
     .town-menu-btn.tm-gate { animation: none; }
     .town-menu-btn.tm-gate .gate-wisp { display: none; }
     .sk-tnode.avail .badge { animation: none; }
+    .mp-fill.mp-nomana, .dh-vital-fill.mp.mp-nomana { animation: none; }
   }
   .title-play.secondary {
     padding: 11px; font-size: 1.5rem; letter-spacing: 1px; border-width: 1px;

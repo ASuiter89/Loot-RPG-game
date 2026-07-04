@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Mana bar flashes when a cast is short on mana", by: "Jeff Louie", notes: [
+    "Try to cast a skill without enough MP and the mana bar gives a subtle brightness pulse, so the shortfall shows on the bar, not just the log.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Passives surge — power spikes at ranks 3 / 7 / 10", by: "Jeff Louie", notes: [
     "Deepening one passive now pays off in jumps, not just a steady drip: its always-on bonus spikes at ranks 3, 7 and 10 — the same milestone ranks that already power up active skills (up to +30% of the stat total at rank 10).",
     "The skill card flags the surge with a chip and rank pips, previews the bigger jump on rank-up, and the level-up line calls out each milestone as you cross it. Keystones stay single-rank, so they don't surge.",

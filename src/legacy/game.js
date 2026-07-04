@@ -18290,7 +18290,7 @@ function castSkillById(id, opts) {
   const bloodPact = keystoneFlag('bloodpact');
   if (bloodPact) {
     if (player.hp <= cost) { castMsg(`🩸 Not enough life for a blood-cast of ${sk.name} — need ${cost} HP.`); _muteCastLog = false; return false; }
-  } else if (player.mp < cost) { castMsg(`💧 Not enough mana for ${sk.name} — need ${cost} MP.`); _muteCastLog = false; return false; }
+  } else if (player.mp < cost) { castMsg(`💧 Not enough mana for ${sk.name} — need ${cost} MP.`); if (!_muteCastLog) flashManaBar(); _muteCastLog = false; return false; }
 
   const fired = runActiveSkill(id); // false = no valid target / nothing to do
   _muteCastLog = false;
@@ -20530,6 +20530,19 @@ function updateVitalFills(dt) {
     const a = hudEl('mp-bar'), b = hudEl('dh-mp-fill');
     if (a) a.style.width = mpW;
     if (b) b.style.width = mpW;
+  }
+}
+// Subtle mana-bar flash when a cast is denied for lack of MP — a quick brightness
+// pulse on whichever MP bar is showing (mobile #mp-bar / desktop #dh-mp-fill), so
+// the failure reads on the bar itself, not only in the log. Restarts the one-shot
+// CSS animation on repeat presses by dropping the class, forcing a reflow, re-adding.
+function flashManaBar() {
+  for (const id of ['mp-bar', 'dh-mp-fill']) {
+    const el = hudEl(id);
+    if (!el) continue;
+    el.classList.remove('mp-nomana');
+    void el.offsetWidth;   // reflow so the animation can replay from the start
+    el.classList.add('mp-nomana');
   }
 }
 // ── Active buffs & debuffs HUD strip ────────────────────────────────────────
