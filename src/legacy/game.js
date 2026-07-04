@@ -40,6 +40,7 @@ import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKIL
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
 import { mercCost } from '../systems/mercPricing.js';
+import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTints.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -2157,7 +2158,7 @@ function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
   {
     const px = offX + (player.fx - 0.5) * tw, py = offY + (player.fy - 0.5) * th;
     actors.push({ footY: py + th * 0.82, l: px - tw * 0.5, t: py - th * 1.2, r: px + tw * 1.5, b: py + th * 1.15,
-      tint: 'rgba(150,220,255,0.9)', draw: () => drawHeroSprite(px, py, tw, th, scale) });
+      tint: heroSilhouetteTint(player.class), draw: () => drawHeroSprite(px, py, tw, th, scale) });
   }
   enemies.forEach((e) => {
     if (e.dead) return;
@@ -2166,7 +2167,7 @@ function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
     const efx = (e.fx == null ? e.x + S / 2 : e.fx), efy = (e.fy == null ? e.y + S / 2 : e.fy);
     const px = offX + (efx - S / 2) * tw, py = offY + (efy - S / 2) * th, cw = S * tw, ch = S * th;
     actors.push({ footY: py + ch * 0.82, l: px - cw * 0.5, t: py - ch * 0.9, r: px + cw * 1.5, b: py + ch * 1.1,
-      tint: 'rgba(255,110,110,0.9)', draw: () => drawEnemyBody(e, px, py, cw, ch, tw, th) });
+      tint: ENEMY_SILHOUETTE_TINT, draw: () => drawEnemyBody(e, px, py, cw, ch, tw, th) });
   });
   const realCtx = ctx;
   for (const a of actors) for (const T of occ) {
