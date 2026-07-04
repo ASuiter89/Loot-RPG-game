@@ -39,6 +39,8 @@ import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
 import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
 import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKILL_ICON_ATLAS } from '../assets/skillIconsAtlas.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
+import { planReconcile, freshDelMeta, sanitizeDelMeta, isTombstoned, addTombstone,
+  mergeDelMeta, delCloudHasAll } from '../persistence/saveSync.js';
 import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
 import { mercCost } from '../systems/mercPricing.js';
 import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTints.js';
@@ -24731,6 +24733,40 @@ function hcGrantAch(id) {
 // graveyard, death screen), referenced directly by its atlas key.
 function hcIcon(px) { return (typeof dlIcon === 'function' && dlIcon('ic_cursed', px)) || ''; }
 
+// ── DELETION TOMBSTONE LEDGER (cross-device delete propagation) ──────────────
+// The mirror image of the hardcore death ledger, but for ordinary user-initiated
+// deletion. Without it, deleting a hero is expressed ONLY as the absence of a
+// cloud row — so any other device that still holds the hero locally treats it as a
+// brand-new character on the next sync, re-uploads it, and it resurrects; delete on
+// one device, it comes back from the other, forever. The fix is a persisted,
+// account-wide record of WHICH character ids were deleted: an append-only, union-
+// merged set of cids that only ever GROWS, so a delete recorded on any device can
+// never be undone by an older copy elsewhere — the moment either device syncs, the
+// tombstone propagates and the hero stays gone everywhere. cloudReconcile scrubs a
+// tombstoned hero from BOTH sides (exactly as it scrubs a hardcore-dead one), so it
+// is never mistaken for a newcomer. The set-algebra lives in the pure, unit-tested
+// persistence/saveSync.js; this is just the local storage + cloud plumbing.
+// Fail-open by construction: a cid is only ever added at a genuine delete site, so
+// the scrub can never remove a save the player still wants.
+const DEL_META_KEY = 'dungeonLoot_delMeta_v1';
+let delMeta = freshDelMeta();
+function loadDelMeta() {
+  try { delMeta = sanitizeDelMeta(JSON.parse(localStorage.getItem(DEL_META_KEY))); }
+  catch (e) { delMeta = freshDelMeta(); }
+}
+function writeDelMeta() { try { localStorage.setItem(DEL_META_KEY, JSON.stringify(delMeta)); } catch (e) {} }
+// True when a parsed save's stable id has been tombstoned (a falsy cid is never one).
+function delIsDeleted(d) { return isTombstoned(delMeta, saveCid(d)); }
+// Permanently record a cid as deleted. Append-only + monotonic, then synced (a
+// no-op for an already-tombstoned cid, so re-deleting is harmless).
+function delMarkDeleted(cid) {
+  const r = addTombstone(delMeta, cid, Date.now());
+  if (!r.added) return;
+  delMeta = r.meta;
+  writeDelMeta();
+  cloudScheduleDeleted();
+}
+
 // ── Hardcore achievements ── Hardcore earns the SAME feats as normal play (the
 // ACHIEVEMENTS list defined further below), so both modes have full parity. The
 // difference is persistence: a hardcore hero's earned feats are meta-progression
@@ -24774,6 +24810,35 @@ function hcBuryDeadSave(d, slot) {
   try { cloudDeleteSlot(slot); } catch (e) {}
 }
 
+// ── Shared delete plumbing (tombstone + cross-device propagation) ────────────
+// Read the stable id of the hero saved in slot i (null if empty / a legacy id-less
+// save). Read BEFORE the slot is cleared, so we know which character to tombstone.
+function slotCid(i) {
+  try { const raw = localStorage.getItem(slotKey(i)); return raw ? saveCid(JSON.parse(raw)) : null; }
+  catch (e) { return null; }
+}
+// Locally record a deletion the instant it happens: tombstone the cid (so no sync
+// ever resurrects it) and cancel any pending debounced cloud push for that slot (so
+// an in-flight save can't re-upload the hero we're deleting). Synchronous — runs
+// before any reload, so a reload's boot reconcile already sees the tombstone.
+function tombstoneDeleted(cid, slot) {
+  if (cloudSaveTimers[slot]) { try { clearTimeout(cloudSaveTimers[slot]); } catch (e) {} cloudSaveTimers[slot] = null; }
+  if (cid) delMarkDeleted(cid);
+}
+// Propagate a deletion to the account: remove the hero's cloud row BY ITS STABLE ID
+// (so a not-yet-converged slot layout can't delete an innocent hero at the same slot
+// index) and push the tombstone ledger up, so every other device scrubs the hero
+// instead of resurrecting it. A legacy id-less save has no cross-device identity, so
+// we can only drop its own slot's cloud row. Best-effort; the reconcile scrub is the
+// backstop that guarantees eventual removal even if this call fails.
+async function propagateDelete(cid, slot) {
+  if (!cloudEnabled() || !authState.user) return;
+  try {
+    if (cid) { await cloudDeleteCid(cid); await cloudPushDeleted(); }
+    else { await cloudDeleteSlot(slot); }
+  } catch (e) {}
+}
+
 async function wipeSave() {
   // The hero you're abandoning earns a headstone in the graveyard first.
   recordFallenHero();
@@ -24781,10 +24846,13 @@ async function wipeSave() {
   // Latch _wipingSave first so the pagehide/visibilitychange autosaves that fire
   // during reload can't re-write the slot we're about to clear.
   _wipingSave = true;
+  const cid = slotCid(activeSlot);
   try { localStorage.removeItem(slotKey(activeSlot)); } catch (e) {}
-  // Drop the cloud row too (awaited) so the boot reconcile can't pull the wiped
-  // hero back. Resolves instantly when signed out.
-  await cloudDeleteSlot(activeSlot);
+  // Tombstone the abandoned hero and drop its cloud row (awaited) so neither this
+  // device's boot reconcile nor any other device can pull the wiped hero back.
+  // Resolves instantly when signed out.
+  tombstoneDeleted(cid, activeSlot);
+  await propagateDelete(cid, activeSlot);
   location.reload();
 }
 
@@ -24984,8 +25052,12 @@ async function newGameInSlot(i) {
   // Freeze saves so the unload autosaves during reload can't refill slot i with
   // the outgoing hero's state, then clear the slot locally and in the cloud.
   _switchingSlot = true;
+  const displaced = slotCid(i); // usually null (New Game is offered on empties), but tombstone anything real
   try { localStorage.removeItem(slotKey(i)); } catch (e) {}
-  await cloudDeleteSlot(i); // clear any cloud row first so the boot sync won't restore it
+  // Tombstone any hero being overwritten and clear its cloud row first, so the boot
+  // sync won't restore it and no other device resurrects it.
+  tombstoneDeleted(displaced, i);
+  await propagateDelete(displaced, i);
   try { localStorage.setItem(ACTIVE_SLOT_KEY, String(i)); } catch (e) {}
   location.reload();
 }
@@ -25000,20 +25072,25 @@ function deleteSlot(i) {
     return;
   }
   slotDeleteArmed = -1;
-  // Wiping the slot you're actively playing means there's nothing to fall back
+  // Read the doomed hero's stable id BEFORE clearing the slot, so we can tombstone
+  // it. Wiping the slot you're actively playing means there's nothing to fall back
   // on — reload starts a fresh hero in it. Freeze saves FIRST (before clearing)
   // so the unload autosaves that fire during reload can't restore the hero we
   // just deleted. Otherwise just clear the slot and refresh the list. In both
-  // cases drop the cloud row so a signed-in player's delete sticks across devices
-  // and the boot sync can't pull the deleted hero back.
+  // cases we tombstone the cid and drop the cloud row so a signed-in player's
+  // delete sticks across devices — no other device can resurrect it, and the boot
+  // sync can't pull it back.
+  const cid = slotCid(i);
   if (i === activeSlot) {
     _switchingSlot = true;
     try { localStorage.removeItem(slotKey(i)); } catch (e) {}
-    cloudDeleteSlot(i).then(() => location.reload());
+    tombstoneDeleted(cid, i);
+    propagateDelete(cid, i).then(() => location.reload());
     return;
   }
   try { localStorage.removeItem(slotKey(i)); } catch (e) {}
-  cloudDeleteSlot(i);
+  tombstoneDeleted(cid, i);
+  propagateDelete(cid, i);
   renderSlots();
 }
 
@@ -25381,11 +25458,14 @@ async function cloudPushSlot(slot, opts) {
   if (!raw) return false;
   let body;
   if (raw === _lastSavePayload) {
-    // Fast path: saveGame() just wrote this exact string, so it's already known
-    // to be a started save and its ts is cached. Splice the bytes straight into
-    // the request body instead of JSON.parse-ing and re-stringifying the whole
-    // save — the keys below match the object literal in the slow path, so the
-    // uploaded payload is byte-identical.
+    // Fast path: saveGame() just wrote this exact string for the active hero, so
+    // it's already known to be a started save and its ts is cached. Never re-upload
+    // a hero that's been deleted (tombstoned) — a stray debounced/keepalive push
+    // firing right after a delete could otherwise resurrect it in the cloud.
+    if (delIsDeleted({ player })) return false;
+    // Splice the bytes straight into the request body instead of JSON.parse-ing and
+    // re-stringifying the whole save — the keys below match the object literal in
+    // the slow path, so the uploaded payload is byte-identical.
     body = '{"user_id":' + JSON.stringify(authState.user.id) + ',"slot":' + JSON.stringify(slot) +
       ',"data":' + raw + ',"updated_at":' + JSON.stringify(new Date(_lastSavePayloadTs || Date.now()).toISOString()) + '}';
   } else {
@@ -25393,6 +25473,8 @@ async function cloudPushSlot(slot, opts) {
     // Never upload a blank, not-yet-started hero — it would overwrite whatever real
     // save already lives in this slot on the account.
     if (!saveStarted(data)) return false;
+    // Never re-upload a deleted hero (see the fast-path note above).
+    if (delIsDeleted(data)) return false;
     body = JSON.stringify({
       user_id: authState.user.id, slot: slot, data: data,
       updated_at: new Date(data.ts || Date.now()).toISOString(),
@@ -25418,6 +25500,24 @@ async function cloudDeleteSlot(slot) {
     await fetch(LB_SUPABASE_URL + '/rest/v1/saves?user_id=eq.' + authState.user.id + '&slot=eq.' + slot, {
       method: 'DELETE', headers: cloudRestHeaders({ 'Prefer': 'return=minimal' }),
     });
+  } catch (e) {}
+}
+// Remove the cloud row(s) for a specific CHARACTER, matched by its stable id — not
+// by slot index. A hero's slot can differ across devices (reconcile relocates
+// colliding heroes to free slots), so deleting by slot index risks nuking a
+// different, innocent hero that happens to sit at that index on the account. We read
+// the account's rows, find the one(s) whose save carries this cid, and delete those
+// by their actual slot. Best-effort; paired with the tombstone so a miss still
+// converges on the next reconcile scrub.
+async function cloudDeleteCid(cid) {
+  if (!cloudEnabled() || !authState.user || !cid) return;
+  if (!await ensureToken()) return;
+  try {
+    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?select=slot,data&user_id=eq.' + authState.user.id, { headers: cloudRestHeaders() });
+    if (!res.ok) return;
+    const rows = await res.json();
+    const targets = (rows || []).filter(r => r && typeof r.slot === 'number' && saveCid(r.data) === cid).map(r => r.slot);
+    await Promise.all(targets.map(s => cloudDeleteSlot(s)));
   } catch (e) {}
 }
 // Synchronous best-effort flush of the active slot (and the shared stash) on
@@ -25525,6 +25625,75 @@ async function hcReconcile() {
   const haveLocal = hcMeta.cids.length || hcMeta.ach.length;
   if (haveLocal && !hcCloudHasAll(cloud)) await cloudWriteHcMeta();
   return learnedDeath;
+}
+
+// ── Deletion-tombstone cloud sync ────────────────────────────────────────────
+// The deletion ledger (delMeta.cids) mirrors to its own dedicated row
+// (DELETED_CLOUD_SLOT), exactly like the hardcore ledger above and for the same
+// reason: it is UNION-merged, never last-writer-wins, so a delete recorded on any
+// device only ever accumulates and can't be undone by a stale copy elsewhere.
+// cloudReconcile() ignores this row (no .player → not a started save); delReconcile()
+// handles it and must run BEFORE cloudReconcile so the scrub sees the full set.
+const DELETED_CLOUD_SLOT = -3; // sentinel cloud "slot" for the deletion ledger — never a real character
+let cloudDelTimer = null;
+function cloudScheduleDeleted() {
+  if (!cloudEnabled() || !authState.user) return;
+  if (cloudDelTimer) return;
+  cloudDelTimer = setTimeout(() => { cloudDelTimer = null; cloudPushDeleted(); }, 3500);
+}
+// Read the account's deletion-ledger row. Returns the data object, null (no row), or
+// undefined (couldn't read — caller MUST NOT then blind-write, or it could shrink
+// the cloud ledger).
+async function cloudFetchDelMeta() {
+  const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?select=data&user_id=eq.' + authState.user.id + '&slot=eq.' + DELETED_CLOUD_SLOT, { headers: cloudRestHeaders() });
+  if (!res.ok) return undefined;
+  const rows = await res.json();
+  return (rows && rows[0] && rows[0].data && typeof rows[0].data === 'object') ? rows[0].data : null;
+}
+// Blind upsert of the CURRENT local delMeta. Internal — only called right after a
+// successful read+merge, so it writes the union (never a shrunk set).
+async function cloudWriteDelMeta() {
+  try {
+    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?on_conflict=user_id,slot', {
+      method: 'POST',
+      headers: cloudRestHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify({
+        user_id: authState.user.id, slot: DELETED_CLOUD_SLOT, data: delMeta,
+        updated_at: new Date(delMeta.ts || Date.now()).toISOString(),
+      }),
+    });
+    return res.ok;
+  } catch (e) { return false; }
+}
+// Union-FIRST push: read the cloud ledger, merge it into ours, then write the union
+// back. As with the hardcore ledger, the read-before-write is the whole point — a
+// blind upsert would let a device with a stale, smaller ledger shrink the cloud and
+// un-delete a hero someone removed elsewhere. If the cloud can't be read we DON'T
+// write, rather than risk a shrinking overwrite.
+async function cloudPushDeleted() {
+  if (!cloudEnabled() || !authState.user) return false;
+  if (!await ensureToken()) return false;
+  let cloud;
+  try { cloud = await cloudFetchDelMeta(); } catch (e) { return false; }
+  if (cloud === undefined) return false;
+  const merged = mergeDelMeta(delMeta, cloud, Date.now());
+  if (merged.grew) { delMeta = merged.meta; writeDelMeta(); }
+  if (delMeta.cids.length && !delCloudHasAll(delMeta, cloud)) return await cloudWriteDelMeta();
+  return true;
+}
+// Boot/sync reconcile: same union-first merge as cloudPushDeleted. Runs just before
+// cloudReconcile so any tombstone recorded on another device is present when the
+// per-slot merge scrubs deleted heroes from both sides.
+async function delReconcile() {
+  if (!cloudEnabled() || !authState.user) return;
+  if (!await ensureToken()) return;
+  let cloud;
+  try { cloud = await cloudFetchDelMeta(); } catch (e) { return; }
+  if (cloud === undefined) return;
+  const merged = mergeDelMeta(delMeta, cloud, Date.now());
+  if (merged.grew) { delMeta = merged.meta; writeDelMeta(); }
+  const haveLocal = delMeta.cids.length;
+  if (haveLocal && !delCloudHasAll(delMeta, cloud)) await cloudWriteDelMeta();
 }
 
 // ── Shared-stash cloud sync ─────────────────────────────────────────────────
@@ -25732,14 +25901,20 @@ async function settingsReconcile() {
 
 // ── Reconcile (sync) ────────────────────────────────────────────────────────
 // Merge this device's slots with the account so NOTHING is ever overwritten by a
-// different character. The cloud's slot layout is the shared source of truth: a
-// hero is identified by its stable id (cid, or its slot index for legacy saves
-// made before ids). Same id on both sides → keep the newer version at the cloud's
-// slot. A hero the cloud doesn't have yet (a different character that happens to
-// collide on a slot index) is appended to the lowest free slot and pushed up, so
-// e.g. signing in on a second device with its own slots 1–2 lands them in slots
-// 3–4 and the cloud ends up holding all four. Returns { activeChanged } so the
-// caller can reload when the active slot's contents moved.
+// different character — and so a DELETED character stays deleted everywhere. The
+// cloud's slot layout is the shared source of truth: a hero is identified by its
+// stable id (cid, or its slot index for legacy saves made before ids). Same id on
+// both sides → keep the newer version at the cloud's slot. A hero the cloud doesn't
+// have (a different character that happens to collide on a slot index) is appended
+// to the lowest free slot and pushed up, so signing in on a second device with its
+// own slots 1–2 lands them in slots 3–4 and the account ends up holding all four.
+// A hardcore-dead hero (hc ledger) or a user-deleted hero (deletion ledger) is
+// scrubbed from BOTH sides so it can never be mistaken for a newcomer and resurrected.
+//
+// The DECISION is a pure function (persistence/saveSync.js ▸ planReconcile) — this
+// wrapper only gathers the inputs (cloud rows + local slots) and applies the plan,
+// keeping every side effect (fetch/localStorage) here at the edge. Returns
+// { activeChanged } so the caller can reload when the active slot's contents moved.
 async function cloudReconcile() {
   const result = { activeChanged: false };
   if (!cloudEnabled() || !authState.user) return result;
@@ -25751,106 +25926,42 @@ async function cloudReconcile() {
     rows = await res.json();
   } catch (e) { return result; }
 
-  // Started saves on each side, keyed by slot index (blank/unstarted are ignored).
-  // Hardcore heroes already in the death ledger are excluded from BOTH sides and
-  // scrubbed, so a stale "live" copy left open on another device can never put a
-  // dead hero back into play — the ledger (union-merged in hcReconcile, run just
-  // before this) is the source of truth on who's dead.
-  const cloud = {}, local = {};
-  const deadCloudSlots = []; // dead-hero rows we're scrubbing — keep newcomers off them
-  (rows || []).forEach(r => {
-    if (!r || typeof r.slot !== 'number') return;
-    if (hcDeadSave(r.data)) { deadCloudSlots.push(r.slot); try { cloudDeleteSlot(r.slot); } catch (e) {} return; }
-    if (saveStarted(r.data)) cloud[r.slot] = r.data;
-  });
-  const localSlots = allLocalSlotIndices();
-  localSlots.forEach(i => {
+  // Read this device's local saves once, so the planner works off plain data.
+  const localRows = [];
+  for (const i of allLocalSlotIndices()) {
     try {
       const raw = localStorage.getItem(slotKey(i));
-      if (!raw) return;
-      const d = JSON.parse(raw);
-      if (hcDeadSave(d)) { try { localStorage.removeItem(slotKey(i)); if (i === activeSlot) result.activeChanged = true; } catch (e) {} return; }
-      if (saveStarted(d)) local[i] = d;
+      if (raw) localRows.push({ slot: i, data: JSON.parse(raw) });
     } catch (e) {}
+  }
+
+  // Pure planner decides the whole layout: scrub dead/deleted from both sides, keep
+  // the newer copy of a shared hero, relocate a colliding newcomer to a free slot,
+  // and follow the active hero if it moved. (hcReconcile + delReconcile have already
+  // run this boot, so the dead/deleted ledgers are current.)
+  const plan = planReconcile({
+    cloudRows: rows || [],
+    localRows,
+    activeSlot,
+    isStarted: saveStarted,
+    cidOf: saveCid,
+    isDead: hcDeadSave,
+    isDeleted: delIsDeleted,
+    lowestFree: lowestFreeSlot,
   });
 
-  const idOf = (d, slot) => saveCid(d) ? ('cid:' + saveCid(d)) : ('slot:' + slot);
-
-  // 1) Anchor every cloud character at its cloud slot.
-  const assign = {};         // final layout: slot -> chosen save data
-  const cloudIds = {};       // identity key -> cloud slot
-  for (const s of Object.keys(cloud).map(Number)) {
-    assign[s] = cloud[s];
-    cloudIds[idOf(cloud[s], s)] = s;
+  // Apply the plan — the only side effects live here.
+  plan.cloudDeletes.forEach(s => { try { cloudDeleteSlot(s); } catch (e) {} });
+  plan.localRemovals.forEach(s => { try { localStorage.removeItem(slotKey(s)); } catch (e) {} });
+  plan.localWrites.forEach(w => { try { localStorage.setItem(slotKey(w.slot), JSON.stringify(w.data)); } catch (e) {} });
+  if (plan.newActiveSlot != null) {
+    // The hero we're actively playing moved to a new slot — follow it so the reload
+    // lands back on that character rather than an emptied slot.
+    try { localStorage.setItem(ACTIVE_SLOT_KEY, String(plan.newActiveSlot)); } catch (e) {}
   }
-
-  // 2) Fold in each local character. Same id as a cloud char → keep the newer
-  //    version at the cloud's slot. A legacy (id-less) cloud save in the same
-  //    slot is treated as an older copy of the same hero. Anything else is a new
-  //    character for the account and gets appended to the lowest free slot.
-  const used = new Set(Object.keys(assign).map(Number));
-  // Don't reuse a slot index whose dead-hero cloud row we just fired a (fire-and-
-  // forget) DELETE at — a newcomer pushed to that same index could otherwise be
-  // wiped if the DELETE lands after its PUSH. The freed index returns to the pool
-  // on the next reconcile, once the row is actually gone.
-  deadCloudSlots.forEach(s => used.add(s));
-  const localDest = {};      // local slot -> where that hero ended up
-  const newcomers = [];
-  for (const i of localSlots) {
-    const l = local[i];
-    if (!l) continue;
-    const key = idOf(l, i);
-    if (key in cloudIds) {
-      const cs = cloudIds[key];
-      localDest[i] = cs;
-      if ((l.ts || 0) > (assign[cs].ts || 0)) assign[cs] = l;
-    } else if (!saveCid(l) && cloud[i]) {
-      // Local is a legacy (id-less) save, so its slot index is its only identity.
-      // The cloud's save in this same slot is the same hero carried forward (it may
-      // have gained an id on another device since). Newest wins; either way the
-      // cloud's id is carried onto the result so the hero is never duplicated.
-      localDest[i] = i;
-      if ((l.ts || 0) > (cloud[i].ts || 0)) {
-        if (saveCid(cloud[i]) && l.player) l.player.cid = saveCid(cloud[i]);
-        assign[i] = l;
-      }
-    } else {
-      newcomers.push(i);
-    }
-  }
-  for (const i of newcomers) {
-    const slot = lowestFreeSlot(used);
-    used.add(slot);
-    assign[slot] = local[i];
-    localDest[i] = slot;
-  }
-
-  // 3) Apply. Cloud characters never move, so no cloud row is ever deleted — we
-  //    only add or update. Write the local cache first (cloudPushSlot reads it),
-  //    clear stale local copies left behind by a moved hero, then push any slot
-  //    whose cloud copy differs.
-  const sameSave = (a, b) => !!a && !!b && (a.ts || 0) === (b.ts || 0) && saveCid(a) === saveCid(b);
-  const assignedSlots = new Set(Object.keys(assign).map(Number));
-  for (const i of localSlots) {
-    if (local[i] && !assignedSlots.has(i)) {
-      try { localStorage.removeItem(slotKey(i)); if (i === activeSlot) result.activeChanged = true; } catch (e) {}
-    }
-  }
-  const uploads = [];
-  for (const i of assignedSlots) {
-    const occ = assign[i];
-    if (!sameSave(local[i], occ)) {
-      try { localStorage.setItem(slotKey(i), JSON.stringify(occ)); if (i === activeSlot) result.activeChanged = true; } catch (e) {}
-    }
-    if (!sameSave(cloud[i], occ)) uploads.push(cloudPushSlot(i));
-  }
-  // If the hero we're actively playing moved to a new slot, follow it so the
-  // reload lands back on that character rather than an emptied slot.
-  if (localDest[activeSlot] != null && localDest[activeSlot] !== activeSlot) {
-    try { localStorage.setItem(ACTIVE_SLOT_KEY, String(localDest[activeSlot])); } catch (e) {}
-    result.activeChanged = true;
-  }
+  const uploads = plan.uploads.map(s => cloudPushSlot(s));
   try { await Promise.all(uploads); } catch (e) {}
+  result.activeChanged = plan.activeChanged;
   return result;
 }
 
@@ -25863,6 +25974,9 @@ async function cloudBootSync() {
   // a death recorded on another device locks out the hero we just booted into.
   const learnedDeath = await hcReconcile();
   if (learnedDeath && hcEnforceActiveLockout(true)) return;
+  // Pull the deletion ledger next so cloudReconcile scrubs anything deleted on
+  // another device instead of resurrecting it as a newcomer.
+  await delReconcile();
   const r = await cloudReconcile();
   await stashReconcile(); // sync the shared stash too (writes STASH_KEY before any reload)
   // Pull the account's preferences (writes the settings localStorage keys before
@@ -25981,6 +26095,7 @@ async function doLogin() {
     applySession(j);
     acctStatus('Signed in ✓ Syncing your saves…', 'ok');
     try { saveGame(); } catch (e) {}   // persist the current local game before merging
+    await delReconcile();              // pull tombstones first so a deleted hero isn't resurrected on link
     await cloudReconcile();
     await stashReconcile();            // merge the shared stash with the account's
     await settingsReconcile();         // merge preferences with the account's
@@ -26001,6 +26116,7 @@ async function doSignup() {
       applySession(j);
       acctStatus('Account created ✓ Syncing your saves…', 'ok');
       try { saveGame(); } catch (e) {}
+      await delReconcile();            // pull tombstones first so a deleted hero isn't resurrected on link
       await cloudReconcile();
       await stashReconcile();          // merge the shared stash with the account's
       await settingsReconcile();       // merge preferences with the account's
@@ -26029,6 +26145,7 @@ async function doSyncNow() {
   try { saveGame(); } catch (e) {}
   const learnedDeath = await hcReconcile();
   if (learnedDeath && hcEnforceActiveLockout(true)) return;
+  await delReconcile();  // pull the deletion ledger so cloudReconcile scrubs deleted heroes
   const r = await cloudReconcile();
   await stashReconcile();
   const settingsPulled = await settingsReconcile();
@@ -26530,6 +26647,7 @@ function titleSound() { toggleSound(); refreshTitleToggles(); }
 // Load the hardcore death ledger + earned feats BEFORE the save, so loadGame() can
 // recognise (and refuse to load) a hero who has already permanently died.
 loadHcMeta();
+loadDelMeta();  // deletion tombstones, so a hero deleted on another device stays deleted here
 loadDaily();   // daily-goal streak (persists in localStorage, independent of saves)
 const hadSave = loadGame();
 loadDevTune();   // restore any saved Dev-tab difficulty overrides (Settings ▸ Dev)
