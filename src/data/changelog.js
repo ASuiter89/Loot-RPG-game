@@ -3,7 +3,25 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
-  { date: "2026-07-04", size: "small", v: "Skill cards: shorter text, wider card", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Dungeon Gate flags the floor holding your lost bag", by: "Jeff Louie", notes: [
+    "The floor where you died glows with a grave marker at the Dungeon Gate, and its difficulty tab gets the same badge, so you know exactly where to dive to reclaim your dropped bag.",
+    "A note under the tier picker names the grave's tier and floor whatever tab you're on.",
+  ] },
+  { date: "2026-07-04", size: "small", v: "Enchanter: Esc backs out one step at a time", by: "Jeff Louie", notes: [
+    "With an item picked in the Enchanter, Esc now returns to the gear screen instead of jumping all the way out to town.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Gentler screen shake & flash, with on/off toggles", by: "Jeff Louie", notes: [
+    "Camera shake and the full-screen colour flash are toned down by default — hits, crits and boss beats nudge the view instead of jolting it.",
+    "Settings ▸ Visuals adds SCREEN SHAKE and SCREEN FLASH switches to turn either effect fully off.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Tighter Craftsman: one-tap forge, 3-wide pickers", by: "Jeff Louie", notes: [
+    "The forged-item preview and its cost now share one row — the FORGE button sits right on the item it makes, so you forge exactly what you see.",
+    "Item-type and base pickers go three across instead of two, killing the wasted space; a lone last tile centres instead of stranding.",
+  ] },
+  { date: "2026-07-04", size: "small", v: "Material wallet abbreviates big counts", by: "Jeff Louie", notes: [
+    "Crafting-material counts past 999 show compact (1.5k, 12k) so the wallet strip stays tidy; hover a chip for the exact tally.",
+  ] },
+  { date: "2026-07-04", size: "small", v: "Skill cards: shorter text, wider card", by: "Jeff Louie", notes: [
     "Every passive and keystone description rewritten terse — stats first, filler words and leftover internal tags gone.",
     "Skill detail card is wider with slightly smaller text, so each stat line fits without wrapping mid-phrase.",
   ] },
@@ -13,20 +31,20 @@ export const CHANGELOG = [
     "Lock toggle is bigger and easier to spot; a Lock/Unlock button also joins Sell & Scrap on a selected item.",
     "Gear your class can't wield no longer sinks to the bottom of the bag — it sorts like everything else.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Mix the music — fade each layer to taste", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Mix the music — fade each layer to taste", by: "Jeff Louie", notes: [
     "Audio settings now has four faders for the soundtrack: BASS, CHORDS, MELODY and DRUMS. Turn any layer up, down, or off, independently of the others.",
     "Each fader steps like the volume controls — tap to raise it a notch, wrapping from full back to off — and remembers where you set it.",
   ] },
-  { date: "2026-07-04", size: "medium", v: "Every music style gets a real bassline & chord groove", by: "Claude", notes: [
+  { date: "2026-07-04", size: "medium", v: "Every music style gets a real bassline & chord groove", by: "Jeff Louie", notes: [
     "The soundtrack no longer holds one flat chord per bar. Every style now plays a MOVING bassline — octave hops, syncopation, and walk-ups that lead into the next chord — plus a chord part with an actual rhythm instead of a single held note.",
     "All ten styles get their own groove so each sounds distinct: driving for Cavern, machine-like for Forge, martial for March, lazy and swung for Tide, ambient and still for Mist and Veil, and pounding for the boss theme.",
     "The music keeps its per-performance key, tempo, and melody variation on top, so it still never repeats note-for-note.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Hero Bars stay put", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Hero Bars stay put", by: "Jeff Louie", notes: [
     "With Hero Bars on, the red Health and blue Mana bars under your hero now stay visible at all times — no more vanishing when a vital fills up.",
     "Stamina bar unchanged: still pops up only while stamina is recovering.",
   ] },
-  { date: "2026-07-03", size: "big", v: "Deep performance pass — the lag is gone", by: "Claude", notes: [
+  { date: "2026-07-03", size: "big", v: "Deep performance pass — the lag is gone", by: "Jeff Louie", notes: [
     "Frame rate stays smooth on deep floors and stays smooth however long the game has been open.",
     "Combat log keeps the newest 200 lines; endless growth was quietly slowing every message.",
     "Ground, minimap and decoration shadows now drawn once per floor and reused, instead of rebuilt every frame.",
@@ -34,55 +52,55 @@ export const CHANGELOG = [
     "Health bars, skill bar and menus repaint only when something actually changed.",
     "Sparks capped and recycled; autosaves deduplicated; music no longer bursts to catch up after tabbing back in.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Every skill has its own icon", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Every skill has its own icon", by: "Jeff Louie", notes: [
     "Each skill now shows a unique icon. Before, a handful of skills shared one picture (e.g. Mana Barrier and Spell Ward), so different skills looked identical.",
     "The ascendancy PATH skills — and the two specializations each class can ascend into — now use the same generated class-coloured badges as the rest of the tree, instead of falling back to old placeholder art.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Cracked walls look like real cracks", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Cracked walls look like real cracks", by: "Jeff Louie", notes: [
     "Dropped the box outline that framed every cracked wall — a cracked wall now reads by its cracks alone.",
     "Redrew the fracture as thin hairline fissures fanning from an impact point instead of one fat scratch.",
     "Each shove now ADDS more cracks rather than fattening the same one, so the wall visibly shatters further toward breaking.",
   ] },
-  { date: "2026-07-03", size: "medium", v: "New skill icons + unique skill names", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "New skill icons + unique skill names", by: "Jeff Louie", notes: [
     "Every skill now has its own hand-generated pixel-art icon set in a raised, class-coloured metal frame — red for Warrior, green for Rogue, yellow for Mage, blue for Templar — filling the whole tile.",
     "Keystone passives keep their octagon frame, now in the same metal look.",
     "Renamed eight skills that shared a name with another so every skill reads uniquely: the active Rampage is now Onslaught, the crit-fury Bloodletter is Tempered Fury, the active Blood Frenzy is War Cry, the Warrior Executioner passive is Ruthless, the second Brace is Fortify, the Warrior Avatar is Titan Form, the Warrior Apocalypse is Bloodstorm, and the passive Absolute Zero is Frozen Ward.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Ascendancy skills get their own points", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Ascendancy skills get their own points", by: "Jeff Louie", notes: [
     "Ascendancy (path) skills now spend a SEPARATE pool of ascendancy points — normal skill points buy only passive & active skills, ascendancy points buy only path skills.",
     "Earn one ascendancy point every 5 levels starting at level 20 (20, 25, 30…) — the level you can first ascend. Points bank up even before you ascend.",
     "Path skills no longer have a level requirement — they're gated only by the earlier skills in the path tree.",
     "Path-tree nodes now show their names under their icons, matching the passive & active trees.",
     "The SKILLS-tab header retitles to ASCENDANCY POINTS on the path tab; the Trainer's full respec refunds both point kinds.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Cracked walls take a few hits — smash from any side", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Cracked walls take a few hits — smash from any side", by: "Jeff Louie", notes: [
     "Shove into a cracked wall from ANY direction now — no more needing to hit it dead-on. Walk or dash into one at any angle and it registers.",
     "Cracked walls no longer shatter in one blow: each shove chips one further and it collapses after three hits, so it half-blocks the way until you keep at it.",
     "The wall grows visibly more fractured with each hit — the crack darkens, spreads and sheds chips, and a warm rim brightens as it nears breaking.",
     "Redrawn crack art: a jagged, chiselled fissure with branches and rubble instead of the old thin scratch.",
     "Each shove throws rock dust, knocks the camera and cracks; the wall giving way crumbles with a heavier thud.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Redesigned skill-bar & loadout tiles", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Redesigned skill-bar & loadout tiles", by: "Jeff Louie", notes: [
     "Every combat-bar tile — skills, potions, the town gate and the auto-cast slot — now shows its icon filling the whole box, edge to edge, with the corners rounded off.",
     "The hotkey moved out of the box corner onto a full-width pill sitting just above each tile; the auto-cast tile's pill reads \"AUTO\".",
     "The SKILLS-tab slot tray gets the same look: bigger tiles with filled icons and pills above, the auto-cast slot set off on the left and the four manual slots as a 2×2 block.",
     "Every skill slot now reads the same — the old gold marking on the first slot is gone. The ready-glow and cooldown dial are unchanged.",
     "The bottom HUD grew taller to seat the pills, and stays clear of clipping at large UI SIZE.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Portal into the dungeon facing down", by: "Claude", notes: ["The hero now always materialises facing down when you enter the dungeon through the Gate — before, it kept whatever direction it faced when it last left, so a re-entry could look like it was facing the wrong way."] },
-  { date: "2026-07-03", size: "small", v: "Skill nodes drop the slot badge", by: "Claude", notes: ["Removed the small slot-number badge from the top-left corner of learned active skills in the tree — it looked just like the rank badge beside it, and the skill-slot bar right above the tree already shows what's bound where."] },
-  { date: "2026-07-03", size: "small", v: "Skill-tree nodes always show their rank", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Portal into the dungeon facing down", by: "Jeff Louie", notes: ["The hero now always materialises facing down when you enter the dungeon through the Gate — before, it kept whatever direction it faced when it last left, so a re-entry could look like it was facing the wrong way."] },
+  { date: "2026-07-03", size: "small", v: "Skill nodes drop the slot badge", by: "Jeff Louie", notes: ["Removed the small slot-number badge from the top-left corner of learned active skills in the tree — it looked just like the rank badge beside it, and the skill-slot bar right above the tree already shows what's bound where."] },
+  { date: "2026-07-03", size: "small", v: "Skill-tree nodes always show their rank", by: "Jeff Louie", notes: [
     "Every skill-tree node now shows its current rank on a redesigned corner pill in every state — learned, ready, locked or maxed — so you can always read a skill's level at a glance.",
     "A node you can spend a point on marks it with a bright pulsing + beside the rank, instead of hiding the rank behind a lone +, so having a point to spend never masks how far you've already ranked a skill.",
     "The rank and hotkey-slot pills are bigger and cleaner, and no longer get clipped on the octagonal keystone nodes.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Animated town-portal teleport", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Animated town-portal teleport", by: "Jeff Louie", notes: [
     "Opening a town portal now charges a blue aura over the hero instead of flashing a gate icon — the full countdown reads as an energy build-up.",
     "When it opens, the hero fades out and rockets up a beam of light off the map before you land in town.",
     "Returning through the Dungeon Gate plays it in reverse: a blue pillar stabs into the floor and the hero materializes out of it.",
     "You can't move or be hit during the brief teleport animation; the countdown's own rules (a foe's hit or a step cancels it) are unchanged.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Enchanting spends materials, not just Glimmer", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Enchanting spends materials, not just Glimmer", by: "Jeff Louie", notes: [
     "Every enchant now costs crafting materials alongside Glimmer + gold: Scrap on any action and a Core on rare gear and up — so the Scrap and Cores that used to pile up unused finally get spent.",
     "Scrap and Core amounts are tuned to match how much of each you actually earn, so enchanting draws every material down at a similar rate instead of leaving you Glimmer-starved atop a Scrap hoard.",
     "The whole bill scales with the item's rarity — enchanting a legendary costs far more than a normal.",
@@ -90,60 +108,60 @@ export const CHANGELOG = [
     "Rerolling a property's value or modifier now spends Scrap (and a Core on rarer gear) too, not Glimmer alone.",
     "Chaos Orbs are now spent only at the Craftsman — the Enchanter never asks for them.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Wider death & skill cards", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Wider death & skill cards", by: "Jeff Louie", notes: [
     "The You-Died screen and the skill detail popover are wider now, so the death recap and each skill's mechanics wrap far less.",
     "Clicking a skill node no longer leaves its small hover label stuck on top of the detail card.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Walls read as raised", by: "Claude", notes: ["Walls now cast a soft shadow onto the floor in front of them — indoors and out — so wall and floor no longer sit on one flat plane. The walls read as raised, the ground as sunken.", "Outdoor the shadow follows the wall's real curved outline (not the tile grid); indoor it follows the built walls' square edges. Light stays fixed at top-left, and it only ever darkens floor, never another wall.", "Lighter grounds (snow, crystal) get a gentler shadow so it never looks harsh."] },
-  { date: "2026-07-03", size: "small", v: "Title Screen button in Settings", by: "Claude", notes: ["New TITLE SCREEN button at the top of the Settings ▸ Play tab returns you to the title/landing screen without abandoning the run — progress is saved, and CONTINUE drops you straight back in."] },
-  { date: "2026-07-03", size: "small", v: "Roomier attribute + buttons", by: "Claude", notes: ["More space between each attribute's value and its + button on the HERO tab; the description column shrinks to make room, so nothing else shifts."] },
-  { date: "2026-07-03", size: "small", v: "Furniture never walls off a path", by: "Claude", notes: ["Solid furniture and scenery now refuse any spot where their full footprint would seal a room or corridor off — a wide table can't plug a hall with its far half, and a stray chest or brazier can't close the last gap of a pocket.", "Every floor stays fully walkable no matter how densely it's furnished."] },
-  { date: "2026-07-03", size: "medium", v: "Furnished interiors & fuller scenery", by: "Claude", notes: ["Built interiors — lodges, halls, crypts, keeps, kitchens — now have real materials: wood-beam, stone-block, brick, panel and adobe walls over wood-plank, stone, marble, tile and cobble floors, matched to the room, in place of the old flat rooms.", "Interiors are laid out as a floor plan now — separate rectangular rooms and halls joined by corridors, rather than one merged cave.", "They're dressed with hand-made props too — tables, chairs, sofas, beds, cabinets, barrels, chests, braziers, potted plants, rugs and clutter. Solid furniture is set off the corridors so it never blocks your path; low clutter and rugs stay walkable.", "The whole prop set is far larger now — indoors and out — so floors repeat much less.", "All art is drawn from the CC-BY-SA \"[LPC]\" collections (full credits in the About notes)."] },
-  { date: "2026-07-03", size: "medium", v: "Floors with depth, not one flat fill", by: "Claude", notes: ["Outdoor floors now blend two or three ground types in natural patches — think tan stone with grey mudstone and a lighter gravel path, or sand giving way to dry soil and rock — instead of a single repeated tile.", "Each biome has a primary floor plus clustered secondary and tertiary floors, with the tileset's own edges smoothing the transitions between them.", "The patches are clustered, never confetti, so the ground reads as a real place with wear and paths."] },
-  { date: "2026-07-03", size: "large", v: "Scenery, trees & see-through occlusion", by: "Claude", notes: ["Outdoor floors now grow real hand-made scenery — trees, bushes, ferns, flowers, mushrooms, logs, cacti, agave, shells and driftwood — matched to the biome: leafy woods on grass, cacti and shells on sand, pines in the cold, bare trees in haunted woods.", "Tall obstacles (trees, big cacti) are solid — you and foes route around them; low clutter (flowers, grass, mushrooms) stays walkable so you step right over it.", "Scenery is placed naturally: sparse obstacles that never seal a corridor, plus a few clusters of ground clutter rather than an even sprinkle.", "Stand behind a tree and its canopy hides you — but a tinted silhouette of your hero (and of foes) shows through the leaves so you can still track exactly where everyone is; only the covered part reads as a silhouette.", "New pixel art is drawn from the CC-BY-SA \"[LPC]\" collections (full credits in the About notes)."] },
-  { date: "2026-07-03", size: "small", v: "Crits land on skills & spells too", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Walls read as raised", by: "Jeff Louie", notes: ["Walls now cast a soft shadow onto the floor in front of them — indoors and out — so wall and floor no longer sit on one flat plane. The walls read as raised, the ground as sunken.", "Outdoor the shadow follows the wall's real curved outline (not the tile grid); indoor it follows the built walls' square edges. Light stays fixed at top-left, and it only ever darkens floor, never another wall.", "Lighter grounds (snow, crystal) get a gentler shadow so it never looks harsh."] },
+  { date: "2026-07-03", size: "small", v: "Title Screen button in Settings", by: "Jeff Louie", notes: ["New TITLE SCREEN button at the top of the Settings ▸ Play tab returns you to the title/landing screen without abandoning the run — progress is saved, and CONTINUE drops you straight back in."] },
+  { date: "2026-07-03", size: "small", v: "Roomier attribute + buttons", by: "Jeff Louie", notes: ["More space between each attribute's value and its + button on the HERO tab; the description column shrinks to make room, so nothing else shifts."] },
+  { date: "2026-07-03", size: "small", v: "Furniture never walls off a path", by: "Jeff Louie", notes: ["Solid furniture and scenery now refuse any spot where their full footprint would seal a room or corridor off — a wide table can't plug a hall with its far half, and a stray chest or brazier can't close the last gap of a pocket.", "Every floor stays fully walkable no matter how densely it's furnished."] },
+  { date: "2026-07-03", size: "medium", v: "Furnished interiors & fuller scenery", by: "Jeff Louie", notes: ["Built interiors — lodges, halls, crypts, keeps, kitchens — now have real materials: wood-beam, stone-block, brick, panel and adobe walls over wood-plank, stone, marble, tile and cobble floors, matched to the room, in place of the old flat rooms.", "Interiors are laid out as a floor plan now — separate rectangular rooms and halls joined by corridors, rather than one merged cave.", "They're dressed with hand-made props too — tables, chairs, sofas, beds, cabinets, barrels, chests, braziers, potted plants, rugs and clutter. Solid furniture is set off the corridors so it never blocks your path; low clutter and rugs stay walkable.", "The whole prop set is far larger now — indoors and out — so floors repeat much less.", "All art is drawn from the CC-BY-SA \"[LPC]\" collections (full credits in the About notes)."] },
+  { date: "2026-07-03", size: "medium", v: "Floors with depth, not one flat fill", by: "Jeff Louie", notes: ["Outdoor floors now blend two or three ground types in natural patches — think tan stone with grey mudstone and a lighter gravel path, or sand giving way to dry soil and rock — instead of a single repeated tile.", "Each biome has a primary floor plus clustered secondary and tertiary floors, with the tileset's own edges smoothing the transitions between them.", "The patches are clustered, never confetti, so the ground reads as a real place with wear and paths."] },
+  { date: "2026-07-03", size: "large", v: "Scenery, trees & see-through occlusion", by: "Jeff Louie", notes: ["Outdoor floors now grow real hand-made scenery — trees, bushes, ferns, flowers, mushrooms, logs, cacti, agave, shells and driftwood — matched to the biome: leafy woods on grass, cacti and shells on sand, pines in the cold, bare trees in haunted woods.", "Tall obstacles (trees, big cacti) are solid — you and foes route around them; low clutter (flowers, grass, mushrooms) stays walkable so you step right over it.", "Scenery is placed naturally: sparse obstacles that never seal a corridor, plus a few clusters of ground clutter rather than an even sprinkle.", "Stand behind a tree and its canopy hides you — but a tinted silhouette of your hero (and of foes) shows through the leaves so you can still track exactly where everyone is; only the covered part reads as a silhouette.", "New pixel art is drawn from the CC-BY-SA \"[LPC]\" collections (full credits in the About notes)."] },
+  { date: "2026-07-03", size: "small", v: "Crits land on skills & spells too", by: "Jeff Louie", notes: [
     "Critical hits now fire on every damage source — auto-attacks, martial skills and spells all roll crits, show the big crit number, and trigger your on-crit passives (combo/zeal charges, primed crits, mana refunds).",
     "Previously only auto-attacks and guaranteed-crit skills surfaced a crit; caster and skill crit builds now pay off as their skills describe.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Leech is martial sustain", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Leech is martial sustain", by: "Jeff Louie", notes: [
     "Life Leech and Mana Leech now also heal from weapon-based skills, not just auto-attacks — a martial build sustains through its skills.",
     "Spell casts never leech: Life and Mana Leech are physical-attack and skill sustain only.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Mud & ice floors removed", by: "Claude", notes: ["Pulled the mud and ice patch terrain for now — they didn't read clearly on the map. Floors no longer slow you in mud or make you slide on ice."] },
-  { date: "2026-07-03", size: "small", v: "Red gate for town & dungeon travel", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Mud & ice floors removed", by: "Jeff Louie", notes: ["Pulled the mud and ice patch terrain for now — they didn't read clearly on the map. Floors no longer slow you in mud or make you slide on ice."] },
+  { date: "2026-07-03", size: "small", v: "Red gate for town & dungeon travel", by: "Jeff Louie", notes: [
     "The Town Portal, Return to Dungeon gate, Dungeon Gate, and the dungeon-depth readout now show a red-swirl stone gate — distinct at a glance from the purple within-floor teleporters.",
     "Every town-bound and dungeon-bound icon shares the one red gate: sidebar TOWN button, town menu, minimap, floor-1 exit, depth pill, and the log & tooltip messages.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Kraken & Tempest sprites refreshed", by: "Claude", notes: ["The Kraken and Tempest now use new bespoke pixel-art sprites in the packed monster sheet."] },
-  { date: "2026-07-03", size: "small", v: "Legendary/unique banner for every source", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Kraken & Tempest sprites refreshed", by: "Jeff Louie", notes: ["The Kraken and Tempest now use new bespoke pixel-art sprites in the packed monster sheet."] },
+  { date: "2026-07-03", size: "small", v: "Legendary/unique banner for every source", by: "Jeff Louie", notes: [
     "The centre-screen legendary/unique loot banner now fires no matter how you get the piece, not just off kills and chests.",
     "Gambler jackpots, bounty and escort rewards, and transmuter fuses now pop the full banner — sting, flash and shake — when they land a legendary or unique.",
     "Lesser rewards keep their existing win cue; only the top two tiers get the banner.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Off-screen monster arrows", by: "Claude", notes: ["Small red arrows now ride the map edge pointing at foes still off-screen — track down the last stragglers sealing the stairs.", "Foes bunched in one direction merge into one arrow and only the nearest few show, kept much smaller than the gold stairs arrow so a busy floor stays readable.", "Toggle it in Settings ▸ Visuals (Monster Arrows); on by default."] },
-  { date: "2026-07-03", size: "small", v: "Truly smooth HP/MP fill", by: "Claude", notes: ["HP/MP over-time recovery now rises at a steady, constant rate — the fill glides up on a consistent slope instead of jumping in small steps as it heals.", "Taking damage or spending mana still snaps the bar down at once, and burst heals fill instantly."] },
-  { date: "2026-07-03", size: "small", v: "Portal cancel & correct stair landings", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Off-screen monster arrows", by: "Jeff Louie", notes: ["Small red arrows now ride the map edge pointing at foes still off-screen — track down the last stragglers sealing the stairs.", "Foes bunched in one direction merge into one arrow and only the nearest few show, kept much smaller than the gold stairs arrow so a busy floor stays readable.", "Toggle it in Settings ▸ Visuals (Monster Arrows); on by default."] },
+  { date: "2026-07-03", size: "small", v: "Truly smooth HP/MP fill", by: "Jeff Louie", notes: ["HP/MP over-time recovery now rises at a steady, constant rate — the fill glides up on a consistent slope instead of jumping in small steps as it heals.", "Taking damage or spending mana still snaps the bar down at once, and burst heals fill instantly."] },
+  { date: "2026-07-03", size: "small", v: "Portal cancel & correct stair landings", by: "Jeff Louie", notes: [
     "Moving now cancels a town portal for every control scheme — click-to-move on desktop used to root you in place until the portal opened; a click, keypress, or joystick nudge all break the channel now.",
     "The step or click that opens the floor-1 exit portal no longer instantly cancels it — only a fresh move does.",
     "Climbing the up-stairs to floor 1 now drops you on the stairs down (the way back below), not on the town portal.",
     "Every floor transition lands you on the matching stair: on the down-stairs after climbing up, on the up-stairs after going down.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Enchanter tooltip no longer sticks", by: "Claude", notes: ["Tapping a worn piece at the Enchanter no longer leaves its gear tooltip floating over the reroll screen — the hover card clears when you pick a piece or back out."] },
-  { date: "2026-07-03", size: "small", v: "Deep gear gates harder", by: "Claude", notes: ["Gear attribute requirements now climb on a steepening curve — the per-level slope ramps up the deeper an item is found, so a deep piece demands a real, class-defining stake in its attribute.", "Early gear is unchanged; the gate bites progressively so off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one."] },
-  { date: "2026-07-03", size: "medium", v: "Dev tab — live difficulty sliders", by: "Claude", notes: ["New Settings ▸ Dev tab with 20 live sliders over the core difficulty-scaling knobs — tune balance on the fly, no reload.", "Enemy scaling: global HP/damage/count multipliers, depth-threat exponent & divisor, HP/damage/accuracy per floor.", "Bosses & elites HP/damage multipliers; run modifiers (anti-grind, conquest scar, endless ramp, hazard damage); hero power (HP per Vitality, attack per primary attribute, max HP per level, points per level).", "Hero knobs apply instantly; enemy/floor knobs preview via a Respawn-floor button. Per-slider ↺ and Reset all.", "Tuning saves across reloads; defaults leave balance unchanged."] },
-  { date: "2026-07-03", size: "medium", v: "Bespoke monster & boss art", by: "Claude", notes: ["All 161 monsters and 5 bosses now use original transparent pixel-art sprites, replacing the old atlas tiles and colour-square placeholders.", "Monsters share one packed sprite sheet; bosses use a higher-res sheet."] },
-  { date: "2026-07-03", size: "small", v: "\"Empty slot\" gear badge", by: "Claude", notes: ["Renamed the gold \"First Equip\" badge on an unfilled gear slot to \"Empty Slot\"."] },
-  { date: "2026-07-03", size: "medium", v: "Self-buffs are tactical, not sustained", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Enchanter tooltip no longer sticks", by: "Jeff Louie", notes: ["Tapping a worn piece at the Enchanter no longer leaves its gear tooltip floating over the reroll screen — the hover card clears when you pick a piece or back out."] },
+  { date: "2026-07-03", size: "small", v: "Deep gear gates harder", by: "Jeff Louie", notes: ["Gear attribute requirements now climb on a steepening curve — the per-level slope ramps up the deeper an item is found, so a deep piece demands a real, class-defining stake in its attribute.", "Early gear is unchanged; the gate bites progressively so off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one."] },
+  { date: "2026-07-03", size: "medium", v: "Dev tab — live difficulty sliders", by: "Jeff Louie", notes: ["New Settings ▸ Dev tab with 20 live sliders over the core difficulty-scaling knobs — tune balance on the fly, no reload.", "Enemy scaling: global HP/damage/count multipliers, depth-threat exponent & divisor, HP/damage/accuracy per floor.", "Bosses & elites HP/damage multipliers; run modifiers (anti-grind, conquest scar, endless ramp, hazard damage); hero power (HP per Vitality, attack per primary attribute, max HP per level, points per level).", "Hero knobs apply instantly; enemy/floor knobs preview via a Respawn-floor button. Per-slider ↺ and Reset all.", "Tuning saves across reloads; defaults leave balance unchanged."] },
+  { date: "2026-07-03", size: "medium", v: "Bespoke monster & boss art", by: "Jeff Louie", notes: ["All 161 monsters and 5 bosses now use original transparent pixel-art sprites, replacing the old atlas tiles and colour-square placeholders.", "Monsters share one packed sprite sheet; bosses use a higher-res sheet."] },
+  { date: "2026-07-03", size: "small", v: "\"Empty slot\" gear badge", by: "Jeff Louie", notes: ["Renamed the gold \"First Equip\" badge on an unfilled gear slot to \"Empty Slot\"."] },
+  { date: "2026-07-03", size: "medium", v: "Self-buffs are tactical, not sustained", by: "Jeff Louie", notes: [
     "Self-buff cooldowns now run well longer than the buff — each is up only ~40% of the time at zero Cooldown Reduction, so buffs are timed windows, not always-on auras.",
     "Baseline uptime varies by skill: cheap/weak buffs ~50%, standard buffs ~42-45%, the strongest capstones and ultimates ~38-40%.",
     "Cooldown Reduction (and a rank-7 skill's faster recharge) raises uptime a lot, but permanent upkeep now takes extreme CDR.",
     "Offensive/summon skills whose buff was a rider keep their attack cadence — buff duration trimmed instead of the cooldown.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Depth shown with difficulty everywhere", by: "Claude", notes: ["Deepest-floor readouts now name the difficulty tier — the title/pause hero card shows \"Brutal 6\" instead of a raw \"Floor 56\".", "Depth-record banners, the greed gate, \"reach a floor\" bounties and the gambler blurb all read as tier + floor now.", "Depth achievements reworded to their tier (e.g. \"Reach Hardened floor 5\" for old floor 30)."] },
-  { date: "2026-07-03", size: "small", v: "Fluid HP/MP recovery", by: "Claude", notes: ["Over-time HP/MP recovery now climbs the bar on a smooth slope instead of stepping up once a second — the fill eases toward true health every frame.", "Taking damage or spending mana still snaps the bar down instantly, and burst heals still fill at once."] },
-  { date: "2026-07-03", size: "small", v: "Monochrome settings menu icons", by: "Claude", notes: ["Settings menu tabs (Play, Visuals, Audio, Progress, About) now use monochrome line icons instead of colored emoji, matching the action rows below them.", "Settings tooltips and the Keybindings title swap their emoji for matching line icons too."] },
-  { date: "2026-07-03", size: "small", v: "Never stuck on an enemy", by: "Claude", notes: ["Fixed a lockup where a foe hopping onto the tile you're standing on trapped you in place until it died — you can now always shove free.", "Ejection follows your input, so you pop out the way you're trying to move; normal meleeing is unaffected."] },
-  { date: "2026-07-03", size: "small", v: "Monochrome title settings icons", by: "Claude", notes: ["Save Slots, Leaderboards and Patch Notes now use monochrome line icons matching the rest of the settings menu, instead of colored emoji."] },
+  { date: "2026-07-03", size: "small", v: "Depth shown with difficulty everywhere", by: "Jeff Louie", notes: ["Deepest-floor readouts now name the difficulty tier — the title/pause hero card shows \"Brutal 6\" instead of a raw \"Floor 56\".", "Depth-record banners, the greed gate, \"reach a floor\" bounties and the gambler blurb all read as tier + floor now.", "Depth achievements reworded to their tier (e.g. \"Reach Hardened floor 5\" for old floor 30)."] },
+  { date: "2026-07-03", size: "small", v: "Fluid HP/MP recovery", by: "Jeff Louie", notes: ["Over-time HP/MP recovery now climbs the bar on a smooth slope instead of stepping up once a second — the fill eases toward true health every frame.", "Taking damage or spending mana still snaps the bar down instantly, and burst heals still fill at once."] },
+  { date: "2026-07-03", size: "small", v: "Monochrome settings menu icons", by: "Jeff Louie", notes: ["Settings menu tabs (Play, Visuals, Audio, Progress, About) now use monochrome line icons instead of colored emoji, matching the action rows below them.", "Settings tooltips and the Keybindings title swap their emoji for matching line icons too."] },
+  { date: "2026-07-03", size: "small", v: "Never stuck on an enemy", by: "Jeff Louie", notes: ["Fixed a lockup where a foe hopping onto the tile you're standing on trapped you in place until it died — you can now always shove free.", "Ejection follows your input, so you pop out the way you're trying to move; normal meleeing is unaffected."] },
+  { date: "2026-07-03", size: "small", v: "Monochrome title settings icons", by: "Jeff Louie", notes: ["Save Slots, Leaderboards and Patch Notes now use monochrome line icons matching the rest of the settings menu, instead of colored emoji."] },
   { date: "2026-07-02", size: "small", v: "No stale sprite flash on load", by: "Claude", notes: ["Hero portraits, the in-world hero, and roaming vendors/mercenaries no longer flash a static placeholder tile before their animated sprite finishes loading — they hold a blank slot and paint the real art the instant it's ready."] },
   { date: "2026-07-02", size: "medium", v: "Town shops reordered & level-gated", by: "Claude", notes: ["Town tiles now follow a fixed order: Healer, Merchant, Ramen House, then progression-gated services, with the Vault last.", "Craftsman opens at level 5; Gambler at depth 10; Trainer & Enchanter at level 10.", "Transmuter opens on reaching Hardened; Bounty Board & Mystic on unlocking Hardened; Sellsword on reaching Brutal.", "Locked services still show in order, greyed, with their unlock requirement.", "Stash Vault renamed to Vault."] },
   { date: "2026-07-02", size: "medium", v: "Uncapped hits, tankier bosses, varied foes", by: "Claude", notes: [
@@ -164,7 +182,7 @@ export const CHANGELOG = [
   { date: "2026-07-02", size: "medium", v: "Pixel icons everywhere — no emoji fallbacks", by: "Claude", notes: ["Every game icon — items, gear, materials, food, currencies, HP/MP, enemies, bosses, NPCs, pets, summons, class & attribute icons, world features, status markers — now renders its pixel sprite directly instead of routing through an emoji. Removed the runtime emoji-to-sprite converter and every emoji fallback: the atlas is always drawn.", "Attribute icons now fit: Might shows a power tile and Luck a shine (were a warrior and a chest).", "Purely decorative header glyphs with no matching sprite are left as-is."] },
   { date: "2026-07-02", size: "medium", v: "Material drops gated & scarcer", by: "Claude", notes: ["Kill-drops gate by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four).", "Salvage is the main early route to a material your tier can't yet drop — it sheds by the item's rarity, not difficulty.", "Rarer mats from salvage are now a lucky roll, not guaranteed, so Core/Chaos stay scarce.", "Salvage quantity scales with item level on a curve that flattens as ilvl climbs.", "Every individual item salvages a little differently — two same-rarity pieces vary in drop rate and amount."] },
   { date: "2026-07-02", size: "small", v: "Volume tiles step up", by: "Claude", notes: ["Tapping the MUSIC or SFX tile now raises the volume a notch instead of lowering it; it wraps from full back to off."] },
-  { date: "2026-07-03", size: "small", v: "Fix: foes can't walk through furniture", by: "Claude", notes: ["Enemies now collide with solid furniture (crates, shelves, plants…) just like you do — no more clipping straight through it.", "Foes path around furniture and won't squeeze a diagonal between two pieces.", "Use furniture as a chokepoint to break a chase."] },
+  { date: "2026-07-03", size: "small", v: "Fix: foes can't walk through furniture", by: "Jeff Louie", notes: ["Enemies now collide with solid furniture (crates, shelves, plants…) just like you do — no more clipping straight through it.", "Foes path around furniture and won't squeeze a diagonal between two pieces.", "Use furniture as a chokepoint to break a chase."] },
   { date: "2026-07-02", size: "small", v: "Stairs arrow toggle", by: "Claude", notes: ["Toggle the off-screen down-stairs arrow in Settings → Visuals (on by default).", "Choice syncs across devices when signed in."] },
   { date: "2026-07-02", size: "small", v: "Fix: title screen wouldn't offer Continue", by: "Claude", notes: ["Settings sync could crash the boot before the title screen finished loading, so returning heroes never saw the Continue button — fixed.", "Re-applying your saved log/loot-drawer collapse state on load no longer counts as a fresh change, keeping cross-device sync timestamps accurate."] },
   { date: "2026-07-02", size: "small", v: "Smoother big fights", by: "Claude", notes: ["Enemy status tints (burning, poisoned, chilled…), the hit-flash, elite/boss auras and threat rings now use cached art instead of rebuilding pricey per-frame effects — much smoother with lots of foes on screen.", "Elite/boss/affix auras read as a soft coloured halo."] },

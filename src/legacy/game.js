@@ -2563,9 +2563,12 @@ function matStripHTML() {
   const chips = CRAFT_MAT_KEYS.map(k => {
     const mat = CRAFT_MATERIALS[k];
     const ic = dlIcon('mat_' + k, 14); // exact DawnLike material tile (no emoji)
+    const owned = m[k] || 0;
     // Gear-style hover card instead of a native title box, escaped for the attr.
-    const tip = `<div class='ht-name' style='color:${mat.color}'>${ic} ${mat.name}</div><div class='ht-line'>${mat.desc}</div>`.replace(/"/g, '&quot;');
-    return `<span class="mat-chip" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()" style="color:${mat.color}">${ic} ${m[k] || 0}</span>`;
+    // Chip count abbreviates (1.5k) past 999 to stay compact; the exact tally
+    // rides the hover card so no precision is lost.
+    const tip = `<div class='ht-name' style='color:${mat.color}'>${ic} ${mat.name}</div><div class='ht-line'>${mat.desc}</div><div class='ht-line'>Owned: ${owned.toLocaleString()}</div>`.replace(/"/g, '&quot;');
+    return `<span class="mat-chip" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()" style="color:${mat.color}">${ic} ${fmtGold(owned)}</span>`;
   }).join('');
   return `<div class="mat-strip">${chips}</div>`;
 }
@@ -5789,6 +5792,19 @@ try { if (localStorage.getItem(STAIRS_ARROW_KEY) === '0') showStairsArrow = fals
 const MONSTER_ARROWS_KEY = 'dungeonLoot_monsterArrows';
 let showMonsterArrows = true;
 try { if (localStorage.getItem(MONSTER_ARROWS_KEY) === '0') showMonsterArrows = false; } catch (e) {}
+// Optional camera shake on hits, crits, big casts and boss beats (see addShake /
+// shakeOffset). On by default, but its amplitude is globally dialled down by
+// SHAKE_SCALE so even the biggest beats stay gentle; toggle off for a dead-still
+// view. Saved across sessions.
+const SCREEN_SHAKE_KEY = 'dungeonLoot_screenShake';
+let showScreenShake = true;
+try { if (localStorage.getItem(SCREEN_SHAKE_KEY) === '0') showScreenShake = false; } catch (e) {}
+// Optional brief full-screen colour wash on crits, low HP and big events (see
+// screenFlash). On by default; its peak opacity lives in styles.css, dialled down
+// from its old harsher value. Toggle off to keep the view clear. Saved.
+const SCREEN_FLASH_KEY = 'dungeonLoot_screenFlash';
+let showScreenFlash = true;
+try { if (localStorage.getItem(SCREEN_FLASH_KEY) === '0') showScreenFlash = false; } catch (e) {}
 // Cap on how many monster arrows ride the edge at once — a swarm floor keeps only
 // the nearest few so the border never rings solid red (the minimap + FOES counter
 // stay the complete tally).
@@ -6262,7 +6278,11 @@ window.gameState = function gameState(radius) {
     food: (typeof groundFood !== 'undefined' ? groundFood || [] : []).map(f => ({ x: f.x, y: f.y, name: f.name })),
     vaultKey: (typeof groundKey !== 'undefined' && groundKey) ? { x: groundKey.x, y: groundKey.y } : null,
     carryingKey: (typeof hasKey !== 'undefined') ? !!hasKey : false,       // can open a locked '+' vault door
-    grave: (typeof graveMarker !== 'undefined' && graveMarker) ? { x: graveMarker.x, y: graveMarker.y } : null, // reclaim your dropped bag
+    grave: (typeof graveMarker !== 'undefined' && graveMarker) ? { x: graveMarker.x, y: graveMarker.y } : null, // reclaim your dropped bag on THIS floor
+    // Your persistent death-drop wherever it lies — survives leaving the floor, and
+    // the town Dungeon Gate flags this floor/tier. Null once reclaimed.
+    graveSite: (typeof graveSite !== 'undefined' && graveSite && (graveSite.items.length || graveSite.gold))
+      ? { floor: graveSite.floor, where: floorLabel(graveSite.floor), items: graveSite.items.length, gold: graveSite.gold || 0 } : null,
     npcs: [
       merchant ? { kind: 'merchant', x: merchant.x, y: merchant.y } : null,
       mystic ? { kind: 'mystic', x: mystic.x, y: mystic.y } : null,
@@ -6491,7 +6511,7 @@ window.gameGuide = function gameGuide(topic) {
       `Hardcore mode (one life, permadeath) is also chosen on the name screen and locks in for that hero. Class can be retrained later at the town Trainer, but name, body type and Hardcore are fixed once you begin. While the class screen is open gameState().mode is 'classSelect'; on the name screen it's 'nameSelect'.`,
     ],
     town: [
-      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, knocked back several floors, your bag dropped as a reclaimable grave on the death floor).`,
+      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, knocked back several floors, your bag dropped as a reclaimable grave on the death floor). The Dungeon Gate flags the tier + floor holding that grave (gameState().graveSite.where), so you can dive straight back to it.`,
       `Town is a menu of services; take the Dungeon Gate to drop back in (choose tier + floor). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
       `Merchant (buy gear / pay to restock); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
@@ -7629,6 +7649,38 @@ function updateMonsterArrowsButton() {
   if (lbl) lbl.textContent = showMonsterArrows ? 'MONSTER ARROWS: ON' : 'MONSTER ARROWS: OFF';
   const btn = document.getElementById('monsterarrows-action');
   if (btn) btn.classList.toggle('on', showMonsterArrows);
+}
+
+// Flip camera shake on and off. Persisted; when off, shakeOffset() returns a zero
+// offset so no hit, crit, big cast or boss beat nudges the view.
+function toggleScreenShake() {
+  showScreenShake = !showScreenShake;
+  try { localStorage.setItem(SCREEN_SHAKE_KEY, showScreenShake ? '1' : '0'); } catch (e) {}
+  settingsChanged();
+  sfx('click');
+  updateScreenShakeButton();
+}
+function updateScreenShakeButton() {
+  const lbl = document.getElementById('screenshake-label');
+  if (lbl) lbl.textContent = showScreenShake ? 'SCREEN SHAKE: ON' : 'SCREEN SHAKE: OFF';
+  const btn = document.getElementById('screenshake-action');
+  if (btn) btn.classList.toggle('on', showScreenShake);
+}
+
+// Flip the full-screen colour flash on and off. Persisted; when off, screenFlash()
+// early-returns so crits, low HP and big events never wash the screen.
+function toggleScreenFlash() {
+  showScreenFlash = !showScreenFlash;
+  try { localStorage.setItem(SCREEN_FLASH_KEY, showScreenFlash ? '1' : '0'); } catch (e) {}
+  settingsChanged();
+  sfx('click');
+  updateScreenFlashButton();
+}
+function updateScreenFlashButton() {
+  const lbl = document.getElementById('screenflash-label');
+  if (lbl) lbl.textContent = showScreenFlash ? 'SCREEN FLASH: ON' : 'SCREEN FLASH: OFF';
+  const btn = document.getElementById('screenflash-action');
+  if (btn) btn.classList.toggle('on', showScreenFlash);
 }
 
 // Settings modal: a centred overlay holding sound, saves, Reset Run and options.
@@ -11163,18 +11215,17 @@ function renderForge() {
     ${baseHint}
     <div class="forge-label">Rarity <span style="opacity:.6">(stat + attr slots)</span></div>
     <div class="forge-grid forge-tiers">${tierBtns}</div>
-    <div class="shop-row" style="margin-top:10px">
+    <div class="shop-row has-actions" style="margin-top:10px">
       <span class="loot-icon">${iconMarkup(itemIcon(preview), tierColor(preview))}</span>
-      <div class="shop-row-info ${rarityClass(preview)}">
-        <div class="shop-row-name">${preview.name}${craftedMark(preview)}</div>
-        <div class="shop-row-stats">${itemStatLine(preview)} · ${caps.stat} stat / ${caps.attr} attr slots</div>
-        ${forgeReqLine}
+      <div class="shop-row-info">
+        <div class="${rarityClass(preview)}">
+          <div class="shop-row-name">${preview.name}${craftedMark(preview)}</div>
+          <div class="shop-row-stats">${itemStatLine(preview)} · ${caps.stat} stat / ${caps.attr} attr slots</div>
+          ${forgeReqLine}
+        </div>
+        <div class="shop-row-sub" style="margin-top:5px">${costLabelHi(cost)}</div>
+        <div class="shop-row-sub" style="color:var(--text-muted);font-style:italic">${craftCharacterNote(forgeSlot, forgeBase)}</div>
       </div>
-    </div>
-    <div class="shop-row has-actions">
-      <div class="shop-row-info"><div class="shop-row-name">Forge cost</div>
-        <div class="shop-row-sub">${costLabelHi(cost)}</div>
-        <div class="shop-row-sub" style="color:var(--text-muted);font-style:italic">${craftCharacterNote(forgeSlot, forgeBase)}</div></div>
       <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="craftItem()"><span data-spr=ic_mallet></span> FORGE</button>
     </div>`);
 }
@@ -12074,14 +12125,20 @@ function renderGate() {
   const front = frontierDiff();
   if (!gateDiff) gateDiff = front;
   gateDiff = Math.max(1, Math.min(front, gateDiff));
-  // Tier picker — one chip per difficulty, still-locked ones greyed out.
+  // Your death-drop, if any, so the Gate can flag the floor (and tier) holding your
+  // lost bag. `graveSite.floor` is a continuous depth; its tier gets a grave badge.
+  const graveDl = (graveSite && (graveSite.items.length || graveSite.gold)) ? graveSite.floor : 0;
+  const graveTier = graveDl ? diffOf(graveDl) : 0;
+  // Tier picker — one chip per difficulty, still-locked ones greyed out. A grave
+  // badge marks the tier holding your lost bag.
   let tabs = '';
   for (let d = 1; d <= 4; d++) {
     const meta = DIFFS[d - 1];
     const unlocked = d <= front;
-    const cls = `gate-diff${d === gateDiff ? ' sel' : ''}${unlocked ? '' : ' locked'}`;
+    const cls = `gate-diff${d === gateDiff ? ' sel' : ''}${unlocked ? '' : ' locked'}${d === graveTier ? ' has-grave' : ''}`;
     const style = (d === gateDiff && unlocked) ? ` style="border-color:${meta.color};color:${meta.color}"` : '';
-    tabs += `<button class="${cls}"${style} ${unlocked ? `onclick="selectGateDiff(${d})"` : 'disabled'}>${meta.name}${unlocked ? '' : ' <span data-spr=feat_door></span>'}</button>`;
+    const badge = d === graveTier ? ' <span data-spr=feat_grave></span>' : (unlocked ? '' : ' <span data-spr=feat_door></span>');
+    tabs += `<button class="${cls}"${style} ${unlocked ? `onclick="selectGateDiff(${d})"` : 'disabled'}>${meta.name}${badge}</button>`;
   }
   // Floor picker for the selected tier. Every floor you've reached is shown (so a
   // death never erases your progress), but floors past the currently-unlocked cap
@@ -12095,10 +12152,14 @@ function renderGate() {
   for (let f = startF; f <= cap; f++) {
     const dl = (gateDiff - 1) * FLOORS_PER_DIFF + f;
     const deepest = f === cap;
+    const hasGrave = dl === graveDl;
+    const graveIcon = hasGrave ? ' <span data-spr=feat_grave></span>' : '';
     if (f > open) {
-      buttons += `<button class="gate-floor locked" disabled title="Locked — fight back down to re-open">${f} <span data-spr=feat_door></span></button>`;
+      const title = hasGrave ? 'Your lost bag lies here — fight back down to reclaim it' : 'Locked — fight back down to re-open';
+      buttons += `<button class="gate-floor locked${hasGrave ? ' has-grave' : ''}" disabled title="${title}">${f} <span data-spr=feat_door></span>${graveIcon}</button>`;
     } else {
-      buttons += `<button class="gate-floor ${dl === dungeonReturn ? 'current' : ''}" onclick="enterDungeonAt(${gateDiff},${f})">${f}${deepest ? ' ▾' : ''}</button>`;
+      const title = hasGrave ? ' title="Your lost bag lies here — dive in and walk onto the grave to reclaim it"' : '';
+      buttons += `<button class="gate-floor ${dl === dungeonReturn ? 'current' : ''}${hasGrave ? ' has-grave' : ''}"${title} onclick="enterDungeonAt(${gateDiff},${f})">${f}${deepest ? ' ▾' : ''}${graveIcon}</button>`;
     }
   }
   const meta = DIFFS[gateDiff - 1];
@@ -12112,9 +12173,15 @@ function renderGate() {
     const tail = conquered ? 'Conquered — drop in on any floor to grind.' : `Deepest reached: floor ${cap} of 25.${lockNote}`;
     blurb = `${meta.name}: ${flavour}. ${tail}`;
   }
+  // Persistent grave note — visible whatever tier is picked, so you always know
+  // where your lost bag is waiting.
+  const graveNote = graveDl
+    ? `<div class="town-blurb gate-grave-note"><span data-spr=feat_grave></span> Your lost bag lies on <b>${floorLabel(graveDl)}</b> — dive in and walk onto the grave to reclaim it.</div>`
+    : '';
   setTownContent(`
     <div class="town-blurb">Choose a difficulty, then a floor. Conquer each one's floor-25 guardian to unlock the next.</div>
     <div class="gate-diffs">${tabs}</div>
+    ${graveNote}
     <div class="town-blurb gate-tier-blurb" style="color:${meta.color}">${blurb}</div>
     <div class="gate-grid">${buttons}</div>`);
 }
@@ -15068,9 +15135,13 @@ function spawnParticles(x, y, color, n, speed) {
 // reused two-slot scratch array — draw() destructures it immediately and never
 // retains it, so recycling kills the per-frame allocation.
 const _shakeXY = [0, 0];
+// Global amplitude scale for ALL camera shake — dialled down so hits, crits and
+// even boss finishers nudge the view gently instead of jolting it. One knob keeps
+// every call site's relative weight; the SCREEN SHAKE setting can zero it entirely.
+const SHAKE_SCALE = 0.55;
 function shakeOffset() {
-  if (Date.now() >= shakeUntil || shakeMag <= 0) { shakeMag = 0; _shakeXY[0] = _shakeXY[1] = 0; return _shakeXY; }
-  const k = (shakeUntil - Date.now()) / 200, m = shakeMag * k;
+  if (!showScreenShake || Date.now() >= shakeUntil || shakeMag <= 0) { shakeMag = 0; _shakeXY[0] = _shakeXY[1] = 0; return _shakeXY; }
+  const k = (shakeUntil - Date.now()) / 200, m = shakeMag * k * SHAKE_SCALE;
   _shakeXY[0] = (Math.random() * 2 - 1) * m;
   _shakeXY[1] = (Math.random() * 2 - 1) * m;
   return _shakeXY;
@@ -15821,6 +15892,7 @@ function tryPlayerStatusProc(e) {
 // Brief full-screen colour flash for crits, low HP, and big events.
 let flashTimer = null;
 function screenFlash(color) {
+  if (!showScreenFlash) return;
   const el = document.getElementById('screen-flash');
   if (!el) return;
   el.style.background = `radial-gradient(circle, transparent 30%, ${color} 100%)`;
@@ -22599,7 +22671,12 @@ function handleEscape() {
   // in the dungeon, and what the header's button does on tap.
   const tov = document.getElementById('town-overlay');
   if (tov && tov.classList.contains('open')) {
-    if (townView === 'service') { townBack(); return true; }
+    if (townView === 'service') {
+      // In the Enchanter, a picked item sits one screen deeper than the paper
+      // doll — Esc backs out to the doll first, and only then to the town hub.
+      if (townServiceKind === 'enchanter' && enchantSel != null) { enchantBack(); return true; }
+      townBack(); return true;
+    }
     toggleSettingsMenu(); return true;
   }
   if (panelOpen && !isWebLayout()) { togglePanel(); return true; }
@@ -23436,10 +23513,8 @@ if (typeof window !== 'undefined') {
   window.addEventListener('pagehide', () => { try { saveGame(); } catch (e) {} try { cloudFlush(); } catch (e) {} });
 }
 
-// Format a millisecond span as a compact human play-time string: "3h 12m",
-// "12m", or "45s" for brand-new heroes. Always returns at least "0s".
-// Compact gold display: exact under 1000, short form (1.2k, 12k, 3.4m) above so
-// big totals don't overflow the HUD / shop panels.
+// Compact number display: exact under 1000, short form (1.2k, 12k, 3.4m) above so
+// big totals (gold, Power) don't overflow the HUD / shop panels.
 function fmtGold(n) {
   n = Math.floor(n || 0);
   if (n < 1000) return String(n);
@@ -23450,6 +23525,8 @@ function fmtGold(n) {
     }
   }
 }
+// Format a millisecond span as a compact human play-time string: "3h 12m",
+// "12m", or "45s" for brand-new heroes. Always returns at least "0s".
 function formatPlayTime(ms) {
   let s = Math.floor((ms || 0) / 1000);
   const h = Math.floor(s / 3600); s -= h * 3600;
@@ -24188,6 +24265,8 @@ const SETTINGS_SYNC_KEYS = [
   'dungeonLoot_pathLine',     // click-to-move pathing line on/off
   'dungeonLoot_stairsArrow',  // off-screen stairs arrow on/off
   'dungeonLoot_monsterArrows',// off-screen monster arrows on/off
+  'dungeonLoot_screenShake',  // camera shake on/off
+  'dungeonLoot_screenFlash',  // full-screen colour flash on/off
   'dungeonLootMusic',         // music volume level (0–5)
   'dungeonLootSfx',           // sfx volume level (0–5)
   'dungeonLootTownAmb',       // town ambience on/off
@@ -25290,6 +25369,8 @@ updateCrosshairButton();
 updatePathLineButton();
 updateStairsArrowButton();
 updateMonsterArrowsButton();
+updateScreenShakeButton();
+updateScreenFlashButton();
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
   window.addEventListener(ev, audioUnlock, { passive: true }));
 
@@ -26085,6 +26166,10 @@ const __DL_FN_BRIDGE = {
   updateStairsArrowButton,
   toggleMonsterArrows,
   updateMonsterArrowsButton,
+  toggleScreenShake,
+  updateScreenShakeButton,
+  toggleScreenFlash,
+  updateScreenFlashButton,
   toggleSettingsMenu,
   closeSettingsMenu,
   settingsToTitle,
