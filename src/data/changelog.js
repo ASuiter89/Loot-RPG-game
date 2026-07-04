@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Deleting a hero now sticks across devices", by: "Claude", notes: [
+    "Fixed cloud saves letting a deleted hero come back: deleting on one device, then opening another, used to resurrect the hero — and it would ping-pong between devices forever.",
+    "Deletions now sync. Removing a hero records it in a shared deletion ledger that every device merges on sign-in and Sync Now, so the character is scrubbed everywhere and never pushed back up. Delete once, it's gone on all your devices.",
+    "Deletes now target a hero by its stable id, not its slot number, so a delete can't ever hit the wrong character when two devices' slots haven't lined up yet.",
+  ] },
   { date: "2026-07-03", size: "large", v: "Uniques reborn — one hand-crafted red for every gear type", by: "Claude", notes: [
     "Red items are no longer randomly-rolled: every unique is now a hand-crafted, named artifact — the one-of-a-kind version of a specific gear type, with one for every weapon, off-hand, armour and jewelry base in the game.",
     "Each unique always wears the SAME signature stat and the SAME six modifiers, hand-picked for the class and fantasy its name promises, plus its own signature power (a legendary modifier like Vampiric). Only the numbers change — they roll scaled to the depth it drops on.",
