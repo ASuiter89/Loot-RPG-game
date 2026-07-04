@@ -7014,7 +7014,7 @@ window.gameGuide = function gameGuide(topic) {
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A quick key-tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
       `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
-      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right — a quick TAP on a footer button fires it (cast the skill, quaff the potion); HOLD one for ~0.5s to read its tooltip instead of firing. The header holds the minimap, vitals, and the settings + bag buttons (top-right). The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
+      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right — a quick TAP on a footer button fires it (cast the skill, quaff the potion); HOLD one for ~0.5s to read its tooltip instead of firing. The header holds the minimap, vitals, and the settings + bag buttons (top-right). On the first touch the game requests fullscreen so it fills the whole screen with no browser chrome; leave with the phone's native back/swipe gesture. The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
@@ -8433,6 +8433,13 @@ function centerSettingsCard() {
   const menu = document.getElementById('settings-menu');
   const card = document.getElementById('settings-card');
   if (!menu || !card) return;
+  // On touch the menu is a SINGLE top-anchored scroll container: the card grows to
+  // its natural height and the scrim scrolls the whole stack (see the body.touch
+  // rules in styles.css). A JS centering offset there would only push a tall tab
+  // (e.g. Visuals) partly below the fold, and the nested card scroll it used to
+  // pair with left the bottom unreachable by a one-finger drag — so skip centering
+  // on touch and let the CSS top padding govern.
+  if (isTouchMode()) { menu.style.paddingTop = ''; return; }
   // Centre the whole stack (character card + settings card), not just the card,
   // so adding the hero panel keeps the group vertically middled on open.
   const measure = document.getElementById('settings-stack') || card;
@@ -8451,6 +8458,9 @@ function showSettingsTab(name) {
   if (name === 'dev') renderDevTune();   // (re)build the tuning sliders from live values
   const card = document.getElementById('settings-card');
   if (card) card.scrollTop = 0;
+  // On touch the outer scrim is the scroll container (the card no longer nests its
+  // own scroll), so return it to the top when switching to a shorter/taller tab.
+  if (isTouchMode()) { const menu = document.getElementById('settings-menu'); if (menu) menu.scrollTop = 0; }
 }
 
 // ── VERSION HISTORY ── newest first; short plain-English notes.
@@ -8913,13 +8923,39 @@ function setTouchMode(on) {
   try { renderSkillBar(); } catch (_) {}
   try { markHudDirty(); } catch (_) {}
 }
+
+// ── MOBILE FULLSCREEN ──
+// On a touch device the game goes fullscreen on the FIRST real touch — that touch
+// is itself the user gesture the Fullscreen API requires — so it fills the whole
+// screen with no browser chrome. The player leaves with the phone's native back /
+// swipe gesture; once they've left we don't pull them back in (re-requesting on
+// every tap would trap them). Feature-detected, so it's a silent no-op where the
+// element Fullscreen API is absent (e.g. iPhone Safari), where the dvh + safe-area
+// layout already fills the visible viewport. Desktop never calls this.
+let _fsUserExited = false;
+function requestGameFullscreen() {
+  if (_fsUserExited) return;
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!req) return;                                                   // unsupported → no-op
+  if (document.fullscreenElement || document.webkitFullscreenElement) return;   // already there
+  try { const r = req.call(el); if (r && r.catch) r.catch(() => {}); } catch (_) {}
+}
+function onFullscreenChange() {
+  const fs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if (!fs) _fsUserExited = true;                 // they left — respect it for this session
+  try { onViewportResize(); } catch (_) {}       // the visible area just changed → refit the canvas
+}
+document.addEventListener('fullscreenchange', onFullscreenChange);
+document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
 // Initial hint: a coarse, hover-less PRIMARY pointer is almost certainly a phone /
 // tablet. Confirmed (or overridden) by the first real pointer event below.
 try {
   if (matchMedia('(pointer: coarse)').matches && matchMedia('(hover: none)').matches) setTouchMode(true);
 } catch (_) {}
 window.addEventListener('pointerdown', e => {
-  if (e.pointerType === 'touch') setTouchMode(true);
+  if (e.pointerType === 'touch') { setTouchMode(true); requestGameFullscreen(); }
   else if (e.pointerType === 'mouse' || e.pointerType === 'pen') setTouchMode(false);
 }, true);   // capture: settle the mode before the canvas handler reads isTouchMode()
 window.addEventListener('pointermove', e => {
