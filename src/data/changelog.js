@@ -9,8 +9,8 @@
 export const CHANGELOG = [
   { date: "2026-07-04", size: "large", v: "Play on your phone — a real touch interface", by: "Claude", notes: [
     "The game now has a full mobile layout. The first time you touch the screen it switches to a phone interface; a mouse switches it back — nothing changes for keyboard-and-mouse play.",
-    "Drag anywhere on the map to raise a floating joystick and steer the hero. A quick tap walks you there and uses whatever's there on arrival — a chest, an NPC — or chases a tapped foe. Double-tap-and-drag to dash.",
-    "A single bottom bar holds a RUN toggle (auto-sprint on or off), the town portal, your potions and skill slots. A menu and a bag button sit in the top corner; your health, mana, floor and foes read across the top with a minimap.",
+    "Drag anywhere on the map to raise a floating joystick and steer the hero. A quick tap walks you there and uses whatever's there on arrival — a chest, an NPC — or chases a tapped foe. A quick flick of the joystick dashes.",
+    "The bottom bar groups a RUN toggle (auto-sprint on or off) with the town portal and potions on the left, the auto-cast slot in the middle, and your skill slots on the right. Settings and bag sit in the top-left; your health, mana, floor and foes read across the top beside a minimap.",
     "The map fills the whole screen and the camera lifts the hero clear of your thumbs. Works in both portrait and landscape, adapts when a folding phone opens or closes, and stays crisp on high-resolution screens.",
     "Menus, shops and the bag open as full-screen sheets with big tap targets, and merchant cards now open on a tap since there's no mouse hover.",
   ] },

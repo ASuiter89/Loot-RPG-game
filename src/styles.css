@@ -4184,62 +4184,68 @@
   body.touch #desktop-hud,
   body.touch #map-info { display: none !important; }
 
-  /* ── Top vitals strip ── the existing #header, reused as a translucent overlay
-     pinned to the top and safe-area padded. pointer-events:none so a tap on the
-     map's top edge falls through to the canvas (steer / tap-to-move). Both ends
-     reserve room — left for the minimap, right for the menu/bag buttons — so the
-     vitals wrap INTO the middle band and never slide under either (this is what
-     keeps a narrow foldable's top from becoming a pile-up). --tb-w is the
-     top-button cluster width, --mm-w the minimap box. */
+  /* ── Top HUD ── (all keyed on body.touch). Left corner, in order across: the
+     settings/bag button column, then a bigger minimap, then the vitals strip
+     (HP/MP · floor · foes · gold). The top-RIGHT is kept clear for the on-map
+     buff/debuff icons. Sizes are tokens so the header's reserved columns stay in
+     lockstep with the elements that occupy them. */
   body.touch {
-    --tb-w: 108px;   /* two 48px utility buttons + gap + edge */
-    --mm-w: 108px;   /* touch minimap box */
+    --tl-btn: 48px;   /* settings / bag utility buttons */
+    --mm-w: 100px;    /* minimap box (≈ the vitals block height) */
+    --bf-w: 92px;     /* clearance kept at top-right for the buff/debuff icons */
   }
+  /* Settings + bag, STACKED in the far top-left corner — this frees the top-right
+     for the buff/debuff icons the buttons used to sit on top of. */
+  body.touch #touch-topbar {
+    position: absolute; pointer-events: auto; display: flex; flex-direction: column; gap: 8px;
+    top: calc(env(safe-area-inset-top, 0px) + 6px);
+    left: calc(env(safe-area-inset-left, 0px) + 6px); right: auto;
+  }
+  /* Minimap: a bigger box just right of the button column, its height matching the
+     vitals block. */
+  body.touch #minimap {
+    top: calc(env(safe-area-inset-top, 0px) + 6px) !important;
+    left: calc(env(safe-area-inset-left, 0px) + var(--tl-btn) + 14px) !important;
+    width: var(--mm-w) !important; height: var(--mm-w) !important;
+    z-index: var(--z-touch);
+  }
+  body.touch #minimap.collapsed { width: 30px !important; height: 30px !important; }
+  /* Vitals strip: to the right of the minimap; the right end is reserved for the
+     buff icons. pointer-events:none so a tap on the map's top edge still steers. */
   body.touch #header {
     position: absolute; top: 0; left: 0; right: 0; z-index: var(--z-hud);
     flex-wrap: wrap; gap: 4px 8px; align-items: center; justify-content: flex-start;
-    padding: calc(env(safe-area-inset-top, 0px) + 5px) calc(env(safe-area-inset-right, 0px) + var(--tb-w)) 5px calc(env(safe-area-inset-left, 0px) + var(--mm-w) + 12px);
+    padding: calc(env(safe-area-inset-top, 0px) + 6px) calc(env(safe-area-inset-right, 0px) + var(--bf-w)) 5px calc(env(safe-area-inset-left, 0px) + var(--tl-btn) + var(--mm-w) + 24px);
     background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 82%, transparent), transparent);
     border-bottom: none; box-shadow: none; pointer-events: none;
   }
   body.touch #stats { gap: 5px 10px; font-size: 1.2rem; flex-wrap: wrap; }
   body.touch .bar-track { width: 56px; height: 12px; }
   body.touch #header .hud-item { font-size: 1.2rem; }
-  /* Trim the least-critical readouts so the strip stays a compact 1–2 rows even on
-     a narrow foldable's cover screen: keep HP/MP, floor, foes and gold. Stamina
-     still shows under the hero while it's draining, so drop it from the strip. */
   body.touch #level-hud, body.touch #power-hud, body.touch #hero-name-hud,
   body.touch #pact-hud, body.touch #food-hud { display: none; }
+  /* Stamina still shows under the hero while draining, so drop it from the strip. */
   body.touch #stats .stat-bar:has(#stam-text) { display: none; }
-
-  /* Minimap: a small top-LEFT corner box (its own reserved column). */
-  body.touch #minimap {
+  /* Buff/debuff icons: top-RIGHT of the map, now unobstructed by the buttons. */
+  body.touch #buff-overlay {
     top: calc(env(safe-area-inset-top, 0px) + 6px) !important;
-    left: calc(env(safe-area-inset-left, 0px) + 6px) !important;
-    width: var(--mm-w) !important; height: var(--mm-w) !important;
-    z-index: var(--z-touch);
+    right: calc(env(safe-area-inset-right, 0px) + 6px) !important;
+    z-index: var(--z-touch); max-width: 42%;
   }
-  body.touch #minimap.collapsed { width: 26px !important; height: 26px !important; }
 
   /* ── Touch HUD overlay ── a full-screen pass-through layer; only its buttons
      catch pointers, so taps on the open map still reach the canvas. */
   #touch-hud { display: none; }
   body.touch #touch-hud { display: block; position: fixed; inset: 0; z-index: var(--z-touch); pointer-events: none; }
-  body.touch #touch-topbar {
-    position: absolute; pointer-events: auto; display: flex; gap: 8px;
-    top: calc(env(safe-area-inset-top, 0px) + 6px);
-    right: calc(env(safe-area-inset-right, 0px) + 8px);
-  }
   /* ── Bottom action bar ── one full-width row: a sprint toggle on the left, then
      the live #skill-bar (town portal · potions · auto-cast · skills 1–4) re-homed
      here by syncHudLayout(). Scrolls horizontally if the tiles overflow a very
      narrow screen. No USE/DASH buttons — tap the map to use, double-tap-drag the
      joystick to dash. */
   body.touch #touch-cluster {
-    position: absolute; pointer-events: auto;
-    display: flex; align-items: center; gap: 8px;
-    left: calc(env(safe-area-inset-left, 0px) + 6px);
-    right: calc(env(safe-area-inset-right, 0px) + 6px);
+    position: absolute; pointer-events: auto; display: flex; align-items: flex-end;
+    left: calc(env(safe-area-inset-left, 0px) + 8px);
+    right: calc(env(safe-area-inset-right, 0px) + 8px);
     bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
   }
 
@@ -4262,48 +4268,49 @@
   }
   .tb-badge:empty { display: none; }
 
-  /* Sprint toggle: pinned at the left of the bar; lights gold when auto-sprint is on. */
-  .touch-act {
-    flex: 0 0 auto; width: clamp(42px, 11vw, 50px); height: clamp(42px, 11vw, 50px); border-radius: var(--radius-lg);
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-    background: color-mix(in srgb, var(--panel-raised) 82%, transparent);
-    border: 1px solid var(--border); color: var(--text);
-    box-shadow: var(--shadow-sm); cursor: pointer;
-    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  /* RUN sprint toggle (rendered as a skill tile leading the left group): lights
+     gold when auto-sprint is latched. */
+  body.touch #touch-cluster .skillbar-btn.sprint-btn {
+    border: 1px solid var(--border); color: var(--purple-200); background: var(--panel-raised);
   }
-  .touch-act svg { width: 23px; height: 23px; }
-  .touch-act .tb-lbl { font-size: 1.1rem; letter-spacing: 0.3px; opacity: 0.8; }
-  .touch-act:active { transform: scale(0.94); }
-  .touch-act.tb-sprint.on {
+  body.touch #touch-cluster .skillbar-btn.sprint-btn .sb-icon svg { width: 60%; height: 60%; }
+  body.touch #touch-cluster .skillbar-btn.sprint-btn.on {
     border-color: var(--gold); color: var(--gold);
-    background: color-mix(in srgb, var(--gold) 22%, var(--panel));
+    background: color-mix(in srgb, var(--gold) 24%, var(--panel));
     box-shadow: 0 0 10px color-mix(in srgb, var(--gold) 55%, transparent);
   }
 
-  /* The re-homed live #skill-bar fills the rest of the bar as one scrolling row
-     (same buttons / onclick / cooldowns as desktop, just re-laid). */
+  /* The re-homed live #skill-bar spans the bar as three groups: a left 2×2
+     (RUN · town over HP · MP), the centred AUTO slot, and a right 2×2 of skills
+     1–4. Same buttons / onclick / cooldowns as desktop, just re-laid. */
   body.touch #touch-cluster #skill-bar {
-    flex: 1 1 auto; min-width: 0;
-    display: flex; align-items: center; flex-wrap: nowrap;
-    /* Centre when the row fits; when it overflows a narrow screen, "safe" falls
-       back to start-alignment so the first tiles (town, potions) are never clipped
-       — you swipe the bar to reach the rest. */
-    justify-content: safe center;
-    gap: 5px; padding: 3px 2px; background: none; border: none; box-shadow: none;
-    overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
-    --sb-size: clamp(40px, 10.5vw, 50px);
+    flex: 1 1 auto; min-width: 0; width: 100%;
+    display: flex; align-items: end; justify-content: space-between; flex-wrap: nowrap;
+    gap: 8px; padding: 0; background: none; border: none; box-shadow: none;
+    --sb-size: clamp(44px, 12vw, 56px);
   }
-  body.touch #touch-cluster #skill-bar::-webkit-scrollbar { display: none; }
   body.touch #touch-cluster #skill-bar .sb-left,
-  body.touch #touch-cluster #skill-bar .sb-right,
+  body.touch #touch-cluster #skill-bar .sb-right {
+    flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, var(--sb-size));
+    gap: 6px; align-items: end; justify-items: center;
+  }
   body.touch #touch-cluster #skill-bar .sb-auto-wrap {
-    flex: 0 0 auto; display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; min-width: 0;
+    flex: 0 0 auto; display: flex; align-items: end; justify-content: center;
   }
   body.touch #touch-cluster .skillbar-btn { width: var(--sb-size); height: var(--sb-size); }
-  body.touch #touch-cluster .sb-cell { flex: 0 0 auto; display: flex; align-items: center; }
-  /* Drop the keyboard hotkey pills (Q/R/1–4) on touch — there's no keyboard, and
-     it keeps the bar to a single tidy row of icons. */
+  body.touch #touch-cluster .sb-cell {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  }
+  /* Keep only the RUN and AUTO labels (as pills, like desktop's AUTO); drop the
+     keyboard hotkey pills. Shown pills float just above their tile so every button
+     still bottom-aligns in its grid row. */
   body.touch #touch-cluster #skill-bar .sb-pill { display: none; }
+  body.touch #touch-cluster #skill-bar .sb-pill.auto,
+  body.touch #touch-cluster #skill-bar .sb-pill.sprint {
+    display: block; position: absolute; top: -15px; left: 50%; right: auto; margin: 0;
+    transform: translateX(-50%); width: max-content; max-width: none; overflow: visible;
+    text-align: center; white-space: nowrap; pointer-events: none;
+  }
 
   /* ── Floating joystick rings ── placed in viewport px by showJoyVisual(); shown
      only while the stick is engaged. Decorative (pointer-events:none). */

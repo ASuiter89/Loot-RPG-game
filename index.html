@@ -600,16 +600,11 @@
       <span class="tb-badge" id="tb-bag-badge"></span>
     </button>
   </div>
-  <!-- Bottom action bar: a sprint toggle, then the live #skill-bar (town portal,
-       potions, auto-cast, skill slots 1–4) re-homed here in one row by
-       syncHudLayout(). No USE/DASH buttons — tap the map to use what's there, and
-       double-tap-drag the joystick to dash. -->
-  <div id="touch-cluster">
-    <button class="touch-act tb-sprint" id="tb-sprint" onclick="toggleTouchSprint()" aria-label="Toggle sprint">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg>
-      <span class="tb-lbl">RUN</span>
-    </button>
-  </div>
+  <!-- Bottom action bar: the live #skill-bar is re-homed here by syncHudLayout()
+       and laid out as three groups — a 2×2 (RUN sprint toggle · town portal over
+       HP · MP potions), the centred AUTO slot, and a 2×2 of skill slots 1–4. No
+       USE/DASH buttons — tap the map to use what's there, double-tap-drag to dash. -->
+  <div id="touch-cluster"></div>
 </div>
 
 <div id="tooltip"></div>

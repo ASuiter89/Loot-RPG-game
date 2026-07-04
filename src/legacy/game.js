@@ -6065,13 +6065,15 @@ const MOVE_ARRIVE = 0.18;   // tiles — how close counts as "reached the click 
 // sprint — push the stick to the rim to run. Everything here is inert until the
 // device reveals itself as touch (body.touch); desktop mouse input is untouched.
 const JOY_RADIUS = 56;   // thumb throw distance (CSS px) for a full-magnitude push
-const DOUBLE_TAP_MS = 320;   // window for a double-tap-drag to fire a dash
-const touchStick = { pointerId: null, pending: false, active: false, dashArmed: false,
+// A quick FLICK of the stick — engage and release within this window while pushed
+// past a fair magnitude — dashes in that direction. Longer holds are just walking.
+const FLICK_MS = 260;
+const FLICK_MAG = 0.5;
+const touchStick = { pointerId: null, pending: false, active: false,
                      ox: 0, oy: 0, cx: 0, cy: 0, ix: 0, iy: 0, mag: 0 };
-let _lastStickUpAt = 0;      // performance.now() of the last stick release (double-tap timing)
+let _stickEngageAt = 0;      // performance.now() when the stick last engaged (flick timing)
 function resetTouchStick() {
   touchStick.pointerId = null; touchStick.pending = false; touchStick.active = false;
-  touchStick.dashArmed = false;
   touchStick.ix = 0; touchStick.iy = 0; touchStick.mag = 0;
   hideJoyVisual();
 }
@@ -6080,11 +6082,7 @@ function resetTouchStick() {
 function toggleTouchSprint() {
   sprintLatched = !sprintLatched;
   if (typeof sfx === 'function') sfx('click');
-  updateTouchSprintBtn();
-}
-function updateTouchSprintBtn() {
-  const b = document.getElementById('tb-sprint');
-  if (b) b.classList.toggle('on', !!sprintLatched);
+  if (typeof renderSkillBar === 'function') renderSkillBar();   // repaints the RUN tile's on/off state
 }
 function heldDir(d) { return keyHeld[d]; }
 function clearHeld() {
@@ -6765,7 +6763,7 @@ window.gameGuide = function gameGuide(topic) {
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A quick key-tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
       `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
-      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. DOUBLE-TAP-and-drag the joystick to DASH in that direction. The bottom bar is one row: a RUN toggle (auto-sprint on/off), the town portal, potions and skill slots 1–4; the top-right has a menu (settings) and a bag button. Everything is also driveable from the keyboard, which stays live.`,
+      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The bottom bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right; the top-right has a menu (settings) and a bag button. Everything is also driveable from the keyboard, which stays live.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
@@ -8531,9 +8529,6 @@ canvas.addEventListener('pointerdown', e => {
     if (rtPaused()) return;
     touchStick.pointerId = e.pointerId;
     touchStick.pending = true; touchStick.active = false;
-    // A fresh press soon after the last release arms a dash: drag from here and the
-    // hero dashes in that direction (a "double-tap in a direction").
-    touchStick.dashArmed = (performance.now() - _lastStickUpAt) < DOUBLE_TAP_MS;
     touchStick.ox = touchStick.cx = e.clientX;
     touchStick.oy = touchStick.cy = e.clientY;
     touchStick.ix = touchStick.iy = touchStick.mag = 0;
@@ -8554,14 +8549,13 @@ canvas.addEventListener('pointermove', e => {
     if (!touchStick.active &&
         (Math.abs(e.clientX - touchStick.ox) > TAP_SLOP || Math.abs(e.clientY - touchStick.oy) > TAP_SLOP)) {
       touchStick.active = true; touchStick.pending = false;
+      _stickEngageAt = performance.now();   // start the flick timer
     }
     if (touchStick.active) {
       const o = slideOrigin({ x: touchStick.ox, y: touchStick.oy }, { x: e.clientX, y: e.clientY }, JOY_RADIUS);
       touchStick.ox = o.x; touchStick.oy = o.y;
       const v = joystickVector(o, { x: e.clientX, y: e.clientY }, JOY_RADIUS, JOY_DEFAULTS.deadZone);
       touchStick.ix = v.ix; touchStick.iy = v.iy; touchStick.mag = v.mag;
-      // Double-tap-drag → dash in the drag direction, once, as the stick engages.
-      if (touchStick.dashArmed && v.mag > 0.35) { touchStick.dashArmed = false; doDash(); }
       showJoyVisual();
     }
     return;
@@ -8576,7 +8570,11 @@ function endJoy(e, isUp) {
   // tap → run the normal tap path (chase a tapped foe, else walk to the point).
   if (touchStick.pointerId === e.pointerId) {
     const wasTap = !touchStick.active;
-    _lastStickUpAt = performance.now();   // for double-tap-drag dash detection
+    // Flick-to-dash: a quick engage-and-release while the stick is pushed dashes in
+    // that direction. doDash reads touchStick.ix/iy, so fire it BEFORE the reset.
+    if (isUp && touchStick.active && (performance.now() - _stickEngageAt) < FLICK_MS && touchStick.mag > FLICK_MAG) {
+      doDash();
+    }
     resetTouchStick();
     gestureStart = null;
     if (isUp && wasTap && !rtPaused()) {
@@ -8639,7 +8637,6 @@ function setTouchMode(on) {
   try { resizeCanvas(); } catch (_) {}
   try { syncHudLayout(); } catch (_) {}
   try { renderSkillBar(); } catch (_) {}
-  try { updateTouchSprintBtn(); } catch (_) {}
   try { markHudDirty(); } catch (_) {}
 }
 // Initial hint: a coarse, hover-less PRIMARY pointer is almost certainly a phone /
@@ -23581,9 +23578,17 @@ function renderSkillBar() {
       <span class="sb-icon">${dlIconFill('feat_gate_red')}</span><span class="sb-info sb-cd-text" data-cdt="portal"></span>
     </button>`);
   }
+  // On touch a RUN (sprint) toggle leads the left group, so the bottom bar reads
+  // as a 2×2 (RUN/Town over HP/MP) · AUTO · 2×2 (skills). It's a plain toggle, not
+  // a skill; it lights up while auto-sprint is latched. Absent on desktop.
+  const sprintCell = isTouchMode()
+    ? cell('RUN', 'sprint', `<button class="skillbar-btn sprint-btn${sprintLatched ? ' on' : ''}" onclick="toggleTouchSprint()" aria-label="Toggle sprint">
+      <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg></span>
+    </button>`)
+    : '';
   // Three sections: Town/Health/Mana left, the auto-cast slot centred, the four
   // manual slots right (see the .sb-left / .sb-auto-wrap / .sb-right flex CSS).
-  const html = `<div class="sb-left">${townBtn}${healBtn}${manaBtn}</div>`
+  const html = `<div class="sb-left">${sprintCell}${townBtn}${healBtn}${manaBtn}</div>`
     + `<div class="sb-auto-wrap">${autoCell}</div>`
     + `<div class="sb-right">${skillsHtml}</div>`;
   if (html !== _lastSkillBarHtml) {   // identical markup — skip the DOM teardown + reflow
