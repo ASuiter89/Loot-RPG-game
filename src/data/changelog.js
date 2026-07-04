@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "large", v: "Uniques reborn — one hand-crafted red for every gear type", by: "Claude", notes: [
+    "Red items are no longer randomly-rolled: every unique is now a hand-crafted, named artifact — the one-of-a-kind version of a specific gear type, with one for every weapon, off-hand, armour and jewelry base in the game.",
+    "Each unique always wears the SAME signature stat and the SAME six modifiers, hand-picked for the class and fantasy its name promises, plus its own signature power (a legendary modifier like Vampiric). Only the numbers change — they roll scaled to the depth it drops on.",
+    "A unique is fixed the moment it drops: its values lock in and it can never be augmented, rerolled or transmuted at the Enchanter. Its detail card flags the fixed properties and shows the signature power.",
+    "Every unique carries its own flavour text and feels distinct from the rest — no two share a name or a build.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Wandering merchant: fuller stock, hover to compare", by: "Jeff Louie", notes: [
     "The roaming merchant now lays out at least six gear pieces, so the detour always pays off.",
     "Hover any ware to pop its full card beside your equipped piece — spot an upgrade before you spend a coin.",
