@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "large", v: "Power now reflects your build", by: "Claude", notes: [
+    "Gear Power is fully dynamic: a piece's Power is now what its stats are actually worth to YOUR hero — your attributes, skills, class and other worn gear — not a near-fixed table.",
+    "A stat your build can't use adds almost no Power now: Crit Damage on a hero with no crit chance, Spell Power on a pure melee build, or Attack Speed on a pure caster all read close to nothing, exactly as they perform.",
+    "Because of that, a higher-rarity or higher-level piece can honestly read LOWER Power than a plainer one that suits your build — sort by Power and trust the upgrade arrow to find your real upgrades.",
+    "Life Leech is now valued by how hard you already hit, defenses by how much survivability they truly add, and every attribute affix by what it does for your class — the same ring is worth different Power to different heroes.",
+    "The hero POWER headline and its \"from gear\" line now reconcile exactly, and Power keeps climbing with every genuine upgrade. Console players and agents: gameState() reports player.power, player.gearPower, and each item's pow + upgrade; see gameGuide(\"power\").",
+  ] },
   { date: "2026-07-04", size: "large", v: "Sets reborn — 20 hand-crafted set collections", by: "Claude", notes: [
     "Set pieces are now pre-defined, NAMED, fixed-stat artifacts — built exactly like uniques (a fixed signature stat, six set modifiers, and their own special power, all locked on drop and never reforgeable) — instead of random gear wearing a set tag.",
     "There are now 20 distinct sets, each a family of specific named pieces. Sets vary in size from 2 to 6 pieces: small ones complete fast, big ones are a long chase. Between them they cover every gear slot.",
