@@ -3,6 +3,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Skill cards: shorter text, wider card", by: "Claude", notes: [
+    "Every passive and keystone description rewritten terse — stats first, filler words and leftover internal tags gone.",
+    "Skill detail card is wider with slightly smaller text, so each stat line fits without wrapping mid-phrase.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Mix the music — fade each layer to taste", by: "Claude", notes: [
     "Audio settings now has four faders for the soundtrack: BASS, CHORDS, MELODY and DRUMS. Turn any layer up, down, or off, independently of the others.",
     "Each fader steps like the volume controls — tap to raise it a notch, wrapping from full back to off — and remembers where you set it.",

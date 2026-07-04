@@ -1469,18 +1469,20 @@
      the node instead of over it and no longer grows the drawer's scroll height.
      Wider than the drawer column since it spills out over the map to the left; a
      very tall card scrolls inside itself rather than running off-screen. */
-  .sk-pop { position: fixed; z-index: 20; width: 360px; max-width: calc(100vw - 16px);
+  .sk-pop { position: fixed; z-index: 20; width: 460px; max-width: calc(100vw - 16px);
     max-height: calc(100vh - 16px); overflow-y: auto; background: var(--bg); border: 1px solid var(--interactive);
-    border-radius: 8px; padding: 8px 9px; font-size: 1.2rem; line-height: 1.5; color: var(--purple-50);
+    border-radius: 8px; padding: 8px 9px; font-size: 1.1rem; line-height: 1.4; color: var(--purple-50);
     box-shadow: 0 6px 20px color-mix(in srgb, var(--ink) 60%, transparent); }
   .sk-pop b { color: var(--gold); }
-  .sk-pop .ty { color: var(--blue-350); font-size: 1.2rem; margin-top: 1px; }
+  /* Name line keeps a step of hierarchy over the denser 1.1rem body. */
+  .sk-pop > b { font-size: 1.2rem; }
+  .sk-pop .ty { color: var(--blue-350); font-size: 1.1rem; margin-top: 1px; }
   .sk-pop .sk-recov { margin-top: 2px; font-size: 1.1rem; color: var(--hp); opacity: 0.85; }
   .sk-pop .ds { margin-top: 3px; color: var(--purple-50); }
   /* Mechanics readout: one tagged chip per engine piece (charge, trigger,
      synergy, transform, detonate…) so a node reads how it actually plays. */
   .sk-pop .mech { margin-top: 5px; display: flex; flex-direction: column; gap: 3px; }
-  .sk-pop .mech-row { display: flex; gap: 5px; align-items: baseline; font-size: 1.2rem; line-height: 1.4; }
+  .sk-pop .mech-row { display: flex; gap: 5px; align-items: baseline; font-size: 1.1rem; line-height: 1.4; }
   .sk-pop .mech-t { flex: 0 0 auto; font-size: 1.1rem; font-weight: 700; letter-spacing: 0.4px;
     text-transform: uppercase; padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
   .sk-pop .mech-d { color: var(--purple-50); }
@@ -1488,19 +1490,19 @@
   /* "On rank up" preview: shows the concrete buff each point buys (now → next). */
   .sk-pop .ru { margin-top: 5px; padding: 4px 6px; background: var(--panel); border: 1px solid var(--panel-raised); border-radius: 6px; }
   .sk-pop .ru-h { font-size: 1.1rem; letter-spacing: 0.5px; color: var(--blue-350); text-transform: uppercase; margin-bottom: 2px; }
-  .sk-pop .ru-row { display: flex; justify-content: space-between; gap: 6px; font-size: 1.2rem; line-height: 1.45; }
+  .sk-pop .ru-row { display: flex; justify-content: space-between; gap: 6px; font-size: 1.1rem; line-height: 1.4; }
   .sk-pop .ru-row .ru-k { color: var(--purple-150); min-width: 0; }
   /* Let long values (e.g. a milestone note) wrap instead of spilling past the
      popover's border; short number ranges still fit on one line. */
   .sk-pop .ru-row .ru-v { color: var(--purple-50); text-align: right; min-width: 0; overflow-wrap: anywhere; }
   .sk-pop .ru-row .ru-v b { color: var(--green-450); font-weight: bold; }
-  .sk-pop .rq { font-size: 1.2rem; margin-top: 3px; line-height: 1.5; }
+  .sk-pop .rq { font-size: 1.1rem; margin-top: 3px; line-height: 1.4; }
   .sk-pop .rq.no { color: var(--red-300); }
   .sk-pop .rq.ok { color: var(--green-450); }
   /* Per-requirement rows: green when that prereq is satisfied, red when still short. */
   .sk-pop .rqok { color: var(--green-450); }
   .sk-pop .rqno { color: var(--red-300); }
-  .sk-pop .rq-hint { font-size: 1.2rem; margin-top: 3px; color: var(--gold); }
+  .sk-pop .rq-hint { font-size: 1.1rem; margin-top: 3px; color: var(--gold); }
   .sk-pop .pop-buy { width: 100%; margin-top: 6px; padding: 5px; border: none; border-radius: 5px;
     background: var(--border); color: var(--paper); font-family: inherit; font-size: 1.2rem; font-weight: bold;
     cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
