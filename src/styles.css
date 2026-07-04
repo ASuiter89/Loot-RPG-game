@@ -2453,6 +2453,20 @@
   .log-line.important { color: var(--paper); }
   .log-line.loot { color: var(--green-500); }
 
+  /* ── PERF HUD (dev tool) ── toggled from the console via perfHud(); a
+     click-through readout pinned top-right above everything else. */
+  .perf-hud {
+    position: fixed; top: var(--space-4); right: var(--space-4);
+    z-index: var(--z-top);
+    padding: var(--space-3) var(--space-4);
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: var(--fs-fine); line-height: 1.5;
+    white-space: pre; pointer-events: none;
+  }
+
   /* ── CONTROLS (mobile) ── */
   #dpad {
     display: grid;

@@ -3,6 +3,14 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "big", v: "Deep performance pass — the lag is gone", by: "Claude", notes: [
+    "Frame rate stays smooth on deep floors and stays smooth however long the game has been open.",
+    "Combat log keeps the newest 200 lines; endless growth was quietly slowing every message.",
+    "Ground, minimap and decoration shadows now drawn once per floor and reused, instead of rebuilt every frame.",
+    "Enemy pathfinding and collision share per-tick maps instead of each foe rescanning the whole floor.",
+    "Health bars, skill bar and menus repaint only when something actually changed.",
+    "Sparks capped and recycled; autosaves deduplicated; music no longer bursts to catch up after tabbing back in.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Every skill has its own icon", by: "Claude", notes: [
     "Each skill now shows a unique icon. Before, a handful of skills shared one picture (e.g. Mana Barrier and Spell Ward), so different skills looked identical.",
     "The ascendancy PATH skills — and the two specializations each class can ascend into — now use the same generated class-coloured badges as the rest of the tree, instead of falling back to old placeholder art.",

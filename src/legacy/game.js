@@ -18,7 +18,7 @@ import { milestonePower, rankScale, skillManaCost,
   earnedSkillPoints, earnedAscPoints,
   SKILL_POINTS_PER_LEVEL, SKILL_POINTS_AT_START, ASCEND_LEVEL, ASC_POINT_EVERY } from '../systems/skillMath.js';
 import { glideVitalFill } from '../systems/vitalFill.js';
-import { offscreenArrows } from '../systems/offscreenArrows.js';
+import { offscreenArrows, tileOnScreen } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
 import { footprintSealsPath } from '../systems/decorPlacement.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
@@ -1468,10 +1468,22 @@ let lpcReady = false;
 // normal play path. The rendered map is cached per (tile size + map shape).
 let PROC_TERRAIN = false;
 let _procCache = { key: null, cv: null };
+// Terrain-cache epoch. mapData is only edited AFTER a floor is built at a few
+// interaction sites (smashing a cracked wall, unlocking the vault door, a spent
+// shrine/fountain, the boss arena carve) — each bumps the shared `mapEpoch`
+// counter (also used by the raised-wall-shadow cache) so baked terrain rebuilds,
+// instead of re-checksumming the whole map every frame to find out nothing
+// changed. Floor builds are covered by floorSerial in the cache keys.
+function bumpMapEpoch() { mapEpoch++; }
+// The terrain bakes only distinguish wall (1, 10) / water (6) / lava (7) / floor
+// (everything else) — an edit WITHIN one class (a spent shrine/fountain or an
+// unlocked vault door becoming plain floor) re-bakes to pixel-identical output,
+// so those sites skip the full-map rebake (and the wall-shadow blur rebuild)
+// entirely. Walkability still changes there — keep calling pathGridDirty().
+function terrainClass(t) { return (t === 1 || t === 10) ? 1 : t === 6 ? 2 : t === 7 ? 3 : 0; }
+function bumpMapEpochIfChanged(oldT, newT) { if (terrainClass(oldT) !== terrainClass(newT)) mapEpoch++; }
 function drawProcTerrain(ox, oy, tw) {
-  let cs = MAP_W * 131 + MAP_H;
-  for (let y = 0; y < MAP_H; y += 3) for (let x = 0; x < MAP_W; x += 3) cs = (cs * 31 + (mapData[y][x] | 0)) | 0;
-  const key = tw + '|' + MAP_W + 'x' + MAP_H + '|' + cs;
+  const key = floorSerial + '|' + mapEpoch + '|' + tw + '|' + MAP_W + 'x' + MAP_H;
   if (_procCache.key !== key) {
     const classify = (x, y) => {
       if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return 'wall';
@@ -1607,35 +1619,94 @@ function lpcDetail(C, ox, oy, tw, x0, y0, x1, y1) {
     if (h % 17 === 0) { ctx.fillStyle = C.accent; ctx.fillRect(px+tw*0.32, py+tw*0.32, tw*0.16, tw*0.16); }
   }
 }
-function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
-  const C = currentTheme();
-  const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' });
+// Full-floor LPC terrain bake. The autotiled ground is static within a floor —
+// the LPC water/lava tiles are deterministic per cell (no animation; the
+// animated procedural liquid in drawLiquid bails while lpcReady) and mapData
+// only changes at the bumpMapEpoch() sites — so run the multi-pass autotiler
+// ONCE into an offscreen canvas and blit it per frame, mirroring _procCache.
+// Autotile edge pieces straddle cell corners (lpcLayer draws at (X-0.5)·tw), so
+// the bake carries a one-tile margin all round and is blitted a tile up-left —
+// nothing clips even if a liquid ever touches the map border.
+let _lpcCache = { key: null, baseKey: null, tw: 0, cv: null };
+// The multi-pass autotile sequence over an arbitrary tile window — shared by the
+// per-floor bake (full map into an offscreen canvas) and the live over-budget
+// fallback below (visible window straight onto the frame, exactly main's old path).
+function paintLPCTerrain(C, B, ox, oy, tw, x0, y0, x1, y1) {
   const inb = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H;
   const solid = (x, y) => { if (!inb(x, y)) return true; const t = mapData[y][x]; return t === 1 || t === 10; };
   const isFloor = (x, y) => inb(x, y) && !solid(x, y);
   const isWater = (x, y) => inb(x, y) && mapData[y][x] === 6;
   const isLava  = (x, y) => inb(x, y) && mapData[y][x] === 7;
-  const cx0 = Math.max(0, x0-1), cy0 = Math.max(0, y0-1), cx1 = Math.min(MAP_W, x1+1), cy1 = Math.min(MAP_H, y1+1);
   ctx.imageSmoothingEnabled = false;
   if (C.indoor && intReady) {
     // Built interiors get real laid materials — wood/stone/marble/brick/adobe wall
     // and floor field tiles, a uniform tile per room (walls on wall cells, floor on
     // the rest), instead of borrowing the outdoor ground terrains.
-    drawInteriorTerrain(C, ox, oy, tw, cx0, cy0, cx1, cy1);
-    drawWallShadow(ox, oy, tw, cx0, cy0, cx1, cy1, B, isFloor);   // built walls read as raised too
+    drawInteriorTerrain(C, ox, oy, tw, x0, y0, x1, y1);
+    drawWallShadow(ox, oy, tw, x0, y0, x1, y1, B, isFloor);   // built walls read as raised too
   } else {
-    lpcFill(B.wall, ox, oy, tw, cx0, cy0, cx1, cy1);
-    lpcLayer(B.floor, isFloor, ox, oy, tw, cx0, cy0, cx1, cy1);
+    lpcFill(B.wall, ox, oy, tw, x0, y0, x1, y1);
+    lpcLayer(B.floor, isFloor, ox, oy, tw, x0, y0, x1, y1);
     // Clustered secondary / tertiary floor patches blended over the primary.
     if (floorVariantMap && !previewFlatFloor) {
       const fv = (x, y) => (inb(x, y) && floorVariantMap[y] ? floorVariantMap[y][x] : 0);
-      if (B.floor2) lpcLayer(B.floor2, (x, y) => isFloor(x, y) && fv(x, y) >= 1, ox, oy, tw, cx0, cy0, cx1, cy1);
-      if (B.floor3) lpcLayer(B.floor3, (x, y) => isFloor(x, y) && fv(x, y) === 2, ox, oy, tw, cx0, cy0, cx1, cy1);
+      if (B.floor2) lpcLayer(B.floor2, (x, y) => isFloor(x, y) && fv(x, y) >= 1, ox, oy, tw, x0, y0, x1, y1);
+      if (B.floor3) lpcLayer(B.floor3, (x, y) => isFloor(x, y) && fv(x, y) === 2, ox, oy, tw, x0, y0, x1, y1);
     }
-    drawWallShadow(ox, oy, tw, cx0, cy0, cx1, cy1, B, isFloor);   // walls read as raised
+    drawWallShadow(ox, oy, tw, x0, y0, x1, y1, B, isFloor);   // walls read as raised
   }
-  if (B.water) lpcLayer(B.water, isWater, ox, oy, tw, cx0, cy0, cx1, cy1);
-  lpcLayer('Lava', isLava, ox, oy, tw, cx0, cy0, cx1, cy1);
+  if (B.water) lpcLayer(B.water, isWater, ox, oy, tw, x0, y0, x1, y1);
+  lpcLayer('Lava', isLava, ox, oy, tw, x0, y0, x1, y1);
+}
+function bakeLPCTerrain(tw) {
+  const C = currentTheme();
+  const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' });
+  const cv = document.createElement('canvas');
+  cv.width = (MAP_W + 2) * tw; cv.height = (MAP_H + 2) * tw;
+  const realCtx = ctx;
+  ctx = cv.getContext('2d');                              // redirect the tile draws into the bake
+  try {
+    paintLPCTerrain(C, B, tw, tw, tw, 0, 0, MAP_W, MAP_H); // one-tile margin (see above)
+  } finally { ctx = realCtx; }
+  return cv;
+}
+function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
+  // Key: floor identity + post-build map edits + tile size (covers zoom/resize),
+  // plus the flags that pick a different visual path — the interior sheet
+  // finishing its load mid-floor, and the flat-floor preview toggle. The raised-
+  // wall shadow layer bakes in too (its own cache keys on the same mapEpoch).
+  const baseKey = floorSerial + '|' + mapEpoch + '|' + MAP_W + 'x' + MAP_H + '|' + intReady + '|' + previewFlatFloor;
+  const key = baseKey + '|' + tw;
+  // Memory guard: the bake canvas is ((MAP_W+2)·tw)² RGBA — a 4K fullscreen on a
+  // deep Endless floor would pin hundreds of MB and re-run a full-floor bake on
+  // every cracked-wall break. Past ~4096px a side, skip the cache and paint the
+  // visible window live each frame (exactly the pre-bake path, pixel-identical).
+  if ((MAP_W + 2) * tw > 4096) {
+    if (_lpcCache.cv) _lpcCache = { key: null, baseKey: null, tw: 0, cv: null };  // release the big canvas
+    const C = currentTheme();
+    const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' });
+    const cx0 = Math.max(0, x0 - 1), cy0 = Math.max(0, y0 - 1);
+    const cx1 = Math.min(MAP_W, x1 + 1), cy1 = Math.min(MAP_H, y1 + 1);
+    paintLPCTerrain(C, B, ox, oy, tw, cx0, cy0, cx1, cy1);
+    return;
+  }
+  if (_lpcCache.key !== key) {
+    // A live window drag crosses a new integer tile size every ~13px of height;
+    // rebaking the whole floor per step would freeze the drag. While the resize
+    // is in flight (body.resizing, cleared 200ms after the last event) stretch
+    // the same floor's stale bake — momentarily soft but fluid — and bake crisp
+    // once on the first frame after it settles.
+    if (_lpcCache.cv && _lpcCache.baseKey === baseKey &&
+        document.body.classList.contains('resizing')) {
+      const s = tw / _lpcCache.tw;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(_lpcCache.cv, ox - tw, oy - tw, _lpcCache.cv.width * s, _lpcCache.cv.height * s);
+      return;
+    }
+    _lpcCache = { key, baseKey, tw, cv: bakeLPCTerrain(tw) };
+  }
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(_lpcCache.cv, ox - tw, oy - tw);          // integer 1:1 blit — pixel-identical
 }
 // ── RAISED-WALL CAST SHADOW ────────────────────────────────────────────────
 // Outdoor walls are flat rock GROUND tiles, so nothing reads as raised. Rather
@@ -1655,7 +1726,10 @@ const WALL_SHADOW_DEPTH = {
 let _wsCache = null, _wsCacheKey = '';
 function wallShadowLayer(B, isFloor) {
   if (!B || !B.floor || !lpcReady) return null;
-  const key = mapEpoch + '|' + MAP_W + 'x' + MAP_H;   // one biome + layout per floor
+  // floorSerial matters too: buildTutorialMap bumps only the serial (not
+  // mapEpoch), and without it a fresh hero's same-sized tutorial could reuse the
+  // previous floor's shadow layer — phantom wall shadows baked into the beach.
+  const key = floorSerial + '|' + mapEpoch + '|' + MAP_W + 'x' + MAP_H;
   if (_wsCache && _wsCacheKey === key) return _wsCache;
   const TS = 32, MW = MAP_W * TS, MH = MAP_H * TS;
   if (MW <= 0 || MH <= 0 || MW * MH > 64e6) { _wsCache = null; _wsCacheKey = key; return null; }
@@ -1902,6 +1976,43 @@ function _silBuf(w, h) {
   if (_silCanvas.height < h) _silCanvas.height = Math.ceil(h);
   return _silCtx;
 }
+// Per-floor occluder list — decorMap is only ever written at floor build
+// (placeOutdoorDecor + the build resets), so parse the "y,x" keys of every
+// walk-behind piece into numeric tile coords ONCE per floor instead of
+// string-splitting the whole decorMap every frame. Keyed by floorSerial,
+// mirroring the stairs-down cache.
+let _occSerial = -1, _occList = [];
+function occluderList() {
+  if (_occSerial !== floorSerial) {
+    _occSerial = floorSerial; _occList = [];
+    for (const k in decorMap) {
+      const id = decorMap[k], d = DECOR_INDEX[id];
+      if (!d || !DECOR_OCCLUDER[id]) continue;            // only trees occlude (walk-behind)
+      const c = k.indexOf(',');
+      _occList.push({ id, d, tx: +k.slice(c + 1), ty: +k.slice(0, c) });
+    }
+  }
+  return _occList;
+}
+// Occluder sprites pre-scaled to the current tile size, keyed by decor id, so
+// each overlap's destination-in mask blits 1:1 (integer coords, no smoothing —
+// alpha copied exactly, pixel-identical) instead of rescaling the atlas region
+// on every composite. Cleared when the tile size (zoom/resize) changes; the
+// handful of occluders per floor keeps it tiny, and ids are global atlas ids
+// so entries stay valid across floors.
+let _occSpriteTw = 0; const _occSprites = new Map();
+function occSpriteMask(id, d, dw, dh, tw) {
+  if (_occSpriteTw !== tw) { _occSpriteTw = tw; _occSprites.clear(); }
+  let cv = _occSprites.get(id);
+  if (!cv) {
+    cv = document.createElement('canvas'); cv.width = Math.max(1, dw); cv.height = Math.max(1, dh);
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.drawImage(decorSheet, d.dx, d.dy, d.w, d.h, 0, 0, dw, dh);
+    _occSprites.set(id, cv);
+  }
+  return cv;
+}
 // Occlusion + tracking: when an actor stands BEHIND a tall decor object (a tree),
 // redraw the tree over the actor so it is genuinely hidden, then stamp a tinted
 // silhouette OF THE ACTOR'S ACTUAL SPRITE over only the pixels the tree covers —
@@ -1910,14 +2021,12 @@ function _silBuf(w, h) {
 function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
   if (!decorReady) return;
   const sc = tw / 32, occ = [];
-  for (const k in decorMap) {
-    const d = DECOR_INDEX[decorMap[k]];
-    if (!d || !DECOR_OCCLUDER[decorMap[k]]) continue;     // only trees occlude (walk-behind)
-    const c = k.split(','), tx = +c[1], ty = +c[0];
-    if (tx < x0 - 2 || tx > x1 + 2 || ty < y0 - 8 || ty > y1 + 2) continue;
+  for (const o of occluderList()) {
+    if (o.tx < x0 - 2 || o.tx > x1 + 2 || o.ty < y0 - 8 || o.ty > y1 + 2) continue;
+    const d = o.d;
     const dw = Math.round(d.w * sc), dh = Math.round(d.h * sc);
-    const cxc = decorAnchorX(decorMap[k], offX + tx * tw, tw), cyb = offY + ty * th + th * 0.98;
-    occ.push({ d, dw, dh, l: Math.round(cxc - dw / 2), t: Math.round(cyb - dh), footY: cyb });
+    const cxc = decorAnchorX(o.id, offX + o.tx * tw, tw), cyb = offY + o.ty * th + th * 0.98;
+    occ.push({ id: o.id, d, dw, dh, l: Math.round(cxc - dw / 2), t: Math.round(cyb - dh), footY: cyb });
   }
   if (!occ.length) return;
   const actors = [];
@@ -1959,7 +2068,7 @@ function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
     g.fillStyle = a.tint; g.fillRect(0, 0, bw, bh);
     g.globalCompositeOperation = 'destination-in';        // keep only where the tree covers
     g.imageSmoothingEnabled = false;
-    g.drawImage(decorSheet, T.d.dx, T.d.dy, T.d.w, T.d.h, T.l - bx, T.t - by, T.dw, T.dh);
+    g.drawImage(occSpriteMask(T.id, T.d, T.dw, T.dh, tw), T.l - bx, T.t - by);
     g.globalCompositeOperation = 'source-over';
     ctx.drawImage(_silCanvas, 0, 0, bw, bh, bx, by, bw, bh);
   }
@@ -3071,12 +3180,39 @@ function statPowerWeight(key) {
   return w;
 }
 
+// ── LOADOUT-DERIVED CACHES ──
+// activeSlots()'s fix-point, totalStat's gear sums and the item-power counts are
+// pure functions of the worn gear, the hero's base attributes and learned skills
+// (Titan's Grip changes off-hand pairing). They're read dozens of times per frame
+// on the combat / kill / render hot paths, so their results are memoized in one
+// shared bucket. The bucket is discarded whenever anything feeding it can have
+// changed: every gear / attribute / skill mutation site calls bumpLoadout()
+// (recomputeMaxStats — the canonical "loadout changed" hook — bumps too), and a
+// wholesale swap of the player/equipped object (load, gear-set switch, the window
+// bridge) is caught by identity. Caching changes nothing about the results —
+// only how often they're recomputed.
+let loadoutEpoch = 0;
+function bumpLoadout() { loadoutEpoch++; }
+let _loBucket = null;
+function loadoutCache() {
+  if (!_loBucket || _loBucket.epoch !== loadoutEpoch || _loBucket.player !== player ||
+      _loBucket.equipped !== equipped || _loBucket.cls !== player.class || _loBucket.asc !== player.ascension) {
+    _loBucket = { epoch: loadoutEpoch, player, equipped, cls: player.class, asc: player.ascension };
+  }
+  return _loBucket;
+}
+
 // Total power of a single item, AS THIS CLASS would wield it: weighted sum of its
 // stats + attributes + a rarity bonus. The same item can be worth different Power to
 // different classes (a +Might affix or a Spell Power roll lands differently), which
 // is the point — Power should track the item's real impact on this hero.
+// Cached per item object: the number is pure over (item, class), and every item
+// mutation (the Enchanter) bumps the loadout epoch, which invalidates the entry.
+const _itemPowerCache = new WeakMap();
 function itemPower(item) {
   if (!item || !item.stats) return 0;
+  const hit = _itemPowerCache.get(item);
+  if (hit && hit.epoch === loadoutEpoch && hit.cls === player.class) return hit.val;
   let p = 0;
   for (const [k, v] of Object.entries(item.stats)) {
     if (k === 'DMG') {
@@ -3092,7 +3228,9 @@ function itemPower(item) {
     if (typeof v === 'number') p += v * attrPowerWeight(k);
   }
   p += TIER_POWER_BONUS[item.tier] || 0;
-  return Math.max(0, Math.round(p));
+  const val = Math.max(0, Math.round(p));
+  _itemPowerCache.set(item, { epoch: loadoutEpoch, cls: player.class, val });
+  return val;
 }
 
 // Effective value of an attribute: the points spent (including the ATTR_BASE
@@ -3299,6 +3437,9 @@ function drFractionVs(lvl)  { return rated(playerDRRating(), drOpposition(lvl));
 function playerCritChance() { return critChanceVs({ level: curDepth() }); }
 function playerDodge() { return dodgeChanceVs({ level: curDepth() }); }
 function recomputeMaxStats() {
+  // Every gear/skill/attribute change funnels through here — drop the loadout
+  // caches first so the reads below (and everything after) see fresh values.
+  bumpLoadout();
   player.maxHp = baseMaxHp();
   player.maxMp = baseMaxMp();
   // Build-defining item powers: Stalwart deepens max HP, Attuned max MP (stacking).
@@ -4083,8 +4224,8 @@ function offhandEquipError(item, weapon) {
 // FIX-POINT: assume every worn piece active, then repeatedly drop any whose gate
 // isn't met by the attributes of the pieces STILL active (a piece never counts its
 // own +attr toward its own gate — the same rule as the equip check). Dropping only
-// removes, so it settles in at most SLOT_KEYS.length passes. Computed on demand
-// (no cache): it's only hit on player actions and panel renders, never a tight loop.
+// removes, so it settles in at most SLOT_KEYS.length passes. The live loadout's
+// result is memoized (see activeSlots / loadoutCache); hypothetical swaps are not.
 // Core resolver, parameterised by `getItem(slot)` so the SAME fix-point serves both
 // the live loadout AND a hypothetical "what if I equipped this candidate" swap (the
 // candidate occupies its slot, the piece it replaces is gone). Returns the settled
@@ -4118,7 +4259,13 @@ function resolveActive(getItem) {
   }
   return { active, attrFrom };
 }
-function activeSlots() { return resolveActive(s => equipped[s]).active; }
+// The live loadout's settled active map, memoized in the loadout cache (the
+// fix-point is re-resolved only after a gear/attribute/skill change — see
+// bumpLoadout) since combat and render paths read it many times per frame.
+function activeSlots() {
+  const c = loadoutCache();
+  return c.active || (c.active = resolveActive(s => equipped[s]).active);
+}
 // Is the piece in this slot worn AND currently counting (not red/ignored)?
 function slotActive(slot) { return !!equipped[slot] && activeSlots()[slot]; }
 // The main-hand weapon IF it currently counts, else null — so a red/ignored weapon
@@ -4694,7 +4841,17 @@ function skillTreeFor(view) {
 // Every node the hero can interact with (both base trees + the unlocked PATH
 // tree). This flat list is the single hook for skillBonus / spent / lookups, so
 // a passive anywhere is "live" the instant it's bought.
-function classSkillTree() { const t = classTrees(); return t.passive.concat(t.active, ascTree()); }
+// Memoized per (class, ascension): the tree arrays themselves are static data, so
+// the concat only changes when the hero's class or path does. Callers iterate the
+// returned array but never mutate it, so sharing one instance is safe.
+let _cstKey = null, _cstList = null;
+function classSkillTree() {
+  const key = (player.class || '') + '|' + (player.ascension || '');
+  if (_cstList && _cstKey === key) return _cstList;
+  const t = classTrees();
+  _cstKey = key;
+  return _cstList = t.passive.concat(t.active, ascTree());
+}
 function skillNode(id) { return classSkillTree().find(n => n.id === id) || null; }
 function skillRank(id) { return (player.skills && player.skills[id]) || 0; }
 // Sum a passive bonus key across every owned node rank (both trees + path). A
@@ -4943,6 +5100,10 @@ function spentAllSkillPoints() { return spentSkillPoints() + spentAscPoints(); }
 // in tree order — each keyed by its own id for cooldowns. The first entry is the
 // hero's primary skill (cast with the button / R key).
 function activeSkillList() {
+  // Memoized in the loadout cache (rank changes bump it): auto-cast and the skill
+  // bar rebuild this list several times per frame otherwise. Callers only read it.
+  const c = loadoutCache();
+  if (c.skillList) return c.skillList;
   const list = [];
   for (const n of classSkillTree()) {
     if (n.type === 'active' && skillRank(n.id) > 0) {
@@ -4951,7 +5112,13 @@ function activeSkillList() {
       list.push({ id: n.id, name: n.name, icon: n.icon, mp: skillManaCost(n, skillRank(n.id)), cd: n.cd, desc: n.desc, node: n });
     }
   }
-  return list;
+  return c.skillList = list;
+}
+// The learned-active id set the slot normalisers probe (memoized alongside the
+// list — normAutoSkill runs per frame and was rebuilding this Set each call).
+function learnedActiveIds() {
+  const c = loadoutCache();
+  return c.learnedIds || (c.learnedIds = new Set(activeSkillList().map(s => s.id)));
 }
 // Which learned actives reach the skill bar / hotkeys is now governed by explicit
 // hotkey slots (player.skillSlots) the player fills, not an auto-filled list — see
@@ -4973,7 +5140,7 @@ const AUTO_SLOT = 'auto';
 // the learned actives and migrates legacy per-skill auto-cast flags (player.autoCast,
 // a map) into the single slot once, preferring the earliest-slotted flagged skill.
 function normAutoSkill() {
-  const learned = new Set(activeSkillList().map(s => s.id));
+  const learned = learnedActiveIds();
   let id = player.autoSkill;
   if (!id && player.autoCast && typeof player.autoCast === 'object') {
     const slots = Array.isArray(player.skillSlots) ? player.skillSlots : [];
@@ -4987,7 +5154,7 @@ function normAutoSkill() {
 // any id that's no longer a learned active and de-duping repeats (mutates + returns).
 // The auto-cast skill is reserved out of the manual row so it can't be doubled up.
 function normSkillSlots() {
-  const learned = new Set(activeSkillList().map(s => s.id));
+  const learned = learnedActiveIds();
   const src = Array.isArray(player.skillSlots) ? player.skillSlots : [];
   const out = [], seen = new Set();
   const auto = normAutoSkill();
@@ -5168,6 +5335,7 @@ function buySkill(id) {
   const firstRank = !(player.skills[id] > 0);
   player.skills[id] = (player.skills[id] || 0) + 1;
   if (skillTreeKindOf(node) === 'path') player.ascPoints--; else player.skillPoints--;
+  bumpLoadout();   // skill ranks feed the cached active-skill list / gear resolve
   // A newly-learned active drops onto the first open hotkey slot so it reaches the
   // bar without a manual assign (the player can re-slot it any time).
   if (firstRank && node.type === 'active') autoSlotSkill(id);
@@ -5237,6 +5405,7 @@ function refundSkill(id) {
   if (rank - 1 <= 0) delete player.skills[id]; else player.skills[id] = rank - 1;
   if (isPath) player.ascPoints = (player.ascPoints || 0) + 1;
   else player.skillPoints = (player.skillPoints || 0) + 1;
+  bumpLoadout();   // skill ranks feed the cached active-skill list / gear resolve
   // A now-unlearned active must drop off the hotkey / auto-cast slots.
   normSkillSlots(); normAutoSkill();
   recomputeMaxStats();
@@ -5657,7 +5826,27 @@ function setPlayerCell(x, y) {
 function tileAtCell(x, y) { return (x >= 0 && y >= 0 && x < MAP_W && y < MAP_H) ? mapData[y][x] : 1; }
 // A movement status — slow/snare (target 'player' or an enemy object).
 function isPlayerSlowed() { return statusEffects.some(s => s.target === 'player' && s.effect === 'slow'); }
-function isEnemySlowed(e) { return statusEffects.some(s => s.target === e && s.effect === 'slow'); }
+// Per-foe movement-status flags (stun/slow/chill), built in ONE pass over
+// statusEffects instead of a fresh .some() scan per foe per tick. Rebuilt lazily
+// whenever statusEffects changes — entries are only ever ADDED by push (length
+// grows) or REMOVED by a filter reassignment (new array identity), and never
+// retagged in place, so identity + length pin the (target, effect) pairs exactly.
+let _moveStatusMap = new Map(), _moveStatusArr = null, _moveStatusLen = -1;
+function enemyMoveStatus(e) {
+  if (_moveStatusArr !== statusEffects || _moveStatusLen !== statusEffects.length) {
+    _moveStatusMap.clear();
+    for (const s of statusEffects) {
+      if (s.target === 'player') continue;
+      if (s.effect !== 'stun' && s.effect !== 'slow' && s.effect !== 'chill') continue;
+      let f = _moveStatusMap.get(s.target);
+      if (!f) { f = { stun: false, slow: false, chill: false }; _moveStatusMap.set(s.target, f); }
+      f[s.effect] = true;
+    }
+    _moveStatusArr = statusEffects; _moveStatusLen = statusEffects.length;
+  }
+  return _moveStatusMap.get(e);
+}
+function isEnemySlowed(e) { const f = enemyMoveStatus(e); return !!(f && f.slow); }
 let inventory = [];
 // The town STASH — a safe vault, completely separate from your character, and
 // SHARED across every save slot: gold and gear banked by one hero can be
@@ -7061,16 +7250,35 @@ function mVoice(o) {
   f.connect(g); g.connect(audio.musicGain);
 }
 
+// Pre-rendered noise bursts for the snare and hat. Filling a fresh random
+// AudioBuffer on every hit costs an allocation plus thousands of Math.random()
+// calls per hit; noise is noise, so cycling a small pool of variants is
+// audibly identical. Built lazily once per AudioContext (needs its sampleRate).
+let _percBufCtx = null, _snareBufs = null, _hatBufs = null, _snareBufIdx = 0, _hatBufIdx = 0;
+function percNoiseBuf(ctx, dur, decayPow) {
+  const n = Math.max(1, Math.floor(ctx.sampleRate * dur));
+  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, decayPow);
+  return buf;
+}
+function percNoisePools(ctx) {
+  if (_percBufCtx === ctx) return;
+  _snareBufs = []; _hatBufs = [];
+  for (let v = 0; v < 4; v++) {
+    _snareBufs.push(percNoiseBuf(ctx, 0.13, 1.4));   // snare envelope: (1-i/n)^1.4
+    _hatBufs.push(percNoiseBuf(ctx, 0.05, 1));        // hat envelope: linear decay
+  }
+  _percBufCtx = ctx;
+}
+
 // A backbeat snare (noise crack + a short pitched body) so drum-driven styles
 // have an actual 2-and-4 groove instead of a straight oom-pah.
 function musicSnare(when, vol) {
   const ctx = audio.ctx;
   if (!ctx) return;
-  const n = Math.max(1, Math.floor(ctx.sampleRate * 0.13));
-  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 1.4);
-  const src = ctx.createBufferSource(); src.buffer = buf;
+  percNoisePools(ctx);
+  const src = ctx.createBufferSource(); src.buffer = _snareBufs[_snareBufIdx++ & 3];
   const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1500;
   const ng = ctx.createGain();
   ng.gain.setValueAtTime(0.0002, when);
@@ -7089,17 +7297,20 @@ function musicSnare(when, vol) {
   o.start(when); o.stop(when + 0.1);
 }
 
+// One section's contribution to a note — a top-level helper (rather than a
+// closure rebuilt inside musicVoice) so scheduling a note allocates nothing
+// beyond the voice itself.
+function musicVoiceSection(role, sec, vmul, o) {
+  if (vmul <= 0.01) return;
+  const p = MUSIC_SECTIONS[sec][role];
+  mVoice({ role, freq: o.freq, dur: o.dur, when: o.when,
+           type: p.type, vol: p.vol * vmul, detune: p.detune,
+           cutoff: p.cutoff, q: p.q, attack: o.attack });
+}
 function musicVoice(role, blend, o) {
-  const sound = (sec, vmul) => {
-    if (vmul <= 0.01) return;
-    const p = MUSIC_SECTIONS[sec][role];
-    mVoice({ role, freq: o.freq, dur: o.dur, when: o.when,
-             type: p.type, vol: p.vol * vmul, detune: p.detune,
-             cutoff: p.cutoff, q: p.q, attack: o.attack });
-  };
-  if (blend.from === blend.to) { sound(blend.from, 1); return; }
-  sound(blend.from, 1 - blend.t);
-  sound(blend.to, blend.t);
+  if (blend.from === blend.to) { musicVoiceSection(role, blend.from, 1, o); return; }
+  musicVoiceSection(role, blend.from, 1 - blend.t, o);
+  musicVoiceSection(role, blend.to, blend.t, o);
 }
 
 // A soft, pitched kick for the downbeats. `vol` scales it so quieter sections
@@ -7122,11 +7333,8 @@ function musicKick(when, vol = 1) {
 function musicHat(when, vol) {
   const ctx = audio.ctx;
   if (!ctx) return;
-  const n = Math.max(1, Math.floor(ctx.sampleRate * 0.05));
-  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
-  const src = ctx.createBufferSource(); src.buffer = buf;
+  percNoisePools(ctx);
+  const src = ctx.createBufferSource(); src.buffer = _hatBufs[_hatBufIdx++ & 3];
   const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000;
   const g = ctx.createGain(); g.gain.value = vol;
   src.connect(f); f.connect(g); g.connect(audio.musicGain);
@@ -7151,14 +7359,26 @@ function musicLeadStep(scale, chord) {
 function scheduleMusic() {
   const ctx = audio.ctx;
   if (!ctx || audio.musicLevel <= 0 || ctx.state === 'suspended') return;
+  // After a suspension (tab muted, context paused) or a long main-thread stall
+  // the audio clock keeps advancing while musicNext stands still. Replaying the
+  // backlog would schedule hundreds of past-due notes in one audible burst, so
+  // after a PATHOLOGICAL gap (seconds — a suspension, not a mere long frame),
+  // snap to "now" and let the tune simply continue from here. Sub-2s hiccups
+  // keep the old brief catch-up so ordinary play sounds exactly as before.
+  if (musicNext < ctx.currentTime - 2) musicNext = ctx.currentTime + 0.02;
   if (!musicProg) musicProg = mpick(MUSIC_SECTIONS[musicStructIdx].progs);
   if (!musicSectionEndTime) {
     musicSectionEndTime = musicNext + SECTION_MIN + Math.random() * (SECTION_MAX - SECTION_MIN);
   }
+  // Whether a boss is alive can't change mid-invocation (the world only mutates
+  // between scheduler ticks), so scan the enemies list once per call rather
+  // than allocating an enemies.some() pass for every scheduled step.
+  const bossNow = typeof enemies !== 'undefined' && enemies.some(en => !en.dead && en.isBoss);
   // Schedule every step that falls inside the look-ahead window. The guard stops
   // a zero/NaN step duration (which would never advance musicNext) from spinning.
+  const horizon = ctx.currentTime + 0.3;
   let _mGuard = 0;
-  while (musicNext < ctx.currentTime + 0.3 && _mGuard++ < 512) {
+  while (musicNext < horizon && _mGuard++ < 512) {
     const when = musicNext;
     const beat = musicStep % STEPS_PER_BAR;
 
@@ -7175,8 +7395,7 @@ function scheduleMusic() {
         : when + SECTION_MIN + Math.random() * (SECTION_MAX - SECTION_MIN);
     }
     // Boss fights hijack the music: swap to the intense Boss track while a boss
-    // lives, then drift back to a normal style once the floor is clear.
-    const bossNow = typeof enemies !== 'undefined' && enemies.some(en => !en.dead && en.isBoss);
+    // lives (bossNow, checked once above), then drift back once the floor clears.
     // Entering a boss fight hijacks the music RIGHT AWAY: kick off the swap to the
     // intense Boss track the instant a boss is alive — no waiting for the next bar
     // line — and ramp it in fast so the intensity lands as you step onto the floor.
@@ -8406,7 +8625,7 @@ function ensureHostilesReachable() {
     const spot = spots.find(s => !getEnemyAt(s.x, s.y) && (Math.abs(s.x - player.x) + Math.abs(s.y - player.y)) > ENEMY_AGGRO + 1)
               || spots.find(s => !getEnemyAt(s.x, s.y));
     if (!spot) break;                                // no room left — give up
-    e.x = spot.x; e.y = spot.y;
+    e.x = spot.x; e.y = spot.y; bumpEnemyPos();
   }
 }
 
@@ -8520,7 +8739,7 @@ function clearTrapsAround(x, y) {
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     const nx = x + dx, ny = y + dy;
     if (nx < 1 || ny < 1 || nx >= MAP_W - 1 || ny >= MAP_H - 1) continue;
-    if (mapData[ny][nx] === 8) mapData[ny][nx] = 0; // spike → plain floor
+    if (mapData[ny][nx] === 8) { mapData[ny][nx] = 0; pathGridDirty(); } // spike → plain floor
   }
   if (traps && traps.length) traps = traps.filter(tr => !(tr.kind === 'arrow' && arrowLaneHits(tr, x, y)));
 }
@@ -8569,6 +8788,8 @@ function spawnEnemyBolt(e, raw, color) {
 // Advance every bolt: move, die on a wall, or strike the hero on overlap.
 function updateProjectiles(dt) {
   if (!projectiles.length) return;
+  // Hoisted hit radius, compared squared so the per-bolt test needs no sqrt.
+  const hitR = PLAYER_R + 0.18, hitR2 = hitR * hitR;
   for (const p of projectiles) {
     // Cosmetic bolts: home onto a target (the hero for enemy shots, or p.tx/p.ty
     // for a player spell bolt), fast so it reads as a bolt, and pop on arrival.
@@ -8586,7 +8807,8 @@ function updateProjectiles(dt) {
     if (blocksShot(Math.floor(p.x), Math.floor(p.y))) {   // pop on a solid obstruction; flies over water/ground
       spawnParticles(p.x - 0.5, p.y - 0.5, p.color, 4, 0.06); p.life = 0; continue;
     }
-    if (Math.hypot(p.x - player.fx, p.y - player.fy) < PLAYER_R + 0.18) {
+    const hdx = p.x - player.fx, hdy = p.y - player.fy;
+    if (hdx * hdx + hdy * hdy < hitR2) {
       if (p.enemyShot && p.e) {
         // A foe's aimed bolt reached the hero — resolve it with that foe's mitigation
         // and on-hit procs (a stat-dodge roll can still avoid it inside the handler).
@@ -8603,13 +8825,18 @@ function updateProjectiles(dt) {
       p.life = 0;
     }
   }
-  projectiles = projectiles.filter(p => p.life > 0);
+  // Compact expired bolts in place — the old per-frame .filter allocated a fresh
+  // array every frame even when nothing died.
+  let w = 0;
+  for (let i = 0; i < projectiles.length; i++) { const p = projectiles[i]; if (p.life > 0) projectiles[w++] = p; }
+  projectiles.length = w;
 }
 
 // Tick the traps: arrow emitters count down and loose a bolt; fire vents cycle
 // on/off and scorch the hero while lit (a brief telegraph window precedes each
 // flare so you can step off).
 function updateTraps(dt) {
+  if (!traps.length) return;
   for (const tr of traps) {
     if (tr.kind === 'arrow') {
       tr.cd -= dt;
@@ -10338,6 +10565,9 @@ function loadDaily() {
 // Repaint the objective chip from the hero's active bounty. It only shows during
 // active dungeon play (hidden in town, on the title screen, and while no bounty is
 // taken) so it stays a quiet cue rather than clutter.
+// The chip repaints on every kill (and gold gain) but its strings rarely move, so
+// the last-written state is remembered and unchanged repaints skip the DOM writes.
+let _objChipLast = null;
 function updateObjectiveChip() {
   const chip = document.getElementById('objective-chip');
   if (!chip) return;
@@ -10345,19 +10575,26 @@ function updateObjectiveChip() {
   const b = p && p.bounty;
   const titleOv = document.getElementById('title-overlay');
   const titleOpen = !!(titleOv && titleOv.classList.contains('open'));
-  if (!b || inTown || titleOpen) { chip.style.display = 'none'; return; }
+  if (!b || inTown || titleOpen) {
+    if (_objChipLast !== 'off') { chip.style.display = 'none'; _objChipLast = 'off'; }
+    return;
+  }
   const prog = Math.min(bountyProgress(b), b.need);
   const done = bountyDone(b);
+  const icHtml = (typeof dlIcon === 'function' && dlIcon('npc_quest', 14)) || '';
+  const label = escapeHtml(b.desc.replace('{n}', b.need));
+  const txtHtml = done ? `${label} — <span class="obj-done">✓ ready to claim</span>` : `${label} — <b>${prog}</b>/${b.need}`;
+  const streakHtml = (typeof dailyStreak === 'number' && dailyStreak > 1) ? `${dlIcon('ic_fire', 14)}${dailyStreak}` : '';
+  const key = icHtml + '\x1f' + txtHtml + '\x1f' + streakHtml;
+  if (_objChipLast === key) return;   // identical strings already on screen
+  _objChipLast = key;
   const ic = document.getElementById('obj-ic');
-  if (ic && typeof dlIcon === 'function') { const s = dlIcon('npc_quest', 14); if (s) ic.innerHTML = s; }
+  if (ic && icHtml) ic.innerHTML = icHtml;
   const txt = document.getElementById('obj-text');
-  if (txt) {
-    const label = escapeHtml(b.desc.replace('{n}', b.need));
-    txt.innerHTML = done ? `${label} — <span class="obj-done">✓ ready to claim</span>` : `${label} — <b>${prog}</b>/${b.need}`;
-  }
+  if (txt) txt.innerHTML = txtHtml;
   const streakEl = document.getElementById('obj-streak');
   if (streakEl) {
-    if (typeof dailyStreak === 'number' && dailyStreak > 1) { streakEl.innerHTML = `${dlIcon('ic_fire', 14)}${dailyStreak}`; streakEl.style.display = ''; }
+    if (streakHtml) { streakEl.innerHTML = streakHtml; streakEl.style.display = ''; }
     else streakEl.style.display = 'none';
   }
   chip.style.display = '';
@@ -11652,6 +11889,7 @@ function openEnchanter() { enchantSel = null; openTownModal('Enchanter', 'ic_wan
 
 // After any enchant: refresh derived stats if the piece is worn, then re-render.
 function afterEnchant(item) {
+  bumpLoadout();   // the item's stats/attrs changed — cached power/gear sums are stale
   if (Object.values(equipped).includes(item)) { recomputeMaxStats(); if (player.hp > player.maxHp) player.hp = player.maxHp; if (player.mp > player.maxMp) player.mp = player.maxMp; }
   sfx('shrine');
   hideHoverTip(); // the hovered button is about to be re-rendered out from under it
@@ -12268,6 +12506,10 @@ function spawnEnemies() {
   enemies = [];
   // Summoned minions, transient combat buffs and skill charges don't carry between floors.
   minions = []; combatBuffs = {}; clearCharges();
+  // Foe-tied status entries are deliberately KEPT across a descend: a DoT still
+  // ticking on a left-behind foe can finish the kill (XP/gold/loot) — longstanding
+  // behavior players can lean on. The orphaned entries expire on their own within
+  // seconds, so they're no leak. (Town/tutorial builds do clear them, as before.)
   const isBossFloor = dungeonLevel % 5 === 0;
   // Hold monster DENSITY constant as floors grow: the regular per-floor foe count
   // is scaled by how much bigger this floor is than the base 20×20 (mapAreaRatio),
@@ -12378,6 +12620,8 @@ function spawnEnemies() {
             for (let ay = ey - pad; ay < ey + bsize + pad; ay++)
               for (let ax = ex - pad; ax < ex + bsize + pad; ax++)
                 if (ax > 0 && ay > 0 && ax < MAP_W - 1 && ay < MAP_H - 1 && mapData[ay][ax] === 1) mapData[ay][ax] = 0;
+            bumpMapEpoch();          // walls knocked out → rebake the terrain
+            pathGridDirty();         // …and refresh the pathfinding grid to match
           }
         }
         // A boss is a couple of levels above its floor, and scales primarily
@@ -13522,17 +13766,34 @@ function seedAmbientEmbers() {
   }
   host.innerHTML = html;
 }
+// ── Static HUD node cache ──
+// The per-frame HUD updaters (vital fills, stamina, cooldown dials, halo,
+// ambient tint, the pause checks) each did fresh getElementById lookups every
+// frame. These nodes are all static in the shell (index.html) and never
+// recreated — syncDesktopHud only re-PARENTS #skill-bar/#pact-hud/#food-hud,
+// which keeps node identity — so resolve each id once and reuse the element.
+const _hudEls = {};
+function hudEl(id) {
+  let el = _hudEls[id];
+  if (el === undefined) el = _hudEls[id] = document.getElementById(id);
+  return el;
+}
 // Tint the motes to the current floor's glow colour (warm on fiery themes, cool
 // on icy ones). Cheap, but guarded so it only writes when the theme changes.
 let _amberTint = null;
 function updateAmbientTint(theme) {
-  const host = document.getElementById('ambient-embers');
+  const host = hudEl('ambient-embers');
   if (!host) return;
   const tint = ((theme || currentTheme()) || {}).stairsGlow || '#ffb24a';
   if (tint === _amberTint) return;
   _amberTint = tint;
   host.style.setProperty('--amber', tint);
 }
+
+// The painterly vignette gradient depends only on the canvas size, so it's
+// memoized and rebuilt only on resize (building a radial gradient every frame
+// was pure repeated work — the stops never change).
+let _vignetteGrad = null, _vignetteW = 0, _vignetteH = 0;
 
 function draw() {
   const W = canvas.width, H = canvas.height;
@@ -13896,6 +14157,7 @@ function draw() {
   // floor but beneath actors. Fire uses the DawnLike flame tile; the barrier is a
   // procedural magical construct (terrain-like, so procedural is fine).
   bossHazards.forEach(h => {
+    if (h.x + 1 < x0 || h.x > x1 || h.y + 1 < y0 || h.y > y1) return; // off-screen (same window as the enemy/trap loops)
     const px = offX + h.x * tw, py = offY + h.y * th;
     const cx = px + tw/2, cy = py + th/2;
     const wob = 0.6 + 0.4 * Math.sin(animNow()/120 + (h.x*7 + h.y*13));
@@ -13920,6 +14182,7 @@ function draw() {
   // Ground chests — a classic brown chest with gold trim, drawn by hand so it
   // looks the same on every device. Lucky chests glow brighter gold.
   groundItems.forEach(({ x, y, luck }) => {
+    if (x + 1 < x0 || x > x1 || y + 1 < y0 || y > y1) return; // off-screen
     const lucky = (luck || 1) > 1;
     const px = offX + x * tw, py = offY + y * th;
     const cx = px + tw/2, cy = py + th/2;
@@ -13964,6 +14227,7 @@ function draw() {
 
   // Ground food — drawn large so a rare bowl is easy to spot on the map.
   groundFood.forEach(f => {
+    if (f.x + 1 < x0 || f.x > x1 || f.y + 1 < y0 || f.y > y1) return; // off-screen
     const px = offX + f.x * tw, py = offY + f.y * th;
     const foodSize = Math.round(tw * 0.95);
     drawSpriteC(f.sprite || 'food', px + tw/2, py + th/2, foodSize);
@@ -13971,6 +14235,7 @@ function draw() {
 
   // Coin piles — a soft circular golden glow so loose gold catches the eye.
   groundGold.forEach(g => {
+    if (g.x + 1 < x0 || g.x > x1 || g.y + 1 < y0 || g.y > y1) return; // off-screen
     const px = offX + g.x * tw, py = offY + g.y * th;
     glowUnder(px + tw/2, py + th/2, tw * 0.42, 'rgba(255,224,102,0.4)');
     if (spriteReady) drawSpriteC('coins', px + tw/2, py + th/2, itemSpritePx(tw));
@@ -14033,7 +14298,6 @@ function draw() {
     if (!arr) statusByTarget.set(s.target, arr = []);
     arr.push(s);
   }
-  const NO_STATUS = [];
 
   // Enemies. Skip any whose footprint sits entirely outside the visible window
   // (with a 1-tile margin for auras/HP bars) — off-screen foes cost nothing to
@@ -14052,13 +14316,20 @@ function draw() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     // Status tint: green = poisoned, gold = stunned, orange = burning, blue = chilled.
-    const eStatus = statusByTarget.get(e) || NO_STATUS;
-    const poisoned = eStatus.some(s => s.effect === 'poison');
-    const stunned = eStatus.some(s => s.effect === 'stun');
-    const burning = eStatus.some(s => s.effect === 'burn');
-    const cursed = eStatus.some(s => s.effect === 'vuln');
-    const chilled = eStatus.some(s => s.effect === 'chill');
-    const charged = eStatus.some(s => s.effect === 'static');
+    // One pass over this foe's statuses sets all six flags at once (six
+    // .some(closure) calls per enemy per frame re-scanned the list and allocated
+    // a closure each); foes with no statuses skip the loop entirely.
+    const eStatus = statusByTarget.get(e);
+    let poisoned = false, stunned = false, burning = false, cursed = false, chilled = false, charged = false;
+    if (eStatus) for (const s of eStatus) {
+      const eff = s.effect;
+      if (eff === 'poison') poisoned = true;
+      else if (eff === 'stun') stunned = true;
+      else if (eff === 'burn') burning = true;
+      else if (eff === 'vuln') cursed = true;
+      else if (eff === 'chill') chilled = true;
+      else if (eff === 'static') charged = true;
+    }
     // Status tint → a cached pre-tinted sprite (was a per-frame ctx.filter, one of
     // the priciest 2D-canvas ops; the cached tile is pixel-identical). Priority
     // matches the old if/else chain: hit-flash first, then the elemental washes.
@@ -14257,6 +14528,7 @@ function draw() {
   // Summoned minions — autonomous allies, drawn with a soft coloured aura and a
   // thin lifespan bar so the player can read how long each will last.
   minions.forEach(m => {
+    if (m.x + 1 < x0 || m.x > x1 || m.y + 1 < y0 || m.y > y1) return; // off-screen (1-tile margin covers aura/lunge)
     const mx = offX + m.x * tw, my = offY + m.y * th;
     drawActorShadow(mx + tw/2, my + th*0.82, tw);
     ctx.save();
@@ -14444,29 +14716,40 @@ function draw() {
   // Player status effects are surfaced as full-screen coloured halos (see
   // updateHaloVignette), not as little icons over the hero sprite.
 
-  // Combat particles — hit sparks / blood that burst, drift, and fade.
+  // Combat particles — hit sparks / blood that burst, drift, and fade. A single
+  // in-place pass compacts expired sparks out (recycling them into the pool) and
+  // draws the survivors — no per-frame array copy or save/restore per spark; only
+  // globalAlpha changes, so one reset after the loop restores the context.
   const pnow = Date.now();
-  particles = particles.filter(p => pnow - p.born < p.life);
-  particles.forEach(p => {
-    const e = pnow - p.born, t = e / p.life, f = e / 16;
+  let pAlive = 0;
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    const e = pnow - p.born;
+    if (e >= p.life) { _particlePool.push(p); continue; }   // expired → recycle
+    particles[pAlive++] = p;
+    const t = e / p.life, f = e / 16;
     const wx = p.x + p.vx * f, wy = p.y + p.vy * f + 0.00006 * e * f; // light gravity
     const px = offX + wx * tw, py = offY + wy * th;
     const s = Math.max(1, tw * 0.1 * (1 - t * 0.6));
-    ctx.save();
     ctx.globalAlpha = Math.max(0, 1 - t);
     ctx.fillStyle = p.color;
     ctx.fillRect(px - s/2, py - s/2, s, s);
-    ctx.restore();
-  });
+  }
+  particles.length = pAlive;
+  ctx.globalAlpha = 1;
 
   // Ultimate-spell cinematics (meteor slam, frost nova, storm…) paint over the
   // world but beneath the floating damage numbers so hits stay readable.
   drawUltimateFx(offX, offY, tw, th);
 
-  // Floating damage numbers
+  // Floating damage numbers — compacted in place with a write index (the old
+  // per-frame .filter allocated a fresh array every frame).
   const now = Date.now();
-  floatingTexts = floatingTexts.filter(ft => now - ft.start < ft.duration);
-  floatingTexts.forEach(ft => {
+  let ftAlive = 0;
+  for (let i = 0; i < floatingTexts.length; i++) {
+    const ft = floatingTexts[i];
+    if (now - ft.start >= ft.duration) continue;   // expired → drop
+    floatingTexts[ftAlive++] = ft;
     const t = (now - ft.start) / ft.duration;
     const px = offX + ft.x * tw + tw / 2;
     const py = offY + ft.y * th - t * tw * 0.8;
@@ -14486,7 +14769,10 @@ function draw() {
     if (coinOk) {
       const cs = Math.max(16, Math.round(fsz * 1.15));
       const gap = Math.max(1, Math.round(fsz * 0.15));
-      const twd = ctx.measureText(ft.text).width;
+      // measureText is costly per frame, so the width is cached on the floater
+      // and only re-measured if its font changes (e.g. the canvas was resized).
+      if (ft._mFont !== ctx.font) { ft._mFont = ctx.font; ft._mW = ctx.measureText(ft.text).width; }
+      const twd = ft._mW;
       const left = px - (cs + gap + twd) / 2;
       const tcx = left + cs + gap + twd / 2;
       ctx.strokeText(ft.text, tcx, py);
@@ -14499,7 +14785,8 @@ function draw() {
       ctx.fillText(ft.text, px, py);
     }
     ctx.restore();
-  });
+  }
+  floatingTexts.length = ftAlive;
 
   // Atmospheric colour wash for this floor, if any.
   if (floorTint) {
@@ -14521,11 +14808,14 @@ function draw() {
   // Painterly vignette: a warm overhead light fading to shadowed edges, for
   // that Golden Sun / Tactics diorama feel.
   const cw = ctx.canvas.width, ch = ctx.canvas.height;
-  const vg = ctx.createRadialGradient(cw/2, ch*0.42, Math.min(cw, ch)*0.18, cw/2, ch*0.5, Math.max(cw, ch)*0.72);
-  vg.addColorStop(0, 'rgba(255,236,190,0.06)');
-  vg.addColorStop(0.55, 'rgba(0,0,0,0)');
-  vg.addColorStop(1, 'rgba(8,6,18,0.55)');
-  ctx.fillStyle = vg;
+  if (!_vignetteGrad || _vignetteW !== cw || _vignetteH !== ch) {
+    _vignetteW = cw; _vignetteH = ch;
+    _vignetteGrad = ctx.createRadialGradient(cw/2, ch*0.42, Math.min(cw, ch)*0.18, cw/2, ch*0.5, Math.max(cw, ch)*0.72);
+    _vignetteGrad.addColorStop(0, 'rgba(255,236,190,0.06)');
+    _vignetteGrad.addColorStop(0.55, 'rgba(0,0,0,0)');
+    _vignetteGrad.addColorStop(1, 'rgba(8,6,18,0.55)');
+  }
+  ctx.fillStyle = _vignetteGrad;
   ctx.fillRect(0, 0, cw, ch);
 
   // Edge indicators pointing at off-screen points of interest — the down-stairs
@@ -14547,6 +14837,23 @@ function draw() {
 // Hidden in town and before a floor exists. Tap it to collapse to a small corner
 // thumbnail (and tap again to expand); the choice is remembered.
 let _mmCanvas = null, _mmCtx = null;
+// Static terrain layer cache. Re-rasterizing every tile of the whole floor each
+// frame was the minimap's entire cost, but the terrain rarely changes — so it's
+// painted once into an offscreen canvas and blitted per frame. The cache key is
+// the floor identity + pixel size + a cheap rolling hash of mapData, because
+// terrain CAN change mid-floor (smashed cracked walls, unlocked vault doors,
+// spent shrines/fountains, boss wall-digging): any tile edit changes the hash
+// and forces a rebuild, so the output stays pixel-identical. The dynamic dots
+// (hero/foes/allies/loot/NPCs) keep drawing on top every frame.
+let _mmTerrain = null, _mmTerrainKey = '';
+function _mmTerrainHash() {
+  let h = 0;
+  for (let y = 0; y < MAP_H; y++) {
+    const row = mapData[y]; if (!row) continue;
+    for (let x = 0; x < MAP_W; x++) h = (h * 31 + row[x]) | 0;
+  }
+  return h;
+}
 let minimapCollapsed = false;
 try { minimapCollapsed = localStorage.getItem('dungeonLootMiniCollapsed') === '1'; } catch (e) {}
 function toggleMinimap() {
@@ -14587,16 +14894,27 @@ function drawMinimap() {
   const m = _mmCtx || (_mmCtx = el.getContext('2d'));
   m.clearRect(0, 0, w, h);
 
-  // Terrain layer.
-  for (let y = 0; y < MAP_H; y++) {
-    const row = mapData[y]; if (!row) continue;
-    for (let x = 0; x < MAP_W; x++) {
-      const c = MM_TCOL[row[x]];
-      if (!c) continue;
-      m.fillStyle = c;
-      m.fillRect(x * PX, y * PX, PX, PX);
+  // Terrain layer — blitted from the offscreen cache, rebuilt only when the
+  // floor, the canvas size, or any terrain tile changes (see _mmTerrainHash).
+  const tKey = floorSerial + ':' + w + 'x' + h + ':' + _mmTerrainHash();
+  if (!_mmTerrain || _mmTerrainKey !== tKey) {
+    _mmTerrainKey = tKey;
+    if (!_mmTerrain) _mmTerrain = document.createElement('canvas');
+    if (_mmTerrain.width !== w) _mmTerrain.width = w;
+    if (_mmTerrain.height !== h) _mmTerrain.height = h;
+    const tm = _mmTerrain.getContext('2d');
+    tm.clearRect(0, 0, w, h);
+    for (let y = 0; y < MAP_H; y++) {
+      const row = mapData[y]; if (!row) continue;
+      for (let x = 0; x < MAP_W; x++) {
+        const c = MM_TCOL[row[x]];
+        if (!c) continue;
+        tm.fillStyle = c;
+        tm.fillRect(x * PX, y * PX, PX, PX);
+      }
     }
   }
+  m.drawImage(_mmTerrain, 0, 0);
 
   // Markers, drawn a touch larger than a tile so they pop against the floor.
   const dot = (x, y, color, s) => {
@@ -14715,28 +15033,39 @@ function drawStairsArrow(offX, offY, tw, th, W, H) {
 // there". Off with the Monster Arrows setting; hidden in town. Geometry (which
 // foes are off-screen, where each arrow sits, the merge) lives in the pure
 // systems/offscreenArrows module; this just draws what it returns.
+// Scratch target list reused across frames — offscreenArrows reads it
+// synchronously and keeps no reference, so recycling the array and its slot
+// objects avoids allocating per foe per frame on a busy floor.
+const _arrowTargets = [];
 function drawMonsterArrows(offX, offY, tw, th, W, H) {
   if (!showMonsterArrows) return;
   if (inTown || !player || !Array.isArray(mapData) || !mapData.length) return;
   if (typeof enemies === 'undefined' || !enemies.length) return;
 
-  const targets = [];
+  let nT = 0;
   for (const e of enemies) {
     // Skip the dead and fleeing treasure goblins: goblins never seal the floor
     // (see hostilesRemaining / floorCleared), so a red "threat" arrow at one would
     // contradict the "foes sealing the stairs" intent — chase them by eye instead.
     if (e.dead || e.isGoblin) continue;
+    // On-screen foes get no arrow anyway (the module applies this exact test), so
+    // skip them up front and don't build target entries for them at all.
+    const span = e.size || 1;
+    if (tileOnScreen(e.x, e.y, span, offX, offY, tw, th, W, H)) continue;
     // e.fx/fy is the smooth footprint CENTRE (may be null before its first render
     // tick); the module falls back to the footprint centre when cx/cy are absent.
-    targets.push({ x: e.x, y: e.y, span: e.size || 1, cx: e.fx, cy: e.fy });
+    const t = _arrowTargets[nT] || (_arrowTargets[nT] = {});
+    t.x = e.x; t.y = e.y; t.span = span; t.cx = e.fx; t.cy = e.fy;
+    nT++;
   }
-  if (!targets.length) return;
+  _arrowTargets.length = nT;
+  if (!nT) return;
 
   const size = Math.max(9, tw * 0.42);          // ~half the stairs arrowhead
   const pad = Math.max(10, tw * 0.55);          // keep the whole head inside the panel
   const arrows = offscreenArrows({
     hero: { fx: player.fx, fy: player.fy },
-    targets, cam: { offX, offY, tw, th }, view: { W, H },
+    targets: _arrowTargets, cam: { offX, offY, tw, th }, view: { W, H },
     pad, mergeDist: size * 1.6,                  // fold a same-direction pack into one arrow
     max: MONSTER_ARROW_CAP,                      // and never ring the whole screen (minimap has the rest)
   });
@@ -14794,6 +15123,8 @@ function spawnFloatingText(x, y, text, color, size, coin) {
 // particles, and a white hit-flash on struck foes. All purely visual and
 // self-expiring; the pulse loop keeps repainting while any are live.
 let particles = [];
+const PARTICLE_CAP = 600;   // hard ceiling — past it the oldest spark is recycled, invisible in a big fight's chaos
+const _particlePool = [];   // expired spark objects, reused by spawnParticles to kill allocation churn
 let shakeMag = 0, shakeUntil = 0;
 function addShake(mag) { shakeMag = Math.max(shakeMag, mag); shakeUntil = Date.now() + 200; }  // rAF loop redraws every frame — no forced draw() needed
 // Burst of `n` little sparks at map-tile (x,y), drifting and fading.
@@ -14801,18 +15132,30 @@ function spawnParticles(x, y, color, n, speed) {
   const now = Date.now();
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, s = (0.3 + Math.random()) * (speed || 0.06);
-    particles.push({ x: x + 0.5, y: y + 0.5, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 0.02,
-      born: now, life: 280 + Math.random() * 220, color });
+    // At the cap, recycle the oldest live spark; otherwise reuse a pooled dead
+    // one (every field is reset below) before allocating fresh.
+    let p;
+    if (particles.length >= PARTICLE_CAP) p = particles.shift();
+    else p = _particlePool.pop() || {};
+    p.x = x + 0.5; p.y = y + 0.5;
+    p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s - 0.02;
+    p.born = now; p.life = 280 + Math.random() * 220; p.color = color;
+    particles.push(p);
   }
   // No draw() here: the rAF game loop already redraws every frame, so forcing a
   // full extra redraw on every particle burst (several per frame in a big fight)
   // was pure duplicated work. The sparks still appear on the very next frame.
 }
-// Current camera-shake offset in pixels (decays to 0), used by draw().
+// Current camera-shake offset in pixels (decays to 0), used by draw(). Returns a
+// reused two-slot scratch array — draw() destructures it immediately and never
+// retains it, so recycling kills the per-frame allocation.
+const _shakeXY = [0, 0];
 function shakeOffset() {
-  if (Date.now() >= shakeUntil || shakeMag <= 0) { shakeMag = 0; return [0, 0]; }
+  if (Date.now() >= shakeUntil || shakeMag <= 0) { shakeMag = 0; _shakeXY[0] = _shakeXY[1] = 0; return _shakeXY; }
   const k = (shakeUntil - Date.now()) / 200, m = shakeMag * k;
-  return [(Math.random() * 2 - 1) * m, (Math.random() * 2 - 1) * m];
+  _shakeXY[0] = (Math.random() * 2 - 1) * m;
+  _shakeXY[1] = (Math.random() * 2 - 1) * m;
+  return _shakeXY;
 }
 // A soft drop-shadow ellipse under an actor, for grounding/depth.
 // ── Attack lunge animation ────────────────────────────────────────────────
@@ -14873,6 +15216,9 @@ function _glowSprite(cache, rgb, ring) {
   else      { grd.addColorStop(0, `rgba(${rgb},1)`); grd.addColorStop(1, `rgba(${rgb},0)`); }
   g.fillStyle = grd;
   g.beginPath(); g.arc(c, c, c, 0, Math.PI * 2); g.fill();
+  // Safety cap: pathological colour churn could otherwise grow the cache without
+  // bound — reset it rather than let it pass 128 entries (rebuilds are cheap).
+  if (cache.size > 128) cache.clear();
   cache.set(rgb, cv);
   return cv;
 }
@@ -15300,7 +15646,7 @@ function tickStatusEffects() {
         notePlayerDamage(dmg, 'poison', true);
         spawnFloatingText(player.x, player.y, `${dmg}`, '#44dd44');
         log(`<span data-spr=potion_g></span> Poison deals ${dmg} damage!`);
-        updateBars();
+        markHudDirty();
       }
       if (pulse && s.effect === 'burn') {
         const dmg = 4 + Math.round(dungeonLevel * 1.5);
@@ -15308,7 +15654,7 @@ function tickStatusEffects() {
         notePlayerDamage(dmg, 'burning', true);
         spawnFloatingText(player.x, player.y, `${dmg}`, '#ff8a3a');
         log(`<span data-spr=ic_fire></span> Burning deals ${dmg} damage!`);
-        updateBars();
+        markHudDirty();
       }
       if (pulse && s.effect === 'stun') {
         log('<span data-spr=ic_stun></span> You are stunned and cannot move!');
@@ -15418,7 +15764,8 @@ function addStatic(e, n, spread) {
 // Ice: stack chill (slows in enemyMove); the 3rd stack flash-freezes (a brief
 // stun) and clears the chill so it has to be built back up.
 function isChilled(e) {
-  return statusEffects.some(s => s.target === e && s.effect === 'chill');
+  const f = enemyMoveStatus(e);   // one shared pass over statusEffects (see the cache)
+  return !!(f && f.chill);
 }
 function addChill(e) {
   if (e.dead || e.isGoblin) return;
@@ -15490,11 +15837,17 @@ function activeHalos() {
   }
   return halos;
 }
+// Last written vignette styles — the halo runs every frame, so skip the CSSOM
+// writes when the computed values haven't changed (idle/paused is the common case).
+let _haloShadow = null, _haloOpacity = null;
 function updateHaloVignette() {
-  const vig = document.getElementById('low-hp-vignette');
+  const vig = hudEl('low-hp-vignette');
   if (!vig) return;
   const halos = activeHalos();
-  if (!halos.length) { if (vig.style.opacity !== '0') vig.style.opacity = '0'; return; }
+  if (!halos.length) {
+    if (_haloOpacity !== '0') { _haloOpacity = '0'; vig.style.opacity = '0'; }
+    return;
+  }
   const phase = animNow() % (halos.length * HALO_SLOT_MS);
   const idx = Math.floor(phase / HALO_SLOT_MS);
   const local = (phase % HALO_SLOT_MS) / HALO_SLOT_MS; // 0..1 within this colour's slot
@@ -15502,8 +15855,10 @@ function updateHaloVignette() {
   // With several halos we fade fully to 0 between colours so the swap is unseen;
   // a single halo keeps a visible floor so it pulses without blinking off.
   const base = halos.length > 1 ? 0 : 0.35;
-  vig.style.boxShadow = `inset 0 0 90px 28px ${HALO_COLORS[halos[idx]]}`;
-  vig.style.opacity = (base + (1 - base) * fade).toFixed(3);
+  const shadow = `inset 0 0 90px 28px ${HALO_COLORS[halos[idx]]}`;
+  if (shadow !== _haloShadow) { _haloShadow = shadow; vig.style.boxShadow = shadow; }
+  const op = (base + (1 - base) * fade).toFixed(3);
+  if (op !== _haloOpacity) { _haloOpacity = op; vig.style.opacity = op; }
 }
 
 function tryBossStatusProc(e) {
@@ -15733,14 +16088,19 @@ const ITEM_POWERS = {
 function rollItemPower() { const ks = Object.keys(ITEM_POWERS); return ks[Math.floor(Math.random() * ks.length)]; }
 // How many active worn pieces carry a given power (so two Vampiric pieces stack).
 // Fast path: if no worn piece even carries the power, skip the active resolve.
+// Memoized per power key in the loadout cache — dealDamage probes vampiric/arcing
+// on every blow, and the answer only moves when gear does.
 function itemPowerCount(key) {
+  const c = loadoutCache();
+  const memo = c.powerN || (c.powerN = {});
+  if (memo[key] !== undefined) return memo[key];
   let raw = 0;
   for (const slot of SLOT_KEYS) { const it = equipped[slot]; if (it && it.power === key) raw++; }
-  if (!raw) return 0;
+  if (!raw) return memo[key] = 0;
   const active = activeSlots();
   let n = 0;
   for (const slot of SLOT_KEYS) { const it = equipped[slot]; if (it && it.power === key && active[slot]) n++; }
-  return n;
+  return memo[key] = n;
 }
 function hasItemPower(key) { return itemPowerCount(key) > 0; }
 // Flat stat bonuses granted by worn powers that carry a `stats` map. Percent
@@ -15889,7 +16249,10 @@ function itemPowerLine(item) {
 // Shrines grant a temporary buff (lasts a few floors) or an instant effect.
 function activateShrine(nx, ny) {
   const info = shrineData[ny+','+nx];
+  const wasT = mapData[ny][nx];
   mapData[ny][nx] = 0;            // shrine is spent
+  bumpMapEpochIfChanged(wasT, 0); // shrine→floor bakes identically — no rebake stall
+  pathGridDirty();                // …but the opened tile joins the pathfinding grid
   delete shrineData[ny+','+nx];
   const kind = info ? info.kind : 'power';
   sfx(kind === 'blood' ? 'hurt' : 'shrine');
@@ -16244,7 +16607,7 @@ function playerSolidCell(cx, cy, ignoreFoes) {
 function breakAhead(cx, cy) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
   const t = mapData[cy][cx];
-  if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
+  if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; bumpMapEpochIfChanged(t, 0); pathGridDirty(); log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
 }
 
 // Land one shove on the cracked wall at (cx,cy): chip it further, and collapse it
@@ -16260,7 +16623,8 @@ function smashCrackedWall(cx, cy) {
   spawnParticles(cx, cy, '#544a3d', broken ? 8 : 4, broken ? 0.10 : 0.06);  // dark chips
   if (broken) {
     mapData[cy][cx] = 0;
-    mapEpoch++;                 // wall removed → invalidate the wall-shadow cache
+    mapEpoch++;                 // wall removed → invalidate the wall-shadow + terrain bakes
+    pathGridDirty();            // …and the opened tile joins the pathfinding grid
     delete wallCracks[key];
     sfx('wall-break');
     log('🧱 You smash through the cracked wall!', 'loot');
@@ -16361,24 +16725,40 @@ function pathStepCost(x, y) {
 // A* from cell (sx,sy) to (gx,gy) over walkable cells: 8-directional, no corner
 // cutting past walls, hazard-weighted. Returns waypoints as tile-centre world
 // points (the start cell dropped, destination last), or null if unreachable.
+// The three map-sized fields are module scratch reused across calls (click-to-
+// move replans every 0.35s, and deep floors are big) — a generation stamp marks
+// which cells this call has touched, so nothing is refilled per call.
+let _tpN = 0, _tpG = null, _tpCame = null, _tpClosed = null, _tpStamp = null, _tpGen = 0;
+const _tpHN = [], _tpHF = [];   // heap scratch, truncated per call
 function findTilePath(sx, sy, gx, gy) {
   if (gx < 0 || gy < 0 || gx >= MAP_W || gy >= MAP_H) return null;
   if (sx === gx && sy === gy) return null;
   if (pathCellBlocked(gx, gy)) return null;               // clicked into a wall — nothing to reach
   const W = MAP_W, H = MAP_H, N = W * H;
-  const g = new Float64Array(N).fill(Infinity);
-  const came = new Int32Array(N).fill(-1);
-  const closed = new Uint8Array(N);
+  if (N > _tpN) {                                         // grow-only; maps only get bigger with depth
+    _tpN = N;
+    _tpG = new Float64Array(N); _tpCame = new Int32Array(N);
+    _tpClosed = new Uint8Array(N); _tpStamp = new Int32Array(N);
+  }
+  // Same wrap-at-storage-width rule as the BFS stamps (there Uint16, here Int32):
+  // past 2^31 the Int32Array truncates and every stamp compare goes false. Decades
+  // away at click-to-move cadence, but the guard costs nothing.
+  if (++_tpGen > 0x7fffffff) { _tpStamp.fill(0); _tpGen = 1; }
+  const gen = _tpGen, stamp = _tpStamp;
+  // A cell is only meaningful once stamped by THIS call; unstamped reads as
+  // { g: Infinity, came: -1, closed: 0 } — identical to the old fresh arrays.
+  const g = _tpG, came = _tpCame, closed = _tpClosed;
+  const touch = (i) => { if (stamp[i] !== gen) { stamp[i] = gen; g[i] = Infinity; came[i] = -1; closed[i] = 0; } };
   const start = sy * W + sx, goal = gy * W + gx;
   const hEst = (x, y) => { const ax = Math.abs(x - gx), ay = Math.abs(y - gy); return (ax + ay) + (Math.SQRT2 - 2) * Math.min(ax, ay); }; // octile
   // Tiny binary min-heap keyed by f (each entry carries its own f, so re-pushing
   // an improved node never corrupts stale copies still in the heap).
-  const hN = [], hF = [];
+  const hN = _tpHN, hF = _tpHF; hN.length = 0; hF.length = 0;
   const swap = (i, j) => { const n = hN[i]; hN[i] = hN[j]; hN[j] = n; const f = hF[i]; hF[i] = hF[j]; hF[j] = f; };
   const push = (n, f) => { hN.push(n); hF.push(f); let i = hN.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (hF[p] <= hF[i]) break; swap(p, i); i = p; } };
   const pop = () => { const top = hN[0], ln = hN.pop(), lf = hF.pop(); if (hN.length) { hN[0] = ln; hF[0] = lf; let i = 0; for (;;) { let l = 2*i+1, r = 2*i+2, s = i; if (l < hN.length && hF[l] < hF[s]) s = l; if (r < hN.length && hF[r] < hF[s]) s = r; if (s === i) break; swap(s, i); i = s; } } return top; };
   const DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-  g[start] = 0; push(start, hEst(sx, sy));
+  touch(start); g[start] = 0; push(start, hEst(sx, sy));
   let guard = N * 8;
   while (hN.length && guard-- > 0) {
     const cur = pop();
@@ -16390,6 +16770,7 @@ function findTilePath(sx, sy, gx, gy) {
       const nx = cx + DIRS[d][0], ny = cy + DIRS[d][1];
       if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
       const ni = ny * W + nx;
+      touch(ni);
       if (closed[ni] || pathCellBlocked(nx, ny)) continue;
       const diag = DIRS[d][0] !== 0 && DIRS[d][1] !== 0;
       if (diag && (pathCellBlocked(cx + DIRS[d][0], cy) || pathCellBlocked(cx, cy + DIRS[d][1]))) continue; // never clip a wall corner
@@ -16397,7 +16778,7 @@ function findTilePath(sx, sy, gx, gy) {
       if (ng < g[ni]) { g[ni] = ng; came[ni] = cur; push(ni, ng + hEst(nx, ny)); }
     }
   }
-  if (came[goal] === -1) return null;                     // no route
+  if (stamp[goal] !== gen || came[goal] === -1) return null;   // no route
   const path = [];
   for (let n = goal; n !== start && n !== -1; n = came[n]) path.push({ x: (n % W) + 0.5, y: ((n / W) | 0) + 0.5 });
   path.reverse();
@@ -16434,9 +16815,24 @@ function updateMoveTargetPath(force) {
 // epsilon above), so this never disturbs a foe you're simply meleeing.
 const UNSTICK_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 const UNSTICK_MAGS = [0.1, 0.2, 0.32, 0.46, 0.62];
+// Last CLEAR overlap check, so the every-frame test can be skipped while nothing
+// relevant has changed: the hero hasn't moved, no world beat ran (foes hop tiles
+// and hazards spawn/expire only on the world clock or via the tracked enemy-move
+// epoch — casts that pull/knock foes around bump it between beats), no foe
+// spawned, and the floor wasn't rebuilt. Mid-floor terrain changes only ever OPEN
+// tiles, so a cached "clear" can never go stale from them. Only a clear result is
+// cached — a blocked hero's shove-out distance depends on dt, so it always reruns.
+let _usFx = NaN, _usFy = 0, _usFloor = -1, _usEpoch = -1, _usLen = -1, _usTick = -1, _usArr = null;
 function unstickPlayer(dt) {
   if (player._squeezeT > 0) return;   // a mob-squeeze owns the hero — don't yank it back into the pile
-  if (!playerBoxBlocked(player.fx, player.fy)) return;
+  if (player.fx === _usFx && player.fy === _usFy && _usFloor === floorSerial && _usArr === enemies &&
+      _usLen === enemies.length && _usEpoch === _enemyPosEpoch && _usTick === _worldTicks) return;
+  if (!playerBoxBlocked(player.fx, player.fy)) {
+    _usFx = player.fx; _usFy = player.fy; _usFloor = floorSerial; _usArr = enemies;
+    _usLen = enemies.length; _usEpoch = _enemyPosEpoch; _usTick = _worldTicks;
+    return;
+  }
+  _usFx = NaN;   // blocked — never cache this outcome
   // Eject the way the hero is actively trying to go, so the shove-out follows intent
   // instead of always popping the same direction. Unit the 8 dirs, then order them
   // by how well they line up with the current movement input (if any).
@@ -16895,7 +17291,10 @@ function useFountain(nx, ny) {
   player.hp = player.maxHp;
   player.mp = player.maxMp;
   player.potionCd = 0; // a sip also resets your potion cooldown
+  const wasT = mapData[ny][nx];
   mapData[ny][nx] = 0; // fountain is spent
+  bumpMapEpochIfChanged(wasT, 0); // fountain→floor bakes identically — no rebake stall
+  pathGridDirty();     // …but the opened tile joins the pathfinding grid
   hasFountain = false;
   sfx('potion');
   log(`<span data-spr=feat_shrine></span> The Fountain of Healing restores you to full HP and MP!`, 'important');
@@ -16958,7 +17357,13 @@ function getWeaponDamage() {
 // Sum a flat stat (ATK, DEF, etc.) across all equipped gear. Titan's Grip lets you
 // wield an off-hand alongside a two-hander, but at a cost: its stats count for 60%.
 // The guard is cheap (the rare 2H+off-hand combo) so skillFlag is rarely hit.
+// Memoized per stat name in the loadout cache: the sum reads only worn gear, set
+// thresholds and item-power bonuses (never buffs/status), so it only moves when
+// gear, attributes or skills do — exactly what bumpLoadout tracks.
 function totalStat(name) {
+  const c = loadoutCache();
+  const memo = c.stats || (c.stats = {});
+  if (memo[name] !== undefined) return memo[name];
   const active = activeSlots();
   let sum = 0;
   const tgPenalty = (equipped.offhand && isTwoHander(equipped.weapon) && skillFlag('titangrip')) ? 0.6 : 1;
@@ -16969,7 +17374,7 @@ function totalStat(name) {
       sum += (slot === 'offhand' && tgPenalty !== 1) ? Math.round(it.stats[name] * tgPenalty) : it.stats[name];
     }
   }
-  return sum + setStatBonus(name) + itemPowerStatBonus(name);   // set thresholds + special-power stat bonuses
+  return memo[name] = sum + setStatBonus(name) + itemPowerStatBonus(name);   // set thresholds + special-power stat bonuses
 }
 
 // Armor reduces incoming damage by a *percentage* with diminishing returns,
@@ -17223,7 +17628,7 @@ function bossFarmMult(e) {
 
 // Everything that happens when a foe falls: XP, gold, and the loot rolls.
 function onEnemyDefeated(e) {
-  e.dead = true;
+  e.dead = true; bumpEnemyPos();   // its tile is free — refresh the occupancy index
   // Summoned minions are pure threat — they drop NO XP, gold or loot, so a
   // summoner boss can't be farmed by killing the fodder it spawns endlessly.
   if (e.minion) { sfx('kill'); updateFloorClear(); return; }
@@ -17390,8 +17795,10 @@ function onEnemyDefeated(e) {
     else if (quest.type === 'cleanse' && enemies.every(en => en.dead || en.isGoblin)) completeQuest('The floor is cleansed of monsters!');
   }
   checkLevelUp();
-  // Loot dropped by the foe went straight into the pack — refresh the panel.
-  renderPanel();
+  // Loot dropped by the foe went straight into the pack — refresh the panel. Via
+  // the dirty flag: the loop flushes at most one rebuild per frame, and only while
+  // the drawer is actually on-screen (a kill with the bag closed costs nothing).
+  renderPanelSoon();
   // With this foe down, the floor may now be clear — unseal the stairs if so.
   updateFloorClear();
 }
@@ -17658,6 +18065,11 @@ function autoCastWorthwhile(node) {
 // the moment it's ready — no global pacing, since there's only one to fire.
 function tickAutoCast(dt) {
   if (inTown || portalChanneling() || isPlayerStunned() || player.hp <= 0) return;
+  // Nothing in the auto-cast slot — and no legacy per-skill flag left for
+  // normAutoSkill to migrate into it — means there is nothing to fire; skip the
+  // slot normalisation (this runs every frame).
+  const ac = player.autoCast;
+  if (!player.autoSkill && !(ac && typeof ac === 'object' && Object.keys(ac).some(k => ac[k]))) return;
   const id = normAutoSkill();
   if (!id || !autoCastWorthwhile(skillNode(id))) return;
   // A silent probe: castSkillById bails (no log, no cost) if the skill is on
@@ -17682,6 +18094,18 @@ function foesInRange(range) {
   return enemies
     .filter(o => !o.dead && (Math.abs(o.x - player.x) + Math.abs(o.y - player.y)) <= range)
     .sort((a, b) => (Math.abs(a.x - player.x) + Math.abs(a.y - player.y)) - (Math.abs(b.x - player.x) + Math.abs(b.y - player.y)));
+}
+// The single nearest living foe within Manhattan `range` — one linear pass for the
+// hot callers that only need foesInRange(...)[0]. Strict `<` keeps the first foe in
+// enemy-array order on a distance tie, matching the stable sort it replaces.
+function nearestFoeInRange(range) {
+  let best = null, bestD = Infinity;
+  for (const o of enemies) {
+    if (o.dead) continue;
+    const d = Math.abs(o.x - player.x) + Math.abs(o.y - player.y);
+    if (d <= range && d < bestD) { best = o; bestD = d; }
+  }
+  return best;
 }
 // A safe, unoccupied tile adjacent to enemy e for the hero to blink onto.
 // Skips lava (7) and spikes (8) so a teleport never strands the hero on a
@@ -17772,7 +18196,7 @@ function skillSpellDamage(e, cast, mult, rank) {
 
 // Direction (cardinal) toward the nearest foe in range, for line/beam shapes.
 function nearestFoeDir(range) {
-  const f = foesInRange(range)[0];
+  const f = nearestFoeInRange(range);
   if (!f) return null;
   const dx = f.x - player.x, dy = f.y - player.y;
   if (Math.abs(dx) >= Math.abs(dy)) return [Math.sign(dx) || 1, 0];
@@ -17791,11 +18215,17 @@ function foesInLine(dir, range) {
   });
 }
 // Greedy chain: nearest unhit foe within 3 tiles of the last, up to n links.
+// Each link is a linear min-distance pass (strict `<` keeps enemy-array order on
+// ties, matching the stable filter+sort it replaces).
 function chainTargets(first, n, range) {
   const hit = [first]; let last = first;
   for (let k = 1; k < n; k++) {
-    const nxt = enemies.filter(o => !o.dead && !hit.includes(o) && (Math.abs(o.x - last.x) + Math.abs(o.y - last.y)) <= 3)
-      .sort((a, b) => (Math.abs(a.x - last.x) + Math.abs(a.y - last.y)) - (Math.abs(b.x - last.x) + Math.abs(b.y - last.y)))[0];
+    let nxt = null, nxtD = Infinity;
+    for (const o of enemies) {
+      if (o.dead || hit.includes(o)) continue;
+      const d = Math.abs(o.x - last.x) + Math.abs(o.y - last.y);
+      if (d <= 3 && d < nxtD) { nxt = o; nxtD = d; }
+    }
     if (!nxt) break;
     hit.push(nxt); last = nxt;
   }
@@ -17841,9 +18271,15 @@ function resolveCast(node, rank) {
   switch (c.shape) {
     case 'self': case 'summon': break;
     case 'melee': {
-      const adj = adjacentToPlayer().sort((a, b) => a.hp - b.hp);
-      if (!adj.length) { castMsg(`No foe within reach.`); return false; }
-      targets = [adj[0]]; center = adj[0]; break;
+      // Weakest adjacent foe — a linear min by hp (strict `<` keeps enemy-array
+      // order on an hp tie, matching the stable sort it replaces).
+      let weakest = null;
+      for (const o of enemies) {
+        if (o.dead || Math.abs(o.x - player.x) > 1 || Math.abs(o.y - player.y) > 1) continue;
+        if (!weakest || o.hp < weakest.hp) weakest = o;
+      }
+      if (!weakest) { castMsg(`No foe within reach.`); return false; }
+      targets = [weakest]; center = weakest; break;
     }
     case 'cleave': {
       targets = adjacentToPlayer();
@@ -17856,12 +18292,12 @@ function resolveCast(node, rank) {
       break;
     }
     case 'bolt': {
-      const f = foesInRange(c.range || 6)[0];
+      const f = nearestFoeInRange(c.range || 6);
       if (!f) { castMsg(`No foe within range.`); return false; }
       targets = [f]; center = f; break;
     }
     case 'blast': {
-      const f = foesInRange(c.range || 6)[0];
+      const f = nearestFoeInRange(c.range || 6);
       if (!f) { castMsg(`No foe within range.`); return false; }
       center = f; targets = enemiesNear(c.radius || 1, f.x, f.y); break;
     }
@@ -17873,12 +18309,12 @@ function resolveCast(node, rank) {
       break;
     }
     case 'chain': {
-      const first = foesInRange(c.range || 6)[0];
+      const first = nearestFoeInRange(c.range || 6);
       if (!first) { castMsg(`No foe within range.`); return false; }
       targets = chainTargets(first, c.chain || 3, c.range || 6); break;
     }
     case 'teleport': {
-      const f = foesInRange(c.range || 6)[0];
+      const f = nearestFoeInRange(c.range || 6);
       if (!f) { castMsg(`No foe within range.`); return false; }
       const spot = adjacentOpenTile(f);
       if (spot) { setPlayerCell(spot.x, spot.y); }
@@ -17912,7 +18348,7 @@ function resolveCast(node, rank) {
   // the blow lands — turns a ranged burst into an instant gather-and-gut.
   if (c.pull && targets.length) {
     const spots = openTilesNear(player.x, player.y, targets.length + 2);
-    targets.forEach((e, k) => { const s = spots[k]; if (s && !e.isBoss) { e.x = s.x; e.y = s.y; } });
+    targets.forEach((e, k) => { const s = spots[k]; if (s && !e.isBoss) { e.x = s.x; e.y = s.y; bumpEnemyPos(); } });
   }
 
   // Feedback. Epic casts — every tree ULTIMATE capstone AND every ASCENSION-path
@@ -18038,7 +18474,7 @@ function resolveCast(node, rank) {
       for (let step = 0; step < c.knockback; step++) {
         const dx = Math.sign(e.x - center.x) || (Math.random() < 0.5 ? 1 : -1);
         const dy = Math.sign(e.y - center.y);
-        if (minionTileFree(e.x + dx, e.y + dy)) { e.x += dx; e.y += dy; } else break;
+        if (minionTileFree(e.x + dx, e.y + dy)) { e.x += dx; e.y += dy; bumpEnemyPos(); } else break;
       }
     }
   }
@@ -18122,21 +18558,29 @@ function runMinionTurn() {
   if (!minions.length) return;
   for (const m of minions) {
     if (m.ttl <= 0) continue;
-    const tgt = nearestEnemyTo(m.x, m.y);
+    // Nearest-foe memo: foes neither move nor die while THIS minion walks (the
+    // loop below only moves the minion), so nearestEnemyTo can only change when
+    // the minion itself changes tile — re-scan the roster only then.
+    let nt = nearestEnemyTo(m.x, m.y), ntX = m.x, ntY = m.y;
+    const nearestHere = () => {
+      if (m.x !== ntX || m.y !== ntY) { nt = nearestEnemyTo(m.x, m.y); ntX = m.x; ntY = m.y; }
+      return nt;
+    };
+    const tgt = nt;
     if (tgt) {
       const dist = Math.abs(tgt.x - m.x) + Math.abs(tgt.y - m.y);
       if (dist <= 1) minionAttack(m, tgt, false);
       else if (m.ranged && dist <= m.range && hasLineOfSight(m.x, m.y, tgt.x, tgt.y)) minionAttack(m, tgt, true);
       else if (m.speed > 0) {
         for (let s = 0; s < m.speed; s++) {
-          const t2 = nearestEnemyTo(m.x, m.y); if (!t2) break;
+          const t2 = nearestHere(); if (!t2) break;
           if (Math.abs(t2.x - m.x) + Math.abs(t2.y - m.y) <= 1) break;
           const step = enemyPathStep(m, t2.x, t2.y); if (!step) break;
           const nx = m.x + step[0], ny = m.y + step[1];
           if (nx === t2.x && ny === t2.y) break;
           if (minionTileFree(nx, ny)) { m.x = nx; m.y = ny; } else break;
         }
-        const t3 = nearestEnemyTo(m.x, m.y);
+        const t3 = nearestHere();
         if (t3 && Math.abs(t3.x - m.x) + Math.abs(t3.y - m.y) <= 1) minionAttack(m, t3, false);
       }
     }
@@ -18159,6 +18603,7 @@ function minionAttack(m, e, ranged) {
 // Run every nearby living enemy's turn once, bailing if the floor changes
 // mid-turn (e.g. a death warps you to the previous floor and rebuilds it).
 function runEnemyTurn() {
+  _worldTicks++;   // this is a world beat too — keep the serial honest for unstickPlayer's skip
   // (Legacy/unused path.) Combat buffs age in real seconds on the world clock now
   // (see worldTick); skill / potion cooldowns count down in real seconds too.
   for (const k in combatBuffs) { const b = combatBuffs[k]; if (b && b.secs > 0) { b.secs -= WORLD_TICK_SECONDS; if (b.secs <= 0) delete combatBuffs[k]; } }
@@ -18200,19 +18645,42 @@ function enemyTileFree(x, y) {
 }
 
 const ENEMY_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+// ENEMY_DIRS flattened into two parallel arrays (same order!) so the BFS hot loop
+// below can index them without destructuring a pair per neighbour.
+const ENEMY_DIR_X = [1, -1, 0, 0, 1, 1, -1, -1];
+const ENEMY_DIR_Y = [0, 0, 1, -1, 1, -1, 1, -1];
 
 // A snapshot grid of every tile a foe can't enter this instant — walls, conjured
 // boss barriers, town NPCs, the player's tile, and every living enemy footprint.
 // Rebuilt once per pathfind so the flood fill below can test a cell in O(1)
 // instead of re-scanning the whole enemy list (getEnemyAt) for every neighbour —
 // the difference between smooth and sluggish when a big pack is hunting you.
+//
+// The STATIC half (walls + solid furniture) is by far the expensive part of that
+// rebuild and almost never changes, so it lives in its own cached buffer: floor
+// (re)generation bumps floorSerial, and the handful of player interactions that
+// open a tile mid-floor (smashing a cracked wall, unlocking the vault door,
+// spending a shrine/fountain, disarming spikes) call pathGridDirty(). Every
+// pathfind then just memcpys the static grid and stamps the movers on top.
+let _pfStatic = null, _pfStaticFloor = -1, _pfStaticStale = true;
+function pathGridDirty() { _pfStaticStale = true; }
+function pathStaticGrid() {
+  const W = MAP_W, H = MAP_H, n = W * H;
+  if (!_pfStatic || _pfStatic.length !== n) { _pfStatic = new Uint8Array(n); _pfStaticStale = true; }
+  if (_pfStaticFloor !== floorSerial) _pfStaticStale = true;
+  if (!_pfStaticStale) return _pfStatic;
+  const b = _pfStatic;
+  for (let y = 0; y < H; y++) { const row = mapData[y]; const base = y * W; for (let x = 0; x < W; x++) b[base + x] = row[x] !== 0 ? 1 : 0; }
+  for (const k in furnitureMap) { const c = k.split(','); const fx = +c[1], fy = +c[0]; if (fx >= 0 && fy >= 0 && fx < W && fy < H) b[fy * W + fx] = 1; } // solid furniture — route around it
+  _pfStaticFloor = floorSerial; _pfStaticStale = false;
+  return b;
+}
 let _pfBlocked = null;
 function pathBlockedGrid() {
   const W = MAP_W, H = MAP_H, n = W * H;
   if (!_pfBlocked || _pfBlocked.length !== n) _pfBlocked = new Uint8Array(n);
   const b = _pfBlocked;
-  for (let y = 0; y < H; y++) { const row = mapData[y]; const base = y * W; for (let x = 0; x < W; x++) b[base + x] = row[x] !== 0 ? 1 : 0; }
-  for (const k in furnitureMap) { const c = k.split(','); const fx = +c[1], fy = +c[0]; if (fx >= 0 && fy >= 0 && fx < W && fy < H) b[fy * W + fx] = 1; } // solid furniture — route around it
+  b.set(pathStaticGrid());   // walls + furniture — one memcpy instead of a full rescan
   for (const h of bossHazards) if (h.kind === 'wall' && h.x >= 0 && h.y >= 0 && h.x < W && h.y < H) b[h.y * W + h.x] = 1;
   for (const o of enemies) {
     if (o.dead) continue;
@@ -18235,24 +18703,38 @@ function pathBlockedGrid() {
 // `came`/`seen` are reused scratch buffers stamped with a per-call generation so
 // neither needs reallocating or clearing each turn (only the rare stamp wrap
 // does), and the "is this tile free?" test reads the precomputed blocked grid.
-let _pfCame = null, _pfSeen = null, _pfGen = 0;
+// The queue is a reused flat buffer too (each cell enqueues at most once, so W*H
+// slots always suffice) — no growable array churn per pathfind.
+let _pfCame = null, _pfSeen = null, _pfQueue = null, _pfGen = 0;
 function enemyPathStep(e, tx, ty) {
   const W = MAP_W, H = MAP_H, n = W * H;
+  // Exploration bound: BFS can never dequeue more than every cell, so capping at
+  // the map area changes NO chase (old semantics exactly) — it only names the
+  // worst case. The real unreachable-flood savings come from the cached static
+  // grid + pooled queue, not from giving up early.
+  const exploreCap = n;
   const start = e.y * W + e.x, goal = ty * W + tx;
   if (start === goal) return null;
   const blocked = pathBlockedGrid();
-  if (!_pfCame || _pfCame.length !== n) { _pfCame = new Int32Array(n); _pfSeen = new Uint16Array(n); _pfGen = 0; }
-  const came = _pfCame, seen = _pfSeen;
-  if (++_pfGen === 0) { seen.fill(0); _pfGen = 1; } // stamp wrapped — clear once
+  if (!_pfCame || _pfCame.length !== n) { _pfCame = new Int32Array(n); _pfSeen = new Uint16Array(n); _pfQueue = new Int32Array(n); _pfGen = 0; }
+  const came = _pfCame, seen = _pfSeen, queue = _pfQueue;
+  // The seen stamps live in a Uint16Array, so the generation must wrap at the
+  // STORAGE width — a plain `=== 0` guard never fires on a JS number, and once
+  // gen outgrows 16 bits every `seen[ni] === gen` compare goes false forever:
+  // dedupe dies, the fixed-size queue silently overflows, and every foe freezes
+  // (~65k pathfinds ≈ under an hour of heavy combat). Wrap-and-clear instead.
+  if (++_pfGen > 0xffff) { seen.fill(0); _pfGen = 1; }
   const gen = _pfGen;
-  const queue = [start];
+  queue[0] = start;
   came[start] = -1; seen[start] = gen;
-  let qi = 0, found = false;
-  while (qi < queue.length) {
+  let qi = 0, qt = 1, found = false, dequeued = 0;
+  while (qi < qt) {
     const cur = queue[qi++];
     if (cur === goal) { found = true; break; }
+    if (++dequeued > exploreCap) break;       // backstop only — cap = map area, no chase is ever cut short
     const cx = cur % W, cy = (cur - cx) / W;
-    for (const [dx, dy] of ENEMY_DIRS) {
+    for (let d = 0; d < 8; d++) {
+      const dx = ENEMY_DIR_X[d], dy = ENEMY_DIR_Y[d];
       const nx = cx + dx, ny = cy + dy;
       if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
       const ni = ny * W + nx;
@@ -18262,7 +18744,7 @@ function enemyPathStep(e, tx, ty) {
       // Don't cut diagonally through a wall corner.
       if (dx !== 0 && dy !== 0 && mapData[cy][nx] !== 0 && mapData[ny][cx] !== 0) continue;
       came[ni] = cur; seen[ni] = gen;
-      queue.push(ni);
+      queue[qt++] = ni;
     }
   }
   if (!found) return null;
@@ -18278,7 +18760,8 @@ function enemyMove(e) {
   if (e.dead) return;
   if (e.isGoblin) { goblinFlee(e); return; }
   // Stunned foes lose their turn.
-  if (statusEffects.some(s => s.target === e && s.effect === 'stun')) return;
+  const _ms = enemyMoveStatus(e);   // one shared pass over statusEffects (see the cache)
+  if (_ms && _ms.stun) return;
 
   // Neutral foes never initiate — they hold their ground (with the rare idle
   // shuffle) until the player provokes them by attacking. Once provoked they
@@ -18364,7 +18847,7 @@ function enemyStep(e, mx, my) {
       const cx = nx + dx, cy = ny + dy;
       if (!enemyTileFree(cx, cy) && getEnemyAt(cx, cy) !== e) return false;
     }
-    e.x = nx; e.y = ny;
+    e.x = nx; e.y = ny; bumpEnemyPos();
     return true;
   }
   if (!enemyTileFree(nx, ny)) return false;
@@ -18375,7 +18858,7 @@ function enemyStep(e, mx, my) {
     const cornerY = mapData[e.y + my][e.x] !== 0 || furnitureMap[(e.y + my) + ',' + e.x] !== undefined;
     if (cornerX && cornerY) return false;
   }
-  e.x = nx; e.y = ny;
+  e.x = nx; e.y = ny; bumpEnemyPos();
   return true;
 }
 
@@ -18445,7 +18928,7 @@ function stepAwayFromPlayer(e) {
 const GOBLIN_ESCAPE_SECS = 6;
 // The goblin gives up and vanishes (no loot) when its getaway timer expires.
 function goblinEscape(e) {
-  e.dead = true;
+  e.dead = true; bumpEnemyPos();   // its tile is free — refresh the occupancy index
   spawnParticles(e.x, e.y, '#ffd24b', 14, 0.13);
   spawnFloatingText(e.x, e.y, 'POOF!', '#ffd24b');
   sfx('teleport');
@@ -18509,7 +18992,7 @@ function enemyAttackPlayer(e) {
   thornsReflect(e); // gear Thorns: flat reflected damage on melee
   tryBossStatusProc(e);
   tryChillProc(e, dmg);
-  updateBars();
+  markHudDirty();
   if (player.hp === 0) handleDeath();
 }
 
@@ -18562,7 +19045,7 @@ function landEnemyRangedHit(e, raw, color) {
   else screenFlash('rgba(180,40,40,0.18)');
   tryBossStatusProc(e);
   tryChillProc(e, dmg);
-  updateBars();
+  markHudDirty();
   if (player.hp === 0) handleDeath();
 }
 
@@ -18634,7 +19117,7 @@ function tickBossHazards() {
     spawnFloatingText(player.x, player.y, `${burn}`, '#ff7733');
     spawnParticles(player.x, player.y, '#ff7733', 5, 0.08);
     log(`<span data-spr=ic_fire></span> You stand in the flames for ${burn}!`);
-    updateBars();
+    markHudDirty();
   }
   bossHazards = bossHazards.filter(h => { h.secs -= WORLD_TICK_SECONDS; return h.secs > 0; });
 }
@@ -18673,7 +19156,7 @@ function bossHitPlayer(raw, e, color) {
   player.hp = Math.max(0, player.hp - dmg);
   notePlayerDamage(dmg, enemyLabel(e) + ' (special)');
   spawnFloatingText(player.x, player.y, `${dmg}`, color || '#ff3344');
-  updateBars();
+  markHudDirty();
   if (player.hp <= player.maxHp * 0.25) screenFlash('#cc0000');
   if (player.hp === 0) handleDeath();
   return dmg;
@@ -18846,7 +19329,7 @@ function bossBlink(e, dist) {
     for (const [bx, by] of spots) {
       if (bossBlockFits(e, bx, by)) {
         spawnParticles(e.x, e.y, '#cc66ff', 10, 0.1);
-        e.x = bx; e.y = by; e.cd = 6;
+        e.x = bx; e.y = by; e.cd = 6; bumpEnemyPos();
         spawnParticles(bx, by, '#cc66ff', 12, 0.12);
         log(`<span data-spr=feat_portal></span> ${e.name} blinks across the room!`, 'important');
         sfx('boss');
@@ -18929,7 +19412,7 @@ function bossCharge(e, dist) {
   let moved = 0;
   for (let step = 0; step < 5; step++) {
     if (!bossBlockFits(e, e.x + dx, e.y + dy)) break;
-    e.x += dx; e.y += dy; moved++;
+    e.x += dx; e.y += dy; moved++; bumpEnemyPos();
     if (footDist(e) <= 1) break;
   }
   if (moved === 0) return false;
@@ -19107,8 +19590,39 @@ function summonMinions(boss, n) {
 
 // Footprint-aware: a multi-tile boss occupies an N×N block from (e.x,e.y), so
 // any cell inside that block counts as "the boss" for collision and attacks.
+//
+// Backed by an occupancy index (tile -> foe) so the every-frame callers — the
+// hero's box-collision corner probes above all — cost one Map lookup instead of
+// scanning the whole roster. The index rebuilds lazily: spawns and floor resets
+// change the enemies array's length/identity, and everything that moves or kills
+// a foe calls bumpEnemyPos(), so a hit is never stale. Cells are stamped in
+// array order, first one wins — the same foe the old enemies.find() returned
+// when footprints ever overlap.
+let _occMap = new Map(), _occArr = null, _occLen = -1, _occStamp = -1, _occW = -1;
+let _enemyPosEpoch = 0;
+function bumpEnemyPos() { _enemyPosEpoch++; }
 function getEnemyAt(x,y) {
-  return enemies.find(e => { if (e.dead) return false; const s = e.size || 1; return x >= e.x && x < e.x + s && y >= e.y && y < e.y + s; }) || null;
+  if (_occArr !== enemies || _occLen !== enemies.length || _occStamp !== _enemyPosEpoch || _occW !== MAP_W) {
+    _occMap.clear();
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const s = e.size || 1;
+      for (let dy = 0; dy < s; dy++) for (let dx = 0; dx < s; dx++) {
+        const cx = e.x + dx, cy = e.y + dy;
+        // Skip cells outside the current map so no two tiles ever share a key
+        // (a stale cross-floor roster can briefly hold out-of-range coords mid-gen).
+        if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) continue;
+        const k = cy * MAP_W + cx;
+        if (!_occMap.has(k)) _occMap.set(k, e);
+      }
+    }
+    _occArr = enemies; _occLen = enemies.length; _occStamp = _enemyPosEpoch; _occW = MAP_W;
+  }
+  if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return null;  // no foe stands out of bounds
+  const e = _occMap.get(y * MAP_W + x);
+  if (!e || e.dead) return null;
+  const s = e.size || 1;   // re-verify the footprint — cheap insurance against a stale stamp
+  return (x >= e.x && x < e.x + s && y >= e.y && y < e.y + s) ? e : null;
 }
 // Smallest Manhattan distance from the player to any tile of an enemy's footprint.
 function footDist(e) {
@@ -19632,6 +20146,7 @@ function spendAttr(key, ev) {
   const amount = Math.min(bulk ? 5 : 1, player.attrPoints);
   player.attributes[key] = (player.attributes[key] || 0) + amount;
   player.attrPoints -= amount;
+  bumpLoadout();   // attributes feed the cached gear resolve (equip gates)
   // Raising Vitality/Spirit/Might immediately grants the extra HP/MP/Stamina it unlocks.
   if (key === 'vitality') { const before = player.maxHp; recomputeMaxStats(); player.hp += (player.maxHp - before); }
   else if (key === 'spirit') { const before = player.maxMp; recomputeMaxStats(); player.mp += (player.maxMp - before); }
@@ -19648,18 +20163,25 @@ function spendAttr(key, ev) {
 
 // The Stamina (stamina) bar updates every frame (it drains/refills continuously),
 // so it's split out and also called from the game loop, not just on updateBars().
+// Last written width/label — this runs every frame, and a full or idle stamina
+// bar is the common case, so skip the style/text writes when nothing changed.
+let _stamW = null, _stamTxt = null, _dhEndW = null;
 function renderStaminaBar() {
-  const bar = document.getElementById('stam-bar');
+  const bar = hudEl('stam-bar');
   if (!bar) return;
   const mx = player.maxStamina || MAX_STAMINA;
   const st = Math.max(0, Math.min(mx, player.stamina || 0));
-  bar.style.width = (st / mx * 100) + '%';
-  const txt = document.getElementById('stam-text');
-  if (txt) txt.textContent = `${Math.round(st)}/${mx}`;
+  const w = (st / mx * 100) + '%';
+  if (w !== _stamW) { _stamW = w; bar.style.width = w; }
+  const txt = hudEl('stam-text');
+  if (txt) {
+    const label = `${Math.round(st)}/${mx}`;
+    if (label !== _stamTxt) { _stamTxt = label; txt.textContent = label; }
+  }
   // Mirror onto the desktop bottom-HUD stamina bar (web layout only).
   if (isWebLayout()) {
-    const dhEnd = document.getElementById('dh-end-fill');
-    if (dhEnd) dhEnd.style.width = (st / mx * 100) + '%';
+    const dhEnd = hudEl('dh-end-fill');
+    if (dhEnd && w !== _dhEndW) { _dhEndW = w; dhEnd.style.width = w; }
   }
 }
 
@@ -19678,6 +20200,7 @@ function renderStaminaBar() {
 // drainPendingRecovery). This is purely how the fill is drawn; player.hp/.mp stay
 // integers. (glideVitalFill lives in systems/vitalFill.js so it can be unit-tested.)
 let _hpFillVis = null, _mpFillVis = null;   // eased visual HP/MP (null → snap on first frame)
+let _hpFillW = null, _mpFillW = null;       // last written fill widths (skip unchanged writes)
 const VITAL_EASE_TAU = 0.14;   // seconds — ease time constant for a rate-less instant sub-burst
 const VITAL_SNAP_FRAC = 0.30;  // a gain bigger than this share of max is a burst, not a trickle → snap
 // Live HP recovery rate (points/sec): passive regen while below max, plus each pending
@@ -19707,9 +20230,21 @@ function updateVitalFills(dt) {
     rate: mpRecoveryRate(), dt, tau: VITAL_EASE_TAU, snapFrac: VITAL_SNAP_FRAC });
   const clampPct = (v, mx) => (mx > 0 ? Math.max(0, Math.min(100, v / mx * 100)) : 0);
   const hpPct = clampPct(_hpFillVis, player.maxHp), mpPct = clampPct(_mpFillVis, player.maxMp);
-  const set = (id, pct) => { const el = document.getElementById(id); if (el) el.style.width = pct + '%'; };
-  set('hp-bar', hpPct); set('mp-bar', mpPct);        // mobile / main HUD
-  set('dh-hp-fill', hpPct); set('dh-mp-fill', mpPct); // desktop bottom HUD
+  // Both layouts get the same width string, so one changed-check covers each pair;
+  // a full (or steady) bar — the common case — skips the style writes entirely.
+  const hpW = hpPct + '%', mpW = mpPct + '%';
+  if (hpW !== _hpFillW) {
+    _hpFillW = hpW;
+    const a = hudEl('hp-bar'), b = hudEl('dh-hp-fill');   // mobile / desktop HUDs
+    if (a) a.style.width = hpW;
+    if (b) b.style.width = hpW;
+  }
+  if (mpW !== _mpFillW) {
+    _mpFillW = mpW;
+    const a = hudEl('mp-bar'), b = hudEl('dh-mp-fill');
+    if (a) a.style.width = mpW;
+    if (b) b.style.width = mpW;
+  }
 }
 // ── Active buffs & debuffs HUD strip ────────────────────────────────────────
 // A little row of DawnLike status icons showing every timed effect on the hero
@@ -19775,9 +20310,27 @@ function renderStatusStrip() {
     if (buffs[k] > 0) chips.push(buffChipHTML('s_' + k, buffs[k], 'floor', null));
   }
   const html = chips.join('');
+  if (html === _statusStripHtml) return;   // identical chips — skip the innerHTML teardown
+  _statusStripHtml = html;
   el.innerHTML = html;
   el.style.display = html ? '' : 'none';
 }
+// ── HUD damage coalescing ───────────────────────────────────────────────────
+// updateBars() is a heavy full-HUD pass, and every damage event (a melee hit, a
+// ranged bolt landing, a boss special, each poison/burn pulse) used to call it
+// synchronously — a pack striking in one world tick meant several full passes.
+// Damage paths now just mark the HUD dirty; flushHudDirty() (called once per
+// frame from gameLoop) folds them into at most one updateBars() per frame.
+let _hudDirty = false;
+function markHudDirty() { _hudDirty = true; }
+function flushHudDirty() { if (_hudDirty) { _hudDirty = false; updateBars(); } }
+// Last-written markup for the HUD bits below that are static most frames —
+// re-assigning identical innerHTML still tears down and re-parses the subtree,
+// so each write is guarded by comparing the freshly built string first.
+let _statusStripHtml = null;
+let _clearStatusHtml = null, _pactHudKey = null, _foodHudKey = null;
+let _invTabHtml = null, _heroTabHtml = null, _skillsTabHtml = null;
+let _skillBtnIconHtml = null;
 function updateBars() {
   renderStaminaBar();
   // Over-time recovery overlay helper: the pending element spans 0 → (current% +
@@ -19797,7 +20350,14 @@ function updateBars() {
   hpBar.classList.toggle('hp-low', hpLow);
   if (hpBar.parentElement) hpBar.parentElement.classList.toggle('hp-low-track', hpLow);
   document.getElementById('mp-text').textContent = `${player.mp}/${player.maxMp}`;
-  setPending('hp-pending', player.hp, player.maxHp, pendingHealTotal());
+  // Computed once, then reused by both the mobile header and the desktop
+  // bottom-HUD mirror below (each used to be computed twice per call, and
+  // playerPower() walks all gear + skills every time).
+  const power = playerPower();
+  const pendHeal = pendingHealTotal();
+  const floorNow = displayFloor();
+  const dm = diffMeta();
+  setPending('hp-pending', player.hp, player.maxHp, pendHeal);
   setPending('mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
   document.getElementById('gold-count').textContent = fmtGold(player.gold);
 
@@ -19811,12 +20371,12 @@ function updateBars() {
     if (dhHp) dhHp.classList.toggle('hp-low', hpLow);
     dset('dh-hp-val', `${player.hp}/${player.maxHp}`);
     dset('dh-mp-val', `${player.mp}/${player.maxMp}`);
-    setPending('dh-hp-pending', player.hp, player.maxHp, pendingHealTotal());
+    setPending('dh-hp-pending', player.hp, player.maxHp, pendHeal);
     setPending('dh-mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
     const dhXp = document.getElementById('dh-xp-fill');
     if (dhXp) dhXp.style.width = Math.min(100, player.xp / xpForLevel(player.level) * 100) + '%';
     dset('dh-xp-lvl', 'Lv ' + player.level);
-    dset('dh-power-num', playerPower());
+    dset('dh-power-num', power);
     dset('dh-gold-num', fmtGold(player.gold));
     const dhName = document.getElementById('dh-name');
     if (dhName) { dhName.textContent = player.name || ''; dhName.style.display = player.name ? '' : 'none'; }
@@ -19831,11 +20391,10 @@ function updateBars() {
 
   // Header HUD: current floor, level + XP progress, enemies remaining.
   const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  setText('floor-num', displayFloor());
+  setText('floor-num', floorNow);
   // Difficulty tag beside the floor number, coloured per tier.
   const fd = document.getElementById('floor-diff');
   if (fd) {
-    const dm = diffMeta();
     fd.textContent = dm.name;
     fd.style.color = dm.color;
     fd.style.background = dm.color + '22'; // faint tint of the tier colour behind the pill
@@ -19848,8 +20407,12 @@ function updateBars() {
   // Seal indicator (mobile header): a locked door while hostiles block the exit,
   // an open one once the floor is clear. Desktop drops the lock (see #map-info).
   const clearEl = document.getElementById('clear-status');
-  if (clearEl) clearEl.innerHTML = dlIcon('feat_door', 14);
-  setText('power-num', playerPower());
+  if (clearEl) {
+    // Static icon — only re-written when its markup changes (atlas load, UI scale).
+    const doorHtml = dlIcon('feat_door', 14);
+    if (doorHtml !== _clearStatusHtml) { _clearStatusHtml = doorHtml; clearEl.innerHTML = doorHtml; }
+  }
+  setText('power-num', power);
 
   // Desktop map-corner readout mirrors the floor + foe count (mobile keeps
   // these in the header). No lock icon: the foes pill simply hides once the
@@ -19857,7 +20420,7 @@ function updateBars() {
   const mapInfo = document.getElementById('map-info');
   if (mapInfo) {
     mapInfo.style.display = inTown ? 'none' : '';
-    setText('map-floor-num', displayFloor());
+    setText('map-floor-num', floorNow);
     const mfd = document.getElementById('map-floor-diff');
     if (mfd && fd) { mfd.textContent = fd.textContent; mfd.style.color = fd.style.color; mfd.style.background = fd.style.background; }
     setText('map-foes-num', foeCount);
@@ -19870,8 +20433,10 @@ function updateBars() {
   if (pactHud) {
     if (pact) {
       pactHud.style.display = '';
-      pactHud.innerHTML = (dlIcon(pact.icon, 14) || '') + ` <span class="hud-val" id="pact-num">${pact.floors}</span>`;
-      pactHud.dataset.tip = `<div class='ht-name'>${dlIcon(pact.icon, 14)} ${pact.name}</div><div class='ht-line'>A mystic pact is in effect — ${pact.floors} floor${pact.floors === 1 ? '' : 's'} left before it lifts.</div>`;
+      const html = (dlIcon(pact.icon, 14) || '') + ` <span class="hud-val" id="pact-num">${pact.floors}</span>`;
+      const tip = `<div class='ht-name'>${dlIcon(pact.icon, 14)} ${pact.name}</div><div class='ht-line'>A mystic pact is in effect — ${pact.floors} floor${pact.floors === 1 ? '' : 's'} left before it lifts.</div>`;
+      // Changes only when the pact or its floors-left change — skip the rebuild otherwise.
+      if (html + tip !== _pactHudKey) { _pactHudKey = html + tip; pactHud.innerHTML = html; pactHud.dataset.tip = tip; }
     } else {
       pactHud.style.display = 'none';
     }
@@ -19883,8 +20448,10 @@ function updateBars() {
     const fb = player.foodBuff;
     if (fb && fb.floors > 0) {
       foodHud.style.display = '';
-      foodHud.innerHTML = bowlIcon(14) + ` <span class="hud-val" id="food-num">${fb.floors}</span>`;
-      foodHud.dataset.tip = `<div class='ht-name' style='color:var(--orange-250)'>${fb.name}</div><div class='ht-line'>${fxDesc(fb.fx)}</div><div class='ht-line'>${fb.floors} floor${fb.floors === 1 ? '' : 's'} of buff left.</div>`;
+      const html = bowlIcon(14) + ` <span class="hud-val" id="food-num">${fb.floors}</span>`;
+      const tip = `<div class='ht-name' style='color:var(--orange-250)'>${fb.name}</div><div class='ht-line'>${fxDesc(fb.fx)}</div><div class='ht-line'>${fb.floors} floor${fb.floors === 1 ? '' : 's'} of buff left.</div>`;
+      // Changes only when the bowl or its floors-left change — skip the rebuild otherwise.
+      if (html + tip !== _foodHudKey) { _foodHudKey = html + tip; foodHud.innerHTML = html; foodHud.dataset.tip = tip; }
     } else {
       foodHud.style.display = 'none';
     }
@@ -19896,7 +20463,10 @@ function updateBars() {
   // Show how many items are in the bag right in the LOOT tab label, in the same
   // tab font (a dim bracket, not a badge).
   const invTab = document.getElementById('tab-inv');
-  if (invTab) invTab.innerHTML = `LOOT<span class="tab-num ${inventory.length>=BAG_MAX?'full':''}">(${inventory.length}/${BAG_MAX})</span>`;
+  if (invTab) {
+    const html = `LOOT<span class="tab-num ${inventory.length>=BAG_MAX?'full':''}">(${inventory.length}/${BAG_MAX})</span>`;
+    if (html !== _invTabHtml) { _invTabHtml = html; invTab.innerHTML = html; }
+  }
 
   // Nudge the HERO / SKILLS tabs when there are unspent points to spend. The
   // SKILLS badge combines both pools (normal skill + ascendancy), since both are
@@ -19905,12 +20475,14 @@ function updateBars() {
   const sPts = (player.skillPoints || 0) + (player.ascPoints || 0);
   const heroTab = document.getElementById('tab-hero');
   if (heroTab) {
-    heroTab.innerHTML = pts > 0 ? `HERO<span class="tab-count">${pts}</span>` : 'HERO';
+    const html = pts > 0 ? `HERO<span class="tab-count">${pts}</span>` : 'HERO';
+    if (html !== _heroTabHtml) { _heroTabHtml = html; heroTab.innerHTML = html; }
     heroTab.classList.toggle('has-points', pts > 0);
   }
   const skillsTab = document.getElementById('tab-skills');
   if (skillsTab) {
-    skillsTab.innerHTML = sPts > 0 ? `SKILLS<span class="tab-count">${sPts}</span>` : 'SKILLS';
+    const html = sPts > 0 ? `SKILLS<span class="tab-count">${sPts}</span>` : 'SKILLS';
+    if (html !== _skillsTabHtml) { _skillsTabHtml = html; skillsTab.innerHTML = html; }
     skillsTab.classList.toggle('has-points', sPts > 0);
   }
   // The tab glow only shows once the bag is open, so also surface a pulsing badge
@@ -19940,7 +20512,11 @@ function updateBars() {
       skillBtn.style.display = '';
       const icon = document.getElementById('skill-icon');
       const label = document.getElementById('skill-label');
-      if (icon) icon.innerHTML = dlIcon(sk.icon,28) || '';
+      if (icon) {
+        // Static per-skill icon — only re-written when its markup changes.
+        const iconHtml = dlIcon(sk.icon, 28) || '';
+        if (iconHtml !== _skillBtnIconHtml) { _skillBtnIconHtml = iconHtml; icon.innerHTML = iconHtml; }
+      }
       const cd = skillCd(sk.id);
       const ready = cd <= 0 && player.mp >= sk.mp && !inTown;
       if (label) label.textContent = cd > 0 ? `${Math.ceil(cd)}s` : `${sk.mp}MP`;
@@ -20094,7 +20670,9 @@ function lootRowVisible(item) {
 // rows (e.g. "+3 ATK · THN · +5 MIG"), so a new player can decode them without
 // hunting through tooltips. Built from STAT_SHORT/STAT_LABELS and ATTRIBUTES so
 // it can never drift out of sync with what the rows actually print.
+let _lootGlossaryHTML = null;   // built once — the key is pure static data
 function lootGlossaryHTML() {
+  if (_lootGlossaryHTML) return _lootGlossaryHTML;
   // Item stats split into themed buckets, alphabetical by short code within each,
   // so the long list stays scannable (and flows into two columns on desktop).
   // Keyed by internal stat key so it can never drift from STAT_SHORT/STAT_LABELS.
@@ -20122,7 +20700,7 @@ function lootGlossaryHTML() {
     const a = ATTRIBUTES[k];
     return `<div class="gl-row"><span class="gl-code">${a.short}</span><span class="gl-mean">${a.label} — ${a.desc}</span></div>`;
   }).join('');
-  return `<details class="loot-glossary"><summary>Stat abbreviations</summary>` +
+  return _lootGlossaryHTML = `<details class="loot-glossary"><summary>Stat abbreviations</summary>` +
     `<div class="gl-body">` +
     statSects +
     group('Attributes', attrRows) +
@@ -20216,40 +20794,47 @@ function renderPanel() {
     const lootCtrls = controls + sortPop + filterPop;
     // Rarity rank for sorting: junk 0 → unique 6 (higher = rarer).
     const TIER_KEYS = Object.keys(TIERS);
-    const tierRank = item => TIER_KEYS.indexOf(item.tier);
-    const powOf = it => it.slot ? itemPower(it) : -1;
-    const slotOf = it => it.slot in slotOrder ? slotOrder[it.slot] : 99;
-    // Sort comparator over {item} rows. A shared pre-pass always sinks pieces this
-    // class can't wield to the bottom; then the chosen key orders the rest.
+    // One pass over the bag: build the visible rows, decorating each with its sort
+    // keys ONCE (power, tier rank, slot rank, "can't wield" flag) so the comparator
+    // below doesn't re-derive them per comparison — and tally the bulk sell/scrap
+    // aggregates in the same sweep (locked pieces are always spared).
+    const rows = [];
+    let bulkN = 0, bulkScrapN = 0, bulkGold = 0;
+    inventory.forEach((item, i) => {
+      if (!lootRowVisible(item)) return;
+      rows.push({
+        item, i,
+        w: (item.slot && !canEquipItem(item)) ? 1 : 0,
+        pow: item.slot ? itemPower(item) : -1,
+        tr: TIER_KEYS.indexOf(item.tier),
+        so: item.slot in slotOrder ? slotOrder[item.slot] : 99,
+      });
+      if (!item.locked) {
+        bulkN++;
+        if (item.slot && TIERS[item.tier]) bulkScrapN++;
+        bulkGold += Math.max(1, Math.round(item.value * 0.5));
+      }
+    });
+    // Sort comparator over the decorated rows. A shared pre-pass always sinks
+    // pieces this class can't wield to the bottom; then the chosen key orders.
     const lootRowCompare = (a, b) => {
-      const wa = (a.item.slot && !canEquipItem(a.item)) ? 1 : 0;
-      const wb = (b.item.slot && !canEquipItem(b.item)) ? 1 : 0;
-      if (wa !== wb) return wa - wb;
-      const ia = a.item, ib = b.item;
+      if (a.w !== b.w) return a.w - b.w;
       switch (lootSort) {
         case 'power':
-          return powOf(ib) - powOf(ia) || tierRank(ib) - tierRank(ia) || slotOf(ia) - slotOf(ib);
+          return b.pow - a.pow || b.tr - a.tr || a.so - b.so;
         case 'slot':
-          return slotOf(ia) - slotOf(ib) || tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia);
+          return a.so - b.so || b.tr - a.tr || b.pow - a.pow;
         case 'value':
-          return (ib.value || 0) - (ia.value || 0) || tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia);
+          return (b.item.value || 0) - (a.item.value || 0) || b.tr - a.tr || b.pow - a.pow;
         case 'rarity':
         default:
           // Highest rarity first (unique → junk); Power breaks ties, then slot.
-          return tierRank(ib) - tierRank(ia) || powOf(ib) - powOf(ia) || slotOf(ia) - slotOf(ib);
+          return b.tr - a.tr || b.pow - a.pow || a.so - b.so;
       }
     };
-    const rows = inventory
-      .map((item, i) => ({ item, i }))
-      .filter(({ item }) => lootRowVisible(item))
-      .sort(lootRowCompare);
-    // Bulk sell / scrap for everything visible under the current filter (locked
-    // pieces are always spared). Mirrors the per-item buttons on a selected row.
-    const bulkTargets = inventory.filter(it => lootRowVisible(it) && !it.locked);
-    const bulkScrapN = bulkTargets.filter(it => it.slot && TIERS[it.tier]).length;
-    const bulkGold = bulkTargets.reduce((s, it) => s + Math.max(1, Math.round(it.value * 0.5)), 0);
+    rows.sort(lootRowCompare);
     const mMoney = dlIcon('ic_money', 13), mScrap = dlIcon('mat_scrap', 13);
-    const bulkBar = bulkTargets.length ? `<div class="loot-bulk-bar">
+    const bulkBar = bulkN ? `<div class="loot-bulk-bar">
       <button class="loot-bulk-btn" onclick="bagBulk('sell')">${mMoney} Sell all · <span data-spr=ic_money></span>${bulkGold}</button>
       ${bulkScrapN ? `<button class="loot-bulk-btn" onclick="bagBulk('scrap')">${mScrap} Scrap all · ${bulkScrapN}</button>` : ''}
     </div>` : '';
@@ -21100,8 +21685,12 @@ function positionSkillPop() {
 // markup and only touch the DOM when it differs. Live cooldown NUMBERS ride on the
 // per-frame updateCooldownDials (the .sb-cd dials), so they stay smooth regardless.
 let _lastSkillBarHtml = null;
+// Live refs into the current bar markup — the .sb-cd cooldown dials and the
+// .sb-cd-text countdown placeholders. Nulled whenever bar.innerHTML changes so
+// they re-resolve against the fresh nodes.
+let _sbCdEls = null, _sbCdTextEls = null;
 function renderSkillBar() {
-  const bar = document.getElementById('skill-bar');
+  const bar = hudEl('skill-bar');
   if (!bar) return;
   // A drag in progress rebuilds the dragged element out from under the pointer and
   // cancels the drop (the world clock re-renders the bar every tick). Hold the
@@ -21112,7 +21701,7 @@ function renderSkillBar() {
   // slots in town. On touch the SKILLS tab still carries that tray, so the bar would
   // just be a redundant second copy — keep the old behavior and hide it in town.
   const town = inTown && isWebLayout();
-  if (inTown && !town) { bar.style.display = 'none'; bar.innerHTML = ''; _lastSkillBarHtml = ''; document.body.classList.remove('town-bar'); syncTownBarReserve(); return; }
+  if (inTown && !town) { bar.style.display = 'none'; bar.innerHTML = ''; _lastSkillBarHtml = ''; _sbCdEls = _sbCdTextEls = null; document.body.classList.remove('town-bar'); syncTownBarReserve(); return; }
   // On the web layout the in-town bar parks as a solid tray the town menu leaves
   // room for (see syncTownBarReserve), with its potions inert. Out in the dungeon
   // it's the live combat bar, and it always renders even before any active is
@@ -21139,11 +21728,16 @@ function renderSkillBar() {
   // is the hotkey (or "AUTO" for the auto-cast slot); `tone` tints the pill to match
   // the button family ('' for a plain skill slot). The icon now fills the box below.
   const cell = (label, tone, btn) => `<div class="sb-cell"><span class="sb-pill${tone ? ' ' + tone : ''}">${label}</span>${btn}</div>`;
+  // The live countdown text ("4s" on a recharging potion, the portal timer) is
+  // deliberately NOT baked into the markup: it changed every second and busted
+  // the _lastSkillBarHtml cache, forcing a full bar rebuild each tick. The
+  // .sb-cd-text placeholders stay empty in the cached string and are filled via
+  // textContent in syncSkillBarCountdowns() on every render call instead.
   const healBtn = cell(kbShort(kbLabel('healthPotion')), 'hp', `<button class="skillbar-btn potion ${town ? 'town-locked' : (potReady && !hpFull ? 'ready' : 'empty')} ${urgent ? 'urgent' : ''} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} ${town ? '' : 'onclick="useHealthPotion()"'}>
-      <span class="sb-icon">${HEAL_POTION_SVG}</span><span class="sb-info" id="heal-label">${pcd > 0 ? Math.ceil(pcd) + 's' : ''}</span>${cdDial('pot')}
+      <span class="sb-icon">${HEAL_POTION_SVG}</span><span class="sb-info sb-cd-text" data-cdt="pot" id="heal-label"></span>${cdDial('pot')}
     </button>`);
   const manaBtn = cell(kbShort(kbLabel('manaPotion')), 'mp', `<button class="skillbar-btn potion mana ${town ? 'town-locked' : (potReady && !mpFull ? 'ready' : 'empty')} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} ${town ? '' : 'onclick="useManaPotion()"'}>
-      <span class="sb-icon">${MANA_POTION_SVG}</span><span class="sb-info">${pcd > 0 ? Math.ceil(pcd) + 's' : ''}</span>${cdDial('pot')}
+      <span class="sb-icon">${MANA_POTION_SVG}</span><span class="sb-info sb-cd-text" data-cdt="pot"></span>${cdDial('pot')}
     </button>`);
   // The four manual slots are rendered filled or empty (keys 1–4, all styled alike).
   // A filled slot casts on click and can be dragged to another slot to rearrange; an
@@ -21215,7 +21809,7 @@ function renderSkillBar() {
       ? `<div class='ht-name'><span data-spr=feat_gate_red></span> Town Portal</div><div class='ht-line'>Opening… ${Math.ceil(portalCharge)} second${Math.ceil(portalCharge) === 1 ? '' : 's'} left. A foe's hit shatters it.</div><div class='ht-sub'>press ${kbLabel('portal')} or move to cancel</div>`
       : `<div class='ht-name'><span data-spr=feat_gate_red></span> Town Portal</div><div class='ht-line'>Open a portal to the safe hub. It channels for a few seconds — you can't act while it does — moving or a foe's hit cancels it.</div><div class='ht-sub'>press ${kbLabel('portal')}</div>`;
     townBtn = cell(kbShort(kbLabel('portal')), 'town', `<button class="skillbar-btn town${here ? ' town-locked' : ''}${ch ? ' channeling' : ''}" ${hoverTip(townTip)} ${here ? '' : 'onclick="enterTown()"'}>
-      <span class="sb-icon">${dlIconFill('feat_gate_red')}</span><span class="sb-info">${ch ? Math.ceil(portalCharge) : ''}</span>
+      <span class="sb-icon">${dlIconFill('feat_gate_red')}</span><span class="sb-info sb-cd-text" data-cdt="portal"></span>
     </button>`);
   }
   // Three sections: Town/Health/Mana left, the auto-cast slot centred, the four
@@ -21223,10 +21817,30 @@ function renderSkillBar() {
   const html = `<div class="sb-left">${townBtn}${healBtn}${manaBtn}</div>`
     + `<div class="sb-auto-wrap">${autoCell}</div>`
     + `<div class="sb-right">${skillsHtml}</div>`;
-  if (html === _lastSkillBarHtml) return;   // identical markup — skip the DOM teardown + reflow
-  _lastSkillBarHtml = html;
-  bar.innerHTML = html;
-  syncTownBarReserve();
+  if (html !== _lastSkillBarHtml) {   // identical markup — skip the DOM teardown + reflow
+    _lastSkillBarHtml = html;
+    bar.innerHTML = html;
+    _sbCdEls = _sbCdTextEls = null;   // the dials/placeholders were just rebuilt
+    syncTownBarReserve();
+  }
+  // Runs on EVERY call (rebuilt or not) so the countdown text stays as live as
+  // the old baked-in markup was.
+  syncSkillBarCountdowns(bar, town);
+}
+// Fill the .sb-cd-text placeholders with the live countdown text — the potions'
+// shared "Ns" recharge (hidden by CSS while the dial shows, but kept identical to
+// the old baked text) and the town portal's channel seconds. textContent-only, so
+// it never busts the cached bar markup or re-parses any HTML.
+function syncSkillBarCountdowns(bar, town) {
+  if (!_sbCdTextEls) _sbCdTextEls = Array.from(bar.querySelectorAll('.sb-cd-text'));
+  if (!_sbCdTextEls.length) return;
+  const pcd = player.potionCd || 0;
+  const potTxt = pcd > 0 ? Math.ceil(pcd) + 's' : '';
+  const portalTxt = (!town && portalChanneling()) ? String(Math.ceil(portalCharge)) : '';
+  for (const el of _sbCdTextEls) {
+    const txt = el.getAttribute('data-cdt') === 'portal' ? portalTxt : potTxt;
+    if (el._cdTxt !== txt) { el._cdTxt = txt; el.textContent = txt; }
+  }
 }
 
 // In town the skill bar parks as a bottom tray; the town/shop/mystic menus reserve
@@ -21535,6 +22149,7 @@ function quickEquip(i) {
   }
   if (equipped[slot]) inventory.push(equipped[slot]); // swap old back into bag
   equipped[slot] = item;
+  bumpLoadout();   // worn gear changed — cached gear resolve/stat sums are stale
   inventory.splice(i, 1);
   selectedItem = null;
   hideTooltip();
@@ -21580,6 +22195,7 @@ function unequip(slot) {
   if (!item) return;
   inventory.push(item);
   equipped[slot] = null;
+  bumpLoadout();   // worn gear changed — cached gear resolve/stat sums are stale
   hideTooltip();
   log(`Unequipped: ${logItem(item)}`);
   // Dropping gear can lower HP/MP and Vitality/Spirit, so recompute the derived
@@ -21912,9 +22528,15 @@ document.addEventListener('click', (e) => {
 // ── LOG ──
 // Log messages are HTML: icons are written inline as dlIcon(key) or <span
 // data-spr=key> (painted by the [data-spr] painter), never emoji.
+// Appended via insertAdjacentHTML — `innerHTML +=` reserializes and reparses
+// every existing line on each call (O(n²) over a session), which is what made
+// long sessions crawl. Scrollback is capped so the DOM stays bounded.
+const LOG_MAX_LINES = 200;
+let _logEl = null;   // #log is static in the markup — resolve once, lazily
 function log(msg, cls='') {
-  const el = document.getElementById('log');
-  el.innerHTML += `<div class="log-line ${cls}">${msg}</div>`;
+  const el = _logEl || (_logEl = document.getElementById('log'));
+  el.insertAdjacentHTML('beforeend', `<div class="log-line ${cls}">${msg}</div>`);
+  while (el.childElementCount > LOG_MAX_LINES) el.removeChild(el.firstElementChild);
   el.scrollTop = el.scrollHeight;
 }
 
@@ -22407,6 +23029,14 @@ function loadStash() {
   healStashItems();
 }
 
+// Bookkeeping from the last successful local save: when it happened (lets the
+// play-time heartbeat skip saves the world-tick autosave already covered), plus
+// the exact serialized string written and its embedded ts (lets cloudPushSlot
+// reuse those bytes instead of re-parsing + re-stringifying the whole save).
+let _lastSaveAt = 0;
+let _lastSavePayload = null;
+let _lastSavePayloadTs = 0;
+
 function saveGame() {
   if (_wipingSave || _switchingSlot) return; // a slot switch / wipe is mid-flight — don't clobber the target slot
   // Don't create a save for a hero who hasn't begun (no class / no progress).
@@ -22425,7 +23055,13 @@ function saveGame() {
       inTown, dungeonReturn, graveSite,
       ts: Date.now(),
     };
-    localStorage.setItem(slotKey(activeSlot), JSON.stringify(data));
+    const payload = JSON.stringify(data);
+    localStorage.setItem(slotKey(activeSlot), payload);
+    // Cache only after the write succeeds so the fast paths never trust a save
+    // that didn't actually land.
+    _lastSavePayload = payload;
+    _lastSavePayloadTs = data.ts;
+    _lastSaveAt = Date.now();
   } catch (e) {
     // localStorage unavailable (e.g. inside artifact preview) — fail silently
   }
@@ -22737,6 +23373,10 @@ function recordFallenHero() {
 // the hero that earned them (the save is destroyed on death).
 const HC_DEAD_KEY = 'dungeonLoot_hcMeta_v1';
 let hcMeta = { cids: [], ach: [], ts: 0 };
+// Set mirror of hcMeta.ach for O(1) membership tests — checkHardcoreAchievements
+// probes every achievement id on each save, so the array indexOf scan adds up.
+// Kept in sync at every point hcMeta.ach changes (load, grant, cloud merge).
+let _hcAchSet = new Set();
 function loadHcMeta() {
   try {
     const j = JSON.parse(localStorage.getItem(HC_DEAD_KEY));
@@ -22748,6 +23388,7 @@ function loadHcMeta() {
       };
     }
   } catch (e) {}
+  _hcAchSet = new Set(hcMeta.ach);
 }
 function writeHcMeta() { try { localStorage.setItem(HC_DEAD_KEY, JSON.stringify(hcMeta)); } catch (e) {} }
 function hcIsDead(cid) { return !!cid && hcMeta.cids.indexOf(cid) !== -1; }
@@ -22763,11 +23404,12 @@ function hcMarkDead(cid) {
   writeHcMeta();
   cloudScheduleHcMeta();
 }
-function hcHasAch(id) { return hcMeta.ach.indexOf(id) !== -1; }
+function hcHasAch(id) { return _hcAchSet.has(id); }
 // Record a newly-earned hardcore achievement. Returns true only the first time.
 function hcGrantAch(id) {
-  if (!id || hcMeta.ach.indexOf(id) !== -1) return false;
+  if (!id || _hcAchSet.has(id)) return false;
   hcMeta.ach.push(id);
+  _hcAchSet.add(id);
   hcMeta.ts = Date.now();
   writeHcMeta();
   cloudScheduleHcMeta();
@@ -22852,7 +23494,13 @@ function playTimeBeat() {
   if (dt > 5000) dt = 1000; // background throttle / sleep — count a nominal tick
   if (typeof player === 'object' && player) player.playMs = (player.playMs || 0) + dt;
   _ptSinceSave += dt;
-  if (_ptSinceSave >= 20000) { _ptSinceSave = 0; try { saveGame(); } catch (e) {} }
+  if (_ptSinceSave >= 20000) {
+    _ptSinceSave = 0;
+    // The world tick already autosaves every few seconds during play, so only
+    // fire the heartbeat save when nothing else persisted recently (e.g. idling
+    // on a menu). playMs still accumulates either way and rides the next save.
+    if (Date.now() - _lastSaveAt >= 15000) { try { saveGame(); } catch (e) {} }
+  }
 }
 setInterval(playTimeBeat, 1000);
 // Reset the beat clock when the tab regains focus so the hidden gap isn't billed,
@@ -23384,19 +24032,31 @@ async function cloudPushSlot(slot, opts) {
   if (!cloudEnabled() || !authState.user) return false;
   let raw; try { raw = localStorage.getItem(slotKey(slot)); } catch (e) {}
   if (!raw) return false;
-  let data; try { data = JSON.parse(raw); } catch (e) { return false; }
-  // Never upload a blank, not-yet-started hero — it would overwrite whatever real
-  // save already lives in this slot on the account.
-  if (!saveStarted(data)) return false;
+  let body;
+  if (raw === _lastSavePayload) {
+    // Fast path: saveGame() just wrote this exact string, so it's already known
+    // to be a started save and its ts is cached. Splice the bytes straight into
+    // the request body instead of JSON.parse-ing and re-stringifying the whole
+    // save — the keys below match the object literal in the slow path, so the
+    // uploaded payload is byte-identical.
+    body = '{"user_id":' + JSON.stringify(authState.user.id) + ',"slot":' + JSON.stringify(slot) +
+      ',"data":' + raw + ',"updated_at":' + JSON.stringify(new Date(_lastSavePayloadTs || Date.now()).toISOString()) + '}';
+  } else {
+    let data; try { data = JSON.parse(raw); } catch (e) { return false; }
+    // Never upload a blank, not-yet-started hero — it would overwrite whatever real
+    // save already lives in this slot on the account.
+    if (!saveStarted(data)) return false;
+    body = JSON.stringify({
+      user_id: authState.user.id, slot: slot, data: data,
+      updated_at: new Date(data.ts || Date.now()).toISOString(),
+    });
+  }
   if (!opts.keepalive) await ensureToken();
   try {
     const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?on_conflict=user_id,slot', {
       method: 'POST',
       headers: cloudRestHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
-      body: JSON.stringify({
-        user_id: authState.user.id, slot: slot, data: data,
-        updated_at: new Date(data.ts || Date.now()).toISOString(),
-      }),
+      body: body,
       keepalive: !!opts.keepalive,
     });
     return res.ok;
@@ -23454,7 +24114,7 @@ function hcMergeIn(cloud) {
   cloudCids.forEach(c => cidSet.add(c));
   cloudAch.forEach(a => achSet.add(a));
   const grew = cidSet.size !== hcMeta.cids.length || achSet.size !== hcMeta.ach.length;
-  if (grew) { hcMeta.cids = Array.from(cidSet); hcMeta.ach = Array.from(achSet); hcMeta.ts = Date.now(); writeHcMeta(); }
+  if (grew) { hcMeta.cids = Array.from(cidSet); hcMeta.ach = Array.from(achSet); _hcAchSet = achSet; hcMeta.ts = Date.now(); writeHcMeta(); }
   return cidSet.size > knownDeaths;
 }
 // Read the account's hardcore-meta row. Returns the data object, null (no row), or
@@ -24751,12 +25411,27 @@ const RT_BLOCKING_OVERLAYS = ['title-overlay','name-overlay','class-overlay','hc
   // close the settings menu, so they must pause the world on their own.
   'conquest-overlay','slots-overlay','account-overlay','lb-overlay','graveyard-overlay','slotpick-overlay',
   'greed-overlay'];   // the risk/reward cursed-floor choice pauses the world while open
+// The blocking overlays are all static shell divs (only their 'open' class
+// toggles), so resolve id → element ONCE and reuse — rtPaused/clockPaused run
+// several times per frame and were re-querying every id on every call.
+// townRest marks the town hub/shop/mystic menus the clock ignores while resting
+// in town (see clockPaused / TOWN_REST_OVERLAYS below).
+let _rtOverlayEls = null;
+function rtOverlayEls() {
+  if (!_rtOverlayEls) {
+    _rtOverlayEls = [];
+    for (const id of RT_BLOCKING_OVERLAYS) {
+      const el = document.getElementById(id);
+      if (el) _rtOverlayEls.push({ el, townRest: TOWN_REST_OVERLAYS.includes(id) });
+    }
+  }
+  return _rtOverlayEls;
+}
 function rtPaused() {
   if (gameHalted || inTown || player.hp <= 0) return true;
   if (portalTransiting()) return true;   // hero is mid-teleport (off the map) — no moving/fighting/being hit
-  for (const id of RT_BLOCKING_OVERLAYS) {
-    const el = document.getElementById(id);
-    if (el && el.classList.contains('open')) return true;
+  for (const o of rtOverlayEls()) {
+    if (o.el.classList.contains('open')) return true;
   }
   if (panelOpen && !isWebLayout()) return true;   // the bag drawer (touch/narrow only)
   return false;
@@ -24773,10 +25448,9 @@ const TOWN_REST_OVERLAYS = ['town-overlay', 'shop-overlay', 'mystic-overlay'];
 function clockPaused() {
   if (gameHalted || player.hp <= 0) return true;
   if (portalTransiting()) return true;   // freeze the scene (and ambient anim) while the hero teleports
-  for (const id of RT_BLOCKING_OVERLAYS) {
-    if (inTown && TOWN_REST_OVERLAYS.includes(id)) continue;   // resting in town → clock runs
-    const el = document.getElementById(id);
-    if (el && el.classList.contains('open')) return true;
+  for (const o of rtOverlayEls()) {
+    if (inTown && o.townRest) continue;   // resting in town → clock runs
+    if (o.el.classList.contains('open')) return true;
   }
   if (panelOpen && !isWebLayout()) return true;   // the bag drawer (touch/narrow only)
   return false;
@@ -24873,20 +25547,30 @@ function tickCooldowns(dt) {
 // empty and show the countdown (whole seconds, then one decimal under 1s). When
 // a skill/potion finishes recharging, refresh the bar so it reads as ready.
 function updateCooldownDials() {
-  const bar = document.getElementById('skill-bar');
+  const bar = hudEl('skill-bar');
   if (!bar) return;
   let finished = false;
-  const dials = bar.querySelectorAll('.sb-cd');
-  for (let i = 0; i < dials.length; i++) {
-    const el = dials[i], btn = el.parentNode, id = el.getAttribute('data-cd');
+  // The dials live inside the markup renderSkillBar caches — re-resolve them only
+  // after a rebuild (_sbCdEls is nulled there) instead of querying every frame.
+  if (!_sbCdEls) {
+    _sbCdEls = [];
+    bar.querySelectorAll('.sb-cd').forEach(el =>
+      _sbCdEls.push({ el, btn: el.parentNode, id: el.getAttribute('data-cd') }));
+  }
+  for (const d of _sbCdEls) {
+    const el = d.el, btn = d.btn, id = d.id;
     let rem = 0, total = 1;
     if (id === 'pot') { rem = player.potionCd || 0; total = POTION_CD; }
     else if (id && id.indexOf('sk:') === 0) { const sid = id.slice(3); rem = skillCd(sid); total = skillCdMax[sid] || rem || 1; }
     if (rem > 0.05) {
       if (!btn.classList.contains('cooling')) btn.classList.add('cooling');
       const frac = total > 0 ? Math.max(0, Math.min(1, rem / total)) : 0;
-      el.style.setProperty('--cd-frac', frac.toFixed(3));
-      el.textContent = rem >= 1 ? String(Math.ceil(rem)) : rem.toFixed(1);
+      // Skip the CSSOM/text writes when the displayed value hasn't changed (the
+      // expando last-values die with the element on any bar rebuild).
+      const fracTxt = frac.toFixed(3);
+      if (el._cdFrac !== fracTxt) { el._cdFrac = fracTxt; el.style.setProperty('--cd-frac', fracTxt); }
+      const txt = rem >= 1 ? String(Math.ceil(rem)) : rem.toFixed(1);
+      if (el._cdNum !== txt) { el._cdNum = txt; el.textContent = txt; }
     } else if (btn.classList.contains('cooling')) {
       finished = true; // came off cooldown — rebuild so it reads as ready
     }
@@ -24942,9 +25626,10 @@ function enemyAttackInterval(e) {
   if (e._atkJit == null) e._atkJit = 0.85 + Math.random() * 0.3;
   return ENEMY_ATK_BASE * (beh.atkMult || 1) * (e.isBoss ? 0.8 : 1) * e._atkJit;
 }
-let _worldAcc = 0, _saveTick = 0;
+let _worldAcc = 0, _saveTick = 0, _worldTicks = 0;
 // One beat of world upkeep, on a fixed real-time cadence (every WORLD_TICK_MS).
 function worldTick() {
+  _worldTicks++;   // world-beat serial — lets per-frame checks (unstickPlayer) skip re-testing a still world
   // Transient combat buffs (War Cry, Sanctuary, …) age out in real seconds on the
   // world clock. Skill and potion cooldowns burn down in real seconds too — see
   // tickCooldowns().
@@ -24980,6 +25665,63 @@ function stepWorldClock(dt) {
   if (_worldAcc > WORLD_TICK_MS) _worldAcc = WORLD_TICK_MS;
 }
 
+// ── PERF HUD (dev tool) ──
+// Console-toggled frame profiler: type perfHud() to show/hide a small fixed
+// overlay (top-right, click-through) with fps, worst frame, and entity/DOM
+// counts. Hidden by default and, while hidden, perfFrameSample() bails on its
+// first check — zero per-frame cost for players.
+let _perfHudEl = null;
+let _perfHudOn = false;
+let _perfLastTs = 0;                     // own delta — the loop's dt is clamped, this sees real stalls
+let _perfFrames = 0, _perfDtSum = 0, _perfWorst = 0;
+let _perfWinStart = 0;                   // start of the rolling 1s sample window
+let _perfAvgMs = 0, _perfWorstMs = 0;    // last completed window's numbers
+let _perfNextPaint = 0;                  // overlay repaints at most every ~500ms
+let _perfDomCount = 0, _perfNextDomScan = 0;  // querySelectorAll('*') is pricey — at most 1/s
+// Called once per frame from gameLoop with the rAF timestamp (dt unused: the
+// loop clamps it at 100ms, which would hide exactly the stalls we're hunting).
+function perfFrameSample(ts, dt) {
+  if (!_perfHudOn) return;               // hidden → free
+  if (_perfLastTs) {
+    const ms = ts - _perfLastTs;
+    _perfFrames++; _perfDtSum += ms;
+    if (ms > _perfWorst) _perfWorst = ms;
+  } else {
+    _perfWinStart = ts;                  // first sample after toggle-on anchors the window
+  }
+  _perfLastTs = ts;
+  if (ts - _perfWinStart >= 1000) {
+    _perfAvgMs = _perfFrames ? _perfDtSum / _perfFrames : 0;
+    _perfWorstMs = _perfWorst;
+    _perfFrames = 0; _perfDtSum = 0; _perfWorst = 0; _perfWinStart = ts;
+  }
+  if (ts < _perfNextPaint) return;
+  _perfNextPaint = ts + 500;
+  if (ts >= _perfNextDomScan) {
+    _perfDomCount = document.querySelectorAll('*').length;
+    _perfNextDomScan = ts + 1000;
+  }
+  const logEl = _logEl || document.getElementById('log');
+  const fps = _perfAvgMs > 0 ? Math.round(1000 / _perfAvgMs) : 0;
+  _perfHudEl.textContent =
+    `fps ${fps}  avg ${_perfAvgMs.toFixed(1)}ms  worst ${_perfWorstMs.toFixed(1)}ms\n` +
+    `enemies ${enemies.length}  particles ${particles.length}  projectiles ${projectiles.length}\n` +
+    `log ${logEl ? logEl.childElementCount : 0}  dom ${_perfDomCount}`;
+}
+function perfHud() {
+  if (!_perfHudEl) {                     // built lazily — players never pay for it
+    _perfHudEl = document.createElement('div');
+    _perfHudEl.className = 'perf-hud';
+    document.body.appendChild(_perfHudEl);
+  }
+  _perfHudOn = !_perfHudOn;
+  _perfHudEl.style.display = _perfHudOn ? 'block' : 'none';
+  // Reset the window so a fresh toggle-on doesn't average across the gap.
+  _perfLastTs = 0; _perfFrames = 0; _perfDtSum = 0; _perfWorst = 0;
+  _perfWinStart = 0; _perfNextPaint = 0; _perfNextDomScan = 0;
+  return _perfHudOn ? 'perf HUD on' : 'perf HUD off';
+}
+
 // Run one frame step in isolation. A thrown error in any subsystem (movement,
 // combat, the world clock, draw…) must NOT cascade and freeze the whole game —
 // otherwise a single bad frame becomes a permanent hang where movement, enemy
@@ -24999,6 +25741,7 @@ function gameLoop(ts) {
   let dt = (ts - _lastTs) / 1000;
   _lastTs = ts;
   if (dt > 0.1) dt = 0.1;          // clamp after a stall so nothing teleports
+  perfFrameSample(ts, dt);         // dev perf HUD sampling — a single boolean check while hidden
   tickAnimClock(ts);               // advance the looping-animation clock (frozen while paused)
   // The teleport fade/beam animation runs on its own even while the world is paused
   // by it (rtPaused → true during transit) — it must keep playing to reach the warp.
@@ -25018,6 +25761,7 @@ function gameLoop(ts) {
     safeStep('world', () => stepWorldClock(dt));
   }
   safeStep('actorRender', () => updateActorRender(dt));
+  safeStep('hudFlush', () => flushHudDirty());     // damage events mark the HUD dirty; one updateBars() lands here same-frame
   safeStep('stamina', () => renderStaminaBar());   // stamina drains/refills continuously — keep the END bar live
   safeStep('vitalBars', () => updateVitalFills(dt)); // ease HP/MP fills so over-time recovery climbs fluidly
   safeStep('cdDials', () => updateCooldownDials()); // animate the skill/potion cooldown dials in real time
@@ -25251,6 +25995,8 @@ const __DL_FN_BRIDGE = {
   offhandEquipError,
   resolveActive,
   activeSlots,
+  bumpLoadout,
+  loadoutCache,
   slotActive,
   activeWeapon,
   activeOffhand,
@@ -25295,6 +26041,7 @@ const __DL_FN_BRIDGE = {
   spentAllSkillPoints,
   earnedAscPoints,
   activeSkillList,
+  learnedActiveIds,
   normAutoSkill,
   normSkillSlots,
   autoSkillObj,
@@ -25883,6 +26630,7 @@ const __DL_FN_BRIDGE = {
   adjacentToPlayer,
   enemiesNear,
   foesInRange,
+  nearestFoeInRange,
   adjacentOpenTile,
   spellBase,
   milestonePower,
@@ -26240,6 +26988,8 @@ const __DL_FN_BRIDGE = {
   enemyAttackInterval,
   worldTick,
   stepWorldClock,
+  perfFrameSample,
+  perfHud,
   safeStep,
   gameLoop,
 };
