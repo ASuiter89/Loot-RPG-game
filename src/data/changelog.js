@@ -12,6 +12,18 @@ export const CHANGELOG = [
     "Every attack is a floor indicator you beat by MOVING — bullets weave through gaps, rings are dodged by clearing their edge, cones by stepping to the flank, decoys by reading which one glows red. Each boss escalates at two-thirds and one-third health with tighter, denser patterns.",
     "Boss attack speed scales with depth, so a Normal-floor guardian reads slowly and a deep-Endless one is brutal — and Normal bosses carry far lighter health pools (a mild challenge), Hardened a middling fight, with Brutal and Endless keeping the full deep pools.",
   ] },
+  { date: "2026-07-04", size: "large", v: "Skills, spells & hybrids — and enemies that resist them differently", by: "Claude", notes: [
+    "Every active now has a clear school — SKILL (weapon, leeches, scales Skill Power), SPELL (magic, scales Spell Power, sped by Cast Speed), or the new HYBRID that lands BOTH a weapon part and a magic part in one cast. Each ability's tooltip spells out how its damage is built, and a hybrid shows its physical + magic split so nothing is vague.",
+    "Classes now sit on a spectrum: Warrior is pure weapon SKILLS, Mage is pure SPELLS, Rogue leans skill with shadow & toxic hybrids (Blink Strike, Venom Nova, Plague Lord and more), and Templar leans holy magic with holy-strike hybrids (Smite, Divine Storm, Redeemer). Each ability was hand-placed on the school that fits it.",
+    "Enemies no longer shrug off all damage equally. Every foe now has separate physical ARMOR and MAGIC RESISTANCE — a stone golem laughs off blades but melts to magic, a wraith ignores steel but not spells, most beasts sit in between. Hit each foe with the school it's weak to; a hybrid splits the difference and is never fully walled.",
+    "New gear stat MAGIC PENETRATION pierces enemy magic resistance — the caster's counterpart to Armor Pen. It rolls on caster gear and enchants, and now sits on wands and staves like the Astral Needle, where armor pen never made sense.",
+    "The bestiary card and gameState() now report each foe's armor and magic-resist, so you can plan your loadout around what's ahead.",
+  ] },
+  { date: "2026-07-04", size: "small", v: "Touch: tap a skill to cast it, hold to read it", by: "Claude", notes: [
+    "On phones, tapping a skill, potion or action button now just fires it — it no longer pops the tooltip over the game the instant you tap.",
+    "To read what a button does, HOLD it for about half a second: its tooltip pops beside it, and that hold won't cast the skill or spend the potion.",
+    "Keyboard-and-mouse play is untouched — hover still shows tooltips exactly as before.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Boss overhaul: 15 guardians, sealed arenas, and a fully telegraphed Rat King", by: "Claude", notes: [
     "Ten all-new bosses join the roster, bringing it to fifteen. Each difficulty now has its OWN five guardians — Normal keeps the original five, while Hardened and Brutal each get five new ones, and Endless rolls any of the fifteen at random. Every newcomer is bespoke pixel art.",
     "Every boss floor is now a fixed circular arena: you enter from the stairs at the south, the guardian holds the centre, the exit is at the north, and pillars give cover. No wandering trash and no loot clutter — just you and the boss.",

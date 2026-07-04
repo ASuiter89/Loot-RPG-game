@@ -94,7 +94,7 @@ const RAW_SETS = {
       desc: 'Skills recharge faster and the damage you deal refunds mana.' },
     pieces: [
       { id: 'arcanistStaff', base: 'Staff', name: 'Surgecaller', native: 'SPELLPWR',
-        mods: [s('CASTSPD'), s('CRIT'), s('CRITDMG'), s('PEN'), s('MP'), a('spirit')], power: 'warmage',
+        mods: [s('CASTSPD'), s('CRIT'), s('CRITDMG'), s('MAGICPEN'), s('MP'), a('spirit')], power: 'warmage',
         flavor: 'it hums with more spell than one caster can spend, and spends it anyway' },
       { id: 'arcanistTome', base: 'Tome', name: 'The Ceaseless Recitation', native: 'CDR',
         mods: [s('MCR'), s('MPKILL'), s('REGEN'), s('MP'), s('CASTSPD'), a('spirit')], power: 'spellbound',
@@ -173,7 +173,7 @@ const RAW_SETS = {
       desc: 'Draw power from the dark — spells recharge faster and feed you mana as they land.' },
     pieces: [
       { id: 'voidWand', base: 'Wand', name: 'Voidtongue', native: 'MPLEECH',
-        mods: [s('SPELLPWR'), s('CASTSPD'), s('MP'), s('CDR'), s('PEN'), a('spirit')], power: 'siphoning',
+        mods: [s('SPELLPWR'), s('CASTSPD'), s('MP'), s('CDR'), s('MAGICPEN'), a('spirit')], power: 'siphoning',
         flavor: 'answers each casting in a voice only you can hear, and drinks a little to speak' },
       { id: 'voidTome', base: 'Tome', name: 'The Nullbound Codex', native: 'MP',
         mods: [s('MPLEECH'), s('CDR'), s('CASTSPD'), s('MCR'), s('CRITDMG'), a('luck')], power: 'spellbound',

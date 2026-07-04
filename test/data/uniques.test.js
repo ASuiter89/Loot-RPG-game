@@ -32,7 +32,7 @@ const CASTER_ONLY = ['SPELLPWR', 'CASTSPD'];
 // Stat keys buildUnique/affixStatValue can roll (mirrors AFFIX_CURVES + CRITDMG).
 const STAT_KEYS = new Set(['ATK', 'DEF', 'SPD', 'HP', 'MP', 'CRIT', 'CRITDMG', 'REGEN', 'ACC',
   'LEECH', 'MPLEECH', 'HPKILL', 'MPKILL', 'THORNS', 'DR', 'BLOCK', 'DODGE', 'IDMG', 'DBLSTRIKE',
-  'CLEAVE', 'BOSSDMG', 'EXEC', 'PEN', 'GOLDFIND', 'XPGAIN', 'MAGICFIND', 'MATFIND', 'SPELLPWR',
+  'CLEAVE', 'BOSSDMG', 'EXEC', 'PEN', 'MAGICPEN', 'GOLDFIND', 'XPGAIN', 'MAGICFIND', 'MATFIND', 'SPELLPWR',
   'SKILLPWR', 'CASTSPD', 'CDR', 'MCR', 'BLEED', 'STUNPWR', 'ATKSPD', 'TENAC']);
 const ATTR_KEYS = new Set(['might', 'agility', 'spirit', 'vitality', 'luck']);
 // Signature powers (mirrors ITEM_POWERS keys in src/legacy/game.js).

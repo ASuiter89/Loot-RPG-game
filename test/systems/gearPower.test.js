@@ -11,7 +11,7 @@ function freshCtx(over = {}) {
   return Object.assign({
     refLevel: 1, weaponAvg: 2, atkFlat: 34, idmgPct: 0, critRating: 8.5, critMult: 2.0,
     skillPwrPct: 0, spellCore: 44, spellPwrPct: 0, atkSpdPct: 0, castSpdPct: 0, cdrRating: 0,
-    penPct: 0, dblStrikePct: 0, cleavePct: 0, bossDmgPct: 0, execPct: 0, bleedPct: 0, stunPct: 0,
+    penPct: 0, magicPenPct: 0, dblStrikePct: 0, cleavePct: 0, bossDmgPct: 0, execPct: 0, bleedPct: 0, stunPct: 0,
     accRating: 112, offMult: 1.10, skillReliance: 1.0, spellReliance: 0.25,
     maxHp: 118, def: 5, dodgeRating: 11.5, blockRating: 0, drRating: 0, dmgTakenMult: 0.90,
     regen: 0.6, thornsPct: 0, tenacPct: 0, leechPct: 0, hpKill: 0,
@@ -110,6 +110,28 @@ describe('stats are gated to the build/class that actually uses them', () => {
     const lowDps = marginalPower(freshCtx(), { leechPct: 10 });
     const hiDps = marginalPower(freshCtx({ atkFlat: 434 }), { leechPct: 10 });
     expect(hiDps).toBeGreaterThan(lowDps * 3);
+  });
+
+  it('Armor Pen helps the martial lane and Magic Pen the spell lane', () => {
+    // For a martial hero, Armor Pen buys far more offense than Magic Pen (whose only
+    // grip is the thin 0.25 spell-reliance lane).
+    const warrior = freshCtx();
+    const wArmor = offenseScore(applyDelta(warrior, { penPct: 40 })) - offenseScore(warrior);
+    const wMagic = offenseScore(applyDelta(warrior, { magicPenPct: 40 })) - offenseScore(warrior);
+    expect(wArmor).toBeGreaterThan(0);
+    expect(wMagic).toBeGreaterThan(0); // small but nonzero — a warrior still casts a little
+    expect(wArmor).toBeGreaterThan(wMagic * 2);
+    // For a caster, the ranking flips: Magic Pen buys more offense than Armor Pen.
+    const mage = mageCtx();
+    const mArmor = offenseScore(applyDelta(mage, { penPct: 40 })) - offenseScore(mage);
+    const mMagic = offenseScore(applyDelta(mage, { magicPenPct: 40 })) - offenseScore(mage);
+    expect(mMagic).toBeGreaterThan(mArmor);
+  });
+
+  it('Magic Pen is worth much more to a caster than to a martial build', () => {
+    const warrior = marginalPower(freshCtx(), { magicPenPct: 30 });
+    const mage = marginalPower(mageCtx(), { magicPenPct: 30 });
+    expect(mage).toBeGreaterThan(warrior * 2);
   });
 });
 

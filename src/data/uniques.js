@@ -114,7 +114,7 @@ const DEFS = [
     mods: [s('SPELLPWR'), s('MPLEECH'), s('CASTSPD'), s('REGEN'), s('CDR'), a('spirit')], power: 'vampiric',
     flavor: 'a bottomless wellspring that drinks blood and magic alike, and is never once sated' },
   { id: 'astralNeedle', base: 'Wand', name: 'The Astral Needle', cls: 'mage', native: 'CRITDMG',
-    mods: [s('SPELLPWR'), s('CRIT'), s('CASTSPD'), s('MP'), s('PEN'), a('luck')], power: 'arcing',
+    mods: [s('SPELLPWR'), s('CRIT'), s('CASTSPD'), s('MP'), s('MAGICPEN'), a('luck')], power: 'arcing',
     flavor: 'a splinter of dying starlight, so keen it finds the seam in any ward' },
   // ── BOWS & SCYTHES ──
   { id: 'stormfletch', base: 'Shortbow', name: 'Stormfletch', cls: 'rogue', native: 'ATKSPD',
