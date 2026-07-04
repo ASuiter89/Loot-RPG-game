@@ -143,9 +143,60 @@ async function main() {
     const tapped = await page.evaluate(() => !!(window.moveTarget && window.moveTarget.active));
     if (!tapped) failures.push('a tap on the map did not arm tap-to-move (moveTarget.active still false)');
 
+    // 5) Footer action buttons: a quick TAP fires the button and does NOT pop the
+    //    hover tip; a long-press (hold) pops the tip WITHOUT firing the button. The
+    //    health potion is always in the bar and safe to drive (a sip just starts its
+    //    shared cooldown), so we use it as the probe. This is the guard for the
+    //    "tapping a skill buried the game under a tooltip" fix.
+    const POT_SEL = '#skill-bar .skillbar-btn.potion:not(.mana)';
+    // A live, off-cooldown potion with room to heal, and no tip on screen.
+    const armPotion = () => page.evaluate(() => {
+      window.player.hp = Math.max(1, window.player.maxHp - 100);
+      window.player.potionCd = 0;
+      document.getElementById('hovertip').style.display = 'none';
+      if (typeof window.renderSkillBar === 'function') window.renderSkillBar();
+    });
+    await armPotion();
+    const potBox = await page.evaluate((sel) => {
+      const b = document.querySelector(sel);
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+    }, POT_SEL);
+    let tapCast = null, tapTip = null, holdTip = null, holdCast = null;
+    if (!potBox) failures.push(`no health-potion button found in the touch skill bar (${POT_SEL})`);
+    else {
+      // Quick tap → the potion fires (cooldown starts) and the tip stays hidden.
+      await fireTouch(page, POT_SEL, 'pointerdown', potBox.x, potBox.y, 3);
+      await fireTouch(page, POT_SEL, 'pointerup', potBox.x, potBox.y, 3);
+      await page.evaluate((sel) => document.querySelector(sel).click(), POT_SEL);   // the click a real tap ends on
+      await page.waitForTimeout(60);
+      const afterTap = await page.evaluate(() => ({
+        tip: getComputedStyle(document.getElementById('hovertip')).display,
+        cd: window.player.potionCd,
+      }));
+      tapTip = afterTap.tip; tapCast = afterTap.cd > 0;
+      if (afterTap.tip !== 'none') failures.push('a quick tap on the potion button popped the hover tip (it should only fire the action)');
+      if (!(afterTap.cd > 0)) failures.push('a quick tap on the potion button did not fire its action (potion cooldown never started)');
+
+      // Reset, then long-press → the tip pops and the action does NOT fire.
+      await armPotion();
+      await fireTouch(page, POT_SEL, 'pointerdown', potBox.x, potBox.y, 4);
+      await page.waitForTimeout(600);                                               // past the ~450ms hold threshold
+      holdTip = await page.evaluate(() => getComputedStyle(document.getElementById('hovertip')).display);
+      await fireTouch(page, POT_SEL, 'pointerup', potBox.x, potBox.y, 4);
+      await page.evaluate((sel) => document.querySelector(sel).click(), POT_SEL);   // a hold still ends on a click — must be swallowed
+      await page.waitForTimeout(60);
+      const cdAfterHold = await page.evaluate(() => window.player.potionCd);
+      holdCast = cdAfterHold > 0;
+      if (holdTip === 'none') failures.push('a long-press on the potion button did not pop the hover tip');
+      if (holdCast) failures.push('a long-press on the potion button fired its action (a hold should only inspect)');
+    }
+
     if (pageErrors.length) failures.push(`uncaught page errors:\n  - ${pageErrors.join('\n  - ')}`);
 
-    console.log('touch: reveal', revealed, '| moved', moved, '| joyCleared', !rest.joyOn, '| tap', tapped);
+    console.log('touch: reveal', revealed, '| moved', moved, '| joyCleared', !rest.joyOn, '| tap', tapped,
+      '| tapCast', tapCast, 'tapTip', tapTip, '| holdTip', holdTip, 'holdCast', holdCast);
   } catch (e) {
     failures.push(`touch drive failed: ${String(e).split('\n')[0]}`);
   } finally {
