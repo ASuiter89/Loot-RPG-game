@@ -14,6 +14,20 @@ export const CHANGELOG = [
     "New gear stat MAGIC PENETRATION pierces enemy magic resistance — the caster's counterpart to Armor Pen. It rolls on caster gear and enchants, and now sits on wands and staves like the Astral Needle, where armor pen never made sense.",
     "The bestiary card and gameState() now report each foe's armor and magic-resist, so you can plan your loadout around what's ahead.",
   ] },
+  { date: "2026-07-04", size: "large", v: "Boss overhaul: 15 guardians, sealed arenas, and a fully telegraphed Rat King", by: "Claude", notes: [
+    "Ten all-new bosses join the roster, bringing it to fifteen. Each difficulty now has its OWN five guardians — Normal keeps the original five, while Hardened and Brutal each get five new ones, and Endless rolls any of the fifteen at random. Every newcomer is bespoke pixel art.",
+    "Every boss floor is now a fixed circular arena: you enter from the stairs at the south, the guardian holds the centre, the exit is at the north, and pillars give cover. No wandering trash and no loot clutter — just you and the boss.",
+    "Stepping onto a boss floor asks first. A prompt warns that every exit seals once you enter — then it is beat the guardian or die: both staircases AND the town portal stay locked until it falls, and all reopen the instant it does.",
+    "Guardians carry far deeper health pools, so a boss is a real, drawn-out fight now instead of a speed bump.",
+    "Enemies and following companions now glide between tiles at a steady pace like the hero — smooth movement in every direction instead of hopping tile to tile.",
+    "The Rat King is fully reworked as the first of the new-style fights: it telegraphs every attack with a floor indicator you dodge by moving — a ground-shaking slam, a pounce that locks onto you, a tail-whirl to back clear of, and vermin that erupt where they are marked. It grows fiercer at two-thirds and one-third health. The rest of the roster's bespoke movesets are coming next.",
+  ] },
+  { date: "2026-07-04", size: "small", v: "Town: Return to Last Floor + Warp to Dungeon", by: "Claude", notes: [
+    "Town's top row now has two gates. Return to Last Floor drops you straight back onto the exact floor you left through the portal — same enemies, loot and layout, right where you stood — instead of rebuilding it.",
+    "Warp to Dungeon (was Return to Dungeon) opens the difficulty and floor picker.",
+    "Return to Last Floor lights up only after you leave by portal or conquest; a death darkens it, so you take Warp to Dungeon back down.",
+    "The hub tagline moved up under the Town title, centred.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Skill milestone text now states exact numbers", by: "Claude", notes: [
     "The rank 3 / 7 / 10 \"Rank bonuses\" ladder now spells out each milestone: +28% power (Empowered), +20% power & 20% faster recharge (Honed), +30% power plus +1 radius/range/target/hit (Mastered) — no more vague \"a power surge\".",
     "Passive milestones read their exact surge too — +8% / +10% / +12% to the bonus — and the milestone level-up log line now shouts the specific gain.",

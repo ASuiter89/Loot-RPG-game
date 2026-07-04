@@ -4,8 +4,18 @@ import { ENEMY_RESIST, DEFAULT_RESIST, RESIST_CAP, resistFor } from '../../src/d
 const entries = Object.entries(ENEMY_RESIST);
 
 describe('ENEMY_RESIST table', () => {
-  it('covers the whole roster (161 monsters + 5 bosses)', () => {
-    expect(entries.length).toBe(166);
+  it('covers the whole roster (161 monsters + 15 bosses; deathknight type shared)', () => {
+    expect(entries.length).toBe(175);
+  });
+
+  it('keys bosses by their BOSSES[].type, not the b_ sprite name', () => {
+    // e.type for a boss is the bare type (ratking), so the resist lookup must match it.
+    for (const t of ['ratking', 'inferno', 'dragon', 'deathknight', 'allseer',
+      'cindra', 'emberbound', 'masquerade', 'magmaw', 'mortisvane',
+      'vael', 'tidewarden', 'shrike', 'kaggoroth', 'ourok']) {
+      expect(ENEMY_RESIST[t], t).toBeTruthy();
+    }
+    expect(ENEMY_RESIST.b_ratking).toBeUndefined();
   });
 
   it('every entry has numeric phys + magic in a sane range', () => {

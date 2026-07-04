@@ -179,11 +179,23 @@ export const ENEMY_RESIST = {
   deathknight: { phys: 1.45, magic: 0.85 }, // heavy plate plus undead, leans physical-tough
   dreadreaper: { phys: 0.6, magic: 1.7 }, // spectral death lurker, phases through steel
   voidtitan: { phys: 0.75, magic: 1.55 }, // body of void energy, soft to weapons
-  b_ratking: { phys: 1.15, magic: 0.95 }, // fleshy swarm — balanced, slight physical lean
-  b_inferno: { phys: 0.8, magic: 1.4 }, // fire elemental — blades find little, resists magic
-  b_dragon: { phys: 1.45, magic: 1.05 }, // scaled brute — tough hide, moderate wards
-  b_deathknight: { phys: 1.4, magic: 1.2 }, // armored undead — heavy plate, strong wards
-  b_allseer: { phys: 0.8, magic: 1.5 }, // eldritch caster — soft to steel, resists magic
+  // ── Bosses (keyed by BOSSES[].type, not the b_ sprite name). Tanky but never a
+  //    wall: the resisted school stays <= ~1.5 so no fixed boss shuts out a pure class. ──
+  ratking: { phys: 1.15, magic: 0.95 }, // fleshy swarm — balanced, slight physical lean
+  inferno: { phys: 0.8, magic: 1.4 }, // fire demon — blades find little, resists magic
+  dragon: { phys: 1.45, magic: 1.05 }, // scaled brute — tough hide, moderate wards
+  deathknight: { phys: 1.4, magic: 1.2 }, // armored undead — heavy plate, strong wards
+  allseer: { phys: 0.8, magic: 1.5 }, // eldritch caster — soft to steel, resists magic
+  cindra: { phys: 0.75, magic: 1.45 }, // arcane weaver — frail body, potent magic wards
+  emberbound: { phys: 0.9, magic: 1.35 }, // ashen fire warden — resists flame-magic, softer to steel
+  masquerade: { phys: 0.8, magic: 1.4 }, // duke of mirrors — illusion-warded against magic
+  magmaw: { phys: 1.2, magic: 1.25 }, // molten devourer — rock-tough and fire-warded, high both
+  mortisvane: { phys: 0.8, magic: 1.45 }, // necrolord — deathly magic wards, soft flesh
+  vael: { phys: 1.5, magic: 1.0 }, // the sunderer — brute physical bulwark, moderate magic
+  tidewarden: { phys: 0.9, magic: 1.35 }, // tide elemental — water parts steel, resists magic
+  shrike: { phys: 1.2, magic: 0.95 }, // impaler beast — physical predator, little warding
+  kaggoroth: { phys: 1.5, magic: 1.05 }, // chained titan — colossal physical bulk, moderate wards
+  ourok: { phys: 1.0, magic: 1.4 }, // dungeon heart — eldritch core, magic-warded
 };
 
 // The resist profile for an enemy type, or the balanced default.

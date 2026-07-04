@@ -576,6 +576,9 @@
              empty right flank balances the Back flank so the title stays centred. -->
         <span class="modal-head__flank right"></span>
       </div>
+      <!-- Hub tagline: centred under the "Town" title, shown only on the hub menu
+           (openTownHub fills + reveals it; opening any service hides it). -->
+      <div id="town-hub-blurb" class="town-blurb town-hub-blurb" hidden></div>
       <div id="town-gold">Your gold: <span data-spr=ic_money></span><span id="town-gold-count">0</span><span id="town-gold-vault"></span></div>
       <div id="town-mats"></div>
       <div id="town-content"></div>
@@ -649,6 +652,21 @@
     <div class="greed-btns">
       <button class="greed-yes" onclick="acceptGreed()">Brave it — double spoils</button>
       <button class="greed-no" onclick="declineGreed()">Take the safe path</button>
+    </div>
+  </div>
+</div>
+
+<!-- Boss-floor gate: a world-pausing confirmation at the threshold of a boss
+     arena. Reuses the greed-card component styling. Shown by openBossGate(); the
+     buttons bridge to bossGateReady()/bossGateCancel(). Once inside, both
+     staircases and the town portal seal until the guardian falls or you die. -->
+<div id="boss-gate-overlay">
+  <div id="boss-gate-card">
+    <div class="greed-title"><span data-spr=feat_door></span> A Boss Floor</div>
+    <div class="greed-body" id="boss-gate-body">A guardian holds the floor below. Step in and <b>every exit seals</b> until it falls or you do. Are you ready?</div>
+    <div class="greed-btns">
+      <button class="greed-yes" onclick="bossGateReady()">I'm ready — seal me in</button>
+      <button class="greed-no" onclick="bossGateCancel()">Not yet</button>
     </div>
   </div>
 </div>
