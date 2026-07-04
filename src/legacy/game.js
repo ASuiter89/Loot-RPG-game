@@ -896,6 +896,38 @@ function renderCursorControls() {
     + `<div class="dp-sw-face">${cursorSwatchIcon(o.idx, o.flip)}</div></div>`).join('');
 }
 
+// ── CURSOR SIZE — scales just the mouse pointer (Settings → CURSOR). The baked
+// pointer already grows with UI SIZE; this multiplier fine-tunes it on top of
+// that, so a player can enlarge (or keep) the blade without resizing every menu.
+// Ranges 1x–2x in 0.25 steps (default 1x); applyGameCursor multiplies it by the
+// UI scale and caps the result at the 128px ceiling browsers enforce on custom
+// cursors. Travels with cursorChoice via SETTINGS_SYNC_KEYS.
+const CURSOR_SIZE_KEY = 'dungeonLootCursorSize';
+const CURSOR_SIZE_MIN = 1, CURSOR_SIZE_MAX = 2, CURSOR_SIZE_STEP = 0.25;
+const CURSOR_SIZE_STEPS = [1, 1.25, 1.5, 1.75, 2];
+let cursorSize = 1;
+try {
+  const _cs = parseFloat(localStorage.getItem(CURSOR_SIZE_KEY));
+  if (!isNaN(_cs)) cursorSize = Math.min(CURSOR_SIZE_MAX, Math.max(CURSOR_SIZE_MIN, _cs));
+} catch (e) {}
+function setCursorSize(v) {
+  // snap to the nearest 0.25 step and clamp to 1–2
+  v = Math.round(v / CURSOR_SIZE_STEP) * CURSOR_SIZE_STEP;
+  cursorSize = Math.min(CURSOR_SIZE_MAX, Math.max(CURSOR_SIZE_MIN, v));
+  try { localStorage.setItem(CURSOR_SIZE_KEY, String(cursorSize)); } catch (e) {}
+  settingsChanged();
+  applyGameCursor();          // rebake the pointer at the new size
+  renderCursorSizeControls();
+  if (typeof sfx === 'function') sfx('click');
+}
+function renderCursorSizeControls() {
+  const row = document.getElementById('cursor-size-row');
+  if (!row) return;
+  row.innerHTML = CURSOR_SIZE_STEPS.map(v =>
+    `<button class="dpad-cfg-btn ${Math.abs(cursorSize - v) < 0.001 ? 'sel' : ''}" onclick="setCursorSize(${v})">${v}x</button>`
+  ).join('');
+}
+
 // Custom mouse cursor: a DawnLike atlas tile (chosen in → CURSOR, default a
 // blade), flipped so its tip points up-left like a normal pointer, baked to a
 // crisp 32px PNG. It replaces BOTH the stock OS arrow and the hand/finger pointer
@@ -908,16 +940,21 @@ function applyGameCursor() {
   if (!spriteReady) return;
   const opt = cursorOption();
   // Scale the baked pointer with the UI SIZE setting so it grows alongside the
-  // rest of the interface instead of staying a tiny 32px sprite at 2x.
-  const S = Math.min(2, Math.max(1, uiScale || 1));
-  const OUT = Math.round(32 * S); // 16px atlas tile scaled up to a cursor size
+  // rest of the interface instead of staying a tiny 32px sprite at 2x, then
+  // apply the dedicated CURSOR SIZE multiplier on top for direct fine-tuning.
+  const S = Math.min(2, Math.max(1, uiScale || 1)) * Math.min(2, Math.max(1, cursorSize || 1));
+  // 16px atlas tile scaled up to a cursor size, capped at 128px — browsers ignore
+  // custom cursors larger than that and silently fall back to the OS arrow.
+  const OUT = Math.min(128, Math.round(32 * S));
   const sx = (opt.idx % ATLAS_COLS) * ATLAS_TS, sy = ((opt.idx / ATLAS_COLS) | 0) * ATLAS_TS;
   const c = document.createElement('canvas'); c.width = OUT; c.height = OUT;
   const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
   if (opt.flip) { g.translate(OUT, 0); g.scale(-1, 1); } // flip so the tip points up-left
   g.drawImage(spriteSheet, sx, sy, ATLAS_TS, ATLAS_TS, 0, 0, OUT, OUT);
-  // The click hotspot sits on this weapon's up-left tip (per-option), scaled to match.
-  const hx = Math.round((opt.hotX || 0) * S), hy = Math.round((opt.hotY || 0) * S);
+  // The click hotspot sits on this weapon's up-left tip (per-option), scaled to
+  // match the baked size (OUT/32, so it tracks the 128px cap too).
+  const hs = OUT / 32;
+  const hx = Math.round((opt.hotX || 0) * hs), hy = Math.round((opt.hotY || 0) * hs);
   const cur = 'url(' + c.toDataURL('image/png') + ') ' + hx + ' ' + hy + ', auto';
   document.documentElement.style.cursor = cur; // default + fallback for any unstyled node
   // Force the blade over clickable elements too: they set their own `cursor: pointer`,
@@ -6509,7 +6546,7 @@ window.gameGuide = function gameGuide(topic) {
       `Cast hotbar skills: number keys ${key('skill1')}-${key('skill' + SKILL_SLOTS)} fire the ${SKILL_SLOTS} manual slots on the RIGHT of the bar (tap to cast). One extra skill sits in a dedicated auto-cast slot in the MIDDLE and fires itself — see the "autocast" topic.`,
       `Esc closes the top menu/overlay, or opens Settings. Settings is split into tabs (Play / Visuals / Audio / Progress / About); non-movement keys are remappable under the Play tab → KEYS (◀ Back or Esc there returns to Settings). The keys shown here are your CURRENT bindings.`,
       `The Play tab's TITLE SCREEN button (at the very top) saves your progress and returns you to the title/landing screen without abandoning the run — hit CONTINUE there to drop straight back in. (This is separate from Reset Run on the Progress tab, which wipes the hero.)`,
-      `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds MINIMAP (the top-left floor-sketch box size — Small / Medium / Large), UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker.`,
+      `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds MINIMAP (the top-left floor-sketch box size — Small / Medium / Large), UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker plus CURSOR SIZE (a 1x–2x multiplier that enlarges the mouse pointer on top of the UI scale; default 1x).`,
     ],
     movement: [
       `Walking, sprinting and dashing all move a free-floating body in real time (with momentum), not on a turn grid. Hold a direction; let go to stop.`,
@@ -7774,7 +7811,7 @@ function toggleSettingsMenu(e) {
   if (e) e.stopPropagation();
   const menu = document.getElementById('settings-menu');
   if (!menu) return;
-  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderDpadControls(); renderCursorControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); updateMixButtons(); centerSettingsCard(); }
+  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderDpadControls(); renderCursorControls(); renderCursorSizeControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); updateMixButtons(); centerSettingsCard(); }
 }
 function closeSettingsMenu() {
   const menu = document.getElementById('settings-menu');
@@ -24463,6 +24500,7 @@ async function stashReconcile() {
 const SETTINGS_SYNC_KEYS = [
   'dungeonLootUiFont',        // chosen UI font
   'cursorChoice',             // chosen cursor
+  'dungeonLootCursorSize',    // cursor size multiplier
   'dungeonLoot_sprintMode',   // sprint HOLD vs TOGGLE
   'dungeonLoot_heroBars',     // under-hero HP/MP bars on/off
   'dungeonLoot_crosshair',    // red target crosshair on/off
@@ -26042,6 +26080,8 @@ const __DL_FN_BRIDGE = {
   setCursorChoice,
   cursorSwatchIcon,
   renderCursorControls,
+  setCursorSize,
+  renderCursorSizeControls,
   applyGameCursor,
   _mkWalkSheet,
   heroWalkSheet,

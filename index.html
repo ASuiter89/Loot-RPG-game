@@ -322,11 +322,14 @@
           <select id="ui-font-select" onchange="setUiFont(this.value)"></select>
         </div>
 
-        <!-- CURSOR — mouse-pointer picker. Shown only on mouse (fine pointer);
-             populated by renderCursorControls() when the menu opens. -->
+        <!-- CURSOR — mouse-pointer picker and size. Shown only on mouse (fine
+             pointer); populated by renderCursorControls() /
+             renderCursorSizeControls() when the menu opens. -->
         <div id="cursor-settings">
           <div class="settings-dpad-label">CURSOR</div>
           <div class="settings-dpad-row" id="cursor-style-row"></div>
+          <div class="settings-dpad-label">CURSOR SIZE</div>
+          <div class="settings-dpad-row" id="cursor-size-row"></div>
         </div>
         </div>
 

@@ -15,6 +15,9 @@ export const CHANGELOG = [
     "When you slip behind a tree or tall furniture, your see-through silhouette now takes your class colour — Warrior red, Mage yellow, Templar blue, Rogue green — so you can still read who you are at a glance.",
     "Enemies hidden behind scenery now show a distinct magenta silhouette, so a lurking foe never blurs into a red Warrior.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Cursor size setting", by: "Claude", notes: [
+    "Settings ▸ Visuals ▸ CURSOR SIZE — a new 1x–2x picker that enlarges the mouse pointer on top of the UI scale, so you can grow the blade without resizing every menu. Defaults to 1x and travels with your chosen cursor across devices.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Patch notes group by local day", by: "Claude", notes: [
     "Version History now dates each update by its Pacific calendar day — evening changes no longer jump ahead to the next day's heading.",
     "Re-dated recent entries that had rolled to the wrong day.",
