@@ -11,9 +11,18 @@ export const CHANGELOG = [
     "Bow and staff shots, ranged summon bolts, and bolt/blast spells now deal their damage the instant the projectile REACHES the target — a foe no longer dies (and vanishes) before the bolt visibly connects.",
     "The release sound still fires as you loose the shot; the hit, its numbers and any crit land as the bolt arrives.",
   ] },
+  { date: "2026-07-03", size: "large", v: "Uniques reborn — one hand-crafted red for every gear type", by: "Claude", notes: [
+    "Red items are no longer randomly-rolled: every unique is now a hand-crafted, named artifact — the one-of-a-kind version of a specific gear type, with one for every weapon, off-hand, armour and jewelry base in the game.",
+    "Each unique always wears the SAME signature stat and the SAME six modifiers, hand-picked for the class and fantasy its name promises, plus its own signature power (a legendary modifier like Vampiric). Only the numbers change — they roll scaled to the depth it drops on.",
+    "A unique is fixed the moment it drops: its values lock in and it can never be augmented, rerolled or transmuted at the Enchanter. Its detail card flags the fixed properties and shows the signature power.",
+    "Every unique carries its own flavour text and feels distinct from the rest — no two share a name or a build.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Wandering merchant: fuller stock, hover to compare", by: "Jeff Louie", notes: [
     "The roaming merchant now lays out at least six gear pieces, so the detour always pays off.",
     "Hover any ware to pop its full card beside your equipped piece — spot an upgrade before you spend a coin.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Watch page loads again", by: "Claude", notes: [
+    "The Watch spectator page now ships with the built site, so opening it no longer hits a 404.",
   ] },
   { date: "2026-07-03", size: "small", v: "Enchanter: Esc backs out one step at a time", by: "Jeff Louie", notes: [
     "With an item picked in the Enchanter, Esc now returns to the gear screen instead of jumping all the way out to town.",

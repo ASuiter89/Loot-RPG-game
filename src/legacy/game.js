@@ -44,6 +44,7 @@ import { mercCost } from '../systems/mercPricing.js';
 import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTints.js';
 import { elementOf, paletteFor, castArchetype, weaponArchetype, projectileElement, bossFxFor,
   archetypeIsProjectile, clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
+import { UNIQUES, uniqueForBase, uniquesForSlot } from '../data/uniques.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -282,6 +283,9 @@ const SUBTYPE_KEYS = Object.keys(WEAPON_SUBTYPES).sort((a, b) => b.length - a.le
 // legacy bare-category weapon ("Ancient Sword of Power" → null, resolved by the
 // category fallback in weaponBaseType).
 function weaponSubType(item) {
+  // A hand-crafted unique carries its sub-type explicitly on item.base (its fancy
+  // name won't contain the sub-type word), so prefer that; else read the name.
+  if (item && item.base && WEAPON_SUBTYPES[item.base]) return item.base;
   const nm = (item && item.name) || '';
   for (const s of SUBTYPE_KEYS) if (nm.includes(s)) return s;
   return null;
@@ -4302,6 +4306,7 @@ for (const s in ARMOR_REQ) ARMOR_REQ_KEYS[s] = Object.keys(ARMOR_REQ[s]).sort((a
 function armorReqDef(item) {
   const tbl = ARMOR_REQ[item.slot];
   if (!tbl) return null;
+  if (item.base && tbl[item.base]) return tbl[item.base]; // hand-crafted unique carries its base
   const nm = item.name || '';
   for (const k of ARMOR_REQ_KEYS[item.slot]) if (nm.includes(k)) return tbl[k];
   return null;
@@ -4339,7 +4344,8 @@ function itemAttrReq(item) {
     def = (sub && WEAPON_REQ[sub]) || WEAPON_REQ[weaponBaseType(item)] || null;
   } else if (item.slot === 'offhand') {
     const nm = item.name || '';
-    for (const k of OFFHAND_REQ_KEYS) if (nm.includes(k)) { def = OFFHAND_REQ[k]; break; }
+    if (item.base && OFFHAND_REQ[item.base]) def = OFFHAND_REQ[item.base]; // unique carries its base
+    else for (const k of OFFHAND_REQ_KEYS) if (nm.includes(k)) { def = OFFHAND_REQ[k]; break; }
   } else if (ARMOR_REQ[item.slot]) {
     def = armorReqDef(item);
   }
@@ -6232,7 +6238,15 @@ window.gameState = function gameState(radius) {
   const R = (typeof radius === 'number' && radius > 0) ? Math.floor(radius) : 10;
   const live = (enemies || []).filter(e => e && !e.dead);
   const dist = e => Math.abs(e.x - player.x) + Math.abs(e.y - player.y);
-  const brief = it => it ? { name: it.name, slot: it.slot, tier: it.tier, stats: it.stats } : null;
+  // A compact item view for the AI-play API. Attributes, the signature power and
+  // the unique/fixed flags matter to a driving agent (a fixed unique can't be
+  // reforged), so they ride along with the stats.
+  const brief = it => it ? {
+    name: it.name, slot: it.slot, tier: it.tier, stats: it.stats,
+    ...(it.attrs && Object.keys(it.attrs).length ? { attrs: it.attrs } : {}),
+    ...(it.power && ITEM_POWERS[it.power] ? { power: ITEM_POWERS[it.power].name } : {}),
+    ...(it.unique ? { unique: it.unique, fixed: !!it.fixed } : {}),
+  } : null;
 
   // ── ASCII overlay map centred on the player ──
   // Terrain glyphs include the spike hazard floor (") an agent must respect;
@@ -6731,6 +6745,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     loot: [
       `Rarity is COLOUR ONLY (no text labels), lowest to highest: grey → white → green → blue → purple → orange → red. Higher tiers allow more bonus affixes.`,
+      `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike every other rarity it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and its own signature power (a "legendary modifier" like Vampiric). Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. gameState() marks worn/held uniques with a "unique" id and "fixed":true.`,
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a depth-milestone cache, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
       `Set pieces are a distinct top-rarity class shown in teal (not the red of a unique). They drop only at the top tier — as rare as any unique — and grant escalating stat bonuses at 2 and 4 matched pieces worn. Wearing the full set (4 pieces = complete) also unlocks its SIGNATURE POWER — a unique effect, not just more stats: Warden's Aegis Wall (block + reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), or Arcanist's Arcane Overflow (cooldown reduction + mana leech). A completed set wraps the hero in a golden aura and its "… set" tag turns gold with a ✦. A piece can roll for any slot; hover/press-hold the tag to see the bonuses, the power, which slots you're wearing, and your count. gameState().sets lists worn sets, completion and active powers.`,
       `Item power is driven more by item level (ilvl, geared to current depth) than by rarity alone. gameState().menu.inventory gives brief items; read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
@@ -12298,6 +12313,7 @@ function afterEnchant(item) {
 function enchantAugment(id) {
   const g = findGear(id); if (!g) return;
   const item = g.item;
+  if (isFixedItem(item)) return; // uniques are fixed on drop — no new properties
   const cost = augmentCost(item);
   const stat = canAddStat(item), attr = canAddAttr(item);
   if ((!stat && !attr) || !canAfford(cost)) return;
@@ -12314,6 +12330,7 @@ function enchantAugment(id) {
 function enchantRerollAll(id) {
   const g = findGear(id); if (!g) return;
   const item = g.item;
+  if (isFixedItem(item)) return; // a unique's properties are locked on drop
   const cost = rerollAllCost(item);
   const caps = TIER_AFFIX_CAPS[item.tier] || { stat:0, attr:0 };
   if (!canAfford(cost) || (caps.stat + caps.attr) === 0) return;
@@ -12335,6 +12352,7 @@ function enchantRerollAll(id) {
 function enchantRerollValue(id, kind, key) {
   const g = findGear(id); if (!g) return;
   const item = g.item;
+  if (isFixedItem(item)) return; // fixed unique — values can't be reforged
   const cost = rerollValueCost(item);
   if (!canAfford(cost)) return;
   const mult = tierMult(item.tier);
@@ -12356,6 +12374,7 @@ function enchantRerollValue(id, kind, key) {
 function enchantRerollType(id, kind, key) {
   const g = findGear(id); if (!g) return;
   const item = g.item;
+  if (isFixedItem(item)) return; // fixed unique — modifiers can't be transmuted
   const cost = rerollTypeCost(item);
   if (!canAfford(cost)) return;
   const mult = tierMult(item.tier);
@@ -12430,6 +12449,10 @@ function enchantPick(id) { hideTooltip(); enchantSel = id; renderEnchanter(); }
 function enchantBack()   { hideTooltip(); enchantSel = null; renderEnchanter(); }
 
 function renderEnchantItem(item) {
+  // A hand-crafted unique is fixed on drop: every property is locked, so the
+  // Enchanter can only admire it. Show its properties read-only with a clear note
+  // instead of the reroll/augment machinery.
+  if (isFixedItem(item)) { renderFixedEnchantItem(item); return; }
   const caps = TIER_AFFIX_CAPS[item.tier] || { stat:0, attr:0 };
   const { statN, attrN } = itemAffixCounts(item);
   const head = headlineStats(item);
@@ -12527,6 +12550,31 @@ function renderEnchantItem(item) {
     <div class="ench-actbar">${augBtn}${allBtn}</div>
     ${blockMsg ? `<div class="hc-line" style="opacity:0.6;margin-top:4px">${blockMsg}</div>` : ''}
     ${poolPanel}`);
+}
+
+// The Enchanter view for a FIXED unique: every property is shown locked (with a
+// native/attribute/curse tag) and there are no reroll or augment controls — a
+// unique is fixed on drop, so its modifiers can never be reforged.
+function renderFixedEnchantItem(item) {
+  const head = headlineStats(item);
+  const line = (k, valStr, tag) =>
+    `<div class="hc-line" style="opacity:0.85"><span data-spr=feat_door></span> ${valStr} <span class="stat-abbr" ${hoverTip(statMeaningTip('stat', k))}>${STAT_LABELS[k] || k}</span> <span style="font-size:1.2rem">${tag}</span></div>`;
+  const statRows = Object.entries(item.stats).map(([k, v]) => {
+    const valStr = (typeof v === 'string') ? v : (v < 0 ? '' : '+') + v;
+    return line(k, valStr, head.includes(k) ? '(native)' : '(fixed)');
+  }).join('');
+  const attrRows = Object.entries(item.attrs || {}).map(([k, v]) =>
+    `<div class="hc-line" style="opacity:0.85;color:var(--gold)"><span data-spr=feat_door></span> +${v} <span class="stat-abbr" ${hoverTip(statMeaningTip('attr', k))}>${(ATTRIBUTES[k] || {}).label || k}</span> <span style="font-size:1.2rem">(fixed)</span></div>`).join('');
+  const powHtml = itemPowerFront(item);
+  const powLine = powHtml ? `<div class="hc-line" style="opacity:0.9">${powHtml}</div>` : '';
+  setTownContent(`
+    <div class="shop-row has-actions"><button class="modal-nav-btn" onclick="enchantBack()">‹ Back</button>
+      <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${item.name}</div>
+      <div class="shop-row-sub">${SLOTS[item.slot].label} · ilvl ${item.ilvl} · unique</div></div></div>
+    <div class="ench-legend">A unique is fixed the moment it drops — its properties can't be augmented or reforged.</div>
+    ${powLine}
+    ${statRows}${attrRows}
+    <div class="hc-line" style="opacity:0.6;margin-top:4px">This artifact's modifiers are set for good. Its values were rolled once, scaled to the depth it dropped on, and locked.</div>`);
 }
 
 // ── DUNGEON GATE — choose a difficulty, then a floor, to re-enter ──
@@ -13415,6 +13463,70 @@ function lockedStats(item) {
   return locked;
 }
 
+// ── HAND-CRAFTED UNIQUES ──
+// The rarest tier (red) is NOT a randomly-affixed drop like every other rarity. Each
+// unique is a hand-authored, NAMED artifact (see src/data/uniques.js): one per gear
+// type, with a FIXED set of six modifiers plus a signature "native" stat and its own
+// legendary power. Only the VALUES roll — scaled by depth (ilvl) exactly once at drop
+// — after which they're locked: a unique can never be augmented or rerolled (see
+// isFixedItem + the Enchanter guards). A share of red drops still roll as chase SET
+// pieces instead (UNIQUE_SET_CHANCE); the rest are these fixed uniques.
+const UNIQUE_SET_CHANCE = 0.4;
+// Which stats a slot's headline OWNS automatically (protected, never a native/mod):
+// DMG for weapons, DEF (+ATK on hands) for armour, the family headline for off-hands,
+// and nothing for jewelry (its native IS the headline).
+function uniqueMandatoryHeadline(slot, familyHeadline) {
+  if (slot === 'weapon') return ['DMG'];
+  if (slot === 'hands')  return ['DEF', 'ATK'];
+  if (slot === 'head' || slot === 'chest' || slot === 'legs') return ['DEF'];
+  if (slot === 'offhand') return familyHeadline.slice();
+  return []; // ring / amulet
+}
+// Build a fully-formed FIXED unique from a definition, rolling each property's VALUE
+// by depth (ilvl) once. applyBaseStats lays down the auto headline (DMG/DEF/family);
+// the definition's `native` then replaces the base's default innate signature, and
+// its six `mods` (five stats + one attribute) fill the rest. The result is marked
+// `fixed` so the Enchanter leaves it alone.
+function buildUnique(def, lvl) {
+  const tier = 'unique';
+  const mult = tierMult(tier);
+  const dmgMult = 2.6;
+  const slot = def.slot;
+  const baseName = def.base;
+  const value = Math.round(5000 * (1 + lvl * 0.12));
+  const item = { id: Math.random(), name: def.name, tier, slot, ilvl: lvl,
+    stats: {}, attrs: {}, value, flavor: def.flavor, icon: iconForBase(slot, baseName),
+    base: baseName, unique: def.id, fixed: true, power: def.power };
+  // Auto headline (DMG / DEF+ATK / off-hand family), rolled within its depth band.
+  applyBaseStats(item, baseName, lvl + rnd(0, 2) * 0.6, mult, dmgMult);
+  const baseInnate = (item.baseStats || []).slice(); // what applyBaseStats protected
+  if (slot === 'offhand') {
+    // Keep the family headline (DEF/BLOCK/SPELLPWR/ATK); native is an EXTRA signature.
+    if (!(def.native in item.stats)) item.stats[def.native] = affixStatValue(def.native, lvl, mult);
+    item.baseStats = [...baseInnate.filter(s => s !== def.native), def.native];
+  } else {
+    // Weapon/armour/jewelry: the unique's native replaces the base's default innate.
+    for (const s of baseInnate) if (s !== def.native) delete item.stats[s];
+    item.stats[def.native] = affixStatValue(def.native, lvl, mult);
+    item.baseStats = [def.native];
+  }
+  // The six fixed modifiers — their values vary by depth, then lock.
+  for (const m of def.mods) {
+    if (m.kind === 'attr') item.attrs[m.key] = affixAttrValue(lvl, mult);
+    else item.stats[m.key] = affixStatValue(m.key, lvl, mult);
+  }
+  return item;
+}
+// Pick a unique definition for a drop — any of them, or (when a slot is forced, e.g.
+// the town gambler targeting a gear type) one that fits that slot.
+function pickUnique(forceSlot) {
+  let pool = UNIQUES;
+  if (forceSlot && SLOTS[forceSlot]) { const s = uniquesForSlot(forceSlot); if (s.length) pool = s; }
+  return pick(pool);
+}
+// Is this a fixed item (a hand-crafted unique)? Fixed items never reroll/augment.
+function isFixedItem(item) { return !!(item && item.fixed); }
+
 function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null) {
   // Item level: how deep this drop is geared for. Higher item level means
   // bigger raw stats regardless of rarity, so loot from deeper floors steadily
@@ -13426,6 +13538,12 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   // forceSlot pins the equipment slot (also used by the gambler, when the player
   // pays to target a specific item type); otherwise the slot is rolled.
   const tier = forceTier || rollTier(rolls, lvl);
+  // The red tier is either a hand-crafted unique (fixed, named artifact) or — a
+  // minority of the time — a chase set piece. A unique short-circuits the whole
+  // random-affix pipeline: its stats come from its definition, not a roll.
+  if (tier === 'unique' && Math.random() >= UNIQUE_SET_CHANCE) {
+    return buildUnique(pickUnique(forceSlot), lvl);
+  }
   const slot = (forceSlot && SLOTS[forceSlot]) ? forceSlot : weighted(SLOT_WEIGHTS);
   const baseName = rollBaseName(slot);
 
@@ -13467,7 +13585,9 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   // own colour — so completing a set is a real chase. Legendaries always carry a
   // power; lower tiers get neither.
   if (tier === 'unique') {
-    if (Math.random() < 0.4) item.set = rollItemSet(); else item.power = rollItemPower();
+    // A hand-crafted unique already returned above; reaching here means this red
+    // drop rolled as a chase SET piece instead.
+    item.set = rollItemSet();
   } else if (tier === 'legendary') {
     item.power = rollItemPower();
   }
@@ -23511,6 +23631,15 @@ function itemCardHTML(item, opts = {}) {
     }
   }
   const power = item.slot ? itemPower(item) : 0;
+  // Signature power (Vampiric, Cleaving, …) — the build-defining "legendary
+  // modifier" a legendary/unique carries. Its glowing tag isn't in the stat list,
+  // so surface it here in the detail card too.
+  const powTag = item.slot ? itemPowerFront(item) : '';
+  const powerLine = powTag ? `<div style="margin:3px 0">${powTag}</div>` : '';
+  // A hand-crafted unique wears its identity on its sleeve: its properties are
+  // fixed on drop and can never be reforged.
+  const uniqueLine = item.fixed
+    ? `<div style="color:${(TIERS.unique || {}).color || '#ff2222'};font-size:1.2rem;font-weight:bold;margin:2px 0">✦ Unique — properties fixed on drop</div>` : '';
   // Item level: drives raw stat size, so it's worth surfacing alongside power.
   const ilvlLine = (item.slot && item.ilvl)
     ? `<span style="color:var(--blue-250);font-weight:bold">ilvl ${item.ilvl}</span>` : '';
@@ -23528,6 +23657,8 @@ function itemCardHTML(item, opts = {}) {
     <div class="tt-name" style="color:${tierColor(item)}">${curseMark(item)}${item.name}</div>
     <div class="tt-tier" style="color:${tierColor(item)}">${item.slot ? `<span data-spr=${SLOTS[item.slot].sprite}></span> ${SLOTS[item.slot].label}` : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</div>
     ${item.slot ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${power}</div>` : ''}
+    ${powerLine}
+    ${uniqueLine}
     ${reqLine}
     ${stats}
     ${weaponLine}
