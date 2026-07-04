@@ -33,9 +33,14 @@ export function offenseScore(c, T = GEAR_POWER) {
   // Expected crit multiplier on an average hit.
   const critChance = rated(pos(c.critRating), critOpp(L, T));
   const critAvg = 1 + critChance * pos(c.critMult - 1);
-  // Armor a representative foe shrugs off, softened by your Armor Penetration.
+  // Physical armor a representative foe shrugs off, softened by your Armor Pen —
+  // applies to the MARTIAL lane (autos + weapon skills).
   const pen = pos(c.penPct) / 100;
   const armorFrac = 1 - T.refArmorPct * (1 - pen / (pen + T.penScale));
+  // Magic resistance the same foe shrugs off, softened by your Magic Pen — applies to
+  // the SPELL lane. So Magic Pen buys Power in proportion to how much you cast.
+  const mpen = pos(c.magicPenPct) / 100;
+  const resFrac = 1 - (T.refMagicResPct != null ? T.refMagicResPct : T.refArmorPct) * (1 - mpen / (mpen + T.penScale));
   // Cooldown Reduction speeds every active (weapon skills AND spells).
   const cdrFrac = rated(pos(c.cdrRating), T.cdrScale);
 
@@ -52,7 +57,9 @@ export function offenseScore(c, T = GEAR_POWER) {
   const castRate = T.castRateBase * (1 + pos(c.castSpdPct) / 100) * (1 + cdrFrac);
   const spellDps = pos(c.spellCore) * castRate * (1 + pos(c.spellPwrPct) / 100);
 
-  let dps = (c.skillReliance * martialDps + c.spellReliance * spellDps) * c.offMult * critAvg * armorFrac;
+  // Each lane meets its OWN mitigation: martial → physical armor (Armor Pen),
+  // spell → magic resistance (Magic Pen).
+  let dps = (c.skillReliance * martialDps * armorFrac + c.spellReliance * spellDps * resFrac) * c.offMult * critAvg;
   // Situational amps count at a discount (only fire in some fights).
   dps *= 1 + T.bossW * pos(c.bossDmgPct) / 100 + T.execW * pos(c.execPct) / 100
     + T.cleaveW * pos(c.cleavePct) / 100 + T.bleedW * pos(c.bleedPct) / 100 + T.stunW * pos(c.stunPct) / 100;

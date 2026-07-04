@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "large", v: "Skills, spells & hybrids — and enemies that resist them differently", by: "Claude", notes: [
+    "Every active now has a clear school — SKILL (weapon, leeches, scales Skill Power), SPELL (magic, scales Spell Power, sped by Cast Speed), or the new HYBRID that lands BOTH a weapon part and a magic part in one cast. Each ability's tooltip spells out how its damage is built, and a hybrid shows its physical + magic split so nothing is vague.",
+    "Classes now sit on a spectrum: Warrior is pure weapon SKILLS, Mage is pure SPELLS, Rogue leans skill with shadow & toxic hybrids (Blink Strike, Venom Nova, Plague Lord and more), and Templar leans holy magic with holy-strike hybrids (Smite, Divine Storm, Redeemer). Each ability was hand-placed on the school that fits it.",
+    "Enemies no longer shrug off all damage equally. Every foe now has separate physical ARMOR and MAGIC RESISTANCE — a stone golem laughs off blades but melts to magic, a wraith ignores steel but not spells, most beasts sit in between. Hit each foe with the school it's weak to; a hybrid splits the difference and is never fully walled.",
+    "New gear stat MAGIC PENETRATION pierces enemy magic resistance — the caster's counterpart to Armor Pen. It rolls on caster gear and enchants, and now sits on wands and staves like the Astral Needle, where armor pen never made sense.",
+    "The bestiary card and gameState() now report each foe's armor and magic-resist, so you can plan your loadout around what's ahead.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Skill milestone text now states exact numbers", by: "Claude", notes: [
     "The rank 3 / 7 / 10 \"Rank bonuses\" ladder now spells out each milestone: +28% power (Empowered), +20% power & 20% faster recharge (Honed), +30% power plus +1 radius/range/target/hit (Mastered) — no more vague \"a power surge\".",
     "Passive milestones read their exact surge too — +8% / +10% / +12% to the bonus — and the milestone level-up log line now shouts the specific gain.",

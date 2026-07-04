@@ -32,6 +32,8 @@ import { SKILL_MILESTONES } from '../data/skillMilestones.js';
 import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/gearPower.js';
 import { GEAR_POWER } from '../data/gearPower.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
+import { resistFraction, penFraction, mitigate, physicalShare } from '../systems/defense.js';
+import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
@@ -151,18 +153,18 @@ const SLOT_AFFIX_POOLS = {
   // A weapon slot lists BOTH power/speed families; itemStatPool() then hard-gates
   // them by the weapon's category — a martial weapon keeps only SKILLPWR/ATKSPD, a
   // caster weapon (Staff/Wand) only SPELLPWR/CASTSPD — so the two never mix.
-  weapon: { stats: ['ATK','ACC','CRIT','CRITDMG','IDMG','DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','LEECH','MPLEECH','SPELLPWR','SKILLPWR','BLEED','STUNPWR','ATKSPD','CASTSPD'], attrs: ['might','agility','spirit'] },
-  head:   { stats: ['HP','MP','REGEN','CRIT','CRITDMG','SPD','MAGICFIND','XPGAIN','SPELLPWR','SKILLPWR','CDR','MCR','CASTSPD','DODGE','MPKILL','MATFIND'], attrs: ['vitality','spirit','luck'] },
+  weapon: { stats: ['ATK','ACC','CRIT','CRITDMG','IDMG','DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','MAGICPEN','LEECH','MPLEECH','SPELLPWR','SKILLPWR','BLEED','STUNPWR','ATKSPD','CASTSPD'], attrs: ['might','agility','spirit'] },
+  head:   { stats: ['HP','MP','REGEN','CRIT','CRITDMG','SPD','MAGICFIND','XPGAIN','SPELLPWR','SKILLPWR','CDR','MCR','CASTSPD','MAGICPEN','DODGE','MPKILL','MATFIND'], attrs: ['vitality','spirit','luck'] },
   chest:  { stats: ['HP','REGEN','MP','DR','BLOCK','THORNS','HPKILL','DODGE','MAGICFIND','TENAC'], attrs: ['vitality','spirit','luck'] },
   hands:  { stats: ['CRIT','ACC','CRITDMG','IDMG','DBLSTRIKE','SPD','PEN','LEECH','EXEC','CDR','CLEAVE','BLOCK','THORNS','ATKSPD','SKILLPWR'], attrs: ['might','agility','spirit'] },
   legs:   { stats: ['SPD','HP','REGEN','DODGE','DR','BLOCK','MP','GOLDFIND','XPGAIN','HPKILL','TENAC'], attrs: ['agility','vitality','luck'] },
-  ring:   { stats: ['CRIT','ACC','CRITDMG','ATK','IDMG','SKILLPWR','LEECH','MPLEECH','GOLDFIND','MAGICFIND','MATFIND','HP','MP','DEF','DBLSTRIKE','BOSSDMG','EXEC','PEN','MCR','MPKILL','CLEAVE'], attrs: ['might','agility','luck','spirit','vitality'] },
-  amulet: { stats: ['MP','HP','REGEN','SPELLPWR','CASTSPD','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC'], attrs: ['spirit','luck','vitality','might','agility'] },
+  ring:   { stats: ['CRIT','ACC','CRITDMG','ATK','IDMG','SKILLPWR','LEECH','MPLEECH','GOLDFIND','MAGICFIND','MATFIND','HP','MP','DEF','DBLSTRIKE','BOSSDMG','EXEC','PEN','MAGICPEN','MCR','MPKILL','CLEAVE'], attrs: ['might','agility','luck','spirit','vitality'] },
+  amulet: { stats: ['MP','HP','REGEN','SPELLPWR','CASTSPD','MAGICPEN','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC'], attrs: ['spirit','luck','vitality','might','agility'] },
   // Off-hands: defensive layers + caster utility. A shield's BLOCK headline already
   // flows through totalStat('BLOCK') into combat, so it needs no special-casing.
   // Like weapons, the power/speed stats here are gated by family in itemStatPool()
   // (caster Tome/Focus → SPELLPWR/CASTSPD; shields & martial off-hands → SKILLPWR).
-  offhand:{ stats: ['BLOCK','DR','THORNS','HP','REGEN','MP','SPELLPWR','CASTSPD','SKILLPWR','CDR','MCR','CRIT','DODGE','TENAC'], attrs: ['vitality','spirit','luck'] },
+  offhand:{ stats: ['BLOCK','DR','THORNS','HP','REGEN','MP','SPELLPWR','CASTSPD','MAGICPEN','SKILLPWR','CDR','MCR','CRIT','DODGE','TENAC'], attrs: ['vitality','spirit','luck'] },
 };
 // Skill/Spell power & their speed levers are mutually exclusive by gear type. The
 // two families below are the ones itemStatPool() drops from the "wrong" gear so a
@@ -2799,7 +2801,7 @@ const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', H
   LEECH:'Life Leech %', MPLEECH:'Mana Leech %', HPKILL:'Life on Kill', MPKILL:'Mana on Kill',
   THORNS:'Thorns', DR:'Damage Reduction', BLOCK:'Block Rating', DODGE:'Evasion',
   IDMG:'Increased Dmg %', DBLSTRIKE:'Double Strike %', CLEAVE:'Cleave %', BOSSDMG:'Dmg vs Bosses %',
-  EXEC:'Execute %', PEN:'Armor Pen %', GOLDFIND:'Gold Find %', XPGAIN:'XP Gain %',
+  EXEC:'Execute %', PEN:'Armor Pen %', MAGICPEN:'Magic Pen %', GOLDFIND:'Gold Find %', XPGAIN:'XP Gain %',
   MAGICFIND:'Magic Find %', MATFIND:'Material Find %', SPELLPWR:'Spell Power %',
   // Skill Power amps your MARTIAL active skills (the weapon-based ones) the way
   // Spell Power amps spells; Cast Speed shortens the recharge of spell actives the
@@ -2816,7 +2818,7 @@ const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', H
 const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', MP:'MP', CRIT:'CRIT', ACC:'ACC',
   CRITDMG:'CDMG', REGEN:'REG', LEECH:'LCH', MPLEECH:'MLC', HPKILL:'HoK', MPKILL:'MoK',
   THORNS:'THN', DR:'DR', BLOCK:'BLK', DODGE:'DGE', IDMG:'IDMG', DBLSTRIKE:'2X', CLEAVE:'CLV',
-  BOSSDMG:'vsB', EXEC:'EXE', PEN:'PEN', GOLDFIND:'GF', XPGAIN:'XP', MAGICFIND:'MF', MATFIND:'MTF',
+  BOSSDMG:'vsB', EXEC:'EXE', PEN:'PEN', MAGICPEN:'MPN', GOLDFIND:'GF', XPGAIN:'XP', MAGICFIND:'MF', MATFIND:'MTF',
   SPELLPWR:'SP', SKILLPWR:'SKP', CASTSPD:'CSP', CDR:'CDR', MCR:'MCR', BLEED:'BLD', STUNPWR:'STN', ATKSPD:'ASP', TENAC:'TEN' };
 // Stats whose value is a percentage — shown with a trailing % and consumed as /100
 // throughout combat. (CRIT/CRITDMG were always percentages; they're listed too so
@@ -2825,7 +2827,7 @@ const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', MP:'MP
 // they're no longer here — they render as plain "+N" and the hero sheet shows the
 // effective % they currently produce. CRITDMG stays a % (it's a damage multiplier).
 const PCT_STATS = new Set(['CRITDMG','LEECH','MPLEECH','IDMG',
-  'DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','GOLDFIND','XPGAIN','MAGICFIND','MATFIND',
+  'DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','MAGICPEN','GOLDFIND','XPGAIN','MAGICFIND','MATFIND',
   'SPELLPWR','SKILLPWR','CASTSPD','MCR','BLEED','STUNPWR','ATKSPD','TENAC']);
 // One-line "what this stat does" blurbs, surfaced by hovering a stat name (see
 // statMeaningTip) in the Enchanter, hero sheet and item cards.
@@ -2854,7 +2856,8 @@ const STAT_DESC = {
   CLEAVE: 'Your hits splash damage to nearby foes.',
   BOSSDMG: 'Extra damage dealt to bosses.',
   EXEC: 'Finishes off low-health foes (bosses just bleed extra).',
-  PEN: 'Ignores part of the foe\'s armor.',
+  PEN: 'Ignores part of the foe\'s armor — makes your weapon attacks and martial skills hit harder.',
+  MAGICPEN: 'Ignores part of the foe\'s magic resistance — makes your spells (and a hybrid\'s magic half) hit harder.',
   GOLDFIND: 'Increases gold dropped by foes.',
   XPGAIN: 'Increases experience earned.',
   MAGICFIND: 'Improves the rarity of loot that drops.',
@@ -3382,7 +3385,7 @@ const FIST_AVG = 2;  // bare-fists average damage ((1+3)/2) — the weapon basel
 const POWER_STAT_AXIS = {
   ATK: 'atkFlat', IDMG: 'idmgPct', CRIT: 'critRating', LCK: 'critRating',
   SKILLPWR: 'skillPwrPct', SPELLPWR: 'spellPwrPct', ATKSPD: 'atkSpdPct', CASTSPD: 'castSpdPct',
-  CDR: 'cdrRating', PEN: 'penPct', DBLSTRIKE: 'dblStrikePct', CLEAVE: 'cleavePct',
+  CDR: 'cdrRating', PEN: 'penPct', MAGICPEN: 'magicPenPct', DBLSTRIKE: 'dblStrikePct', CLEAVE: 'cleavePct',
   BOSSDMG: 'bossDmgPct', EXEC: 'execPct', BLEED: 'bleedPct', STUNPWR: 'stunPct',
   ACC: 'accRating', SPD: 'dodgeRating', DODGE: 'dodgeRating', DEF: 'def', DR: 'drRating',
   BLOCK: 'blockRating', THORNS: 'thornsPct', TENAC: 'tenacPct', LEECH: 'leechPct',
@@ -3432,6 +3435,7 @@ function buildPowerContext() {
     castSpdPct: totalStat('CASTSPD'),
     cdrRating: totalStat('CDR'),
     penPct: totalStat('PEN') + 100 * skillBonus('pen'),
+    magicPenPct: totalStat('MAGICPEN') + 100 * skillBonus('mpen'),
     dblStrikePct: totalStat('DBLSTRIKE'),
     cleavePct: totalStat('CLEAVE'), bossDmgPct: totalStat('BOSSDMG'), execPct: totalStat('EXEC'),
     bleedPct: totalStat('BLEED'), stunPct: totalStat('STUNPWR'),
@@ -4891,7 +4895,7 @@ const SKILL_TREES = {
     active: buildWeb([
       {"id":"r_a00","name":"Backstab","icon":"sk_ra_backstab","mp":7,"cd":2,"syn":{"skill":"r_p00","per":0.05},"cast":{"shape":"melee","wpn":1.6,"crit":true},"desc":"A guaranteed-critical strike that deals {dmg}, hitting harder against wounded foes.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"r_a01","name":"Riposte","icon":"sk_ra_gut","mp":7,"cd":3,"cast":{"shape":"melee","wpn":1.5,"buff":[{"id":"dmgUp","dur":2,"mag":0.25}]},"desc":"A swift dueling thrust dealing {dmg} that buffs your damage briefly after striking.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"r_a02","name":"Smoke Bomb","icon":"sk_ra_smoke","mp":8,"cd":5,"cast":{"shape":"self","buff":[{"id":"dodgeUp","dur":4,"mag":0.35}]},"desc":"Drop a smoke cloud, granting a burst of dodge to slip away and feed Momentum.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"r_a02","name":"Smoke Bomb","icon":"sk_ra_smoke","mp":8,"cd":5,"cast":{"shape":"self","buff":[{"id":"dodgeUp","dur":4,"mag":0.35}],"kind":"spell"},"desc":"Drop a smoke cloud, granting a burst of dodge to slip away and feed Momentum.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"r_a03","name":"Poison Dart","icon":"sk_ra_poison","mp":7,"cd":3,"syn":{"skill":"r_p03","per":0.05},"cast":{"shape":"bolt","wpn":1.1,"range":5,"status":{"effect":"poison","dur":4,"chance":1}},"desc":"Fling a venomous dart for {dmg} that poisons the target.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"r_a04","name":"Throw Knife","icon":"sk_ra_throwknife","mp":6,"cd":2,"syn":{"skill":"r_p04","per":0.05},"cast":{"shape":"bolt","wpn":1.5,"range":6},"desc":"Hurl a knife at a distant enemy for {dmg}.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"r_a10","name":"Gut","icon":"sk_ra10","mp":9,"cd":3,"cast":{"shape":"melee","wpn":1.8,"status":{"effect":"vuln","dur":4,"chance":1}},"desc":"A vicious opening cut dealing {dmg} that leaves the target vulnerable.","br":0,"x":0.28,"y":0.34,"band":1,"req":["r_a00"]},
@@ -4901,23 +4905,23 @@ const SKILL_TREES = {
       {"id":"r_a14","name":"Pin","icon":"sk_ra_pin","mp":9,"cd":4,"cast":{"shape":"bolt","wpn":1.6,"range":6,"status":{"effect":"stun","dur":1,"chance":1}},"desc":"A piercing shot dealing {dmg} that stuns the target in place.","br":4,"x":0.28,"y":0.34,"band":1,"req":["r_a04"]},
       {"id":"r_a20","name":"Eviscerate","icon":"sk_ra_eviscerate","mp":12,"cd":4,"syn":{"skill":"r_p10","per":0.05},"cast":{"shape":"melee","wpn":2,"execute":0.2,"crit":true},"desc":"A guaranteed-critical strike dealing {dmg} that finishes off badly wounded foes.","br":0,"x":0.72,"y":0.34,"band":1,"req":["r_a00"]},
       {"id":"r_a21","name":"Focus","icon":"sk_ra_focusbuff","mp":11,"cd":6,"cast":{"shape":"self","buff":[{"id":"critUp","dur":5,"mag":0.3},{"id":"dmgUp","dur":5,"mag":0.25}]},"desc":"Center yourself, sharply raising crit and damage for a time.","br":1,"x":0.72,"y":0.34,"band":1,"req":["r_a01"]},
-      {"id":"r_a22","name":"Blink Strike","icon":"sk_ra_blink","mp":18,"cd":5,"syn":{"skill":"r_p12","per":0.05},"cast":{"shape":"teleport","wpn":1.6,"lifesteal":0.2,"range":5},"desc":"Teleport to a foe and cut them for {dmg}, leeching life on the hit.","br":2,"x":0.72,"y":0.34,"band":1,"req":["r_a02"]},
-      {"id":"r_a23","name":"Venom Nova","icon":"sk_ra_venomnova","mp":13,"cd":5,"syn":{"skill":"r_p13","per":0.05},"cast":{"shape":"nova","wpn":1.4,"radius":3,"status":{"effect":"poison","dur":5,"chance":1}},"desc":"Burst a cloud of poison around you for {dmg}, poisoning every nearby foe.","br":3,"x":0.72,"y":0.34,"band":1,"req":["r_a03"]},
+      {"id":"r_a22","name":"Blink Strike","icon":"sk_ra_blink","mp":18,"cd":5,"syn":{"skill":"r_p12","per":0.05},"cast":{"shape":"teleport","wpn":1.3,"lifesteal":0.2,"range":5,"spell":0.6,"kind":"hybrid"},"desc":"Teleport to a foe and cut them for {dmg}, leeching life on the hit.","br":2,"x":0.72,"y":0.34,"band":1,"req":["r_a02"]},
+      {"id":"r_a23","name":"Venom Nova","icon":"sk_ra_venomnova","mp":13,"cd":5,"syn":{"skill":"r_p13","per":0.05},"cast":{"shape":"nova","wpn":0.8,"radius":3,"status":{"effect":"poison","dur":5,"chance":1},"spell":0.9,"kind":"hybrid"},"desc":"Burst a cloud of poison around you for {dmg}, poisoning every nearby foe.","br":3,"x":0.72,"y":0.34,"band":1,"req":["r_a03"]},
       {"id":"r_a24","name":"Volley","icon":"sk_ra_volley","mp":12,"cd":4,"cast":{"shape":"line","wpn":1.7,"range":7},"desc":"Loose a line of arrows dealing {dmg} that pierce everything in their path.","br":4,"x":0.72,"y":0.34,"band":1,"req":["r_a04"]},
-      {"id":"r_a30","name":"Death Mark","icon":"sk_ra_deathmark","mp":14,"cd":5,"cast":{"shape":"bolt","wpn":2,"range":6,"crit":true,"status":{"effect":"vuln","dur":5,"chance":1}},"desc":"Brand a foe for {dmg} with a guaranteed-critical mark, leaving them vulnerable.","br":0,"x":0.28,"y":0.58,"band":2,"req":["r_a10"]},
+      {"id":"r_a30","name":"Death Mark","icon":"sk_ra_deathmark","mp":14,"cd":5,"cast":{"shape":"bolt","wpn":1.2,"range":6,"crit":true,"status":{"effect":"vuln","dur":5,"chance":1},"spell":0.9,"kind":"hybrid"},"desc":"Brand a foe for {dmg} with a guaranteed-critical mark, leaving them vulnerable.","br":0,"x":0.28,"y":0.58,"band":2,"req":["r_a10"]},
       {"id":"r_a31","name":"Fan of Knives","icon":"sk_ra_fanknives","mp":14,"cd":5,"cast":{"shape":"nova","wpn":1.3,"radius":3,"repeat":2},"desc":"Spray blades in a nova for {dmg}, striking all nearby foes twice.","br":1,"x":0.28,"y":0.58,"band":2,"req":["r_a11"]},
-      {"id":"r_a32","name":"Shadow Clone","icon":"sk_ra_shadowclone","mp":15,"cd":7,"syn":{"skill":"r_p32","per":0.05},"cast":{"shape":"summon","buff":[{"id":"dodgeUp","dur":6,"mag":0.25}],"summon":{"kind":"shadow","count":2,"ttl":16}},"desc":"Conjure shadow doubles to fight alongside you and grant dodge. +5% potency per point in Untouchable.","br":2,"x":0.28,"y":0.58,"band":2,"req":["r_a12"]},
-      {"id":"r_a33","name":"Plague Bomb","icon":"sk_ra_plaguebomb","mp":15,"cd":5,"syn":{"skill":"r_p33","per":0.05},"cast":{"shape":"blast","wpn":1.6,"radius":3,"range":6,"status":{"effect":"poison","dur":6,"chance":1}},"desc":"Lob a toxic bomb dealing {dmg} that blasts an area and poisons all caught in it.","br":3,"x":0.28,"y":0.58,"band":2,"req":["r_a13"]},
+      {"id":"r_a32","name":"Shadow Clone","icon":"sk_ra_shadowclone","mp":15,"cd":7,"syn":{"skill":"r_p32","per":0.05},"cast":{"shape":"summon","buff":[{"id":"dodgeUp","dur":6,"mag":0.25}],"summon":{"kind":"shadow","count":2,"ttl":16},"kind":"spell"},"desc":"Conjure shadow doubles to fight alongside you and grant dodge. +5% potency per point in Untouchable.","br":2,"x":0.28,"y":0.58,"band":2,"req":["r_a12"]},
+      {"id":"r_a33","name":"Plague Bomb","icon":"sk_ra_plaguebomb","mp":15,"cd":5,"syn":{"skill":"r_p33","per":0.05},"cast":{"shape":"blast","wpn":0.8,"radius":3,"range":6,"status":{"effect":"poison","dur":6,"chance":1},"spell":1,"kind":"hybrid"},"desc":"Lob a toxic bomb dealing {dmg} that blasts an area and poisons all caught in it.","br":3,"x":0.28,"y":0.58,"band":2,"req":["r_a13"]},
       {"id":"r_a34","name":"Pierce","icon":"sk_ra_pierce","mp":13,"cd":4,"syn":{"skill":"r_p34","per":0.05},"cast":{"shape":"line","wpn":2.2,"range":8},"desc":"A penetrating long-range shot that ignores armor to deal {dmg}.","br":4,"x":0.28,"y":0.58,"band":2,"req":["r_a14"]},
       {"id":"r_a40","name":"Executioner","icon":"sk_ra_executioner","mp":18,"cd":6,"syn":{"skill":"r_p40","per":0.05},"cast":{"shape":"melee","wpn":2.6,"execute":0.3,"crit":true},"desc":"A guaranteed-critical execution dealing {dmg} that slays non-boss foes under 30% health.","br":0,"x":0.72,"y":0.58,"band":2,"req":["r_a20"]},
       {"id":"r_a41","name":"Twin Strike","icon":"sk_ra_twinclone","mp":17,"cd":5,"cast":{"shape":"melee","wpn":1.5,"lifesteal":0.15,"repeat":3},"desc":"A three-hit dual-blade barrage on one foe for {dmg} that leeches life.","br":1,"x":0.72,"y":0.58,"band":2,"req":["r_a21"]},
-      {"id":"r_a42","name":"Vanish","icon":"sk_ra_vanish","mp":16,"cd":7,"cast":{"shape":"teleport","range":7,"buff":[{"id":"dodgeUp","dur":6,"mag":0.4},{"id":"dmgUp","dur":6,"mag":0.3}]},"desc":"Vanish into shadow, teleporting away with a strong dodge and damage buff.","br":2,"x":0.72,"y":0.58,"band":2,"req":["r_a22"]},
+      {"id":"r_a42","name":"Vanish","icon":"sk_ra_vanish","mp":16,"cd":7,"cast":{"shape":"teleport","range":7,"buff":[{"id":"dodgeUp","dur":6,"mag":0.4},{"id":"dmgUp","dur":6,"mag":0.3}],"kind":"spell"},"desc":"Vanish into shadow, teleporting away with a strong dodge and damage buff.","br":2,"x":0.72,"y":0.58,"band":2,"req":["r_a22"]},
       {"id":"r_a43","name":"Death Rain","icon":"sk_ra_deathrain","mp":18,"cd":6,"syn":{"skill":"r_p43","per":0.05},"cast":{"shape":"blast","wpn":2,"radius":4,"range":7,"status":{"effect":"poison","dur":6,"chance":1}},"desc":"Rain venomous blades across a wide area for {dmg}, poisoning every foe struck.","br":3,"x":0.72,"y":0.58,"band":2,"req":["r_a23"]},
       {"id":"r_a44","name":"Kill Shot","icon":"sk_ra_killshot","mp":17,"cd":5,"syn":{"skill":"r_p44","per":0.05},"cast":{"shape":"line","wpn":2.4,"range":9,"crit":true},"desc":"A guaranteed-critical long-range shot dealing {dmg} that pierces a line of enemies.","br":4,"x":0.72,"y":0.58,"band":2,"req":["r_a24"]},
-      {"id":"r_a50","name":"Perfect Vanish","icon":"sk_ra_perfectvanish","mp":24,"cd":10,"cast":{"shape":"teleport","wpn":3.4,"execute":0.4,"range":7,"crit":true,"buff":[{"id":"critUp","dur":6,"mag":0.4}]},"desc":"Strike from nowhere for a guaranteed-critical killing blow of {dmg} that executes wounded non-boss foes and buffs your crit.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a30","r_a40"]},
+      {"id":"r_a50","name":"Perfect Vanish","icon":"sk_ra_perfectvanish","mp":24,"cd":10,"cast":{"shape":"teleport","wpn":2.6,"execute":0.4,"range":7,"crit":true,"buff":[{"id":"critUp","dur":6,"mag":0.4}],"spell":1,"kind":"hybrid"},"desc":"Strike from nowhere for a guaranteed-critical killing blow of {dmg} that executes wounded non-boss foes and buffs your crit.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a30","r_a40"]},
       {"id":"r_a51","name":"Thousand Cuts","icon":"sk_ra_thousandcuts","mp":26,"cd":10,"syn":{"skill":"r_p51","per":0.04},"cast":{"shape":"nova","wpn":1.8,"lifesteal":0.12,"radius":4,"repeat":3},"desc":"Unleash a blinding flurry of three nova-wide blade sweeps around you for {dmg}.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a31","r_a41"]},
-      {"id":"r_a52","name":"Phantom Dash","icon":"sk_ra_phantomdash","mp":25,"cd":11,"cast":{"shape":"teleport","wpn":2.6,"range":8,"buff":[{"id":"dodgeUp","dur":7,"mag":0.45}],"summon":{"kind":"shadow","count":3,"ttl":18}},"desc":"Become a phantom, teleporting through foes for {dmg} while summoning shadows to fight on.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a32","r_a42"]},
-      {"id":"r_a53","name":"Plague Lord","icon":"sk_ra53","mp":28,"cd":11,"syn":{"skill":"r_p53","per":0.04},"cast":{"shape":"nova","wpn":2.4,"lifesteal":0.2,"radius":4,"status":{"effect":"poison","dur":8,"chance":1}},"desc":"Detonate a massive plague nova dealing {dmg} that poisons and rots every foe around you.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a33","r_a43"]},
+      {"id":"r_a52","name":"Phantom Dash","icon":"sk_ra_phantomdash","mp":25,"cd":11,"cast":{"shape":"teleport","wpn":1.9,"range":8,"buff":[{"id":"dodgeUp","dur":7,"mag":0.45}],"summon":{"kind":"shadow","count":3,"ttl":18},"spell":0.9,"kind":"hybrid"},"desc":"Become a phantom, teleporting through foes for {dmg} while summoning shadows to fight on.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a32","r_a42"]},
+      {"id":"r_a53","name":"Plague Lord","icon":"sk_ra53","mp":28,"cd":11,"syn":{"skill":"r_p53","per":0.04},"cast":{"shape":"nova","wpn":1.2,"lifesteal":0.2,"radius":4,"status":{"effect":"poison","dur":8,"chance":1},"spell":1.5,"kind":"hybrid"},"desc":"Detonate a massive plague nova dealing {dmg} that poisons and rots every foe around you.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a33","r_a43"]},
       {"id":"r_a54","name":"Death Rain Volley","icon":"sk_ra54","mp":28,"cd":11,"syn":{"skill":"r_p54","per":0.04},"cast":{"shape":"blast","wpn":3,"radius":4,"range":9,"repeat":2,"crit":true},"desc":"Blanket a huge area in a guaranteed-critical storm of piercing arrows dealing {dmg}.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a34","r_a44"]}
     ], 'active'),
   },
@@ -4960,32 +4964,32 @@ const SKILL_TREES = {
       {"id":"m_a01","name":"Frost Shard","icon":"sk_ma_frostshard","mp":6,"cd":1,"syn":{"skill":"m_p01","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"stun","dur":1,"chance":0.6}},"desc":"Fire an icy shard that deals {dmg} and may freeze a foe.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"m_a02","name":"Spark","icon":"sk_ma_spark","mp":6,"cd":1,"syn":{"skill":"m_p02","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":7},"desc":"Loose a crackling spark at a distant foe for {dmg}.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"m_a03","name":"Arcane Missile","icon":"sk_ma_arcaneorb","mp":7,"cd":1,"syn":{"skill":"m_p03","per":0.05},"cast":{"shape":"bolt","spell":1.2,"drainMp":0.1,"range":5},"desc":"Launch an unerring arcane missile that deals {dmg} and saps mana.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a04","name":"Mana Barrier","icon":"sk_ma_barrier","mp":10,"cd":15,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":40}]},"desc":"Conjure a shield that absorbs incoming damage.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a10","name":"Ember Surge","icon":"sk_ma_emberbuff","mp":12,"cd":6,"cast":{"shape":"self","buff":[{"id":"spellUp","dur":5,"mag":0.4}]},"desc":"Empower yourself, sharply increasing spell damage for several seconds.","br":0,"x":0.28,"y":0.34,"band":1,"req":["m_a00"]},
+      {"id":"m_a04","name":"Mana Barrier","icon":"sk_ma_barrier","mp":10,"cd":15,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":40}],"kind":"spell"},"desc":"Conjure a shield that absorbs incoming damage.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a10","name":"Ember Surge","icon":"sk_ma_emberbuff","mp":12,"cd":6,"cast":{"shape":"self","buff":[{"id":"spellUp","dur":5,"mag":0.4}],"kind":"spell"},"desc":"Empower yourself, sharply increasing spell damage for several seconds.","br":0,"x":0.28,"y":0.34,"band":1,"req":["m_a00"]},
       {"id":"m_a11","name":"Frost Nova","icon":"sk_ma_frostnova","mp":12,"cd":4,"syn":{"skill":"m_p11","per":0.05},"cast":{"shape":"nova","spell":1,"radius":2,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Erupt with frost for {dmg}, freezing nearby foes.","br":1,"x":0.28,"y":0.34,"band":1,"req":["m_a01"]},
       {"id":"m_a12","name":"Chain Spark","icon":"sk_ma_chainlightning","mp":12,"cd":3,"syn":{"skill":"m_p12","per":0.05},"cast":{"shape":"chain","spell":1,"range":6,"chain":3},"desc":"Lightning leaps between several nearby foes for {dmg}.","br":2,"x":0.28,"y":0.34,"band":1,"req":["m_a02"]},
       {"id":"m_a13","name":"Arcane Blast","icon":"sk_ma_arcanepower","mp":13,"cd":3,"syn":{"skill":"m_p13","per":0.04},"cast":{"shape":"blast","spell":1.2,"radius":2,"range":4},"desc":"Detonate arcane force for {dmg} in a radius around a point.","br":3,"x":0.28,"y":0.34,"band":1,"req":["m_a03"]},
-      {"id":"m_a14","name":"Blink","icon":"sk_ma_blink","mp":8,"cd":4,"cast":{"shape":"teleport","range":5,"buff":[{"id":"dodgeUp","dur":2,"mag":0.4}]},"desc":"Teleport a short distance to reposition instantly and slip attacks.","br":4,"x":0.28,"y":0.34,"band":1,"req":["m_a04"]},
+      {"id":"m_a14","name":"Blink","icon":"sk_ma_blink","mp":8,"cd":4,"cast":{"shape":"teleport","range":5,"buff":[{"id":"dodgeUp","dur":2,"mag":0.4}],"kind":"spell"},"desc":"Teleport a short distance to reposition instantly and slip attacks.","br":4,"x":0.28,"y":0.34,"band":1,"req":["m_a04"]},
       {"id":"m_a20","name":"Fireball","icon":"sk_ma_fireball","mp":15,"cd":3,"syn":{"skill":"m_p10","per":0.05},"cast":{"shape":"blast","spell":1.4,"radius":2,"range":5,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Lob a fireball that explodes for {dmg}, burning all caught in the blast.","br":0,"x":0.72,"y":0.34,"band":1,"req":["m_a00"]},
       {"id":"m_a21","name":"Ice Prison","icon":"sk_ma_iceprison","mp":14,"cd":4,"syn":{"skill":"m_p21","per":0.05},"cast":{"shape":"bolt","spell":1.3,"range":6,"status":{"effect":"stun","dur":3,"chance":1}},"desc":"Lock a foe in ice for {dmg}, stunning it and leaving it vulnerable.","br":1,"x":0.72,"y":0.34,"band":1,"req":["m_a01"]},
       {"id":"m_a22","name":"Voltaic Bolt","icon":"sk_ma_voltaic","mp":14,"cd":3,"syn":{"skill":"m_p22","per":0.05},"cast":{"shape":"line","spell":1.4,"range":7,"status":{"effect":"stun","dur":1,"chance":0.5}},"desc":"A piercing bolt of lightning dealing {dmg} that may shock a foe senseless.","br":2,"x":0.72,"y":0.34,"band":1,"req":["m_a02"]},
       {"id":"m_a23","name":"Arcane Orb","icon":"sk_ma23","mp":15,"cd":3,"syn":{"skill":"m_p23","per":0.05},"cast":{"shape":"bolt","spell":1.6,"drainMp":0.2,"range":5},"desc":"Conjure a heavy orb that strikes for {dmg} and drains the target's mana.","br":3,"x":0.72,"y":0.34,"band":1,"req":["m_a03"]},
-      {"id":"m_a24","name":"Spell Ward","icon":"sk_ma24","mp":16,"cd":15,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":70},{"id":"regen","dur":6,"mag":6}]},"desc":"Raise a barrier and a regenerating ward over yourself.","br":4,"x":0.72,"y":0.34,"band":1,"req":["m_a04"]},
+      {"id":"m_a24","name":"Spell Ward","icon":"sk_ma24","mp":16,"cd":15,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":70},{"id":"regen","dur":6,"mag":6}],"kind":"spell"},"desc":"Raise a barrier and a regenerating ward over yourself.","br":4,"x":0.72,"y":0.34,"band":1,"req":["m_a04"]},
       {"id":"m_a30","name":"Flame Wave","icon":"sk_ma_flamewave","mp":18,"cd":4,"syn":{"skill":"m_p30","per":0.05},"cast":{"shape":"line","spell":1.6,"range":7,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Send a wave of fire for {dmg}, scorching across a line of foes.","br":0,"x":0.28,"y":0.58,"band":2,"req":["m_a10"]},
       {"id":"m_a31","name":"Blizzard","icon":"sk_ma_blizzard","mp":20,"cd":5,"cast":{"shape":"blast","spell":1.5,"radius":3,"range":6,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Call a storm of ice over an area for {dmg}, freezing everything beneath.","br":1,"x":0.28,"y":0.58,"band":2,"req":["m_a11"]},
       {"id":"m_a32","name":"Thunderstorm","icon":"sk_ma_thunderstorm","mp":20,"cd":4,"syn":{"skill":"m_p32","per":0.04},"cast":{"shape":"chain","spell":1.4,"range":7,"chain":5,"status":{"effect":"stun","dur":1,"chance":0.4}},"desc":"Lightning arcs wildly between many foes around you for {dmg}.","br":2,"x":0.28,"y":0.58,"band":2,"req":["m_a12"]},
       {"id":"m_a33","name":"Disintegrate","icon":"sk_ma_disintegrate","mp":20,"cd":4,"syn":{"skill":"m_p33","per":0.05},"cast":{"shape":"line","spell":1.7,"execute":0.25,"drainMp":0.2,"range":5},"desc":"A withering beam dealing {dmg} that drains mana and executes weakened foes.","br":3,"x":0.28,"y":0.58,"band":2,"req":["m_a13"]},
-      {"id":"m_a34","name":"Conjure Elemental","icon":"sk_ma_elemental","mp":18,"cd":7,"cast":{"shape":"summon","summon":{"kind":"elemental","count":1,"ttl":18}},"desc":"Summon an arcane elemental to fight at your side.","br":4,"x":0.28,"y":0.58,"band":2,"req":["m_a14"]},
+      {"id":"m_a34","name":"Conjure Elemental","icon":"sk_ma_elemental","mp":18,"cd":7,"cast":{"shape":"summon","summon":{"kind":"elemental","count":1,"ttl":18},"kind":"spell"},"desc":"Summon an arcane elemental to fight at your side.","br":4,"x":0.28,"y":0.58,"band":2,"req":["m_a14"]},
       {"id":"m_a40","name":"Firestorm","icon":"sk_ma_firestorm","mp":24,"cd":5,"syn":{"skill":"m_p40","per":0.04},"cast":{"shape":"blast","spell":1.8,"radius":3,"range":6,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Rain fire over a wide area for {dmg}, burning all within.","br":0,"x":0.72,"y":0.58,"band":2,"req":["m_a20"]},
       {"id":"m_a41","name":"Ice Age","icon":"sk_ma_iceage","mp":26,"cd":6,"cast":{"shape":"nova","spell":1.7,"radius":3,"status":{"effect":"stun","dur":3,"chance":1}},"desc":"Freeze the battlefield for {dmg}, stunning and weakening every foe near you.","br":1,"x":0.72,"y":0.58,"band":2,"req":["m_a21"]},
       {"id":"m_a42","name":"Storm Call","icon":"sk_ma_stormcall","mp":26,"cd":5,"syn":{"skill":"m_p42","per":0.04},"cast":{"shape":"random","spell":1.6,"range":8,"count":5,"status":{"effect":"stun","dur":1,"chance":0.5}},"desc":"Summon a barrage of lightning bolts for {dmg}, striking foes at random.","br":2,"x":0.72,"y":0.58,"band":2,"req":["m_a22"]},
-      {"id":"m_a43","name":"Twin Elemental","icon":"sk_ma_twinelemental","mp":28,"cd":8,"cast":{"shape":"summon","summon":{"kind":"elemental","count":2,"ttl":20,"strong":true}},"desc":"Summon a pair of mighty arcane elementals to wage war for you.","br":3,"x":0.72,"y":0.58,"band":2,"req":["m_a23"]},
-      {"id":"m_a44","name":"Arcane Golem","icon":"sk_ma_golem","mp":26,"cd":9,"cast":{"shape":"summon","buff":[{"id":"shield","dur":6,"mag":90}],"summon":{"kind":"golem","count":1,"ttl":22,"strong":true}},"desc":"Conjure a hulking golem to guard you and shield yourself.","br":4,"x":0.72,"y":0.58,"band":2,"req":["m_a24"]},
+      {"id":"m_a43","name":"Twin Elemental","icon":"sk_ma_twinelemental","mp":28,"cd":8,"cast":{"shape":"summon","summon":{"kind":"elemental","count":2,"ttl":20,"strong":true},"kind":"spell"},"desc":"Summon a pair of mighty arcane elementals to wage war for you.","br":3,"x":0.72,"y":0.58,"band":2,"req":["m_a23"]},
+      {"id":"m_a44","name":"Arcane Golem","icon":"sk_ma_golem","mp":26,"cd":9,"cast":{"shape":"summon","buff":[{"id":"shield","dur":6,"mag":90}],"summon":{"kind":"golem","count":1,"ttl":22,"strong":true},"kind":"spell"},"desc":"Conjure a hulking golem to guard you and shield yourself.","br":4,"x":0.72,"y":0.58,"band":2,"req":["m_a24"]},
       {"id":"m_a50","name":"Meteor","icon":"sk_ma_meteor","mp":34,"cd":8,"syn":{"skill":"m_p40","per":0.05},"cast":{"shape":"blast","spell":2.2,"radius":4,"range":6,"knockback":2,"status":{"effect":"burn","dur":5,"chance":1}},"desc":"Call a colossal meteor that obliterates an area in fire for {dmg}.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a30","m_a40"]},
       {"id":"m_a51","name":"Absolute Zero","icon":"sk_ma_absolutezero","mp":34,"cd":9,"cast":{"shape":"nova","spell":2,"radius":4,"pull":true,"status":{"effect":"stun","dur":4,"chance":1}},"desc":"Plunge the field into killing cold for {dmg}, freezing all foes solid and leaving them vulnerable.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a31","m_a41"]},
       {"id":"m_a52","name":"Apocalypse","icon":"sk_ma_apocalypse","mp":36,"cd":10,"syn":{"skill":"m_p42","per":0.05},"cast":{"shape":"chain","spell":2,"range":9,"chain":8,"status":{"effect":"stun","dur":2,"chance":0.6}},"desc":"Unleash a cataclysm of chained lightning that ravages the whole battlefield for {dmg}.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a32","m_a42"]},
       {"id":"m_a53","name":"Disintegration Ray","icon":"sk_ma53","mp":38,"cd":10,"syn":{"skill":"m_p43","per":0.05},"cast":{"shape":"line","spell":2.2,"execute":0.35,"drainMp":0.3,"range":9,"crit":true},"desc":"A perfected annihilation beam dealing {dmg} that always crits, drains deeply and executes the weak.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a33","m_a43"]},
-      {"id":"m_a54","name":"Elemental Army","icon":"sk_ma_elementarmy","mp":40,"cd":12,"cast":{"shape":"summon","buff":[{"id":"shield","dur":8,"mag":140}],"summon":{"kind":"elemental","count":4,"ttl":24,"strong":true}},"desc":"Conjure an entire host of arcane elementals and shield yourself behind them.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a34","m_a44"]}
+      {"id":"m_a54","name":"Elemental Army","icon":"sk_ma_elementarmy","mp":40,"cd":12,"cast":{"shape":"summon","buff":[{"id":"shield","dur":8,"mag":140}],"summon":{"kind":"elemental","count":4,"ttl":24,"strong":true},"kind":"spell"},"desc":"Conjure an entire host of arcane elementals and shield yourself behind them.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a34","m_a44"]}
     ], 'active'),
   },
 
@@ -5023,34 +5027,34 @@ const SKILL_TREES = {
       {"id":"t_p54","name":"Archon","icon":"sk_t_archon","fx":{"spell":0.25,"pen":0.06,"crit":0.05},"cfx":{"spell":0.15},"cond":"casteroff","trigger":{"on":"crit","effect":{"nextCrit":true}},"keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: +25% holy spell power, +6% pen, +5% crit; caster off-hand: +15% spell. Each holy crit guarantees the next.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["t_p34","t_p44"]}
     ], 'passive'),
     active: buildWeb([
-      {"id":"t_a00","name":"Smite","icon":"sk_ta_smite","mp":7,"cd":2,"syn":{"skill":"t_p00","per":0.05},"cast":{"shape":"melee","wpn":1.3,"spell":0.6,"crit":true},"desc":"A righteous blow infused with holy power that strikes true for {dmg}.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"t_a01","name":"Shield of Faith","icon":"sk_ta_shieldself","mp":8,"cd":11,"cast":{"shape":"self","buff":[{"id":"shield","dur":5,"mag":55},{"id":"defUp","dur":5,"mag":0.25}]},"desc":"Raise a holy ward granting a shield and damage reduction.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"t_a02","name":"Thorn Ward","icon":"sk_ta_aegisfield","mp":8,"cd":15,"syn":{"skill":"t_p02","per":0.05},"cast":{"shape":"self","buff":[{"id":"thorns","dur":6,"mag":35},{"id":"regen","dur":6,"mag":6}]},"desc":"Surround yourself with retaliatory thorns and regeneration.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"t_a03","name":"Mend","icon":"sk_ta_mend","mp":18,"cd":6,"cast":{"shape":"self","heal":{"flat":40,"perLevel":4}},"desc":"Channel divine light to mend your wounds.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"t_a00","name":"Smite","icon":"sk_ta_smite","mp":7,"cd":2,"syn":{"skill":"t_p00","per":0.05},"cast":{"shape":"melee","wpn":1.3,"spell":0.6,"crit":true,"kind":"hybrid"},"desc":"A righteous blow infused with holy power that strikes true for {dmg}.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"t_a01","name":"Shield of Faith","icon":"sk_ta_shieldself","mp":8,"cd":11,"cast":{"shape":"self","buff":[{"id":"shield","dur":5,"mag":55},{"id":"defUp","dur":5,"mag":0.25}],"kind":"spell"},"desc":"Raise a holy ward granting a shield and damage reduction.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"t_a02","name":"Thorn Ward","icon":"sk_ta_aegisfield","mp":8,"cd":15,"syn":{"skill":"t_p02","per":0.05},"cast":{"shape":"self","buff":[{"id":"thorns","dur":6,"mag":35},{"id":"regen","dur":6,"mag":6}],"kind":"spell"},"desc":"Surround yourself with retaliatory thorns and regeneration.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"t_a03","name":"Mend","icon":"sk_ta_mend","mp":18,"cd":6,"cast":{"shape":"self","heal":{"flat":40,"perLevel":4},"kind":"spell"},"desc":"Channel divine light to mend your wounds.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"t_a04","name":"Holy Bolt","icon":"sk_ta_smiteline","mp":8,"cd":3,"syn":{"skill":"t_p04","per":0.05},"cast":{"shape":"bolt","spell":1.2,"range":6,"crit":true},"desc":"Hurl a searing bolt of holy light at a distant foe for {dmg}.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"t_a10","name":"Chastise","icon":"sk_ta_chastise","mp":9,"cd":4,"syn":{"skill":"t_p00","per":0.05},"cast":{"shape":"melee","wpn":1.5,"spell":0.8,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"A scorching holy strike that deals {dmg} and sets the target ablaze.","br":0,"x":0.28,"y":0.34,"band":1,"req":["t_a00"]},
-      {"id":"t_a11","name":"Guardian","icon":"sk_ta_guardian","mp":12,"cd":16,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":80},{"id":"thorns","dur":6,"mag":40}]},"desc":"A guardian aura granting a heavy shield and reflective thorns.","br":1,"x":0.28,"y":0.34,"band":1,"req":["t_a01"]},
-      {"id":"t_a12","name":"Retribution","icon":"sk_ta_strike","mp":9,"cd":4,"syn":{"skill":"t_p02","per":0.05},"cast":{"shape":"cleave","wpn":1.6,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A vengeful cleave dealing {dmg} that leaves struck foes vulnerable.","br":2,"x":0.28,"y":0.34,"band":1,"req":["t_a02"]},
-      {"id":"t_a13","name":"Bless","icon":"sk_ta_blessbuff","mp":10,"cd":19,"cast":{"shape":"self","buff":[{"id":"regen","dur":7,"mag":10},{"id":"dmgUp","dur":7,"mag":0.2}]},"desc":"Bless yourself with renewing regeneration and surging might.","br":3,"x":0.28,"y":0.34,"band":1,"req":["t_a03"]},
+      {"id":"t_a10","name":"Chastise","icon":"sk_ta_chastise","mp":9,"cd":4,"syn":{"skill":"t_p00","per":0.05},"cast":{"shape":"melee","wpn":1.5,"spell":0.8,"status":{"effect":"burn","dur":3,"chance":1},"kind":"hybrid"},"desc":"A scorching holy strike that deals {dmg} and sets the target ablaze.","br":0,"x":0.28,"y":0.34,"band":1,"req":["t_a00"]},
+      {"id":"t_a11","name":"Guardian","icon":"sk_ta_guardian","mp":12,"cd":16,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":80},{"id":"thorns","dur":6,"mag":40}],"kind":"spell"},"desc":"A guardian aura granting a heavy shield and reflective thorns.","br":1,"x":0.28,"y":0.34,"band":1,"req":["t_a01"]},
+      {"id":"t_a12","name":"Retribution","icon":"sk_ta_strike","mp":9,"cd":4,"syn":{"skill":"t_p02","per":0.05},"cast":{"shape":"cleave","wpn":1.4,"status":{"effect":"vuln","dur":3,"chance":1},"spell":0.5,"kind":"hybrid"},"desc":"A vengeful cleave dealing {dmg} that leaves struck foes vulnerable.","br":2,"x":0.28,"y":0.34,"band":1,"req":["t_a02"]},
+      {"id":"t_a13","name":"Bless","icon":"sk_ta_blessbuff","mp":10,"cd":19,"cast":{"shape":"self","buff":[{"id":"regen","dur":7,"mag":10},{"id":"dmgUp","dur":7,"mag":0.2}],"kind":"spell"},"desc":"Bless yourself with renewing regeneration and surging might.","br":3,"x":0.28,"y":0.34,"band":1,"req":["t_a03"]},
       {"id":"t_a14","name":"Holy Fire","icon":"sk_ta_holyfire","mp":12,"cd":5,"syn":{"skill":"t_p04","per":0.05},"cast":{"shape":"nova","spell":1.3,"radius":2,"status":{"effect":"burn","dur":3,"chance":0.8}},"desc":"Erupt in holy flame for {dmg}, scorching all foes around you.","br":4,"x":0.28,"y":0.34,"band":1,"req":["t_a04"]},
-      {"id":"t_a20","name":"Zealous Charge","icon":"sk_ta20","mp":12,"cd":5,"syn":{"skill":"t_p20","per":0.05},"cast":{"shape":"teleport","range":5,"wpn":1.7,"spell":0.9,"lifesteal":0.15,"repeat":2,"buff":[{"id":"dodgeUp","dur":2,"mag":0.3}]},"desc":"Charge the nearest foe for {dmg}, striking twice and draining life. Reaches ranged attackers.","br":0,"x":0.72,"y":0.34,"band":1,"req":["t_a00"]},
-      {"id":"t_a21","name":"Aegis Field","icon":"sk_ta21","mp":14,"cd":22,"cast":{"shape":"self","buff":[{"id":"shield","dur":8,"mag":130},{"id":"defUp","dur":8,"mag":0.35},{"id":"regen","dur":8,"mag":10}]},"desc":"Project a vast aegis granting a great shield, defense, and regeneration.","br":1,"x":0.72,"y":0.34,"band":1,"req":["t_a01"]},
+      {"id":"t_a20","name":"Zealous Charge","icon":"sk_ta20","mp":12,"cd":5,"syn":{"skill":"t_p20","per":0.05},"cast":{"shape":"teleport","range":5,"wpn":1.7,"spell":0.9,"lifesteal":0.15,"repeat":2,"buff":[{"id":"dodgeUp","dur":2,"mag":0.3}],"kind":"hybrid"},"desc":"Charge the nearest foe for {dmg}, striking twice and draining life. Reaches ranged attackers.","br":0,"x":0.72,"y":0.34,"band":1,"req":["t_a00"]},
+      {"id":"t_a21","name":"Aegis Field","icon":"sk_ta21","mp":14,"cd":22,"cast":{"shape":"self","buff":[{"id":"shield","dur":8,"mag":130},{"id":"defUp","dur":8,"mag":0.35},{"id":"regen","dur":8,"mag":10}],"kind":"spell"},"desc":"Project a vast aegis granting a great shield, defense, and regeneration.","br":1,"x":0.72,"y":0.34,"band":1,"req":["t_a01"]},
       {"id":"t_a22","name":"Condemn","icon":"sk_ta_condemn","mp":12,"cd":5,"syn":{"skill":"t_p22","per":0.05},"cast":{"shape":"blast","spell":1.4,"radius":2,"range":5,"knockback":2,"status":{"effect":"stun","dur":2,"chance":0.7}},"desc":"Hurl a damning blast dealing {dmg} that knocks back and stuns the guilty.","br":2,"x":0.72,"y":0.34,"band":1,"req":["t_a02"]},
       {"id":"t_a23","name":"Consecrate","icon":"sk_ta_consecrate","mp":18,"cd":6,"syn":{"skill":"t_p23","per":0.05},"cast":{"shape":"nova","spell":1,"radius":3,"heal":{"flat":50,"perLevel":4},"buff":[{"id":"regen","dur":6,"mag":12}]},"desc":"Hallow the ground for {dmg}, searing foes while mending your wounds.","br":3,"x":0.72,"y":0.34,"band":1,"req":["t_a03"]},
       {"id":"t_a24","name":"Judgment","icon":"sk_ta_judgment","mp":14,"cd":5,"syn":{"skill":"t_p24","per":0.05},"cast":{"shape":"bolt","spell":1.7,"execute":0.25,"range":7,"crit":true},"desc":"Pass divine judgment on a foe for {dmg}, executing the weak.","br":4,"x":0.72,"y":0.34,"band":1,"req":["t_a04"]},
-      {"id":"t_a30","name":"Hammer of Wrath","icon":"sk_ta_hammer","mp":16,"cd":6,"syn":{"skill":"t_p30","per":0.05},"cast":{"shape":"blast","wpn":2,"spell":1.2,"radius":2,"range":6,"crit":true,"status":{"effect":"stun","dur":2,"chance":1}},"desc":"Hurl a holy hammer that detonates for {dmg}, stunning all it strikes.","br":0,"x":0.28,"y":0.58,"band":2,"req":["t_a10"]},
-      {"id":"t_a31","name":"Twin Guardian","icon":"sk_ta_twinguardian","mp":18,"cd":8,"cast":{"shape":"summon","buff":[{"id":"shield","dur":8,"mag":120}],"summon":{"kind":"spirit","count":2,"ttl":6}},"desc":"Summon two guardian spirits to fight at your side behind a holy shield.","br":1,"x":0.28,"y":0.58,"band":2,"req":["t_a11"]},
+      {"id":"t_a30","name":"Hammer of Wrath","icon":"sk_ta_hammer","mp":16,"cd":6,"syn":{"skill":"t_p30","per":0.05},"cast":{"shape":"blast","wpn":2,"spell":1.2,"radius":2,"range":6,"crit":true,"status":{"effect":"stun","dur":2,"chance":1},"kind":"hybrid"},"desc":"Hurl a holy hammer that detonates for {dmg}, stunning all it strikes.","br":0,"x":0.28,"y":0.58,"band":2,"req":["t_a10"]},
+      {"id":"t_a31","name":"Twin Guardian","icon":"sk_ta_twinguardian","mp":18,"cd":8,"cast":{"shape":"summon","buff":[{"id":"shield","dur":8,"mag":120}],"summon":{"kind":"spirit","count":2,"ttl":6},"kind":"spell"},"desc":"Summon two guardian spirits to fight at your side behind a holy shield.","br":1,"x":0.28,"y":0.58,"band":2,"req":["t_a11"]},
       {"id":"t_a32","name":"Holy Ground","icon":"sk_ta_holyground","mp":16,"cd":6,"syn":{"skill":"t_p32","per":0.05},"cast":{"shape":"nova","spell":1.3,"radius":3,"status":{"effect":"vuln","dur":4,"chance":1},"buff":[{"id":"thorns","dur":8,"mag":60}]},"desc":"Sanctify the ground for {dmg}, weakening foes and cloaking you in thorns.","br":2,"x":0.28,"y":0.58,"band":2,"req":["t_a12"]},
-      {"id":"t_a33","name":"Sanctuary","icon":"sk_ta_sanctuary","mp":20,"cd":22,"syn":{"skill":"t_p33","per":0.05},"cast":{"shape":"self","heal":{"flat":70,"perLevel":6},"buff":[{"id":"shield","dur":8,"mag":150},{"id":"regen","dur":8,"mag":14}]},"desc":"Invoke a sanctuary that heals greatly and shelters you behind light.","br":3,"x":0.28,"y":0.58,"band":2,"req":["t_a13"]},
+      {"id":"t_a33","name":"Sanctuary","icon":"sk_ta_sanctuary","mp":20,"cd":22,"syn":{"skill":"t_p33","per":0.05},"cast":{"shape":"self","heal":{"flat":70,"perLevel":6},"buff":[{"id":"shield","dur":8,"mag":150},{"id":"regen","dur":8,"mag":14}],"kind":"spell"},"desc":"Invoke a sanctuary that heals greatly and shelters you behind light.","br":3,"x":0.28,"y":0.58,"band":2,"req":["t_a13"]},
       {"id":"t_a34","name":"Wrath of Heaven","icon":"sk_ta_wrath","mp":18,"cd":6,"syn":{"skill":"t_p34","per":0.05},"cast":{"shape":"line","spell":2,"range":6,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Call down a searing beam of holy wrath that deals {dmg}, piercing and burning.","br":4,"x":0.28,"y":0.58,"band":2,"req":["t_a14"]},
-      {"id":"t_a40","name":"Divine Storm","icon":"sk_ta_divinestorm","mp":22,"cd":6,"syn":{"skill":"t_p40","per":0.05},"cast":{"shape":"nova","wpn":2,"spell":1,"lifesteal":0.2,"radius":3,"repeat":2},"desc":"Whirl in a storm of holy blades for {dmg}, striking all around you twice and draining life.","br":0,"x":0.72,"y":0.58,"band":2,"req":["t_a20"]},
-      {"id":"t_a41","name":"Bastion","icon":"sk_ta_bastion","mp":24,"cd":31,"cast":{"shape":"self","buff":[{"id":"shield","dur":10,"mag":220},{"id":"defUp","dur":10,"mag":0.5},{"id":"thorns","dur":10,"mag":80},{"id":"regen","dur":10,"mag":14}]},"desc":"Become an unbreakable bastion with an immense shield, defense, and thorns.","br":1,"x":0.72,"y":0.58,"band":2,"req":["t_a21"]},
-      {"id":"t_a42","name":"Redeemer","icon":"sk_ta_redeemer","mp":20,"cd":7,"syn":{"skill":"t_p42","per":0.05},"cast":{"shape":"cleave","wpn":2.2,"spell":1,"status":{"effect":"vuln","dur":4,"chance":1},"buff":[{"id":"thorns","dur":8,"mag":90}]},"desc":"A redeeming sweep dealing {dmg} that weakens foes and wreathes you in punishing thorns.","br":2,"x":0.72,"y":0.58,"band":2,"req":["t_a22"]},
+      {"id":"t_a40","name":"Divine Storm","icon":"sk_ta_divinestorm","mp":22,"cd":6,"syn":{"skill":"t_p40","per":0.05},"cast":{"shape":"nova","wpn":2,"spell":1,"lifesteal":0.2,"radius":3,"repeat":2,"kind":"hybrid"},"desc":"Whirl in a storm of holy blades for {dmg}, striking all around you twice and draining life.","br":0,"x":0.72,"y":0.58,"band":2,"req":["t_a20"]},
+      {"id":"t_a41","name":"Bastion","icon":"sk_ta_bastion","mp":24,"cd":31,"cast":{"shape":"self","buff":[{"id":"shield","dur":10,"mag":220},{"id":"defUp","dur":10,"mag":0.5},{"id":"thorns","dur":10,"mag":80},{"id":"regen","dur":10,"mag":14}],"kind":"spell"},"desc":"Become an unbreakable bastion with an immense shield, defense, and thorns.","br":1,"x":0.72,"y":0.58,"band":2,"req":["t_a21"]},
+      {"id":"t_a42","name":"Redeemer","icon":"sk_ta_redeemer","mp":20,"cd":7,"syn":{"skill":"t_p42","per":0.05},"cast":{"shape":"cleave","wpn":2.2,"spell":1,"status":{"effect":"vuln","dur":4,"chance":1},"buff":[{"id":"thorns","dur":8,"mag":90}],"kind":"hybrid"},"desc":"A redeeming sweep dealing {dmg} that weakens foes and wreathes you in punishing thorns.","br":2,"x":0.72,"y":0.58,"band":2,"req":["t_a22"]},
       {"id":"t_a43","name":"Holy Nova","icon":"sk_ta_holynova","mp":22,"cd":6,"syn":{"skill":"t_p43","per":0.05},"cast":{"shape":"nova","spell":1.5,"radius":3,"heal":{"pctDmg":0.4},"buff":[{"id":"regen","dur":8,"mag":16}]},"desc":"Detonate a nova of holy light for {dmg}, searing foes and healing for a share of the damage.","br":3,"x":0.72,"y":0.58,"band":2,"req":["t_a23"]},
       {"id":"t_a44","name":"Sunbeam","icon":"sk_ta_sunbeam","mp":22,"cd":6,"syn":{"skill":"t_p44","per":0.05},"cast":{"shape":"line","spell":2.4,"execute":0.3,"range":7,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Channel a piercing sunbeam dealing {dmg} that incinerates and executes the wounded.","br":4,"x":0.72,"y":0.58,"band":2,"req":["t_a24"]},
-      {"id":"t_a50","name":"Avatar","icon":"sk_ta_avatar","mp":30,"cd":29,"syn":{"skill":"t_p50","per":0.04},"cast":{"shape":"self","buff":[{"id":"dmgUp","dur":10,"mag":0.5},{"id":"critUp","dur":10,"mag":0.3},{"id":"lifestealUp","dur":10,"mag":0.2},{"id":"shield","dur":10,"mag":180}]},"desc":"Ascend into a radiant avatar, surging with holy power, crit, and lifesteal.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a30","t_a40"]},
-      {"id":"t_a51","name":"Celestial Host","icon":"sk_ta_celestialhost","mp":30,"cd":12,"cast":{"shape":"summon","buff":[{"id":"shield","dur":5,"mag":260},{"id":"defUp","dur":5,"mag":0.4}],"summon":{"kind":"spirit","count":3,"ttl":8,"strong":true}},"desc":"Call down a host of celestial guardians behind a colossal shield.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a31","t_a41"]},
-      {"id":"t_a52","name":"Avatar of Vengeance","icon":"sk_ta_archon","mp":28,"cd":35,"syn":{"skill":"t_p52","per":0.04},"cast":{"shape":"self","buff":[{"id":"thorns","dur":12,"mag":160},{"id":"defUp","dur":12,"mag":0.3},{"id":"dmgUp","dur":12,"mag":0.3},{"id":"shield","dur":12,"mag":200}]},"desc":"Become an avatar of vengeance, hurling back devastating thorns behind a holy shield.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a32","t_a42"]},
+      {"id":"t_a50","name":"Avatar","icon":"sk_ta_avatar","mp":30,"cd":29,"syn":{"skill":"t_p50","per":0.04},"cast":{"shape":"self","buff":[{"id":"dmgUp","dur":10,"mag":0.5},{"id":"critUp","dur":10,"mag":0.3},{"id":"lifestealUp","dur":10,"mag":0.2},{"id":"shield","dur":10,"mag":180}],"kind":"spell"},"desc":"Ascend into a radiant avatar, surging with holy power, crit, and lifesteal.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a30","t_a40"]},
+      {"id":"t_a51","name":"Celestial Host","icon":"sk_ta_celestialhost","mp":30,"cd":12,"cast":{"shape":"summon","buff":[{"id":"shield","dur":5,"mag":260},{"id":"defUp","dur":5,"mag":0.4}],"summon":{"kind":"spirit","count":3,"ttl":8,"strong":true},"kind":"spell"},"desc":"Call down a host of celestial guardians behind a colossal shield.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a31","t_a41"]},
+      {"id":"t_a52","name":"Avatar of Vengeance","icon":"sk_ta_archon","mp":28,"cd":35,"syn":{"skill":"t_p52","per":0.04},"cast":{"shape":"self","buff":[{"id":"thorns","dur":12,"mag":160},{"id":"defUp","dur":12,"mag":0.3},{"id":"dmgUp","dur":12,"mag":0.3},{"id":"shield","dur":12,"mag":200}],"kind":"spell"},"desc":"Become an avatar of vengeance, hurling back devastating thorns behind a holy shield.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a32","t_a42"]},
       {"id":"t_a53","name":"Light of Heaven","icon":"sk_ta_lightofheaven","mp":28,"cd":9,"syn":{"skill":"t_p53","per":0.04},"cast":{"shape":"nova","spell":1.8,"radius":4,"heal":{"flat":120,"perLevel":8},"buff":[{"id":"shield","dur":4,"mag":240},{"id":"regen","dur":4,"mag":20}]},"desc":"Unleash the light of heaven for {dmg}, searing all foes and flooding you with healing and protection.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a33","t_a43"]},
       {"id":"t_a54","name":"Judgment Day","icon":"sk_ta_judgmentday","mp":34,"cd":11,"syn":{"skill":"t_p54","per":0.04},"cast":{"shape":"nova","spell":3.2,"execute":0.35,"radius":4,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Call down judgment day for {dmg}, a cataclysm of holy fire that obliterates and executes all around you.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a34","t_a44"]}
     ], 'active'),
@@ -5415,17 +5419,31 @@ function spellPowerMult() {
 function skillPowerMult() {
   return 1 + skillBonus('skillpwr') + buffMag('skillUp') + totalStat('SKILLPWR') / 100;
 }
-// The SCHOOL of an active node — 'skill' (martial, weapon-based) or 'spell' (magic).
-// Explicit via cast.kind when set; otherwise DERIVED so every legacy node classifies
-// correctly with zero data migration: a cast that deals spell damage is a spell, and
-// everything else (weapon strikes, and pure buffs/summons/heals) is a skill. This tag
-// drives which power stat amps the ability (Skill vs Spell Power) and which speed lever
-// recharges it (Cast Speed only helps spells), and shows as a badge in the skill tree.
+// The SCHOOL of an active node — 'skill' (martial, weapon-based), 'spell' (magic), or
+// 'hybrid' (a weapon strike that also channels magic, dealing BOTH). Explicit via
+// cast.kind when set; otherwise DERIVED so every legacy node classifies with zero
+// migration: a cast carrying BOTH weapon and spell damage is a hybrid, spell-only is a
+// spell, and everything else (weapon strikes, pure buffs/summons/heals) is a skill. The
+// tag drives which power stat amps each part (Skill vs Spell Power), which enemy defense
+// it meets (armor vs magic resist), and which speed lever recharges it (Cast Speed helps
+// spells AND hybrids; leech pays only from a hybrid's weapon half). Shown as a badge.
 function castKind(node) {
   const c = node && node.cast;
   if (!c) return 'skill';
-  if (c.kind === 'skill' || c.kind === 'spell') return c.kind;
+  if (c.kind === 'skill' || c.kind === 'spell' || c.kind === 'hybrid') return c.kind;
+  if (c.wpn != null && c.spell != null) return 'hybrid';
   return (c.spell != null) ? 'spell' : 'skill';
+}
+// Presentation for a school: the badge icon(s), label, tint and one-line "what this
+// means" blurb, kept in one place so every surface (tree popover, detail card, guide)
+// tells the same story. Hybrid pairs the sword + orb glyphs — weapon AND magic.
+function castSchoolMeta(kind) {
+  if (kind === 'spell') return { label: 'SPELL', icons: '<span data-spr=ic_orb></span>', color: '#b08ad8',
+    desc: 'Magic — scales with Spell Power; meets a foe\'s magic resistance (pierced by Magic Pen); Cooldown Reduction &amp; Cast Speed shorten its recharge. Does not leech.' };
+  if (kind === 'hybrid') return { label: 'HYBRID', icons: '<span data-spr=w_sword></span><span data-spr=ic_orb></span>', color: '#c99cd6',
+    desc: 'Weapon + magic — lands a PHYSICAL part (meets armour, leeches, scales Skill Power) AND a MAGIC part (meets magic resistance, scales Spell Power). Cooldown Reduction &amp; Cast Speed shorten its recharge.' };
+  return { label: 'SKILL', icons: '<span data-spr=w_sword></span>', color: '#e0a24b',
+    desc: 'Martial — scales with your weapon damage &amp; Skill Power; meets a foe\'s physical armour (pierced by Armor Pen); leeches; Cooldown Reduction shortens its recharge.' };
 }
 // Prereqs satisfied? (high enough level, ascension matches, every prereq owned).
 function skillReqMet(node) {
@@ -6609,7 +6627,8 @@ window.gameState = function gameState(radius) {
     // `cooldownFull` is the CDR-adjusted recharge. Null for non-damage actives. See the
     // "damage" topic in gameGuide() and skillDamagePreview() for the exact model.
     const dp = (typeof skillDamagePreview === 'function') ? skillDamagePreview(node, rank) : null;
-    o.damage = dp ? { min: dp.min, max: dp.max, hits: dp.strikes, base: { min: dp.baseMin, max: dp.baseMax } } : null;
+    o.damage = dp ? { min: dp.min, max: dp.max, hits: dp.strikes, base: { min: dp.baseMin, max: dp.baseMax },
+      ...(dp.hybrid ? { phys: dp.phys, magic: dp.magic } : {}) } : null;
     o.dps = dp ? Math.round(dp.dps) : null;
     o.cooldownFull = (typeof effectiveSkillCd === 'function') ? Math.round(effectiveSkillCd(node, rank) * 10) / 10 : (node ? node.cd : null);
     if (idx != null) {
@@ -6754,6 +6773,12 @@ window.gameState = function gameState(radius) {
       enraged: !!e.enraged,                    // boss permanently hits +50% (triggers below 40% HP)
       berserk: (e.berserkT || 0) > 0,          // boss temporary damage spike — wait it out like a ward
       affix: e.affix || null,                  // elite-style modifier on ~22% of ordinary foes (see gameGuide "enemies")
+      // Typed defence: % of a blow this foe shrugs off, per school. Physical armor
+      // blunts your weapon attacks & martial SKILLS (pierced by Armor Pen); magic
+      // resist blunts your SPELLS (pierced by Magic Pen). A HYBRID's two halves meet
+      // each. Pick the school this foe is SOFT to. Rounded to whole %.
+      armor: Math.round(enemyArmorPct(e) * 100),
+      magicResist: Math.round(enemyMagicResPct(e) * 100),
       status: enemyStatus(e),                  // e.g. ['stun'], ['slow','poison']
     }; }),
     chests: (groundItems || []).map(g => ({ x: g.x, y: g.y })),
@@ -6947,7 +6972,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     healing: [
       `RECOVERY IS OVER TIME, not instant. Most healing no longer snaps HP up — it fills a PENDING pool that pays into HP at a capped rate (~12%/s of max HP per source), so the bar climbs on a visible slope. gameState().player.pendingHeal is the HP still owed; the HP/MP bars show it as a translucent zone ahead of the solid fill.`,
-      `OVER-TIME sources STACK (a potion sip pays out on top of any pending leech): the Health Potion, all life leech / lifesteal (paid from your physical attacks and weapon skills — spells don't leech), Scythe Reap, Vampiric, Life-on-Kill, and incidental on-kill / on-cast "sliver" heals.`,
+      `OVER-TIME sources STACK (a potion sip pays out on top of any pending leech): the Health Potion, all life leech / lifesteal (paid from your physical attacks and weapon skills — spells don't leech, and a HYBRID strike leeches only from its physical half, not its magic half), Scythe Reap, Vampiric, Life-on-Kill, and incidental on-kill / on-cast "sliver" heals.`,
       `INSTANT sources land immediately, as before: deliberate active HEAL skills you cast (e.g. Divine Storm, Final Judgment, Blood Drinker) and EMERGENCY low-HP triggers (a passive that heals when you drop below 25% HP). A skill's detail card tags which kind it grants (heal — instant / leech — over time).`,
       `The Health Potion mends 35% of max HP over a few seconds (Potency raises the amount; shared 6s cooldown, down to 2s via Recharge). It is INTERRUPTIBLE: one DIRECT hit above 18% of max HP spills half the remaining sip ("SIP SPILLED"). Damage-over-time (lava/poison/burn) never interrupts it, and earned leech is never interrupted — only the potion sip is fragile.`,
       `Because you can no longer burst back to full, don't wait until you're low: sip EARLY, keep moving, and let the pending pool refill the slope while you avoid the next hit.`,
@@ -6958,7 +6983,7 @@ window.gameGuide = function gameGuide(topic) {
       `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready.`,
       `The bar has ${SKILL_SLOTS} MANUAL slots (cast by hand with ${key('skill1')}-${key('skill' + SKILL_SLOTS)}) plus ONE dedicated auto-cast slot. You choose what goes where — drag a learned active onto a slot, or use the SKILLS-tab slot buttons; a freshly-learned active auto-fills the first open manual slot.`,
       `gameState().skills lists each filled manual slot's number key, MP cost (already reduced by your Mana Cost Reduction), cooldown remaining, ready flag, and what the skill DOES — its shape, range/radius and the damages/heals/buffs/summons flags — so you can pick one without inspecting it. The auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
-      `Every active is either a SKILL (martial/weapon-based) or a SPELL (magic) — shown as a SKILL / SPELL badge on its tree node and in gameState().skills[i].school. A SKILL scales with your weapon damage + Skill Power gear; a SPELL scales with Spirit + Spell Power gear. Gear those stats to match the actives you lean on.`,
+      `Every active has a SCHOOL — SKILL, SPELL, or HYBRID — shown as a badge on its tree node and in gameState().skills[i].school. A SKILL is martial: weapon-based, scales with weapon damage + Skill Power, leeches life, meets a foe's physical ARMOR (pierced by Armor Pen), recharged by CDR only. A SPELL is magic: scales with Spirit + Spell Power, never leeches, meets a foe's MAGIC RESIST (pierced by Magic Pen), recharged by CDR + Cast Speed. A HYBRID lands BOTH — a physical part (leeches, meets armor, Skill Power) AND a magic part (meets magic resist, Spell Power); its tooltip spells out the split, and it recharges with CDR + Cast Speed. Classes lean differently: Warrior is all SKILL, Mage all SPELL, Rogue mostly skill with shadow/toxic hybrids, Templar mostly holy spells with holy-strike hybrids. Gear the stats that match the actives you lean on.`,
       `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and a rank-7 skill adds an extra ×1.2. The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
       `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% power (Empowered), then +20% power and a 20%-faster recharge (Honed), then +30% power plus +1 radius/range/target/hit (Mastered) — so deepening a key skill outpaces its rising mana cost. Every skill's detail card shows a "Rank bonuses" ladder listing all three, each lit green with a ✓ once your rank has earned it.`,
@@ -6973,7 +6998,9 @@ window.gameGuide = function gameGuide(topic) {
       `AUTO-ATTACK: your automatic weapon swing. Scales with weapon Damage + Attack (ATK) + your class's damage attributes (e.g. Might). Dedicated amp: Increased Dmg % (IDMG). Speed lever: Attack Speed % (ATKSPD) — faster swings. Can MISS (accuracy vs the foe's evasion).`,
       `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
       `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
-      `So NO — Attack does not feed everything: ATK + weapon Damage power auto-attacks and martial skills only; spells ignore them and live on Spirit + Spell Power. The three % amps (IDMG / Skill Power / Spell Power) are one-per-source and never cross over.`,
+      `HYBRID (a weapon strike that also channels magic — the Templar's holy strikes, the Rogue's shadow/toxic strikes): lands a physical part AND a magic part in one cast. The physical part scales like a SKILL (weapon + Skill Power, leeches, meets armor); the magic part scales like a SPELL (Spirit + Spell Power, no leech, meets magic resist). Only the physical half leeches. Recharged by CDR + Cast Speed. Its tooltip shows the exact split ("40 physical + 30 magic"), so build BOTH power stats to max it — or lean one and accept the other half stays modest.`,
+      `TYPED MITIGATION: a foe shrugs off a slice of each blow, and the slice depends on the SCHOOL. Physical armor blunts auto-attacks + martial skills (Armor Pen % pierces it); magic resistance blunts spells (Magic Pen % pierces it). Enemies differ — a stone golem is armored but soft to magic, a wraith resists magic but not steel. gameState().enemies[i] reports each foe's armor and magicResist (whole %); the bestiary card shows both. Hit a foe with the school it's SOFT to; a HYBRID splits across both, so it's never fully walled.`,
+      `So NO — Attack does not feed everything: ATK + weapon Damage power auto-attacks and martial skills only; spells ignore them and live on Spirit + Spell Power. The three % amps (IDMG / Skill Power / Spell Power) are one-per-source and never cross over — and a HYBRID's two halves each ride their own lane.`,
       `RANGES & ROLLS: weapons and spells both deal a RANGE, not one fixed number. A weapon rolls its printed min–max; a SPELL now rolls too — around its base by a per-spell spread (a focused magic missile rolls tight, a chaotic meteor rolls wild), so no two spells feel the same. Each roll is taken at fine (fractional) precision BEFORE your multipliers apply, so even a small weapon produces organic, varied hits instead of two or three repeating numbers — the damage finally dealt is still a whole number. Every range is symmetric about the old value, so averages (and balance) are unchanged; only the texture is new.`,
       `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). CDR is a RATING, not a flat %: the fraction it actually cuts off a cooldown is CDR/(CDR+100), so it climbs toward but never reaches 100% (no cap — the math just can't get there), and the hero sheet / tooltips show that real % — a cooldown drops by exactly the amount shown. gameState().player.offense reports skillPower / spellPower / increasedDmg / attackSpeed / castSpeed, the raw cooldownRating, and cooldownReduction as the 0..1 fraction it yields.`,
       `TOOLTIP READOUT: each damage skill's description reads "deals X to Y damage" — its ABSOLUTE base per-hit range (the ability's own damage: rank, coefficient and your caster power — weapon roll/ATK/attributes for a skill, Spirit for a spell — before ANY situational buff, depth armour or crit). Below it sit two pills versus a typical foe at your current depth. "Damage lo–hi per hit" is that base after everything PERSISTENT except crit and cast rate — class %, gear IDMG/Skill/Spell Power, the difficulty scar and the foe's armour — the honest number that pops over a foe on ONE strike. A multi-strike cast shows a "×N" badge instead of inflating the range; status/elemental procs and transient buffs (shrines, food, war-cries) stay out. "DPS" is the effective sustained damage per second: that per-hit range's midpoint, lifted by crit chance × crit damage, times hits-per-cast, times how often the skill can be cast (cooldown after Cooldown Reduction / Cast Speed). Crit and cast rate live ONLY in DPS — never in the Damage pill. On rank-up the preview shows the new base range, not a bare %. Big numbers abbreviate (1.2k, 3.4M). gameState() skills carry { damage:{min,max,hits,base:{min,max}}, dps, cooldownFull }.`,
@@ -7021,10 +7048,11 @@ window.gameGuide = function gameGuide(topic) {
       `CURSED FLOOR (the "greed" gate): rarely, on descending to a non-boss floor from depth 3+, a WORLD-PAUSING prompt offers to brave the floor for DOUBLED loot & gold at the cost of tougher non-boss foes (more HP and damage). Movement freezes until you choose — gameState().greed.pending is true, mode is 'greed' and blockingOverlay is 'greed-overlay'; call acceptGreed() to take it (gameState().greed.active then reads true, mult 2) or declineGreed() to skip.`,
     ],
     enemies: [
-      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), affix (an elite-style modifier), and status (e.g. ["stun"], ["slow"]).`,
+      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), affix (an elite-style modifier), armor / magicResist (typed defence — see below), and status (e.g. ["stun"], ["slow"]).`,
       `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
       `Behaviors (gameState().enemies[i].behavior): chaser (steady, 1 tile/turn), swift (2 tiles/turn), pack (1 tile/turn, but rushes to 2 when you drop below 50% HP — wolves/tigers), erratic (darts unpredictably), brute (slow — acts every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand). A foe with the ice CHILL status is likewise dragged to that half-cadence, but chill is a STATUS (it shows in enemies[i].status), not a behavior.`,
       `Each archetype also has its OWN toughness & punch, not just movement: brutes are tanky and hit hard but swing slowly; swift vermin and erratic flyers are frail and jab for less; casters are squishy but strike from range; lurkers ambush for a heavier blow; packs are individually weak but swarm. So two foes on the same floor can differ a lot — read the behavior, not just the sprite.`,
+      `TYPED DEFENCE (gameState().enemies[i].armor / magicResist, whole %): every foe shrugs off a slice of your damage, and how big depends on the SCHOOL of the hit. Physical armor blunts auto-attacks + martial SKILLS (your Armor Pen % pierces it); magic resistance blunts SPELLS (your Magic Pen % pierces it). Foes differ by nature — a stone/metal/armored/scaled foe carries high armor but low magic resist (cast at it); a ghost, wisp, elemental, ooze or caster resists magic but not steel (strike it); most beasts sit in between. Hit each foe with the school it is SOFT to; a HYBRID ability splits its blow across both, so it is never fully walled. The bestiary card shows both values once you've slain enough of a species.`,
       `ENEMY AFFIXES (gameState().enemies[i].affix): roughly a fifth of ordinary (non-elite) foes carry ONE modifier, shown by a coloured aura and a name prefix — tough (+HP), fierce (+damage), venomous (poison-on-hit), accurate (cuts through your dodge), evasive (your hits often whiff — bring Accuracy), chill (snares you on hit). Read the affix, not just the sprite.`,
       `Ranged foes fire DODGEABLE bolts, not guaranteed hits — a bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
       `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly.`,
@@ -7090,8 +7118,8 @@ window.gameGuide = function gameGuide(topic) {
   const t = String(topic).toLowerCase().replace(/[^a-z]/g, '');
   const alias = {
     move: 'movement', moving: 'movement', sprint: 'movement', dash: 'movement', stamina: 'movement', stamina: 'movement', walk: 'movement', walking: 'movement', facing: 'movement', face: 'movement', direction: 'movement', animation: 'movement', animate: 'movement',
-    skill: 'skills', cast: 'skills', autocast: 'autocast', autocasting: 'autocast',
-    damage: 'damage', dmg: 'damage', spell: 'damage', spells: 'damage', spellpower: 'damage', skillpower: 'damage', attackspeed: 'damage', castspeed: 'damage', cooldown: 'damage', cdr: 'damage', scaling: 'damage', attack: 'damage', autoattack: 'damage',
+    skill: 'skills', cast: 'skills', autocast: 'autocast', autocasting: 'autocast', hybrid: 'skills', school: 'skills', schools: 'skills',
+    damage: 'damage', dmg: 'damage', spell: 'damage', spells: 'damage', spellpower: 'damage', skillpower: 'damage', attackspeed: 'damage', castspeed: 'damage', cooldown: 'damage', cdr: 'damage', scaling: 'damage', attack: 'damage', autoattack: 'damage', armor: 'damage', magicpen: 'damage', magicresist: 'damage', magicresistance: 'damage', resist: 'damage', resistance: 'damage', mitigation: 'damage', pen: 'damage', penetration: 'damage',
     autoloot: 'autoloot', autoscrap: 'autoloot', scrap: 'autoloot', sell: 'autoloot', salvage: 'autoloot', material: 'autoloot', materials: 'autoloot', mats: 'autoloot',
     item: 'loot', items: 'loot', gear: 'loot', rarity: 'loot', loots: 'loot',
     power: 'power', itempower: 'power', gearpower: 'power', upgrade: 'power', upgrades: 'power', rating: 'power', strength: 'power', build: 'power',
@@ -8946,10 +8974,16 @@ function renderEnemyCard(e) {
   // The stat rows, each gated by its own learn-threshold.
   const styleLbl = ENEMY_STYLE_LABEL[e.behavior] || 'Hunter';
   const rangedLbl = (BEHAVIORS[e.behavior] && BEHAVIORS[e.behavior].ranged) ? 'Ranged' : 'Melee';
+  // Typed defence — which school this foe shrugs off. Whichever is LOWER is the
+  // school to hit it with (a rock-skinned foe: high Armor, low Magic res → cast at it).
+  const armorPct = Math.round(enemyArmorPct(e) * 100);
+  const mresPct = Math.round(enemyMagicResPct(e) * 100);
   const fields = [
     ['lvl',   'Level',  e.level || '—'],
     ['hp',    'Health', e.maxHp],
     ['dmg',   'Damage', e.dmg],
+    ['armor', 'Armor',  `${armorPct}%`],
+    ['mres',  'Magic res', `${mresPct}%`],
     ['style', 'Style',  styleLbl],
     ['reach', 'Attack', rangedLbl],
   ];
@@ -13786,7 +13820,7 @@ const AFFIX_CURVES = {
   // they feed the rating-vs-level curves in combat instead of being a flat %.
   CRIT:{flat:1.0}, LCK:{flat:1.0}, DODGE:{flat:1.0}, BLOCK:{flat:1.2}, DR:{flat:0.8}, ACC:{flat:1.8},
   LEECH:{pct:0.18,cap:8}, MPLEECH:{pct:0.18,cap:8}, IDMG:{pct:0.25,cap:12}, DBLSTRIKE:{pct:0.14,cap:7}, CLEAVE:{pct:0.5,cap:25},
-  BOSSDMG:{pct:0.4,cap:18}, EXEC:{pct:0.3,cap:15}, PEN:{pct:0.5,cap:25}, GOLDFIND:{pct:0.7,cap:35},
+  BOSSDMG:{pct:0.4,cap:18}, EXEC:{pct:0.3,cap:15}, PEN:{pct:0.5,cap:25}, MAGICPEN:{pct:0.5,cap:25}, GOLDFIND:{pct:0.7,cap:35},
   XPGAIN:{pct:0.5,cap:25}, MAGICFIND:{pct:0.4,cap:20}, MATFIND:{pct:0.6,cap:30}, SPELLPWR:{pct:0.3,cap:15},
   // Skill Power / Cast Speed mirror Spell Power / Attack Speed exactly, so they read
   // as "another modest offense %" and their realistic stacked totals match.
@@ -19234,24 +19268,40 @@ function rollPlayerHit(e) {
   return { dmg: Math.max(1, Math.round(dmg)), isCrit };
 }
 
-// Fraction of a player's blow an enemy shrugs off via armor. Modest by default so
-// it barely taxes normal fights, but real on elites/bosses where Armor Pen earns
-// its slot. Scales gently with the foe's level/depth.
-function enemyArmorPct(e) {
+// The depth/elite/boss BASE a foe shrugs off, before its per-school multiplier.
+// Modest by default so it barely taxes normal fights, but real on elites/bosses where
+// Penetration earns its slot. Scales gently with the foe's level/depth. Uncapped here —
+// the per-school functions below apply the multiplier then clamp.
+function enemyArmorBase(e) {
   let pct = 0.03 + Math.min(0.10, ((e && e.level) || dungeonLevel) * 0.0035);
   if (e && e.isElite) pct += 0.06;
   if (e && e.isBoss)  pct += 0.12;
-  return Math.min(0.45, pct);
+  return pct;
+}
+// PHYSICAL armor: the base reshaped by the foe's physical-resist multiplier. Mitigates
+// auto-attacks and martial SKILLS (and a hybrid strike's weapon half). Armor Pen (PEN)
+// ignores part of it. A stone golem carries a high multiplier here; a wraith a low one.
+function enemyArmorPct(e) {
+  return resistFraction(enemyArmorBase(e), enemyResistFor(e && e.type).phys, RESIST_CAP);
+}
+// MAGIC resistance: the twin of enemyArmorPct for the spell school. Mitigates SPELLS
+// (and a hybrid strike's magic half). Magic Pen (MAGICPEN) ignores part of it.
+function enemyMagicResPct(e) {
+  return resistFraction(enemyArmorBase(e), enemyResistFor(e && e.type).magic, RESIST_CAP);
 }
 // Fraction of a foe's armor that Armor Penetration ignores. Asymptotic, NOT capped:
 // raw pen p (gear PEN% + pen passives) feeds p/(p+0.5), which climbs toward — but
 // never reaches — ignoring ALL armor. Each point helps a little less than the last
 // (light pen ≈ its old linear value; heavy pen keeps gaining past the old 90% wall
 // without ever fully negating armor), matching how the game's other stats now scale.
-// Shared by auto-attacks (rollPlayerHit) and skills/spells (applyOffenseMods).
+// Shared by auto-attacks (rollPlayerHit) and physical skills (applyOffenseMods).
 function armorPenFrac() {
-  const p = Math.max(0, totalStat('PEN') / 100 + skillBonus('pen'));
-  return p / (p + 0.5);
+  return penFraction(totalStat('PEN') / 100 + skillBonus('pen'));
+}
+// The spell-school twin of armorPenFrac: gear Magic Pen % (MAGICPEN) + any 'mpen' skill
+// passive erode a foe's MAGIC resistance the same asymptotic way Armor Pen erodes armor.
+function magicPenFrac() {
+  return penFraction(totalStat('MAGICPEN') / 100 + skillBonus('mpen'));
 }
 
 // Apply already-rolled damage to a foe and show the number. Returns true if it
@@ -19741,7 +19791,7 @@ function castSkillById(id, opts) {
   // Reduction form: cd = base × (1 − CDR/(CDR+CDR_SCALE)) = base / (1 + CDR/CDR_SCALE).
   // Same rating→asymptotic-% curve the hero sheet shows (cooldownReductionFrac).
   let haste = 1 + Math.max(0, totalStat('CDR')) / CDR_SCALE;                        // every active
-  if (castKind(sk) === 'spell') haste *= 1 + Math.max(0, totalStat('CASTSPD')) / 100; // spells only
+  if (castKind(sk) !== 'skill') haste *= 1 + Math.max(0, totalStat('CASTSPD')) / 100; // spells + hybrids
   if (skillRank(id) >= 7) haste *= 1.20;                                            // ✦✦ Honed milestone
   setSkillCd(id, Math.max(0.5, sk.cd / haste));
   updateBars();
@@ -19886,8 +19936,11 @@ function applyOffenseMods(dmg, e, forceCrit, isSpell) {
   if (lowHp && e && e.hp < e.maxHp * 0.35) dmg *= (1 + lowHp);
   _lastOffenseCrit = forceCrit || isCritical(Math.random(), critChanceVs(e));
   if (_lastOffenseCrit) dmg *= critDamageMult();
-  const armor = enemyArmorPct(e);
-  if (armor > 0) { const pen = armorPenFrac(); dmg *= (1 - armor * (1 - pen)); }
+  // School-typed mitigation: a spell meets the foe's MAGIC resistance (pierced by Magic
+  // Pen); a weapon/martial hit meets its physical ARMOR (pierced by Armor Pen). A hybrid
+  // strike arrives here once per part, so each half is mitigated by its own defense.
+  const resist = isSpell ? enemyMagicResPct(e) : enemyArmorPct(e);
+  dmg = mitigate(dmg, resist, isSpell ? magicPenFrac() : armorPenFrac());
   return dmg;
 }
 // One weapon-based blow for an active. No per-hit cap — a big skill hit lands its
@@ -19937,11 +19990,12 @@ function skillDamagePreview(node, rank) {
   const cast0 = node && node.cast;
   if (!cast0) return null;
   const c = applyCastMods(node, cast0); // owned passives can add wpn/spell/repeat/…
-  // A hybrid cast (both wpn AND spell) lands its WEAPON value only — resolveCast's
-  // damage branch is `if (c.wpn) … else if (c.spell) …` — so test wpn first.
-  const isWeapon = c.wpn != null;
-  const isSpellDmg = !isWeapon && c.spell != null;
-  if (!isWeapon && !isSpellDmg) return null; // no direct damage → no readout
+  // A cast can carry a WEAPON part (c.wpn), a MAGIC part (c.spell), or — for a hybrid —
+  // BOTH. Each part is previewed on its own lane (its own scaling + its own enemy
+  // defence) exactly the way resolveCast lands them, then summed for the per-hit total.
+  const hasWpn = c.wpn != null;
+  const hasSpell = c.spell != null;
+  if (!hasWpn && !hasSpell) return null; // no direct damage → no readout
 
   const r = rank || 1;
   // Multi-strike: a cast that lands several hits on the SAME target (cast.repeat);
@@ -19953,39 +20007,46 @@ function skillDamagePreview(node, rank) {
 
   const synM = synergyMult(node);
   const rs = rankScale(r);
-  // A representative normal foe at the current depth: no boss/elite armour bump, so
-  // its armour (and the crit opposition below) scale with depth alone.
+  // A representative normal foe at the current depth: no boss/elite bump, neutral
+  // resist profile, so its mitigation scales with depth alone. Each school meets its
+  // own defence — the weapon lane physical armour (+ Armor Pen), the magic lane magic
+  // resistance (+ Magic Pen) — mirroring the split in applyOffenseMods.
   const foe = { level: curDepth() };
-  const armor = enemyArmorPct(foe);
-  const armorFactor = armor > 0 ? (1 - armor * (1 - armorPenFrac())) : 1;
+  const physFactor = 1 - enemyArmorPct(foe) * (1 - armorPenFrac());
+  const magicFactor = 1 - enemyMagicResPct(foe) * (1 - magicPenFrac());
 
-  // Two PER-HIT ranges, each crit- and cast-rate-free:
-  //   • BASE (baseMin..baseMax) — the ability's own damage: rank + coefficient (+ your
-  //     ATK / Spirit / Skill|Spell Power, the way a weapon's own damage scales) folded
-  //     in, but NOTHING situational — no gear damage%, class %, difficulty scar, depth
-  //     armour or crit. This is the "deals X to Y" printed in the description and the
-  //     number the rank-up preview compares.
-  //   • DAMAGE (hitMin..hitMax) — BASE times everything persistent EXCEPT crit and cast
-  //     rate: class %, gear Increased Damage, the difficulty scar and this depth's
-  //     armour. Transient shrine/food/war-cry buffs stay out so the readout is stable.
-  let baseMin, baseMax, off;
-  if (isWeapon) {
+  // PER-HIT ranges, each crit- and cast-rate-free. BASE (the ability's own damage:
+  // rank + coefficient + your ATK / Spirit / Skill|Spell Power) and DAMAGE (BASE ×
+  // everything persistent EXCEPT crit and cast rate: class %, IDMG, difficulty scar,
+  // this depth's mitigation). Computed per lane so a hybrid shows both.
+  const weaponPart = () => {
     const [wLo, wHi] = weaponDmgRange();
     const flat = player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
     const mult = c.wpn * synM * rs * skillPowerMult();
-    baseMin = (wLo + flat) * mult;
-    baseMax = (wHi + flat) * mult;
-    // The always-on weapon multipliers from applyOffenseMods: class damage,
-    // difficulty scar, gear IDMG, armour (crit + situational spikes excluded).
-    off = classDmgDealtMult() * diffDebuffMult() * (1 + totalStat('IDMG') / 100) * armorFactor;
-  } else {
-    // Spells roll a range now: spellBase is the CENTER, the per-spell spread widens it.
+    const off = classDmgDealtMult() * diffDebuffMult() * (1 + totalStat('IDMG') / 100) * physFactor;
+    return { baseMin: (wLo + flat) * mult, baseMax: (wHi + flat) * mult, off };
+  };
+  const magicPart = () => {
     const centerBase = spellBase(c.flat || 12, c.perLvl || 2) * c.spell * synM * rs;
-    [baseMin, baseMax] = spreadRange(centerBase, spellSpreadFor(node.id));
-    off = diffDebuffMult() * armorFactor; // spells skip class-dmg & IDMG (isSpell path)
+    const [lo, hi] = spreadRange(centerBase, spellSpreadFor(node.id));
+    const off = diffDebuffMult() * magicFactor; // spells skip class-dmg & IDMG (isSpell path)
+    return { baseMin: lo, baseMax: hi, off };
+  };
+
+  let baseMin = 0, baseMax = 0, hitMin = 0, hitMax = 0, phys = null, magic = null;
+  if (hasWpn) {
+    const p = weaponPart();
+    baseMin += p.baseMin; baseMax += p.baseMax;
+    const lo = Math.max(1, Math.round(p.baseMin * p.off)), hi = Math.max(1, Math.round(p.baseMax * p.off));
+    hitMin += lo; hitMax += hi; phys = { min: lo, max: hi };
   }
-  const hitMin = Math.max(1, Math.round(baseMin * off));
-  const hitMax = Math.max(1, Math.round(baseMax * off));
+  if (hasSpell) {
+    const p = magicPart();
+    baseMin += p.baseMin; baseMax += p.baseMax;
+    const lo = Math.max(1, Math.round(p.baseMin * p.off)), hi = Math.max(1, Math.round(p.baseMax * p.off));
+    hitMin += lo; hitMax += hi; magic = { min: lo, max: hi };
+  }
+  hitMin = Math.max(1, hitMin); hitMax = Math.max(1, hitMax);
 
   const critChance = critChanceVs(foe);
   const critMult = critDamageMult();
@@ -19999,6 +20060,7 @@ function skillDamagePreview(node, rank) {
     min: hitMin, max: hitMax,                                              // per-hit Damage range (no crit/cadence)
     baseMin: Math.max(1, Math.round(baseMin)), baseMax: Math.max(1, Math.round(baseMax)), // per-hit absolute base
     strikes, dps, effectiveCd: effCd,
+    hybrid: !!(phys && magic), phys, magic,   // per-lane split for a hybrid readout (else one is null)
   };
 }
 
@@ -20009,7 +20071,7 @@ function skillDamagePreview(node, rank) {
 function effectiveSkillCd(node, rank) {
   const haste = castHaste({
     cdr: totalStat('CDR'), castSpd: totalStat('CASTSPD'),
-    isSpell: castKind(node) === 'spell', honed: (rank || 1) >= 7,
+    isSpell: castKind(node) !== 'skill', honed: (rank || 1) >= 7, // Cast Speed: spells + hybrids
   });
   return effectiveCooldown((node && node.cd) || 0, haste);
 }
@@ -20025,7 +20087,13 @@ function skillDmgTipLine(node, rank) {
   // Damage = per-HIT range (no crit, no cast rate). A multi-strike cast shows a ×N
   // badge instead of inflating the range. DPS folds in crit + how often it fires.
   const hits = p.strikes > 1 ? ` <span style='opacity:0.75'>(×${p.strikes})</span>` : '';
+  // A hybrid spells out both lanes so nothing is ambiguous: how much is weapon damage
+  // (meets armour, leeches) vs how much is holy/arcane (meets magic resist).
+  const split = (p.hybrid && p.phys && p.magic)
+    ? `<div class='ht-sub' style='opacity:0.8'><span style='color:#e0a24b'>${formatDamageRange(p.phys.min, p.phys.max)} physical</span> + <span style='color:#b08ad8'>${formatDamageRange(p.magic.min, p.magic.max)} magic</span></div>`
+    : '';
   return `<div class='ht-sub'>Damage <b>${formatDamageRange(p.min, p.max)}</b> <span style='opacity:0.6'>per hit</span>${hits}</div>`
+    + split
     + `<div class='ht-sub'>DPS <b style='color:var(--gold)'>${abbreviateNumber(p.dps)}</b></div>`;
 }
 
@@ -20237,21 +20305,28 @@ function resolveCast(node, rank) {
     for (const e of targets) {
       if (e.dead) { i++; continue; }
       const falloff = (c.shape === 'chain') ? Math.pow(0.7, i) : 1;
-      let dmg = 0, crit = false;
-      // Crit is rolled inside applyOffenseMods for weapon actives AND spells; read
-      // it back so skills and spells show the crit and fire on-crit triggers.
-      if (c.wpn) { dmg = skillPhysDamage(e, c.wpn * falloff * synM, rank, c.crit); crit = _lastOffenseCrit; }
-      else if (c.spell) { dmg = skillSpellDamage(e, c, c.spell * falloff * synM, rank, spSpread); crit = _lastOffenseCrit; }
+      // A hybrid runs BOTH passes: the weapon half (physical, leech-eligible, meets
+      // armor, scales Skill Power) PLUS the magic half (no leech, meets magic resist,
+      // scales Spell Power). A pure skill runs only the wpn pass, a pure spell only the
+      // spell pass — behaviour-identical to the old if/else. Crit is rolled per part
+      // inside applyOffenseMods and read back from _lastOffenseCrit.
+      let dmg = 0, crit = false, physPart = 0;
+      if (c.wpn) { const pd = skillPhysDamage(e, c.wpn * falloff * synM, rank, c.crit); dmg += pd; physPart += pd; if (_lastOffenseCrit) crit = true; }
+      if (c.spell) { const md = skillSpellDamage(e, c, c.spell * falloff * synM, rank, spSpread); dmg += md; if (_lastOffenseCrit) crit = true; }
       // Execute: a wounded, non-boss foe is finished outright; bosses just bleed extra.
+      // Keep the physical share proportional so leech pays from the weapon half only.
       if (c.execute && dmg > 0) {
+        const before = dmg;
         if (!e.isBoss && e.hp <= e.maxHp * c.execute) dmg = Math.max(dmg, e.hp);
         else if (e.isBoss) dmg = Math.round(dmg * 1.4);
+        physPart *= dmg / before;
       }
-      if (dmg > 0) { total += dmg; if (physCast) physTotal += dmg; if (crit) anyCrit = true; dealDamage(e, dmg, crit); }
+      const physFrac = physicalShare(physPart, dmg); // 1 for a pure skill, 0<..<1 for a hybrid
+      if (dmg > 0) { total += dmg; if (physCast) physTotal += dmg * physFrac; if (crit) anyCrit = true; dealDamage(e, dmg, crit); }
       // Elemental affinity: fire ignites, lightning charges (and amps), ice chills.
       // The static amp deals a small bonus on top, shown as a pale-blue tick.
       const elemBonus = applyElementalHit(e, node, dmg);
-      if (elemBonus > 0 && !e.dead) { total += elemBonus; if (physCast) physTotal += elemBonus; dealDamage(e, elemBonus, false); spawnFloatingText(e.x, e.y, `+${elemBonus}`, '#bfe3ff'); }
+      if (elemBonus > 0 && !e.dead) { total += elemBonus; if (physCast) physTotal += elemBonus * physFrac; dealDamage(e, elemBonus, false); spawnFloatingText(e.x, e.y, `+${elemBonus}`, '#bfe3ff'); }
       if (c.status && !e.dead) {
         const chance = Math.min(1, c.status.chance + 0.03 * (rank - 1));
         if (Math.random() < chance) applyStatusEffect(e, c.status.effect, c.status.dur + Math.floor((rank - 1) / 3), 'player');
@@ -20282,12 +20357,13 @@ function resolveCast(node, rank) {
     if (boomed) { screenFlash('#ff8a3a'); sfx('boss'); }
   }
 
-  if (c.lifesteal && total > 0) {
+  if (c.lifesteal && physTotal > 0) {
     // Capped like passive lifesteal so a big multi-target nova can't fully heal
-    // you off the pack it just hit; Warded Halls dampen it further.
+    // you off the pack it just hit; Warded Halls dampen it further. Pays from the
+    // PHYSICAL total (physTotal) — a hybrid's holy half doesn't leech, same rule as gear.
     const lsMult = (floorMod && floorMod.lifestealMult) || 1;
     const cap = Math.max(1, Math.round(player.maxHp * 0.15));
-    const got = Math.min(Math.round(total * c.lifesteal * lsMult), cap);
+    const got = Math.min(Math.round(physTotal * c.lifesteal * lsMult), cap);
     if (got > 0) { queueHeal(got); spawnFloatingText(player.x, player.y, `+${got}`, '#ff6688'); } // active-skill leech pays out over time
   }
   // Gear Life/Mana Leech + lifesteal passives pay out from PHYSICAL damage — your
@@ -22573,7 +22649,7 @@ function lootGlossaryHTML() {
   // so the long list stays scannable (and flows into two columns on desktop).
   // Keyed by internal stat key so it can never drift from STAT_SHORT/STAT_LABELS.
   const STAT_GROUPS = [
-    ['Offense', ['ATK','ACC','CRIT','CRITDMG','IDMG','PEN','DBLSTRIKE','CLEAVE','EXEC','BOSSDMG','ATKSPD','BLEED','STUNPWR']],
+    ['Offense', ['ATK','ACC','CRIT','CRITDMG','IDMG','PEN','MAGICPEN','DBLSTRIKE','CLEAVE','EXEC','BOSSDMG','ATKSPD','BLEED','STUNPWR']],
     ['Defense', ['DEF','HP','DR','BLOCK','DODGE','TENAC','THORNS']],
     ['Sustain', ['REGEN','LEECH','MPLEECH','HPKILL','MPKILL']],
     ['Caster',  ['MP','SPELLPWR','SKILLPWR','CASTSPD','CDR','MCR']],
@@ -22825,7 +22901,7 @@ function renderHero(el) {
   // atlas tile (rendered via data-spr) so nothing relies on a shared emoji.
   const EXT = [
     ['IDMG','ic_stun','Increased dmg'], ['BOSSDMG','ui_level','Dmg vs bosses'], ['EXEC','w_dagger','Execute'],
-    ['PEN','w_spear','Armor pen'], ['CLEAVE','w_axe','Cleave'], ['DBLSTRIKE','w_scythe','Double strike'],
+    ['PEN','w_spear','Armor pen'], ['MAGICPEN','ic_orb','Magic pen'], ['CLEAVE','w_axe','Cleave'], ['DBLSTRIKE','w_scythe','Double strike'],
     ['LEECH','ic_heart','Life leech'], ['MPLEECH','ic_orb','Mana leech'], ['HPKILL','ic_heart','Life on kill'],
     ['MPKILL','ic_orb','Mana on kill'], ['THORNS','spikes_up','Thorns'],
     ['SKILLPWR','w_scythe','Skill power'], ['SPELLPWR','ic_orb','Spell power'],
@@ -23114,7 +23190,8 @@ function renderSkills(el) {
   const sn = selectedSkillId ? byId[selectedSkillId] : null;
   if (sn) {
     const rank = skillRank(sn.id);
-    const typeTxt = sn.type === 'active' ? `<span data-spr=ic_stun></span> ACTIVE · ${castKind(sn) === 'spell' ? '<span data-spr=ic_orb></span> SPELL' : '<span data-spr=w_sword></span> SKILL'} · ${skillManaCost(sn, rank)}MP · ${fmtCd(effectiveSkillCd(sn, rank))}s cd · ${castShapeLabel(sn.cast)}` : 'PASSIVE';
+    const _sm = sn.type === 'active' ? castSchoolMeta(castKind(sn)) : null;
+    const typeTxt = sn.type === 'active' ? `<span data-spr=ic_stun></span> ACTIVE · ${_sm.icons} ${_sm.label} · ${skillManaCost(sn, rank)}MP · ${fmtCd(effectiveSkillCd(sn, rank))}s cd · ${castShapeLabel(sn.cast)}` : 'PASSIVE';
     const pips = (sn.type === 'active' || (sn.type === 'passive' && !sn.keystone)) ? milestonePips(rank) : '';
     const rankTxt = ` <span style="color:var(--gold)">${rank}/${sn.max}${pips ? ' ' + pips : ''}</span>`;
     const reqRows = [];
@@ -23308,7 +23385,7 @@ const FX_LABELS = {
   dodge:     ['dodge', 'frac'],      spell:     ['spell damage', 'frac'],
   manaShield:['mana shield', 'frac'], zeal:     ['rage damage', 'frac'],
   lowHpDmg:  ['vs. wounded foes', 'frac'], reflect: ['melee reflect', 'frac'],
-  pen:       ['armor pen', 'frac'],  block:     ['block chance', 'pct'],
+  pen:       ['armor pen', 'frac'],  mpen:      ['magic pen', 'frac'],  block:     ['block chance', 'pct'],
   dr:        ['damage reduction', 'pct'], goldFind: ['gold found', 'pct'],
   tenacity:  ['crowd-control resist', 'pct'],
   magicFind: ['magic find', 'pct'],  xpGain:    ['XP gain', 'pct'],
@@ -23415,20 +23492,21 @@ function skillMechList(n, rank) {
   }
   if (n.cast) {
     const c = n.cast;
-    // School first — whether this is a martial SKILL (scales with your weapon & Skill
-    // Power, recharged by Cooldown Reduction) or a magic SPELL (scales with Spell
-    // Power, recharged by Cooldown Reduction AND Cast Speed). It's the tag that tells
-    // a player which gear stats power this ability.
-    if (castKind(n) === 'spell') add('Spell', '#b08ad8', 'Magic — scales with Spell Power; Cooldown Reduction &amp; Cast Speed shorten its recharge.');
-    else add('Skill', '#e0a24b', 'Martial — scales with your weapon damage &amp; Skill Power; Cooldown Reduction shortens its recharge.');
-    // Two live readout pills — the per-HIT damage range at this depth (gear/attributes/
-    // rank folded in; crit, cast rate and chance procs excluded; a ×N badge marks a
-    // multi-strike cast), and the effective sustained DPS (that range's midpoint × crit
-    // × hits-per-cast × how often it fires). Only for direct-damage actives (wpn/spell).
+    // School first — a martial SKILL (weapon + Skill Power, recharged by Cooldown
+    // Reduction), a magic SPELL (Spell Power, recharged by CDR AND Cast Speed), or a
+    // HYBRID that lands both a weapon and a magic part. It's the tag that tells a player
+    // which gear stats power this ability and which enemy defence it meets.
+    const sm = castSchoolMeta(castKind(n));
+    add(sm.label.charAt(0) + sm.label.slice(1).toLowerCase(), sm.color, sm.desc);
+    // Live readout pills — the per-HIT damage range at this depth (gear/attributes/rank
+    // folded in; crit, cast rate and chance procs excluded; a ×N badge marks a multi-
+    // strike cast), and the effective sustained DPS. A hybrid also spells out its
+    // weapon-vs-magic split so the mitigation each part faces is unambiguous.
     const dp = skillDamagePreview(n, rank);
     if (dp) {
       const hits = dp.strikes > 1 ? ` <span style="opacity:0.75">(×${dp.strikes})</span>` : '';
       add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b> <span style="opacity:0.6">per hit</span>${hits}`);
+      if (dp.hybrid && dp.phys && dp.magic) add('Split', '#c99cd6', `<span style="color:#e0a24b">${formatDamageRange(dp.phys.min, dp.phys.max)} physical</span> + <span style="color:#b08ad8">${formatDamageRange(dp.magic.min, dp.magic.max)} magic</span>`);
       add('DPS', '#e0a24b', `<b>${abbreviateNumber(dp.dps)}</b>`);
     }
     // Movement first — gap-closers/pulls/escapes are the headline of a mobility skill.
