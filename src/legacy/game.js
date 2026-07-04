@@ -21162,6 +21162,9 @@ function renderPanel() {
     }
     el.innerHTML = lootHead + rows.map(({ item, i }) => {
       const equipable = !!item.slot;
+      // Attribute/off-hand requirement unmet — can't wield it. Flagged both by the
+      // yellow lock button and a faint red wash on the whole row.
+      const cantEquip = equipable && !canEquipItem(item);
       const slotName = item.slot ? SLOTS[item.slot].label : 'potion';
       // Compare this item's power to whatever currently fills its slot, so we can
       // flag upgrades and show the power swing (▲+5 / ▼-2).
@@ -21175,7 +21178,7 @@ function renderPanel() {
         ? `<div class='ht-name'><span data-spr=feat_door></span> Locked</div><div class='ht-line'>Safe from selling, scrapping &amp; auto-loot. Tap to unlock.</div>`
         : `<div class='ht-name'><span data-spr=feat_door></span> Unlocked</div><div class='ht-line'>Tap to lock — keeps it from being sold or scrapped.</div>`)}>${dlIcon('key', 20) || (item.locked ? '<span data-spr=feat_door></span>' : '<span data-spr=feat_door></span>')}</button>`;
       return `
-      <div class="loot-item ${rarityClass(item)} ${selectedItem===i?'selected':''} ${isUpgrade?'upgrade':''} ${item.locked?'locked':''}">
+      <div class="loot-item ${rarityClass(item)} ${selectedItem===i?'selected':''} ${isUpgrade?'upgrade':''} ${item.locked?'locked':''} ${cantEquip?'cant-equip':''}">
         <div class="loot-info" onclick="selectItem(${i}, this)"
              onmouseenter="showTooltip(event,${i})" onmouseleave="hideTooltip()">
           <div class="item-name">${curseMark(item)}${item.name}${craftedMark(item)}</div>
@@ -21184,7 +21187,7 @@ function renderPanel() {
         </div>
         ${lockBtn}
         ${equipable
-          ? (canEquipItem(item)
+          ? (!cantEquip
               ? `<button class="row-btn equip-row-btn ${isUpgrade?'upgrade-btn':''}" onclick="quickEquip(${i})">${equippedHere && isUpgrade?'SWAP':'EQUIP'}</button>`
               : `<button class="row-btn locked-row-btn" ${hoverTip(`<div class='ht-name'><span data-spr=feat_door></span> Can't Equip</div><div class='ht-line'>${equipLockReason(item)}</div>`)} onclick="quickEquip(${i})"><span data-spr=feat_door></span></button>`)
           : ''}

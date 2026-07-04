@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Can't-equip loot rows tinted red", by: "Jeff Louie", notes: [
+    "A loot row you can't equip (attribute requirement unmet) now gets a faint red wash, reinforcing the yellow lock button.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Dungeon Gate flags the floor holding your lost bag", by: "Jeff Louie", notes: [
     "The floor where you died glows with a grave marker at the Dungeon Gate, and its difficulty tab gets the same badge, so you know exactly where to dive to reclaim your dropped bag.",
     "A note under the tier picker names the grave's tier and floor whatever tab you're on.",
