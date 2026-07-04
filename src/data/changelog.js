@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Bounty board cards drop the left sprite", by: "Claude", notes: [
+    "Bounty board contract cards no longer show a little figure on the left — the name, objective and reward now use the full card width.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Sellsword camp cards show a big mercenary portrait", by: "Claude", notes: [
     "Each Sellsword hire card now matches the hero card: name and description sit left-aligned, with the mercenary's walking sprite standing tall on the right instead of a small icon crammed beside the name.",
   ] },

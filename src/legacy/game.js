@@ -10979,8 +10979,7 @@ function renderBounty() {
   html += `<div class="town-blurb">Take a contract from the board and complete it out in the dungeon, then return to claim gold, materials and a piece of gear geared to your depth. Fresh contracts are posted from time to time — one bounty at a time.</div>`;
   const offers = _bountyOffers = rollBounties();
   html += '<div class="shop-grid">' + offers.map((o, i) => {
-    return `<div class="shop-row has-actions">
-      ${dlIcon('npc_quest', 32)}
+    return `<div class="shop-row has-actions no-icon">
       <div class="shop-row-info">
         <div class="shop-row-name">${o.title}</div>
         <div class="shop-row-stats">${o.desc(o.need)} · <span data-spr=ic_money></span>${o.gold} + ${o.mat[1]}<span data-spr=mat_${o.mat[0]}></span> + gear</div>
