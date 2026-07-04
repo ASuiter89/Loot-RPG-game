@@ -1475,6 +1475,13 @@ let _procCache = { key: null, cv: null };
 // instead of re-checksumming the whole map every frame to find out nothing
 // changed. Floor builds are covered by floorSerial in the cache keys.
 function bumpMapEpoch() { mapEpoch++; }
+// The terrain bakes only distinguish wall (1, 10) / water (6) / lava (7) / floor
+// (everything else) — an edit WITHIN one class (a spent shrine/fountain or an
+// unlocked vault door becoming plain floor) re-bakes to pixel-identical output,
+// so those sites skip the full-map rebake (and the wall-shadow blur rebuild)
+// entirely. Walkability still changes there — keep calling pathGridDirty().
+function terrainClass(t) { return (t === 1 || t === 10) ? 1 : t === 6 ? 2 : t === 7 ? 3 : 0; }
+function bumpMapEpochIfChanged(oldT, newT) { if (terrainClass(oldT) !== terrainClass(newT)) mapEpoch++; }
 function drawProcTerrain(ox, oy, tw) {
   const key = floorSerial + '|' + mapEpoch + '|' + tw + '|' + MAP_W + 'x' + MAP_H;
   if (_procCache.key !== key) {
@@ -1620,7 +1627,7 @@ function lpcDetail(C, ox, oy, tw, x0, y0, x1, y1) {
 // Autotile edge pieces straddle cell corners (lpcLayer draws at (X-0.5)·tw), so
 // the bake carries a one-tile margin all round and is blitted a tile up-left —
 // nothing clips even if a liquid ever touches the map border.
-let _lpcCache = { key: null, cv: null };
+let _lpcCache = { key: null, baseKey: null, tw: 0, cv: null };
 function bakeLPCTerrain(tw) {
   const C = currentTheme();
   const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' });
@@ -1663,8 +1670,23 @@ function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
   // plus the flags that pick a different visual path — the interior sheet
   // finishing its load mid-floor, and the flat-floor preview toggle. The raised-
   // wall shadow layer bakes in too (its own cache keys on the same mapEpoch).
-  const key = floorSerial + '|' + mapEpoch + '|' + tw + '|' + MAP_W + 'x' + MAP_H + '|' + intReady + '|' + previewFlatFloor;
-  if (_lpcCache.key !== key) _lpcCache = { key, cv: bakeLPCTerrain(tw) };
+  const baseKey = floorSerial + '|' + mapEpoch + '|' + MAP_W + 'x' + MAP_H + '|' + intReady + '|' + previewFlatFloor;
+  const key = baseKey + '|' + tw;
+  if (_lpcCache.key !== key) {
+    // A live window drag crosses a new integer tile size every ~13px of height;
+    // rebaking the whole floor per step would freeze the drag. While the resize
+    // is in flight (body.resizing, cleared 200ms after the last event) stretch
+    // the same floor's stale bake — momentarily soft but fluid — and bake crisp
+    // once on the first frame after it settles.
+    if (_lpcCache.cv && _lpcCache.baseKey === baseKey &&
+        document.body.classList.contains('resizing')) {
+      const s = tw / _lpcCache.tw;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(_lpcCache.cv, ox - tw, oy - tw, _lpcCache.cv.width * s, _lpcCache.cv.height * s);
+      return;
+    }
+    _lpcCache = { key, baseKey, tw, cv: bakeLPCTerrain(tw) };
+  }
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(_lpcCache.cv, ox - tw, oy - tw);          // integer 1:1 blit — pixel-identical
 }
@@ -16206,9 +16228,10 @@ function itemPowerLine(item) {
 // Shrines grant a temporary buff (lasts a few floors) or an instant effect.
 function activateShrine(nx, ny) {
   const info = shrineData[ny+','+nx];
+  const wasT = mapData[ny][nx];
   mapData[ny][nx] = 0;            // shrine is spent
-  bumpMapEpoch();                 // map edited → rebake the terrain
-  pathGridDirty();                // …and the opened tile joins the pathfinding grid
+  bumpMapEpochIfChanged(wasT, 0); // shrine→floor bakes identically — no rebake stall
+  pathGridDirty();                // …but the opened tile joins the pathfinding grid
   delete shrineData[ny+','+nx];
   const kind = info ? info.kind : 'power';
   sfx(kind === 'blood' ? 'hurt' : 'shrine');
@@ -16563,7 +16586,7 @@ function playerSolidCell(cx, cy, ignoreFoes) {
 function breakAhead(cx, cy) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
   const t = mapData[cy][cx];
-  if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; bumpMapEpoch(); pathGridDirty(); log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
+  if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; bumpMapEpochIfChanged(t, 0); pathGridDirty(); log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
 }
 
 // Land one shove on the cracked wall at (cx,cy): chip it further, and collapse it
@@ -16696,7 +16719,11 @@ function findTilePath(sx, sy, gx, gy) {
     _tpG = new Float64Array(N); _tpCame = new Int32Array(N);
     _tpClosed = new Uint8Array(N); _tpStamp = new Int32Array(N);
   }
-  const gen = ++_tpGen, stamp = _tpStamp;
+  // Same wrap-at-storage-width rule as the BFS stamps (there Uint16, here Int32):
+  // past 2^31 the Int32Array truncates and every stamp compare goes false. Decades
+  // away at click-to-move cadence, but the guard costs nothing.
+  if (++_tpGen > 0x7fffffff) { _tpStamp.fill(0); _tpGen = 1; }
+  const gen = _tpGen, stamp = _tpStamp;
   // A cell is only meaningful once stamped by THIS call; unstamped reads as
   // { g: Infinity, came: -1, closed: 0 } — identical to the old fresh arrays.
   const g = _tpG, came = _tpCame, closed = _tpClosed;
@@ -17243,9 +17270,10 @@ function useFountain(nx, ny) {
   player.hp = player.maxHp;
   player.mp = player.maxMp;
   player.potionCd = 0; // a sip also resets your potion cooldown
+  const wasT = mapData[ny][nx];
   mapData[ny][nx] = 0; // fountain is spent
-  bumpMapEpoch();      // map edited → rebake the terrain
-  pathGridDirty();     // …and the opened tile joins the pathfinding grid
+  bumpMapEpochIfChanged(wasT, 0); // fountain→floor bakes identically — no rebake stall
+  pathGridDirty();     // …but the opened tile joins the pathfinding grid
   hasFountain = false;
   sfx('potion');
   log(`<span data-spr=feat_shrine></span> The Fountain of Healing restores you to full HP and MP!`, 'important');
@@ -18669,7 +18697,12 @@ function enemyPathStep(e, tx, ty) {
   const blocked = pathBlockedGrid();
   if (!_pfCame || _pfCame.length !== n) { _pfCame = new Int32Array(n); _pfSeen = new Uint16Array(n); _pfQueue = new Int32Array(n); _pfGen = 0; }
   const came = _pfCame, seen = _pfSeen, queue = _pfQueue;
-  if (++_pfGen === 0) { seen.fill(0); _pfGen = 1; } // stamp wrapped — clear once
+  // The seen stamps live in a Uint16Array, so the generation must wrap at the
+  // STORAGE width — a plain `=== 0` guard never fires on a JS number, and once
+  // gen outgrows 16 bits every `seen[ni] === gen` compare goes false forever:
+  // dedupe dies, the fixed-size queue silently overflows, and every foe freezes
+  // (~65k pathfinds ≈ under an hour of heavy combat). Wrap-and-clear instead.
+  if (++_pfGen > 0xffff) { seen.fill(0); _pfGen = 1; }
   const gen = _pfGen;
   queue[0] = start;
   came[start] = -1; seen[start] = gen;
