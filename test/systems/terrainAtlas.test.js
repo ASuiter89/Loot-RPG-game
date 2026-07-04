@@ -8,6 +8,7 @@ import {
   atlasColRow,
   blobTemplateToRole,
   packRoleIntoAtlas,
+  blobMissingMasks,
 } from '../../src/systems/terrainAtlas.js';
 
 describe('cornerMask', () => {
@@ -70,6 +71,26 @@ describe('resolveTileId', () => {
     const seen = new Set();
     for (let x = 0; x < 12; x++) for (let y = 0; y < 12; y++) seen.add(resolveTileId(table, fills, 15, x, y));
     expect(seen.size).toBeGreaterThan(1);
+  });
+});
+
+describe('blobMissingMasks', () => {
+  it('reports nothing for a complete 1..15 table', () => {
+    const full = {}; for (let m = 1; m <= 15; m++) full[m] = m * 10;
+    expect(blobMissingMasks(full)).toEqual([]);
+  });
+  it('lists exactly the absent masks (mask 9 was the real Mudstone_Gray gap)', () => {
+    const full = {}; for (let m = 1; m <= 15; m++) full[m] = m * 10;
+    const { 9: _drop, ...missing9 } = full;
+    expect(blobMissingMasks(missing9)).toEqual([9]);
+  });
+  it('treats null/undefined entries and a null table as missing', () => {
+    expect(blobMissingMasks(null)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]);
+    expect(blobMissingMasks({ 1: 5, 2: null })).toContain(2);
+  });
+  it('ignores mask 0 (never a tile) — only 1..15 count', () => {
+    const full = { 0: 999 }; for (let m = 1; m <= 15; m++) full[m] = m;
+    expect(blobMissingMasks(full)).toEqual([]);
   });
 });
 
