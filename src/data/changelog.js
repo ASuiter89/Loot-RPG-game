@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Wandering merchant: fuller stock, hover to compare", by: "Jeff Louie", notes: [
+    "The roaming merchant now lays out at least six gear pieces, so the detour always pays off.",
+    "Hover any ware to pop its full card beside your equipped piece — spot an upgrade before you spend a coin.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Enchanter: Esc backs out one step at a time", by: "Jeff Louie", notes: [
     "With an item picked in the Enchanter, Esc now returns to the gear screen instead of jumping all the way out to town.",
   ] },

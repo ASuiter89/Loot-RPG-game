@@ -10084,12 +10084,13 @@ function spawnMerchant(footReach) {
   } while ((mapData[my][mx] !== 0 || (mx === player.x && my === player.y) || getEnemyAt(mx,my)
             || isChokePoint(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
   if (tries >= 100) return;
-  // A small randomized stock of gamble-priced gear pieces. (Potions are no longer
-  // sold — they're a built-in skill now.) ilvl/range stored so a paid restock can
-  // re-roll the same kind of wares.
+  // A full randomized stock of gamble-priced gear pieces — at least six, so the
+  // wanderer is always worth the detour. (Potions are no longer sold — they're a
+  // built-in skill now.) ilvl/range stored so a paid restock re-rolls the same
+  // kind of wares.
   const ilvl = dungeonLevel + 1;
   const sale = Math.random() < 0.25 ? 0.7 : 1; // sometimes a 30%-off flash sale
-  merchant = { x: mx, y: my, stock: rollShopStock(ilvl, 2, 3), sale, ilvl, stockLo: 2, stockHi: 3 };
+  merchant = { x: mx, y: my, stock: rollShopStock(ilvl, 6, 8), sale, ilvl, stockLo: 6, stockHi: 8 };
   log('<span data-spr=mat_glimmer></span> A robed merchant has wandered onto this floor...', 'important');
   if (sale < 1) log('<span data-spr=scroll></span> The merchant is holding a flash sale — 30% off everything!', 'important');
 }
@@ -10262,7 +10263,7 @@ function renderShop() {
     const scolor = tierColor(s.item);
     return `<div class="shop-row has-actions ${isUpgrade?'upgrade':''} ${afford?'':'cant-afford'}">
       <span class="loot-icon">${iconMarkup(sicon, scolor)}</span>
-      <div class="shop-row-info ${cls}">
+      <div class="shop-row-info ${cls}" onmouseenter="showShopTooltip(event,${i})" onmouseleave="hideTooltip()">
         <div class="shop-row-name">${name}</div>
         <div class="shop-row-sub">${sub}</div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
@@ -23361,6 +23362,14 @@ function showTooltip(e, i) {
   showTooltipForItem(inventory[i], e.currentTarget);
 }
 
+// Merchant wares mirror the bag: hovering a ware pops the same item card,
+// side-by-side with whatever you have equipped in that slot, so an upgrade reads
+// at a glance before you spend a coin.
+function showShopTooltip(e, i) {
+  const s = merchant && merchant.stock[i];
+  if (s) showTooltipForItem(s.item, e.currentTarget);
+}
+
 // ── Shared tooltip placement ─────────────────────────────────────────────────
 // The ONE positioner every floating hover card uses (item tooltip, skill popover,
 // button/stat hovertip). It pops the card out to the SIDE of its anchor and never
@@ -27996,6 +28005,7 @@ const __DL_FN_BRIDGE = {
   hoverSlot,
   selectItem,
   showTooltip,
+  showShopTooltip,
   placeTooltipBesideAnchor,
   positionTooltip,
   itemCardHTML,
