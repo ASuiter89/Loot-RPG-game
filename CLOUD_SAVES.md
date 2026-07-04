@@ -143,15 +143,18 @@ used by the leaderboard cover cloud saves too.
   never saved, pushed, or counted in a sync — so signing in on a fresh device
   pulls your existing account saves down instead of letting the empty title-screen
   slot overwrite them.
-- **Shared-stash caveat (last-writer-wins).** Unlike per-character saves, the
-  account-wide **stash** (the shared Vault) is synced as one blob by newest
-  timestamp. In normal use this is lossless — every deposit/withdraw pushes to the
-  cloud, and each device pulls the latest on boot — but if you edit the stash on
-  **two devices while both are offline** (or before the second has pulled the
-  first's change), the later-saved blob wins and the other device's stash change is
-  dropped. Per-hero saves don't have this limitation (they merge per character); a
-  full conflict-free stash merge (item-level history + a gold counter) is tracked
-  as a future enhancement.
+- **Shared stash merges conflict-free.** The account-wide **stash** (the shared
+  Vault) is a small CRDT, so — like per-character saves — it never loses data to a
+  sync, even under concurrent **offline** edits on two devices. Gold is a per-device
+  deposit/withdrawal counter (the merge sums both devices' deposits and subtracts
+  both withdrawals), and items are tracked by a per-deposit tag with withdrawal
+  tombstones (the merge unions everything deposited and drops anything withdrawn).
+  So depositing on your phone while your PC is offline, then syncing, keeps **both**
+  contributions; a withdrawn item never reappears, and a re-deposited one survives.
+  Every push is union-first (read the account copy, merge, write back), so a stale
+  device can't clobber a newer one. (Existing pre-CRDT stashes upgrade in place: the
+  old balance is preserved and merges by max across devices, so it's never
+  double-counted.)
 - **Privacy.** Only the player's own save JSON is stored, and RLS prevents anyone
   else's key from reading it. Passwords are handled entirely by Supabase Auth —
   the game never stores them.

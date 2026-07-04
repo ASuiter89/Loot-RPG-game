@@ -41,6 +41,7 @@ import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKIL
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 import { planReconcile, freshDelMeta, sanitizeDelMeta, isTombstoned, addTombstone,
   mergeDelMeta, delCloudHasAll } from '../persistence/saveSync.js';
+import { freshStash, sanitizeStash, mergeStash, depositGold, withdrawGold } from '../persistence/stashSync.js';
 import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
 import { mercCost } from '../systems/mercPricing.js';
 import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTints.js';
@@ -6063,8 +6064,8 @@ let inventory = [];
 // inside each character's save, is never lost on death (though town shops may
 // draw on it to cover a purchase — see spendGold), and is only reachable from
 // the Vault in town. `ts` is the last-write time, used to
-// pick the newest copy when syncing.
-let stash = { gold: 0, items: [], ts: 0 };
+// merge copies conflict-free when syncing (see the shared-stash CRDT below).
+let stash = freshStash();
 // ── GEAR SETS ── You keep TWO independent equipment loadouts and toggle between
 // them (Set 1 / Set 2). `equipped` always points at the ACTIVE set, so every
 // read/write of equipped[slot] elsewhere keeps working untouched — only the
@@ -12005,7 +12006,7 @@ function stashDepositGold(amt) {
   amt = Math.min(stashGoldAmount(amt), player.gold);
   if (!amt || amt <= 0) return;
   player.gold -= amt;
-  stash.gold = (stash.gold || 0) + amt;
+  depositGold(stash, stashDeviceId(), amt); // PN-counter deposit; re-materialises stash.gold
   sfx('buy');
   log(`<span data-spr=ic_coffer></span> Deposited <span data-spr=ic_money></span>${amt} into the vault. (<span data-spr=ic_money></span>${stash.gold} stored)`, 'loot');
   updateBars(); renderStash(); saveGame(); saveStash();
@@ -12013,7 +12014,7 @@ function stashDepositGold(amt) {
 function stashWithdrawGold(amt) {
   amt = Math.min(stashGoldAmount(amt), stash.gold || 0);
   if (!amt || amt <= 0) return;
-  stash.gold -= amt;
+  withdrawGold(stash, stashDeviceId(), amt); // PN-counter withdrawal; re-materialises stash.gold
   player.gold += amt;
   sfx('buy');
   log(`<span data-spr=ic_coffer></span> Withdrew <span data-spr=ic_money></span>${amt} from the vault. (<span data-spr=ic_money></span>${stash.gold} stored)`, 'loot');
@@ -12037,7 +12038,7 @@ function spendGold(amt) {
   // so it's never silent.
   const fromVault = amt - carried;
   player.gold = 0;
-  stash.gold = (stash.gold || 0) - fromVault;
+  withdrawGold(stash, stashDeviceId(), fromVault); // spending vault gold is a PN-counter withdrawal
   log(`<span data-spr=ic_coffer></span> Drew <span data-spr=ic_money></span>${fromVault} from the vault to cover it. (<span data-spr=ic_money></span>${stash.gold} left)`, 'loot');
   saveStash();
   return true;
@@ -12054,6 +12055,7 @@ function stashDepositItem(i) {
   const item = inventory[i];
   if (!item) return;
   inventory.splice(i, 1);
+  item._st = newStashTag();   // OR-set identity for this deposit (fresh, so it beats any old tombstone)
   stash.items.push(item);
   sfx('equip');
   log(`<span data-spr=ic_coffer></span> Stored ${logItem(item)} in the vault.`);
@@ -12063,6 +12065,8 @@ function stashWithdrawItem(i) {
   const item = stash.items[i];
   if (!item) return;
   stash.items.splice(i, 1);
+  if (item._st != null) stash.rm.push(String(item._st)); // tombstone this withdrawal so no sync resurrects it
+  delete item._st;                                        // clean the tag before it re-enters the bag
   inventory.push(item);
   recordWardrobe(item);
   sfx('equip');
@@ -24290,22 +24294,34 @@ function saveOrder(a, b) {
 // character's save: deposit gold or gear with one hero and any other hero can
 // withdraw it. It's persisted under its own localStorage key, and — for signed-
 // in players — mirrored to a dedicated cloud row (STASH_CLOUD_SLOT) so the pool
-// follows the account across devices. `ts` is the last-write time; sync keeps
-// whichever copy is newest (last-writer-wins, matching how per-slot saves
-// reconcile).
+// follows the account across devices.
+//
+// Cross-device sync is CONFLICT-FREE, not last-writer-wins: the stash is a small
+// CRDT (see persistence/stashSync.js). Gold is a per-device deposit/withdrawal
+// PN-counter; items are an OR-set keyed by a per-deposit tag (`_st`) with
+// withdrawal tombstones. Any two copies merge with NO loss, so a deposit made on
+// one device while another is offline is never dropped, and a withdrawn item never
+// resurrects. `stash.gold` and `stash.items` are the materialised current values
+// that the rest of the game reads; the deposit/withdraw helpers keep them in step
+// with the underlying counters/tags.
 const STASH_KEY = 'dungeonLoot_stash_v1';
 const STASH_CLOUD_SLOT = -1; // sentinel "slot" for the shared stash's cloud row — never a real character
-function freshStash() { return { gold: 0, items: [], ts: 0 }; }
-// Coerce an arbitrary parsed blob into a clean { gold, items, ts } stash.
-function sanitizeStash(d) {
-  const s = freshStash();
-  if (d && typeof d === 'object') {
-    s.gold = Math.max(0, Math.floor(d.gold) || 0);
-    s.items = (Array.isArray(d.items) ? d.items : []).filter(it => it && it.slot);
-    s.ts = Math.max(0, Math.floor(d.ts) || 0);
+// A stable per-DEVICE id for the gold PN-counter (each device counts its own
+// deposits/withdrawals; the merge sums across devices). Minted once, then persisted.
+const STASH_DEVICE_KEY = 'dungeonLoot_deviceId_v1';
+let _stashDeviceId = null;
+function stashDeviceId() {
+  if (_stashDeviceId) return _stashDeviceId;
+  try { _stashDeviceId = localStorage.getItem(STASH_DEVICE_KEY) || null; } catch (e) {}
+  if (!_stashDeviceId) {
+    _stashDeviceId = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    try { localStorage.setItem(STASH_DEVICE_KEY, _stashDeviceId); } catch (e) {}
   }
-  return s;
+  return _stashDeviceId;
 }
+// A fresh, unique tag for one DEPOSIT of an item (its OR-set identity). Re-depositing
+// a previously withdrawn item mints a new tag, so it survives its old tombstone.
+function newStashTag() { return 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 // Re-stamp icons and ensure an attrs block on every stashed item — the same
 // healing the bag/equipped gear gets in loadGame().
 function healStashItems() {
@@ -24317,11 +24333,10 @@ function writeStashLocal() { try { localStorage.setItem(STASH_KEY, JSON.stringif
 // mirror to the account (debounced) when signed in.
 function saveStash() { stash.ts = Date.now(); writeStashLocal(); cloudScheduleStash(); }
 // One-time migration for saves made before the stash was shared: fold every
-// slot's old embedded stash into a single pool (sum gold, gather items) so no
-// banked gold or gear is lost. Carries the newest source save's ts so a freshly
-// migrated device doesn't out-rank a cloud stash that already holds real activity.
+// slot's old embedded stash into a single v1 pool (sum gold, gather items). The
+// caller sanitises this into the CRDT form, so no banked gold or gear is lost.
 function migrateLegacyStashes() {
-  const merged = freshStash();
+  const merged = { gold: 0, items: [], ts: 0 };
   for (const i of allLocalSlotIndices()) {
     let raw; try { raw = localStorage.getItem(slotKey(i)); } catch (e) { continue; }
     if (!raw) continue;
@@ -24337,16 +24352,17 @@ function migrateLegacyStashes() {
   }
   return merged;
 }
-// Load the shared stash into the global `stash`. The first run after the upgrade
-// has no STASH_KEY yet, so we migrate the old per-character stashes into it.
+// Load the shared stash into the global `stash`, upgrading a v1 blob to the CRDT
+// form via sanitizeStash. The first run after the shared-stash upgrade has no
+// STASH_KEY yet, so we migrate the old per-character stashes into it.
 function loadStash() {
   let raw; try { raw = localStorage.getItem(STASH_KEY); } catch (e) {}
   if (raw) {
     try { stash = sanitizeStash(JSON.parse(raw)); } catch (e) { stash = freshStash(); }
   } else {
-    stash = migrateLegacyStashes();
-    writeStashLocal(); // persist so the migration only ever runs once
+    stash = sanitizeStash(migrateLegacyStashes());
   }
+  writeStashLocal(); // persist the (possibly migrated) CRDT form so it's stable on disk
   healStashItems();
 }
 
@@ -25543,13 +25559,12 @@ async function cloudDeleteCid(cid) {
 function cloudFlush() {
   if (cloudEnabled() && authState.user) {
     try { cloudPushSlot(activeSlot, { keepalive: true }); } catch (e) {}
-    try { cloudPushStash({ keepalive: true }); } catch (e) {}
-    // NOTE: the hardcore ledger is deliberately NOT flushed here. A flush is a
-    // blind keepalive write that can't read-then-union first, so a device with a
-    // stale ledger would shrink the cloud row and erase a death recorded
-    // elsewhere. Deaths/feats reach the cloud via the union-first cloudPushHcMeta
-    // (debounced on change, and awaited on the death screen) and re-sync on the
-    // next boot's hcReconcile — never through a flush.
+    // NOTE: neither the shared stash nor the hardcore ledger is flushed here. A
+    // flush is a blind keepalive write that can't read-then-merge first, so it would
+    // regress a union/CRDT row — clobbering a concurrent stash deposit from another
+    // device, or erasing a death recorded elsewhere. Both reach the cloud via their
+    // union-first pushes (cloudPushStash / cloudPushHcMeta, debounced on change) and
+    // re-sync on the next boot — never through a flush.
   }
 }
 
@@ -25716,20 +25731,46 @@ async function delReconcile() {
 
 // ── Shared-stash cloud sync ─────────────────────────────────────────────────
 // The shared stash mirrors to one dedicated row per account (STASH_CLOUD_SLOT),
-// separate from the per-character slot rows. cloudReconcile() ignores it (it
-// isn't a started character save), so stashReconcile() handles it on its own:
-// newest `ts` wins, matching the per-slot last-writer-wins model.
+// separate from the per-character slot rows. cloudReconcile() ignores it (it isn't
+// a started character save), so it has its own sync. Unlike the per-slot saves this
+// is NOT last-writer-wins: the stash is a CRDT (persistence/stashSync.js), so every
+// push is UNION-FIRST — read the cloud copy, merge it with ours (losing nothing on
+// either side), then write the merged result back both locally and up. A blind
+// overwrite could otherwise regress the cloud by clobbering a concurrent deposit
+// from another device we hadn't merged yet.
 let cloudStashTimer = null;
 function cloudScheduleStash() {
   if (!cloudEnabled() || !authState.user) return;
   if (cloudStashTimer) return;
   cloudStashTimer = setTimeout(() => { cloudStashTimer = null; cloudPushStash(); }, 3500);
 }
-// Upsert the shared stash into its dedicated cloud row. Best-effort.
-async function cloudPushStash(opts) {
-  opts = opts || {};
+// Replace the live stash with a merged copy IN PLACE (same object identity, so no
+// reader holds a stale reference), re-heal item icons, persist, and refresh the
+// Vault if it's open.
+function adoptStash(merged) {
+  stash.v = merged.v; stash.gl = merged.gl; stash.rm = merged.rm;
+  stash.items = merged.items; stash.gold = merged.gold; stash.ts = merged.ts;
+  healStashItems();
+  writeStashLocal();
+  const ov = document.getElementById('town-overlay');
+  const title = document.getElementById('town-title');
+  if (ov && ov.classList.contains('open') && title && title.dataset.title === 'Vault') renderStash();
+}
+// Union-first push: read the account's stash row, merge it with ours, adopt the
+// merged result locally, then upsert it back. Best-effort — any failure (including a
+// build whose DB rejects the sentinel slot) simply leaves the fully-working local
+// stash untouched.
+async function cloudPushStash() {
   if (!cloudEnabled() || !authState.user) return false;
-  if (!opts.keepalive) await ensureToken();
+  if (!await ensureToken()) return false;
+  let cloud;
+  try {
+    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?select=data&user_id=eq.' + authState.user.id + '&slot=eq.' + STASH_CLOUD_SLOT, { headers: cloudRestHeaders() });
+    if (!res.ok) return false;
+    const rows = await res.json();
+    cloud = (rows && rows[0]) ? rows[0].data : null;
+  } catch (e) { return false; }
+  if (cloud) adoptStash(mergeStash(stash, cloud)); // merge in the account's copy before writing
   try {
     const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?on_conflict=user_id,slot', {
       method: 'POST',
@@ -25738,39 +25779,14 @@ async function cloudPushStash(opts) {
         user_id: authState.user.id, slot: STASH_CLOUD_SLOT, data: stash,
         updated_at: new Date(stash.ts || Date.now()).toISOString(),
       }),
-      keepalive: !!opts.keepalive,
     });
     return res.ok;
   } catch (e) { return false; }
 }
-// Merge this device's shared stash with the account's. Newest ts wins; a missing
-// cloud row (or a strictly-older one) just pushes ours up. Best-effort — any
-// failure (including a build whose DB rejects the sentinel slot) simply leaves
-// the fully-working local stash untouched.
+// Boot/sync reconcile: the union-first push already reads-merges-writes, so merging
+// the account's stash into ours on boot is exactly the same operation.
 async function stashReconcile() {
-  if (!cloudEnabled() || !authState.user) return;
-  if (!await ensureToken()) return;
-  let rows;
-  try {
-    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?select=data&user_id=eq.' + authState.user.id + '&slot=eq.' + STASH_CLOUD_SLOT, { headers: cloudRestHeaders() });
-    if (!res.ok) return;
-    rows = await res.json();
-  } catch (e) { return; }
-  const cloud = (rows && rows[0]) ? sanitizeStash(rows[0].data) : null;
-  const localTs = stash.ts || 0;
-  if (cloud && cloud.ts > localTs) {
-    // Cloud copy is newer — adopt it locally and refresh the Vault if it's open.
-    stash = cloud;
-    writeStashLocal();
-    healStashItems();
-    const ov = document.getElementById('town-overlay');
-    const title = document.getElementById('town-title');
-    if (ov && ov.classList.contains('open') && title && title.dataset.title === 'Vault') renderStash();
-  } else if (!cloud || localTs > cloud.ts) {
-    // Ours is newer, or the cloud has no stash yet — push ours up.
-    await cloudPushStash();
-  }
-  // Equal ts → treat as identical, nothing to do.
+  await cloudPushStash();
 }
 
 // ── Settings cloud sync ─────────────────────────────────────────────────────
