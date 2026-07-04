@@ -7,15 +7,15 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
-  { date: "2026-07-04", size: "small", v: "Dungeon Gate flags the floor holding your lost bag", by: "Jeff Louie", notes: [
+  { date: "2026-07-03", size: "small", v: "Dungeon Gate flags the floor holding your lost bag", by: "Jeff Louie", notes: [
     "The floor where you died glows with a grave marker at the Dungeon Gate, and its difficulty tab gets the same badge, so you know exactly where to dive to reclaim your dropped bag.",
     "A note under the tier picker names the grave's tier and floor whatever tab you're on.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Passives surge — power spikes at ranks 3 / 7 / 10", by: "Jeff Louie", notes: [
+  { date: "2026-07-03", size: "small", v: "Passives surge — power spikes at ranks 3 / 7 / 10", by: "Jeff Louie", notes: [
     "Deepening one passive now pays off in jumps, not just a steady drip: its always-on bonus spikes at ranks 3, 7 and 10 — the same milestone ranks that already power up active skills (up to +30% of the stat total at rank 10).",
     "The skill card flags the surge with a chip and rank pips, previews the bigger jump on rank-up, and the level-up line calls out each milestone as you cross it. Keystones stay single-rank, so they don't surge.",
   ] },
-  { date: "2026-07-04", size: "medium", v: "A full rack of new synth instruments", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "A full rack of new synth instruments", by: "Claude", notes: [
     "Rebuilt the soundtrack's synth engine so styles no longer share the same three sounds. New instruments: deep round sub bass, a detuned drum-&-bass reese, a squelchy acid bass, big super-saw leads and chords, metallic FM bells, plucky bell/marimba tones, and hollow reed leads — each style now picks the ones that fit it.",
     "Fixed the bass: it used to be forced to the same punchy sawtooth in every style (the 'polka' feel). Basslines now use rounder, smoother sub tones and less on-the-beat bounce, so each style's low end has its own character.",
   ] },
