@@ -28,6 +28,8 @@ import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../uti
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
 import { rollDamage, spreadRange } from '../systems/damageRoll.js';
 import { spellSpreadFor } from '../data/spellSpread.js';
+import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/gearPower.js';
+import { GEAR_POWER } from '../data/gearPower.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
@@ -57,6 +59,9 @@ import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTin
 import { elementOf, paletteFor, castArchetype, weaponArchetype, projectileElement, bossFxFor,
   archetypeIsProjectile, clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
 import { UNIQUES, uniqueForBase, uniquesForSlot } from '../data/uniques.js';
+import { ITEM_SETS } from '../data/itemSets.js';
+import { setPieceCount, setComplete as setIsComplete, setStatContribution,
+  rollSetPiece } from '../systems/itemSets.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -2874,37 +2879,15 @@ function statMeaningTip(kind, key) {
 const HERO = 'The hero';
 
 // ── POWER & ATTRIBUTES ──
-// Every equippable item has a single "power" number summarising how strong it is:
-// each stat is worth a weighted amount, plus a flat bonus for its rarity tier.
-// The player's overall power is built from their level, attributes, and gear.
-const STAT_POWER_WEIGHTS = { ATK:3, DEF:2, SPD:1.5, LCK:1.5, HP:0.2, MP:0.25, CRIT:1.5, ACC:0.9, CRITDMG:1, REGEN:5, DMG:3,
-  // Rating stats (CRIT/DODGE/BLOCK/DR/ACC/SPD) are now larger flat numbers that
-  // scale with item level, so their per-point power weight is lowered to keep an
-  // item's overall Power sane and comparable to the old %-stat era. SPD matches
-  // DODGE (1.5): both feed evasion rating 1:1, so an equal value is equal Power.
-  // HP and MP are the two big resource POOLS — they roll several times larger than
-  // any other stat (AFFIX_CURVES flat 6 / 4), so they carry a small per-point weight
-  // (0.2 / 0.25); otherwise one HP roll alone would out-power a whole weapon's damage.
-  LEECH:5, MPLEECH:3, HPKILL:1, MPKILL:1, THORNS:1, DR:1.5, BLOCK:1.2, DODGE:1.5, IDMG:4, DBLSTRIKE:5,
-  CLEAVE:2, BOSSDMG:2, EXEC:2, PEN:2, GOLDFIND:1, XPGAIN:1, MAGICFIND:2, MATFIND:1, SPELLPWR:3,
-  SKILLPWR:3, CASTSPD:4, CDR:4, MCR:3, BLEED:3, STUNPWR:2, ATKSPD:4, TENAC:2.5 };
-// Base per-point power weight of an attribute — the class-INDEPENDENT half: every
-// attribute feeds a family of derived stats (HP, MP, crit, evasion, regen…) that's
-// the same for everyone. On top of this, a class earns EXTRA Power for points in the
-// attribute it deals damage with (see attrPowerWeight), so the same +Might is worth
-// more to a Warrior than a Mage. Used identically for spent attributes (playerPower)
-// and gear affixes (itemPower), so a point is worth the same Power spent or geared.
-const ATTR_POWER_WEIGHT = 3;
-// Power credited per point of bonus Attack an attribute grants THIS class through the
-// damage system (attrDamage / dmgAttrs: primary ×2.4, secondary ×0.8, universal Might
-// ×0.6 per point). Lighter than the ATK gear-stat weight (3) on purpose, so a damage
-// attribute clearly matters to its class without Power collapsing into a damage meter.
-const ATTR_DMG_POWER = 1.2;
-// A small flat nudge per rarity — kept low on purpose so an item's power is
-// driven mostly by its (item-level-scaled) stats. This is what lets a deep
-// common eventually out-power an early legendary instead of the tier bonus
-// permanently outranking it.
-const TIER_POWER_BONUS = { junk:0, normal:1, uncommon:2, rare:4, epic:7, legendary:11, unique:16 };
+// Every equippable item has a single "power" number, and the hero has an overall
+// Power. Both are now BUILD-AWARE: an item's Power is the marginal gain in an
+// effective combat score (a blend of effective offense and survivability, built
+// from the real combat formulas) that its affixes give THIS hero's current build,
+// so a stat that does nothing for you — Crit Damage with no crit, Spell Power on a
+// martial build, Attack Speed on a caster — adds ~0 Power. The pure math lives in
+// src/systems/gearPower.js with tuning in src/data/gearPower.js; the adapter that
+// reads the live build into that math (buildPowerContext / itemPower / playerPower)
+// sits with the loadout caches below.
 
 // Hero attributes — the only thing you spend points on. Every class now starts
 // with the SAME spread (ATTR_BASE in each) and differs only in how its points
@@ -3358,34 +3341,6 @@ const MATERIAL_MIN_DIFF = { scrap: 1, glimmer: 1, core: 2, chaos: 3 };
 function activeDifficulty() { return inTown ? diffOf(Math.max(1, dungeonReturn || 1)) : currentDifficulty(); }
 function materialUnlocked(k) { return activeDifficulty() >= (MATERIAL_MIN_DIFF[k] || 1); }
 
-// Per-point power weight of an attribute FOR THE CURRENT CLASS. Every attribute is
-// worth the class-independent ATTR_POWER_WEIGHT (its derived-stat package); the
-// class's damage attributes turn points into real Attack on top (attrDamage), so a
-// point in your primary/secondary damage stat — or any Might, which always lends a
-// little Attack — is worth more Power to you than to a class that can't hit with it.
-function attrPowerWeight(key) {
-  let w = ATTR_POWER_WEIGHT;
-  const { primary, secondary } = classDmgAttrs();
-  if (key === primary)        w += ATTR_DMG_PRIMARY   * ATTR_DMG_POWER;
-  else if (key === secondary) w += ATTR_DMG_SECONDARY * ATTR_DMG_POWER;
-  else if (key === 'might')   w += ATTR_FX.atkPerMight * ATTR_DMG_POWER; // universal Might dab
-  return w;
-}
-// Per-point power weight of a gear STAT for the current class. Most stats are
-// class-neutral (their table weight); Spell Power is scaled by how much the class
-// actually casts (CLASS_SPELL_RELIANCE), so a caster values a Spell Power roll fully
-// while it's near-dead weight on a pure-martial Warrior or Rogue.
-function statPowerWeight(key) {
-  let w = STAT_POWER_WEIGHTS[key] || 1;
-  // Caster %s (Spell Power / Cast Speed) are weighted by how much the class casts;
-  // martial-skill %s (Skill Power) by how much it leans on weapon skills — so a
-  // Spell Power roll pads a Mage's Power but is near-dead weight on a Warrior, and
-  // vice-versa for Skill Power. Keeps per-class Power tracking real gear impact.
-  if (key === 'SPELLPWR' || key === 'CASTSPD') w *= (CLASS_SPELL_RELIANCE[player.class] ?? 1);
-  else if (key === 'SKILLPWR') w *= (CLASS_SKILL_RELIANCE[player.class] ?? 1);
-  return w;
-}
-
 // ── LOADOUT-DERIVED CACHES ──
 // activeSlots()'s fix-point, totalStat's gear sums and the item-power counts are
 // pure functions of the worn gear, the hero's base attributes and learned skills
@@ -3408,35 +3363,186 @@ function loadoutCache() {
   return _loBucket;
 }
 
-// Total power of a single item, AS THIS CLASS would wield it: weighted sum of its
-// stats + attributes + a rarity bonus. The same item can be worth different Power to
-// different classes (a +Might affix or a Spell Power roll lands differently), which
-// is the point — Power should track the item's real impact on this hero.
-// Cached per item object: the number is pure over (item, class), and every item
-// mutation (the Enchanter) bumps the loadout epoch, which invalidates the entry.
-const _itemPowerCache = new WeakMap();
-function itemPower(item) {
-  if (!item || !item.stats) return 0;
-  const hit = _itemPowerCache.get(item);
-  if (hit && hit.epoch === loadoutEpoch && hit.cls === player.class) return hit.val;
-  let p = 0;
-  for (const [k, v] of Object.entries(item.stats)) {
+// ── BUILD-AWARE POWER ADAPTER ──
+// Bridges the live game to the pure combat-score math in systems/gearPower.js.
+// It reads the hero's whole build into a numeric CONTEXT (via the existing
+// derived-stat functions, so attributes + skills + worn gear + class are already
+// folded in) and maps each item's affixes into a matching DELTA on that context.
+// An item's Power is then the marginal combat-score the delta buys — so a stat
+// worth nothing to this build (Crit Damage with no crit, Spell Power on a martial
+// build, Attack Speed on a caster) adds ~0 Power. See src/data/gearPower.js.
+const FIST_AVG = 2;  // bare-fists average damage ((1+3)/2) — the weapon baseline
+
+// Which combat-score axis each gear stat feeds (a +v roll adds v to that axis).
+// CRITDMG, HP and weapon DMG are special-cased in itemPowerContribution; the keys
+// NOT listed here (MP, MCR, MP-leech/kill, find/XP/gold) carry no combat axis —
+// they add flat, build-independent utility Power instead (GEAR_POWER.utilityFlat),
+// since they don't change combat strength.
+const POWER_STAT_AXIS = {
+  ATK: 'atkFlat', IDMG: 'idmgPct', CRIT: 'critRating', LCK: 'critRating',
+  SKILLPWR: 'skillPwrPct', SPELLPWR: 'spellPwrPct', ATKSPD: 'atkSpdPct', CASTSPD: 'castSpdPct',
+  CDR: 'cdrRating', PEN: 'penPct', DBLSTRIKE: 'dblStrikePct', CLEAVE: 'cleavePct',
+  BOSSDMG: 'bossDmgPct', EXEC: 'execPct', BLEED: 'bleedPct', STUNPWR: 'stunPct',
+  ACC: 'accRating', SPD: 'dodgeRating', DODGE: 'dodgeRating', DEF: 'def', DR: 'drRating',
+  BLOCK: 'blockRating', THORNS: 'thornsPct', TENAC: 'tenacPct', LEECH: 'leechPct',
+  HPKILL: 'hpKill', REGEN: 'regen',
+};
+
+// The hero's current full-build combat context — every input combatScore() reads.
+// Chances are measured against a reference tied to the hero's LEVEL (stable as you
+// walk between floors, and cache-safe: level-ups bump the loadout epoch). Cached
+// once per loadout epoch alongside the other loadout-derived sums.
+function buildPowerContext() {
+  const c = loadoutCache();
+  if (c.powerCtx) return c.powerCtx;
+  const L = Math.max(1, player.level || 1);
+  const [wLo, wHi] = weaponDmgRange();
+  // Power reflects your permanent BUILD, so the context excludes TRANSIENT combat
+  // buffs and food (buffMag / foodFx) — they change without bumping the loadout
+  // epoch, so folding them in would freeze a stale, buffed value in the cache and
+  // make Power flicker. The rating/mult aggregates below are therefore rebuilt
+  // from their permanent parts (attributes + gear + learned passives) rather than
+  // read from the buff-inclusive derived functions. Where a derived function is
+  // already buff-free (accuracy, block, DR, attack speed, class multipliers) it is
+  // reused directly.
+  const hpMult = (player.class === 'templar' ? 1.20 : 1) * (1 + skillBonus('maxHpPct')) * diffDebuffMult();
+  const hpRaw = L * DEV.hpPerLevel + totalAttr('vitality') * ATTR_FX.hpPerVit + totalStat('HP');
+  const ctx = {
+    refLevel: L,
+    // Fixed multipliers / class reliance (never moved by a single affix).
+    offMult: classDmgDealtMult() * diffDebuffMult(),
+    dmgTakenMult: classDmgTakenMult(),
+    skillReliance: CLASS_SKILL_RELIANCE[player.class] ?? 1,
+    spellReliance: CLASS_SPELL_RELIANCE[player.class] ?? 1,
+    // Effective max-HP gained per raw point of HP / Vitality (the class + skill +
+    // difficulty multipliers), so a +HP roll's survivability is valued as it lands.
+    hpScale: hpMult,
+    // Offense aggregates.
+    weaponAvg: (wLo + wHi) / 2,
+    atkFlat: L * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat'),
+    idmgPct: totalStat('IDMG'),
+    critRating: totalAttr('luck') * ATTR_FX.critPerLuck + totalStat('CRIT') + totalStat('LCK')
+      + ratePct(skillBonus('crit')) + (player.class === 'rogue' ? 12 + L * 1.2 : 0),
+    critMult: critDamageMult(),
+    skillPwrPct: skillBonus('skillpwr') * 100 + totalStat('SKILLPWR'),
+    spellPwrPct: ((player.class === 'mage' ? 0.15 : 0) + skillBonus('spell')) * 100 + totalStat('SPELLPWR'),
+    spellCore: GEAR_POWER.spellFlat + L * GEAR_POWER.spellPerLvl + totalAttr('spirit') * ATTR_FX.spellPerSpr,
+    atkSpdPct: playerAttackSpeedPct(),
+    castSpdPct: totalStat('CASTSPD'),
+    cdrRating: totalStat('CDR'),
+    penPct: totalStat('PEN') + 100 * skillBonus('pen'),
+    dblStrikePct: totalStat('DBLSTRIKE'),
+    cleavePct: totalStat('CLEAVE'), bossDmgPct: totalStat('BOSSDMG'), execPct: totalStat('EXEC'),
+    bleedPct: totalStat('BLEED'), stunPct: totalStat('STUNPWR'),
+    accRating: playerAccuracyRating(),
+    // Defense aggregates.
+    maxHp: Math.max(1, hpRaw * hpMult),
+    def: totalStat('DEF') + totalAttr('vitality') * ATTR_FX.defPerVit,
+    dodgeRating: totalAttr('agility') * ATTR_FX.evaPerAgi + totalStat('SPD') + totalStat('DODGE')
+      + ratePct(skillBonus('dodge')) + (player.class === 'rogue' ? 14 + L * 1.2 : 0),
+    blockRating: playerBlockRating(),
+    drRating: playerDRRating(),
+    regen: (totalStat('REGEN') + totalAttr('vitality') * ATTR_FX.hpRegenPerVit
+      + (player.class === 'templar' ? 2 : 0) + skillBonus('hpRegen')) * TICKS_PER_SEC,
+    thornsPct: totalStat('THORNS'),
+    tenacPct: totalStat('TENAC'),
+    leechPct: totalStat('LEECH'),
+    hpKill: totalStat('HPKILL'),
+  };
+  c.powerCtx = ctx;
+  return ctx;
+}
+
+// Combat-axis delta an attribute affix (+v of `key`) adds, folding the class's
+// damage scaling (attrDamage) and each attribute's derived-stat package (ATTR_FX)
+// — so +Luck is worth Power only to a build that crits, +Spirit only where it
+// feeds spells, etc.
+function attrPowerAxes(key, v, ctx, add) {
+  const { primary, secondary } = classDmgAttrs();
+  const dmgCoef = key === primary ? ATTR_DMG_PRIMARY
+    : key === secondary ? ATTR_DMG_SECONDARY
+    : key === 'might' ? ATTR_FX.atkPerMight : 0;   // universal Might dab when off-class
+  if (dmgCoef) add('atkFlat', v * dmgCoef);
+  if (key === 'vitality') {
+    add('maxHp', v * ATTR_FX.hpPerVit * ctx.hpScale);
+    add('def', v * ATTR_FX.defPerVit);
+    add('regen', v * ATTR_FX.hpRegenPerVit * TICKS_PER_SEC);
+  } else if (key === 'agility') {
+    add('dodgeRating', v * ATTR_FX.evaPerAgi);
+    add('accRating', v * ATTR_FX.accPerAgi);
+  } else if (key === 'spirit') {
+    add('spellCore', v * ATTR_FX.spellPerSpr);
+  } else if (key === 'luck') {
+    add('critRating', v * ATTR_FX.critPerLuck);
+  }
+}
+
+// An item's affixes expressed as a combat-context delta (the axes its stats/attrs
+// move). Weapon DMG is stored relative to bare fists so vacating the weapon slot
+// (below) leaves the fists baseline rather than zero damage.
+function itemPowerContribution(item, ctx) {
+  const d = {};
+  const add = (axis, val) => { d[axis] = (d[axis] || 0) + val; };
+  const stats = item.stats || {};
+  for (const k in stats) {
+    const v = stats[k];
     if (k === 'DMG') {
       const [lo, hi] = String(v).split('-').map(Number);
-      p += ((lo + hi) / 2) * STAT_POWER_WEIGHTS.DMG;
-    } else if (typeof v === 'number') {
-      p += v * statPowerWeight(k);
-    }
+      if (Number.isFinite(lo) && Number.isFinite(hi)) add('weaponAvg', (lo + hi) / 2 - FIST_AVG);
+    } else if (typeof v !== 'number') { /* non-numeric (e.g. a legendary tag) — skip */ }
+    else if (k === 'CRITDMG') add('critMult', v / 100);
+    else if (k === 'HP') add('maxHp', v * ctx.hpScale);
+    else if (POWER_STAT_AXIS[k]) add(POWER_STAT_AXIS[k], v);
   }
-  // Attribute affixes (+Might, +Luck, …) add to an item's power too, weighted by how
-  // much THIS class gains from that attribute (attrPowerWeight).
-  if (item.attrs) for (const [k, v] of Object.entries(item.attrs)) {
-    if (typeof v === 'number') p += v * attrPowerWeight(k);
+  const attrs = item.attrs || {};
+  for (const k in attrs) if (typeof attrs[k] === 'number') attrPowerAxes(k, attrs[k], ctx, add);
+  return d;
+}
+
+// Flat, build-independent Power an item carries: a small nudge per point of a
+// non-combat stat (find / XP / gold / mana) so a pure-utility piece never reads a
+// literal 0, plus the rarity-tier bonus.
+function itemFlatPower(item) {
+  let f = GEAR_POWER.tierBonus[item.tier] || 0;
+  const stats = item.stats || {};
+  for (const k in stats) {
+    const w = GEAR_POWER.utilityFlat[k];
+    if (w && typeof stats[k] === 'number') f += stats[k] * w;
   }
-  p += TIER_POWER_BONUS[item.tier] || 0;
-  const val = Math.max(0, Math.round(p));
-  _itemPowerCache.set(item, { epoch: loadoutEpoch, cls: player.class, val });
-  return val;
+  return f;
+}
+
+// Raw (unrounded, un-clamped) Power an item is worth to the CURRENT build: the
+// marginal combat-score gain of slotting it — its slot VACATED first, so a weapon
+// replaces the current weapon rather than stacking with it, and the equipped piece
+// in a slot is valued against the build without it — plus its flat utility Power.
+function itemPowerRaw(item) {
+  const ctx = buildPowerContext();
+  const contrib = itemPowerContribution(item, ctx);
+  let base = ctx;
+  const occ = item.slot ? equipped[item.slot] : null;
+  if (occ && activeSlots()[item.slot]) {
+    base = applyDelta(ctx, occ === item ? contrib : itemPowerContribution(occ, ctx), -1);
+  }
+  return marginalPower(base, contrib) + itemFlatPower(item);
+}
+
+// Cached per item object over (loadout epoch, class): the value is pure over the
+// build, and every gear / attribute / skill mutation bumps the epoch, invalidating
+// the entry. Stores the RAW value so the upgrade delta stays honest about curses.
+const _itemPowerCache = new WeakMap();
+function itemPowerRawCached(item) {
+  if (!item || !item.stats) return 0;
+  const hit = _itemPowerCache.get(item);
+  if (hit && hit.epoch === loadoutEpoch && hit.cls === player.class) return hit.raw;
+  const raw = itemPowerRaw(item);
+  _itemPowerCache.set(item, { epoch: loadoutEpoch, cls: player.class, raw });
+  return raw;
+}
+// The Power number shown on a piece — its marginal worth to this hero, floored at 0.
+function itemPower(item) {
+  if (!item || !item.stats) return 0;
+  return Math.max(0, Math.round(itemPowerRawCached(item)));
 }
 
 // Effective value of an attribute: the points spent (including the ATTR_BASE
@@ -3480,33 +3586,61 @@ function attrDamage() {
 // reads negative.
 function critDamageMult() { return Math.max(0, 2.0 + totalStat('CRITDMG') / 100 + skillBonus('critDmg')); }
 
-// The player's overall power: a blend of level, attributes, and equipped gear.
-// Red/ignored pieces (requirement no longer met) don't count — they give nothing.
+// The hero's overall Power — the absolute strength of the whole build. It IS the
+// effective combat score (offense × survivability, which already folds in level,
+// attributes, skills and worn gear via the derived stats) scaled to the familiar
+// ~100-300 fresh-hero range, plus the small flat utility/tier Power of worn
+// pieces. Monotonic: a real upgrade always raises it. Red/ignored pieces give
+// nothing (their stats aren't in the context, and their flats are skipped).
 function playerPower() {
-  let p = player.level * 10;
+  const ctx = buildPowerContext();
+  let p = GEAR_POWER.K * powerScalar(ctx);
   const active = activeSlots();
-  for (const slot of SLOT_KEYS) if (active[slot]) p += itemPower(equipped[slot]);
-  // Every allocated attribute point counts — the starting ATTR_BASE block AND points
-  // spent on level-up — each weighted by how much THIS class gains from it
-  // (attrPowerWeight), exactly like a gear attribute affix, so a point is worth the
-  // same Power spent or geared and a damage-stat build reads stronger than an off-stat one.
-  for (const k of ATTR_KEYS) p += (player.attributes?.[k] || 0) * attrPowerWeight(k);
-  p += spentAllSkillPoints() * 5; // skill-tree investment (both pools) shows up in Power too
+  for (const slot of SLOT_KEYS) if (active[slot] && equipped[slot]) p += itemFlatPower(equipped[slot]);
   return Math.round(p);
 }
 
+// The bare build the CURRENT hero has with all ACTIVE worn gear stripped away: its
+// combat context (level + attributes + skills only) and the flat Power those worn
+// pieces carry. Only ACTIVE pieces are stripped — an inactive (requirement-not-met)
+// piece contributes nothing to the live context to begin with.
+function strippedPowerContext() {
+  const ctx = buildPowerContext();
+  const active = activeSlots();
+  let bare = ctx, flat = 0;
+  for (const slot of SLOT_KEYS) {
+    const it = active[slot] && equipped[slot];
+    if (!it) continue;
+    bare = applyDelta(bare, itemPowerContribution(it, ctx), -1);
+    flat += itemFlatPower(it);
+  }
+  return { ctx, bare, flat };
+}
+// The "from gear" figure on the hero sheet — the Power your WORN gear adds, a clean
+// combat-score delta (full build vs. that build stripped bare). Because it reads
+// the live full context directly, POWER decomposes EXACTLY into this plus the
+// level/attribute/skill base, and it never double-counts two pieces' synergy.
+function gearContributionPower() {
+  const { ctx, bare, flat } = strippedPowerContext();
+  return Math.round(GEAR_POWER.K * (powerScalar(ctx) - powerScalar(bare)) + flat);
+}
+
 // The true Power swing from equipping `item` into its slot — what the bag/shop
-// "upgrade" arrows compare against. Beyond the piece it replaces, equipping a
-// two-handed weapon also STRANDS an incompatible off-hand (loadItem stows it), so
-// that off-hand's power belongs in the baseline. Without this, a 2H weapon could
-// flag as a green upgrade while actually LOWERING your Power once the off-hand drops.
+// "upgrade" arrows compare against. Because itemPower values a piece against its
+// slot VACATED, itemPower(new) and itemPower(current occupant) share one baseline,
+// so their difference is the honest swap delta. Beyond the piece it replaces,
+// equipping a two-handed weapon also STRANDS an incompatible off-hand (loadItem
+// stows it), so that off-hand's Power is lost in the swap too — without this a 2H
+// could flag as a green upgrade while actually LOWERING your Power.
 function equipUpgradeDelta(item) {
   if (!item || !item.slot) return 0;
-  let baseline = equipped[item.slot] ? itemPower(equipped[item.slot]) : 0;
-  if (item.slot === 'weapon' && equipped.offhand && offhandEquipError(equipped.offhand, item)) {
-    baseline += itemPower(equipped.offhand);
+  const active = activeSlots();
+  const occ = equipped[item.slot];
+  let d = itemPowerRawCached(item) - ((occ && active[item.slot]) ? itemPowerRawCached(occ) : 0);
+  if (item.slot === 'weapon' && equipped.offhand && active.offhand && offhandEquipError(equipped.offhand, item)) {
+    d -= itemPowerRawCached(equipped.offhand);
   }
-  return itemPower(item) - baseline;
+  return Math.round(d);
 }
 
 // Max HP/MP are derived from level + attributes so the formula stays consistent
@@ -4546,15 +4680,16 @@ function equipReqBadge(item) {
 // dealt multiplier only applies to physical hits (see applyOffenseMods).
 const CLASS_DMG_DEALT = { warrior: 1.10, rogue: 1.12, mage: 1.00, templar: 1.00 };
 const CLASS_DMG_TAKEN = { warrior: 0.90, rogue: 0.95, mage: 0.90, templar: 0.85 };
-// How much each class leans on spell damage, used only to value the Spell Power gear
-// stat in Power (statPowerWeight): a Mage lives on spells, a Templar casts holy
-// smites alongside melee, and a Warrior/Rogue barely cast — so Spell Power is near-
-// dead weight for them and shouldn't pad their Power as if it were a caster's.
+// How much each class leans on spell damage. Blends the spell lane into the Power
+// combat score (buildPowerContext / systems/gearPower.js) and gates the caster
+// levers: a Mage lives on spells, a Templar casts holy smites alongside melee, and
+// a Warrior/Rogue barely cast — so Spell Power / Cast Speed are near-dead weight on
+// them and shouldn't pad their Power as if it were a caster's.
 const CLASS_SPELL_RELIANCE = { warrior: 0.25, rogue: 0.25, mage: 1.0, templar: 0.7 };
 // The martial mirror of CLASS_SPELL_RELIANCE: how much each class leans on WEAPON
-// active skills, used to value the Skill Power gear stat in Power (statPowerWeight).
-// Melee classes live on skills; the Mage barely swings, so Skill Power is near-dead
-// weight on it — the inverse of the spell reliance above.
+// active skills. Blends the martial lane into the Power combat score and gates the
+// martial levers (Skill Power / Attack Speed). Melee classes live on skills; the
+// Mage barely swings, so those are near-dead weight on it — the inverse of above.
 const CLASS_SKILL_RELIANCE = { warrior: 1.0, rogue: 1.0, mage: 0.35, templar: 0.85 };
 function classDmgDealtMult() {
   const base = CLASS_DMG_DEALT[player.class] || 1;
@@ -6317,7 +6452,15 @@ window.gameState = function gameState(radius) {
     name: it.name, slot: it.slot, tier: it.tier, stats: it.stats,
     ...(it.attrs && Object.keys(it.attrs).length ? { attrs: it.attrs } : {}),
     ...(it.power && ITEM_POWERS[it.power] ? { power: ITEM_POWERS[it.power].name } : {}),
+    // `pow` is this piece's BUILD-AWARE Power (its worth to the current hero, not a
+    // fixed table): a stat that does nothing for your build adds ~0. `upgrade` is
+    // the Power swing vs. what fills its slot now (+ = a real upgrade for you).
+    ...(it.slot ? { pow: itemPower(it), upgrade: equipUpgradeDelta(it) } : {}),
     ...(it.unique ? { unique: it.unique, fixed: !!it.fixed } : {}),
+    // A set piece is a fixed, named artifact too (like a unique) but also belongs
+    // to a set — surface its set id, piece id and the fixed flag so a driving agent
+    // can tell it can't be reforged and see which set it advances.
+    ...(it.set ? { set: it.set, setPiece: it.setPiece, fixed: !!it.fixed } : {}),
   } : null;
 
   // ── ASCII overlay map centred on the player ──
@@ -6547,6 +6690,12 @@ window.gameState = function gameState(radius) {
       xpToNext: (typeof xpForLevel === 'function') ? xpForLevel(player.level) : null,
       gold: player.gold, class: player.class, ascension: player.ascension,
       attributes: player.attributes ? Object.assign({}, player.attributes) : null, // might/vitality/agility/spirit/luck
+      // Overall Power (the hero-sheet headline) and the slice of it your worn gear
+      // contributes. Power is BUILD-AWARE: it's an effective combat score (offense ×
+      // survivability), so an item's Power — and each stat's share of it — reflects
+      // what it actually does for THIS build. See gameGuide("power").
+      power: (typeof playerPower === 'function') ? playerPower() : null,
+      gearPower: (typeof gearContributionPower === 'function') ? gearContributionPower() : null,
       // Offense-scaling gear stats (all %), so an agent can see which build a hero is
       // geared for without reading tooltips. skillPower amps MARTIAL skills, spellPower
       // amps SPELLS; attackSpeed quickens auto-attacks, castSpeed the recharge of spell
@@ -6584,7 +6733,7 @@ window.gameState = function gameState(radius) {
     // shows a golden aura on the hero. Mirrors the "… set" tooltip.
     sets: (typeof wornSetCounts === 'function') ? Object.entries(wornSetCounts()).map(([sid, n]) => {
       const s = ITEM_SETS[sid], done = setComplete(sid, n);
-      return { id: sid, name: s.name, worn: n, need: setMaxTier(s), complete: done,
+      return { id: sid, name: s.name, worn: n, need: setPieceCount(s), complete: done,
         power: s.power ? { name: s.power.name, active: done, effect: Object.assign({}, s.power.stats) } : null };
     }) : [],
     // The manual hotbar: each filled slot's number key (1..4), what it casts, MP
@@ -6838,10 +6987,10 @@ window.gameGuide = function gameGuide(topic) {
     ],
     loot: [
       `Rarity is COLOUR ONLY (no text labels), lowest to highest: grey → white → green → blue → purple → orange → red. Higher tiers allow more bonus affixes.`,
-      `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike every other rarity it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and its own signature power (a "legendary modifier" like Vampiric). Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. gameState() marks worn/held uniques with a "unique" id and "fixed":true.`,
+      `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike the random rarities it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and its own signature power (a "legendary modifier" like Vampiric). Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. (Set pieces — see below — are the OTHER fixed, named red artifacts.) gameState() marks worn/held uniques with a "unique" id and "fixed":true.`,
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a depth-milestone cache, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
-      `Set pieces are a distinct top-rarity class shown in teal (not the red of a unique). They drop only at the top tier — as rare as any unique — and grant escalating stat bonuses at 2 and 4 matched pieces worn. Wearing the full set (4 pieces = complete) also unlocks its SIGNATURE POWER — a unique effect, not just more stats: Warden's Aegis Wall (block + reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), or Arcanist's Arcane Overflow (cooldown reduction + mana leech). A completed set wraps the hero in a golden aura and its "… set" tag turns gold with a ✦. A piece can roll for any slot; hover/press-hold the tag to see the bonuses, the power, which slots you're wearing, and your count. gameState().sets lists worn sets, completion and active powers.`,
-      `Item power is driven more by item level (ilvl, geared to current depth) than by rarity alone. gameState().menu.inventory gives brief items; read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
+      `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
+      `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
@@ -6852,7 +7001,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     autoloot: [
       `AUTO-LOOT applies a per-rarity rule the instant gear drops: Keep (default), Scrap (into materials), or Sell (50% value gold). Set it on the LOOT tab (Auto-Loot). gameState().menu.autoLoot shows the rules.`,
-      `The picker has a row per rarity plus a "set" row (right above unique) for set pieces — they roll at the unique tier but answer to their own rule, so you can keep chase set pieces while still auto-selling plain uniques.`,
+      `The picker has a row per rarity plus a "set" row (right above unique) for set pieces — they drop at the top tier alongside uniques but answer to their own rule, so you can keep chase set pieces while still auto-selling plain uniques.`,
       `It only touches organically-found drops (chests, kills) — never shop buys or forged gear — and never locked items.`,
       `Auto-scrap only works on equippable gear; non-gear set to Scrap falls back to Keep. Use Sell to auto-dispose of non-gear.`,
       `Scrapping melts gear into materials, tied to the item's RARITY (not difficulty): any piece gives Scrap, white+ can shed Glimmer, green+ a slim Core (real odds from blue+), and epic+ a lucky Chaos Orb — grey junk melts to pure Scrap. Each mat is a separate roll, so finer mats stay scarce; the COUNT scales with item level along a curve that flattens as it climbs. Every individual item salvages a little differently, so two same-rarity pieces vary. gameState().menu.materials shows your wallet.`,
@@ -6929,6 +7078,12 @@ window.gameGuide = function gameGuide(topic) {
       `Hero-power knobs apply instantly (HP/derived stats recompute); enemy & floor knobs bite only on newly spawned foes, so use the panel's "Respawn floor" button to re-roll the current floor and preview. Each slider has a ↺ reset; "Reset all" restores every default. Values persist across reloads (localStorage key dungeonLoot_devTune_v1).`,
       `gameState().devTuning lists any knob currently away from its default ({id,label,value,default}); an empty array means shipping balance. Check it if difficulty feels off — the balance may have been retuned here.`,
     ],
+    power: [
+      `Power is a single number rating how strong a hero — or a single gear piece — is. It is BUILD-AWARE: not a fixed table, but the marginal gain in an effective COMBAT SCORE (a blend of your effective offense/DPS and survivability/EHP, built from the real combat formulas) that the piece's stats give THIS hero's current build.`,
+      `So a stat that does nothing for your build is worth ~0 Power to you: a Crit Damage roll on a hero with no crit chance barely moves your damage, so it barely adds Power; Spell Power on a pure martial build, or Attack Speed on a pure caster, are near-dead weight and priced as such. The SAME item can be worth very different Power to two different heroes — that is the point. Chances are measured against your own LEVEL (a stable reference), and transient shrine/food buffs are excluded, so Power reflects your durable build, not the moment.`,
+      `Read it from gameState(): player.power is the overall headline (POWER on the hero sheet), player.gearPower is the slice your worn gear contributes (POWER = that + your level/attribute/skill base). Each equippable item in menu.inventory carries pow (its Power to you) and upgrade (the Power swing vs. what fills its slot now: positive = a genuine upgrade FOR YOUR BUILD). Sort/compare by pow, and trust upgrade over raw rarity — a higher-tier piece can be a downgrade if its stats don't suit you.`,
+      `Consequences an agent should expect: an item's pow can differ across two heroes and shrinks as your build saturates a stat (diminishing returns); the overall player.power still climbs monotonically with any real upgrade. To raise Power, stack stats your build actually uses (your class's damage lane, crit damage only once you have crit chance, more HP/mitigation for survivability), not just bigger rarities.`,
+    ],
   };
   if (topic == null) return Object.assign({ topics: Object.keys(G) }, G);
   const t = String(topic).toLowerCase().replace(/[^a-z]/g, '');
@@ -6938,6 +7093,7 @@ window.gameGuide = function gameGuide(topic) {
     damage: 'damage', dmg: 'damage', spell: 'damage', spells: 'damage', spellpower: 'damage', skillpower: 'damage', attackspeed: 'damage', castspeed: 'damage', cooldown: 'damage', cdr: 'damage', scaling: 'damage', attack: 'damage', autoattack: 'damage',
     autoloot: 'autoloot', autoscrap: 'autoloot', scrap: 'autoloot', sell: 'autoloot', salvage: 'autoloot', material: 'autoloot', materials: 'autoloot', mats: 'autoloot',
     item: 'loot', items: 'loot', gear: 'loot', rarity: 'loot', loots: 'loot',
+    power: 'power', itempower: 'power', gearpower: 'power', upgrade: 'power', upgrades: 'power', rating: 'power', strength: 'power', build: 'power',
     hazard: 'hazards', trap: 'hazards', traps: 'hazards', projectile: 'hazards', barrier: 'hazards', fire: 'hazards', terrain: 'hazards', tiles: 'hazards', greed: 'hazards', cursed: 'hazards', curse: 'hazards', shrine: 'hazards', teleporter: 'hazards', fountain: 'hazards',
     enemy: 'enemies', boss: 'enemies', bosses: 'enemies', ai: 'enemies', minion: 'enemies', minions: 'enemies', ally: 'enemies', allies: 'enemies', affix: 'enemies', enrage: 'enemies', berserk: 'enemies', conquest: 'enemies', scar: 'enemies', rainbow: 'enemies',
     quest: 'quests', quests: 'quests', escort: 'quests', rescue: 'quests', fetch: 'quests', tribute: 'quests', forage: 'quests', beacon: 'quests', beacons: 'quests', objective: 'quests', bounty: 'town',
@@ -12830,11 +12986,16 @@ function renderFixedEnchantItem(item) {
     `<div class="hc-line" style="opacity:0.85;color:var(--gold)"><span data-spr=feat_door></span> +${v} <span class="stat-abbr" ${hoverTip(statMeaningTip('attr', k))}>${(ATTRIBUTES[k] || {}).label || k}</span> <span style="font-size:1.2rem">(fixed)</span></div>`).join('');
   const powHtml = itemPowerFront(item);
   const powLine = powHtml ? `<div class="hc-line" style="opacity:0.9">${powHtml}</div>` : '';
+  // Set pieces are fixed artifacts too — label them as a set piece (with the set
+  // tag), not a "unique", so the read-only panel reads true.
+  const isSet = !!item.set;
+  const kindWord = isSet ? 'set piece' : 'unique';
+  const setTag = isSet ? itemSetTag(item) : '';
   setTownContent(`
     <div class="shop-row has-actions"><button class="modal-nav-btn" onclick="enchantBack()">‹ Back</button>
       <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${item.name}</div>
-      <div class="shop-row-sub">${SLOTS[item.slot].label} · ilvl ${item.ilvl} · unique</div></div></div>
-    <div class="ench-legend">A unique is fixed the moment it drops — its properties can't be augmented or reforged.</div>
+      <div class="shop-row-sub">${SLOTS[item.slot].label} · ilvl ${item.ilvl} · ${kindWord}${setTag}</div></div></div>
+    <div class="ench-legend">A ${kindWord} is fixed the moment it drops — its properties can't be augmented or reforged.</div>
     ${powLine}
     ${statRows}${attrRows}
     <div class="hc-line" style="opacity:0.6;margin-top:4px">This artifact's modifiers are set for good. Its values were rolled once, scaled to the depth it dropped on, and locked.</div>`);
@@ -13747,12 +13908,14 @@ function uniqueMandatoryHeadline(slot, familyHeadline) {
   if (slot === 'offhand') return familyHeadline.slice();
   return []; // ring / amulet
 }
-// Build a fully-formed FIXED unique from a definition, rolling each property's VALUE
-// by depth (ilvl) once. applyBaseStats lays down the auto headline (DMG/DEF/family);
-// the definition's `native` then replaces the base's default innate signature, and
-// its six `mods` (five stats + one attribute) fill the rest. The result is marked
-// `fixed` so the Enchanter leaves it alone.
-function buildUnique(def, lvl) {
+// Build a fully-formed FIXED artifact from a definition, rolling each property's
+// VALUE by depth (ilvl) once. applyBaseStats lays down the auto headline
+// (DMG/DEF/family); the definition's `native` then replaces the base's default
+// innate signature, and its six `mods` (five stats + one attribute) fill the rest.
+// The result is marked `fixed` so the Enchanter leaves it alone. `membership` tags
+// it as a unique ({unique}) or a set piece ({set, setPiece}); both paths are
+// otherwise identical (same native/mods/power/base/baseStats machinery).
+function buildFixedArtifact(def, lvl, membership) {
   const tier = 'unique';
   const mult = tierMult(tier);
   const dmgMult = 2.6;
@@ -13761,7 +13924,7 @@ function buildUnique(def, lvl) {
   const value = Math.round(5000 * (1 + lvl * 0.12));
   const item = { id: Math.random(), name: def.name, tier, slot, ilvl: lvl,
     stats: {}, attrs: {}, value, flavor: def.flavor, icon: iconForBase(slot, baseName),
-    base: baseName, unique: def.id, fixed: true, power: def.power };
+    base: baseName, fixed: true, power: def.power, ...membership };
   // Auto headline (DMG / DEF+ATK / off-hand family), rolled within its depth band.
   applyBaseStats(item, baseName, lvl + rnd(0, 2) * 0.6, mult, dmgMult);
   const baseInnate = (item.baseStats || []).slice(); // what applyBaseStats protected
@@ -13770,7 +13933,7 @@ function buildUnique(def, lvl) {
     if (!(def.native in item.stats)) item.stats[def.native] = affixStatValue(def.native, lvl, mult);
     item.baseStats = [...baseInnate.filter(s => s !== def.native), def.native];
   } else {
-    // Weapon/armour/jewelry: the unique's native replaces the base's default innate.
+    // Weapon/armour/jewelry: the artifact's native replaces the base's default innate.
     for (const s of baseInnate) if (s !== def.native) delete item.stats[s];
     item.stats[def.native] = affixStatValue(def.native, lvl, mult);
     item.baseStats = [def.native];
@@ -13782,12 +13945,23 @@ function buildUnique(def, lvl) {
   }
   return item;
 }
+// A hand-crafted unique: a fixed artifact tagged with its unique id.
+function buildUnique(def, lvl) { return buildFixedArtifact(def, lvl, { unique: def.id }); }
+// A set piece: the SAME fixed-artifact treatment as a unique (named, fixed native
+// + six mods + its own signature power) but tagged with its set id + piece id, so
+// it also feeds the worn-count set bonuses and completion power.
+function buildSetPiece(sp, lvl) { return buildFixedArtifact(sp.piece, lvl, { set: sp.setId, setPiece: sp.piece.id }); }
 // Pick a unique definition for a drop — any of them, or (when a slot is forced, e.g.
 // the town gambler targeting a gear type) one that fits that slot.
 function pickUnique(forceSlot) {
   let pool = UNIQUES;
   if (forceSlot && SLOTS[forceSlot]) { const s = uniquesForSlot(forceSlot); if (s.length) pool = s; }
   return pick(pool);
+}
+// Pick a specific set piece for a drop — any authored piece, or (forced slot) one
+// that fills that slot. Returns { setId, piece } or null.
+function pickSetPiece(forceSlot) {
+  return rollSetPiece((forceSlot && SLOTS[forceSlot]) ? forceSlot : null, Math.random, ITEM_SETS);
 }
 // Is this a fixed item (a hand-crafted unique)? Fixed items never reroll/augment.
 function isFixedItem(item) { return !!(item && item.fixed); }
@@ -13803,10 +13977,16 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   // forceSlot pins the equipment slot (also used by the gambler, when the player
   // pays to target a specific item type); otherwise the slot is rolled.
   const tier = forceTier || rollTier(rolls, lvl);
-  // The red tier is either a hand-crafted unique (fixed, named artifact) or — a
-  // minority of the time — a chase set piece. A unique short-circuits the whole
-  // random-affix pipeline: its stats come from its definition, not a roll.
-  if (tier === 'unique' && Math.random() >= UNIQUE_SET_CHANCE) {
+  // The red tier is always a FIXED, hand-crafted artifact — either a one-of-a-kind
+  // unique or (a minority of the time, UNIQUE_SET_CHANCE) a chase SET piece. Both
+  // short-circuit the whole random-affix pipeline: their stats come from a
+  // definition, not a roll. A set piece additionally carries its set membership so
+  // it feeds the worn-count set bonuses.
+  if (tier === 'unique') {
+    if (Math.random() < UNIQUE_SET_CHANCE) {
+      const sp = pickSetPiece(forceSlot);
+      if (sp) return buildSetPiece(sp, lvl);
+    }
     return buildUnique(pickUnique(forceSlot), lvl);
   }
   const slot = (forceSlot && SLOTS[forceSlot]) ? forceSlot : weighted(SLOT_WEIGHTS);
@@ -13844,19 +14024,12 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   addStatAffixes(item, lvl, mult, rollAffixCount(caps.stat));
   addAttrAffixes(item, lvl, mult, rollAffixCount(caps.attr));
 
-  // ── BUILD-DEFINING EXTRAS ── a unique either carries a special power (changes
-  // HOW you fight) or is a collectible set piece (escalating worn-count bonuses).
-  // Set pieces are their own top rarity — as rare as any unique and worn in their
-  // own colour — so completing a set is a real chase. Legendaries always carry a
-  // power; lower tiers get neither.
-  if (tier === 'unique') {
-    // A hand-crafted unique already returned above; reaching here means this red
-    // drop rolled as a chase SET piece instead.
-    item.set = rollItemSet();
-  } else if (tier === 'legendary') {
+  // ── BUILD-DEFINING EXTRAS ── legendaries carry a special power (changes HOW you
+  // fight); lower tiers get none. (Red drops — uniques and set pieces alike — are
+  // fixed artifacts built above and returned before reaching here.)
+  if (tier === 'legendary') {
     item.power = rollItemPower();
   }
-  if (item.set && ITEM_SETS[item.set]) item.name = ITEM_SETS[item.set].name + ' ' + baseName;
 
   // Cursed items (~12% of uncommon+): a big stat boost paired with a penalty.
   // The negative stat flows straight through totalStat(), so the drawback is real.
@@ -17594,25 +17767,9 @@ function itemPowerStatBonus(name) {
   }
   return sum;
 }
-// Each set: escalating stat bonuses at 2 pieces, then completing it (the top
-// threshold = every tier defined here) unlocks a signature `power` — a unique
-// effect (leech, cleave, reflect, cooldowns…) folded into totalStat, NOT just
-// more raw stats — plus a golden completion aura on the hero.
-const ITEM_SETS = {
-  warden:   { name: "Warden's",   color: '#7fd0ff',
-    bonus: { 2: { DEF: 12, HP: 40 }, 4: { DEF: 30, HP: 120, BLOCK: 10 } },
-    power: { name: 'Aegis Wall', stats: { DR: 8, THORNS: 8, BLOCK: 8 },
-      desc: 'Turn aside more blows and reflect a slice of every hit back at attackers.' } },
-  reaver:   { name: "Reaver's",   color: '#ff7a5c',
-    bonus: { 2: { ATK: 10, CRIT: 6 }, 4: { ATK: 26, CRIT: 14, IDMG: 12 } },
-    power: { name: 'Bloodfrenzy', stats: { LEECH: 8, CLEAVE: 30, EXEC: 12 },
-      desc: 'Hits cleave into nearby foes, leech their life, and execute the wounded.' } },
-  arcanist: { name: "Arcanist's", color: '#c77bff',
-    bonus: { 2: { SPELLPWR: 8, MP: 40 }, 4: { SPELLPWR: 20, MP: 120, CDR: 8 } },
-    power: { name: 'Arcane Overflow', stats: { CDR: 10, MPLEECH: 10, SPELLPWR: 12 },
-      desc: 'Skills recharge faster and the damage you deal refunds mana.' } },
-};
-function rollItemSet() { const ks = Object.keys(ITEM_SETS); return ks[Math.floor(Math.random() * ks.length)]; }
+// The set roster + its pure helpers live in src/data/itemSets.js and
+// src/systems/itemSets.js (imported at the top). Set pieces are fixed, named
+// artifacts (built by buildSetPiece, mirroring buildUnique) picked by pickSetPiece.
 function wornSetCounts() {
   const c = {};
   const active = activeSlots();
@@ -17623,10 +17780,10 @@ function wornSetCounts() {
   }
   return c;
 }
-// The top worn-count threshold a set defines. Reaching it "completes" the set:
-// its final bonus tier AND its unique power turn on, and the hero gains the aura.
-function setMaxTier(set) { return Math.max(...Object.keys(set.bonus).map(Number)); }
-function setComplete(sid, n) { const s = ITEM_SETS[sid]; return !!s && n >= setMaxTier(s); }
+// A set completes when every one of its pieces is worn (see setPieceCount —
+// its size). Completion turns on the top bonus tier AND the signature power and
+// grants the golden aura.
+function setComplete(sid, n) { return setIsComplete(ITEM_SETS[sid], n); }
 // Set ids currently worn at full completion — powers active, golden aura on.
 function completedSets() {
   const out = [], counts = wornSetCounts();
@@ -17634,8 +17791,7 @@ function completedSets() {
   return out;
 }
 // Extra value of a stat granted by whatever set thresholds are currently met,
-// plus the signature power of any completed set. Generalised over each set's
-// declared tiers so future sets can define their own thresholds.
+// plus the signature power of any completed set (see setStatContribution).
 // Fast path: totalStat calls this constantly — bail before the active resolve
 // whenever no set pieces are worn at all (the overwhelmingly common case).
 function setStatBonus(name) {
@@ -17644,50 +17800,57 @@ function setStatBonus(name) {
   if (!anySet) return 0;
   let sum = 0;
   const counts = wornSetCounts();
-  for (const sid in counts) {
-    const set = ITEM_SETS[sid], n = counts[sid];
-    for (const t of Object.keys(set.bonus)) if (n >= +t && set.bonus[t][name] != null) sum += set.bonus[t][name];
-    if (set.power && set.power.stats && n >= setMaxTier(set) && set.power.stats[name] != null) sum += set.power.stats[name];
-  }
+  for (const sid in counts) sum += setStatContribution(ITEM_SETS[sid], counts[sid], name);
   return sum;
 }
-// Rich hover card for a set-name tag: which slots the set can fill (lit for the
-// ones you currently wear it in), and each worn-count threshold's bonus (lit when
-// active, dimmed when not yet met). Reads live worn state so it tracks as you gear
-// up. Single-quoted attributes only — hoverTip escapes double quotes.
+// Rich hover card for a set-name tag: the set's named pieces (each a fixed
+// artifact, lit gold-tick when you're wearing that exact piece), and each
+// worn-count threshold's bonus (lit when active, dimmed when not yet met). Reads
+// live worn state so it tracks as you gear up. The `.set-tip` wrapper widens the
+// card (see styles.css). Single-quoted attributes only — hoverTip escapes double
+// quotes.
 function setTooltipHTML(setId) {
   const s = ITEM_SETS[setId];
   if (!s) return '';
   const worn = wornSetCounts()[setId] || 0;
-  // A set piece can roll for ANY slot; show every slot, lighting the ones you're
-  // currently wearing a piece of THIS set in.
-  const slotList = SLOT_KEYS.map(slot => {
-    const has = equipped[slot] && equipped[slot].set === setId;
-    const label = SLOTS[slot].label;
-    return has ? `<span style='color:${SET_RARITY_COLOR}'>${label} ✓</span>`
-               : `<span style='opacity:.45'>${label}</span>`;
-  }).join(' · ');
-  const maxT = setMaxTier(s);
-  const complete = worn >= maxT;
+  const pieces = setPieceCount(s);
+  const complete = worn >= pieces;
+  // A completed set glows gold like its aura; otherwise it wears its own colour,
+  // giving each set its own identity in the tooltip.
+  const accent = complete ? 'var(--gold)' : s.color;
+  // This set's OWN named pieces, in gear order — each a specific fixed artifact.
+  // Lit for the exact piece you're wearing; dimmed for ones you're still hunting.
+  const pieceList = s.pieces.slice()
+    .sort((a, b) => SLOT_KEYS.indexOf(a.slot) - SLOT_KEYS.indexOf(b.slot))
+    .map(p => {
+      const has = equipped[p.slot] && equipped[p.slot].set === setId;
+      const label = (SLOTS[p.slot] || {}).label || p.slot;
+      return has
+        ? `<div style='color:${accent}'>✓ ${p.name} <span style='opacity:.7'>· ${label}</span></div>`
+        : `<div style='opacity:.5'>${p.name} <span style='opacity:.8'>· ${label}</span></div>`;
+    }).join('');
   // Each worn-count threshold and what it grants, lit when currently active.
   const bonusLines = Object.keys(s.bonus).map(Number).sort((a, b) => a - b).map(t => {
     const b = s.bonus[t];
     const stats = Object.entries(b)
       .map(([k, v]) => `+${v}${PCT_STATS.has(k) ? '%' : ''} ${STAT_SHORT[k] || k}`).join(' · ');
     const met = worn >= t;
-    return `<div style='color:${met ? SET_RARITY_COLOR : 'var(--junk)'}'>${met ? '✓ ' : ''}${t} pieces: ${stats}</div>`;
+    return `<div style='color:${met ? accent : 'var(--junk)'}'>${met ? '✓ ' : ''}${t} pieces: ${stats}</div>`;
   }).join('');
-  // The signature power — the completion reward. Gold and lit once the set is
-  // complete, dimmed with its unlock count while you're still collecting.
+  // The completion power — the reward for wearing every piece. Gold and lit once
+  // the set is complete, dimmed with its unlock count while you're still collecting.
   const powerLine = s.power
     ? `<div style='color:${complete ? 'var(--gold)' : 'var(--junk)'};margin-top:3px'>` +
-      `${complete ? '✦ ' : `${maxT} pieces — `}<b>${s.power.name}</b>: ${s.power.desc}</div>` +
+      `${complete ? '✦ ' : `${pieces} pieces — `}<b>${s.power.name}</b>: ${s.power.desc}</div>` +
       (complete ? `<div style='color:var(--gold)'>★ Set complete — a golden aura surrounds you.</div>` : '')
     : '';
-  return `<div class='ht-name' style='color:${SET_RARITY_COLOR}'>${s.name} Set${complete ? " <span style='color:var(--gold)'>✦</span>" : ''}</div>` +
-    `<div class='ht-line'>A set piece can drop for any gear slot. Match pieces for escalating bonuses; complete the set (${maxT}) to unlock its power and a golden aura.</div>` +
-    `<div class='ht-sub'><b>Worn: ${worn}/${maxT}</b> — ${slotList}</div>` +
-    `<div class='ht-sub'>${bonusLines}${powerLine}</div>`;
+  return `<div class='set-tip'>` +
+    `<div class='ht-name' style='color:${accent}'>${s.name} Set${complete ? " <span style='color:var(--gold)'>✦</span>" : ''}</div>` +
+    `<div class='ht-line'>A ${pieces}-piece set. Every piece is a fixed, named artifact — collect and wear them all for escalating bonuses, a completion power, and a golden aura.</div>` +
+    `<div class='ht-sub'><b>Worn: ${worn}/${pieces}</b></div>` +
+    `<div class='ht-sub'>${pieceList}</div>` +
+    `<div class='ht-sub'>${bonusLines}${powerLine}</div>` +
+    `</div>`;
 }
 // Short markup describing an item's special power / set membership, appended to its
 // stat line so the build-defining bit is visible wherever gear is listed.
@@ -22639,8 +22802,7 @@ function renderHero(el) {
   const pts = player.attrPoints || 0;
   // Count only ACTIVE gear so this "from gear" subtotal reconciles with the headline
   // POWER (playerPower also skips red/ignored pieces).
-  const gActive = activeSlots();
-  const gearPower = SLOT_KEYS.reduce((s, k) => s + (gActive[k] ? itemPower(equipped[k]) : 0), 0);
+  const gearPower = gearContributionPower();
   const dmgA = classDmgAttrs();
   // Each attribute row shows base+spent plus any gear bonus, tags the class's
   // damage attributes, and offers a + to raise it.
@@ -23868,7 +24030,24 @@ function renderEnchantDoll() {
 }
 
 // ── GEAR-SET SWITCH ── the Set 1 / Set 2 toggle that sits above the paper doll.
-function gearSetPower(set) { return SLOT_KEYS.reduce((s, k) => s + (set[k] ? itemPower(set[k]) : 0), 0); }
+// Total Power a saved loadout (gear set 1 / 2) would contribute if worn — its
+// EQUIPPABLE pieces valued as a group against the current hero's bare build (a clean
+// combat-score delta, not a sum of per-piece pills). Pieces this hero can't wear are
+// skipped, the way they'd sit inactive if equipped, so the two loadouts compare
+// fairly and the active set's figure lines up with the hero-sheet "from gear".
+function gearSetPower(set) {
+  const { bare } = strippedPowerContext();
+  const ctx = buildPowerContext();
+  let withSet = bare, flat = 0;
+  for (const slot of SLOT_KEYS) {
+    const it = set[slot];
+    if (!it || !it.stats) continue;
+    if (typeof canEquipItem === 'function' && !canEquipItem(it)) continue;
+    withSet = applyDelta(withSet, itemPowerContribution(it, ctx), 1);
+    flat += itemFlatPower(it);
+  }
+  return Math.round(GEAR_POWER.K * (powerScalar(withSet) - powerScalar(bare)) + flat);
+}
 function gearSetCount(set) { return SLOT_KEYS.reduce((n, k) => n + (set[k] ? 1 : 0), 0); }
 // The active set is lit gold; tapping the other one swaps your whole loadout.
 function gearSetBarHTML() {
@@ -24138,10 +24317,14 @@ function itemCardHTML(item, opts = {}) {
   // so surface it here in the detail card too.
   const powTag = item.slot ? itemPowerFront(item) : '';
   const powerLine = powTag ? `<div style="margin:3px 0">${powTag}</div>` : '';
-  // A hand-crafted unique wears its identity on its sleeve: its properties are
-  // fixed on drop and can never be reforged.
+  // A fixed artifact wears its identity on its sleeve: its properties are set on
+  // drop and can never be reforged. Set pieces are fixed too, but read as a "Set
+  // piece" in teal rather than a "Unique" in red.
   const uniqueLine = item.fixed
-    ? `<div style="color:${(TIERS.unique || {}).color || '#ff2222'};font-size:1.2rem;font-weight:bold;margin:2px 0">✦ Unique — properties fixed on drop</div>` : '';
+    ? (item.set
+        ? `<div style="color:${SET_RARITY_COLOR};font-size:1.2rem;font-weight:bold;margin:2px 0">✦ Set piece — properties fixed on drop</div>`
+        : `<div style="color:${(TIERS.unique || {}).color || '#ff2222'};font-size:1.2rem;font-weight:bold;margin:2px 0">✦ Unique — properties fixed on drop</div>`)
+    : '';
   // Item level: drives raw stat size, so it's worth surfacing alongside power.
   const ilvlLine = (item.slot && item.ilvl)
     ? `<span style="color:var(--blue-250);font-weight:bold">ilvl ${item.ilvl}</span>` : '';
@@ -24210,6 +24393,8 @@ function renderHoverTip(el, htmlOverride) {
   const html = htmlOverride || (el && el.dataset ? el.dataset.tip : '');
   if (!html) return;
   hoverTipEl.innerHTML = html;
+  // The wider set card opts in via a .set-tip wrapper; every other card stays narrow.
+  hoverTipEl.classList.toggle('wide', !!hoverTipEl.querySelector('.set-tip'));
   hoverTipEl.style.display = 'block';
   // Pop out beside the element like every other tooltip (see
   // placeTooltipBesideAnchor): to the side, never over the thing you're pointing at.
@@ -27876,8 +28061,6 @@ const __DL_FN_BRIDGE = {
   recordDepth,
   activeDifficulty,
   materialUnlocked,
-  attrPowerWeight,
-  statPowerWeight,
   itemPower,
   totalAttr,
   classDmgAttrs,
@@ -28516,9 +28699,10 @@ const __DL_FN_BRIDGE = {
   itemPowerCount,
   hasItemPower,
   itemPowerStatBonus,
-  rollItemSet,
+  pickSetPiece,
+  buildSetPiece,
   wornSetCounts,
-  setMaxTier,
+  setPieceCount,
   setComplete,
   completedSets,
   setStatBonus,
@@ -28973,6 +29157,7 @@ __dlLive("INGREDIENTS", () => INGREDIENTS, undefined);
 __dlLive("MANA_POTION_SVG", () => MANA_POTION_SVG, undefined);
 __dlLive("RAMEN_INGREDIENT_COUNT", () => RAMEN_INGREDIENT_COUNT, undefined);
 __dlLive("SLOT_KEYS", () => SLOT_KEYS, undefined);
+__dlLive("ITEM_SETS", () => ITEM_SETS, undefined);
 __dlLive("TIERS", () => TIERS, undefined);
 __dlLive("UI_FONTS", () => UI_FONTS, undefined);
 __dlLive("UI_FONT_KEY", () => UI_FONT_KEY, undefined);

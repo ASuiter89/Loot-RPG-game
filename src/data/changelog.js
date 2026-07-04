@@ -14,6 +14,20 @@ export const CHANGELOG = [
     "The map fills the space between the two bars and stays crisp on high-resolution screens. The game is portrait-only — turned sideways it asks you to rotate back.",
     "Menus, shops and the bag open as full-screen sheets with big tap targets, and merchant cards now open on a tap since there's no mouse hover.",
   ] },
+  { date: "2026-07-04", size: "large", v: "Power now reflects your build", by: "Claude", notes: [
+    "Gear Power is fully dynamic: a piece's Power is now what its stats are actually worth to YOUR hero — your attributes, skills, class and other worn gear — not a near-fixed table.",
+    "A stat your build can't use adds almost no Power now: Crit Damage on a hero with no crit chance, Spell Power on a pure melee build, or Attack Speed on a pure caster all read close to nothing, exactly as they perform.",
+    "Because of that, a higher-rarity or higher-level piece can honestly read LOWER Power than a plainer one that suits your build — sort by Power and trust the upgrade arrow to find your real upgrades.",
+    "Life Leech is now valued by how hard you already hit, defenses by how much survivability they truly add, and every attribute affix by what it does for your class — the same ring is worth different Power to different heroes.",
+    "The hero POWER headline and its \"from gear\" line now reconcile exactly, and Power keeps climbing with every genuine upgrade. Console players and agents: gameState() reports player.power, player.gearPower, and each item's pow + upgrade; see gameGuide(\"power\").",
+  ] },
+  { date: "2026-07-04", size: "large", v: "Sets reborn — 20 hand-crafted set collections", by: "Claude", notes: [
+    "Set pieces are now pre-defined, NAMED, fixed-stat artifacts — built exactly like uniques (a fixed signature stat, six set modifiers, and their own special power, all locked on drop and never reforgeable) — instead of random gear wearing a set tag.",
+    "There are now 20 distinct sets, each a family of specific named pieces. Sets vary in size from 2 to 6 pieces: small ones complete fast, big ones are a long chase. Between them they cover every gear slot.",
+    "Each set has its own escalating worn-count bonuses AND a completion power that switches on when you wear every piece — a set-wide effect layered on top of each piece's own power, plus the golden aura.",
+    "\"Worn: n / size\" now counts against the set's real number of pieces. The wider set tooltip lists the set's named pieces and ticks the exact ones you're wearing.",
+    "Set pieces read as fixed artifacts everywhere — the Enchanter leaves them alone, and their cards and gameState() flag them as set pieces (with their set and piece ids).",
+  ] },
   { date: "2026-07-04", size: "small", v: "Skill descriptions read their damage inline", by: "Claude", notes: [
     "Every damage skill's description now weaves its damage range into the sentence — e.g. \"Hurl a bolt of flame that deals 16k–22k damage and sets a foe ablaze\" — instead of tacking it on as a separate trailing line.",
     "A multi-strike skill shows a (×N) badge right after the range, and the Damage pill reads \"per hit (×3)\" so the single-hit number and the strike count stay clearly separate.",

@@ -61,7 +61,7 @@ const EXPECTED_STATE_KEYS = [
 const EXPECTED_GUIDE_TOPICS = [
   'overview', 'driving', 'controls', 'movement', 'combat', 'healing', 'skills',
   'damage', 'autocast', 'loot', 'autoloot', 'hazards', 'enemies', 'quests', 'progression',
-  'character', 'town', 'tips', 'dev',
+  'character', 'town', 'tips', 'dev', 'power',
 ];
 
 function findExecutable() {
