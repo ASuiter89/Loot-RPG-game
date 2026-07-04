@@ -6027,7 +6027,10 @@ let autoAttackTarget = null;
 // When the point isn't reachable in a straight line (a wall sits between), we
 // plan a route around it — `path` holds the waypoints and `pathIdx` the one the
 // hero is currently heading for (see updateMoveTargetPath / updatePlayer).
-const moveTarget = { active: false, hold: false, wx: 0, wy: 0, path: null, pathIdx: 0,
+// `foe` (when set) makes this a CHASE: the destination glues to that foe's live
+// position each frame and clears once it's in weapon reach or dies — clicking a
+// foe paths you straight to it (see updatePlayer / the pointerup tap handler).
+const moveTarget = { active: false, hold: false, wx: 0, wy: 0, path: null, pathIdx: 0, foe: null,
                      _repathT: 0, _stallT: 0, _px: 0, _py: 0, _pathDX: -1, _pathDY: -1 };
 const MOVE_ARRIVE = 0.18;   // tiles — how close counts as "reached the click point"
 function heldDir(d) { return keyHeld[d] || touchHeld[d]; }
@@ -6036,7 +6039,7 @@ function clearHeld() {
   touchHeld.up = touchHeld.down = touchHeld.left = touchHeld.right = false;
   joy.active = false; joy.dx = joy.dy = joy.mag = 0;
   sprintHeld = false;
-  moveTarget.active = false; moveTarget.hold = false; moveTarget.path = null;
+  moveTarget.active = false; moveTarget.hold = false; moveTarget.path = null; moveTarget.foe = null;
 }
 // Move the hero to a grid cell AND sync the smooth float position to its centre.
 // Used everywhere the hero is repositioned (spawn, stairs, teleports, blinks,
@@ -6701,7 +6704,7 @@ window.gameGuide = function gameGuide(topic) {
     controls: [
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A single tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
-      `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
+      `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. HOVERING a foe pops its codex card (known stats) under the map. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
@@ -8410,6 +8413,7 @@ const JOY_MAX = 56;   // px throw radius (full tilt)
 const JOY_TAP = 12;   // travel under this counts as a tap, not a drag
 let joyId = null, joyOX = 0, joyOY = 0, joyMoved = false;
 let gestureStart = null;   // pointerdown anchor, for tap detection in BOTH layouts
+let gestureFoe = null;     // the foe under the press — so a tap chases/inspects THAT foe even if it scurries before release
 // Floating joystick visuals (DOM, so they're crisp and ignore the choppy camera).
 const joyBase = document.createElement('div');
 const joyKnob = document.createElement('div');
@@ -8430,12 +8434,14 @@ function setMoveTargetFromClient(cx, cy) {
   moveTarget.wx = Math.max(0.5, Math.min(MAP_W - 0.5, w.wx));
   moveTarget.wy = Math.max(0.5, Math.min(MAP_H - 0.5, w.wy));
   moveTarget.active = true;
+  moveTarget.foe = null;   // a plain ground point isn't a chase (a foe tap re-sets this)
   if (fresh) { moveTarget._stallT = 0; moveTarget._px = player.fx; moveTarget._py = player.fy; }
   // Work out whether we need to route around a wall to reach the new point.
   updateMoveTargetPath(false);
 }
 canvas.addEventListener('pointerdown', e => {
   gestureStart = { x: e.clientX, y: e.clientY };   // anchor for tap-to-inspect (both layouts)
+  gestureFoe = enemyAtClient(e.clientX, e.clientY); // the foe pressed on, latched for the tap
   // Pressing anywhere on the map that isn't the inspected foe dismisses its card
   // right away, so a click-and-hold / drag-to-move closes it too (a plain tap on the
   // SAME foe is left for pointerup, which toggles the card shut).
@@ -8459,7 +8465,11 @@ canvas.addEventListener('pointerdown', e => {
 canvas.addEventListener('pointermove', e => {
   // Desktop: while the button is held, keep the move target glued to the cursor.
   if (clickMoveId === e.pointerId) { if (moveTarget.hold) setMoveTargetFromClient(e.clientX, e.clientY); return; }
-  if (joyId !== e.pointerId) return;
+  if (joyId !== e.pointerId) {
+    // Desktop hover-to-inspect: pointing at a foe pops its codex card under the map.
+    if (isWebLayout()) updateHoverCard(e.clientX, e.clientY);
+    return;
+  }
   const dx = e.clientX - joyOX, dy = e.clientY - joyOY;
   const d = Math.hypot(dx, dy);
   if (d > JOY_TAP) joyMoved = true;
@@ -8485,22 +8495,39 @@ function endJoy(e, isUp) {
     // hero finishes walking to the spot and stops on arrival (handled in updatePlayer).
   }
   if (!isUp || moved) return;       // a cancel or a drag is not a tap
-  // A tap on a foe opens its inspect card (codex) instead of walking to it; on empty
-  // ground it dismisses an open card, otherwise (touch only) it's USE / grab / talk.
-  const foe = enemyAtClient(e.clientX, e.clientY);
-  if (foe) { if (wasClickMove) moveTarget.active = false; toggleEnemyCard(foe, e.clientX, e.clientY); return; }
+  // Prefer the foe pressed on at pointerdown (it may have moved off the tile before
+  // release), falling back to whatever sits under the release point.
+  const foe = (gestureFoe && !gestureFoe.dead) ? gestureFoe : enemyAtClient(e.clientX, e.clientY);
+  if (foe) {
+    // Desktop: clicking a foe PATHS you to it — the move target latches onto the live
+    // foe and chases it into weapon reach, then auto-attack takes over. Touch has no
+    // hover, so a tap still opens the codex card. Skip arming a chase while play is
+    // paused (a menu, or a frozen teleport/portal transit that leaves the canvas live
+    // but has no overlay) — matches the pointerdown move guard so a warp never emerges
+    // auto-walking.
+    if (isWebLayout()) { if (!rtPaused()) { moveTarget.foe = foe; moveTarget.active = true; updateMoveTargetPath(true); } return; }
+    toggleEnemyCard(foe);
+    return;
+  }
   if (enemyCardFor) { closeEnemyCard(); return; }
   if (!isWebLayout()) pickup();
 }
 canvas.addEventListener('pointerup', e => endJoy(e, true));
 canvas.addEventListener('pointercancel', e => endJoy(e, false));
+// Mouse left the map → drop any hover codex card (no pointermove fires off-canvas).
+canvas.addEventListener('pointerleave', () => {
+  if (isWebLayout() && clickMoveId === null && enemyCardFor) closeEnemyCard();
+});
 
-// ── TAP-TO-INSPECT: enemy codex card ──
-// Tapping a foe shows a concise stat card. Its numbers stay hidden as ??? until
-// you've killed enough of that species to "learn" them — each kill rolls toward
-// revealing more, with the full card unlocked at 10 kills. Bosses are an open
-// book on sight. Tapping the card, the same foe, or empty space closes it.
+// ── INSPECT: enemy codex card ──
+// A concise stat card for a foe: hovering one on desktop pops it (clicking a foe
+// paths to it instead); on touch a tap opens it. It shows under the map, semi-
+// transparent, so it never hides the foe you're pointing at. Its numbers stay
+// hidden as ??? until you've killed enough of that species to "learn" them — each
+// kill rolls toward revealing more, fully unlocked at 10 kills. Bosses are an open
+// book on sight.
 let enemyCardFor = null;
+let hoverFoe = null;   // the foe the cursor is currently over (desktop hover card)
 const BESTIARY_FULL = 10; // kills to fully reveal a species
 const ENEMY_STYLE_LABEL = {
   chaser: 'Hunter', swift: 'Swift', erratic: 'Erratic', lurker: 'Ambusher',
@@ -8547,17 +8574,27 @@ function enemyAtClient(cx, cy) {
     return t.mx >= en.x && t.mx < en.x + s && t.my >= en.y && t.my < en.y + s;
   }) || null;
 }
-function toggleEnemyCard(e, cx, cy) {
+function toggleEnemyCard(e) {
   if (enemyCardFor === e) { closeEnemyCard(); return; }
   enemyCardFor = e;
-  renderEnemyCard(e, cx, cy);
+  renderEnemyCard(e);
+}
+// Desktop hover: keep the codex card synced to the foe under the cursor. Only
+// re-renders when the pointed-at foe changes, so it's not per-frame DOM churn.
+function updateHoverCard(cx, cy) {
+  const foe = rtPaused() ? null : enemyAtClient(cx, cy);
+  if (foe === hoverFoe) return;
+  hoverFoe = foe;
+  if (foe) { enemyCardFor = foe; renderEnemyCard(foe); }
+  else if (enemyCardFor) closeEnemyCard();
 }
 function closeEnemyCard() {
   enemyCardFor = null;
+  hoverFoe = null;
   const el = document.getElementById('enemy-card');
   if (el) el.style.display = 'none';
 }
-function renderEnemyCard(e, cx, cy) {
+function renderEnemyCard(e) {
   const el = document.getElementById('enemy-card');
   if (!el) return;
   const kills = bestiaryKills(e);
@@ -8592,13 +8629,18 @@ function renderEnemyCard(e, cx, cy) {
   el.innerHTML =
     `<div class="ec-head">${icon}<div><div class="ec-name">${name}</div><div class="ec-sub">${sub}</div></div></div>` +
     `<div class="ec-grid">${rows}</div>${foot}`;
-  // Anchor near the tap, flipping/clamping to stay on-screen.
+  // A desktop hover card is a passive read-out (never eats a map click); a touch
+  // card stays tappable so a tap dismisses it.
+  el.style.pointerEvents = isWebLayout() ? 'none' : 'auto';
+  // Pin UNDER the map: centred along the bottom edge of the canvas, clamped to the
+  // viewport. Semi-transparent (see #enemy-card in styles.css) so it never hides
+  // the foe you're pointing at.
   el.style.display = 'block';
+  const cr = canvas.getBoundingClientRect();
   const r = el.getBoundingClientRect();
   const gap = 12;
-  let left = cx - r.width / 2;
-  let top = cy - r.height - gap;
-  if (top < gap) top = cy + gap;
+  let left = cr.left + (cr.width - r.width) / 2;
+  let top = cr.bottom - r.height - gap;
   left = Math.max(gap, Math.min(left, window.innerWidth - r.width - gap));
   top = Math.max(gap, Math.min(top, window.innerHeight - r.height - gap));
   el.style.left = left + 'px';
@@ -18307,40 +18349,60 @@ function updatePlayer(dt) {
   // furthest waypoint we can head straight for; otherwise we steer straight and let
   // movePlayerBy slide along walls. We bail only when genuinely wedged (non-hold).
   if (Math.abs(ix) > 0.01 || Math.abs(iy) > 0.01) {
-    moveTarget.active = false; moveTarget.path = null;
+    moveTarget.active = false; moveTarget.path = null; moveTarget.foe = null;
   } else if (moveTarget.active) {
-    // Refresh the route now and then as the hero advances (and drop it the moment
-    // a clear straight shot to the target opens up).
-    moveTarget._repathT -= dt;
-    if (moveTarget._repathT <= 0) { updateMoveTargetPath(true); moveTarget._repathT = 0.35; }
-
-    // Pick the point to steer at: the furthest path waypoint we can go straight to,
-    // or the exact click point when there's no route (or we're on the final leg).
-    let tx = moveTarget.wx, ty = moveTarget.wy;
-    const path = moveTarget.path;
-    let onFinalLeg = true;
-    if (path && path.length) {
-      let i = moveTarget.pathIdx;
-      while (i < path.length - 1 && moveLineClear(player.fx, player.fy, path[i + 1].x, path[i + 1].y)) i++;
-      moveTarget.pathIdx = i;
-      onFinalLeg = i >= path.length - 1;
-      if (!onFinalLeg) { tx = path[i].x; ty = path[i].y; }
-    }
-    const tdx = tx - player.fx, tdy = ty - player.fy;
-    const finalDist = Math.hypot(moveTarget.wx - player.fx, moveTarget.wy - player.fy);
-    if (!moveTarget.hold && onFinalLeg && finalDist <= MOVE_ARRIVE) {
-      moveTarget.active = false; moveTarget.path = null;   // reached the clicked point — stop
-    } else if (Math.hypot(tdx, tdy) > 0.02) {
-      [ix, iy] = steerToward(tdx, tdy);      // head for the waypoint; slide along any wall
-      // Give up only when truly stuck: no real ground covered for a beat (a wall or
-      // a foe pinning us). Path detours grow the straight-line gap, so we track
-      // actual movement, not distance-to-target. Holding never bails — it chases on.
-      if (!moveTarget.hold) {
-        if (Math.hypot(player.fx - moveTarget._px, player.fy - moveTarget._py) > 0.008) moveTarget._stallT = 0;
-        else if ((moveTarget._stallT += dt) > 1.1) { moveTarget.active = false; moveTarget.path = null; }
+    // Chasing a clicked foe ("path you to it"): glue the destination to its live
+    // position, and stop the moment it dies or comes into weapon reach — auto-attack
+    // then engages from where we stand instead of shoving into the body. O(1): the
+    // foe reference is held from the click, so no per-frame enemies scan here.
+    const f = moveTarget.foe;
+    if (f) {
+      if (f.dead || f.hp <= 0) {
+        moveTarget.active = false; moveTarget.path = null; moveTarget.foe = null;
+      } else {
+        const fs = f.size || 1;
+        moveTarget.wx = Math.max(0.5, Math.min(MAP_W - 0.5, f.fx == null ? f.x + fs / 2 : f.fx));
+        moveTarget.wy = Math.max(0.5, Math.min(MAP_H - 0.5, f.fy == null ? f.y + fs / 2 : f.fy));
+        const rng = weaponRangeOf((equipped || {}).weapon) || STYLE_RANGE[weaponStyle()] || 1;
+        if (footChebyshev(f) <= rng && (rng < 2 || hasLineToPlayer(f))) {
+          moveTarget.active = false; moveTarget.path = null; moveTarget.foe = null;
+        }
       }
     }
-    moveTarget._px = player.fx; moveTarget._py = player.fy;
+    if (moveTarget.active) {   // still en route (chase, above, may have just ended it)
+      // Refresh the route now and then as the hero advances (and drop it the moment
+      // a clear straight shot to the target opens up).
+      moveTarget._repathT -= dt;
+      if (moveTarget._repathT <= 0) { updateMoveTargetPath(true); moveTarget._repathT = 0.35; }
+
+      // Pick the point to steer at: the furthest path waypoint we can go straight to,
+      // or the exact click point when there's no route (or we're on the final leg).
+      let tx = moveTarget.wx, ty = moveTarget.wy;
+      const path = moveTarget.path;
+      let onFinalLeg = true;
+      if (path && path.length) {
+        let i = moveTarget.pathIdx;
+        while (i < path.length - 1 && moveLineClear(player.fx, player.fy, path[i + 1].x, path[i + 1].y)) i++;
+        moveTarget.pathIdx = i;
+        onFinalLeg = i >= path.length - 1;
+        if (!onFinalLeg) { tx = path[i].x; ty = path[i].y; }
+      }
+      const tdx = tx - player.fx, tdy = ty - player.fy;
+      const finalDist = Math.hypot(moveTarget.wx - player.fx, moveTarget.wy - player.fy);
+      if (!moveTarget.hold && onFinalLeg && finalDist <= MOVE_ARRIVE) {
+        moveTarget.active = false; moveTarget.path = null; moveTarget.foe = null;   // reached the point — stop
+      } else if (Math.hypot(tdx, tdy) > 0.02) {
+        [ix, iy] = steerToward(tdx, tdy);      // head for the waypoint; slide along any wall
+        // Give up only when truly stuck: no real ground covered for a beat (a wall or
+        // a foe pinning us). Path detours grow the straight-line gap, so we track
+        // actual movement, not distance-to-target. Holding never bails — it chases on.
+        if (!moveTarget.hold) {
+          if (Math.hypot(player.fx - moveTarget._px, player.fy - moveTarget._py) > 0.008) moveTarget._stallT = 0;
+          else if ((moveTarget._stallT += dt) > 1.1) { moveTarget.active = false; moveTarget.path = null; moveTarget.foe = null; }
+        }
+      }
+      moveTarget._px = player.fx; moveTarget._py = player.fy;
+    }
   }
   const mag = Math.hypot(ix, iy);
   const moving = mag > 0.01;
@@ -28734,6 +28796,7 @@ __dlLive("equipped", () => equipped, (v) => { equipped = v; });
 __dlLive("gateDiff", () => gateDiff, (v) => { gateDiff = v; });
 __dlLive("inventory", () => inventory, (v) => { inventory = v; });
 __dlLive("keybindCapture", () => keybindCapture, (v) => { keybindCapture = v; });
+__dlLive("lastCam", () => lastCam, undefined);   // read-only handle — lets tests map a screen point to a map tile (see clientToTile)
 __dlLive("lbMode", () => lbMode, (v) => { lbMode = v; });
 __dlLive("lbTab", () => lbTab, (v) => { lbTab = v; });
 __dlLive("merchant", () => merchant, (v) => { merchant = v; });
