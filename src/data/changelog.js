@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Leaderboard rows show class, subclass & all stats", by: "Jeff Louie", notes: [
+    "Each board row now carries a second line: the hero's specialization — their ascension (subclass) in its signature colour, or their base class — plus a sigil.",
+    "Every row shows floor, level, gold and Power together, not just the ranked stat, so you can compare heroes fully whichever board you're on. Big counts abbreviate (12.3k).",
+  ] },
   { date: "2026-07-03", size: "medium", v: "AI-play console tools see the whole game", by: "Claude", notes: [
     "gameState() surfaces what a console-driving agent was blind to: floor quests and their objective tiles, the cursed-floor 'greed' choice, the rainbow conquest gate, your hired Sellsword and active bounty, boss enrage/berserk phases, enemy affixes, your weapon's true reach, and a full survivability read-out (defense, crit, dodge, block, damage reduction, tenacity).",
     "canMove no longer misreports: every world-pausing overlay (the greed prompt, tier-conquest banner, hardcore death, leaderboard and more) now flips it false with the right mode, so an agent never fires dead movement keys.",

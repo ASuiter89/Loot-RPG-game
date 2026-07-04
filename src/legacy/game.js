@@ -24900,6 +24900,7 @@ function lbEntryFromPlayer() {
   return {
     name: String(player.name || 'Adventurer').slice(0, 16),
     player_class: player.class || null,
+    ascension: player.ascension || null,
     max_floor: lbInt(player.maxFloor || 1, 1),
     level: lbInt(player.level || 1, 1),
     gold: lbInt(player.maxGold || player.gold || 0, 0),
@@ -24914,7 +24915,7 @@ function lbScheduleSubmit() {
   if (!player || !player.name) return;
   player.maxGold = Math.max(player.maxGold || 0, player.gold || 0);
   player.maxPower = Math.max(player.maxPower || 0, playerPower() || 0);
-  const sig = [player.name, player.maxFloor || 1, player.level || 1, player.maxGold || 0, player.maxPower || 0, player.class || '', player.hardcore ? 'hc' : ''].join('|');
+  const sig = [player.name, player.maxFloor || 1, player.level || 1, player.maxGold || 0, player.maxPower || 0, player.class || '', player.ascension || '', player.hardcore ? 'hc' : ''].join('|');
   if (sig === lbLastSig) return;
   lbLastSig = sig;
   if (lbSubmitTimer) return; // a write is already queued; it'll pick up the latest stats
@@ -24941,6 +24942,7 @@ function lbSubmitLocal(entry) {
       all[i] = {
         name: entry.name,
         player_class: entry.player_class,
+        ascension: entry.ascension,
         max_floor: Math.max(all[i].max_floor || 1, entry.max_floor),
         level: Math.max(all[i].level || 1, entry.level),
         gold: Math.max(all[i].gold || 0, entry.gold),
@@ -25011,6 +25013,27 @@ function setLbMode(mode) {
   syncLbButtons();
   renderLeaderboard();
 }
+// A row's specialization label: the ascension (subclass) name in its signature
+// colour once the hero has ascended, otherwise the plain base-class name. Older
+// rows with an unknown/missing class read as "Wanderer".
+function lbSubclassLabel(r) {
+  const asc = r.ascension && typeof ASCENSIONS === 'object' && ASCENSIONS[r.ascension];
+  if (asc) return `<span class="lb-asc" style="color:${asc.color}">${dlIcon(asc.icon, 14) || ''}${escapeHtml(asc.name)}</span>`;
+  const c = r.player_class && typeof CLASSES === 'object' && CLASSES[r.player_class];
+  return `<span class="lb-cls">${c ? escapeHtml(c.name) : 'Wanderer'}</span>`;
+}
+// One compact stat chip for a board row. The three metrics OTHER than the current
+// sort ride the meta line, so every hero shows floor / level / gold / power at a
+// glance no matter which board you're on. Big counts abbreviate (12.3k) to fit.
+function lbStatChip(kind, r) {
+  switch (kind) {
+    case 'floor': return `<span class="lb-chip">${lbFloorLabel(r.max_floor || 1)}</span>`;
+    case 'level': return `<span class="lb-chip">Lv ${r.level || 1}</span>`;
+    case 'gold':  return `<span class="lb-chip"><span data-spr=ic_money></span>${fmtGold(r.gold || 0)}</span>`;
+    case 'power': return `<span class="lb-chip">${PWR_GLYPH}${fmtGold(r.power || 1)}</span>`;
+    default: return '';
+  }
+}
 async function renderLeaderboard() {
   const list = document.getElementById('lb-list');
   const status = document.getElementById('lb-status');
@@ -25042,11 +25065,23 @@ async function renderLeaderboard() {
     // everyone else is a plain row. The rank is always a plain number.
     const top = i < 3 ? ` lb-top-${i + 1}` : '';
     const me = myName && r.name === myName ? ' me' : '';
+    // Second line: the hero's specialization (subclass) on the left, and the
+    // stats OTHER than the one being sorted on the right — so a row shows class,
+    // ascension, floor, level, gold and power together, not just the ranked stat.
+    const meta = ['floor', 'level', 'gold', 'power']
+      .filter(k => k !== lbTab)
+      .map(k => lbStatChip(k, r)).join('');
     return `<div class="lb-row${top}${me}">
-      <span class="lb-rank">${i + 1}</span>
-      <span class="lb-class">${cls}</span>
-      <span class="lb-name">${escapeHtml(r.name)}</span>
-      <span class="lb-val">${sort.fmt(r[sort.col] || 0)}</span>
+      <div class="lb-row-main">
+        <span class="lb-rank">${i + 1}</span>
+        <span class="lb-class">${cls}</span>
+        <span class="lb-name">${escapeHtml(r.name)}</span>
+        <span class="lb-val">${sort.fmt(r[sort.col] || 0)}</span>
+      </div>
+      <div class="lb-row-meta">
+        <span class="lb-sub">${lbSubclassLabel(r)}</span>
+        <span class="lb-meta">${meta}</span>
+      </div>
     </div>`;
   }).join('');
 }
