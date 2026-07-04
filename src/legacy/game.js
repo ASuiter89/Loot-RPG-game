@@ -5723,11 +5723,11 @@ function buySkill(id) {
   if (hpGain > 0) gains.push(`+${hpGain} max HP`);
   if (mpGain > 0) gains.push(`+${mpGain} max MP`);
   const gainStr = gains.length ? ` (${gains.join(', ')})` : '';
-  // Milestone rank reached? Shout the power spike + the perk it unlocks. Passives
-  // surge at the same ranks (3/7/10) — their always-on bonus spikes (keystones cap
-  // at rank 1, so they never hit one).
+  // Milestone rank reached? Shout its name + exactly what it grants. Passives surge
+  // at the same ranks (3/7/10) — their always-on bonus spikes (keystones cap at rank
+  // 1, so they never hit one).
   const ms = (node.type === 'active' || (node.type === 'passive' && !node.keystone)) && SKILL_MILESTONES.find(m => m.rank === newRank);
-  const msStr = ms ? (node.type === 'passive' ? ` ${ms.pips} Milestone — bonus surges!` : ` ${ms.pips} Milestone — power spike + ${ms.perk}!`) : '';
+  const msStr = ms ? ` ${ms.pips} ${ms.name} — ${node.type === 'passive' ? ms.passiveDesc : ms.activeDesc}!` : '';
   if (ms) screenFlash('#ffd27a');
   log(`<span data-spr=mat_glimmer></span> Learned ${node.name}${(node.max || 1) > 1 ? ` (rank ${newRank}/${node.max})` : ''}${summary ? ` — now ${summary}.` : '.'}${gainStr}${msStr}`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); saveGame();
@@ -6961,8 +6961,8 @@ window.gameGuide = function gameGuide(topic) {
       `Every active is either a SKILL (martial/weapon-based) or a SPELL (magic) — shown as a SKILL / SPELL badge on its tree node and in gameState().skills[i].school. A SKILL scales with your weapon damage + Skill Power gear; a SPELL scales with Spirit + Spell Power gear. Gear those stats to match the actives you lean on.`,
       `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and a rank-7 skill adds an extra ×1.2. The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
-      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — a big power surge (Empowered), then more power + a shorter cooldown (Honed), then more power + wider reach (Mastered) — so deepening a key skill outpaces its rising mana cost. Every skill's detail card shows a "Rank bonuses" ladder listing all three, each lit green with a ✓ once your rank has earned it.`,
-      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. Its detail card shows a Surge chip, milestone pips by the rank, the bigger jump in the on-rank-up preview, and the same green-when-earned "Rank bonuses" ladder. Keystones stay single-rank, so they don't surge.`,
+      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% power (Empowered), then +20% power and a 20%-faster recharge (Honed), then +30% power plus +1 radius/range/target/hit (Mastered) — so deepening a key skill outpaces its rising mana cost. Every skill's detail card shows a "Rank bonuses" ladder listing all three, each lit green with a ✓ once your rank has earned it.`,
+      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. Its detail card lists all three in the green-when-earned "Rank bonuses" ladder, shows milestone pips by the rank, and the surge is folded into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
@@ -23435,7 +23435,11 @@ function skillMechList(n, rank) {
     if (c.shape === 'teleport') add('Gap-closer', '#5fc9c0', `Blink up to ${c.range || 6} tiles onto the nearest foe and strike — closes on ranged attackers.`);
     if (c.pull) add('Pull', '#5fc9c0', 'Yanks a distant foe across the gap to you.');
     if (c.recall) add('Escape', '#5fc9c0', 'Blink away to the spot furthest from any foe.');
+    if (c.crit) add('Crit', '#e05a4b', 'Every hit is a guaranteed critical.');
     if (c.status) add('Status', '#d98a6f', `Inflicts ${c.status.effect} (${secsTxt(c.status.dur)}).`);
+    if (c.knockback) add('Knockback', '#d98a6f', `Shoves foes back ${c.knockback} tile${c.knockback > 1 ? 's' : ''}.`);
+    if (c.execute) add('Execute', '#e07a3a', `Instantly finishes non-boss foes at or below ${Math.round(c.execute * 100)}% HP.`);
+    if (c.lifesteal) add('Leech', '#7ad08a', `Heals you for ${Math.round(c.lifesteal * 100)}% of the damage dealt.`);
     if (c.detonate) add('Detonate', '#e07a3a', `Explodes vuln-marked foes for ${Math.round(c.detonate * 100)}% damage.`);
     if (c.summon) add('Summon', '#7ad08a', `Calls ${c.summon.count > 1 ? c.summon.count + ' ' : ''}${c.summon.kind}${c.summon.count > 1 ? 's' : ''} for ${secsTxt(c.summon.ttl)}.`);
     if (Array.isArray(c.buff)) for (const b of c.buff) add('Buff', '#6fb7d9', `${buffAmt(b)} ${BUFF_LABEL[b.id] || b.id} (${secsTxt(b.dur)}).`);
@@ -23447,9 +23451,8 @@ function skillMechList(n, rank) {
       if (parts.length) add('Heal', '#7ad08a', parts.join(' + ') + '.');
     }
   }
-  // Passive milestone surge — the always-on bonus spikes at ranks 3/7/10 for going
-  // deep (keystones cap at rank 1, so they never surge).
-  if (n.type === 'passive' && !n.keystone && (n.fx || n.cfx)) add('Surge', '#e8c267', 'Ranks 3 / 7 / 10 spike this passive’s bonus — a reward for going deep.');
+  // Passive milestone surges (the +8/+10/+12% spikes at ranks 3/7/10) now get their
+  // own specific "Rank bonuses" ladder in the card, so no vague Surge chip here.
   // Cross-cutting keystone rule that a stat line can't show.
   if (n.kflag === 'bloodpact') add('Keystone', '#e8c267', 'Active skills cost life instead of mana.');
   return rows;

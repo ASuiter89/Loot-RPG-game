@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Skill milestone text now states exact numbers", by: "Claude", notes: [
+    "The rank 3 / 7 / 10 \"Rank bonuses\" ladder now spells out each milestone: +28% power (Empowered), +20% power & 20% faster recharge (Honed), +30% power plus +1 radius/range/target/hit (Mastered) — no more vague \"a power surge\".",
+    "Passive milestones read their exact surge too — +8% / +10% / +12% to the bonus — and the milestone level-up log line now shouts the specific gain.",
+    "Skill cards gained Leech, Execute, Knockback and guaranteed-Crit chips that show the actual percentages and tile counts, so a skill's numbers no longer hide inside its flavor text.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Play on your phone — a real touch interface", by: "Claude", notes: [
     "The game now has a full mobile layout. The first time you touch the screen it switches to a phone interface; a mouse switches it back — nothing changes for keyboard-and-mouse play.",
     "Drag anywhere on the map to raise a floating joystick and steer the hero. A quick tap walks you there and uses whatever's there on arrival — a chest, an NPC — or chases a tapped foe. A quick flick of the joystick dashes.",

@@ -1,20 +1,20 @@
 // The fixed power spikes every rankable skill shares at ranks 3 / 7 / 10. Pouring
-// points into one skill pays off in jumps, not just a slow drip: each milestone
-// grants a power surge PLUS a signature perk (kept generic so it applies to every
-// data-driven skill). Pure presentation data — the pip glyphs shown by the rank
-// readout, the milestone's name + perk, and a per-type blurb of what it grants.
-// Actives gain reach and a shorter cooldown that a passive can't, so each entry
-// carries BOTH an active and a passive description. The magnitudes themselves live
-// in src/systems/skillMath.js (milestonePower / passiveMilestonePower); keystones
-// cap at rank 1, so they never reach one.
+// points into one skill pays off in jumps, not a slow drip. Pure presentation data:
+// the pip glyphs shown by the rank readout, the milestone's name, and a per-type
+// line of EXACTLY what it grants (actives gain reach + a faster recharge a passive
+// can't, so each carries both an active and a passive line). The numbers mirror
+// src/systems/skillMath.js (milestonePower's +28/+20/+30% active spikes and
+// passiveMilestonePower's +8/+10/+12% passive spikes) and resolveCast's rank-10
+// reach step (+1 radius/range/target/hit) — keep them in sync. Keystones cap at
+// rank 1, so they never reach one.
 export const SKILL_MILESTONES = [
-  { rank: 3, pips: '✦', name: 'Empowered', perk: 'power surge',
-    activeDesc: 'a big power surge — every hit lands harder',
-    passiveDesc: 'its always-on bonus surges' },
-  { rank: 7, pips: '✦✦', name: 'Honed', perk: 'shorter cooldown',
-    activeDesc: 'more power, plus a shorter cooldown',
-    passiveDesc: 'a bigger surge to its bonus' },
-  { rank: 10, pips: '✦✦✦', name: 'Mastered', perk: 'wider reach',
-    activeDesc: 'more power, plus wider reach — extra hits and targets',
-    passiveDesc: 'the biggest surge to its bonus' },
+  { rank: 3, pips: '✦', name: 'Empowered',
+    activeDesc: '+28% power',
+    passiveDesc: '+8% to its bonus' },
+  { rank: 7, pips: '✦✦', name: 'Honed',
+    activeDesc: '+20% power · 20% faster recharge',
+    passiveDesc: '+10% to its bonus' },
+  { rank: 10, pips: '✦✦✦', name: 'Mastered',
+    activeDesc: '+30% power · +1 radius/range, +1 target, +1 hit',
+    passiveDesc: '+12% to its bonus' },
 ];
