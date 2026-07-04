@@ -27474,28 +27474,40 @@ function updateCooldownDials() {
 // Slide every enemy sprite toward its logic cell each frame so cell-to-cell steps
 // read as smooth motion. Big displacements (knockback, blink, a 2-tile dash) snap
 // rather than drift through walls. Lazy-inits fx/fy for foes spawned mid-floor.
+// Glide an actor's render centre (a.fx/a.fy) toward its logic cell (tx,ty) at a
+// CONSTANT velocity — the way the hero moves — instead of an ease-in that
+// decelerates on arrival (which read as a tile-to-tile hop). When the logic cell
+// steps to a new tile, we set a speed that covers the gap in exactly one world
+// beat, so the sprite arrives just as the next step begins: seamless, continuous
+// 8-direction motion, never a pop. A large jump (blink/teleport/floor rebuild)
+// snaps rather than sliding across the room. Render-only: logic positions,
+// collision and completion checks are untouched. `gx0/gy0` cache the last target
+// tile; `gsp` is the glide speed (tiles/sec). Returns the heading for facing.
+function glideActor(a, tx, ty, dt) {
+  if (a.fx == null) { a.fx = tx; a.fy = ty; a._gx0 = tx; a._gy0 = ty; a._gsp = 0; return; }
+  if (Math.abs(tx - a.fx) > 1.6 || Math.abs(ty - a.fy) > 1.6) { a.fx = tx; a.fy = ty; a._gx0 = tx; a._gy0 = ty; a._gsp = 0; return; }
+  if (tx !== a._gx0 || ty !== a._gy0) {                 // stepped to a new tile
+    const gap = Math.hypot(tx - a.fx, ty - a.fy);
+    a._gsp = gap / WORLD_TICK_SECONDS;                  // cover it in one beat → constant speed
+    a._gx0 = tx; a._gy0 = ty;
+  }
+  const dx = tx - a.fx, dy = ty - a.fy, dist = Math.hypot(dx, dy);
+  if (dist > 1e-4) {
+    const stepLen = Math.min(dist, (a._gsp || (1 / WORLD_TICK_SECONDS)) * dt);
+    a.fx += dx / dist * stepLen; a.fy += dy / dist * stepLen;
+    a.faceDx = dx; a.faceDy = dy;                       // remember heading (for facing)
+  }
+}
 function updateActorRender(dt) {
-  const k = Math.min(1, dt * ENEMY_INTERP);
   for (const e of enemies) {
     if (e.atkCd > 0) e.atkCd -= dt;               // real-time attack cooldown
     const s = e.size || 1;
-    const tx = e.x + s / 2, ty = e.y + s / 2;     // footprint centre
-    if (e.fx == null) { e.fx = tx; e.fy = ty; continue; }
-    if (Math.abs(tx - e.fx) > 1.5 || Math.abs(ty - e.fy) > 1.5) { e.fx = tx; e.fy = ty; }
-    else { e.fx += (tx - e.fx) * k; e.fy += (ty - e.fy) * k; }
+    glideActor(e, e.x + s / 2, e.y + s / 2, dt);  // footprint centre
   }
-  // The quest NPC (an escorted follower, or a wandering lost pet) steps cell-to-
-  // cell on the world tick; glide its sprite toward that logic cell the same way
-  // so it reads as fluid follow movement instead of snapping tile to tile. fx/fy
-  // track the cell in the same top-left convention as npc.x/npc.y (the draw code
-  // adds the +0.5 centre offset). This is render-only — logic positions are
-  // untouched, so completion checks and collision are unaffected.
-  if (quest && quest.npc) {
-    const n = quest.npc;
-    if (n.fx == null) { n.fx = n.x; n.fy = n.y; }
-    else if (Math.abs(n.x - n.fx) > 1.5 || Math.abs(n.y - n.fy) > 1.5) { n.fx = n.x; n.fy = n.y; }
-    else { n.fx += (n.x - n.fx) * k; n.fy += (n.y - n.fy) * k; }
-  }
+  // The quest NPC (an escorted follower, or a wandering lost pet) glides toward its
+  // logic cell in the same top-left convention as npc.x/npc.y (the draw code adds
+  // the +0.5 centre offset), so it reads as fluid follow movement, not a snap.
+  if (quest && quest.npc) glideActor(quest.npc, quest.npc.x, quest.npc.y, dt);
 }
 
 // ── Attack speed ──
