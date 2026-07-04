@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { abbreviateNumber, formatDamageRange } from '../../src/utils/format.js';
+import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../../src/utils/format.js';
 
 describe('abbreviateNumber', () => {
   it('prints small values exactly (rounded)', () => {
@@ -59,5 +59,42 @@ describe('formatDamageRange', () => {
 
   it('abbreviates each end independently', () => {
     expect(formatDamageRange(900, 1500)).toBe('900–1.5k');
+  });
+});
+
+describe('abbreviateNumbersIn', () => {
+  it('abbreviates a bare big damage number', () => {
+    expect(abbreviateNumbersIn('15230')).toBe('15k');   // ≥10 of a unit → whole
+    expect(abbreviateNumbersIn('8400')).toBe('8.4k');   // <10 of a unit → one decimal
+    expect(abbreviateNumbersIn('2000000')).toBe('2M');
+  });
+  it('leaves numbers under 1000 (fewer than 4 digits) untouched', () => {
+    expect(abbreviateNumbersIn('250')).toBe('250');
+    expect(abbreviateNumbersIn('999')).toBe('999');
+  });
+  it('keeps prefixes and suffixes around the number', () => {
+    expect(abbreviateNumbersIn('15230!')).toBe('15k!');        // crit marker
+    expect(abbreviateNumbersIn('+8400')).toBe('+8.4k');        // heal / gold
+    expect(abbreviateNumbersIn('-2500')).toBe('-2.5k');        // life cost
+    expect(abbreviateNumbersIn('💥8400')).toBe('💥8.4k');      // detonation
+    expect(abbreviateNumbersIn('+12000 MP')).toBe('+12k MP');  // mana restore
+  });
+  it('only abbreviates the 4+ digit run in a compound label', () => {
+    expect(abbreviateNumbersIn('2×15230')).toBe('2×15k');      // the ×2 count stays
+    expect(abbreviateNumbersIn('BLOCK 4200')).toBe('BLOCK 4.2k');
+    expect(abbreviateNumbersIn('2×250')).toBe('2×250');        // nothing 4+ digits
+  });
+  it('leaves pure-text labels alone', () => {
+    expect(abbreviateNumbersIn('MISS')).toBe('MISS');
+    expect(abbreviateNumbersIn('DODGE')).toBe('DODGE');
+    expect(abbreviateNumbersIn('FURY 3')).toBe('FURY 3');
+  });
+  it('does not disturb sprite-span markup (no 4-digit runs in keys)', () => {
+    expect(abbreviateNumbersIn('<span data-spr=ic_orb></span>13400'))
+      .toBe('<span data-spr=ic_orb></span>13k');
+  });
+  it('returns non-string input unchanged', () => {
+    expect(abbreviateNumbersIn(undefined)).toBe(undefined);
+    expect(abbreviateNumbersIn(1234)).toBe(1234);
   });
 });

@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Floating combat numbers abbreviate when big", by: "Claude", notes: [
+    "The damage, heal and gold numbers that pop up on screen now abbreviate once they pass a thousand (15230 → 15k, 2500000 → 2.5M) instead of splashing the tile with a wall of digits — matching the skill tooltips and the gold in your HUD.",
+    "Small numbers, crit marks and labels (BLOCK, MISS, +50 MP) read exactly as before.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Cracked walls break again; foe card sits under the minimap", by: "Claude", notes: [
     "Clicking (or holding on) a cracked wall once more walks you INTO it so you shove it down — the walk-up-to-the-edge behaviour now skips cracked walls, which you break by pressing into them. Routes still go around them.",
     "The hovered-foe codex card now sits right under the minimap instead of floating at the bottom-centre of the screen.",

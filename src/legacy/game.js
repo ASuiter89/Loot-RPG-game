@@ -24,7 +24,7 @@ import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.j
 import { footprintSealsPath } from '../systems/decorPlacement.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
-import { abbreviateNumber, formatDamageRange } from '../utils/format.js';
+import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
 import { castHaste, castsPerSecond, effectiveDps } from '../systems/skillDamage.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
@@ -15808,6 +15808,11 @@ function spawnFloatingText(x, y, text, color, size, coin) {
   // bold pop, used for crit / rampage damage numbers). `coin` draws the gold-coin
   // sprite to the left of the text so gold floaters read as "coin + amount", to
   // match the HUD/menus instead of a trailing "g".
+  // Big pop-up numbers (a deep-floor crit, a fat gold drop) would splash the tile
+  // with a wall of digits, so abbreviate any 1000+ run the same way the HUD and
+  // skill tooltips do (15230 → 15.2k). Labels, small numbers and prefixes like
+  // "2×" / "+…MP" are left intact. See src/utils/format.js.
+  text = abbreviateNumbersIn(text);
   const now = Date.now();
   // Anti-overlap: a kill or multi-hit can fire several floaters at almost the
   // same spot in one frame. Rather than let them pile into an unreadable blob,
