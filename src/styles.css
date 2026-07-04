@@ -1855,14 +1855,20 @@
   /* Frozen LOOT-tab header — subtabs, sort/filter, Auto-Loot, the bulk bar and
      the stat key stay pinned at the top while the item list scrolls beneath.
      Negative margins stretch it across the drawer's padding gutters (re-added
-     inside) so scrolling rows can't peek through at the edges. */
+     inside) so scrolling rows can't peek through at the edges. The bottom
+     padding is load-bearing: without it the last child's (the stat-key
+     collapsible) bottom margin collapses through the header, so this sticky,
+     higher-z-index header overlaps the top loot row — and since the header
+     paints above the list, clicks on the top item's upper edge hit the
+     collapsible instead of selecting the item. The padding gives the header a
+     solid bottom edge that clears the first row (and its upgrade glow). */
   .loot-head {
     position: sticky;
     top: 0;
     z-index: 5;
     background: var(--panel);
     margin: -6px -6px 0;
-    padding: 6px 6px 0;
+    padding: 6px 6px 10px;
     box-shadow: 0 4px 8px -4px color-mix(in srgb, var(--ink) 70%, transparent);
   }
 
@@ -3895,8 +3901,10 @@
        it. box-sizing keeps rows from overflowing their own padding. */
     #panel-content { padding: 8px 12px 8px 8px; }
     #panel-content .loot-item, #panel-content .row-btn { box-sizing: border-box; }
-    /* Match the frozen header's gutter-cover to the wider desktop padding. */
-    #panel-content .loot-head { margin: -8px -12px 0 -8px; padding: 8px 12px 0 8px; }
+    /* Match the frozen header's gutter-cover to the wider desktop padding. The
+       bottom padding (see the base .loot-head rule) keeps the stat-key
+       collapsible from overlapping — and stealing clicks from — the top row. */
+    #panel-content .loot-head { margin: -8px -12px 0 -8px; padding: 8px 12px 10px 8px; }
     /* Skill-tree node names: on desktop there's ample room around the web, so let
        full names ("Warstomp", "Unbreakable") wrap/extend instead of truncating to
        "Warsto…". The #id selector wins over the .sk-tree.web / .sk-tnode rules. */

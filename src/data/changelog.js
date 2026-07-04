@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Top loot row no longer opens the stat key", by: "Claude", notes: [
+    "The frozen stat-key bar no longer overlaps the first item in the bag, so clicking the top row — usually the upgrade-highlighted one — selects it (with its Sell / Scrap / Lock actions) instead of toggling the Stat abbreviations panel.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Skill damage pill always shows its real range", by: "Claude", notes: [
     "The Damage pill on a skill's card now always shows a low–high range. When a hit's spread is narrow next to a big number, both ends used to abbreviate to the same value and collapse to one figure — it now adds just enough decimal precision to show the true span (e.g. 16.0k–16.3k instead of a lone 16k). A fixed-damage spell still shows a single number, because it has no roll.",
     "The Damage and DPS pills dropped their trailing explanation text — they're just the numbers now — and every pill's value is right-aligned, tag on the left.",
