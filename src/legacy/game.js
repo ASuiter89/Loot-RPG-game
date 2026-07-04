@@ -11011,7 +11011,7 @@ function warpToTown() {
   buildTown();
   sfx('stairs');
   log('<span data-spr=feat_gate_red></span> The portal opens and you step through into the safety of town.', 'important');
-  log('Pick a service from the menu. The <span data-spr=feat_gate_red></span> Dungeon Gate takes you back below.');
+  log('Pick a service from the menu. <span data-spr=feat_gate_red></span> Warp to Dungeon takes you back below, or Return to Last Floor drops you right where you left.');
   updateBars();
   openTownHub();
   draw();
@@ -27494,7 +27494,7 @@ cloudBootSync();
 
 if (hadSave) {
   log(`Welcome back, level ${player.level} adventurer.`, 'important');
-  if (inTown) log('You are in town. Pick a service from the menu, or take the <span data-spr=feat_gate_red></span> Dungeon Gate back into the dungeon.');
+  if (inTown) log('You are in town. Pick a service from the menu, or take <span data-spr=feat_gate_red></span> Warp to Dungeon back into the dungeon.');
   else log(`Resuming on dungeon level ${dungeonLevel}. Your gear is intact.`);
 } else {
   log('Welcome to the dungeon. Use WASD or the arrow keys to move.', 'important');
