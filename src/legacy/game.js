@@ -10806,7 +10806,11 @@ function renderMercCamp() {
   const depth = player.maxFloor || 1;
   html += '<div class="pact-grid">' + MERC_TYPES.map(t => {
     const accent = t.accent || '#7fe0a0';
-    const icon = townWalkIcon(MERC_ART[t.id], 22) || dlIcon((typeof MINION_SPRITE === 'object' && MINION_SPRITE && MINION_SPRITE[t.minion]) || 'hero_warrior', 22);
+    // A merc's card carries an actual CHARACTER sprite, so it mirrors the hero card
+    // (.hero-card) instead of the Mystic's inline ability-icon head: name +
+    // description left-aligned, the walking sprite right-aligned and standing about
+    // as tall as those two lines. Hence the .merc-card one-off + the bigger sprite.
+    const icon = townWalkIcon(MERC_ART[t.id], 64) || dlIcon((typeof MINION_SPRITE === 'object' && MINION_SPRITE && MINION_SPRITE[t.minion]) || 'hero_warrior', 64);
     const buttons = MERC_DURATIONS.map(dur => {
       const cost = mercCost(t.mult, depth, dur.mult);
       const afford = spendableGold() >= cost;
@@ -10816,9 +10820,14 @@ function renderMercCamp() {
         <span class="pact-cost${afford ? '' : ' cost-short'}"><span data-spr=ic_money></span>${cost.toLocaleString()}</span>
       </button>`;
     }).join('');
-    return `<div class="pact-card" style="--accent:${accent};--accentSoft:${hexA(accent, 0.14)}">
-      <div class="pact-head"><span class="pact-ic">${icon}</span><span class="pact-name">${t.name}</span></div>
-      <div class="pact-desc">${t.desc}</div>
+    return `<div class="pact-card merc-card" style="--accent:${accent};--accentSoft:${hexA(accent, 0.14)}">
+      <div class="merc-top">
+        <div class="merc-info">
+          <div class="pact-name">${t.name}</div>
+          <div class="pact-desc">${t.desc}</div>
+        </div>
+        <div class="merc-portrait">${icon}</div>
+      </div>
       <div class="pact-buy-label">Hire for</div>
       <div class="pact-durations">${buttons}</div>
     </div>`;
