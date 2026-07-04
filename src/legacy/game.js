@@ -31,7 +31,7 @@ import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
 import { CHANGELOG } from '../data/changelog.js';
 import { MUSIC_SECTIONS } from '../data/musicSections.js';
-import { bassSemi, voiceChord } from '../systems/musicGroove.js';
+import { bassSemi, voiceChord, voiceSpread } from '../systems/musicGroove.js';
 import { terrainPacksInUse } from '../data/terrainPacks.js';
 import { renderProcMap } from '../render/procTerrain.js';
 import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
@@ -7199,11 +7199,17 @@ function musicLerp(key, blend) {
 // sound BOTH the old and new instrument at crossfaded volumes — that overlap is
 // what makes the timbre "morph" into the next section instead of hard-switching.
 // A far richer music voice than the shared sfx `voice()`: real ADSR with a
-// sustain stage, layered detuned oscillators, plus per-role shaping so bass,
-// pad and lead read as distinct instruments instead of the same soft flute.
-//  - bass: sawtooth + a sine sub an octave down (punchy, warm)
-//  - pad:  the style wave + a fifth for width, slow attack, long release
-//  - lead: the style wave + an octave harmonic + gentle vibrato (it sings)
+// sustain stage, layered oscillators, and a per-style `voice` recipe so the
+// soundtrack draws on a whole rack of distinct electronic instruments instead of
+// the same three shapes. Each style names a voice per role in the section data;
+// an unset voice falls back to the classic per-role shape (saw bass / warm pad /
+// singing lead). The recipes:
+//   BASS  saw   bright driving saw + sub          sub   round sine/tri sub (no oom-pah)
+//         reese detuned-saw growl + sub           acid  303 saw with a resonant sweep
+//   LEAD  sing  wave + octave + vibrato           pluck fast-decay bell/marimba (no sustain)
+//         square hollow reedy square              supersaw big stack of detuned saws
+//         fm    metallic FM bell / e-piano
+//   PAD   warm  wave + a fifth, slow swell        supersaw / fm  as above, pad-shaped
 function mVoice(o) {
   const ctx = audio.ctx;
   if (!ctx) return;
@@ -7211,18 +7217,64 @@ function mVoice(o) {
   let type = o.type || 'triangle', vol = o.vol != null ? o.vol : 0.18;
   let detune = o.detune != null ? o.detune : 6, cutoff = o.cutoff || 2200, q = o.q || 1;
   let attack = o.attack || 0.012, sustain = 0.6, release = 0.12;
-  let sub = 0, fifth = 0, octave = 0, vibrato = 0;
-  if (role === 'bass') { type = 'sawtooth'; attack = 0.008; sustain = 0.82; release = 0.06; sub = 0.55; cutoff = Math.min(cutoff, 1400); q = Math.max(q, 1.4); }
-  else if (role === 'pad') { attack = Math.max(attack, 0.09); sustain = 0.85; release = 0.35; fifth = 0.32; vol *= 0.92; }
-  else if (role === 'lead') { attack = 0.014; sustain = 0.52; release = 0.14; octave = 0.28; vibrato = 5; q = Math.max(q, 1.2); }
+  // Timbre knobs the recipes flip on:
+  let sub = 0, subType = 'sine';    // sub-oscillator an octave down
+  let fifth = 0, octave = 0;        // added harmonics (width / brightness)
+  let vibrato = 0;                  // pitch-LFO depth (cents)
+  let unison = 0, uniSpread = 0;    // super-saw / reese: extra detuned voices
+  let fm = 0, fmRatio = 2;          // FM: modulator depth (× freq) and ratio
+  let filterEnv = 0;                // acid: resonant cutoff sweep (× cutoff)
+  const voice = o.voice || (role === 'bass' ? 'saw' : role === 'lead' ? 'sing' : 'warm');
+  switch (voice) {
+    // ── bass instruments ──
+    case 'sub':                     // deep round sub — smooth, never oom-pah
+      if (type === 'sawtooth' || type === 'square') type = 'triangle';
+      attack = 0.02; sustain = 0.95; release = 0.16; sub = 0.7; cutoff = Math.min(cutoff, 850); q = Math.max(q, 0.7); break;
+    case 'reese':                   // detuned-saw growl (drum & bass)
+      type = 'sawtooth'; attack = 0.012; sustain = 0.92; release = 0.14; sub = 0.55;
+      unison = 3; uniSpread = Math.max(detune, 16); cutoff = Math.min(cutoff, 1300); q = Math.max(q, 2); break;
+    case 'acid':                    // 303-style resonant squelch (house / industrial)
+      type = 'sawtooth'; attack = 0.006; sustain = 0.55; release = 0.09; sub = 0.3;
+      q = Math.max(q, 7); filterEnv = 3.5; cutoff = Math.min(cutoff, 780); break;
+    case 'saw':                     // classic bright driving bass
+      type = 'sawtooth'; attack = 0.008; sustain = 0.82; release = 0.06; sub = 0.55;
+      cutoff = Math.min(cutoff, 1400); q = Math.max(q, 1.4); break;
+    // ── lead / pad instruments ──
+    case 'supersaw':                // huge stack of detuned saws (EDM lead / big chords)
+      type = 'sawtooth'; sustain = 0.72; release = 0.18;
+      unison = role === 'pad' ? 2 : 3; uniSpread = Math.max(detune, 18);
+      attack = role === 'pad' ? Math.max(attack, 0.05) : 0.012;
+      if (role === 'lead') octave = 0.16; if (role === 'pad') vol *= 0.9; break;
+    case 'pluck':                   // fast-decay plucky bell/marimba — no sustain
+      attack = 0.003; sustain = 0.0; release = 0.06; octave = 0.16; cutoff = Math.max(cutoff, 2600); break;
+    case 'fm':                      // metallic FM bell / electric piano
+      attack = role === 'pad' ? 0.04 : 0.008; sustain = 0.5; release = 0.22;
+      fm = 1.6; fmRatio = role === 'pad' ? 3 : 2; if (role === 'pad') vol *= 0.9; break;
+    case 'square':                  // hollow reedy retro lead
+      type = 'square'; attack = 0.01; sustain = 0.55; release = 0.12; octave = 0.2; vibrato = 4; break;
+    case 'sing':                    // singing lead — wave + octave harmonic + vibrato
+      attack = 0.014; sustain = 0.52; release = 0.14; octave = 0.28; vibrato = 5; q = Math.max(q, 1.2); break;
+    case 'warm':                    // soft pad — wave + a fifth for width, slow swell
+    default:
+      attack = Math.max(attack, 0.09); sustain = 0.85; release = 0.35; fifth = 0.32; vol *= 0.92; break;
+  }
 
   const g = ctx.createGain();
   const f = ctx.createBiquadFilter();
   f.type = 'lowpass'; f.Q.value = q;
-  f.frequency.setValueAtTime(cutoff, when);
-  f.frequency.exponentialRampToValueAtTime(Math.max(220, cutoff * 0.55), when + dur);
+  if (filterEnv > 0) {
+    // Acid squelch: snap the cutoff up on the attack, then decay it back down
+    // under high resonance for that vocal 303 quack.
+    f.frequency.setValueAtTime(cutoff, when);
+    f.frequency.exponentialRampToValueAtTime(Math.min(12000, cutoff * filterEnv), when + attack + 0.02);
+    f.frequency.exponentialRampToValueAtTime(Math.max(160, cutoff * 0.6), when + dur);
+  } else {
+    f.frequency.setValueAtTime(cutoff, when);
+    f.frequency.exponentialRampToValueAtTime(Math.max(220, cutoff * 0.55), when + dur);
+  }
 
   // ADSR: attack -> quick decay to a sustain plateau -> release to silence.
+  // (A pluck's sustain is 0, so it decays straight to silence — a short bell.)
   const peak = Math.max(0.0002, vol);
   const sus = Math.max(0.0002, vol * sustain);
   const decayEnd = when + attack + 0.06;
@@ -7241,11 +7293,25 @@ function mVoice(o) {
     os.connect(og); og.connect(f); os.start(when); os.stop(stopAt);
     return os;
   };
-  osList.push(mk(type, freq, -detune, 0.85));
-  osList.push(mk(type, freq, detune, 0.85));
+  // Main oscillator stack: a detuned pair, or a wider super-saw / reese cluster.
+  if (unison > 0) {
+    const spread = voiceSpread(unison * 2 + 1, uniSpread);
+    const gPer = 0.82 / Math.sqrt(spread.length);
+    for (const dt of spread) osList.push(mk(type, freq, dt, gPer));
+  } else {
+    osList.push(mk(type, freq, -detune, 0.85));
+    osList.push(mk(type, freq, detune, 0.85));
+  }
   if (octave > 0) mk(type, freq * 2, 4, octave);
   if (fifth > 0) mk(type, freq * 1.5, 3, fifth);
-  if (sub > 0) mk('sine', freq / 2, 0, sub);
+  if (sub > 0) mk(subType, freq / 2, 0, sub);
+  // FM: a sine modulator bends the carriers' pitch for a metallic bell timbre.
+  if (fm > 0) {
+    const mod = ctx.createOscillator(); mod.type = 'sine'; mod.frequency.value = freq * fmRatio;
+    const mg = ctx.createGain(); mg.gain.value = fm * freq;
+    mod.connect(mg); osList.forEach(os => mg.connect(os.frequency));
+    mod.start(when); mod.stop(stopAt);
+  }
   if (vibrato > 0) {
     const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5.4;
     const lg = ctx.createGain(); lg.gain.value = vibrato;
@@ -7311,7 +7377,7 @@ function musicVoiceSection(role, sec, vmul, o) {
   const vel = o.vel != null ? o.vel : 1;   // per-note velocity (ghost..accent)
   mVoice({ role, freq: o.freq, dur: o.dur, when: o.when,
            type: p.type, vol: p.vol * vmul * vel, detune: p.detune,
-           cutoff: p.cutoff, q: p.q, attack: o.attack });
+           cutoff: p.cutoff, q: p.q, attack: o.attack, voice: p.voice });
 }
 function musicVoice(role, blend, o) {
   if (blend.from === blend.to) { musicVoiceSection(role, blend.from, 1, o); return; }

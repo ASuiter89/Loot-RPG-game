@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bassSemi, voiceChord } from '../../src/systems/musicGroove.js';
+import { bassSemi, voiceChord, voiceSpread } from '../../src/systems/musicGroove.js';
 
 // Am triad [root, third, fifth] and the F it resolves into (root 8), in semitones
 // from A2 — the same absolute-offset convention the section data uses.
@@ -52,6 +52,27 @@ describe('voiceChord — triad re-voicings', () => {
   it('always returns exactly three tones', () => {
     for (const v of ['root', 'inv1', 'inv2', 'open', 'wide', undefined]) {
       expect(voiceChord(Am, v)).toHaveLength(3);
+    }
+  });
+});
+
+describe('voiceSpread — detuned super-saw / reese oscillator cluster', () => {
+  it('a single voice sits dead on pitch', () => {
+    expect(voiceSpread(1, 20)).toEqual([0]);
+    expect(voiceSpread(0, 20)).toEqual([0]);
+  });
+
+  it('spreads n voices evenly across the full ±cents range', () => {
+    expect(voiceSpread(2, 10)).toEqual([-10, 10]);
+    expect(voiceSpread(3, 12)).toEqual([-12, 0, 12]);
+    expect(voiceSpread(5, 16)).toEqual([-16, -8, 0, 8, 16]);
+  });
+
+  it('stays centred on the true pitch (offsets sum to ~0)', () => {
+    for (const n of [2, 3, 4, 5, 7]) {
+      const sum = voiceSpread(n, 18).reduce((a, b) => a + b, 0);
+      expect(Math.abs(sum)).toBeLessThan(1e-9);
+      expect(voiceSpread(n, 18)).toHaveLength(n);
     }
   });
 });
