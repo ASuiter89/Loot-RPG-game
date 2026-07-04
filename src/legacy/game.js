@@ -4247,9 +4247,11 @@ const BOSSES = [
 // The finite guardians in difficulty order (5 per tier) — selection indexes this
 // by (tier-1)*5 + local floor index. Endless ignores it and rolls at random.
 const BOSSES_PER_TIER = 5;
-// The boss overhaul makes guardians a real fight: ~5x the old health pools so a
-// boss is a sustained encounter rather than a speed-bump.
-const BOSS_HP_OVERHAUL = 5;
+// The boss overhaul makes guardians a real fight — but only the deep tiers carry the
+// full pools. Normal stays a mild challenge, Hardened a semi-tough fight, and Brutal
+// + Endless keep the ~5x sustained encounter. Indexed by difficulty tier (1-4).
+const BOSS_HP_MULT_BY_TIER = { 1: 1.6, 2: 3.0, 3: 5.0, 4: 5.0 };
+function bossHpMult() { return BOSS_HP_MULT_BY_TIER[currentDifficulty()] || 5.0; }
 
 // ── ENEMY AI BEHAVIOURS ──
 // Each archetype defines HOW a monster moves and fights, so foes feel distinct
@@ -13685,7 +13687,7 @@ function spawnEnemies() {
         // pace as your power climbs). Its level also sets the loot it drops.
         const bossLevel = dungeonLevel + 2;
         const bossThreat = depthThreat(bossLevel) * threatScale;
-        const bossHp = Math.round((50 + bossLevel * 23) * bossThreat * DEV.bossHpMult * DEV.enemyHpMult * BOSS_HP_OVERHAUL);   // ~5x the old pools — the boss-fight overhaul makes every guardian a proper, drawn-out fight
+        const bossHp = Math.round((50 + bossLevel * 23) * bossThreat * DEV.bossHpMult * DEV.enemyHpMult * bossHpMult());   // depth-scaled overhaul pools: mild on Normal, tough on Hardened, full ~5x on Brutal+Endless
         const bossDmg = Math.round((9 + bossLevel * 2.1) * bossThreat * DEV.bossDmgMult * DEV.enemyDmgMult);  // and they hit somewhat harder
         enemies.push({
           x: ex, y: ey,
@@ -28171,11 +28173,59 @@ function glideActor(a, tx, ty, dt) {
     a.faceDx = dx; a.faceDy = dy;                       // remember heading (for facing)
   }
 }
+// A foe's continuous move speed (tiles/sec), derived from its archetype so a swift
+// vermin flows fast and a brute lumbers — chilled/slowed foes drag.
+function enemyRenderSpeed(e) {
+  const beh = BEHAVIORS[e.behavior] || BEHAVIORS.chaser;
+  let s = 2.7 * (beh.speed || 1);                 // chaser 2.7 t/s · swift ~5.4
+  if (beh.slow || e.slow) s *= 0.6;
+  if (isChilled(e)) s *= 0.5;
+  return s;
+}
+// Terrain-only solidity for a foe's smooth movement (walls, deep water, boss walls,
+// solid furniture) — foes don't block each other here, so they never gridlock.
+function enemyTerrainSolid(x, y) {
+  if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return true;
+  if (!isFloorPassable(mapData[y][x])) return true;
+  if (bossWallAt(x, y)) return true;
+  if (furnitureMap[y + ',' + x] !== undefined) return true;
+  return false;
+}
+function enemyBoxBlocked(fx, fy) {
+  const r = 0.34, e = 1e-4;                        // a little smaller than a tile so it hugs corners
+  const x0 = Math.floor(fx - r), x1 = Math.floor(fx + r - e);
+  const y0 = Math.floor(fy - r), y1 = Math.floor(fy + r - e);
+  return enemyTerrainSolid(x0, y0) || enemyTerrainSolid(x1, y0) ||
+         enemyTerrainSolid(x0, y1) || enemyTerrainSolid(x1, y1);
+}
 function updateActorRender(dt) {
   for (const e of enemies) {
     if (e.atkCd > 0) e.atkCd -= dt;               // real-time attack cooldown
     const s = e.size || 1;
-    glideActor(e, e.x + s / 2, e.y + s / 2, dt);  // footprint centre
+    const cx = e.x + s / 2, cy = e.y + s / 2;     // logic-tile centre
+    // Aggro single-tile foes CONTINUOUSLY pursue the hero's live position every
+    // frame — so they flow with you instead of stepping to a stale tile then
+    // pausing. The sprite is kept within ~1 tile of its (always-walkable) logic
+    // cell, which advances on the world tick, so collision/attacks (keyed off
+    // e.x/e.y) stay honest and it never drifts through a wall. Non-aggro foes,
+    // foes mid-teleport, and multi-tile bosses use the plain tile glide.
+    const _ms = (s === 1 && e.aggro && !e.dead) ? enemyMoveStatus(e) : null;
+    if (s === 1 && e.aggro && !e.dead && !(_ms && _ms.stun)) {
+      if (e.fx == null || Math.abs(e.fx - cx) > 2.0 || Math.abs(e.fy - cy) > 2.0) { e.fx = cx; e.fy = cy; }
+      const spd = enemyRenderSpeed(e);
+      const dx = player.fx - e.fx, dy = player.fy - e.fy, d = Math.hypot(dx, dy) || 1;
+      if (d > 0.72) {                              // don't pile onto the hero
+        const step = Math.min(d - 0.72, spd * dt);
+        const CL = 0.85;                           // max lead/lag from the logic cell
+        let nfx = Math.max(cx - CL, Math.min(cx + CL, e.fx + dx / d * step));
+        let nfy = Math.max(cy - CL, Math.min(cy + CL, e.fy + dy / d * step));
+        if (!enemyBoxBlocked(nfx, e.fy)) e.fx = nfx;   // axis-separated → slides along walls
+        if (!enemyBoxBlocked(e.fx, nfy)) e.fy = nfy;
+        e.faceDx = dx; e.faceDy = dy;
+      }
+    } else {
+      glideActor(e, cx, cy, dt);                  // footprint centre
+    }
   }
   // The quest NPC (an escorted follower, or a wandering lost pet) glides toward its
   // logic cell in the same top-left convention as npc.x/npc.y (the draw code adds
