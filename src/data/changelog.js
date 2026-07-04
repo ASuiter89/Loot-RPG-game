@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Transmuter lets you pick which pieces to fuse", by: "Claude", notes: [
+    "The Transmuter no longer grabs gear on its own. Choose a rarity, then tick exactly which unlocked pieces go in the crucible — a running count and the gold cost show before you commit, and the fuse only fires once the recipe is full.",
+    "The fuse count now climbs with rarity: 2 junk or normal, 3 uncommon or rare, 4 epic, and 5 legendary to draw a unique (which may roll a set piece).",
+    "Locked keepers never appear in the picker, so they're safe no matter what you tick.",
+    "Removed the stray potion icon beside each fuse row — the rows now read as the recipe they are.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Gold & materials update everywhere the moment you transact", by: "Claude", notes: [
     "Selling, buying or salvaging at the Merchant now updates your gold and material counts on the spot in every place they show — the town-menu header, the bottom HUD and the LOOT tab — instead of looking unchanged until you switched menus.",
     "The Merchant now shows your crafting materials at the top, like the town menu does, so salvaging a piece there gives the same instant tally.",

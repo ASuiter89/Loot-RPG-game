@@ -128,9 +128,10 @@ async function main() {
         try { window.claimBounty(); } finally { Math.random = realRandom; }
       });
 
-      // Transmuter: fuse three legendary pieces -> one unique (forced tier, no RNG).
+      // Transmuter: fuse five legendary pieces -> one unique (forced tier, no RNG).
+      // A legendary fuse takes 5 (the recipe count climbs with rarity).
       window.player.gold = 1e9;
-      for (let i = 0; i < 3; i++) window.inventory.push(window.generateItem(1, 10, 'legendary', 'chest'));
+      for (let i = 0; i < 5; i++) window.inventory.push(window.generateItem(1, 10, 'legendary', 'chest'));
       res.sources.transmuter = drive(() => window.transmute('legendary'));
 
       return res;

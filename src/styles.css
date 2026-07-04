@@ -2624,6 +2624,21 @@
   .shop-grid { display: grid; grid-template-columns: 1fr; gap: 6px; }
   .shop-grid .shop-row { margin-bottom: 0; }
   @media (min-width: 760px) { .shop-grid { grid-template-columns: 1fr 1fr; } }
+  /* Transmuter piece picker: each unlocked piece of the chosen rarity is a whole-
+     row toggle; the ticked three are what the crucible spends (gold-accented). */
+  .shop-row.transmute-pick { cursor: pointer; }
+  .shop-row.transmute-pick.picked {
+    border-color: var(--gold); background: var(--tint-gold);
+    box-shadow: inset 3px 0 0 var(--gold);
+  }
+  .transmute-check {
+    flex: 0 0 auto; width: calc(18px * var(--ui-scale, 1)); text-align: center;
+    color: var(--gold); font-weight: bold; font-size: 1.6rem; line-height: 1;
+  }
+  /* Sticky-feeling action bar under the picker: Back · count · Fuse. */
+  .transmute-bar { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }
+  .transmute-count { flex: 1; text-align: center; font-weight: bold; font-size: 1.4rem; color: var(--meta); }
+  .transmute-count.ready { color: var(--gold); }
   /* Pay-to-restock button — full width under the wares. */
   .shop-refresh-btn {
     display: block; width: 100%; margin: 10px 0 2px; padding: 9px 0;
