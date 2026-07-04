@@ -6246,6 +6246,9 @@ let skillView = 'active';  // which SKILLS sub-tree is shown: passive | active |
 let skillBranch = 0;        // which specialization branch (column 0..4) is shown within passive/active
 let mapData = [];
 let mapEpoch = 0;   // bumped whenever the map layout changes, to invalidate the wall-shadow cache
+// Boss-arena state: the centre of the current boss room, and (only during a boss
+// floor's build) the tile the guardian is pinned to. Both null off a boss floor.
+let bossArenaCenter = null, bossArenaCell = null;
 // Per-tile shove tally for cracked walls (tile 10): "y,x" -> hits taken so far.
 // A wall absent from the map is untouched (stage 0); it's deleted when it breaks.
 // Rebuilt empty with every floor (see each `mapData = []`), never saved — the map
@@ -9332,6 +9335,11 @@ function generateMap() {
   mapData = []; wallCracks = {};
   for (let y = 0; y < MAP_H; y++) { mapData[y] = []; for (let x = 0; x < MAP_W; x++) mapData[y][x] = 1; }
 
+  // ── BOSS FLOOR? ── every boss floor is the same fixed, hand-authored arena
+  // (hero enters south, guardian holds the centre, exit at the north). Build it
+  // and stop — none of the procedural rooms/loot/NPC/decor passes below run.
+  if (dungeonLevel % 5 === 0) { buildBossArena(); return; }
+
   // ── ROOMS ── a handful of rectangles, occasionally one big grand hall.
   const rooms = [];
   // More rooms on bigger floors, so a larger map is a denser dungeon rather than
@@ -9686,6 +9694,83 @@ function generateMap() {
 
   // Consume the arrival direction — the next floor defaults to a downward entry
   // unless its caller (the stairs-up handler) sets it again right before building.
+  arrivalDir = 'down';
+}
+
+// ── FIXED BOSS ARENA ─────────────────────────────────────────────────────────
+// Every boss floor is the same hand-authored circular room, identical each time:
+// the hero enters from the stairs at the SOUTH, the guardian holds the CENTRE, and
+// the way onward sits at the NORTH — sealed (like any uncleared floor) until the
+// boss falls. Four pillars give cover to duck telegraphed shots behind. No trash,
+// no loot clutter, no side rooms — just the hero and the boss. The confirmation
+// gate and the exit locks that trap you here until you win or die are layered on
+// in the stairs and town-portal handlers.
+const BOSS_ARENA_R = 10;                        // circle radius, centre-to-wall (tiles)
+const BOSS_ARENA_SIZE = BOSS_ARENA_R * 2 + 5;   // map dimension, with a wall margin
+function buildBossArena() {
+  // Fixed size regardless of difficulty, so the arena is identical every time.
+  MAP_W = BOSS_ARENA_SIZE; MAP_H = BOSS_ARENA_SIZE;
+  const cx = MAP_W >> 1, cy = MAP_H >> 1;
+  bossArenaCenter = { x: cx, y: cy };
+  // Solid rock, then carve the circular floor out of it.
+  mapData = []; wallCracks = {};
+  const R2 = BOSS_ARENA_R * BOSS_ARENA_R;
+  for (let y = 0; y < MAP_H; y++) {
+    mapData[y] = [];
+    for (let x = 0; x < MAP_W; x++) {
+      const dx = x - cx, dy = y - cy;
+      mapData[y][x] = (dx * dx + dy * dy <= R2) ? 0 : 1;
+    }
+  }
+  // Four cover pillars on an inner ring — something to break line of sight on.
+  const pr = Math.round(BOSS_ARENA_R * 0.55);
+  for (const [ox, oy] of [[-pr, -pr], [pr, -pr], [-pr, pr], [pr, pr]]) {
+    const x = cx + ox, y = cy + oy;
+    if (mapData[y] && mapData[y][x] === 0) mapData[y][x] = 1;
+  }
+  // ── ENTRANCE (south) ── the hero spawns here, on the stair back the way they
+  // came. Which stair type it is depends on arrival direction, mirroring the
+  // normal floor logic; either way the entrance is south and the exit is north.
+  const climbing = arrivalDir === 'up';
+  const entryStair = climbing ? 2 : 12;   // the way you came in (under your feet)
+  const farStair = climbing ? 12 : 2;     // the way onward
+  const syTile = cy + BOSS_ARENA_R - 2;   // a couple tiles inside the south wall
+  startPos = { x: cx, y: syTile };
+  setPlayerCell(cx, syTile);
+  clearHeld();
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const yy = syTile + dy, xx = cx + dx;
+    if (yy > 0 && xx > 0 && yy < MAP_H - 1 && xx < MAP_W - 1) mapData[yy][xx] = 0;
+  }
+  mapData[syTile][cx] = entryStair;
+  // ── EXIT (north) ── omitted on the last finite boss floor (conquer it, then
+  // take the next difficulty from town). Otherwise sealed until the boss dies.
+  const noOnward = isLastFiniteFloor() && farStair === 2;
+  if (!noOnward) mapData[cy - BOSS_ARENA_R + 2][cx] = farStair;
+  // The guardian holds the centre; spawnEnemies pins the boss to this cell.
+  bossArenaCell = { x: cx - 1, y: cy - 1 };
+  // ── Floor-scoped resets ── a boss floor carries none of the usual clutter.
+  merchant = null; mystic = null;
+  groundItems = []; groundFood = []; groundGold = []; graveMarker = null;
+  shrineData = {}; hasFountain = false; groundKey = null; hasKey = false;
+  quest = null; teleporters = {}; nextDiffPortal = null; floorRooms = [];
+  bossHazards = []; projectiles = []; clearAttackFx();
+  floorThemeOverride = null;      // a bare stone arena, not a themed interior
+  // Rebuild the terrain + pathfinding caches for the hand-authored layout.
+  bumpMapEpoch(); pathGridDirty();
+  // Spawn the guardian (boss only — spawnEnemies gives boss floors a count of 1).
+  spawnEnemies();
+  bossArenaCell = null;           // consumed
+  // ── CLEAR CONDITION ── the exit stays sealed until the boss falls. A boss floor
+  // is never "pre-cleared" unless you've already beaten it (backtracking here).
+  floorCleared = false;
+  resetPortal();
+  warpFx = null;
+  if (player.clearedFloors && player.clearedFloors[dungeonLevel]) floorCleared = true;
+  if (!floorCleared) {
+    const b = enemies.find(e => e.isBoss);
+    log(`⚠️ ${b ? b.name : 'A guardian'} bars the way — its seal holds every exit until it falls.`, 'important');
+  }
   arrivalDir = 'down';
 }
 
@@ -13089,7 +13174,7 @@ function spawnEnemies() {
   // A generous ceiling keeps even the largest deep-Endless floors from spawning an
   // unnavigable mob. Boss floors keep their own tuned, depth-based roster.
   let count = isBossFloor
-    ? 1 + Math.min(9, Math.floor(dungeonLevel / 5))   // boss + minions, capped so deep Endless boss floors aren't a wall of 40 foes
+    ? 1                                               // just the guardian — a boss floor is a 1v1 arena; any adds come from the boss's own telegraphed summons
     : Math.min(Math.round(Math.min(3 + Math.floor(dungeonLevel * 0.7), 10) * mapAreaRatio() * DEV.enemyCountMult), 40);
   // Some floor modifiers crowd the level with extra foes.
   if (!isBossFloor && floorMod.enemyMult) count = Math.round(count * floorMod.enemyMult);
@@ -13173,10 +13258,14 @@ function spawnEnemies() {
         const boss = isEndless()
           ? pick(BOSSES)
           : BOSSES[Math.max(0, Math.min(bossIdx, BOSSES.length - 1))];
-        // Big bosses need an open N×N block; fall back to a single tile if the
-        // floor is too cramped to fit one.
         let bsize = boss.size || 1;
-        if (bsize > 1) {
+        if (bossArenaCell) {
+          // Fixed boss arena: the guardian is pinned dead-centre (its open block is
+          // already carved into the room), no random placement or wall-knocking.
+          ex = bossArenaCell.x; ey = bossArenaCell.y;
+        } else if (bsize > 1) {
+          // Endless / legacy floors: big bosses need an open N×N block; fall back to
+          // a single tile if the floor is too cramped to fit one.
           let found = false;
           for (let tr = 0; tr < 200 && !found; tr++) {
             const cx = rnd(1, MAP_W - bsize - 1), cy = rnd(1, MAP_H - bsize - 1);
