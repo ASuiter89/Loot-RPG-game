@@ -11,6 +11,10 @@ export const CHANGELOG = [
     "Deepening one passive now pays off in jumps, not just a steady drip: its always-on bonus spikes at ranks 3, 7 and 10 — the same milestone ranks that already power up active skills (up to +30% of the stat total at rank 10).",
     "The skill card flags the surge with a chip and rank pips, previews the bigger jump on rank-up, and the level-up line calls out each milestone as you cross it. Keystones stay single-rank, so they don't surge.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Hidden heroes glow their class colour", by: "Claude", notes: [
+    "When you slip behind a tree or tall furniture, your see-through silhouette now takes your class colour — Warrior red, Mage yellow, Templar blue, Rogue green — so you can still read who you are at a glance.",
+    "Enemies hidden behind scenery now show a distinct magenta silhouette, so a lurking foe never blurs into a red Warrior.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Patch notes group by local day", by: "Claude", notes: [
     "Version History now dates each update by its Pacific calendar day — evening changes no longer jump ahead to the next day's heading.",
     "Re-dated recent entries that had rolled to the wrong day.",
