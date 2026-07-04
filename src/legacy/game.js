@@ -6395,7 +6395,7 @@ window.gameState = function gameState(radius) {
     ['howto-overlay', 'howto'], ['autoloot-overlay', 'autoloot'], ['keybind-overlay', 'keybinds'],
     ['slotpick-overlay', 'slotpick'], ['newrun-overlay', 'newrun'], ['slots-overlay', 'slots'],
     ['account-overlay', 'account'], ['lb-overlay', 'leaderboard'], ['graveyard-overlay', 'graveyard'],
-    ['conquest-overlay', 'conquest'], ['greed-overlay', 'greed'],
+    ['conquest-overlay', 'conquest'], ['greed-overlay', 'greed'], ['boss-gate-overlay', 'bossgate'],
     ['shop-overlay', 'shop'], ['mystic-overlay', 'mystic'], ['town-overlay', 'town'],
   ];
   let mode = 'dungeon', blockingOverlay = null;
@@ -10620,6 +10620,12 @@ function startPortalChannel() {
   if (inTown) { openTownHub(); return; }
   if (portalTransiting() || mapWarping()) return;   // already teleporting — ignore the button
   if (tutorialActive) { log('🏖️ Head north into the cave to begin your descent first.'); sfx('denied'); return; }
+  // On a boss floor the guardian's seal denies the town portal too — there is no
+  // retreat until it falls (or you do).
+  if (isBossLevel(dungeonLevel) && !floorCleared) {
+    log('<span data-spr=feat_gate_red></span> The guardian\'s seal smothers your portal — there is no leaving until it falls.', 'important');
+    sfx('denied'); return;
+  }
   if (portalCharge > 0) { cancelPortalChannel('<span data-spr=feat_gate_red></span> You let the town portal fade.'); return; }
   portalCharge = PORTAL_CHANNEL_SECS;
   // Drop whatever movement opened the portal (a held key, or the click-to-move
@@ -12865,6 +12871,14 @@ function enterDungeonAt(diff, floor, opts) {
   // Clamp to the *unlocked* cap, not just the reached cap — a death can re-lock
   // deep floors, and you can't re-enter past where you've fought back down to.
   floor = Math.max(1, Math.min(tierUnlockedCap(diff) || 1, Math.round(floor) || 1));
+  // Warping from town onto an unbeaten boss floor is the same point of no return as
+  // taking the stairs into one — confirm first, before we leave town, so declining
+  // simply keeps you where you are.
+  const _target = (diff - 1) * FLOORS_PER_DIFF + floor;
+  if (!(opts && opts.bossConfirmed) && bossGateNeeded(_target)) {
+    openBossGate(_target, () => enterDungeonAt(diff, floor, Object.assign({}, opts, { bossConfirmed: true })));
+    return;
+  }
   revivedInTown = false; // entering the dungeon clears the post-death prompt
   closeTown();
   dungeonLevel = (diff - 1) * FLOORS_PER_DIFF + floor;
@@ -18669,8 +18683,48 @@ function onEnterCell(nx, ny) {
 }
 
 // Climb to the previous floor (or, on floor 1 of a tier, begin a town portal).
+// ── BOSS FLOOR GATE ──────────────────────────────────────────────────────────
+// A boss floor is a point of no return: once inside, BOTH staircases AND the town
+// portal are sealed until the guardian falls (or you do). So we ask before the
+// threshold. The prompt pauses the world (it's a MODAL); "I'm Ready" runs the
+// stored transition, "Not Ready" cancels it and leaves you where you stand.
+let pendingBossEntry = null;   // a thunk that performs the confirmed transition
+function isBossLevel(dl) { return dl > 0 && dl % 5 === 0; }
+function bossFloorCleared(dl) { return !!(player.clearedFloors && player.clearedFloors[dl]); }
+// True when moving to depth `dl` would drop you into an unbeaten boss arena.
+function bossGateNeeded(dl) { return !tutorialActive && isBossLevel(dl) && !bossFloorCleared(dl); }
+function openBossGate(dl, proceed) {
+  pendingBossEntry = proceed;
+  const el = document.getElementById('boss-gate-overlay');
+  const body = document.getElementById('boss-gate-body');
+  if (body) body.innerHTML = `A guardian holds <b>${floorLabel(dl)}</b>. Step in and <b>every exit seals</b> — no stairs, no town portal — until it falls or you do. Are you ready?`;
+  if (el) el.classList.add('open');
+  sfx('click');
+}
+function bossGateReady() {
+  const el = document.getElementById('boss-gate-overlay'); if (el) el.classList.remove('open');
+  const go = pendingBossEntry; pendingBossEntry = null;
+  sfx('stairs');
+  if (typeof go === 'function') go();
+}
+function bossGateCancel() {
+  const el = document.getElementById('boss-gate-overlay'); if (el) el.classList.remove('open');
+  pendingBossEntry = null;
+  sfx('click');
+  log('You steady yourself at the threshold — then step back. The guardian can wait.');
+}
+
 function goUpStairs(nx, ny) {
   if (displayFloor() === 1) { setPlayerCell(nx, ny); startPortalChannel(); return; }
+  // A boss floor seals its entrance too — no climbing back out until the guardian falls.
+  if (isBossLevel(dungeonLevel) && !floorCleared) {
+    log('<span data-spr=feat_door></span> The guardian\'s seal holds the way back shut — defeat it first.', 'important'); sfx('click'); return;
+  }
+  // Climbing UP into an unbeaten boss floor? Confirm at the threshold first.
+  if (bossGateNeeded(dungeonLevel - 1)) { openBossGate(dungeonLevel - 1, () => performAscend(nx, ny)); return; }
+  performAscend(nx, ny);
+}
+function performAscend(nx, ny) {
   dungeonLevel--;
   statusEffects = [];
   tickBuffs();
@@ -18693,6 +18747,17 @@ function goDownStairs(nx, ny) {
     return;
   }
   if (!floorCleared) { log(`<span data-spr=feat_door></span> The stairs are sealed. ${clearConditionLabel()}`, 'important'); sfx('click'); return; }
+  if (isLastFiniteFloor()) {
+    log(`<span data-spr=b_ratking></span> This is the deepest floor of the ${diffMeta().name} dungeon — conquer its guardian, then take the next difficulty from town.`, 'important');
+    sfx('click');
+    return;
+  }
+  // Entering an unbeaten boss floor below? Confirm at the threshold — a boss floor
+  // is a point of no return once you step in.
+  if (bossGateNeeded(dungeonLevel + 1)) { openBossGate(dungeonLevel + 1, () => performDescend(nx, ny)); return; }
+  performDescend(nx, ny);
+}
+function performDescend(nx, ny) {
   if (quest && quest.type === 'escort') {
     const near = (Math.abs(quest.npc.x - player.x) + Math.abs(quest.npc.y - player.y)) <= 3;
     if (quest.npc.following && near) {
@@ -18708,11 +18773,6 @@ function goDownStairs(nx, ny) {
       log(`😟 You descended without ${quest.npc.name} — the escort failed.`);
     }
     quest = null;
-  }
-  if (isLastFiniteFloor()) {
-    log(`<span data-spr=b_ratking></span> This is the deepest floor of the ${diffMeta().name} dungeon — conquer its guardian, then take the next difficulty from town.`, 'important');
-    sfx('click');
-    return;
   }
   dungeonLevel++;
   recordDepth();
@@ -27242,7 +27302,8 @@ const RT_BLOCKING_OVERLAYS = ['title-overlay','name-overlay','class-overlay','hc
   // Reachable mid-dungeon (e.g. from the menu or on a tier conquest) — these
   // close the settings menu, so they must pause the world on their own.
   'conquest-overlay','slots-overlay','account-overlay','lb-overlay','graveyard-overlay','slotpick-overlay',
-  'greed-overlay'];   // the risk/reward cursed-floor choice pauses the world while open
+  'greed-overlay',    // the risk/reward cursed-floor choice pauses the world while open
+  'boss-gate-overlay'];   // the "are you ready?" boss-floor threshold prompt pauses the world too
 // The blocking overlays are all static shell divs (only their 'open' class
 // toggles), so resolve id → element ONCE and reuse — rtPaused/clockPaused run
 // several times per frame and were re-querying every id on every call.
@@ -28148,6 +28209,8 @@ const __DL_FN_BRIDGE = {
   clearGreed,
   acceptGreed,
   declineGreed,
+  bossGateReady,
+  bossGateCancel,
   openTownService,
   _tbR,
   _tbI,

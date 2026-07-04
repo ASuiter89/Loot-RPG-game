@@ -556,13 +556,13 @@
   #objective-chip .obj-streak { color: var(--orange-800); font-weight: bold; }
 
   /* Greed gate — the risk/reward "cursed floor" choice modal. */
-  #greed-overlay {
+  #greed-overlay, #boss-gate-overlay {
     position: fixed; inset: 0; z-index: 470; display: none;
     align-items: center; justify-content: center; padding: 20px;
     background: color-mix(in srgb, var(--ink) 72%, transparent);
   }
-  #greed-overlay.open { display: flex; }
-  #greed-card {
+  #greed-overlay.open, #boss-gate-overlay.open { display: flex; }
+  #greed-card, #boss-gate-card {
     max-width: 340px; width: 100%; padding: 20px 18px;
     background: linear-gradient(180deg, var(--magenta-750), var(--bg));
     border: 2px solid var(--red-550); border-radius: 12px; text-align: center;

@@ -618,6 +618,21 @@
   </div>
 </div>
 
+<!-- Boss-floor gate: a world-pausing confirmation at the threshold of a boss
+     arena. Reuses the greed-card component styling. Shown by openBossGate(); the
+     buttons bridge to bossGateReady()/bossGateCancel(). Once inside, both
+     staircases and the town portal seal until the guardian falls or you die. -->
+<div id="boss-gate-overlay">
+  <div id="boss-gate-card">
+    <div class="greed-title"><span data-spr=feat_door></span> A Boss Floor</div>
+    <div class="greed-body" id="boss-gate-body">A guardian holds the floor below. Step in and <b>every exit seals</b> until it falls or you do. Are you ready?</div>
+    <div class="greed-btns">
+      <button class="greed-yes" onclick="bossGateReady()">I'm ready — seal me in</button>
+      <button class="greed-no" onclick="bossGateCancel()">Not yet</button>
+    </div>
+  </div>
+</div>
+
 <!-- Objective chip — a compact "what am I working toward" banner pinned near the
      top. Shows your active bounty's live progress, or a nudge to grab one, plus a
      daily-goal streak. Updated by updateObjectiveChip(); tap to open the board. -->
