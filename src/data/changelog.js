@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Hover to inspect a foe, click to charge it", by: "Claude", notes: [
+    "Point at a foe (desktop) to pop its codex card — it now shows under the map and is semi-transparent, so it never covers the enemy you're reading.",
+    "Clicking a foe no longer opens that card: it paths you straight to it. The hero chases the foe into weapon reach and auto-attack takes over.",
+    "On touch, a tap still opens the codex card as before.",
+  ] },
   { date: "2026-07-03", size: "small", v: "The shared Vault syncs without losing anything", by: "Claude", notes: [
     "The account-wide Vault now merges across devices instead of one copy winning: deposit gold or gear on your phone while your PC is offline, and after syncing you keep both — no deposit is ever dropped.",
     "Taking an item out of the Vault sticks everywhere, and a re-stored item won't vanish. Your existing Vault carries over untouched.",
