@@ -219,7 +219,9 @@ The in-game Version History popup is driven by the `CHANGELOG` array in
   never UTC.** The Version History popup groups entries under a per-day heading, so
   a UTC date lands an evening change under the next day. Your environment clock is
   usually UTC: derive the Pacific day (e.g. `TZ=America/Los_Angeles date +%F`)
-  rather than trusting a UTC "today".
+  rather than trusting a UTC "today". A data-validity test enforces this — it fails
+  if any entry is dated after the current Pacific day, so a UTC-drifted date breaks
+  CI instead of silently shipping under tomorrow.
 - **Add an entry for every user-facing change you ship, in the same commit.**
 - **Be maximally concise** — present-tense fragments, drop articles/hedges, ~one
   line each.

@@ -24,6 +24,22 @@ describe('CHANGELOG data validity', () => {
     expect(CHANGELOG[0].date >= CHANGELOG[CHANGELOG.length - 1].date).toBe(true);
   });
 
+  it('has no entry dated in the future (Pacific day, not UTC)', () => {
+    // CLAUDE.md: entries are dated by the Pacific (America/Los_Angeles) calendar
+    // day they ship. The build clock is usually UTC, so an evening change stamped
+    // with the UTC "today" lands a day ahead — the Version History then groups it
+    // under tomorrow. This guard makes that recurrence fail CI instead of relying
+    // on the author remembering to convert. `en-CA` formats as YYYY-MM-DD, and the
+    // explicit timeZone makes the check independent of where the test runs.
+    const pacificToday = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+    const future = CHANGELOG.filter(e => e.date > pacificToday);
+    expect(
+      future,
+      `changelog entries dated after the Pacific day ${pacificToday} (UTC-day drift?):\n`
+        + future.map(e => `${e.date}  ${e.v}`).join('\n'),
+    ).toEqual([]);
+  });
+
   it('never references other games (project changelog rule)', () => {
     // CLAUDE.md: player-facing copy must stand on its own, not lean on another
     // title for meaning. Guard the most likely slips.
