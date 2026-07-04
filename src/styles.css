@@ -234,7 +234,7 @@
     --shadow-glow: 0 0 8px var(--interactive);
 
     /* ---- Z-index layers ---- */
-    --z-hud: 50; --z-overlay: 200; --z-modal: 210; --z-top: 300;
+    --z-hud: 50; --z-touch: 120; --z-overlay: 200; --z-modal: 210; --z-top: 300;
 
     /* ── UI FONT ── one knob for the whole interface. The player picks a face in
        <span data-spr=ic_mallet></span> Settings → Visuals → UI FONT; setUiFont() overrides this custom property at
@@ -1431,6 +1431,15 @@
      popover's border; short number ranges still fit on one line. */
   .sk-pop .ru-row .ru-v { color: var(--purple-50); text-align: right; min-width: 0; overflow-wrap: anywhere; }
   .sk-pop .ru-row .ru-v b { color: var(--green-450); font-weight: bold; }
+  /* Rank-bonus ladder: the fixed rank 3 / 7 / 10 milestones, all always shown and
+     lit green (with a ✓) once this skill's rank has earned them. */
+  .sk-pop .ms { margin-top: 5px; padding: 4px 6px; background: var(--panel); border: 1px solid var(--panel-raised); border-radius: 6px; }
+  .sk-pop .ms-h { font-size: 1.1rem; letter-spacing: 0.5px; color: var(--blue-350); text-transform: uppercase; margin-bottom: 2px; }
+  .sk-pop .ms-row { display: flex; justify-content: space-between; gap: 6px; font-size: 1.1rem; line-height: 1.4; }
+  .sk-pop .ms-row .ms-k { flex: 0 0 auto; white-space: nowrap; font-weight: 700; letter-spacing: 0.3px; color: var(--purple-150); }
+  .sk-pop .ms-row .ms-v { text-align: right; min-width: 0; overflow-wrap: anywhere; color: var(--purple-50); }
+  .sk-pop .ms-row .ms-v b { color: inherit; font-weight: 700; }
+  .sk-pop .ms-row.met .ms-k, .sk-pop .ms-row.met .ms-v { color: var(--green-450); }
   .sk-pop .rq { font-size: 1.1rem; margin-top: 3px; line-height: 1.4; }
   .sk-pop .rq.no { color: var(--red-300); }
   .sk-pop .rq.ok { color: var(--green-450); }
@@ -2199,6 +2208,10 @@
   #hovertip .ht-name { font-weight: bold; font-size: 1.4rem; margin-bottom: 4px; color: var(--gold-350); }
   #hovertip .ht-line { color: var(--meta); }
   #hovertip .ht-sub  { color: var(--meta); font-size: 1.2rem; margin-top: 3px; }
+  /* The set card packs slot lists, several bonus tiers and a power blurb, so it
+     gets roughly double the standard hovertip width to read comfortably. The
+     .wide class is toggled on when the card holds a .set-tip (see renderHoverTip). */
+  #hovertip.wide { max-width: 480px; }
 
   /* Enemy codex card — pops on hover (desktop) or tap (touch), pinned right UNDER the
      minimap and laid out as a tidy stat grid. Semi-transparent (and blurred behind) so
@@ -4159,3 +4172,257 @@
   .food-row.eatable:hover { border-color: var(--uncommon); background: var(--green-800); }
   .food-row.eatable:hover .eat-btn { background: var(--green-550); }
   .food-row.eatable:active { background: var(--green-800); }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     TOUCH UI — additive mobile layer, keyed ENTIRELY off body.touch (set by
+     setTouchMode() in game.js on the first real touch pointer). A desktop machine
+     never matches body.touch, so this whole section is inert on desktop and the
+     mouse-only smoke test never enters it. Both orientations are first-class;
+     portrait/landscape differences use @media (orientation:…) SCOPED under
+     body.touch, so they can never affect a desktop layout.
+     Colours/sizes come from :root tokens (see styles-lint); translucency uses
+     color-mix so no raw rgba() escapes the token layer.
+     ═══════════════════════════════════════════════════════════════════════════ */
+
+  /* Banded layout: a solid HEADER band and FOOTER band, with the map filling the
+     space BETWEEN them — so HUD content sits on its band and never spills onto the
+     map. Portrait only (landscape shows the rotate notice). */
+  body.touch {
+    --hdr-h: 104px;   /* header band content height (minimap + vitals) */
+    --ftr-h: 134px;   /* footer band content height (2×2 tiles + pill row) */
+    --mm-w: 88px;     /* minimap box (fits inside the header band) */
+    --tbar-w: 104px;  /* settings + bag, side by side, top-right */
+  }
+  body.touch #main { position: relative; flex: 1 1 auto; min-height: 0; }
+  /* The map lives strictly between the two bands. Absolute (not fixed) so it does
+     NOT create a stacking context that would trap the fixed minimap behind the
+     header band. */
+  body.touch #game-wrap {
+    position: absolute; left: 0; right: 0;
+    top: calc(env(safe-area-inset-top, 0px) + var(--hdr-h));
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--ftr-h));
+    width: auto; min-height: 0;
+  }
+  /* ONLY the main map canvas fills that area — NOT the #minimap canvas. */
+  body.touch #canvas { width: 100%; height: 100%; }
+  body.touch #bottom-row,
+  body.touch #control-bar,
+  body.touch #desktop-hud,
+  body.touch #map-info { display: none !important; }
+
+  /* ── Header band ── solid bar across the top. Minimap at the left, the vitals
+     (HP/MP · floor · foes · gold) just right of it, and settings + bag at the
+     far right. Sized to contain all of that. */
+  body.touch #header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: var(--z-touch);
+    height: calc(env(safe-area-inset-top, 0px) + var(--hdr-h));
+    display: flex; flex-wrap: wrap; align-content: center; align-items: center;
+    gap: 3px 8px; justify-content: flex-start;
+    padding: calc(env(safe-area-inset-top, 0px) + 5px) calc(env(safe-area-inset-right, 0px) + var(--tbar-w) + 8px) 5px calc(env(safe-area-inset-left, 0px) + var(--mm-w) + 18px);
+    background: linear-gradient(180deg, var(--panel-raised), var(--panel));
+    border-bottom: 2px solid var(--frame);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 55%, transparent);
+    pointer-events: none;
+  }
+  body.touch #stats { gap: 4px 10px; font-size: 1.2rem; flex-wrap: wrap; }
+  body.touch .bar-track { width: 58px; height: 12px; }
+  body.touch #header .hud-item { font-size: 1.2rem; }
+  body.touch #level-hud, body.touch #power-hud, body.touch #hero-name-hud,
+  body.touch #pact-hud, body.touch #food-hud { display: none; }
+  /* Stamina still shows under the hero while draining, so drop it from the strip. */
+  body.touch #stats .stat-bar:has(#stam-text) { display: none; }
+  /* Minimap: top-left, inside the header band (fixed so it isn't clipped by the
+     between-bands #game-wrap). */
+  body.touch #minimap {
+    position: fixed !important;
+    top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+    left: calc(env(safe-area-inset-left, 0px) + 8px) !important;
+    width: var(--mm-w) !important; height: var(--mm-w) !important;
+    z-index: calc(var(--z-touch) + 1);
+    background: var(--bg); opacity: 1;   /* solid so it reads on the dark header band */
+  }
+  body.touch #minimap.collapsed { width: 30px !important; height: 30px !important; }
+  /* Settings + bag: top-right of the header band, side by side. */
+  body.touch #touch-topbar {
+    position: fixed; pointer-events: auto; display: flex; flex-direction: row; gap: 8px;
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    right: calc(env(safe-area-inset-right, 0px) + 8px); left: auto;
+    z-index: calc(var(--z-touch) + 1);
+  }
+  /* Buff/debuff icons: top-RIGHT of the MAP (the #game-wrap already starts below
+     the header band), so they read on the map, clear of the header. */
+  body.touch #buff-overlay {
+    top: 6px !important; right: 6px !important;
+    z-index: var(--z-hud); max-width: 60%;
+  }
+
+  /* ── Touch HUD overlay ── a full-screen pass-through layer; only its buttons
+     catch pointers, so taps on the open map still reach the canvas. */
+  #touch-hud { display: none; }
+  body.touch #touch-hud { display: block; position: fixed; inset: 0; z-index: var(--z-touch); pointer-events: none; }
+  /* ── Bottom action bar ── one full-width row: a sprint toggle on the left, then
+     the live #skill-bar (town portal · potions · auto-cast · skills 1–4) re-homed
+     here by syncHudLayout(). Scrolls horizontally if the tiles overflow a very
+     narrow screen. No USE/DASH buttons — tap the map to use, double-tap-drag the
+     joystick to dash. */
+  /* ── Footer band ── solid bar across the bottom; the extra top padding gives the
+     RUN / AUTO pills room ON the band, so they never poke up onto the map. */
+  body.touch #touch-cluster {
+    position: fixed; pointer-events: auto; left: 0; right: 0; bottom: 0;
+    height: calc(env(safe-area-inset-bottom, 0px) + var(--ftr-h));
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 20px calc(env(safe-area-inset-right, 0px) + 10px) calc(env(safe-area-inset-bottom, 0px) + 10px) calc(env(safe-area-inset-left, 0px) + 10px);
+    background: linear-gradient(0deg, var(--panel-raised), var(--panel));
+    border-top: 2px solid var(--frame);
+    box-shadow: 0 -2px 8px color-mix(in srgb, var(--ink) 55%, transparent);
+    z-index: var(--z-touch);
+  }
+
+  /* Utility buttons (menu, bag): 48px round translucent tiles. */
+  .touch-util {
+    width: 48px; height: 48px; border-radius: var(--radius-pill); position: relative;
+    display: flex; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--panel-raised) 76%, transparent);
+    border: 1px solid var(--border); color: var(--purple-200);
+    box-shadow: var(--shadow-sm); cursor: pointer;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .touch-util svg { width: 24px; height: 24px; }
+  .touch-util:active { background: color-mix(in srgb, var(--interactive) 32%, var(--panel)); }
+  .tb-badge {
+    position: absolute; top: -3px; right: -3px; min-width: 16px; height: 16px; padding: 0 3px;
+    border-radius: var(--radius-pill); background: var(--gold); color: var(--ink);
+    font-size: 1.1rem; font-weight: bold; line-height: 16px; text-align: center;
+    box-shadow: 0 0 5px color-mix(in srgb, var(--gold) 70%, transparent);
+  }
+  .tb-badge:empty { display: none; }
+
+  /* RUN sprint toggle (rendered as a skill tile leading the left group): lights
+     gold when auto-sprint is latched. */
+  body.touch #touch-cluster .skillbar-btn.sprint-btn {
+    border: 1px solid var(--border); color: var(--purple-200); background: var(--panel-raised);
+  }
+  body.touch #touch-cluster .skillbar-btn.sprint-btn .sb-icon svg { width: 60%; height: 60%; }
+  body.touch #touch-cluster .skillbar-btn.sprint-btn.on {
+    border-color: var(--gold); color: var(--gold);
+    background: color-mix(in srgb, var(--gold) 24%, var(--panel));
+    box-shadow: 0 0 10px color-mix(in srgb, var(--gold) 55%, transparent);
+  }
+
+  /* The re-homed live #skill-bar spans the bar as three groups: a left 2×2
+     (RUN · town over HP · MP), the centred AUTO slot, and a right 2×2 of skills
+     1–4. Same buttons / onclick / cooldowns as desktop, just re-laid. */
+  body.touch #touch-cluster #skill-bar {
+    flex: 1 1 auto; min-width: 0; width: 100%;
+    display: flex; align-items: end; justify-content: space-between; flex-wrap: nowrap;
+    gap: 8px; padding: 0; background: none; border: none; box-shadow: none;
+    --sb-size: clamp(42px, 11.5vw, 50px);
+  }
+  body.touch #touch-cluster #skill-bar .sb-left,
+  body.touch #touch-cluster #skill-bar .sb-right {
+    flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, var(--sb-size));
+    gap: 6px; align-items: end; justify-items: center;
+  }
+  body.touch #touch-cluster #skill-bar .sb-auto-wrap {
+    flex: 0 0 auto; display: flex; align-items: end; justify-content: center;
+  }
+  body.touch #touch-cluster .skillbar-btn { width: var(--sb-size); height: var(--sb-size); }
+  body.touch #touch-cluster .sb-cell {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  }
+  /* Keep only the RUN and AUTO labels (as pills, like desktop's AUTO); drop the
+     keyboard hotkey pills. Shown pills float just above their tile so every button
+     still bottom-aligns in its grid row. */
+  body.touch #touch-cluster #skill-bar .sb-pill { display: none; }
+  body.touch #touch-cluster #skill-bar .sb-pill.auto,
+  body.touch #touch-cluster #skill-bar .sb-pill.sprint {
+    display: block; position: absolute; top: -15px; left: 50%; right: auto; margin: 0;
+    transform: translateX(-50%); width: max-content; max-width: none; overflow: visible;
+    text-align: center; white-space: nowrap; pointer-events: none;
+  }
+
+  /* ── Landscape block ── Dungeon Loot is portrait-only on touch. In landscape,
+     this full-screen notice covers the game (and updateOrientationBlock() pauses
+     play). Scoped under body.touch so desktop never sees it. */
+  #rotate-notice { display: none; }
+  @media (orientation: landscape) {
+    body.touch #rotate-notice {
+      display: flex; position: fixed; inset: 0; z-index: var(--z-top);
+      align-items: center; justify-content: center; text-align: center;
+      background: var(--bg); color: var(--text);
+      padding: calc(env(safe-area-inset-top, 0px) + 24px) 28px calc(env(safe-area-inset-bottom, 0px) + 24px);
+    }
+    body.touch #rotate-notice .rot-inner { max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    body.touch #rotate-notice .rot-icon { width: 56px; height: 56px; color: var(--gold); }
+    body.touch #rotate-notice .rot-title { font-size: var(--fs-title); color: var(--gold); font-weight: bold; }
+    body.touch #rotate-notice .rot-sub { font-size: var(--fs-body); color: var(--text-muted); line-height: 1.4; }
+  }
+
+  /* ── Floating joystick rings ── placed in viewport px by showJoyVisual(); shown
+     only while the stick is engaged. Decorative (pointer-events:none). */
+  #joy-base, #joy-knob { display: none; }
+  body.touch.joy-on #joy-base {
+    display: block; position: fixed; z-index: var(--z-touch); pointer-events: none;
+    width: 112px; height: 112px; margin-left: -56px; margin-top: -56px; border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--interactive) 55%, transparent);
+    background: radial-gradient(circle, color-mix(in srgb, var(--interactive) 15%, transparent), transparent 70%);
+  }
+  body.touch.joy-on #joy-knob {
+    display: block; position: fixed; z-index: var(--z-touch); pointer-events: none;
+    width: 46px; height: 46px; margin-left: -23px; margin-top: -23px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, color-mix(in srgb, var(--interactive) 85%, var(--paper)), var(--interactive));
+    border: 2px solid color-mix(in srgb, var(--paper) 40%, transparent);
+    box-shadow: var(--shadow-glow);
+  }
+
+  /* ── Bag/loot drawer as a full-screen sheet ── */
+  body.touch #side-panel { transition: none; }
+  body.touch:not(.bag-open) #side-panel { display: none; }
+  body.touch.bag-open #side-panel {
+    display: flex; position: fixed; inset: 0; width: 100%; transform: none; opacity: 1;
+    pointer-events: auto; z-index: var(--z-modal); border-left: none;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  }
+  /* The desktop spine becomes a top header/close bar on touch. */
+  body.touch.bag-open #panel-toggle {
+    display: flex; align-items: center; gap: 8px; justify-content: space-between; width: 100%;
+    writing-mode: horizontal-tb; transform: none; height: auto; flex: 0 0 auto;
+    padding: 12px 16px; font-size: var(--fs-head-sm); color: var(--gold);
+    border-bottom: 1px solid var(--border);
+  }
+  body.touch.bag-open #panel-toggle::after { content: '✕'; margin-left: auto; font-size: var(--fs-head); }
+  body.touch.bag-open #panel-toggle .log-caret { display: none; }
+  body.touch.bag-open #panel-body { flex: 1; min-height: 0; }
+
+  /* ── Larger tap targets across the menus/shops on touch (48px floor). ── */
+  body.touch .tab-btn, body.touch .settings-tab-btn, body.touch .shop-tab,
+  body.touch .lb-tab, body.touch .lb-mode { min-height: 44px; }
+  body.touch .settings-item, body.touch .town-menu-btn, body.touch .shop-row,
+  body.touch .act-btn, body.touch .la-btn, body.touch .modal-nav-btn,
+  body.touch .kb-row { min-height: 44px; }
+  /* Full-height, scrollable modals so long menus reach on a small screen. */
+  /* Town / shop / mystic modals fill the screen on touch (the 340px cap clips the
+     2-column service grid on a phone); the settings card just grows to full height. */
+  body.touch #town-overlay, body.touch #shop-overlay, body.touch #mystic-overlay { padding: 0; }
+  body.touch #town-modal, body.touch #shop-modal, body.touch #mystic-modal {
+    width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  body.touch #town-content, body.touch #shop-content, body.touch #mystic-content { overflow-x: hidden; }
+  body.touch #settings-card { max-height: 100dvh; }
+
+  /* Tutorial hint chip: dock it clear of the top vitals strip (which can wrap to
+     2 rows on a narrow foldable) and of both thumb zones, and hide it while a
+     full-screen sheet is open. */
+  body.touch #tutorial-hint {
+    top: calc(env(safe-area-inset-top, 0px) + 96px); bottom: auto;
+    left: 50%; transform: translateX(-50%); max-width: 82vw; font-size: var(--fs-sub);
+  }
+  body.touch.bag-open #tutorial-hint { display: none; }
+
+  /* Objective/bounty chip: dock it just above the bottom action bar on touch so it
+     never sits under the top vitals or the menu/bag buttons. */
+  body.touch #objective-chip {
+    top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+    max-width: 82vw;
+  }

@@ -30,8 +30,12 @@ import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../uti
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
 import { rollDamage, spreadRange } from '../systems/damageRoll.js';
 import { spellSpreadFor } from '../data/spellSpread.js';
+import { SKILL_MILESTONES } from '../data/skillMilestones.js';
+import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/gearPower.js';
+import { GEAR_POWER } from '../data/gearPower.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
+import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
 import { forgeSections } from '../systems/forgeFlow.js';
@@ -59,6 +63,9 @@ import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTin
 import { elementOf, paletteFor, castArchetype, weaponArchetype, projectileElement, bossFxFor,
   archetypeIsProjectile, clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
 import { UNIQUES, uniqueForBase, uniquesForSlot } from '../data/uniques.js';
+import { ITEM_SETS } from '../data/itemSets.js';
+import { setPieceCount, setComplete as setIsComplete, setStatContribution,
+  rollSetPiece } from '../systems/itemSets.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -2885,37 +2892,15 @@ function statMeaningTip(kind, key) {
 const HERO = 'The hero';
 
 // ── POWER & ATTRIBUTES ──
-// Every equippable item has a single "power" number summarising how strong it is:
-// each stat is worth a weighted amount, plus a flat bonus for its rarity tier.
-// The player's overall power is built from their level, attributes, and gear.
-const STAT_POWER_WEIGHTS = { ATK:3, DEF:2, SPD:1.5, LCK:1.5, HP:0.2, MP:0.25, CRIT:1.5, ACC:0.9, CRITDMG:1, REGEN:5, DMG:3,
-  // Rating stats (CRIT/DODGE/BLOCK/DR/ACC/SPD) are now larger flat numbers that
-  // scale with item level, so their per-point power weight is lowered to keep an
-  // item's overall Power sane and comparable to the old %-stat era. SPD matches
-  // DODGE (1.5): both feed evasion rating 1:1, so an equal value is equal Power.
-  // HP and MP are the two big resource POOLS — they roll several times larger than
-  // any other stat (AFFIX_CURVES flat 6 / 4), so they carry a small per-point weight
-  // (0.2 / 0.25); otherwise one HP roll alone would out-power a whole weapon's damage.
-  LEECH:5, MPLEECH:3, HPKILL:1, MPKILL:1, THORNS:1, DR:1.5, BLOCK:1.2, DODGE:1.5, IDMG:4, DBLSTRIKE:5,
-  CLEAVE:2, BOSSDMG:2, EXEC:2, PEN:2, GOLDFIND:1, XPGAIN:1, MAGICFIND:2, MATFIND:1, SPELLPWR:3,
-  SKILLPWR:3, CASTSPD:4, CDR:4, MCR:3, BLEED:3, STUNPWR:2, ATKSPD:4, TENAC:2.5 };
-// Base per-point power weight of an attribute — the class-INDEPENDENT half: every
-// attribute feeds a family of derived stats (HP, MP, crit, evasion, regen…) that's
-// the same for everyone. On top of this, a class earns EXTRA Power for points in the
-// attribute it deals damage with (see attrPowerWeight), so the same +Might is worth
-// more to a Warrior than a Mage. Used identically for spent attributes (playerPower)
-// and gear affixes (itemPower), so a point is worth the same Power spent or geared.
-const ATTR_POWER_WEIGHT = 3;
-// Power credited per point of bonus Attack an attribute grants THIS class through the
-// damage system (attrDamage / dmgAttrs: primary ×2.4, secondary ×0.8, universal Might
-// ×0.6 per point). Lighter than the ATK gear-stat weight (3) on purpose, so a damage
-// attribute clearly matters to its class without Power collapsing into a damage meter.
-const ATTR_DMG_POWER = 1.2;
-// A small flat nudge per rarity — kept low on purpose so an item's power is
-// driven mostly by its (item-level-scaled) stats. This is what lets a deep
-// common eventually out-power an early legendary instead of the tier bonus
-// permanently outranking it.
-const TIER_POWER_BONUS = { junk:0, normal:1, uncommon:2, rare:4, epic:7, legendary:11, unique:16 };
+// Every equippable item has a single "power" number, and the hero has an overall
+// Power. Both are now BUILD-AWARE: an item's Power is the marginal gain in an
+// effective combat score (a blend of effective offense and survivability, built
+// from the real combat formulas) that its affixes give THIS hero's current build,
+// so a stat that does nothing for you — Crit Damage with no crit, Spell Power on a
+// martial build, Attack Speed on a caster — adds ~0 Power. The pure math lives in
+// src/systems/gearPower.js with tuning in src/data/gearPower.js; the adapter that
+// reads the live build into that math (buildPowerContext / itemPower / playerPower)
+// sits with the loadout caches below.
 
 // Hero attributes — the only thing you spend points on. Every class now starts
 // with the SAME spread (ATTR_BASE in each) and differs only in how its points
@@ -3369,34 +3354,6 @@ const MATERIAL_MIN_DIFF = { scrap: 1, glimmer: 1, core: 2, chaos: 3 };
 function activeDifficulty() { return inTown ? diffOf(Math.max(1, dungeonReturn || 1)) : currentDifficulty(); }
 function materialUnlocked(k) { return activeDifficulty() >= (MATERIAL_MIN_DIFF[k] || 1); }
 
-// Per-point power weight of an attribute FOR THE CURRENT CLASS. Every attribute is
-// worth the class-independent ATTR_POWER_WEIGHT (its derived-stat package); the
-// class's damage attributes turn points into real Attack on top (attrDamage), so a
-// point in your primary/secondary damage stat — or any Might, which always lends a
-// little Attack — is worth more Power to you than to a class that can't hit with it.
-function attrPowerWeight(key) {
-  let w = ATTR_POWER_WEIGHT;
-  const { primary, secondary } = classDmgAttrs();
-  if (key === primary)        w += ATTR_DMG_PRIMARY   * ATTR_DMG_POWER;
-  else if (key === secondary) w += ATTR_DMG_SECONDARY * ATTR_DMG_POWER;
-  else if (key === 'might')   w += ATTR_FX.atkPerMight * ATTR_DMG_POWER; // universal Might dab
-  return w;
-}
-// Per-point power weight of a gear STAT for the current class. Most stats are
-// class-neutral (their table weight); Spell Power is scaled by how much the class
-// actually casts (CLASS_SPELL_RELIANCE), so a caster values a Spell Power roll fully
-// while it's near-dead weight on a pure-martial Warrior or Rogue.
-function statPowerWeight(key) {
-  let w = STAT_POWER_WEIGHTS[key] || 1;
-  // Caster %s (Spell Power / Cast Speed) are weighted by how much the class casts;
-  // martial-skill %s (Skill Power) by how much it leans on weapon skills — so a
-  // Spell Power roll pads a Mage's Power but is near-dead weight on a Warrior, and
-  // vice-versa for Skill Power. Keeps per-class Power tracking real gear impact.
-  if (key === 'SPELLPWR' || key === 'CASTSPD') w *= (CLASS_SPELL_RELIANCE[player.class] ?? 1);
-  else if (key === 'SKILLPWR') w *= (CLASS_SKILL_RELIANCE[player.class] ?? 1);
-  return w;
-}
-
 // ── LOADOUT-DERIVED CACHES ──
 // activeSlots()'s fix-point, totalStat's gear sums and the item-power counts are
 // pure functions of the worn gear, the hero's base attributes and learned skills
@@ -3419,35 +3376,186 @@ function loadoutCache() {
   return _loBucket;
 }
 
-// Total power of a single item, AS THIS CLASS would wield it: weighted sum of its
-// stats + attributes + a rarity bonus. The same item can be worth different Power to
-// different classes (a +Might affix or a Spell Power roll lands differently), which
-// is the point — Power should track the item's real impact on this hero.
-// Cached per item object: the number is pure over (item, class), and every item
-// mutation (the Enchanter) bumps the loadout epoch, which invalidates the entry.
-const _itemPowerCache = new WeakMap();
-function itemPower(item) {
-  if (!item || !item.stats) return 0;
-  const hit = _itemPowerCache.get(item);
-  if (hit && hit.epoch === loadoutEpoch && hit.cls === player.class) return hit.val;
-  let p = 0;
-  for (const [k, v] of Object.entries(item.stats)) {
+// ── BUILD-AWARE POWER ADAPTER ──
+// Bridges the live game to the pure combat-score math in systems/gearPower.js.
+// It reads the hero's whole build into a numeric CONTEXT (via the existing
+// derived-stat functions, so attributes + skills + worn gear + class are already
+// folded in) and maps each item's affixes into a matching DELTA on that context.
+// An item's Power is then the marginal combat-score the delta buys — so a stat
+// worth nothing to this build (Crit Damage with no crit, Spell Power on a martial
+// build, Attack Speed on a caster) adds ~0 Power. See src/data/gearPower.js.
+const FIST_AVG = 2;  // bare-fists average damage ((1+3)/2) — the weapon baseline
+
+// Which combat-score axis each gear stat feeds (a +v roll adds v to that axis).
+// CRITDMG, HP and weapon DMG are special-cased in itemPowerContribution; the keys
+// NOT listed here (MP, MCR, MP-leech/kill, find/XP/gold) carry no combat axis —
+// they add flat, build-independent utility Power instead (GEAR_POWER.utilityFlat),
+// since they don't change combat strength.
+const POWER_STAT_AXIS = {
+  ATK: 'atkFlat', IDMG: 'idmgPct', CRIT: 'critRating', LCK: 'critRating',
+  SKILLPWR: 'skillPwrPct', SPELLPWR: 'spellPwrPct', ATKSPD: 'atkSpdPct', CASTSPD: 'castSpdPct',
+  CDR: 'cdrRating', PEN: 'penPct', DBLSTRIKE: 'dblStrikePct', CLEAVE: 'cleavePct',
+  BOSSDMG: 'bossDmgPct', EXEC: 'execPct', BLEED: 'bleedPct', STUNPWR: 'stunPct',
+  ACC: 'accRating', SPD: 'dodgeRating', DODGE: 'dodgeRating', DEF: 'def', DR: 'drRating',
+  BLOCK: 'blockRating', THORNS: 'thornsPct', TENAC: 'tenacPct', LEECH: 'leechPct',
+  HPKILL: 'hpKill', REGEN: 'regen',
+};
+
+// The hero's current full-build combat context — every input combatScore() reads.
+// Chances are measured against a reference tied to the hero's LEVEL (stable as you
+// walk between floors, and cache-safe: level-ups bump the loadout epoch). Cached
+// once per loadout epoch alongside the other loadout-derived sums.
+function buildPowerContext() {
+  const c = loadoutCache();
+  if (c.powerCtx) return c.powerCtx;
+  const L = Math.max(1, player.level || 1);
+  const [wLo, wHi] = weaponDmgRange();
+  // Power reflects your permanent BUILD, so the context excludes TRANSIENT combat
+  // buffs and food (buffMag / foodFx) — they change without bumping the loadout
+  // epoch, so folding them in would freeze a stale, buffed value in the cache and
+  // make Power flicker. The rating/mult aggregates below are therefore rebuilt
+  // from their permanent parts (attributes + gear + learned passives) rather than
+  // read from the buff-inclusive derived functions. Where a derived function is
+  // already buff-free (accuracy, block, DR, attack speed, class multipliers) it is
+  // reused directly.
+  const hpMult = (player.class === 'templar' ? 1.20 : 1) * (1 + skillBonus('maxHpPct')) * diffDebuffMult();
+  const hpRaw = L * DEV.hpPerLevel + totalAttr('vitality') * ATTR_FX.hpPerVit + totalStat('HP');
+  const ctx = {
+    refLevel: L,
+    // Fixed multipliers / class reliance (never moved by a single affix).
+    offMult: classDmgDealtMult() * diffDebuffMult(),
+    dmgTakenMult: classDmgTakenMult(),
+    skillReliance: CLASS_SKILL_RELIANCE[player.class] ?? 1,
+    spellReliance: CLASS_SPELL_RELIANCE[player.class] ?? 1,
+    // Effective max-HP gained per raw point of HP / Vitality (the class + skill +
+    // difficulty multipliers), so a +HP roll's survivability is valued as it lands.
+    hpScale: hpMult,
+    // Offense aggregates.
+    weaponAvg: (wLo + wHi) / 2,
+    atkFlat: L * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat'),
+    idmgPct: totalStat('IDMG'),
+    critRating: totalAttr('luck') * ATTR_FX.critPerLuck + totalStat('CRIT') + totalStat('LCK')
+      + ratePct(skillBonus('crit')) + (player.class === 'rogue' ? 12 + L * 1.2 : 0),
+    critMult: critDamageMult(),
+    skillPwrPct: skillBonus('skillpwr') * 100 + totalStat('SKILLPWR'),
+    spellPwrPct: ((player.class === 'mage' ? 0.15 : 0) + skillBonus('spell')) * 100 + totalStat('SPELLPWR'),
+    spellCore: GEAR_POWER.spellFlat + L * GEAR_POWER.spellPerLvl + totalAttr('spirit') * ATTR_FX.spellPerSpr,
+    atkSpdPct: playerAttackSpeedPct(),
+    castSpdPct: totalStat('CASTSPD'),
+    cdrRating: totalStat('CDR'),
+    penPct: totalStat('PEN') + 100 * skillBonus('pen'),
+    dblStrikePct: totalStat('DBLSTRIKE'),
+    cleavePct: totalStat('CLEAVE'), bossDmgPct: totalStat('BOSSDMG'), execPct: totalStat('EXEC'),
+    bleedPct: totalStat('BLEED'), stunPct: totalStat('STUNPWR'),
+    accRating: playerAccuracyRating(),
+    // Defense aggregates.
+    maxHp: Math.max(1, hpRaw * hpMult),
+    def: totalStat('DEF') + totalAttr('vitality') * ATTR_FX.defPerVit,
+    dodgeRating: totalAttr('agility') * ATTR_FX.evaPerAgi + totalStat('SPD') + totalStat('DODGE')
+      + ratePct(skillBonus('dodge')) + (player.class === 'rogue' ? 14 + L * 1.2 : 0),
+    blockRating: playerBlockRating(),
+    drRating: playerDRRating(),
+    regen: (totalStat('REGEN') + totalAttr('vitality') * ATTR_FX.hpRegenPerVit
+      + (player.class === 'templar' ? 2 : 0) + skillBonus('hpRegen')) * TICKS_PER_SEC,
+    thornsPct: totalStat('THORNS'),
+    tenacPct: totalStat('TENAC'),
+    leechPct: totalStat('LEECH'),
+    hpKill: totalStat('HPKILL'),
+  };
+  c.powerCtx = ctx;
+  return ctx;
+}
+
+// Combat-axis delta an attribute affix (+v of `key`) adds, folding the class's
+// damage scaling (attrDamage) and each attribute's derived-stat package (ATTR_FX)
+// — so +Luck is worth Power only to a build that crits, +Spirit only where it
+// feeds spells, etc.
+function attrPowerAxes(key, v, ctx, add) {
+  const { primary, secondary } = classDmgAttrs();
+  const dmgCoef = key === primary ? ATTR_DMG_PRIMARY
+    : key === secondary ? ATTR_DMG_SECONDARY
+    : key === 'might' ? ATTR_FX.atkPerMight : 0;   // universal Might dab when off-class
+  if (dmgCoef) add('atkFlat', v * dmgCoef);
+  if (key === 'vitality') {
+    add('maxHp', v * ATTR_FX.hpPerVit * ctx.hpScale);
+    add('def', v * ATTR_FX.defPerVit);
+    add('regen', v * ATTR_FX.hpRegenPerVit * TICKS_PER_SEC);
+  } else if (key === 'agility') {
+    add('dodgeRating', v * ATTR_FX.evaPerAgi);
+    add('accRating', v * ATTR_FX.accPerAgi);
+  } else if (key === 'spirit') {
+    add('spellCore', v * ATTR_FX.spellPerSpr);
+  } else if (key === 'luck') {
+    add('critRating', v * ATTR_FX.critPerLuck);
+  }
+}
+
+// An item's affixes expressed as a combat-context delta (the axes its stats/attrs
+// move). Weapon DMG is stored relative to bare fists so vacating the weapon slot
+// (below) leaves the fists baseline rather than zero damage.
+function itemPowerContribution(item, ctx) {
+  const d = {};
+  const add = (axis, val) => { d[axis] = (d[axis] || 0) + val; };
+  const stats = item.stats || {};
+  for (const k in stats) {
+    const v = stats[k];
     if (k === 'DMG') {
       const [lo, hi] = String(v).split('-').map(Number);
-      p += ((lo + hi) / 2) * STAT_POWER_WEIGHTS.DMG;
-    } else if (typeof v === 'number') {
-      p += v * statPowerWeight(k);
-    }
+      if (Number.isFinite(lo) && Number.isFinite(hi)) add('weaponAvg', (lo + hi) / 2 - FIST_AVG);
+    } else if (typeof v !== 'number') { /* non-numeric (e.g. a legendary tag) — skip */ }
+    else if (k === 'CRITDMG') add('critMult', v / 100);
+    else if (k === 'HP') add('maxHp', v * ctx.hpScale);
+    else if (POWER_STAT_AXIS[k]) add(POWER_STAT_AXIS[k], v);
   }
-  // Attribute affixes (+Might, +Luck, …) add to an item's power too, weighted by how
-  // much THIS class gains from that attribute (attrPowerWeight).
-  if (item.attrs) for (const [k, v] of Object.entries(item.attrs)) {
-    if (typeof v === 'number') p += v * attrPowerWeight(k);
+  const attrs = item.attrs || {};
+  for (const k in attrs) if (typeof attrs[k] === 'number') attrPowerAxes(k, attrs[k], ctx, add);
+  return d;
+}
+
+// Flat, build-independent Power an item carries: a small nudge per point of a
+// non-combat stat (find / XP / gold / mana) so a pure-utility piece never reads a
+// literal 0, plus the rarity-tier bonus.
+function itemFlatPower(item) {
+  let f = GEAR_POWER.tierBonus[item.tier] || 0;
+  const stats = item.stats || {};
+  for (const k in stats) {
+    const w = GEAR_POWER.utilityFlat[k];
+    if (w && typeof stats[k] === 'number') f += stats[k] * w;
   }
-  p += TIER_POWER_BONUS[item.tier] || 0;
-  const val = Math.max(0, Math.round(p));
-  _itemPowerCache.set(item, { epoch: loadoutEpoch, cls: player.class, val });
-  return val;
+  return f;
+}
+
+// Raw (unrounded, un-clamped) Power an item is worth to the CURRENT build: the
+// marginal combat-score gain of slotting it — its slot VACATED first, so a weapon
+// replaces the current weapon rather than stacking with it, and the equipped piece
+// in a slot is valued against the build without it — plus its flat utility Power.
+function itemPowerRaw(item) {
+  const ctx = buildPowerContext();
+  const contrib = itemPowerContribution(item, ctx);
+  let base = ctx;
+  const occ = item.slot ? equipped[item.slot] : null;
+  if (occ && activeSlots()[item.slot]) {
+    base = applyDelta(ctx, occ === item ? contrib : itemPowerContribution(occ, ctx), -1);
+  }
+  return marginalPower(base, contrib) + itemFlatPower(item);
+}
+
+// Cached per item object over (loadout epoch, class): the value is pure over the
+// build, and every gear / attribute / skill mutation bumps the epoch, invalidating
+// the entry. Stores the RAW value so the upgrade delta stays honest about curses.
+const _itemPowerCache = new WeakMap();
+function itemPowerRawCached(item) {
+  if (!item || !item.stats) return 0;
+  const hit = _itemPowerCache.get(item);
+  if (hit && hit.epoch === loadoutEpoch && hit.cls === player.class) return hit.raw;
+  const raw = itemPowerRaw(item);
+  _itemPowerCache.set(item, { epoch: loadoutEpoch, cls: player.class, raw });
+  return raw;
+}
+// The Power number shown on a piece — its marginal worth to this hero, floored at 0.
+function itemPower(item) {
+  if (!item || !item.stats) return 0;
+  return Math.max(0, Math.round(itemPowerRawCached(item)));
 }
 
 // Effective value of an attribute: the points spent (including the ATTR_BASE
@@ -3491,33 +3599,61 @@ function attrDamage() {
 // reads negative.
 function critDamageMult() { return Math.max(0, 2.0 + totalStat('CRITDMG') / 100 + skillBonus('critDmg')); }
 
-// The player's overall power: a blend of level, attributes, and equipped gear.
-// Red/ignored pieces (requirement no longer met) don't count — they give nothing.
+// The hero's overall Power — the absolute strength of the whole build. It IS the
+// effective combat score (offense × survivability, which already folds in level,
+// attributes, skills and worn gear via the derived stats) scaled to the familiar
+// ~100-300 fresh-hero range, plus the small flat utility/tier Power of worn
+// pieces. Monotonic: a real upgrade always raises it. Red/ignored pieces give
+// nothing (their stats aren't in the context, and their flats are skipped).
 function playerPower() {
-  let p = player.level * 10;
+  const ctx = buildPowerContext();
+  let p = GEAR_POWER.K * powerScalar(ctx);
   const active = activeSlots();
-  for (const slot of SLOT_KEYS) if (active[slot]) p += itemPower(equipped[slot]);
-  // Every allocated attribute point counts — the starting ATTR_BASE block AND points
-  // spent on level-up — each weighted by how much THIS class gains from it
-  // (attrPowerWeight), exactly like a gear attribute affix, so a point is worth the
-  // same Power spent or geared and a damage-stat build reads stronger than an off-stat one.
-  for (const k of ATTR_KEYS) p += (player.attributes?.[k] || 0) * attrPowerWeight(k);
-  p += spentAllSkillPoints() * 5; // skill-tree investment (both pools) shows up in Power too
+  for (const slot of SLOT_KEYS) if (active[slot] && equipped[slot]) p += itemFlatPower(equipped[slot]);
   return Math.round(p);
 }
 
+// The bare build the CURRENT hero has with all ACTIVE worn gear stripped away: its
+// combat context (level + attributes + skills only) and the flat Power those worn
+// pieces carry. Only ACTIVE pieces are stripped — an inactive (requirement-not-met)
+// piece contributes nothing to the live context to begin with.
+function strippedPowerContext() {
+  const ctx = buildPowerContext();
+  const active = activeSlots();
+  let bare = ctx, flat = 0;
+  for (const slot of SLOT_KEYS) {
+    const it = active[slot] && equipped[slot];
+    if (!it) continue;
+    bare = applyDelta(bare, itemPowerContribution(it, ctx), -1);
+    flat += itemFlatPower(it);
+  }
+  return { ctx, bare, flat };
+}
+// The "from gear" figure on the hero sheet — the Power your WORN gear adds, a clean
+// combat-score delta (full build vs. that build stripped bare). Because it reads
+// the live full context directly, POWER decomposes EXACTLY into this plus the
+// level/attribute/skill base, and it never double-counts two pieces' synergy.
+function gearContributionPower() {
+  const { ctx, bare, flat } = strippedPowerContext();
+  return Math.round(GEAR_POWER.K * (powerScalar(ctx) - powerScalar(bare)) + flat);
+}
+
 // The true Power swing from equipping `item` into its slot — what the bag/shop
-// "upgrade" arrows compare against. Beyond the piece it replaces, equipping a
-// two-handed weapon also STRANDS an incompatible off-hand (loadItem stows it), so
-// that off-hand's power belongs in the baseline. Without this, a 2H weapon could
-// flag as a green upgrade while actually LOWERING your Power once the off-hand drops.
+// "upgrade" arrows compare against. Because itemPower values a piece against its
+// slot VACATED, itemPower(new) and itemPower(current occupant) share one baseline,
+// so their difference is the honest swap delta. Beyond the piece it replaces,
+// equipping a two-handed weapon also STRANDS an incompatible off-hand (loadItem
+// stows it), so that off-hand's Power is lost in the swap too — without this a 2H
+// could flag as a green upgrade while actually LOWERING your Power.
 function equipUpgradeDelta(item) {
   if (!item || !item.slot) return 0;
-  let baseline = equipped[item.slot] ? itemPower(equipped[item.slot]) : 0;
-  if (item.slot === 'weapon' && equipped.offhand && offhandEquipError(equipped.offhand, item)) {
-    baseline += itemPower(equipped.offhand);
+  const active = activeSlots();
+  const occ = equipped[item.slot];
+  let d = itemPowerRawCached(item) - ((occ && active[item.slot]) ? itemPowerRawCached(occ) : 0);
+  if (item.slot === 'weapon' && equipped.offhand && active.offhand && offhandEquipError(equipped.offhand, item)) {
+    d -= itemPowerRawCached(equipped.offhand);
   }
-  return itemPower(item) - baseline;
+  return Math.round(d);
 }
 
 // Max HP/MP are derived from level + attributes so the formula stays consistent
@@ -4590,15 +4726,16 @@ function equipReqBadge(item) {
 // dealt multiplier only applies to physical hits (see applyOffenseMods).
 const CLASS_DMG_DEALT = { warrior: 1.10, rogue: 1.12, mage: 1.00, templar: 1.00 };
 const CLASS_DMG_TAKEN = { warrior: 0.90, rogue: 0.95, mage: 0.90, templar: 0.85 };
-// How much each class leans on spell damage, used only to value the Spell Power gear
-// stat in Power (statPowerWeight): a Mage lives on spells, a Templar casts holy
-// smites alongside melee, and a Warrior/Rogue barely cast — so Spell Power is near-
-// dead weight for them and shouldn't pad their Power as if it were a caster's.
+// How much each class leans on spell damage. Blends the spell lane into the Power
+// combat score (buildPowerContext / systems/gearPower.js) and gates the caster
+// levers: a Mage lives on spells, a Templar casts holy smites alongside melee, and
+// a Warrior/Rogue barely cast — so Spell Power / Cast Speed are near-dead weight on
+// them and shouldn't pad their Power as if it were a caster's.
 const CLASS_SPELL_RELIANCE = { warrior: 0.25, rogue: 0.25, mage: 1.0, templar: 0.7 };
 // The martial mirror of CLASS_SPELL_RELIANCE: how much each class leans on WEAPON
-// active skills, used to value the Skill Power gear stat in Power (statPowerWeight).
-// Melee classes live on skills; the Mage barely swings, so Skill Power is near-dead
-// weight on it — the inverse of the spell reliance above.
+// active skills. Blends the martial lane into the Power combat score and gates the
+// martial levers (Skill Power / Attack Speed). Melee classes live on skills; the
+// Mage barely swings, so those are near-dead weight on it — the inverse of above.
 const CLASS_SKILL_RELIANCE = { warrior: 1.0, rogue: 1.0, mage: 0.35, templar: 0.85 };
 function classDmgDealtMult() {
   const base = CLASS_DMG_DEALT[player.class] || 1;
@@ -4731,34 +4868,34 @@ const SKILL_TREES = {
     ], 'passive'),
     active: buildWeb([
       {"id":"w_a00","name":"Brace","icon":"sk_wa_brace","mp":8,"cd":11,"cast":{"shape":"self","buff":[{"id":"shield","dur":5,"mag":50},{"id":"defUp","dur":5,"mag":0.25}]},"desc":"Hunker down for a defensive shield and damage reduction.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"w_a01","name":"Rend","icon":"sk_wa_rend","mp":7,"cd":3,"cast":{"shape":"melee","wpn":1.4,"lifesteal":0.15,"status":{"effect":"poison","dur":3,"chance":1}},"desc":"A bleeding strike that poisons the target and steals life.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"w_a02","name":"Cleave","icon":"sk_wa_cleave","mp":7,"cd":2,"cast":{"shape":"cleave","wpn":1.5},"desc":"Swing wide, striking all foes in front of you.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"w_a03","name":"Bash","icon":"sk_wa_bash","mp":8,"cd":4,"cast":{"shape":"melee","wpn":1.6,"crit":true,"status":{"effect":"stun","dur":1,"chance":1}},"desc":"A heavy guaranteed-crit blow that stuns the target.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"w_a04","name":"Shield Bash","icon":"sk_wa04","mp":8,"cd":4,"cast":{"shape":"melee","wpn":1.3,"status":{"effect":"stun","dur":2,"chance":1},"buff":[{"id":"shield","dur":4,"mag":45}]},"desc":"Slam with your shield to stun and gain a brief guard.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"w_a01","name":"Rend","icon":"sk_wa_rend","mp":7,"cd":3,"cast":{"shape":"melee","wpn":1.4,"lifesteal":0.15,"status":{"effect":"poison","dur":3,"chance":1}},"desc":"A bleeding strike that deals {dmg}, poisons the target and steals life.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"w_a02","name":"Cleave","icon":"sk_wa_cleave","mp":7,"cd":2,"cast":{"shape":"cleave","wpn":1.5},"desc":"Swing wide for {dmg}, striking all foes in front of you.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"w_a03","name":"Bash","icon":"sk_wa_bash","mp":8,"cd":4,"cast":{"shape":"melee","wpn":1.6,"crit":true,"status":{"effect":"stun","dur":1,"chance":1}},"desc":"A heavy guaranteed-crit blow that deals {dmg} and stuns the target.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"w_a04","name":"Shield Bash","icon":"sk_wa04","mp":8,"cd":4,"cast":{"shape":"melee","wpn":1.3,"status":{"effect":"stun","dur":2,"chance":1},"buff":[{"id":"shield","dur":4,"mag":45}]},"desc":"Slam with your shield for {dmg}, stunning the foe and gaining a brief guard.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"w_a10","name":"Taunt","icon":"sk_wa_roar","mp":10,"cd":15,"cast":{"shape":"self","buff":[{"id":"thorns","dur":6,"mag":30},{"id":"regen","dur":6,"mag":6}]},"desc":"A defiant shout granting thorns and regeneration.","br":0,"x":0.28,"y":0.34,"band":1,"req":["w_a00"]},
-      {"id":"w_a11","name":"Blood Drinker","icon":"sk_wa11","mp":18,"cd":5,"cast":{"shape":"melee","wpn":1.7,"lifesteal":0.25,"heal":{"pctDmg":0.15}},"desc":"A vampiric strike healing for a share of the damage dealt.","br":1,"x":0.28,"y":0.34,"band":1,"req":["w_a01"]},
-      {"id":"w_a12","name":"Hamstring Swing","icon":"sk_wa12","mp":9,"cd":4,"cast":{"shape":"cleave","wpn":1.7,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A wide cleave that makes struck foes vulnerable.","br":2,"x":0.28,"y":0.34,"band":1,"req":["w_a02"]},
-      {"id":"w_a13","name":"Throw Blade","icon":"sk_wa_throw","mp":8,"cd":3,"cast":{"shape":"bolt","range":6,"wpn":1.8,"crit":true},"desc":"Hurl a weapon at a distant foe with deadly precision.","br":3,"x":0.28,"y":0.34,"band":1,"req":["w_a03"]},
+      {"id":"w_a11","name":"Blood Drinker","icon":"sk_wa11","mp":18,"cd":5,"cast":{"shape":"melee","wpn":1.7,"lifesteal":0.25,"heal":{"pctDmg":0.15}},"desc":"A vampiric strike dealing {dmg}, healing you for a share of it.","br":1,"x":0.28,"y":0.34,"band":1,"req":["w_a01"]},
+      {"id":"w_a12","name":"Hamstring Swing","icon":"sk_wa12","mp":9,"cd":4,"cast":{"shape":"cleave","wpn":1.7,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A wide cleave dealing {dmg} that leaves struck foes vulnerable.","br":2,"x":0.28,"y":0.34,"band":1,"req":["w_a02"]},
+      {"id":"w_a13","name":"Throw Blade","icon":"sk_wa_throw","mp":8,"cd":3,"cast":{"shape":"bolt","range":6,"wpn":1.8,"crit":true},"desc":"Hurl a weapon at a distant foe for {dmg} with deadly precision.","br":3,"x":0.28,"y":0.34,"band":1,"req":["w_a03"]},
       {"id":"w_a14","name":"Fortify","icon":"sk_wa_fortify","mp":10,"cd":15,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":70},{"id":"thorns","dur":6,"mag":35}]},"desc":"Raise your guard for a heavy shield and reflected thorns.","br":4,"x":0.28,"y":0.34,"band":1,"req":["w_a04"]},
       {"id":"w_a20","name":"Last Stand","icon":"sk_wa_laststand","mp":14,"cd":19,"cast":{"shape":"self","buff":[{"id":"shield","dur":7,"mag":110},{"id":"defUp","dur":7,"mag":0.4}]},"desc":"Plant your feet for a massive shield and damage reduction.","br":0,"x":0.72,"y":0.34,"band":1,"req":["w_a00"]},
-      {"id":"w_a21","name":"Onslaught","icon":"sk_wa_rampage","mp":18,"cd":5,"cast":{"shape":"melee","wpn":1.6,"repeat":2,"lifesteal":0.2},"desc":"A frenzy of strikes hitting twice and stealing heavy life.","br":1,"x":0.72,"y":0.34,"band":1,"req":["w_a01"]},
-      {"id":"w_a22","name":"Slam","icon":"sk_wa_slam","mp":12,"cd":5,"cast":{"shape":"nova","radius":2,"wpn":1.9,"status":{"effect":"stun","dur":2,"chance":0.6}},"desc":"Smash the ground for a shockwave that stuns nearby foes.","br":2,"x":0.72,"y":0.34,"band":1,"req":["w_a02"]},
-      {"id":"w_a23","name":"Impale","icon":"sk_wa_impale","mp":12,"cd":5,"cast":{"shape":"line","range":5,"wpn":2,"crit":true,"execute":0.25},"desc":"A piercing line strike that executes weakened foes.","br":3,"x":0.72,"y":0.34,"band":1,"req":["w_a03"]},
-      {"id":"w_a24","name":"Shield Charge","icon":"sk_wa_charge","mp":12,"cd":6,"cast":{"shape":"teleport","range":5,"wpn":1.6,"status":{"effect":"stun","dur":2,"chance":1},"buff":[{"id":"shield","dur":5,"mag":70}]},"desc":"Charge the nearest foe — stun it and gain a shield. Reaches ranged attackers.","br":4,"x":0.72,"y":0.34,"band":1,"req":["w_a04"]},
-      {"id":"w_a30","name":"Warstomp","icon":"sk_wa_warstomp","mp":14,"cd":6,"cast":{"shape":"nova","radius":3,"wpn":1.6,"knockback":2,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Stomp the earth to knock back and stun all around you.","br":0,"x":0.28,"y":0.58,"band":2,"req":["w_a10"]},
+      {"id":"w_a21","name":"Onslaught","icon":"sk_wa_rampage","mp":18,"cd":5,"cast":{"shape":"melee","wpn":1.6,"repeat":2,"lifesteal":0.2},"desc":"A frenzy of strikes for {dmg}, hitting twice and stealing heavy life.","br":1,"x":0.72,"y":0.34,"band":1,"req":["w_a01"]},
+      {"id":"w_a22","name":"Slam","icon":"sk_wa_slam","mp":12,"cd":5,"cast":{"shape":"nova","radius":2,"wpn":1.9,"status":{"effect":"stun","dur":2,"chance":0.6}},"desc":"Smash the ground for a shockwave dealing {dmg}, stunning nearby foes.","br":2,"x":0.72,"y":0.34,"band":1,"req":["w_a02"]},
+      {"id":"w_a23","name":"Impale","icon":"sk_wa_impale","mp":12,"cd":5,"cast":{"shape":"line","range":5,"wpn":2,"crit":true,"execute":0.25},"desc":"A piercing line strike dealing {dmg} that executes weakened foes.","br":3,"x":0.72,"y":0.34,"band":1,"req":["w_a03"]},
+      {"id":"w_a24","name":"Shield Charge","icon":"sk_wa_charge","mp":12,"cd":6,"cast":{"shape":"teleport","range":5,"wpn":1.6,"status":{"effect":"stun","dur":2,"chance":1},"buff":[{"id":"shield","dur":5,"mag":70}]},"desc":"Charge the nearest foe for {dmg} — stunning it and gaining a shield. Reaches ranged attackers.","br":4,"x":0.72,"y":0.34,"band":1,"req":["w_a04"]},
+      {"id":"w_a30","name":"Warstomp","icon":"sk_wa_warstomp","mp":14,"cd":6,"cast":{"shape":"nova","radius":3,"wpn":1.6,"knockback":2,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Stomp the earth for {dmg}, knocking back and stunning all around you.","br":0,"x":0.28,"y":0.58,"band":2,"req":["w_a10"]},
       {"id":"w_a31","name":"War Cry","icon":"sk_wa_warcry","mp":14,"cd":20,"cast":{"shape":"self","buff":[{"id":"dmgUp","dur":7,"mag":0.4},{"id":"lifestealUp","dur":7,"mag":0.15}]},"desc":"Enter a rage boosting damage and lifesteal as you fight.","br":1,"x":0.28,"y":0.58,"band":2,"req":["w_a11"]},
-      {"id":"w_a32","name":"Whirlwind","icon":"sk_wa_whirl","mp":15,"cd":5,"syn":{"skill":"w_p22","per":0.05},"cast":{"shape":"nova","radius":2,"wpn":1.7,"repeat":2},"desc":"Spin furiously, striking everything around you twice.","br":2,"x":0.28,"y":0.58,"band":2,"req":["w_a12"]},
-      {"id":"w_a33","name":"Hook","icon":"sk_wa_hook","mp":12,"cd":5,"cast":{"shape":"bolt","range":7,"wpn":2,"pull":true,"crit":true,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"Yank a distant foe to you with a vicious crit.","br":3,"x":0.28,"y":0.58,"band":2,"req":["w_a13"]},
+      {"id":"w_a32","name":"Whirlwind","icon":"sk_wa_whirl","mp":15,"cd":5,"syn":{"skill":"w_p22","per":0.05},"cast":{"shape":"nova","radius":2,"wpn":1.7,"repeat":2},"desc":"Spin furiously for {dmg}, striking everything around you twice.","br":2,"x":0.28,"y":0.58,"band":2,"req":["w_a12"]},
+      {"id":"w_a33","name":"Hook","icon":"sk_wa_hook","mp":12,"cd":5,"cast":{"shape":"bolt","range":7,"wpn":2,"pull":true,"crit":true,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"Yank a distant foe to you and strike for {dmg} with a vicious crit.","br":3,"x":0.28,"y":0.58,"band":2,"req":["w_a13"]},
       {"id":"w_a34","name":"Rally","icon":"sk_wa_rally","mp":14,"cd":22,"cast":{"shape":"self","buff":[{"id":"shield","dur":8,"mag":120},{"id":"thorns","dur":8,"mag":50},{"id":"defUp","dur":8,"mag":0.3}]},"desc":"Plant a banner granting a shield and reflective thorns.","br":4,"x":0.28,"y":0.58,"band":2,"req":["w_a14"]},
       {"id":"w_a40","name":"Unbreakable","icon":"sk_wa40","mp":20,"cd":22,"cast":{"shape":"self","buff":[{"id":"shield","dur":8,"mag":180},{"id":"defUp","dur":8,"mag":0.5},{"id":"regen","dur":8,"mag":12}]},"desc":"Become a living wall with an immense shield and regeneration.","br":0,"x":0.72,"y":0.58,"band":2,"req":["w_a20"]},
-      {"id":"w_a41","name":"Reaping Swing","icon":"sk_wa_reaping","mp":18,"cd":5,"cast":{"shape":"cleave","wpn":2.2,"lifesteal":0.3,"execute":0.3},"desc":"A wide reaping cleave that drains life and executes the weak.","br":1,"x":0.72,"y":0.58,"band":2,"req":["w_a21"]},
-      {"id":"w_a42","name":"Colossus Smash","icon":"sk_wa_colossus","mp":18,"cd":7,"syn":{"skill":"w_p32","per":0.05},"cast":{"shape":"nova","radius":3,"wpn":2.6,"status":{"effect":"vuln","dur":4,"chance":1},"knockback":2},"desc":"A devastating shockwave that shatters and stuns all foes.","br":2,"x":0.72,"y":0.58,"band":2,"req":["w_a22"]},
-      {"id":"w_a43","name":"Executioner's Strike","icon":"sk_wa43","mp":16,"cd":6,"cast":{"shape":"line","range":6,"wpn":2.6,"crit":true,"execute":0.35,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A guaranteed-crit line that pierces and executes wounded foes.","br":3,"x":0.72,"y":0.58,"band":2,"req":["w_a23"]},
+      {"id":"w_a41","name":"Reaping Swing","icon":"sk_wa_reaping","mp":18,"cd":5,"cast":{"shape":"cleave","wpn":2.2,"lifesteal":0.3,"execute":0.3},"desc":"A wide reaping cleave dealing {dmg} that drains life and executes the weak.","br":1,"x":0.72,"y":0.58,"band":2,"req":["w_a21"]},
+      {"id":"w_a42","name":"Colossus Smash","icon":"sk_wa_colossus","mp":18,"cd":7,"syn":{"skill":"w_p32","per":0.05},"cast":{"shape":"nova","radius":3,"wpn":2.6,"status":{"effect":"vuln","dur":4,"chance":1},"knockback":2},"desc":"A devastating shockwave dealing {dmg} that shatters and stuns all foes.","br":2,"x":0.72,"y":0.58,"band":2,"req":["w_a22"]},
+      {"id":"w_a43","name":"Executioner's Strike","icon":"sk_wa43","mp":16,"cd":6,"cast":{"shape":"line","range":6,"wpn":2.6,"crit":true,"execute":0.35,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A guaranteed-crit line dealing {dmg} that pierces and executes wounded foes.","br":3,"x":0.72,"y":0.58,"band":2,"req":["w_a23"]},
       {"id":"w_a44","name":"Bulwark Aura","icon":"sk_wa_banner","mp":18,"cd":27,"cast":{"shape":"self","buff":[{"id":"shield","dur":9,"mag":160},{"id":"thorns","dur":9,"mag":70},{"id":"dodgeUp","dur":9,"mag":0.2}]},"desc":"Raise an aura granting a vast shield and heavy thorns.","br":4,"x":0.72,"y":0.58,"band":2,"req":["w_a24"]},
       {"id":"w_a50","name":"Titan Form","icon":"sk_wa_avatar","mp":30,"cd":29,"cast":{"shape":"self","buff":[{"id":"shield","dur":10,"mag":260},{"id":"defUp","dur":10,"mag":0.6},{"id":"dmgUp","dur":10,"mag":0.5},{"id":"regen","dur":10,"mag":16}]},"desc":"Transform into an unstoppable titan with a colossal shield and surging power.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a30","w_a40"]},
-      {"id":"w_a51","name":"Bloodstorm","icon":"sk_wa_apocalypse","mp":28,"cd":8,"cast":{"shape":"melee","wpn":2.4,"repeat":3,"lifesteal":0.35,"execute":0.3},"desc":"A storm of bloody strikes hitting three times, draining heavy life and executing the wounded.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a31","w_a41"]},
-      {"id":"w_a52","name":"Cataclysm","icon":"sk_wa_cataclysm","mp":34,"cd":11,"syn":{"skill":"w_p42","per":0.04},"cast":{"shape":"nova","radius":4,"wpn":3.4,"knockback":2,"status":{"effect":"stun","dur":3,"chance":0.8}},"desc":"A titanic two-handed quake that obliterates everything around you.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a32","w_a42"]},
-      {"id":"w_a53","name":"Decapitate","icon":"sk_wa_titanleap","mp":24,"cd":9,"cast":{"shape":"teleport","range":7,"wpn":3,"crit":true,"execute":0.4,"status":{"effect":"vuln","dur":4,"chance":1}},"desc":"Leap onto a foe with a guaranteed crit; executes non-bosses. Reaches ranged attackers.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a33","w_a43"]},
+      {"id":"w_a51","name":"Bloodstorm","icon":"sk_wa_apocalypse","mp":28,"cd":8,"cast":{"shape":"melee","wpn":2.4,"repeat":3,"lifesteal":0.35,"execute":0.3},"desc":"A storm of bloody strikes for {dmg}, hitting three times, draining heavy life and executing the wounded.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a31","w_a41"]},
+      {"id":"w_a52","name":"Cataclysm","icon":"sk_wa_cataclysm","mp":34,"cd":11,"syn":{"skill":"w_p42","per":0.04},"cast":{"shape":"nova","radius":4,"wpn":3.4,"knockback":2,"status":{"effect":"stun","dur":3,"chance":0.8}},"desc":"A titanic two-handed quake dealing {dmg} that obliterates everything around you.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a32","w_a42"]},
+      {"id":"w_a53","name":"Decapitate","icon":"sk_wa_titanleap","mp":24,"cd":9,"cast":{"shape":"teleport","range":7,"wpn":3,"crit":true,"execute":0.4,"status":{"effect":"vuln","dur":4,"chance":1}},"desc":"Leap onto a foe for {dmg} with a guaranteed crit; executes non-bosses. Reaches ranged attackers.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a33","w_a43"]},
       {"id":"w_a54","name":"War Machine","icon":"sk_wa_warmachine","mp":30,"cd":35,"cast":{"shape":"self","buff":[{"id":"shield","dur":12,"mag":300},{"id":"thorns","dur":12,"mag":110},{"id":"defUp","dur":12,"mag":0.5},{"id":"regen","dur":12,"mag":18}]},"desc":"Become an impregnable fortress with an immense shield, thorns, and relentless regeneration.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a34","w_a44"]}
     ], 'active'),
   },
@@ -4797,36 +4934,36 @@ const SKILL_TREES = {
       {"id":"r_p54","name":"Death Dealer","icon":"sk_rp54","fx":{"critDmg":0.4,"pen":0.08},"cfx":{"critDmg":0.3,"pen":0.05},"cond":"cat:Bow","trigger":{"on":"crit","effect":{"charge":"combo","buff":{"id":"dmgUp","dur":3,"mag":0.25}}},"keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: +40% crit damage, +8% pen; bow: +30% crit damage, +5% pen more. On crit: shred armor (+25% damage), +1 Combo.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["r_p34","r_p44"]}
     ], 'passive'),
     active: buildWeb([
-      {"id":"r_a00","name":"Backstab","icon":"sk_ra_backstab","mp":7,"cd":2,"syn":{"skill":"r_p00","per":0.05},"cast":{"shape":"melee","wpn":1.6,"crit":true},"desc":"A guaranteed-critical strike that hits harder against wounded foes. +5% damage per point in Killer Instinct.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"r_a01","name":"Riposte","icon":"sk_ra_gut","mp":7,"cd":3,"cast":{"shape":"melee","wpn":1.5,"buff":[{"id":"dmgUp","dur":2,"mag":0.25}]},"desc":"A swift dueling thrust that buffs your damage briefly after striking.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"r_a00","name":"Backstab","icon":"sk_ra_backstab","mp":7,"cd":2,"syn":{"skill":"r_p00","per":0.05},"cast":{"shape":"melee","wpn":1.6,"crit":true},"desc":"A guaranteed-critical strike that deals {dmg}, hitting harder against wounded foes.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"r_a01","name":"Riposte","icon":"sk_ra_gut","mp":7,"cd":3,"cast":{"shape":"melee","wpn":1.5,"buff":[{"id":"dmgUp","dur":2,"mag":0.25}]},"desc":"A swift dueling thrust dealing {dmg} that buffs your damage briefly after striking.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"r_a02","name":"Smoke Bomb","icon":"sk_ra_smoke","mp":8,"cd":5,"cast":{"shape":"self","buff":[{"id":"dodgeUp","dur":4,"mag":0.35}]},"desc":"Drop a smoke cloud, granting a burst of dodge to slip away and feed Momentum.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"r_a03","name":"Poison Dart","icon":"sk_ra_poison","mp":7,"cd":3,"syn":{"skill":"r_p03","per":0.05},"cast":{"shape":"bolt","wpn":1.1,"range":5,"status":{"effect":"poison","dur":4,"chance":1}},"desc":"Fling a venomous dart that poisons the target. +5% damage per point in Venom.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"r_a04","name":"Throw Knife","icon":"sk_ra_throwknife","mp":6,"cd":2,"syn":{"skill":"r_p04","per":0.05},"cast":{"shape":"bolt","wpn":1.5,"range":6},"desc":"Hurl a knife at a distant enemy for solid ranged damage. +5% damage per point in Precision.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"r_a10","name":"Gut","icon":"sk_ra10","mp":9,"cd":3,"cast":{"shape":"melee","wpn":1.8,"status":{"effect":"vuln","dur":4,"chance":1}},"desc":"A vicious opening cut that makes the target vulnerable.","br":0,"x":0.28,"y":0.34,"band":1,"req":["r_a00"]},
-      {"id":"r_a11","name":"Blade Dance","icon":"sk_ra_bladeflurry","mp":10,"cd":3,"syn":{"skill":"r_p11","per":0.05},"cast":{"shape":"melee","wpn":1.3,"repeat":2},"desc":"A rapid two-hit flurry against a single foe. +5% damage per point in Opportunist.","br":1,"x":0.28,"y":0.34,"band":1,"req":["r_a01"]},
+      {"id":"r_a03","name":"Poison Dart","icon":"sk_ra_poison","mp":7,"cd":3,"syn":{"skill":"r_p03","per":0.05},"cast":{"shape":"bolt","wpn":1.1,"range":5,"status":{"effect":"poison","dur":4,"chance":1}},"desc":"Fling a venomous dart for {dmg} that poisons the target.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"r_a04","name":"Throw Knife","icon":"sk_ra_throwknife","mp":6,"cd":2,"syn":{"skill":"r_p04","per":0.05},"cast":{"shape":"bolt","wpn":1.5,"range":6},"desc":"Hurl a knife at a distant enemy for {dmg}.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"r_a10","name":"Gut","icon":"sk_ra10","mp":9,"cd":3,"cast":{"shape":"melee","wpn":1.8,"status":{"effect":"vuln","dur":4,"chance":1}},"desc":"A vicious opening cut dealing {dmg} that leaves the target vulnerable.","br":0,"x":0.28,"y":0.34,"band":1,"req":["r_a00"]},
+      {"id":"r_a11","name":"Blade Dance","icon":"sk_ra_bladeflurry","mp":10,"cd":3,"syn":{"skill":"r_p11","per":0.05},"cast":{"shape":"melee","wpn":1.3,"repeat":2},"desc":"A rapid two-hit flurry against a single foe for {dmg}.","br":1,"x":0.28,"y":0.34,"band":1,"req":["r_a01"]},
       {"id":"r_a12","name":"Dash","icon":"sk_ra_dash","mp":8,"cd":4,"cast":{"shape":"teleport","range":5,"buff":[{"id":"dodgeUp","dur":3,"mag":0.25}]},"desc":"Blink a short distance and gain a fleeting dodge buff.","br":2,"x":0.28,"y":0.34,"band":1,"req":["r_a02"]},
-      {"id":"r_a13","name":"Caltrops","icon":"sk_ra_caltrops","mp":10,"cd":4,"cast":{"shape":"nova","wpn":1,"radius":2,"status":{"effect":"poison","dur":4,"chance":1}},"desc":"Scatter spiked caltrops in a nova that poisons nearby foes.","br":3,"x":0.28,"y":0.34,"band":1,"req":["r_a03"]},
-      {"id":"r_a14","name":"Pin","icon":"sk_ra_pin","mp":9,"cd":4,"cast":{"shape":"bolt","wpn":1.6,"range":6,"status":{"effect":"stun","dur":1,"chance":1}},"desc":"A piercing shot that stuns the target in place.","br":4,"x":0.28,"y":0.34,"band":1,"req":["r_a04"]},
-      {"id":"r_a20","name":"Eviscerate","icon":"sk_ra_eviscerate","mp":12,"cd":4,"syn":{"skill":"r_p10","per":0.05},"cast":{"shape":"melee","wpn":2,"execute":0.2,"crit":true},"desc":"A guaranteed-critical strike that finishes off badly wounded foes. +5% damage per point in Deadly Strikes.","br":0,"x":0.72,"y":0.34,"band":1,"req":["r_a00"]},
+      {"id":"r_a13","name":"Caltrops","icon":"sk_ra_caltrops","mp":10,"cd":4,"cast":{"shape":"nova","wpn":1,"radius":2,"status":{"effect":"poison","dur":4,"chance":1}},"desc":"Scatter spiked caltrops in a nova dealing {dmg} that poisons nearby foes.","br":3,"x":0.28,"y":0.34,"band":1,"req":["r_a03"]},
+      {"id":"r_a14","name":"Pin","icon":"sk_ra_pin","mp":9,"cd":4,"cast":{"shape":"bolt","wpn":1.6,"range":6,"status":{"effect":"stun","dur":1,"chance":1}},"desc":"A piercing shot dealing {dmg} that stuns the target in place.","br":4,"x":0.28,"y":0.34,"band":1,"req":["r_a04"]},
+      {"id":"r_a20","name":"Eviscerate","icon":"sk_ra_eviscerate","mp":12,"cd":4,"syn":{"skill":"r_p10","per":0.05},"cast":{"shape":"melee","wpn":2,"execute":0.2,"crit":true},"desc":"A guaranteed-critical strike dealing {dmg} that finishes off badly wounded foes.","br":0,"x":0.72,"y":0.34,"band":1,"req":["r_a00"]},
       {"id":"r_a21","name":"Focus","icon":"sk_ra_focusbuff","mp":11,"cd":6,"cast":{"shape":"self","buff":[{"id":"critUp","dur":5,"mag":0.3},{"id":"dmgUp","dur":5,"mag":0.25}]},"desc":"Center yourself, sharply raising crit and damage for a time.","br":1,"x":0.72,"y":0.34,"band":1,"req":["r_a01"]},
-      {"id":"r_a22","name":"Blink Strike","icon":"sk_ra_blink","mp":18,"cd":5,"syn":{"skill":"r_p12","per":0.05},"cast":{"shape":"teleport","wpn":1.6,"lifesteal":0.2,"range":5},"desc":"Teleport to a foe and cut them, leeching life on the hit. +5% damage per point in Fleet Footed.","br":2,"x":0.72,"y":0.34,"band":1,"req":["r_a02"]},
-      {"id":"r_a23","name":"Venom Nova","icon":"sk_ra_venomnova","mp":13,"cd":5,"syn":{"skill":"r_p13","per":0.05},"cast":{"shape":"nova","wpn":1.4,"radius":3,"status":{"effect":"poison","dur":5,"chance":1}},"desc":"Burst a cloud of poison around you, poisoning every nearby foe. +5% damage per point in Virulent Toxins.","br":3,"x":0.72,"y":0.34,"band":1,"req":["r_a03"]},
-      {"id":"r_a24","name":"Volley","icon":"sk_ra_volley","mp":12,"cd":4,"cast":{"shape":"line","wpn":1.7,"range":7},"desc":"Loose a line of arrows that pierce everything in their path.","br":4,"x":0.72,"y":0.34,"band":1,"req":["r_a04"]},
-      {"id":"r_a30","name":"Death Mark","icon":"sk_ra_deathmark","mp":14,"cd":5,"cast":{"shape":"bolt","wpn":2,"range":6,"crit":true,"status":{"effect":"vuln","dur":5,"chance":1}},"desc":"Brand a foe with a guaranteed-critical mark and make them vulnerable.","br":0,"x":0.28,"y":0.58,"band":2,"req":["r_a10"]},
-      {"id":"r_a31","name":"Fan of Knives","icon":"sk_ra_fanknives","mp":14,"cd":5,"cast":{"shape":"nova","wpn":1.3,"radius":3,"repeat":2},"desc":"Spray blades in a nova that strikes all nearby foes twice.","br":1,"x":0.28,"y":0.58,"band":2,"req":["r_a11"]},
+      {"id":"r_a22","name":"Blink Strike","icon":"sk_ra_blink","mp":18,"cd":5,"syn":{"skill":"r_p12","per":0.05},"cast":{"shape":"teleport","wpn":1.6,"lifesteal":0.2,"range":5},"desc":"Teleport to a foe and cut them for {dmg}, leeching life on the hit.","br":2,"x":0.72,"y":0.34,"band":1,"req":["r_a02"]},
+      {"id":"r_a23","name":"Venom Nova","icon":"sk_ra_venomnova","mp":13,"cd":5,"syn":{"skill":"r_p13","per":0.05},"cast":{"shape":"nova","wpn":1.4,"radius":3,"status":{"effect":"poison","dur":5,"chance":1}},"desc":"Burst a cloud of poison around you for {dmg}, poisoning every nearby foe.","br":3,"x":0.72,"y":0.34,"band":1,"req":["r_a03"]},
+      {"id":"r_a24","name":"Volley","icon":"sk_ra_volley","mp":12,"cd":4,"cast":{"shape":"line","wpn":1.7,"range":7},"desc":"Loose a line of arrows dealing {dmg} that pierce everything in their path.","br":4,"x":0.72,"y":0.34,"band":1,"req":["r_a04"]},
+      {"id":"r_a30","name":"Death Mark","icon":"sk_ra_deathmark","mp":14,"cd":5,"cast":{"shape":"bolt","wpn":2,"range":6,"crit":true,"status":{"effect":"vuln","dur":5,"chance":1}},"desc":"Brand a foe for {dmg} with a guaranteed-critical mark, leaving them vulnerable.","br":0,"x":0.28,"y":0.58,"band":2,"req":["r_a10"]},
+      {"id":"r_a31","name":"Fan of Knives","icon":"sk_ra_fanknives","mp":14,"cd":5,"cast":{"shape":"nova","wpn":1.3,"radius":3,"repeat":2},"desc":"Spray blades in a nova for {dmg}, striking all nearby foes twice.","br":1,"x":0.28,"y":0.58,"band":2,"req":["r_a11"]},
       {"id":"r_a32","name":"Shadow Clone","icon":"sk_ra_shadowclone","mp":15,"cd":7,"syn":{"skill":"r_p32","per":0.05},"cast":{"shape":"summon","buff":[{"id":"dodgeUp","dur":6,"mag":0.25}],"summon":{"kind":"shadow","count":2,"ttl":16}},"desc":"Conjure shadow doubles to fight alongside you and grant dodge. +5% potency per point in Untouchable.","br":2,"x":0.28,"y":0.58,"band":2,"req":["r_a12"]},
-      {"id":"r_a33","name":"Plague Bomb","icon":"sk_ra_plaguebomb","mp":15,"cd":5,"syn":{"skill":"r_p33","per":0.05},"cast":{"shape":"blast","wpn":1.6,"radius":3,"range":6,"status":{"effect":"poison","dur":6,"chance":1}},"desc":"Lob a toxic bomb that blasts an area and poisons all caught in it. +5% damage per point in Plaguebearer.","br":3,"x":0.28,"y":0.58,"band":2,"req":["r_a13"]},
-      {"id":"r_a34","name":"Pierce","icon":"sk_ra_pierce","mp":13,"cd":4,"syn":{"skill":"r_p34","per":0.05},"cast":{"shape":"line","wpn":2.2,"range":8},"desc":"A penetrating long-range shot that ignores armor for big damage. +5% damage per point in Deadeye.","br":4,"x":0.28,"y":0.58,"band":2,"req":["r_a14"]},
-      {"id":"r_a40","name":"Executioner","icon":"sk_ra_executioner","mp":18,"cd":6,"syn":{"skill":"r_p40","per":0.05},"cast":{"shape":"melee","wpn":2.6,"execute":0.3,"crit":true},"desc":"A guaranteed-critical execution that slays non-boss foes under 30% health. +5% damage per point in Assassinate.","br":0,"x":0.72,"y":0.58,"band":2,"req":["r_a20"]},
-      {"id":"r_a41","name":"Twin Strike","icon":"sk_ra_twinclone","mp":17,"cd":5,"cast":{"shape":"melee","wpn":1.5,"lifesteal":0.15,"repeat":3},"desc":"A three-hit dual-blade barrage on one foe that leeches life.","br":1,"x":0.72,"y":0.58,"band":2,"req":["r_a21"]},
+      {"id":"r_a33","name":"Plague Bomb","icon":"sk_ra_plaguebomb","mp":15,"cd":5,"syn":{"skill":"r_p33","per":0.05},"cast":{"shape":"blast","wpn":1.6,"radius":3,"range":6,"status":{"effect":"poison","dur":6,"chance":1}},"desc":"Lob a toxic bomb dealing {dmg} that blasts an area and poisons all caught in it.","br":3,"x":0.28,"y":0.58,"band":2,"req":["r_a13"]},
+      {"id":"r_a34","name":"Pierce","icon":"sk_ra_pierce","mp":13,"cd":4,"syn":{"skill":"r_p34","per":0.05},"cast":{"shape":"line","wpn":2.2,"range":8},"desc":"A penetrating long-range shot that ignores armor to deal {dmg}.","br":4,"x":0.28,"y":0.58,"band":2,"req":["r_a14"]},
+      {"id":"r_a40","name":"Executioner","icon":"sk_ra_executioner","mp":18,"cd":6,"syn":{"skill":"r_p40","per":0.05},"cast":{"shape":"melee","wpn":2.6,"execute":0.3,"crit":true},"desc":"A guaranteed-critical execution dealing {dmg} that slays non-boss foes under 30% health.","br":0,"x":0.72,"y":0.58,"band":2,"req":["r_a20"]},
+      {"id":"r_a41","name":"Twin Strike","icon":"sk_ra_twinclone","mp":17,"cd":5,"cast":{"shape":"melee","wpn":1.5,"lifesteal":0.15,"repeat":3},"desc":"A three-hit dual-blade barrage on one foe for {dmg} that leeches life.","br":1,"x":0.72,"y":0.58,"band":2,"req":["r_a21"]},
       {"id":"r_a42","name":"Vanish","icon":"sk_ra_vanish","mp":16,"cd":7,"cast":{"shape":"teleport","range":7,"buff":[{"id":"dodgeUp","dur":6,"mag":0.4},{"id":"dmgUp","dur":6,"mag":0.3}]},"desc":"Vanish into shadow, teleporting away with a strong dodge and damage buff.","br":2,"x":0.72,"y":0.58,"band":2,"req":["r_a22"]},
-      {"id":"r_a43","name":"Death Rain","icon":"sk_ra_deathrain","mp":18,"cd":6,"syn":{"skill":"r_p43","per":0.05},"cast":{"shape":"blast","wpn":2,"radius":4,"range":7,"status":{"effect":"poison","dur":6,"chance":1}},"desc":"Rain venomous blades across a wide area, poisoning every foe struck. +5% damage per point in Venomlord.","br":3,"x":0.72,"y":0.58,"band":2,"req":["r_a23"]},
-      {"id":"r_a44","name":"Kill Shot","icon":"sk_ra_killshot","mp":17,"cd":5,"syn":{"skill":"r_p44","per":0.05},"cast":{"shape":"line","wpn":2.4,"range":9,"crit":true},"desc":"A guaranteed-critical long-range shot that pierces a line of enemies. +5% damage per point in Sharpshooter.","br":4,"x":0.72,"y":0.58,"band":2,"req":["r_a24"]},
-      {"id":"r_a50","name":"Perfect Vanish","icon":"sk_ra_perfectvanish","mp":24,"cd":10,"cast":{"shape":"teleport","wpn":3.4,"execute":0.4,"range":7,"crit":true,"buff":[{"id":"critUp","dur":6,"mag":0.4}]},"desc":"Strike from nowhere for a guaranteed-critical killing blow that executes wounded non-boss foes and buffs your crit.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a30","r_a40"]},
-      {"id":"r_a51","name":"Thousand Cuts","icon":"sk_ra_thousandcuts","mp":26,"cd":10,"syn":{"skill":"r_p51","per":0.04},"cast":{"shape":"nova","wpn":1.8,"lifesteal":0.12,"radius":4,"repeat":3},"desc":"Unleash a blinding flurry of three nova-wide blade sweeps around you. +4% damage per point in Dual Mastery.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a31","r_a41"]},
-      {"id":"r_a52","name":"Phantom Dash","icon":"sk_ra_phantomdash","mp":25,"cd":11,"cast":{"shape":"teleport","wpn":2.6,"range":8,"buff":[{"id":"dodgeUp","dur":7,"mag":0.45}],"summon":{"kind":"shadow","count":3,"ttl":18}},"desc":"Become a phantom, teleporting through foes while summoning shadows to fight on.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a32","r_a42"]},
-      {"id":"r_a53","name":"Plague Lord","icon":"sk_ra53","mp":28,"cd":11,"syn":{"skill":"r_p53","per":0.04},"cast":{"shape":"nova","wpn":2.4,"lifesteal":0.2,"radius":4,"status":{"effect":"poison","dur":8,"chance":1}},"desc":"Detonate a massive plague nova that poisons and rots every foe around you. +4% damage per point in Apex Plague.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a33","r_a43"]},
-      {"id":"r_a54","name":"Death Rain Volley","icon":"sk_ra54","mp":28,"cd":11,"syn":{"skill":"r_p54","per":0.04},"cast":{"shape":"blast","wpn":3,"radius":4,"range":9,"repeat":2,"crit":true},"desc":"Blanket a huge area in a guaranteed-critical storm of piercing arrows. +4% damage per point in Death Dealer.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a34","r_a44"]}
+      {"id":"r_a43","name":"Death Rain","icon":"sk_ra_deathrain","mp":18,"cd":6,"syn":{"skill":"r_p43","per":0.05},"cast":{"shape":"blast","wpn":2,"radius":4,"range":7,"status":{"effect":"poison","dur":6,"chance":1}},"desc":"Rain venomous blades across a wide area for {dmg}, poisoning every foe struck.","br":3,"x":0.72,"y":0.58,"band":2,"req":["r_a23"]},
+      {"id":"r_a44","name":"Kill Shot","icon":"sk_ra_killshot","mp":17,"cd":5,"syn":{"skill":"r_p44","per":0.05},"cast":{"shape":"line","wpn":2.4,"range":9,"crit":true},"desc":"A guaranteed-critical long-range shot dealing {dmg} that pierces a line of enemies.","br":4,"x":0.72,"y":0.58,"band":2,"req":["r_a24"]},
+      {"id":"r_a50","name":"Perfect Vanish","icon":"sk_ra_perfectvanish","mp":24,"cd":10,"cast":{"shape":"teleport","wpn":3.4,"execute":0.4,"range":7,"crit":true,"buff":[{"id":"critUp","dur":6,"mag":0.4}]},"desc":"Strike from nowhere for a guaranteed-critical killing blow of {dmg} that executes wounded non-boss foes and buffs your crit.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a30","r_a40"]},
+      {"id":"r_a51","name":"Thousand Cuts","icon":"sk_ra_thousandcuts","mp":26,"cd":10,"syn":{"skill":"r_p51","per":0.04},"cast":{"shape":"nova","wpn":1.8,"lifesteal":0.12,"radius":4,"repeat":3},"desc":"Unleash a blinding flurry of three nova-wide blade sweeps around you for {dmg}.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a31","r_a41"]},
+      {"id":"r_a52","name":"Phantom Dash","icon":"sk_ra_phantomdash","mp":25,"cd":11,"cast":{"shape":"teleport","wpn":2.6,"range":8,"buff":[{"id":"dodgeUp","dur":7,"mag":0.45}],"summon":{"kind":"shadow","count":3,"ttl":18}},"desc":"Become a phantom, teleporting through foes for {dmg} while summoning shadows to fight on.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a32","r_a42"]},
+      {"id":"r_a53","name":"Plague Lord","icon":"sk_ra53","mp":28,"cd":11,"syn":{"skill":"r_p53","per":0.04},"cast":{"shape":"nova","wpn":2.4,"lifesteal":0.2,"radius":4,"status":{"effect":"poison","dur":8,"chance":1}},"desc":"Detonate a massive plague nova dealing {dmg} that poisons and rots every foe around you.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a33","r_a43"]},
+      {"id":"r_a54","name":"Death Rain Volley","icon":"sk_ra54","mp":28,"cd":11,"syn":{"skill":"r_p54","per":0.04},"cast":{"shape":"blast","wpn":3,"radius":4,"range":9,"repeat":2,"crit":true},"desc":"Blanket a huge area in a guaranteed-critical storm of piercing arrows dealing {dmg}.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a34","r_a44"]}
     ], 'active'),
   },
 
@@ -4864,35 +5001,35 @@ const SKILL_TREES = {
       {"id":"m_p54","name":"Blood Pact","icon":"sk_m_omniscience","fx":{"spell":0.28,"lifesteal":0.1,"hpRegen":3},"cfx":{"lifesteal":0.06,"spell":0.2},"cond":"lowhp","kflag":"bloodpact","keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: spells cost LIFE, not mana. Heavy lifesteal and regen; wounded: more.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p34","m_p44"]}
     ], 'passive'),
     active: buildWeb([
-      {"id":"m_a00","name":"Firebolt","icon":"sk_ma_firebolt","mp":6,"cd":1,"syn":{"skill":"m_p00","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Hurl a bolt of flame that sets a foe ablaze. +5% damage per point in Kindling.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a01","name":"Frost Shard","icon":"sk_ma_frostshard","mp":6,"cd":1,"syn":{"skill":"m_p01","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"stun","dur":1,"chance":0.6}},"desc":"Fire an icy shard that may freeze a foe. +5% damage per point in Frost Touch.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a02","name":"Spark","icon":"sk_ma_spark","mp":6,"cd":1,"syn":{"skill":"m_p02","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":7},"desc":"Loose a crackling spark at a distant foe. +5% damage per point in Static Charge.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a03","name":"Arcane Missile","icon":"sk_ma_arcaneorb","mp":7,"cd":1,"syn":{"skill":"m_p03","per":0.05},"cast":{"shape":"bolt","spell":1.2,"drainMp":0.1,"range":5},"desc":"Launch an unerring arcane missile that saps mana. +5% damage per point in Arcane Study.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a00","name":"Firebolt","icon":"sk_ma_firebolt","mp":6,"cd":1,"syn":{"skill":"m_p00","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Hurl a bolt of flame that deals {dmg} and sets a foe ablaze.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a01","name":"Frost Shard","icon":"sk_ma_frostshard","mp":6,"cd":1,"syn":{"skill":"m_p01","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"stun","dur":1,"chance":0.6}},"desc":"Fire an icy shard that deals {dmg} and may freeze a foe.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a02","name":"Spark","icon":"sk_ma_spark","mp":6,"cd":1,"syn":{"skill":"m_p02","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":7},"desc":"Loose a crackling spark at a distant foe for {dmg}.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a03","name":"Arcane Missile","icon":"sk_ma_arcaneorb","mp":7,"cd":1,"syn":{"skill":"m_p03","per":0.05},"cast":{"shape":"bolt","spell":1.2,"drainMp":0.1,"range":5},"desc":"Launch an unerring arcane missile that deals {dmg} and saps mana.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"m_a04","name":"Mana Barrier","icon":"sk_ma_barrier","mp":10,"cd":15,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":40}]},"desc":"Conjure a shield that absorbs incoming damage.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"m_a10","name":"Ember Surge","icon":"sk_ma_emberbuff","mp":12,"cd":6,"cast":{"shape":"self","buff":[{"id":"spellUp","dur":5,"mag":0.4}]},"desc":"Empower yourself, sharply increasing spell damage for several seconds.","br":0,"x":0.28,"y":0.34,"band":1,"req":["m_a00"]},
-      {"id":"m_a11","name":"Frost Nova","icon":"sk_ma_frostnova","mp":12,"cd":4,"syn":{"skill":"m_p11","per":0.05},"cast":{"shape":"nova","spell":1,"radius":2,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Erupt with frost, freezing nearby foes. +5% damage per point in Cold Bones.","br":1,"x":0.28,"y":0.34,"band":1,"req":["m_a01"]},
-      {"id":"m_a12","name":"Chain Spark","icon":"sk_ma_chainlightning","mp":12,"cd":3,"syn":{"skill":"m_p12","per":0.05},"cast":{"shape":"chain","spell":1,"range":6,"chain":3},"desc":"Lightning leaps between several nearby foes. +5% damage per point in Conduction.","br":2,"x":0.28,"y":0.34,"band":1,"req":["m_a02"]},
-      {"id":"m_a13","name":"Arcane Blast","icon":"sk_ma_arcanepower","mp":13,"cd":3,"syn":{"skill":"m_p13","per":0.04},"cast":{"shape":"blast","spell":1.2,"radius":2,"range":4},"desc":"Detonate arcane force in a radius around a point. +4% damage per point in Mana Pool.","br":3,"x":0.28,"y":0.34,"band":1,"req":["m_a03"]},
+      {"id":"m_a11","name":"Frost Nova","icon":"sk_ma_frostnova","mp":12,"cd":4,"syn":{"skill":"m_p11","per":0.05},"cast":{"shape":"nova","spell":1,"radius":2,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Erupt with frost for {dmg}, freezing nearby foes.","br":1,"x":0.28,"y":0.34,"band":1,"req":["m_a01"]},
+      {"id":"m_a12","name":"Chain Spark","icon":"sk_ma_chainlightning","mp":12,"cd":3,"syn":{"skill":"m_p12","per":0.05},"cast":{"shape":"chain","spell":1,"range":6,"chain":3},"desc":"Lightning leaps between several nearby foes for {dmg}.","br":2,"x":0.28,"y":0.34,"band":1,"req":["m_a02"]},
+      {"id":"m_a13","name":"Arcane Blast","icon":"sk_ma_arcanepower","mp":13,"cd":3,"syn":{"skill":"m_p13","per":0.04},"cast":{"shape":"blast","spell":1.2,"radius":2,"range":4},"desc":"Detonate arcane force for {dmg} in a radius around a point.","br":3,"x":0.28,"y":0.34,"band":1,"req":["m_a03"]},
       {"id":"m_a14","name":"Blink","icon":"sk_ma_blink","mp":8,"cd":4,"cast":{"shape":"teleport","range":5,"buff":[{"id":"dodgeUp","dur":2,"mag":0.4}]},"desc":"Teleport a short distance to reposition instantly and slip attacks.","br":4,"x":0.28,"y":0.34,"band":1,"req":["m_a04"]},
-      {"id":"m_a20","name":"Fireball","icon":"sk_ma_fireball","mp":15,"cd":3,"syn":{"skill":"m_p10","per":0.05},"cast":{"shape":"blast","spell":1.4,"radius":2,"range":5,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Lob a fireball that explodes and burns all caught in the blast. +5% damage per point in Smoldering.","br":0,"x":0.72,"y":0.34,"band":1,"req":["m_a00"]},
-      {"id":"m_a21","name":"Ice Prison","icon":"sk_ma_iceprison","mp":14,"cd":4,"syn":{"skill":"m_p21","per":0.05},"cast":{"shape":"bolt","spell":1.3,"range":6,"status":{"effect":"stun","dur":3,"chance":1}},"desc":"Lock a foe in ice, stunning it and leaving it vulnerable. +5% damage per point in Permafrost.","br":1,"x":0.72,"y":0.34,"band":1,"req":["m_a01"]},
-      {"id":"m_a22","name":"Voltaic Bolt","icon":"sk_ma_voltaic","mp":14,"cd":3,"syn":{"skill":"m_p22","per":0.05},"cast":{"shape":"line","spell":1.4,"range":7,"status":{"effect":"stun","dur":1,"chance":0.5}},"desc":"A piercing bolt of lightning that may shock a foe senseless. +5% damage per point in Arc Lightning.","br":2,"x":0.72,"y":0.34,"band":1,"req":["m_a02"]},
-      {"id":"m_a23","name":"Arcane Orb","icon":"sk_ma23","mp":15,"cd":3,"syn":{"skill":"m_p23","per":0.05},"cast":{"shape":"bolt","spell":1.6,"drainMp":0.2,"range":5},"desc":"Conjure a heavy orb that strikes hard and drains the target's mana. +5% damage per point in Arcane Surge.","br":3,"x":0.72,"y":0.34,"band":1,"req":["m_a03"]},
+      {"id":"m_a20","name":"Fireball","icon":"sk_ma_fireball","mp":15,"cd":3,"syn":{"skill":"m_p10","per":0.05},"cast":{"shape":"blast","spell":1.4,"radius":2,"range":5,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Lob a fireball that explodes for {dmg}, burning all caught in the blast.","br":0,"x":0.72,"y":0.34,"band":1,"req":["m_a00"]},
+      {"id":"m_a21","name":"Ice Prison","icon":"sk_ma_iceprison","mp":14,"cd":4,"syn":{"skill":"m_p21","per":0.05},"cast":{"shape":"bolt","spell":1.3,"range":6,"status":{"effect":"stun","dur":3,"chance":1}},"desc":"Lock a foe in ice for {dmg}, stunning it and leaving it vulnerable.","br":1,"x":0.72,"y":0.34,"band":1,"req":["m_a01"]},
+      {"id":"m_a22","name":"Voltaic Bolt","icon":"sk_ma_voltaic","mp":14,"cd":3,"syn":{"skill":"m_p22","per":0.05},"cast":{"shape":"line","spell":1.4,"range":7,"status":{"effect":"stun","dur":1,"chance":0.5}},"desc":"A piercing bolt of lightning dealing {dmg} that may shock a foe senseless.","br":2,"x":0.72,"y":0.34,"band":1,"req":["m_a02"]},
+      {"id":"m_a23","name":"Arcane Orb","icon":"sk_ma23","mp":15,"cd":3,"syn":{"skill":"m_p23","per":0.05},"cast":{"shape":"bolt","spell":1.6,"drainMp":0.2,"range":5},"desc":"Conjure a heavy orb that strikes for {dmg} and drains the target's mana.","br":3,"x":0.72,"y":0.34,"band":1,"req":["m_a03"]},
       {"id":"m_a24","name":"Spell Ward","icon":"sk_ma24","mp":16,"cd":15,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":70},{"id":"regen","dur":6,"mag":6}]},"desc":"Raise a barrier and a regenerating ward over yourself.","br":4,"x":0.72,"y":0.34,"band":1,"req":["m_a04"]},
-      {"id":"m_a30","name":"Flame Wave","icon":"sk_ma_flamewave","mp":18,"cd":4,"syn":{"skill":"m_p30","per":0.05},"cast":{"shape":"line","spell":1.6,"range":7,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Send a wave of fire scorching across a line of foes. +5% damage per point in Conflagration.","br":0,"x":0.28,"y":0.58,"band":2,"req":["m_a10"]},
-      {"id":"m_a31","name":"Blizzard","icon":"sk_ma_blizzard","mp":20,"cd":5,"cast":{"shape":"blast","spell":1.5,"radius":3,"range":6,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Call a storm of ice over an area, freezing everything beneath.","br":1,"x":0.28,"y":0.58,"band":2,"req":["m_a11"]},
-      {"id":"m_a32","name":"Thunderstorm","icon":"sk_ma_thunderstorm","mp":20,"cd":4,"syn":{"skill":"m_p32","per":0.04},"cast":{"shape":"chain","spell":1.4,"range":7,"chain":5,"status":{"effect":"stun","dur":1,"chance":0.4}},"desc":"Lightning arcs wildly between many foes around you. +4% damage per point in Overcharge.","br":2,"x":0.28,"y":0.58,"band":2,"req":["m_a12"]},
-      {"id":"m_a33","name":"Disintegrate","icon":"sk_ma_disintegrate","mp":20,"cd":4,"syn":{"skill":"m_p33","per":0.05},"cast":{"shape":"line","spell":1.7,"execute":0.25,"drainMp":0.2,"range":5},"desc":"A withering beam that drains mana and executes weakened foes. +5% damage per point in Arcane Power.","br":3,"x":0.28,"y":0.58,"band":2,"req":["m_a13"]},
+      {"id":"m_a30","name":"Flame Wave","icon":"sk_ma_flamewave","mp":18,"cd":4,"syn":{"skill":"m_p30","per":0.05},"cast":{"shape":"line","spell":1.6,"range":7,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Send a wave of fire for {dmg}, scorching across a line of foes.","br":0,"x":0.28,"y":0.58,"band":2,"req":["m_a10"]},
+      {"id":"m_a31","name":"Blizzard","icon":"sk_ma_blizzard","mp":20,"cd":5,"cast":{"shape":"blast","spell":1.5,"radius":3,"range":6,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Call a storm of ice over an area for {dmg}, freezing everything beneath.","br":1,"x":0.28,"y":0.58,"band":2,"req":["m_a11"]},
+      {"id":"m_a32","name":"Thunderstorm","icon":"sk_ma_thunderstorm","mp":20,"cd":4,"syn":{"skill":"m_p32","per":0.04},"cast":{"shape":"chain","spell":1.4,"range":7,"chain":5,"status":{"effect":"stun","dur":1,"chance":0.4}},"desc":"Lightning arcs wildly between many foes around you for {dmg}.","br":2,"x":0.28,"y":0.58,"band":2,"req":["m_a12"]},
+      {"id":"m_a33","name":"Disintegrate","icon":"sk_ma_disintegrate","mp":20,"cd":4,"syn":{"skill":"m_p33","per":0.05},"cast":{"shape":"line","spell":1.7,"execute":0.25,"drainMp":0.2,"range":5},"desc":"A withering beam dealing {dmg} that drains mana and executes weakened foes.","br":3,"x":0.28,"y":0.58,"band":2,"req":["m_a13"]},
       {"id":"m_a34","name":"Conjure Elemental","icon":"sk_ma_elemental","mp":18,"cd":7,"cast":{"shape":"summon","summon":{"kind":"elemental","count":1,"ttl":18}},"desc":"Summon an arcane elemental to fight at your side.","br":4,"x":0.28,"y":0.58,"band":2,"req":["m_a14"]},
-      {"id":"m_a40","name":"Firestorm","icon":"sk_ma_firestorm","mp":24,"cd":5,"syn":{"skill":"m_p40","per":0.04},"cast":{"shape":"blast","spell":1.8,"radius":3,"range":6,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Rain fire over a wide area, burning all within. +4% damage per point in Living Flame.","br":0,"x":0.72,"y":0.58,"band":2,"req":["m_a20"]},
-      {"id":"m_a41","name":"Ice Age","icon":"sk_ma_iceage","mp":26,"cd":6,"cast":{"shape":"nova","spell":1.7,"radius":3,"status":{"effect":"stun","dur":3,"chance":1}},"desc":"Freeze the battlefield, stunning and weakening every foe near you.","br":1,"x":0.72,"y":0.58,"band":2,"req":["m_a21"]},
-      {"id":"m_a42","name":"Storm Call","icon":"sk_ma_stormcall","mp":26,"cd":5,"syn":{"skill":"m_p42","per":0.04},"cast":{"shape":"random","spell":1.6,"range":8,"count":5,"status":{"effect":"stun","dur":1,"chance":0.5}},"desc":"Summon a barrage of lightning bolts striking foes at random. +4% damage per point in Tesla Field.","br":2,"x":0.72,"y":0.58,"band":2,"req":["m_a22"]},
+      {"id":"m_a40","name":"Firestorm","icon":"sk_ma_firestorm","mp":24,"cd":5,"syn":{"skill":"m_p40","per":0.04},"cast":{"shape":"blast","spell":1.8,"radius":3,"range":6,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Rain fire over a wide area for {dmg}, burning all within.","br":0,"x":0.72,"y":0.58,"band":2,"req":["m_a20"]},
+      {"id":"m_a41","name":"Ice Age","icon":"sk_ma_iceage","mp":26,"cd":6,"cast":{"shape":"nova","spell":1.7,"radius":3,"status":{"effect":"stun","dur":3,"chance":1}},"desc":"Freeze the battlefield for {dmg}, stunning and weakening every foe near you.","br":1,"x":0.72,"y":0.58,"band":2,"req":["m_a21"]},
+      {"id":"m_a42","name":"Storm Call","icon":"sk_ma_stormcall","mp":26,"cd":5,"syn":{"skill":"m_p42","per":0.04},"cast":{"shape":"random","spell":1.6,"range":8,"count":5,"status":{"effect":"stun","dur":1,"chance":0.5}},"desc":"Summon a barrage of lightning bolts for {dmg}, striking foes at random.","br":2,"x":0.72,"y":0.58,"band":2,"req":["m_a22"]},
       {"id":"m_a43","name":"Twin Elemental","icon":"sk_ma_twinelemental","mp":28,"cd":8,"cast":{"shape":"summon","summon":{"kind":"elemental","count":2,"ttl":20,"strong":true}},"desc":"Summon a pair of mighty arcane elementals to wage war for you.","br":3,"x":0.72,"y":0.58,"band":2,"req":["m_a23"]},
       {"id":"m_a44","name":"Arcane Golem","icon":"sk_ma_golem","mp":26,"cd":9,"cast":{"shape":"summon","buff":[{"id":"shield","dur":6,"mag":90}],"summon":{"kind":"golem","count":1,"ttl":22,"strong":true}},"desc":"Conjure a hulking golem to guard you and shield yourself.","br":4,"x":0.72,"y":0.58,"band":2,"req":["m_a24"]},
-      {"id":"m_a50","name":"Meteor","icon":"sk_ma_meteor","mp":34,"cd":8,"syn":{"skill":"m_p40","per":0.05},"cast":{"shape":"blast","spell":2.2,"radius":4,"range":6,"knockback":2,"status":{"effect":"burn","dur":5,"chance":1}},"desc":"Call a colossal meteor that obliterates an area in fire. +5% damage per point in Living Flame.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a30","m_a40"]},
-      {"id":"m_a51","name":"Absolute Zero","icon":"sk_ma_absolutezero","mp":34,"cd":9,"cast":{"shape":"nova","spell":2,"radius":4,"pull":true,"status":{"effect":"stun","dur":4,"chance":1}},"desc":"Plunge the field into killing cold, freezing all foes solid and leaving them vulnerable.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a31","m_a41"]},
-      {"id":"m_a52","name":"Apocalypse","icon":"sk_ma_apocalypse","mp":36,"cd":10,"syn":{"skill":"m_p42","per":0.05},"cast":{"shape":"chain","spell":2,"range":9,"chain":8,"status":{"effect":"stun","dur":2,"chance":0.6}},"desc":"Unleash a cataclysm of chained lightning that ravages the whole battlefield. +5% damage per point in Tesla Field.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a32","m_a42"]},
-      {"id":"m_a53","name":"Disintegration Ray","icon":"sk_ma53","mp":38,"cd":10,"syn":{"skill":"m_p43","per":0.05},"cast":{"shape":"line","spell":2.2,"execute":0.35,"drainMp":0.3,"range":9,"crit":true},"desc":"A perfected annihilation beam that always crits, drains deeply and executes the weak. +5% damage per point in Spell Weave.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a33","m_a43"]},
+      {"id":"m_a50","name":"Meteor","icon":"sk_ma_meteor","mp":34,"cd":8,"syn":{"skill":"m_p40","per":0.05},"cast":{"shape":"blast","spell":2.2,"radius":4,"range":6,"knockback":2,"status":{"effect":"burn","dur":5,"chance":1}},"desc":"Call a colossal meteor that obliterates an area in fire for {dmg}.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a30","m_a40"]},
+      {"id":"m_a51","name":"Absolute Zero","icon":"sk_ma_absolutezero","mp":34,"cd":9,"cast":{"shape":"nova","spell":2,"radius":4,"pull":true,"status":{"effect":"stun","dur":4,"chance":1}},"desc":"Plunge the field into killing cold for {dmg}, freezing all foes solid and leaving them vulnerable.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a31","m_a41"]},
+      {"id":"m_a52","name":"Apocalypse","icon":"sk_ma_apocalypse","mp":36,"cd":10,"syn":{"skill":"m_p42","per":0.05},"cast":{"shape":"chain","spell":2,"range":9,"chain":8,"status":{"effect":"stun","dur":2,"chance":0.6}},"desc":"Unleash a cataclysm of chained lightning that ravages the whole battlefield for {dmg}.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a32","m_a42"]},
+      {"id":"m_a53","name":"Disintegration Ray","icon":"sk_ma53","mp":38,"cd":10,"syn":{"skill":"m_p43","per":0.05},"cast":{"shape":"line","spell":2.2,"execute":0.35,"drainMp":0.3,"range":9,"crit":true},"desc":"A perfected annihilation beam dealing {dmg} that always crits, drains deeply and executes the weak.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a33","m_a43"]},
       {"id":"m_a54","name":"Elemental Army","icon":"sk_ma_elementarmy","mp":40,"cd":12,"cast":{"shape":"summon","buff":[{"id":"shield","dur":8,"mag":140}],"summon":{"kind":"elemental","count":4,"ttl":24,"strong":true}},"desc":"Conjure an entire host of arcane elementals and shield yourself behind them.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a34","m_a44"]}
     ], 'active'),
   },
@@ -4931,36 +5068,36 @@ const SKILL_TREES = {
       {"id":"t_p54","name":"Archon","icon":"sk_t_archon","fx":{"spell":0.25,"pen":0.06,"crit":0.05},"cfx":{"spell":0.15},"cond":"casteroff","trigger":{"on":"crit","effect":{"nextCrit":true}},"keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: +25% holy spell power, +6% pen, +5% crit; caster off-hand: +15% spell. Each holy crit guarantees the next.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["t_p34","t_p44"]}
     ], 'passive'),
     active: buildWeb([
-      {"id":"t_a00","name":"Smite","icon":"sk_ta_smite","mp":7,"cd":2,"syn":{"skill":"t_p00","per":0.05},"cast":{"shape":"melee","wpn":1.3,"spell":0.6,"crit":true},"desc":"A righteous blow infused with holy power that strikes true.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"t_a00","name":"Smite","icon":"sk_ta_smite","mp":7,"cd":2,"syn":{"skill":"t_p00","per":0.05},"cast":{"shape":"melee","wpn":1.3,"spell":0.6,"crit":true},"desc":"A righteous blow infused with holy power that strikes true for {dmg}.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"t_a01","name":"Shield of Faith","icon":"sk_ta_shieldself","mp":8,"cd":11,"cast":{"shape":"self","buff":[{"id":"shield","dur":5,"mag":55},{"id":"defUp","dur":5,"mag":0.25}]},"desc":"Raise a holy ward granting a shield and damage reduction.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"t_a02","name":"Thorn Ward","icon":"sk_ta_aegisfield","mp":8,"cd":15,"syn":{"skill":"t_p02","per":0.05},"cast":{"shape":"self","buff":[{"id":"thorns","dur":6,"mag":35},{"id":"regen","dur":6,"mag":6}]},"desc":"Surround yourself with retaliatory thorns and regeneration.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"t_a03","name":"Mend","icon":"sk_ta_mend","mp":18,"cd":6,"cast":{"shape":"self","heal":{"flat":40,"perLevel":4}},"desc":"Channel divine light to mend your wounds.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"t_a04","name":"Holy Bolt","icon":"sk_ta_smiteline","mp":8,"cd":3,"syn":{"skill":"t_p04","per":0.05},"cast":{"shape":"bolt","spell":1.2,"range":6,"crit":true},"desc":"Hurl a searing bolt of holy light at a distant foe.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"t_a10","name":"Chastise","icon":"sk_ta_chastise","mp":9,"cd":4,"syn":{"skill":"t_p00","per":0.05},"cast":{"shape":"melee","wpn":1.5,"spell":0.8,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"A scorching holy strike that sets the target ablaze.","br":0,"x":0.28,"y":0.34,"band":1,"req":["t_a00"]},
+      {"id":"t_a04","name":"Holy Bolt","icon":"sk_ta_smiteline","mp":8,"cd":3,"syn":{"skill":"t_p04","per":0.05},"cast":{"shape":"bolt","spell":1.2,"range":6,"crit":true},"desc":"Hurl a searing bolt of holy light at a distant foe for {dmg}.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"t_a10","name":"Chastise","icon":"sk_ta_chastise","mp":9,"cd":4,"syn":{"skill":"t_p00","per":0.05},"cast":{"shape":"melee","wpn":1.5,"spell":0.8,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"A scorching holy strike that deals {dmg} and sets the target ablaze.","br":0,"x":0.28,"y":0.34,"band":1,"req":["t_a00"]},
       {"id":"t_a11","name":"Guardian","icon":"sk_ta_guardian","mp":12,"cd":16,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":80},{"id":"thorns","dur":6,"mag":40}]},"desc":"A guardian aura granting a heavy shield and reflective thorns.","br":1,"x":0.28,"y":0.34,"band":1,"req":["t_a01"]},
-      {"id":"t_a12","name":"Retribution","icon":"sk_ta_strike","mp":9,"cd":4,"syn":{"skill":"t_p02","per":0.05},"cast":{"shape":"cleave","wpn":1.6,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A vengeful cleave that leaves struck foes vulnerable.","br":2,"x":0.28,"y":0.34,"band":1,"req":["t_a02"]},
+      {"id":"t_a12","name":"Retribution","icon":"sk_ta_strike","mp":9,"cd":4,"syn":{"skill":"t_p02","per":0.05},"cast":{"shape":"cleave","wpn":1.6,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A vengeful cleave dealing {dmg} that leaves struck foes vulnerable.","br":2,"x":0.28,"y":0.34,"band":1,"req":["t_a02"]},
       {"id":"t_a13","name":"Bless","icon":"sk_ta_blessbuff","mp":10,"cd":19,"cast":{"shape":"self","buff":[{"id":"regen","dur":7,"mag":10},{"id":"dmgUp","dur":7,"mag":0.2}]},"desc":"Bless yourself with renewing regeneration and surging might.","br":3,"x":0.28,"y":0.34,"band":1,"req":["t_a03"]},
-      {"id":"t_a14","name":"Holy Fire","icon":"sk_ta_holyfire","mp":12,"cd":5,"syn":{"skill":"t_p04","per":0.05},"cast":{"shape":"nova","spell":1.3,"radius":2,"status":{"effect":"burn","dur":3,"chance":0.8}},"desc":"Erupt in holy flame, scorching all foes around you.","br":4,"x":0.28,"y":0.34,"band":1,"req":["t_a04"]},
-      {"id":"t_a20","name":"Zealous Charge","icon":"sk_ta20","mp":12,"cd":5,"syn":{"skill":"t_p20","per":0.05},"cast":{"shape":"teleport","range":5,"wpn":1.7,"spell":0.9,"lifesteal":0.15,"repeat":2,"buff":[{"id":"dodgeUp","dur":2,"mag":0.3}]},"desc":"Charge the nearest foe, striking twice and draining life. Reaches ranged attackers.","br":0,"x":0.72,"y":0.34,"band":1,"req":["t_a00"]},
+      {"id":"t_a14","name":"Holy Fire","icon":"sk_ta_holyfire","mp":12,"cd":5,"syn":{"skill":"t_p04","per":0.05},"cast":{"shape":"nova","spell":1.3,"radius":2,"status":{"effect":"burn","dur":3,"chance":0.8}},"desc":"Erupt in holy flame for {dmg}, scorching all foes around you.","br":4,"x":0.28,"y":0.34,"band":1,"req":["t_a04"]},
+      {"id":"t_a20","name":"Zealous Charge","icon":"sk_ta20","mp":12,"cd":5,"syn":{"skill":"t_p20","per":0.05},"cast":{"shape":"teleport","range":5,"wpn":1.7,"spell":0.9,"lifesteal":0.15,"repeat":2,"buff":[{"id":"dodgeUp","dur":2,"mag":0.3}]},"desc":"Charge the nearest foe for {dmg}, striking twice and draining life. Reaches ranged attackers.","br":0,"x":0.72,"y":0.34,"band":1,"req":["t_a00"]},
       {"id":"t_a21","name":"Aegis Field","icon":"sk_ta21","mp":14,"cd":22,"cast":{"shape":"self","buff":[{"id":"shield","dur":8,"mag":130},{"id":"defUp","dur":8,"mag":0.35},{"id":"regen","dur":8,"mag":10}]},"desc":"Project a vast aegis granting a great shield, defense, and regeneration.","br":1,"x":0.72,"y":0.34,"band":1,"req":["t_a01"]},
-      {"id":"t_a22","name":"Condemn","icon":"sk_ta_condemn","mp":12,"cd":5,"syn":{"skill":"t_p22","per":0.05},"cast":{"shape":"blast","spell":1.4,"radius":2,"range":5,"knockback":2,"status":{"effect":"stun","dur":2,"chance":0.7}},"desc":"Hurl a damning blast that knocks back and stuns the guilty.","br":2,"x":0.72,"y":0.34,"band":1,"req":["t_a02"]},
-      {"id":"t_a23","name":"Consecrate","icon":"sk_ta_consecrate","mp":18,"cd":6,"syn":{"skill":"t_p23","per":0.05},"cast":{"shape":"nova","spell":1,"radius":3,"heal":{"flat":50,"perLevel":4},"buff":[{"id":"regen","dur":6,"mag":12}]},"desc":"Hallow the ground, searing foes while mending your wounds.","br":3,"x":0.72,"y":0.34,"band":1,"req":["t_a03"]},
-      {"id":"t_a24","name":"Judgment","icon":"sk_ta_judgment","mp":14,"cd":5,"syn":{"skill":"t_p24","per":0.05},"cast":{"shape":"bolt","spell":1.7,"execute":0.25,"range":7,"crit":true},"desc":"Pass divine judgment on a foe, executing the weak.","br":4,"x":0.72,"y":0.34,"band":1,"req":["t_a04"]},
-      {"id":"t_a30","name":"Hammer of Wrath","icon":"sk_ta_hammer","mp":16,"cd":6,"syn":{"skill":"t_p30","per":0.05},"cast":{"shape":"blast","wpn":2,"spell":1.2,"radius":2,"range":6,"crit":true,"status":{"effect":"stun","dur":2,"chance":1}},"desc":"Hurl a holy hammer that detonates, stunning all it strikes.","br":0,"x":0.28,"y":0.58,"band":2,"req":["t_a10"]},
+      {"id":"t_a22","name":"Condemn","icon":"sk_ta_condemn","mp":12,"cd":5,"syn":{"skill":"t_p22","per":0.05},"cast":{"shape":"blast","spell":1.4,"radius":2,"range":5,"knockback":2,"status":{"effect":"stun","dur":2,"chance":0.7}},"desc":"Hurl a damning blast dealing {dmg} that knocks back and stuns the guilty.","br":2,"x":0.72,"y":0.34,"band":1,"req":["t_a02"]},
+      {"id":"t_a23","name":"Consecrate","icon":"sk_ta_consecrate","mp":18,"cd":6,"syn":{"skill":"t_p23","per":0.05},"cast":{"shape":"nova","spell":1,"radius":3,"heal":{"flat":50,"perLevel":4},"buff":[{"id":"regen","dur":6,"mag":12}]},"desc":"Hallow the ground for {dmg}, searing foes while mending your wounds.","br":3,"x":0.72,"y":0.34,"band":1,"req":["t_a03"]},
+      {"id":"t_a24","name":"Judgment","icon":"sk_ta_judgment","mp":14,"cd":5,"syn":{"skill":"t_p24","per":0.05},"cast":{"shape":"bolt","spell":1.7,"execute":0.25,"range":7,"crit":true},"desc":"Pass divine judgment on a foe for {dmg}, executing the weak.","br":4,"x":0.72,"y":0.34,"band":1,"req":["t_a04"]},
+      {"id":"t_a30","name":"Hammer of Wrath","icon":"sk_ta_hammer","mp":16,"cd":6,"syn":{"skill":"t_p30","per":0.05},"cast":{"shape":"blast","wpn":2,"spell":1.2,"radius":2,"range":6,"crit":true,"status":{"effect":"stun","dur":2,"chance":1}},"desc":"Hurl a holy hammer that detonates for {dmg}, stunning all it strikes.","br":0,"x":0.28,"y":0.58,"band":2,"req":["t_a10"]},
       {"id":"t_a31","name":"Twin Guardian","icon":"sk_ta_twinguardian","mp":18,"cd":8,"cast":{"shape":"summon","buff":[{"id":"shield","dur":8,"mag":120}],"summon":{"kind":"spirit","count":2,"ttl":6}},"desc":"Summon two guardian spirits to fight at your side behind a holy shield.","br":1,"x":0.28,"y":0.58,"band":2,"req":["t_a11"]},
-      {"id":"t_a32","name":"Holy Ground","icon":"sk_ta_holyground","mp":16,"cd":6,"syn":{"skill":"t_p32","per":0.05},"cast":{"shape":"nova","spell":1.3,"radius":3,"status":{"effect":"vuln","dur":4,"chance":1},"buff":[{"id":"thorns","dur":8,"mag":60}]},"desc":"Sanctify the ground, weakening foes and cloaking you in thorns.","br":2,"x":0.28,"y":0.58,"band":2,"req":["t_a12"]},
+      {"id":"t_a32","name":"Holy Ground","icon":"sk_ta_holyground","mp":16,"cd":6,"syn":{"skill":"t_p32","per":0.05},"cast":{"shape":"nova","spell":1.3,"radius":3,"status":{"effect":"vuln","dur":4,"chance":1},"buff":[{"id":"thorns","dur":8,"mag":60}]},"desc":"Sanctify the ground for {dmg}, weakening foes and cloaking you in thorns.","br":2,"x":0.28,"y":0.58,"band":2,"req":["t_a12"]},
       {"id":"t_a33","name":"Sanctuary","icon":"sk_ta_sanctuary","mp":20,"cd":22,"syn":{"skill":"t_p33","per":0.05},"cast":{"shape":"self","heal":{"flat":70,"perLevel":6},"buff":[{"id":"shield","dur":8,"mag":150},{"id":"regen","dur":8,"mag":14}]},"desc":"Invoke a sanctuary that heals greatly and shelters you behind light.","br":3,"x":0.28,"y":0.58,"band":2,"req":["t_a13"]},
-      {"id":"t_a34","name":"Wrath of Heaven","icon":"sk_ta_wrath","mp":18,"cd":6,"syn":{"skill":"t_p34","per":0.05},"cast":{"shape":"line","spell":2,"range":6,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Call down a searing beam of holy wrath that pierces and burns.","br":4,"x":0.28,"y":0.58,"band":2,"req":["t_a14"]},
-      {"id":"t_a40","name":"Divine Storm","icon":"sk_ta_divinestorm","mp":22,"cd":6,"syn":{"skill":"t_p40","per":0.05},"cast":{"shape":"nova","wpn":2,"spell":1,"lifesteal":0.2,"radius":3,"repeat":2},"desc":"Whirl in a storm of holy blades, striking all around you twice and draining life.","br":0,"x":0.72,"y":0.58,"band":2,"req":["t_a20"]},
+      {"id":"t_a34","name":"Wrath of Heaven","icon":"sk_ta_wrath","mp":18,"cd":6,"syn":{"skill":"t_p34","per":0.05},"cast":{"shape":"line","spell":2,"range":6,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Call down a searing beam of holy wrath that deals {dmg}, piercing and burning.","br":4,"x":0.28,"y":0.58,"band":2,"req":["t_a14"]},
+      {"id":"t_a40","name":"Divine Storm","icon":"sk_ta_divinestorm","mp":22,"cd":6,"syn":{"skill":"t_p40","per":0.05},"cast":{"shape":"nova","wpn":2,"spell":1,"lifesteal":0.2,"radius":3,"repeat":2},"desc":"Whirl in a storm of holy blades for {dmg}, striking all around you twice and draining life.","br":0,"x":0.72,"y":0.58,"band":2,"req":["t_a20"]},
       {"id":"t_a41","name":"Bastion","icon":"sk_ta_bastion","mp":24,"cd":31,"cast":{"shape":"self","buff":[{"id":"shield","dur":10,"mag":220},{"id":"defUp","dur":10,"mag":0.5},{"id":"thorns","dur":10,"mag":80},{"id":"regen","dur":10,"mag":14}]},"desc":"Become an unbreakable bastion with an immense shield, defense, and thorns.","br":1,"x":0.72,"y":0.58,"band":2,"req":["t_a21"]},
-      {"id":"t_a42","name":"Redeemer","icon":"sk_ta_redeemer","mp":20,"cd":7,"syn":{"skill":"t_p42","per":0.05},"cast":{"shape":"cleave","wpn":2.2,"spell":1,"status":{"effect":"vuln","dur":4,"chance":1},"buff":[{"id":"thorns","dur":8,"mag":90}]},"desc":"A redeeming sweep that weakens foes and wreathes you in punishing thorns.","br":2,"x":0.72,"y":0.58,"band":2,"req":["t_a22"]},
-      {"id":"t_a43","name":"Holy Nova","icon":"sk_ta_holynova","mp":22,"cd":6,"syn":{"skill":"t_p43","per":0.05},"cast":{"shape":"nova","spell":1.5,"radius":3,"heal":{"pctDmg":0.4},"buff":[{"id":"regen","dur":8,"mag":16}]},"desc":"Detonate a nova of holy light, searing foes and healing for a share of the damage.","br":3,"x":0.72,"y":0.58,"band":2,"req":["t_a23"]},
-      {"id":"t_a44","name":"Sunbeam","icon":"sk_ta_sunbeam","mp":22,"cd":6,"syn":{"skill":"t_p44","per":0.05},"cast":{"shape":"line","spell":2.4,"execute":0.3,"range":7,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Channel a piercing sunbeam that incinerates and executes the wounded.","br":4,"x":0.72,"y":0.58,"band":2,"req":["t_a24"]},
+      {"id":"t_a42","name":"Redeemer","icon":"sk_ta_redeemer","mp":20,"cd":7,"syn":{"skill":"t_p42","per":0.05},"cast":{"shape":"cleave","wpn":2.2,"spell":1,"status":{"effect":"vuln","dur":4,"chance":1},"buff":[{"id":"thorns","dur":8,"mag":90}]},"desc":"A redeeming sweep dealing {dmg} that weakens foes and wreathes you in punishing thorns.","br":2,"x":0.72,"y":0.58,"band":2,"req":["t_a22"]},
+      {"id":"t_a43","name":"Holy Nova","icon":"sk_ta_holynova","mp":22,"cd":6,"syn":{"skill":"t_p43","per":0.05},"cast":{"shape":"nova","spell":1.5,"radius":3,"heal":{"pctDmg":0.4},"buff":[{"id":"regen","dur":8,"mag":16}]},"desc":"Detonate a nova of holy light for {dmg}, searing foes and healing for a share of the damage.","br":3,"x":0.72,"y":0.58,"band":2,"req":["t_a23"]},
+      {"id":"t_a44","name":"Sunbeam","icon":"sk_ta_sunbeam","mp":22,"cd":6,"syn":{"skill":"t_p44","per":0.05},"cast":{"shape":"line","spell":2.4,"execute":0.3,"range":7,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Channel a piercing sunbeam dealing {dmg} that incinerates and executes the wounded.","br":4,"x":0.72,"y":0.58,"band":2,"req":["t_a24"]},
       {"id":"t_a50","name":"Avatar","icon":"sk_ta_avatar","mp":30,"cd":29,"syn":{"skill":"t_p50","per":0.04},"cast":{"shape":"self","buff":[{"id":"dmgUp","dur":10,"mag":0.5},{"id":"critUp","dur":10,"mag":0.3},{"id":"lifestealUp","dur":10,"mag":0.2},{"id":"shield","dur":10,"mag":180}]},"desc":"Ascend into a radiant avatar, surging with holy power, crit, and lifesteal.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a30","t_a40"]},
       {"id":"t_a51","name":"Celestial Host","icon":"sk_ta_celestialhost","mp":30,"cd":12,"cast":{"shape":"summon","buff":[{"id":"shield","dur":5,"mag":260},{"id":"defUp","dur":5,"mag":0.4}],"summon":{"kind":"spirit","count":3,"ttl":8,"strong":true}},"desc":"Call down a host of celestial guardians behind a colossal shield.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a31","t_a41"]},
       {"id":"t_a52","name":"Avatar of Vengeance","icon":"sk_ta_archon","mp":28,"cd":35,"syn":{"skill":"t_p52","per":0.04},"cast":{"shape":"self","buff":[{"id":"thorns","dur":12,"mag":160},{"id":"defUp","dur":12,"mag":0.3},{"id":"dmgUp","dur":12,"mag":0.3},{"id":"shield","dur":12,"mag":200}]},"desc":"Become an avatar of vengeance, hurling back devastating thorns behind a holy shield.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a32","t_a42"]},
-      {"id":"t_a53","name":"Light of Heaven","icon":"sk_ta_lightofheaven","mp":28,"cd":9,"syn":{"skill":"t_p53","per":0.04},"cast":{"shape":"nova","spell":1.8,"radius":4,"heal":{"flat":120,"perLevel":8},"buff":[{"id":"shield","dur":4,"mag":240},{"id":"regen","dur":4,"mag":20}]},"desc":"Unleash the light of heaven, searing all foes and flooding you with healing and protection.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a33","t_a43"]},
-      {"id":"t_a54","name":"Judgment Day","icon":"sk_ta_judgmentday","mp":34,"cd":11,"syn":{"skill":"t_p54","per":0.04},"cast":{"shape":"nova","spell":3.2,"execute":0.35,"radius":4,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Call down judgment day, a cataclysm of holy fire that obliterates and executes all around you.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a34","t_a44"]}
+      {"id":"t_a53","name":"Light of Heaven","icon":"sk_ta_lightofheaven","mp":28,"cd":9,"syn":{"skill":"t_p53","per":0.04},"cast":{"shape":"nova","spell":1.8,"radius":4,"heal":{"flat":120,"perLevel":8},"buff":[{"id":"shield","dur":4,"mag":240},{"id":"regen","dur":4,"mag":20}]},"desc":"Unleash the light of heaven for {dmg}, searing all foes and flooding you with healing and protection.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a33","t_a43"]},
+      {"id":"t_a54","name":"Judgment Day","icon":"sk_ta_judgmentday","mp":34,"cd":11,"syn":{"skill":"t_p54","per":0.04},"cast":{"shape":"nova","spell":3.2,"execute":0.35,"radius":4,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Call down judgment day for {dmg}, a cataclysm of holy fire that obliterates and executes all around you.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a34","t_a44"]}
     ], 'active'),
   },
 };
@@ -5631,11 +5768,11 @@ function buySkill(id) {
   if (hpGain > 0) gains.push(`+${hpGain} max HP`);
   if (mpGain > 0) gains.push(`+${mpGain} max MP`);
   const gainStr = gains.length ? ` (${gains.join(', ')})` : '';
-  // Milestone rank reached? Shout the power spike + the perk it unlocks. Passives
-  // surge at the same ranks (3/7/10) — their always-on bonus spikes (keystones cap
-  // at rank 1, so they never hit one).
+  // Milestone rank reached? Shout its name + exactly what it grants. Passives surge
+  // at the same ranks (3/7/10) — their always-on bonus spikes (keystones cap at rank
+  // 1, so they never hit one).
   const ms = (node.type === 'active' || (node.type === 'passive' && !node.keystone)) && SKILL_MILESTONES.find(m => m.rank === newRank);
-  const msStr = ms ? (node.type === 'passive' ? ` ${ms.pips} Milestone — bonus surges!` : ` ${ms.pips} Milestone — power spike + ${ms.perk}!`) : '';
+  const msStr = ms ? ` ${ms.pips} ${ms.name} — ${node.type === 'passive' ? ms.passiveDesc : ms.activeDesc}!` : '';
   if (ms) screenFlash('#ffd27a');
   log(`<span data-spr=mat_glimmer></span> Learned ${node.name}${(node.max || 1) > 1 ? ` (rank ${newRank}/${node.max})` : ''}${summary ? ` — now ${summary}.` : '.'}${gainStr}${msStr}`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); saveGame();
@@ -6097,13 +6234,44 @@ let autoAttackTarget = null;
 // position each frame and clears once it's in weapon reach or dies — clicking a
 // foe paths you straight to it (see updatePlayer / the pointerup tap handler).
 const moveTarget = { active: false, hold: false, wx: 0, wy: 0, path: null, pathIdx: 0, foe: null,
+                     interactOnArrive: false,
                      _repathT: 0, _stallT: 0, _px: 0, _py: 0, _pathDX: -1, _pathDY: -1 };
 const MOVE_ARRIVE = 0.18;   // tiles — how close counts as "reached the click point"
+// ── TOUCH JOYSTICK ──
+// On a touch device a floating on-screen stick drives the hero the same way held
+// WASD does: its analog vector is injected into updatePlayer's input vector (see
+// the joystickMath module for the pure math). `active` is true only once the
+// thumb has dragged past the tap threshold (so a quick tap still walks/inspects
+// via the normal tap path). Coordinates are client (CSS) px. `mag` (0..1) decides
+// sprint — push the stick to the rim to run. Everything here is inert until the
+// device reveals itself as touch (body.touch); desktop mouse input is untouched.
+const JOY_RADIUS = 56;   // thumb throw distance (CSS px) for a full-magnitude push
+// A quick FLICK of the stick — engage and release within this window while pushed
+// past a fair magnitude — dashes in that direction. Longer holds are just walking.
+const FLICK_MS = 260;
+const FLICK_MAG = 0.5;
+const touchStick = { pointerId: null, pending: false, active: false,
+                     ox: 0, oy: 0, cx: 0, cy: 0, ix: 0, iy: 0, mag: 0 };
+let _stickEngageAt = 0;      // performance.now() when the stick last engaged (flick timing)
+function resetTouchStick() {
+  touchStick.pointerId = null; touchStick.pending = false; touchStick.active = false;
+  touchStick.ix = 0; touchStick.iy = 0; touchStick.mag = 0;
+  hideJoyVisual();
+}
+// Touch sprint is an explicit on/off toggle (the sprint button) rather than a
+// push-to-rim gesture — it just latches the same auto-sprint the keyboard uses.
+function toggleTouchSprint() {
+  sprintLatched = !sprintLatched;
+  if (typeof sfx === 'function') sfx('click');
+  if (typeof renderSkillBar === 'function') renderSkillBar();   // repaints the RUN tile's on/off state
+}
 function heldDir(d) { return keyHeld[d]; }
 function clearHeld() {
   keyHeld.up = keyHeld.down = keyHeld.left = keyHeld.right = false;
   sprintHeld = false;
   moveTarget.active = false; moveTarget.hold = false; moveTarget.path = null; moveTarget.foe = null;
+  moveTarget.interactOnArrive = false;
+  resetTouchStick();   // drop any active on-screen stick too (blur / floor change / halt)
 }
 // Move the hero to a grid cell AND sync the smooth float position to its centre.
 // Used everywhere the hero is repositioned (spawn, stairs, teleports, blinks,
@@ -6337,7 +6505,15 @@ window.gameState = function gameState(radius) {
     name: it.name, slot: it.slot, tier: it.tier, stats: it.stats,
     ...(it.attrs && Object.keys(it.attrs).length ? { attrs: it.attrs } : {}),
     ...(it.power && ITEM_POWERS[it.power] ? { power: ITEM_POWERS[it.power].name } : {}),
+    // `pow` is this piece's BUILD-AWARE Power (its worth to the current hero, not a
+    // fixed table): a stat that does nothing for your build adds ~0. `upgrade` is
+    // the Power swing vs. what fills its slot now (+ = a real upgrade for you).
+    ...(it.slot ? { pow: itemPower(it), upgrade: equipUpgradeDelta(it) } : {}),
     ...(it.unique ? { unique: it.unique, fixed: !!it.fixed } : {}),
+    // A set piece is a fixed, named artifact too (like a unique) but also belongs
+    // to a set — surface its set id, piece id and the fixed flag so a driving agent
+    // can tell it can't be reforged and see which set it advances.
+    ...(it.set ? { set: it.set, setPiece: it.setPiece, fixed: !!it.fixed } : {}),
   } : null;
 
   // ── ASCII overlay map centred on the player ──
@@ -6533,6 +6709,10 @@ window.gameState = function gameState(radius) {
     // it clears itself in under a second. (The 'out'/'in' pair is the post-channel
     // town animation, distinct from the channel — see player.channeling.)
     transit,
+    // 'touch' once the mobile layer is active (floating joystick + thumb buttons),
+    // else 'mouse'. Purely informational — every action is still driveable from the
+    // keyboard/console in both modes.
+    input: (typeof document !== 'undefined' && document.body && document.body.classList.contains('touch')) ? 'touch' : 'mouse',
     inTown: !!inTown,
     floor: dungeonLevel,                                                   // continuous depth (1, 2, 3, …)
     floorDisplay: (typeof displayFloor === 'function') ? displayFloor() : dungeonLevel, // 1–25 within a tier
@@ -6563,6 +6743,12 @@ window.gameState = function gameState(radius) {
       xpToNext: (typeof xpForLevel === 'function') ? xpForLevel(player.level) : null,
       gold: player.gold, class: player.class, ascension: player.ascension,
       attributes: player.attributes ? Object.assign({}, player.attributes) : null, // might/vitality/agility/spirit/luck
+      // Overall Power (the hero-sheet headline) and the slice of it your worn gear
+      // contributes. Power is BUILD-AWARE: it's an effective combat score (offense ×
+      // survivability), so an item's Power — and each stat's share of it — reflects
+      // what it actually does for THIS build. See gameGuide("power").
+      power: (typeof playerPower === 'function') ? playerPower() : null,
+      gearPower: (typeof gearContributionPower === 'function') ? gearContributionPower() : null,
       // Offense-scaling gear stats (all %), so an agent can see which build a hero is
       // geared for without reading tooltips. skillPower amps MARTIAL skills, spellPower
       // amps SPELLS; attackSpeed quickens auto-attacks, castSpeed the recharge of spell
@@ -6600,7 +6786,7 @@ window.gameState = function gameState(radius) {
     // shows a golden aura on the hero. Mirrors the "… set" tooltip.
     sets: (typeof wornSetCounts === 'function') ? Object.entries(wornSetCounts()).map(([sid, n]) => {
       const s = ITEM_SETS[sid], done = setComplete(sid, n);
-      return { id: sid, name: s.name, worn: n, need: setMaxTier(s), complete: done,
+      return { id: sid, name: s.name, worn: n, need: setPieceCount(s), complete: done,
         power: s.power ? { name: s.power.name, active: done, effect: Object.assign({}, s.power.stats) } : null };
     }) : [],
     // The manual hotbar: each filled slot's number key (1..4), what it casts, MP
@@ -6788,6 +6974,7 @@ window.gameGuide = function gameGuide(topic) {
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A quick key-tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
       `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
+      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right; the header holds the minimap, vitals, and the settings + bag buttons (top-right). The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
@@ -6801,7 +6988,7 @@ window.gameGuide = function gameGuide(topic) {
       `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds MINIMAP (the top-left floor-sketch box size — Small / Medium / Large), UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker plus CURSOR SIZE (a 1x–2x multiplier that enlarges the mouse pointer on top of the UI scale; default 1x).`,
     ],
     movement: [
-      `Walking, sprinting and dashing all move a free-floating body in real time (with momentum), not on a turn grid. Hold a direction; let go to stop.`,
+      `Walking, sprinting and dashing all move a free-floating body in real time (with momentum), not on a turn grid. Hold a direction; let go to stop. On touch, the floating joystick feeds the same motion — push it to the rim to sprint (see the "controls" topic).`,
       `The hero faces and animates in the direction it walks — down/up/left/right — cycling a walk animation while moving and resting on a standing frame when still. It's purely cosmetic; gameState().player.faceDir reports the current 4-way facing.`,
       `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~34/sec). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch auto-sprint).`,
       `DASH (${key('dash')}) is a quick burst (costs 35 Stamina, ~0.55s cooldown). It only repositions fast — there are no i-frames and enemies are solid, so you can't dash THROUGH a foe to escape.`,
@@ -6835,8 +7022,8 @@ window.gameGuide = function gameGuide(topic) {
       `Every active is either a SKILL (martial/weapon-based) or a SPELL (magic) — shown as a SKILL / SPELL badge on its tree node and in gameState().skills[i].school. A SKILL scales with your weapon damage + Skill Power gear; a SPELL scales with Spirit + Spell Power gear. Gear those stats to match the actives you lean on.`,
       `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and a rank-7 skill adds an extra ×1.2. The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
-      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — a big power surge, then a shorter cooldown, then wider reach — so deepening a key skill outpaces its rising mana cost.`,
-      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. Its detail card shows a Surge chip, milestone pips by the rank, and the bigger jump in the on-rank-up preview. Keystones stay single-rank, so they don't surge.`,
+      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% power (Empowered), then +20% power and a 20%-faster recharge (Honed), then +30% power plus +1 radius/range/target/hit (Mastered) — so deepening a key skill outpaces its rising mana cost. Every skill's detail card shows a "Rank bonuses" ladder listing all three, each lit green with a ✓ once your rank has earned it.`,
+      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. Its detail card lists all three in the green-when-earned "Rank bonuses" ladder, shows milestone pips by the rank, and the surge is folded into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
@@ -6862,10 +7049,10 @@ window.gameGuide = function gameGuide(topic) {
     ],
     loot: [
       `Rarity is COLOUR ONLY (no text labels), lowest to highest: grey → white → green → blue → purple → orange → red. Higher tiers allow more bonus affixes.`,
-      `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike every other rarity it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and its own signature power (a "legendary modifier" like Vampiric). Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. gameState() marks worn/held uniques with a "unique" id and "fixed":true.`,
+      `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike the random rarities it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and its own signature power (a "legendary modifier" like Vampiric). Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. (Set pieces — see below — are the OTHER fixed, named red artifacts.) gameState() marks worn/held uniques with a "unique" id and "fixed":true.`,
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a depth-milestone cache, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
-      `Set pieces are a distinct top-rarity class shown in teal (not the red of a unique). They drop only at the top tier — as rare as any unique — and grant escalating stat bonuses at 2 and 4 matched pieces worn. Wearing the full set (4 pieces = complete) also unlocks its SIGNATURE POWER — a unique effect, not just more stats: Warden's Aegis Wall (block + reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), or Arcanist's Arcane Overflow (cooldown reduction + mana leech). A completed set wraps the hero in a golden aura and its "… set" tag turns gold with a ✦. A piece can roll for any slot; hover/press-hold the tag to see the bonuses, the power, which slots you're wearing, and your count. gameState().sets lists worn sets, completion and active powers.`,
-      `Item power is driven more by item level (ilvl, geared to current depth) than by rarity alone. gameState().menu.inventory gives brief items; read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
+      `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
+      `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
@@ -6876,7 +7063,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     autoloot: [
       `AUTO-LOOT applies a per-rarity rule the instant gear drops: Keep (default), Scrap (into materials), or Sell (50% value gold). Set it on the LOOT tab (Auto-Loot). gameState().menu.autoLoot shows the rules.`,
-      `The picker has a row per rarity plus a "set" row (right above unique) for set pieces — they roll at the unique tier but answer to their own rule, so you can keep chase set pieces while still auto-selling plain uniques.`,
+      `The picker has a row per rarity plus a "set" row (right above unique) for set pieces — they drop at the top tier alongside uniques but answer to their own rule, so you can keep chase set pieces while still auto-selling plain uniques.`,
       `It only touches organically-found drops (chests, kills) — never shop buys or forged gear — and never locked items.`,
       `Auto-scrap only works on equippable gear; non-gear set to Scrap falls back to Keep. Use Sell to auto-dispose of non-gear.`,
       `Scrapping melts gear into materials, tied to the item's RARITY (not difficulty): any piece gives Scrap, white+ can shed Glimmer, green+ a slim Core (real odds from blue+), and epic+ a lucky Chaos Orb — grey junk melts to pure Scrap. Each mat is a separate roll, so finer mats stay scarce; the COUNT scales with item level along a curve that flattens as it climbs. Every individual item salvages a little differently, so two same-rarity pieces vary. gameState().menu.materials shows your wallet.`,
@@ -6955,6 +7142,12 @@ window.gameGuide = function gameGuide(topic) {
       `Hero-power knobs apply instantly (HP/derived stats recompute); enemy & floor knobs bite only on newly spawned foes, so use the panel's "Respawn floor" button to re-roll the current floor and preview. Each slider has a ↺ reset; "Reset all" restores every default. Values persist across reloads (localStorage key dungeonLoot_devTune_v1).`,
       `gameState().devTuning lists any knob currently away from its default ({id,label,value,default}); an empty array means shipping balance. Check it if difficulty feels off — the balance may have been retuned here.`,
     ],
+    power: [
+      `Power is a single number rating how strong a hero — or a single gear piece — is. It is BUILD-AWARE: not a fixed table, but the marginal gain in an effective COMBAT SCORE (a blend of your effective offense/DPS and survivability/EHP, built from the real combat formulas) that the piece's stats give THIS hero's current build.`,
+      `So a stat that does nothing for your build is worth ~0 Power to you: a Crit Damage roll on a hero with no crit chance barely moves your damage, so it barely adds Power; Spell Power on a pure martial build, or Attack Speed on a pure caster, are near-dead weight and priced as such. The SAME item can be worth very different Power to two different heroes — that is the point. Chances are measured against your own LEVEL (a stable reference), and transient shrine/food buffs are excluded, so Power reflects your durable build, not the moment.`,
+      `Read it from gameState(): player.power is the overall headline (POWER on the hero sheet), player.gearPower is the slice your worn gear contributes (POWER = that + your level/attribute/skill base). Each equippable item in menu.inventory carries pow (its Power to you) and upgrade (the Power swing vs. what fills its slot now: positive = a genuine upgrade FOR YOUR BUILD). Sort/compare by pow, and trust upgrade over raw rarity — a higher-tier piece can be a downgrade if its stats don't suit you.`,
+      `Consequences an agent should expect: an item's pow can differ across two heroes and shrinks as your build saturates a stat (diminishing returns); the overall player.power still climbs monotonically with any real upgrade. To raise Power, stack stats your build actually uses (your class's damage lane, crit damage only once you have crit chance, more HP/mitigation for survivability), not just bigger rarities.`,
+    ],
   };
   if (topic == null) return Object.assign({ topics: Object.keys(G) }, G);
   const t = String(topic).toLowerCase().replace(/[^a-z]/g, '');
@@ -6964,6 +7157,7 @@ window.gameGuide = function gameGuide(topic) {
     damage: 'damage', dmg: 'damage', spell: 'damage', spells: 'damage', spellpower: 'damage', skillpower: 'damage', attackspeed: 'damage', castspeed: 'damage', cooldown: 'damage', cdr: 'damage', scaling: 'damage', attack: 'damage', autoattack: 'damage',
     autoloot: 'autoloot', autoscrap: 'autoloot', scrap: 'autoloot', sell: 'autoloot', salvage: 'autoloot', material: 'autoloot', materials: 'autoloot', mats: 'autoloot',
     item: 'loot', items: 'loot', gear: 'loot', rarity: 'loot', loots: 'loot',
+    power: 'power', itempower: 'power', gearpower: 'power', upgrade: 'power', upgrades: 'power', rating: 'power', strength: 'power', build: 'power',
     hazard: 'hazards', trap: 'hazards', traps: 'hazards', projectile: 'hazards', barrier: 'hazards', fire: 'hazards', terrain: 'hazards', tiles: 'hazards', greed: 'hazards', cursed: 'hazards', curse: 'hazards', shrine: 'hazards', teleporter: 'hazards', fountain: 'hazards',
     enemy: 'enemies', boss: 'enemies', bosses: 'enemies', ai: 'enemies', minion: 'enemies', minions: 'enemies', ally: 'enemies', allies: 'enemies', affix: 'enemies', enrage: 'enemies', berserk: 'enemies', conquest: 'enemies', scar: 'enemies', rainbow: 'enemies',
     quest: 'quests', quests: 'quests', escort: 'quests', rescue: 'quests', fetch: 'quests', tribute: 'quests', forage: 'quests', beacon: 'quests', beacons: 'quests', objective: 'quests', bounty: 'town',
@@ -8445,6 +8639,9 @@ function closeGraveyard() { document.getElementById('graveyard-overlay').classLi
 const canvas = document.getElementById('canvas');
 let ctx = canvas.getContext('2d'); // `let` so the occlusion pass can briefly redirect draws into an offscreen silhouette buffer
 
+// Vertical follow-camera lift (buffer px) so the hero clears the bottom thumb
+// controls on touch. Recomputed in resizeCanvas; 0 on desktop.
+let touchCamBiasPx = 0;
 function resizeCanvas() {
   // Match the drawing buffer to the canvas's on-screen size so the map fills its
   // whole area — square or not. draw() keeps tiles square (sized off the shorter
@@ -8452,8 +8649,17 @@ function resizeCanvas() {
   // CSS handles the layout (full cell on desktop, fill-the-area on mobile).
   canvas.style.width = '';
   canvas.style.height = '';
-  canvas.width  = canvas.offsetWidth;
-  canvas.height = canvas.offsetHeight;
+  const cw = canvas.offsetWidth, ch = canvas.offsetHeight;
+  // On touch, back the buffer at device resolution (capped at 2×) so pixel art
+  // stays crisp on high-DPR phones. draw()'s camera and clientToWorld both scale
+  // off the buffer size, so nothing else needs to change. Desktop stays 1:1.
+  const touch = document.body.classList.contains('touch');
+  const dpr = touch ? Math.min(2, window.devicePixelRatio || 1) : 1;
+  canvas.width  = Math.max(1, Math.round(cw * dpr));
+  canvas.height = Math.max(1, Math.round(ch * dpr));
+  // The touch map lives in its own area between the solid header/footer bands, so
+  // the hero just centres in the canvas — no camera bias needed (0 on desktop too).
+  touchCamBiasPx = 0;
 }
 resizeCanvas();
 // The desktop panel widths are vw-based (clamp), so they shift continuously as the
@@ -8462,12 +8668,18 @@ resizeCanvas();
 // the drag, not chase it a third of a second behind — and clear the flag once the
 // drag settles.
 let _resizeAnimTimer = null;
-window.addEventListener('resize', () => {
+function onViewportResize() {
   document.body.classList.add('resizing');
   if (_resizeAnimTimer) clearTimeout(_resizeAnimTimer);
   _resizeAnimTimer = setTimeout(() => document.body.classList.remove('resizing'), 200);
   resizeCanvas(); if (inTown) syncTownBarReserve(); draw();
-});
+}
+window.addEventListener('resize', onViewportResize);
+// Foldables (fold/unfold), rotation, and the mobile URL bar showing/hiding change
+// the usable viewport without always firing a plain window 'resize' — refit on
+// those too so the full-screen canvas always matches the visible area.
+window.addEventListener('orientationchange', onViewportResize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
 
 // The loot drawer is a permanent column — always open; tapping the map never closes it.
 
@@ -8478,6 +8690,14 @@ let panelOpen = false;
 function togglePanel() {
   // The loot drawer is a permanent column — just (re)render it.
   panelOpen = true; renderPanel();
+}
+// Touch: the bag/loot drawer is a full-screen sheet toggled by the BAG button
+// (body.bag-open drives the CSS; renderPanel fills it). On desktop the drawer is a
+// permanent column, so this is only wired under body.touch.
+function toggleBag() {
+  const open = !document.body.classList.contains('bag-open');
+  document.body.classList.toggle('bag-open', open);
+  if (open) { document.body.classList.remove('panel-collapsed'); panelOpen = true; renderPanel(); }
 }
 
 // ── MAP CLICK-TO-MOVE ──
@@ -8520,6 +8740,21 @@ canvas.addEventListener('pointerdown', e => {
   // right away, so a click-and-hold / drag-to-move closes it too (a plain tap on the
   // SAME foe is left for pointerup, which toggles the card shut).
   if (enemyCardFor && enemyAtClient(e.clientX, e.clientY) !== enemyCardFor) closeEnemyCard();
+  // Touch: arm a floating joystick. We don't move yet — a drag past the tap slop
+  // engages the stick (steer the hero), while a release without dragging falls
+  // through to the normal tap (walk-to-point / chase a tapped foe). So tap-to-move
+  // lives alongside the stick. Multi-touch is fine: the stick claims THIS pointer;
+  // the skill/action buttons are separate DOM elements with their own pointers.
+  if (isTouchMode() && e.pointerType === 'touch') {
+    if (rtPaused()) return;
+    touchStick.pointerId = e.pointerId;
+    touchStick.pending = true; touchStick.active = false;
+    touchStick.ox = touchStick.cx = e.clientX;
+    touchStick.oy = touchStick.cy = e.clientY;
+    touchStick.ix = touchStick.iy = touchStick.mag = 0;
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    return;
+  }
   if (e.button !== 0 || rtPaused()) return;      // left button only; not while a menu/town/death pauses play
   clickMoveId = e.pointerId;
   moveTarget.hold = true;                         // track the cursor until the button comes up
@@ -8527,12 +8762,51 @@ canvas.addEventListener('pointerdown', e => {
   setMoveTargetFromClient(e.clientX, e.clientY);
 });
 canvas.addEventListener('pointermove', e => {
+  // Touch joystick drag: engage once the thumb clears the tap slop, then feed the
+  // analog vector (with a sliding origin) to updatePlayer via touchStick.
+  if (touchStick.pointerId === e.pointerId) {
+    touchStick.cx = e.clientX; touchStick.cy = e.clientY;
+    if (!touchStick.active &&
+        (Math.abs(e.clientX - touchStick.ox) > TAP_SLOP || Math.abs(e.clientY - touchStick.oy) > TAP_SLOP)) {
+      touchStick.active = true; touchStick.pending = false;
+      _stickEngageAt = performance.now();   // start the flick timer
+    }
+    if (touchStick.active) {
+      const o = slideOrigin({ x: touchStick.ox, y: touchStick.oy }, { x: e.clientX, y: e.clientY }, JOY_RADIUS);
+      touchStick.ox = o.x; touchStick.oy = o.y;
+      const v = joystickVector(o, { x: e.clientX, y: e.clientY }, JOY_RADIUS, JOY_DEFAULTS.deadZone);
+      touchStick.ix = v.ix; touchStick.iy = v.iy; touchStick.mag = v.mag;
+      showJoyVisual();
+    }
+    return;
+  }
   // While the button is held, keep the move target glued to the cursor.
   if (clickMoveId === e.pointerId) { if (moveTarget.hold) setMoveTargetFromClient(e.clientX, e.clientY); return; }
   // Hover-to-inspect: pointing at a foe pops its codex card under the map.
   updateHoverCard(e.clientX, e.clientY);
 });
 function endJoy(e, isUp) {
+  // Touch joystick release/cancel. A stick that never dragged past the slop was a
+  // tap → run the normal tap path (chase a tapped foe, else walk to the point).
+  if (touchStick.pointerId === e.pointerId) {
+    const wasTap = !touchStick.active;
+    // Flick-to-dash: a quick engage-and-release while the stick is pushed dashes in
+    // that direction. doDash reads touchStick.ix/iy, so fire it BEFORE the reset.
+    if (isUp && touchStick.active && (performance.now() - _stickEngageAt) < FLICK_MS && touchStick.mag > FLICK_MAG) {
+      doDash();
+    }
+    resetTouchStick();
+    gestureStart = null;
+    if (isUp && wasTap && !rtPaused()) {
+      const foe = (gestureFoe && !gestureFoe.dead) ? gestureFoe : enemyAtClient(e.clientX, e.clientY);
+      if (foe) { moveTarget.foe = foe; moveTarget.active = true; moveTarget.interactOnArrive = false; updateMoveTargetPath(true); }
+      // Tap-to-move doubles as tap-to-USE on touch: walk to the spot and, on
+      // arrival, run pickup() (opens a chest underfoot / talks to an adjacent NPC;
+      // most loot is auto-grabbed on walk-over anyway).
+      else { setMoveTargetFromClient(e.clientX, e.clientY); moveTarget.interactOnArrive = true; }
+    }
+    return;
+  }
   const wasClickMove = clickMoveId === e.pointerId;
   // Tap detection: the press barely moved from its pointerdown anchor.
   const moved = gestureStart && (Math.abs(e.clientX - gestureStart.x) > TAP_SLOP || Math.abs(e.clientY - gestureStart.y) > TAP_SLOP);
@@ -8565,6 +8839,88 @@ canvas.addEventListener('pointercancel', e => endJoy(e, false));
 canvas.addEventListener('pointerleave', () => {
   if (clickMoveId === null && enemyCardFor) closeEnemyCard();
 });
+
+// ── TOUCH MODE DETECTION ──────────────────────────────────────────────────────
+// Touch is an ADDITIVE layer keyed entirely off body.touch — never a UA sniff and
+// never a media-query layout swap, so a desktop machine is byte-identical to
+// before and keyboard/mouse stay live in every mode. We reveal the touch UI on the
+// first genuine touch pointer and retract it on a real mouse/pen pointer, so a
+// hybrid device (touch laptop + mouse) tracks whatever the player last used.
+// Compatibility mouse events (the legacy mousedown/mousemove a tap synthesizes)
+// are NOT PointerEvents, so keying detection on pointerType avoids the classic
+// "touch immediately looks like a mouse" trap.
+function isTouchMode() { return document.body.classList.contains('touch'); }
+// Dungeon Loot is portrait-only on touch: in landscape we cover the game with the
+// rotate notice (CSS) AND pause play (this flag feeds rtPaused) so nothing happens
+// behind it. Desktop never sets body.touch, so it's never blocked.
+let touchLandscapeBlock = false;
+function updateOrientationBlock() {
+  let land = false;
+  try { land = matchMedia('(orientation: landscape)').matches; } catch (_) {}
+  touchLandscapeBlock = isTouchMode() && land;
+}
+try { matchMedia('(orientation: landscape)').addEventListener('change', () => { updateOrientationBlock(); clearHeld(); }); } catch (_) {}
+function setTouchMode(on) {
+  if (isTouchMode() === on) return;
+  document.body.classList.toggle('touch', on);
+  if (!on) resetTouchStick();
+  updateOrientationBlock();
+  try { resizeCanvas(); } catch (_) {}
+  try { syncHudLayout(); } catch (_) {}
+  try { renderSkillBar(); } catch (_) {}
+  try { markHudDirty(); } catch (_) {}
+}
+// Initial hint: a coarse, hover-less PRIMARY pointer is almost certainly a phone /
+// tablet. Confirmed (or overridden) by the first real pointer event below.
+try {
+  if (matchMedia('(pointer: coarse)').matches && matchMedia('(hover: none)').matches) setTouchMode(true);
+} catch (_) {}
+window.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch') setTouchMode(true);
+  else if (e.pointerType === 'mouse' || e.pointerType === 'pen') setTouchMode(false);
+}, true);   // capture: settle the mode before the canvas handler reads isTouchMode()
+window.addEventListener('pointermove', e => {
+  if (e.pointerType === 'mouse') setTouchMode(false);   // a mouse hovering ⇒ desktop
+}, { capture: true, passive: true });
+
+// ── FLOATING JOYSTICK VISUAL ──
+// Two DOM rings (base = origin, knob = thumb) positioned in viewport px, so the
+// render loop (draw()) never touches them. Shown only while the stick is engaged;
+// body.joy-on fades them in. Coordinates are client px (== viewport px for the
+// position:fixed rings).
+let _joyBaseEl = null, _joyKnobEl = null;
+function _joyEls() {
+  if (!_joyBaseEl) _joyBaseEl = document.getElementById('joy-base');
+  if (!_joyKnobEl) _joyKnobEl = document.getElementById('joy-knob');
+  return _joyBaseEl && _joyKnobEl;
+}
+function showJoyVisual() {
+  if (!_joyEls()) return;
+  _joyBaseEl.style.left = touchStick.ox + 'px';
+  _joyBaseEl.style.top  = touchStick.oy + 'px';
+  let dx = touchStick.cx - touchStick.ox, dy = touchStick.cy - touchStick.oy;
+  const d = Math.hypot(dx, dy);
+  if (d > JOY_RADIUS) { dx = dx / d * JOY_RADIUS; dy = dy / d * JOY_RADIUS; }   // clamp knob to the rim
+  _joyKnobEl.style.left = (touchStick.ox + dx) + 'px';
+  _joyKnobEl.style.top  = (touchStick.oy + dy) + 'px';
+  document.body.classList.add('joy-on');
+}
+function hideJoyVisual() { document.body.classList.remove('joy-on'); }
+
+// Home the shared #skill-bar element in the right container for the layout: the
+// bottom-HUD belt on desktop, or the touch thumb-cluster on touch (re-homing the
+// live element, not duplicating it, so every id-based updater keeps working — same
+// pattern as syncDesktopHud).
+function syncHudLayout() {
+  const bar = document.getElementById('skill-bar');
+  if (!bar) return;
+  if (isTouchMode()) {
+    const cluster = document.getElementById('touch-cluster');
+    if (cluster && bar.parentNode !== cluster) cluster.appendChild(bar);   // after the sprint toggle
+  } else {
+    syncDesktopHud();
+  }
+}
 
 // ── INSPECT: enemy codex card ──
 // A concise stat card for a foe: hovering one on desktop pops it (clicking a foe
@@ -8727,7 +9083,7 @@ function syncDesktopHud() {
     if (d && el.parentNode !== d) d.appendChild(el);
   }
 }
-syncDesktopHud();
+syncHudLayout();   // route the skill bar to the desktop belt or the touch cluster
 
 // ══════════════════════════════════════════
 // MAP GENERATION
@@ -9866,7 +10222,7 @@ function finishTutorial() {
 // nudge as the new player progresses (move → fight → enter the cave). Tapping it
 // opens the full How to Play menu (wired on the element's onclick).
 function tutorialStage(stage) {
-  const moveHow = 'WASD / arrows';
+  const moveHow = isTouchMode() ? 'the joystick (drag the map)' : 'WASD / arrows';
   if (stage === 'move') {
     setTutorialHint(`Use <b>${moveHow}</b> to move. Walk into the <b>skeleton</b> to attack it.`);
   } else if (stage === 'cave') {
@@ -10384,7 +10740,7 @@ function renderShop() {
     // size for every piece), and every following line — slot/power, stats, the
     // can't-equip note — is left-aligned to the card edge (see .shop-card in CSS).
     return `<div class="shop-row shop-card has-actions ${isUpgrade?'upgrade':''} ${afford?'':'cant-afford'} ${reqBadge?'cant-equip':''}">
-      <div class="shop-row-info ${cls}" onmouseenter="showShopTooltip(event,${i})" onmouseleave="hideTooltip()">
+      <div class="shop-row-info ${cls}" data-shop-idx="${i}" onmouseenter="showShopTooltip(event,${i})" onmouseleave="hideTooltip()">
         <div class="shop-row-name"><span class="loot-icon">${iconMarkup(sicon, scolor, true, 20)}</span>${name}</div>
         <div class="shop-row-sub">${sub}</div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
@@ -12782,11 +13138,16 @@ function renderFixedEnchantItem(item) {
     `<div class="hc-line" style="opacity:0.85;color:var(--gold)"><span data-spr=feat_door></span> +${v} <span class="stat-abbr" ${hoverTip(statMeaningTip('attr', k))}>${(ATTRIBUTES[k] || {}).label || k}</span> <span style="font-size:1.2rem">(fixed)</span></div>`).join('');
   const powHtml = itemPowerFront(item);
   const powLine = powHtml ? `<div class="hc-line" style="opacity:0.9">${powHtml}</div>` : '';
+  // Set pieces are fixed artifacts too — label them as a set piece (with the set
+  // tag), not a "unique", so the read-only panel reads true.
+  const isSet = !!item.set;
+  const kindWord = isSet ? 'set piece' : 'unique';
+  const setTag = isSet ? itemSetTag(item) : '';
   setTownContent(`
     <div class="shop-row has-actions"><button class="modal-nav-btn" onclick="enchantBack()">‹ Back</button>
       <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${item.name}</div>
-      <div class="shop-row-sub">${SLOTS[item.slot].label} · ilvl ${item.ilvl} · unique</div></div></div>
-    <div class="ench-legend">A unique is fixed the moment it drops — its properties can't be augmented or reforged.</div>
+      <div class="shop-row-sub">${SLOTS[item.slot].label} · ilvl ${item.ilvl} · ${kindWord}${setTag}</div></div></div>
+    <div class="ench-legend">A ${kindWord} is fixed the moment it drops — its properties can't be augmented or reforged.</div>
     ${powLine}
     ${statRows}${attrRows}
     <div class="hc-line" style="opacity:0.6;margin-top:4px">This artifact's modifiers are set for good. Its values were rolled once, scaled to the depth it dropped on, and locked.</div>`);
@@ -13714,12 +14075,14 @@ function uniqueMandatoryHeadline(slot, familyHeadline) {
   if (slot === 'offhand') return familyHeadline.slice();
   return []; // ring / amulet
 }
-// Build a fully-formed FIXED unique from a definition, rolling each property's VALUE
-// by depth (ilvl) once. applyBaseStats lays down the auto headline (DMG/DEF/family);
-// the definition's `native` then replaces the base's default innate signature, and
-// its six `mods` (five stats + one attribute) fill the rest. The result is marked
-// `fixed` so the Enchanter leaves it alone.
-function buildUnique(def, lvl) {
+// Build a fully-formed FIXED artifact from a definition, rolling each property's
+// VALUE by depth (ilvl) once. applyBaseStats lays down the auto headline
+// (DMG/DEF/family); the definition's `native` then replaces the base's default
+// innate signature, and its six `mods` (five stats + one attribute) fill the rest.
+// The result is marked `fixed` so the Enchanter leaves it alone. `membership` tags
+// it as a unique ({unique}) or a set piece ({set, setPiece}); both paths are
+// otherwise identical (same native/mods/power/base/baseStats machinery).
+function buildFixedArtifact(def, lvl, membership) {
   const tier = 'unique';
   const mult = tierMult(tier);
   const dmgMult = 2.6;
@@ -13728,7 +14091,7 @@ function buildUnique(def, lvl) {
   const value = Math.round(5000 * (1 + lvl * 0.12));
   const item = { id: Math.random(), name: def.name, tier, slot, ilvl: lvl,
     stats: {}, attrs: {}, value, flavor: def.flavor, icon: iconForBase(slot, baseName),
-    base: baseName, unique: def.id, fixed: true, power: def.power };
+    base: baseName, fixed: true, power: def.power, ...membership };
   // Auto headline (DMG / DEF+ATK / off-hand family), rolled within its depth band.
   applyBaseStats(item, baseName, lvl + rnd(0, 2) * 0.6, mult, dmgMult);
   const baseInnate = (item.baseStats || []).slice(); // what applyBaseStats protected
@@ -13737,7 +14100,7 @@ function buildUnique(def, lvl) {
     if (!(def.native in item.stats)) item.stats[def.native] = affixStatValue(def.native, lvl, mult);
     item.baseStats = [...baseInnate.filter(s => s !== def.native), def.native];
   } else {
-    // Weapon/armour/jewelry: the unique's native replaces the base's default innate.
+    // Weapon/armour/jewelry: the artifact's native replaces the base's default innate.
     for (const s of baseInnate) if (s !== def.native) delete item.stats[s];
     item.stats[def.native] = affixStatValue(def.native, lvl, mult);
     item.baseStats = [def.native];
@@ -13749,12 +14112,23 @@ function buildUnique(def, lvl) {
   }
   return item;
 }
+// A hand-crafted unique: a fixed artifact tagged with its unique id.
+function buildUnique(def, lvl) { return buildFixedArtifact(def, lvl, { unique: def.id }); }
+// A set piece: the SAME fixed-artifact treatment as a unique (named, fixed native
+// + six mods + its own signature power) but tagged with its set id + piece id, so
+// it also feeds the worn-count set bonuses and completion power.
+function buildSetPiece(sp, lvl) { return buildFixedArtifact(sp.piece, lvl, { set: sp.setId, setPiece: sp.piece.id }); }
 // Pick a unique definition for a drop — any of them, or (when a slot is forced, e.g.
 // the town gambler targeting a gear type) one that fits that slot.
 function pickUnique(forceSlot) {
   let pool = UNIQUES;
   if (forceSlot && SLOTS[forceSlot]) { const s = uniquesForSlot(forceSlot); if (s.length) pool = s; }
   return pick(pool);
+}
+// Pick a specific set piece for a drop — any authored piece, or (forced slot) one
+// that fills that slot. Returns { setId, piece } or null.
+function pickSetPiece(forceSlot) {
+  return rollSetPiece((forceSlot && SLOTS[forceSlot]) ? forceSlot : null, Math.random, ITEM_SETS);
 }
 // Is this a fixed item (a hand-crafted unique)? Fixed items never reroll/augment.
 function isFixedItem(item) { return !!(item && item.fixed); }
@@ -13770,10 +14144,16 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   // forceSlot pins the equipment slot (also used by the gambler, when the player
   // pays to target a specific item type); otherwise the slot is rolled.
   const tier = forceTier || rollTier(rolls, lvl);
-  // The red tier is either a hand-crafted unique (fixed, named artifact) or — a
-  // minority of the time — a chase set piece. A unique short-circuits the whole
-  // random-affix pipeline: its stats come from its definition, not a roll.
-  if (tier === 'unique' && Math.random() >= UNIQUE_SET_CHANCE) {
+  // The red tier is always a FIXED, hand-crafted artifact — either a one-of-a-kind
+  // unique or (a minority of the time, UNIQUE_SET_CHANCE) a chase SET piece. Both
+  // short-circuit the whole random-affix pipeline: their stats come from a
+  // definition, not a roll. A set piece additionally carries its set membership so
+  // it feeds the worn-count set bonuses.
+  if (tier === 'unique') {
+    if (Math.random() < UNIQUE_SET_CHANCE) {
+      const sp = pickSetPiece(forceSlot);
+      if (sp) return buildSetPiece(sp, lvl);
+    }
     return buildUnique(pickUnique(forceSlot), lvl);
   }
   const slot = (forceSlot && SLOTS[forceSlot]) ? forceSlot : weighted(SLOT_WEIGHTS);
@@ -13811,19 +14191,12 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   addStatAffixes(item, lvl, mult, rollAffixCount(caps.stat));
   addAttrAffixes(item, lvl, mult, rollAffixCount(caps.attr));
 
-  // ── BUILD-DEFINING EXTRAS ── a unique either carries a special power (changes
-  // HOW you fight) or is a collectible set piece (escalating worn-count bonuses).
-  // Set pieces are their own top rarity — as rare as any unique and worn in their
-  // own colour — so completing a set is a real chase. Legendaries always carry a
-  // power; lower tiers get neither.
-  if (tier === 'unique') {
-    // A hand-crafted unique already returned above; reaching here means this red
-    // drop rolled as a chase SET piece instead.
-    item.set = rollItemSet();
-  } else if (tier === 'legendary') {
+  // ── BUILD-DEFINING EXTRAS ── legendaries carry a special power (changes HOW you
+  // fight); lower tiers get none. (Red drops — uniques and set pieces alike — are
+  // fixed artifacts built above and returned before reaching here.)
+  if (tier === 'legendary') {
     item.power = rollItemPower();
   }
-  if (item.set && ITEM_SETS[item.set]) item.name = ITEM_SETS[item.set].name + ' ' + baseName;
 
   // Cursed items (~12% of uncommon+): a big stat boost paired with a penalty.
   // The negative stat flows straight through totalStat(), so the drawback is real.
@@ -14620,7 +14993,10 @@ function draw() {
     camFy = warpFx.sy + (warpFx.dy - warpFx.sy) * wf.panT;
   }
   let camX = camFx * tw - W/2;
-  let camY = camFy * th - H/2;
+  // On touch, lift the hero above the bottom control band (joystick / skill
+  // cluster) so the thumbs never cover it. touchCamBiasPx is device px, recomputed
+  // per resize/orientation; 0 on desktop, so this line is a no-op there.
+  let camY = camFy * th - H/2 + touchCamBiasPx;
   const maxCamX = MAP_W * tw - W;
   const maxCamY = MAP_H * th - H;
   // If the map is smaller than the viewport on an axis, center it instead.
@@ -17562,25 +17938,9 @@ function itemPowerStatBonus(name) {
   }
   return sum;
 }
-// Each set: escalating stat bonuses at 2 pieces, then completing it (the top
-// threshold = every tier defined here) unlocks a signature `power` — a unique
-// effect (leech, cleave, reflect, cooldowns…) folded into totalStat, NOT just
-// more raw stats — plus a golden completion aura on the hero.
-const ITEM_SETS = {
-  warden:   { name: "Warden's",   color: '#7fd0ff',
-    bonus: { 2: { DEF: 12, HP: 40 }, 4: { DEF: 30, HP: 120, BLOCK: 10 } },
-    power: { name: 'Aegis Wall', stats: { DR: 8, THORNS: 8, BLOCK: 8 },
-      desc: 'Turn aside more blows and reflect a slice of every hit back at attackers.' } },
-  reaver:   { name: "Reaver's",   color: '#ff7a5c',
-    bonus: { 2: { ATK: 10, CRIT: 6 }, 4: { ATK: 26, CRIT: 14, IDMG: 12 } },
-    power: { name: 'Bloodfrenzy', stats: { LEECH: 8, CLEAVE: 30, EXEC: 12 },
-      desc: 'Hits cleave into nearby foes, leech their life, and execute the wounded.' } },
-  arcanist: { name: "Arcanist's", color: '#c77bff',
-    bonus: { 2: { SPELLPWR: 8, MP: 40 }, 4: { SPELLPWR: 20, MP: 120, CDR: 8 } },
-    power: { name: 'Arcane Overflow', stats: { CDR: 10, MPLEECH: 10, SPELLPWR: 12 },
-      desc: 'Skills recharge faster and the damage you deal refunds mana.' } },
-};
-function rollItemSet() { const ks = Object.keys(ITEM_SETS); return ks[Math.floor(Math.random() * ks.length)]; }
+// The set roster + its pure helpers live in src/data/itemSets.js and
+// src/systems/itemSets.js (imported at the top). Set pieces are fixed, named
+// artifacts (built by buildSetPiece, mirroring buildUnique) picked by pickSetPiece.
 function wornSetCounts() {
   const c = {};
   const active = activeSlots();
@@ -17591,10 +17951,10 @@ function wornSetCounts() {
   }
   return c;
 }
-// The top worn-count threshold a set defines. Reaching it "completes" the set:
-// its final bonus tier AND its unique power turn on, and the hero gains the aura.
-function setMaxTier(set) { return Math.max(...Object.keys(set.bonus).map(Number)); }
-function setComplete(sid, n) { const s = ITEM_SETS[sid]; return !!s && n >= setMaxTier(s); }
+// A set completes when every one of its pieces is worn (see setPieceCount —
+// its size). Completion turns on the top bonus tier AND the signature power and
+// grants the golden aura.
+function setComplete(sid, n) { return setIsComplete(ITEM_SETS[sid], n); }
 // Set ids currently worn at full completion — powers active, golden aura on.
 function completedSets() {
   const out = [], counts = wornSetCounts();
@@ -17602,8 +17962,7 @@ function completedSets() {
   return out;
 }
 // Extra value of a stat granted by whatever set thresholds are currently met,
-// plus the signature power of any completed set. Generalised over each set's
-// declared tiers so future sets can define their own thresholds.
+// plus the signature power of any completed set (see setStatContribution).
 // Fast path: totalStat calls this constantly — bail before the active resolve
 // whenever no set pieces are worn at all (the overwhelmingly common case).
 function setStatBonus(name) {
@@ -17612,50 +17971,57 @@ function setStatBonus(name) {
   if (!anySet) return 0;
   let sum = 0;
   const counts = wornSetCounts();
-  for (const sid in counts) {
-    const set = ITEM_SETS[sid], n = counts[sid];
-    for (const t of Object.keys(set.bonus)) if (n >= +t && set.bonus[t][name] != null) sum += set.bonus[t][name];
-    if (set.power && set.power.stats && n >= setMaxTier(set) && set.power.stats[name] != null) sum += set.power.stats[name];
-  }
+  for (const sid in counts) sum += setStatContribution(ITEM_SETS[sid], counts[sid], name);
   return sum;
 }
-// Rich hover card for a set-name tag: which slots the set can fill (lit for the
-// ones you currently wear it in), and each worn-count threshold's bonus (lit when
-// active, dimmed when not yet met). Reads live worn state so it tracks as you gear
-// up. Single-quoted attributes only — hoverTip escapes double quotes.
+// Rich hover card for a set-name tag: the set's named pieces (each a fixed
+// artifact, lit gold-tick when you're wearing that exact piece), and each
+// worn-count threshold's bonus (lit when active, dimmed when not yet met). Reads
+// live worn state so it tracks as you gear up. The `.set-tip` wrapper widens the
+// card (see styles.css). Single-quoted attributes only — hoverTip escapes double
+// quotes.
 function setTooltipHTML(setId) {
   const s = ITEM_SETS[setId];
   if (!s) return '';
   const worn = wornSetCounts()[setId] || 0;
-  // A set piece can roll for ANY slot; show every slot, lighting the ones you're
-  // currently wearing a piece of THIS set in.
-  const slotList = SLOT_KEYS.map(slot => {
-    const has = equipped[slot] && equipped[slot].set === setId;
-    const label = SLOTS[slot].label;
-    return has ? `<span style='color:${SET_RARITY_COLOR}'>${label} ✓</span>`
-               : `<span style='opacity:.45'>${label}</span>`;
-  }).join(' · ');
-  const maxT = setMaxTier(s);
-  const complete = worn >= maxT;
+  const pieces = setPieceCount(s);
+  const complete = worn >= pieces;
+  // A completed set glows gold like its aura; otherwise it wears its own colour,
+  // giving each set its own identity in the tooltip.
+  const accent = complete ? 'var(--gold)' : s.color;
+  // This set's OWN named pieces, in gear order — each a specific fixed artifact.
+  // Lit for the exact piece you're wearing; dimmed for ones you're still hunting.
+  const pieceList = s.pieces.slice()
+    .sort((a, b) => SLOT_KEYS.indexOf(a.slot) - SLOT_KEYS.indexOf(b.slot))
+    .map(p => {
+      const has = equipped[p.slot] && equipped[p.slot].set === setId;
+      const label = (SLOTS[p.slot] || {}).label || p.slot;
+      return has
+        ? `<div style='color:${accent}'>✓ ${p.name} <span style='opacity:.7'>· ${label}</span></div>`
+        : `<div style='opacity:.5'>${p.name} <span style='opacity:.8'>· ${label}</span></div>`;
+    }).join('');
   // Each worn-count threshold and what it grants, lit when currently active.
   const bonusLines = Object.keys(s.bonus).map(Number).sort((a, b) => a - b).map(t => {
     const b = s.bonus[t];
     const stats = Object.entries(b)
       .map(([k, v]) => `+${v}${PCT_STATS.has(k) ? '%' : ''} ${STAT_SHORT[k] || k}`).join(' · ');
     const met = worn >= t;
-    return `<div style='color:${met ? SET_RARITY_COLOR : 'var(--junk)'}'>${met ? '✓ ' : ''}${t} pieces: ${stats}</div>`;
+    return `<div style='color:${met ? accent : 'var(--junk)'}'>${met ? '✓ ' : ''}${t} pieces: ${stats}</div>`;
   }).join('');
-  // The signature power — the completion reward. Gold and lit once the set is
-  // complete, dimmed with its unlock count while you're still collecting.
+  // The completion power — the reward for wearing every piece. Gold and lit once
+  // the set is complete, dimmed with its unlock count while you're still collecting.
   const powerLine = s.power
     ? `<div style='color:${complete ? 'var(--gold)' : 'var(--junk)'};margin-top:3px'>` +
-      `${complete ? '✦ ' : `${maxT} pieces — `}<b>${s.power.name}</b>: ${s.power.desc}</div>` +
+      `${complete ? '✦ ' : `${pieces} pieces — `}<b>${s.power.name}</b>: ${s.power.desc}</div>` +
       (complete ? `<div style='color:var(--gold)'>★ Set complete — a golden aura surrounds you.</div>` : '')
     : '';
-  return `<div class='ht-name' style='color:${SET_RARITY_COLOR}'>${s.name} Set${complete ? " <span style='color:var(--gold)'>✦</span>" : ''}</div>` +
-    `<div class='ht-line'>A set piece can drop for any gear slot. Match pieces for escalating bonuses; complete the set (${maxT}) to unlock its power and a golden aura.</div>` +
-    `<div class='ht-sub'><b>Worn: ${worn}/${maxT}</b> — ${slotList}</div>` +
-    `<div class='ht-sub'>${bonusLines}${powerLine}</div>`;
+  return `<div class='set-tip'>` +
+    `<div class='ht-name' style='color:${accent}'>${s.name} Set${complete ? " <span style='color:var(--gold)'>✦</span>" : ''}</div>` +
+    `<div class='ht-line'>A ${pieces}-piece set. Every piece is a fixed, named artifact — collect and wear them all for escalating bonuses, a completion power, and a golden aura.</div>` +
+    `<div class='ht-sub'><b>Worn: ${worn}/${pieces}</b></div>` +
+    `<div class='ht-sub'>${pieceList}</div>` +
+    `<div class='ht-sub'>${bonusLines}${powerLine}</div>` +
+    `</div>`;
 }
 // Short markup describing an item's special power / set membership, appended to its
 // stat line so the build-defining bit is visible wherever gear is listed.
@@ -18459,6 +18825,9 @@ function doDash() {
   if ((player.dashCd || 0) > 0 || player.stamina < DASH_COST) return;
   let dx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let dy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
+  // Touch: dash in the joystick's current push direction (a double-tap-drag on the
+  // stick triggers this — see the pointer handlers).
+  if (dx === 0 && dy === 0 && touchStick.active && touchStick.mag > 0) { dx = touchStick.ix; dy = touchStick.iy; }
   // Click-to-move: with no manual direction, dash toward the target — or, when a
   // route around a wall is planned, toward the next waypoint so we don't dash into it.
   if (dx === 0 && dy === 0 && moveTarget.active) {
@@ -18508,6 +18877,9 @@ function updatePlayer(dt) {
   // Input vector — keyboard (WASD / arrows).
   let ix = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let iy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
+  // Touch joystick overrides the keyboard vector while it's engaged. It reads as
+  // "manual input" below, so it cancels any click-to-move the same way a key does.
+  if (touchStick.active && touchStick.mag > 0) { ix = touchStick.ix; iy = touchStick.iy; }
   // Click-to-move: with no keyboard input, steer toward the click target.
   // Any manual input cancels it (you take back the wheel). While the button is held
   // the target tracks the cursor, so the hero keeps walking toward it; a plain click
@@ -18558,6 +18930,8 @@ function updatePlayer(dt) {
       const finalDist = Math.hypot(moveTarget.wx - player.fx, moveTarget.wy - player.fy);
       if (!moveTarget.hold && onFinalLeg && finalDist <= MOVE_ARRIVE) {
         moveTarget.active = false; moveTarget.path = null; moveTarget.foe = null;   // reached the point — stop
+        // Tap-to-use: on arrival, open a chest underfoot / talk to an adjacent NPC.
+        if (moveTarget.interactOnArrive) { moveTarget.interactOnArrive = false; if (typeof pickup === 'function') pickup(); }
       } else if (Math.hypot(tdx, tdy) > 0.02) {
         [ix, iy] = steerToward(tdx, tdy);      // head for the waypoint; slide along any wall
         // Give up only when truly stuck: no real ground covered for a beat (a wall or
@@ -19692,17 +20066,10 @@ function spellBase(flat, perLevel) {
 // fired (false = nothing to do, so castSkillById refunds the mana).
 
 // ── ACTIVE-SKILL MILESTONES ──
-// Pouring points into one active pays off in jumps, not just a slow drip: ranks
-// 3 / 7 / 10 each grant a power spike PLUS a signature perk. Kept generic so it
-// applies to every data-driven active:
-//   ✦   rank 3  Empowered — a big power surge
-//   ✦✦  rank 7  Honed     — extra power, shorter cooldown
-//   ✦✦✦ rank 10 Mastered  — extra power, wider reach / more targets
-const SKILL_MILESTONES = [
-  { rank: 3,  pips: '✦',   perk: 'power surge' },
-  { rank: 7,  pips: '✦✦',  perk: 'shorter cooldown' },
-  { rank: 10, pips: '✦✦✦', perk: 'wider reach' },
-];
+// Ranks 3 / 7 / 10 each grant a power spike PLUS a signature perk (Empowered /
+// Honed / Mastered), generic so it applies to every data-driven skill. The table
+// (pips, names, per-type blurbs) lives in src/data/skillMilestones.js; the
+// magnitudes in src/systems/skillMath.js (milestonePower / passiveMilestonePower).
 // milestonePower / rankScale / skillManaCost extracted to src/systems/skillMath.js.
 // Milestone pips earned so far (for the node popover rank readout).
 function milestonePips(rank) { let p = ''; for (const m of SKILL_MILESTONES) if (rank >= m.rank) p = m.pips; return p; }
@@ -19873,8 +20240,8 @@ function skillDmgTipLine(node, rank) {
   if (!p) return '';
   // Damage = per-HIT range (no crit, no cast rate). A multi-strike cast shows a ×N
   // badge instead of inflating the range. DPS folds in crit + how often it fires.
-  const hits = p.strikes > 1 ? ` <span style='opacity:0.75'>×${p.strikes}</span>` : '';
-  return `<div class='ht-sub'>Damage <b>${formatDamageRange(p.min, p.max)}</b>${hits} <span style='opacity:0.6'>per hit</span></div>`
+  const hits = p.strikes > 1 ? ` <span style='opacity:0.75'>(×${p.strikes})</span>` : '';
+  return `<div class='ht-sub'>Damage <b>${formatDamageRange(p.min, p.max)}</b> <span style='opacity:0.6'>per hit</span>${hits}</div>`
     + `<div class='ht-sub'>DPS <b style='color:var(--gold)'>${abbreviateNumber(p.dps)}</b></div>`;
 }
 
@@ -19883,21 +20250,19 @@ function skillDmgTipLine(node, rank) {
 //     already shown as its own Synergy pill, per the copy cleanup.
 //   • for a direct-damage active, its ABSOLUTE base per-hit damage range (rank +
 //     coefficient + your caster power, before any situational buff/armour/crit) is
-//     woven in: a `{dmg}` token in the desc is replaced in place (so copy can read
-//     "…deals X–Y damage and…"), otherwise the range is appended as its own sentence.
-//     A multi-strike cast carries a ×N badge.
+//     woven in where a `{dmg}` token sits, so copy reads "…deals X–Y damage (×N) and…".
+//     `{dmg}` expands to the whole phrase ("16k–22k damage", plus a "(×N)" badge for a
+//     multi-strike cast) — a desc writes "deals {dmg} and …", not "{dmg} damage". A desc
+//     with no token falls back to the phrase appended as its own sentence.
 function skillDescHtml(node, rank) {
   let d = (node && node.desc) || '';
   d = d.replace(/\s*\+\d+%\s+damage per point in [^.]+\.?/gi, '').trim();
   const dp = (node && node.cast) ? skillDamagePreview(node, rank) : null;
   if (dp) {
-    const hits = dp.strikes > 1 ? ` <span style='opacity:0.75'>×${dp.strikes}</span>` : '';
-    const range = `<b>${formatDamageRange(dp.baseMin, dp.baseMax)}</b>${hits}`;
-    if (/\{dmg\}/.test(d)) d = d.replace(/\{dmg\}/g, range);
-    else {
-      const clause = `Deals ${range} damage${dp.strikes > 1 ? ' per hit' : ''}.`;
-      d = d ? `${d} ${clause}` : clause;
-    }
+    const hits = dp.strikes > 1 ? ` <span style='opacity:0.75'>(×${dp.strikes})</span>` : '';
+    const phrase = `<b>${formatDamageRange(dp.baseMin, dp.baseMax)}</b> damage${hits}`;
+    if (/\{dmg\}/.test(d)) d = d.replace(/\{dmg\}/g, phrase);
+    else d = d ? `${d} Deals ${phrase}.` : `Deals ${phrase}.`;
   }
   return d;
 }
@@ -22386,11 +22751,14 @@ function updateBars() {
   // The tab glow only shows once the bag is open, so also surface a pulsing badge
   // on the always-visible BAG button (combining attribute + skill points).
   const bagBadge = document.getElementById('bag-points-badge');
+  const totalPts = pts + sPts;
   if (bagBadge) {
-    const totalPts = pts + sPts;
     bagBadge.textContent = totalPts;
     bagBadge.classList.toggle('show', totalPts > 0);
   }
+  // Mirror the unspent-points count onto the touch BAG button's badge.
+  const tbBagBadge = document.getElementById('tb-bag-badge');
+  if (tbBagBadge) tbBagBadge.textContent = totalPts > 0 ? String(totalPts) : '';
   // Plain item count in brackets next to the BAG label — same font, no glow.
   const bagCount = document.getElementById('bag-count');
   if (bagCount) {
@@ -22797,8 +23165,7 @@ function renderHero(el) {
   const pts = player.attrPoints || 0;
   // Count only ACTIVE gear so this "from gear" subtotal reconciles with the headline
   // POWER (playerPower also skips red/ignored pieces).
-  const gActive = activeSlots();
-  const gearPower = SLOT_KEYS.reduce((s, k) => s + (gActive[k] ? itemPower(equipped[k]) : 0), 0);
+  const gearPower = gearContributionPower();
   const dmgA = classDmgAttrs();
   // Each attribute row shows base+spent plus any gear bonus, tags the class's
   // damage attributes, and offers a + to raise it.
@@ -23154,6 +23521,8 @@ function renderSkills(el) {
           `</div>`;
       }
     }
+    // The fixed rank 3 / 7 / 10 milestone ladder — always shown, green once earned.
+    const msHtml = skillMilestonesHtml(sn, rank);
     const reqMet = skillReqMet(sn);
     let reqHtml = reqRows.length ? `<div class="rq">${reqRows.join('<br>')}</div>` : '';
     if (reqMet && !skillMaxed(sn) && skillPointsFor(sn) <= 0) {
@@ -23191,6 +23560,7 @@ function renderSkills(el) {
       <div class="ds">${skillDescHtml(sn, rank)}</div>
       ${skillMechHtml(sn, rank)}
       ${ruHtml}
+      ${msHtml}
       ${reqHtml}
       ${buyBtn}
       ${refundBtn}
@@ -23426,15 +23796,19 @@ function skillMechList(n, rank) {
     // × hits-per-cast × how often it fires). Only for direct-damage actives (wpn/spell).
     const dp = skillDamagePreview(n, rank);
     if (dp) {
-      const hits = dp.strikes > 1 ? ` <span style="opacity:0.75">×${dp.strikes}</span>` : '';
-      add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b>${hits} <span style="opacity:0.6">per hit</span>`);
+      const hits = dp.strikes > 1 ? ` <span style="opacity:0.75">(×${dp.strikes})</span>` : '';
+      add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b> <span style="opacity:0.6">per hit</span>${hits}`);
       add('DPS', '#e0a24b', `<b>${abbreviateNumber(dp.dps)}</b>`);
     }
     // Movement first — gap-closers/pulls/escapes are the headline of a mobility skill.
     if (c.shape === 'teleport') add('Gap-closer', '#5fc9c0', `Blink up to ${c.range || 6} tiles onto the nearest foe and strike — closes on ranged attackers.`);
     if (c.pull) add('Pull', '#5fc9c0', 'Yanks a distant foe across the gap to you.');
     if (c.recall) add('Escape', '#5fc9c0', 'Blink away to the spot furthest from any foe.');
+    if (c.crit) add('Crit', '#e05a4b', 'Every hit is a guaranteed critical.');
     if (c.status) add('Status', '#d98a6f', `Inflicts ${c.status.effect} (${secsTxt(c.status.dur)}).`);
+    if (c.knockback) add('Knockback', '#d98a6f', `Shoves foes back ${c.knockback} tile${c.knockback > 1 ? 's' : ''}.`);
+    if (c.execute) add('Execute', '#e07a3a', `Instantly finishes non-boss foes at or below ${Math.round(c.execute * 100)}% HP.`);
+    if (c.lifesteal) add('Leech', '#7ad08a', `Heals you for ${Math.round(c.lifesteal * 100)}% of the damage dealt.`);
     if (c.detonate) add('Detonate', '#e07a3a', `Explodes vuln-marked foes for ${Math.round(c.detonate * 100)}% damage.`);
     if (c.summon) add('Summon', '#7ad08a', `Calls ${c.summon.count > 1 ? c.summon.count + ' ' : ''}${c.summon.kind}${c.summon.count > 1 ? 's' : ''} for ${secsTxt(c.summon.ttl)}.`);
     if (Array.isArray(c.buff)) for (const b of c.buff) add('Buff', '#6fb7d9', `${buffAmt(b)} ${BUFF_LABEL[b.id] || b.id} (${secsTxt(b.dur)}).`);
@@ -23446,9 +23820,8 @@ function skillMechList(n, rank) {
       if (parts.length) add('Heal', '#7ad08a', parts.join(' + ') + '.');
     }
   }
-  // Passive milestone surge — the always-on bonus spikes at ranks 3/7/10 for going
-  // deep (keystones cap at rank 1, so they never surge).
-  if (n.type === 'passive' && !n.keystone && (n.fx || n.cfx)) add('Surge', '#e8c267', 'Ranks 3 / 7 / 10 spike this passive’s bonus — a reward for going deep.');
+  // Passive milestone surges (the +8/+10/+12% spikes at ranks 3/7/10) now get their
+  // own specific "Rank bonuses" ladder in the card, so no vague Surge chip here.
   // Cross-cutting keystone rule that a stat line can't show.
   if (n.kflag === 'bloodpact') add('Keystone', '#e8c267', 'Active skills cost life instead of mana.');
   return rows;
@@ -23487,15 +23860,8 @@ function skillRankUpRows(node, rank) {
         rows.push([`${meta[0]} ${cl}`, rank > 0 ? `${cur} → <b>${next}</b>` : `<b>${next}</b>`]);
       }
     }
-    // Dangle the next milestone as a goal — passives surge at ranks 3/7/10 too
-    // (keystones cap at rank 1, so they never reach one).
-    if (!node.keystone) {
-      const nm = nextMilestone(rank);
-      if (nm) {
-        const hit = (rank + 1) === nm.rank;
-        rows.push([`${nm.pips} rank ${nm.rank}`, hit ? `<b>power surge!</b>` : 'power surge']);
-      }
-    }
+    // The rank 3/7/10 surges get their own always-shown section (skillMilestonesHtml)
+    // rather than a dangled next-milestone row here.
   } else if (node.type === 'active' && node.cast) {
     // Damaging actives preview the concrete base per-hit range each rank buys (what the
     // "deals X to Y" description shows); pure buff/summon/heal actives keep the abstract
@@ -23525,14 +23891,36 @@ function skillRankUpRows(node, rank) {
       const nextN = Math.min(8, base + Math.floor((rank + 1 - 1) / 4));
       if (rank === 0 || nextN > curN) rows.push(['minions', rank > 0 ? `${curN} → <b>${nextN}</b>` : `<b>${nextN}</b>`]);
     }
-    // Dangle the next milestone as a goal — and flag it when the next point hits it.
-    const nm = nextMilestone(rank);
-    if (nm) {
-      const hit = (rank + 1) === nm.rank;
-      rows.push([`${nm.pips} rank ${nm.rank}`, hit ? `<b>power + ${nm.perk}!</b>` : nm.perk]);
-    }
+    // The rank 3/7/10 milestones get their own always-shown section
+    // (skillMilestonesHtml) rather than a dangled next-milestone row here.
   }
   return rows;
+}
+// Does this node earn the fixed rank 3 / 7 / 10 power spikes? Every active does; a
+// passive does unless it's a keystone (capped at rank 1) or has no scalable fx/cfx
+// bonus to surge. Mirrors where milestonePower / passiveMilestonePower apply.
+function skillHasMilestones(node) {
+  if (!node) return false;
+  if (node.type === 'active') return !!node.cast;
+  if (node.type === 'passive') return !node.keystone && !!(node.fx || node.cfx);
+  return false;
+}
+// The rank 3 / 7 / 10 spikes as a standalone checklist for the detail card: all
+// three are ALWAYS shown (what each grants), and each lights green once this skill's
+// rank is high enough to have earned it — so you can see the whole ladder at any
+// rank, not just the next rung. Empty for skills that never milestone.
+function skillMilestonesHtml(node, rank) {
+  if (!skillHasMilestones(node)) return '';
+  const passive = node.type === 'passive';
+  const r = rank || 0;
+  const rows = SKILL_MILESTONES.map(m => {
+    const met = r >= m.rank;
+    const desc = passive ? m.passiveDesc : m.activeDesc;
+    return `<div class="ms-row${met ? ' met' : ''}">`
+      + `<span class="ms-k">${met ? '✓ ' : ''}${m.pips} Rank ${m.rank}</span>`
+      + `<span class="ms-v"><b>${m.name}</b> — ${desc}</span></div>`;
+  }).join('');
+  return `<div class="ms"><div class="ms-h">Rank bonuses</div>${rows}</div>`;
 }
 // Plain-text "new total" summary at a given rank, for the level-up log line.
 function skillTotalSummary(node, rank) {
@@ -23747,9 +24135,17 @@ function renderSkillBar() {
       <span class="sb-icon">${dlIconFill('feat_gate_red')}</span><span class="sb-info sb-cd-text" data-cdt="portal"></span>
     </button>`);
   }
+  // On touch a RUN (sprint) toggle leads the left group, so the bottom bar reads
+  // as a 2×2 (RUN/Town over HP/MP) · AUTO · 2×2 (skills). It's a plain toggle, not
+  // a skill; it lights up while auto-sprint is latched. Absent on desktop.
+  const sprintCell = isTouchMode()
+    ? cell('RUN', 'sprint', `<button class="skillbar-btn sprint-btn${sprintLatched ? ' on' : ''}" onclick="toggleTouchSprint()" aria-label="Toggle sprint">
+      <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg></span>
+    </button>`)
+    : '';
   // Three sections: Town/Health/Mana left, the auto-cast slot centred, the four
   // manual slots right (see the .sb-left / .sb-auto-wrap / .sb-right flex CSS).
-  const html = `<div class="sb-left">${townBtn}${healBtn}${manaBtn}</div>`
+  const html = `<div class="sb-left">${sprintCell}${townBtn}${healBtn}${manaBtn}</div>`
     + `<div class="sb-auto-wrap">${autoCell}</div>`
     + `<div class="sb-right">${skillsHtml}</div>`;
   if (html !== _lastSkillBarHtml) {   // identical markup — skip the DOM teardown + reflow
@@ -24018,7 +24414,24 @@ function renderEnchantDoll() {
 }
 
 // ── GEAR-SET SWITCH ── the Set 1 / Set 2 toggle that sits above the paper doll.
-function gearSetPower(set) { return SLOT_KEYS.reduce((s, k) => s + (set[k] ? itemPower(set[k]) : 0), 0); }
+// Total Power a saved loadout (gear set 1 / 2) would contribute if worn — its
+// EQUIPPABLE pieces valued as a group against the current hero's bare build (a clean
+// combat-score delta, not a sum of per-piece pills). Pieces this hero can't wear are
+// skipped, the way they'd sit inactive if equipped, so the two loadouts compare
+// fairly and the active set's figure lines up with the hero-sheet "from gear".
+function gearSetPower(set) {
+  const { bare } = strippedPowerContext();
+  const ctx = buildPowerContext();
+  let withSet = bare, flat = 0;
+  for (const slot of SLOT_KEYS) {
+    const it = set[slot];
+    if (!it || !it.stats) continue;
+    if (typeof canEquipItem === 'function' && !canEquipItem(it)) continue;
+    withSet = applyDelta(withSet, itemPowerContribution(it, ctx), 1);
+    flat += itemFlatPower(it);
+  }
+  return Math.round(GEAR_POWER.K * (powerScalar(withSet) - powerScalar(bare)) + flat);
+}
 function gearSetCount(set) { return SLOT_KEYS.reduce((n, k) => n + (set[k] ? 1 : 0), 0); }
 // The active set is lit gold; tapping the other one swaps your whole loadout.
 function gearSetBarHTML() {
@@ -24288,10 +24701,14 @@ function itemCardHTML(item, opts = {}) {
   // so surface it here in the detail card too.
   const powTag = item.slot ? itemPowerFront(item) : '';
   const powerLine = powTag ? `<div style="margin:3px 0">${powTag}</div>` : '';
-  // A hand-crafted unique wears its identity on its sleeve: its properties are
-  // fixed on drop and can never be reforged.
+  // A fixed artifact wears its identity on its sleeve: its properties are set on
+  // drop and can never be reforged. Set pieces are fixed too, but read as a "Set
+  // piece" in teal rather than a "Unique" in red.
   const uniqueLine = item.fixed
-    ? `<div style="color:${(TIERS.unique || {}).color || '#ff2222'};font-size:1.2rem;font-weight:bold;margin:2px 0">✦ Unique — properties fixed on drop</div>` : '';
+    ? (item.set
+        ? `<div style="color:${SET_RARITY_COLOR};font-size:1.2rem;font-weight:bold;margin:2px 0">✦ Set piece — properties fixed on drop</div>`
+        : `<div style="color:${(TIERS.unique || {}).color || '#ff2222'};font-size:1.2rem;font-weight:bold;margin:2px 0">✦ Unique — properties fixed on drop</div>`)
+    : '';
   // Item level: drives raw stat size, so it's worth surfacing alongside power.
   const ilvlLine = (item.slot && item.ilvl)
     ? `<span style="color:var(--blue-250);font-weight:bold">ilvl ${item.ilvl}</span>` : '';
@@ -24360,12 +24777,40 @@ function renderHoverTip(el, htmlOverride) {
   const html = htmlOverride || (el && el.dataset ? el.dataset.tip : '');
   if (!html) return;
   hoverTipEl.innerHTML = html;
+  // The wider set card opts in via a .set-tip wrapper; every other card stays narrow.
+  hoverTipEl.classList.toggle('wide', !!hoverTipEl.querySelector('.set-tip'));
   hoverTipEl.style.display = 'block';
   // Pop out beside the element like every other tooltip (see
   // placeTooltipBesideAnchor): to the side, never over the thing you're pointing at.
   placeTooltipBesideAnchor(hoverTipEl, el.getBoundingClientRect());
 }
 function hideHoverTip() { hoverTipEl.style.display = 'none'; }
+
+// ── TOUCH: tap-to-tip fallback ──
+// There's no hover on touch, so the onmouseenter tips (merchant item cards, and
+// the styled data-tip popups) would be invisible. On touch, a tap on an
+// info-only surface pops the same card; a second tap (or a tap elsewhere) hides
+// it. Bubble phase, so an actionable element's own onclick still fires first —
+// and we skip buttons so tapping an action doesn't also flash a tip over it.
+document.addEventListener('click', (e) => {
+  if (!isTouchMode()) return;
+  // Merchant buy cards: tap the info column (not the BUY button) to see the item.
+  const shopInfo = e.target.closest('.shop-row-info[data-shop-idx]');
+  if (shopInfo && !e.target.closest('.act-btn')) {
+    const i = +shopInfo.getAttribute('data-shop-idx');
+    if (typeof merchant !== 'undefined' && merchant && merchant.stock && merchant.stock[i]) {
+      if (ttEl.style.display === 'block') hideTooltip();
+      else showTooltipForItem(merchant.stock[i].item, shopInfo);
+    }
+    return;
+  }
+  // Generic info-only data-tip surfaces (never a button/actionable control).
+  const tipEl = e.target.closest('[data-tip]');
+  if (tipEl && !e.target.closest('button, .act-btn, .settings-item, .skillbar-btn, .tab-btn')) {
+    if (hoverTipEl.style.display === 'block') hideHoverTip();
+    else renderHoverTip(tipEl);
+  }
+});
 
 // Build the data-tip + handlers for a styled hover popup (the gear-card look),
 // so JS-rendered buttons share the same hover UI as everything else instead of
@@ -24472,6 +24917,9 @@ function setPanelCollapsed(collapsed, persist = true) {
   refitMapDuringSlide();
 }
 function togglePanelCollapse() {
+  // On touch the drawer is a full-screen sheet, so the spine/close button just
+  // toggles it shut instead of folding a column.
+  if (isTouchMode()) { toggleBag(); if (typeof sfx === 'function') sfx('click'); return; }
   setPanelCollapsed(!document.body.classList.contains('panel-collapsed'));
   if (typeof sfx === 'function') sfx('click');
 }
@@ -27496,6 +27944,7 @@ function rtOverlayEls() {
 }
 function rtPaused() {
   if (gameHalted || inTown || player.hp <= 0) return true;
+  if (touchLandscapeBlock) return true;  // portrait-only on touch — frozen while the rotate notice is up
   if (portalTransiting()) return true;   // hero is mid-teleport (off the map) — no moving/fighting/being hit
   if (mapWarping()) return true;         // walking through a teleporter pad — frozen mid-traversal
   for (const o of rtOverlayEls()) {
@@ -28009,8 +28458,6 @@ const __DL_FN_BRIDGE = {
   recordDepth,
   activeDifficulty,
   materialUnlocked,
-  attrPowerWeight,
-  statPowerWeight,
   itemPower,
   totalAttr,
   classDmgAttrs,
@@ -28274,6 +28721,8 @@ const __DL_FN_BRIDGE = {
   closeGraveyard,
   resizeCanvas,
   togglePanel,
+  toggleBag,
+  toggleTouchSprint,
   setMoveTargetFromClient,
   endJoy,
   bestiaryKey,
@@ -28649,9 +29098,10 @@ const __DL_FN_BRIDGE = {
   itemPowerCount,
   hasItemPower,
   itemPowerStatBonus,
-  rollItemSet,
+  pickSetPiece,
+  buildSetPiece,
   wornSetCounts,
-  setMaxTier,
+  setPieceCount,
   setComplete,
   completedSets,
   setStatBonus,
@@ -29106,6 +29556,7 @@ __dlLive("INGREDIENTS", () => INGREDIENTS, undefined);
 __dlLive("MANA_POTION_SVG", () => MANA_POTION_SVG, undefined);
 __dlLive("RAMEN_INGREDIENT_COUNT", () => RAMEN_INGREDIENT_COUNT, undefined);
 __dlLive("SLOT_KEYS", () => SLOT_KEYS, undefined);
+__dlLive("ITEM_SETS", () => ITEM_SETS, undefined);
 __dlLive("TIERS", () => TIERS, undefined);
 __dlLive("UI_FONTS", () => UI_FONTS, undefined);
 __dlLive("UI_FONT_KEY", () => UI_FONT_KEY, undefined);

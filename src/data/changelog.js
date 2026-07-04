@@ -15,6 +15,41 @@ export const CHANGELOG = [
     "Enemies and following companions now glide between tiles at a steady pace like the hero — smooth movement in every direction instead of hopping tile to tile.",
     "The Rat King is fully reworked as the first of the new-style fights: it telegraphs every attack with a floor indicator you dodge by moving — a ground-shaking slam, a pounce that locks onto you, a tail-whirl to back clear of, and vermin that erupt where they are marked. It grows fiercer at two-thirds and one-third health. The rest of the roster's bespoke movesets are coming next.",
   ] },
+  { date: "2026-07-04", size: "small", v: "Skill milestone text now states exact numbers", by: "Claude", notes: [
+    "The rank 3 / 7 / 10 \"Rank bonuses\" ladder now spells out each milestone: +28% power (Empowered), +20% power & 20% faster recharge (Honed), +30% power plus +1 radius/range/target/hit (Mastered) — no more vague \"a power surge\".",
+    "Passive milestones read their exact surge too — +8% / +10% / +12% to the bonus — and the milestone level-up log line now shouts the specific gain.",
+    "Skill cards gained Leech, Execute, Knockback and guaranteed-Crit chips that show the actual percentages and tile counts, so a skill's numbers no longer hide inside its flavor text.",
+  ] },
+  { date: "2026-07-04", size: "large", v: "Play on your phone — a real touch interface", by: "Claude", notes: [
+    "The game now has a full mobile layout. The first time you touch the screen it switches to a phone interface; a mouse switches it back — nothing changes for keyboard-and-mouse play.",
+    "Drag anywhere on the map to raise a floating joystick and steer the hero. A quick tap walks you there and uses whatever's there on arrival — a chest, an NPC — or chases a tapped foe. A quick flick of the joystick dashes.",
+    "A header bar holds the minimap, your health/mana/floor/foes and the settings & bag buttons; a footer bar holds a RUN toggle (auto-sprint) and the town portal over your potions, the auto-cast slot in the middle, and your four skill slots. Buffs and debuffs sit in the map's top-right corner.",
+    "The map fills the space between the two bars and stays crisp on high-resolution screens. The game is portrait-only — turned sideways it asks you to rotate back.",
+    "Menus, shops and the bag open as full-screen sheets with big tap targets, and merchant cards now open on a tap since there's no mouse hover.",
+  ] },
+  { date: "2026-07-04", size: "small", v: "Skill cards show the full rank 3 / 7 / 10 bonus ladder", by: "Claude", notes: [
+    "A skill's detail card now has a \"Rank bonuses\" section listing all three milestones — Empowered (rank 3), Honed (rank 7) and Mastered (rank 10) — and what each grants, always visible at any rank.",
+    "Each milestone lights up green with a ✓ once your rank in that skill is high enough to have earned it, so you can see the whole ladder ahead instead of just the next rung.",
+    "The single \"next milestone\" line moved out of the On-rank-up preview into this dedicated section. Applies to every skill that surges — all actives and all non-keystone passives.",
+  ] },
+  { date: "2026-07-04", size: "large", v: "Power now reflects your build", by: "Claude", notes: [
+    "Gear Power is fully dynamic: a piece's Power is now what its stats are actually worth to YOUR hero — your attributes, skills, class and other worn gear — not a near-fixed table.",
+    "A stat your build can't use adds almost no Power now: Crit Damage on a hero with no crit chance, Spell Power on a pure melee build, or Attack Speed on a pure caster all read close to nothing, exactly as they perform.",
+    "Because of that, a higher-rarity or higher-level piece can honestly read LOWER Power than a plainer one that suits your build — sort by Power and trust the upgrade arrow to find your real upgrades.",
+    "Life Leech is now valued by how hard you already hit, defenses by how much survivability they truly add, and every attribute affix by what it does for your class — the same ring is worth different Power to different heroes.",
+    "The hero POWER headline and its \"from gear\" line now reconcile exactly, and Power keeps climbing with every genuine upgrade. Console players and agents: gameState() reports player.power, player.gearPower, and each item's pow + upgrade; see gameGuide(\"power\").",
+  ] },
+  { date: "2026-07-04", size: "large", v: "Sets reborn — 20 hand-crafted set collections", by: "Claude", notes: [
+    "Set pieces are now pre-defined, NAMED, fixed-stat artifacts — built exactly like uniques (a fixed signature stat, six set modifiers, and their own special power, all locked on drop and never reforgeable) — instead of random gear wearing a set tag.",
+    "There are now 20 distinct sets, each a family of specific named pieces. Sets vary in size from 2 to 6 pieces: small ones complete fast, big ones are a long chase. Between them they cover every gear slot.",
+    "Each set has its own escalating worn-count bonuses AND a completion power that switches on when you wear every piece — a set-wide effect layered on top of each piece's own power, plus the golden aura.",
+    "\"Worn: n / size\" now counts against the set's real number of pieces. The wider set tooltip lists the set's named pieces and ticks the exact ones you're wearing.",
+    "Set pieces read as fixed artifacts everywhere — the Enchanter leaves them alone, and their cards and gameState() flag them as set pieces (with their set and piece ids).",
+  ] },
+  { date: "2026-07-04", size: "small", v: "Skill descriptions read their damage inline", by: "Claude", notes: [
+    "Every damage skill's description now weaves its damage range into the sentence — e.g. \"Hurl a bolt of flame that deals 16k–22k damage and sets a foe ablaze\" — instead of tacking it on as a separate trailing line.",
+    "A multi-strike skill shows a (×N) badge right after the range, and the Damage pill reads \"per hit (×3)\" so the single-hit number and the strike count stay clearly separate.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Spells roll a damage range; skill cards rebuilt around per-hit damage", by: "Claude", notes: [
     "Spells now roll a damage RANGE instead of a fixed number. Each spell has its own width — a focused Arcane Missile rolls tight, a chaotic Meteor rolls wild — so no two feel the same. The average is unchanged, so this adds texture without shifting balance.",
     "Weapon and spell rolls are now fine-grained before your buffs and gear scale them, so even a small weapon lands varied, organic hits instead of two or three repeating numbers. The damage finally dealt is still a whole number.",
