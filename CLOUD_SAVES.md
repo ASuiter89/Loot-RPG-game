@@ -110,8 +110,19 @@ used by the leaderboard cover cloud saves too.
   pushed up. So if a PC holds heroes in slots 1–2 and a phone independently holds
   two heroes in slots 1–2, syncing lands the phone's pair in slots 3–4 and the
   account ends up with all four; signing in on the PC then pulls slots 3–4 down so
-  both devices converge. Cloud characters never move, so no save is ever deleted
-  by a sync.
+  both devices converge. A sync never deletes a save on its own — only heroes you
+  deliberately delete are removed (see next).
+- **Deletions sync across devices.** Deleting a hero (Save Slots → Del, Reset Run,
+  or starting a New Game over a slot) records the character's `cid` in an
+  append-only **deletion ledger** that mirrors to its own account row (like the
+  hardcore death ledger) and is **union-merged** on every sync — it only ever
+  grows. On sync, a hero whose `cid` is in the ledger is scrubbed from **both**
+  sides (local cache and cloud row), so it can never be mistaken for a brand-new
+  character and pushed back up. The moment either device syncs, the deletion
+  propagates and the hero stays gone **everywhere** — no more "delete on PC,
+  reappears on mobile" ping-pong. (A legacy save made before ids has no
+  cross-device identity, so its deletion only removes its own slot's row; every
+  hero created since carries a `cid` and syncs its deletion fully.)
 - **Unlimited slots.** There's no fixed slot cap — the Save Slots menu shows every
   occupied slot plus one fresh "New Game" row, growing as you add heroes (and as
   cross-device syncs append more).
