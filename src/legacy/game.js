@@ -6432,7 +6432,11 @@ window.gameState = function gameState(radius) {
     food: (typeof groundFood !== 'undefined' ? groundFood || [] : []).map(f => ({ x: f.x, y: f.y, name: f.name })),
     vaultKey: (typeof groundKey !== 'undefined' && groundKey) ? { x: groundKey.x, y: groundKey.y } : null,
     carryingKey: (typeof hasKey !== 'undefined') ? !!hasKey : false,       // can open a locked '+' vault door
-    grave: (typeof graveMarker !== 'undefined' && graveMarker) ? { x: graveMarker.x, y: graveMarker.y } : null, // reclaim your dropped bag
+    grave: (typeof graveMarker !== 'undefined' && graveMarker) ? { x: graveMarker.x, y: graveMarker.y } : null, // reclaim your dropped bag on THIS floor
+    // Your persistent death-drop wherever it lies — survives leaving the floor, and
+    // the town Dungeon Gate flags this floor/tier. Null once reclaimed.
+    graveSite: (typeof graveSite !== 'undefined' && graveSite && (graveSite.items.length || graveSite.gold))
+      ? { floor: graveSite.floor, where: floorLabel(graveSite.floor), items: graveSite.items.length, gold: graveSite.gold || 0 } : null,
     npcs: [
       merchant ? { kind: 'merchant', x: merchant.x, y: merchant.y } : null,
       mystic ? { kind: 'mystic', x: mystic.x, y: mystic.y } : null,
@@ -6662,7 +6666,7 @@ window.gameGuide = function gameGuide(topic) {
       `Hardcore mode (one life, permadeath) is also chosen on the name screen and locks in for that hero. Class can be retrained later at the town Trainer, but name, body type and Hardcore are fixed once you begin. While the class screen is open gameState().mode is 'classSelect'; on the name screen it's 'nameSelect'.`,
     ],
     town: [
-      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, knocked back several floors, your bag dropped as a reclaimable grave on the death floor).`,
+      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, knocked back several floors, your bag dropped as a reclaimable grave on the death floor). The Dungeon Gate flags the tier + floor holding that grave (gameState().graveSite.where), so you can dive straight back to it.`,
       `Town is a menu of services; take the Dungeon Gate to drop back in (choose tier + floor). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
       `Merchant (buy gear / pay to restock); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
@@ -12346,14 +12350,20 @@ function renderGate() {
   const front = frontierDiff();
   if (!gateDiff) gateDiff = front;
   gateDiff = Math.max(1, Math.min(front, gateDiff));
-  // Tier picker — one chip per difficulty, still-locked ones greyed out.
+  // Your death-drop, if any, so the Gate can flag the floor (and tier) holding your
+  // lost bag. `graveSite.floor` is a continuous depth; its tier gets a grave badge.
+  const graveDl = (graveSite && (graveSite.items.length || graveSite.gold)) ? graveSite.floor : 0;
+  const graveTier = graveDl ? diffOf(graveDl) : 0;
+  // Tier picker — one chip per difficulty, still-locked ones greyed out. A grave
+  // badge marks the tier holding your lost bag.
   let tabs = '';
   for (let d = 1; d <= 4; d++) {
     const meta = DIFFS[d - 1];
     const unlocked = d <= front;
-    const cls = `gate-diff${d === gateDiff ? ' sel' : ''}${unlocked ? '' : ' locked'}`;
+    const cls = `gate-diff${d === gateDiff ? ' sel' : ''}${unlocked ? '' : ' locked'}${d === graveTier ? ' has-grave' : ''}`;
     const style = (d === gateDiff && unlocked) ? ` style="border-color:${meta.color};color:${meta.color}"` : '';
-    tabs += `<button class="${cls}"${style} ${unlocked ? `onclick="selectGateDiff(${d})"` : 'disabled'}>${meta.name}${unlocked ? '' : ' <span data-spr=feat_door></span>'}</button>`;
+    const badge = d === graveTier ? ' <span data-spr=feat_grave></span>' : (unlocked ? '' : ' <span data-spr=feat_door></span>');
+    tabs += `<button class="${cls}"${style} ${unlocked ? `onclick="selectGateDiff(${d})"` : 'disabled'}>${meta.name}${badge}</button>`;
   }
   // Floor picker for the selected tier. Every floor you've reached is shown (so a
   // death never erases your progress), but floors past the currently-unlocked cap
@@ -12367,10 +12377,14 @@ function renderGate() {
   for (let f = startF; f <= cap; f++) {
     const dl = (gateDiff - 1) * FLOORS_PER_DIFF + f;
     const deepest = f === cap;
+    const hasGrave = dl === graveDl;
+    const graveIcon = hasGrave ? ' <span data-spr=feat_grave></span>' : '';
     if (f > open) {
-      buttons += `<button class="gate-floor locked" disabled title="Locked — fight back down to re-open">${f} <span data-spr=feat_door></span></button>`;
+      const title = hasGrave ? 'Your lost bag lies here — fight back down to reclaim it' : 'Locked — fight back down to re-open';
+      buttons += `<button class="gate-floor locked${hasGrave ? ' has-grave' : ''}" disabled title="${title}">${f} <span data-spr=feat_door></span>${graveIcon}</button>`;
     } else {
-      buttons += `<button class="gate-floor ${dl === dungeonReturn ? 'current' : ''}" onclick="enterDungeonAt(${gateDiff},${f})">${f}${deepest ? ' ▾' : ''}</button>`;
+      const title = hasGrave ? ' title="Your lost bag lies here — dive in and walk onto the grave to reclaim it"' : '';
+      buttons += `<button class="gate-floor ${dl === dungeonReturn ? 'current' : ''}${hasGrave ? ' has-grave' : ''}"${title} onclick="enterDungeonAt(${gateDiff},${f})">${f}${deepest ? ' ▾' : ''}${graveIcon}</button>`;
     }
   }
   const meta = DIFFS[gateDiff - 1];
@@ -12384,9 +12398,15 @@ function renderGate() {
     const tail = conquered ? 'Conquered — drop in on any floor to grind.' : `Deepest reached: floor ${cap} of 25.${lockNote}`;
     blurb = `${meta.name}: ${flavour}. ${tail}`;
   }
+  // Persistent grave note — visible whatever tier is picked, so you always know
+  // where your lost bag is waiting.
+  const graveNote = graveDl
+    ? `<div class="town-blurb gate-grave-note"><span data-spr=feat_grave></span> Your lost bag lies on <b>${floorLabel(graveDl)}</b> — dive in and walk onto the grave to reclaim it.</div>`
+    : '';
   setTownContent(`
     <div class="town-blurb">Choose a difficulty, then a floor. Conquer each one's floor-25 guardian to unlock the next.</div>
     <div class="gate-diffs">${tabs}</div>
+    ${graveNote}
     <div class="town-blurb gate-tier-blurb" style="color:${meta.color}">${blurb}</div>
     <div class="gate-grid">${buttons}</div>`);
 }

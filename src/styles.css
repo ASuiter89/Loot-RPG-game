@@ -3532,6 +3532,19 @@
      must fight back down to them before they're clickable again. */
   .gate-floor.locked { opacity: 0.4; cursor: not-allowed; color: var(--orange-500); border-style: dashed; }
   .gate-floor.locked:active { background: var(--orange-850); }
+  /* Floor (or tier) holding your death-drop — a pulsing gold halo mirrors the
+     in-world grave beacon so you can spot where to reclaim your lost bag. A locked
+     grave floor keeps its dashed look but still glows at full opacity. */
+  .gate-floor.has-grave, .gate-diff.has-grave {
+    border-color: var(--gold);
+    animation: gate-grave-glow 1.4s ease-in-out infinite;
+  }
+  .gate-floor.has-grave { opacity: 1; }
+  @keyframes gate-grave-glow {
+    0%, 100% { box-shadow: 0 0 6px color-mix(in srgb, var(--gold-350) 45%, transparent); }
+    50%      { box-shadow: 0 0 12px color-mix(in srgb, var(--gold-350) 85%, transparent); }
+  }
+  .gate-grave-note { color: var(--gold); }
   /* Difficulty tier picker at the top of the Dungeon Gate. */
   .gate-diffs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
   .gate-diff {
