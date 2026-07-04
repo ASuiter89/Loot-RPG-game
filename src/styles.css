@@ -3943,6 +3943,10 @@
     }
     .shop-grid .shop-row > .loot-icon { grid-row: 1 / -1; grid-column: 1; align-self: start; margin-top: 2px; }
     .shop-grid .shop-row > .shop-row-info { grid-row: 1; grid-column: 2 / -1; min-width: 0; }
+    /* Iconless cards (bounty board) drop the left sprite column: the name +
+       description span the full first row, leaving the footer button in the
+       content-sized first column on row 2. */
+    .shop-grid .shop-row.no-icon > .shop-row-info { grid-column: 1 / -1; }
     .shop-grid .shop-row > .shop-price { grid-row: 2; grid-column: 2; justify-self: start; align-self: center; }
     .shop-grid .shop-row > .shop-buy-btn,
     .shop-grid .shop-row > .shop-sell-btn { grid-row: 2; grid-column: 3; justify-self: end; }
