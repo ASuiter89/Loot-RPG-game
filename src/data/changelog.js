@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "large", v: "Every guardian now has its own telegraphed moveset", by: "Claude", notes: [
+    "All fifteen bosses now fight with bespoke, fully-telegraphed movesets — not just the Rat King. Each has a signature you learn and dodge: the Inferno Demon rains fire and floods the floor; the Elder Dragon breathes cones and charges; the Death Knight and Mortis Vane raise the dead behind bone-spear lanes; the All-Seer and Cindra weave spiralling bullet-storms; Emberbound spreads a burning floor; the Masquerade splits into mirror-decoys where only the real one strikes; Magmaw slams you back toward the lava; Vael and Ourok spin pinwheels of light; the Tidewarden floods and drags; the Shrike blinks and executes; and Kaggoroth shifts its whole moveset each phase.",
+    "Every attack is a floor indicator you beat by MOVING — bullets weave through gaps, rings are dodged by clearing their edge, cones by stepping to the flank, decoys by reading which one glows red. Each boss escalates at two-thirds and one-third health with tighter, denser patterns.",
+    "Boss attack speed scales with depth, so a Normal-floor guardian reads slowly and a deep-Endless one is brutal — and Normal bosses carry far lighter health pools (a mild challenge), Hardened a middling fight, with Brutal and Endless keeping the full deep pools.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Boss overhaul: 15 guardians, sealed arenas, and a fully telegraphed Rat King", by: "Claude", notes: [
     "Ten all-new bosses join the roster, bringing it to fifteen. Each difficulty now has its OWN five guardians — Normal keeps the original five, while Hardened and Brutal each get five new ones, and Endless rolls any of the fifteen at random. Every newcomer is bespoke pixel art.",
     "Every boss floor is now a fixed circular arena: you enter from the stairs at the south, the guardian holds the centre, the exit is at the north, and pillars give cover. No wandering trash and no loot clutter — just you and the boss.",
