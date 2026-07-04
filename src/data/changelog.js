@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Fix: prisoner cells never sealed off", by: "Claude", notes: [
+    "Decor can no longer spawn on the one floor tile you must stand on to smash into a jailbreak cell — that approach tile is now reserved, so a tree or rock can't wall the captive away for good.",
+  ] },
   { date: "2026-07-03", size: "large", v: "Full combat VFX overhaul", by: "Claude", notes: [
     "Every skill, spell, weapon swing and monster attack now has its own animation, tinted to its element — fire, ice, lightning, holy, poison, blood, arcane.",
     "Weapon swings draw on the canvas at last: a crescent slash (sword), a wide sweep (axe/scythe), a rapid double-flick (dagger), an overhead smash (mace), a reaching stab (spear).",
