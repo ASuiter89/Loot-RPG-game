@@ -1,18 +1,26 @@
 // In-game "Version History" changelog data (player-facing patch notes).
 // Pure data — newest entries first; each is { date, size, v, by, notes:[…] }.
+// `date` is the Pacific (America/Los_Angeles) calendar day the change shipped —
+// NOT UTC. The version overlay groups entries under a per-day heading, so an
+// entry logged late in the evening would land under the wrong day if it used a
+// UTC date instead of the local one.
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
-  { date: "2026-07-04", size: "small", v: "Icons fill their space instead of floating small", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Patch notes group by local day", by: "Claude", notes: [
+    "Version History now dates each update by its Pacific calendar day — evening changes no longer jump ahead to the next day's heading.",
+    "Re-dated recent entries that had rolled to the wrong day.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Icons fill their space instead of floating small", by: "Claude", notes: [
     "Menu and HUD icons now size to their actual artwork instead of the whole tile, so they read as tall as the text beside them and fill their slots — no more shrunken icons stranded inside transparent padding.",
     "Most visible on the gold and crafting-material counts (Scrap, Glimmer, Core, Chaos), whose art filled as little as a third of its tile; also sharpens icons across the bag, shop, forge, enchanter, reward lines and message log.",
   ] },
-  { date: "2026-07-04", size: "medium", v: "Four dance styles join the soundtrack", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "Four dance styles join the soundtrack", by: "Claude", notes: [
     "New generative styles: Pulse (deep house), Neon (festival EDM), Lagoon (tropical house), and Rush (drum & bass) — each a full kit with its own key, groove, and instruments.",
     "Four-on-the-floor kicks and off-beat basslines for the house styles; a fast rolling breakbeat and deep sub for drum & bass.",
     "Pick any of them from Settings ▸ Audio, or leave it on Shuffle to drift through the lot.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Skill cards: shorter text, wider card", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Skill cards: shorter text, wider card", by: "Claude", notes: [
     "Every passive and keystone description rewritten terse — stats first, filler words and leftover internal tags gone.",
     "Skill detail card is wider with slightly smaller text, so each stat line fits without wrapping mid-phrase.",
   ] },
@@ -22,11 +30,11 @@ export const CHANGELOG = [
     "Lock toggle is bigger and easier to spot; a Lock/Unlock button also joins Sell & Scrap on a selected item.",
     "Gear your class can't wield no longer sinks to the bottom of the bag — it sorts like everything else.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Mix the music — fade each layer to taste", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Mix the music — fade each layer to taste", by: "Claude", notes: [
     "Audio settings now has four faders for the soundtrack: BASS, CHORDS, MELODY and DRUMS. Turn any layer up, down, or off, independently of the others.",
     "Each fader steps like the volume controls — tap to raise it a notch, wrapping from full back to off — and remembers where you set it.",
   ] },
-  { date: "2026-07-04", size: "medium", v: "Every music style gets a real bassline & chord groove", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "Every music style gets a real bassline & chord groove", by: "Claude", notes: [
     "The soundtrack no longer holds one flat chord per bar. Every style now plays a MOVING bassline — octave hops, syncopation, and walk-ups that lead into the next chord — plus a chord part with an actual rhythm instead of a single held note.",
     "All ten styles get their own groove so each sounds distinct: driving for Cavern, machine-like for Forge, martial for March, lazy and swung for Tide, ambient and still for Mist and Veil, and pounding for the boss theme.",
     "The music keeps its per-performance key, tempo, and melody variation on top, so it still never repeats note-for-note.",
@@ -138,21 +146,21 @@ export const CHANGELOG = [
     "Every floor transition lands you on the matching stair: on the down-stairs after climbing up, on the up-stairs after going down.",
   ] },
   { date: "2026-07-03", size: "small", v: "Enchanter tooltip no longer sticks", by: "Claude", notes: ["Tapping a worn piece at the Enchanter no longer leaves its gear tooltip floating over the reroll screen — the hover card clears when you pick a piece or back out."] },
-  { date: "2026-07-03", size: "small", v: "Deep gear gates harder", by: "Claude", notes: ["Gear attribute requirements now climb on a steepening curve — the per-level slope ramps up the deeper an item is found, so a deep piece demands a real, class-defining stake in its attribute.", "Early gear is unchanged; the gate bites progressively so off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one."] },
-  { date: "2026-07-03", size: "medium", v: "Dev tab — live difficulty sliders", by: "Claude", notes: ["New Settings ▸ Dev tab with 20 live sliders over the core difficulty-scaling knobs — tune balance on the fly, no reload.", "Enemy scaling: global HP/damage/count multipliers, depth-threat exponent & divisor, HP/damage/accuracy per floor.", "Bosses & elites HP/damage multipliers; run modifiers (anti-grind, conquest scar, endless ramp, hazard damage); hero power (HP per Vitality, attack per primary attribute, max HP per level, points per level).", "Hero knobs apply instantly; enemy/floor knobs preview via a Respawn-floor button. Per-slider ↺ and Reset all.", "Tuning saves across reloads; defaults leave balance unchanged."] },
-  { date: "2026-07-03", size: "medium", v: "Bespoke monster & boss art", by: "Claude", notes: ["All 161 monsters and 5 bosses now use original transparent pixel-art sprites, replacing the old atlas tiles and colour-square placeholders.", "Monsters share one packed sprite sheet; bosses use a higher-res sheet."] },
-  { date: "2026-07-03", size: "small", v: "\"Empty slot\" gear badge", by: "Claude", notes: ["Renamed the gold \"First Equip\" badge on an unfilled gear slot to \"Empty Slot\"."] },
-  { date: "2026-07-03", size: "medium", v: "Self-buffs are tactical, not sustained", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Deep gear gates harder", by: "Claude", notes: ["Gear attribute requirements now climb on a steepening curve — the per-level slope ramps up the deeper an item is found, so a deep piece demands a real, class-defining stake in its attribute.", "Early gear is unchanged; the gate bites progressively so off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one."] },
+  { date: "2026-07-02", size: "medium", v: "Dev tab — live difficulty sliders", by: "Claude", notes: ["New Settings ▸ Dev tab with 20 live sliders over the core difficulty-scaling knobs — tune balance on the fly, no reload.", "Enemy scaling: global HP/damage/count multipliers, depth-threat exponent & divisor, HP/damage/accuracy per floor.", "Bosses & elites HP/damage multipliers; run modifiers (anti-grind, conquest scar, endless ramp, hazard damage); hero power (HP per Vitality, attack per primary attribute, max HP per level, points per level).", "Hero knobs apply instantly; enemy/floor knobs preview via a Respawn-floor button. Per-slider ↺ and Reset all.", "Tuning saves across reloads; defaults leave balance unchanged."] },
+  { date: "2026-07-02", size: "medium", v: "Bespoke monster & boss art", by: "Claude", notes: ["All 161 monsters and 5 bosses now use original transparent pixel-art sprites, replacing the old atlas tiles and colour-square placeholders.", "Monsters share one packed sprite sheet; bosses use a higher-res sheet."] },
+  { date: "2026-07-02", size: "small", v: "\"Empty slot\" gear badge", by: "Claude", notes: ["Renamed the gold \"First Equip\" badge on an unfilled gear slot to \"Empty Slot\"."] },
+  { date: "2026-07-02", size: "medium", v: "Self-buffs are tactical, not sustained", by: "Claude", notes: [
     "Self-buff cooldowns now run well longer than the buff — each is up only ~40% of the time at zero Cooldown Reduction, so buffs are timed windows, not always-on auras.",
     "Baseline uptime varies by skill: cheap/weak buffs ~50%, standard buffs ~42-45%, the strongest capstones and ultimates ~38-40%.",
     "Cooldown Reduction (and a rank-7 skill's faster recharge) raises uptime a lot, but permanent upkeep now takes extreme CDR.",
     "Offensive/summon skills whose buff was a rider keep their attack cadence — buff duration trimmed instead of the cooldown.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Depth shown with difficulty everywhere", by: "Claude", notes: ["Deepest-floor readouts now name the difficulty tier — the title/pause hero card shows \"Brutal 6\" instead of a raw \"Floor 56\".", "Depth-record banners, the greed gate, \"reach a floor\" bounties and the gambler blurb all read as tier + floor now.", "Depth achievements reworded to their tier (e.g. \"Reach Hardened floor 5\" for old floor 30)."] },
-  { date: "2026-07-03", size: "small", v: "Fluid HP/MP recovery", by: "Claude", notes: ["Over-time HP/MP recovery now climbs the bar on a smooth slope instead of stepping up once a second — the fill eases toward true health every frame.", "Taking damage or spending mana still snaps the bar down instantly, and burst heals still fill at once."] },
-  { date: "2026-07-03", size: "small", v: "Monochrome settings menu icons", by: "Claude", notes: ["Settings menu tabs (Play, Visuals, Audio, Progress, About) now use monochrome line icons instead of colored emoji, matching the action rows below them.", "Settings tooltips and the Keybindings title swap their emoji for matching line icons too."] },
-  { date: "2026-07-03", size: "small", v: "Never stuck on an enemy", by: "Claude", notes: ["Fixed a lockup where a foe hopping onto the tile you're standing on trapped you in place until it died — you can now always shove free.", "Ejection follows your input, so you pop out the way you're trying to move; normal meleeing is unaffected."] },
-  { date: "2026-07-03", size: "small", v: "Monochrome title settings icons", by: "Claude", notes: ["Save Slots, Leaderboards and Patch Notes now use monochrome line icons matching the rest of the settings menu, instead of colored emoji."] },
+  { date: "2026-07-02", size: "small", v: "Depth shown with difficulty everywhere", by: "Claude", notes: ["Deepest-floor readouts now name the difficulty tier — the title/pause hero card shows \"Brutal 6\" instead of a raw \"Floor 56\".", "Depth-record banners, the greed gate, \"reach a floor\" bounties and the gambler blurb all read as tier + floor now.", "Depth achievements reworded to their tier (e.g. \"Reach Hardened floor 5\" for old floor 30)."] },
+  { date: "2026-07-02", size: "small", v: "Fluid HP/MP recovery", by: "Claude", notes: ["Over-time HP/MP recovery now climbs the bar on a smooth slope instead of stepping up once a second — the fill eases toward true health every frame.", "Taking damage or spending mana still snaps the bar down instantly, and burst heals still fill at once."] },
+  { date: "2026-07-02", size: "small", v: "Monochrome settings menu icons", by: "Claude", notes: ["Settings menu tabs (Play, Visuals, Audio, Progress, About) now use monochrome line icons instead of colored emoji, matching the action rows below them.", "Settings tooltips and the Keybindings title swap their emoji for matching line icons too."] },
+  { date: "2026-07-02", size: "small", v: "Never stuck on an enemy", by: "Claude", notes: ["Fixed a lockup where a foe hopping onto the tile you're standing on trapped you in place until it died — you can now always shove free.", "Ejection follows your input, so you pop out the way you're trying to move; normal meleeing is unaffected."] },
+  { date: "2026-07-02", size: "small", v: "Monochrome title settings icons", by: "Claude", notes: ["Save Slots, Leaderboards and Patch Notes now use monochrome line icons matching the rest of the settings menu, instead of colored emoji."] },
   { date: "2026-07-02", size: "small", v: "No stale sprite flash on load", by: "Claude", notes: ["Hero portraits, the in-world hero, and roaming vendors/mercenaries no longer flash a static placeholder tile before their animated sprite finishes loading — they hold a blank slot and paint the real art the instant it's ready."] },
   { date: "2026-07-02", size: "medium", v: "Town shops reordered & level-gated", by: "Claude", notes: ["Town tiles now follow a fixed order: Healer, Merchant, Ramen House, then progression-gated services, with the Vault last.", "Craftsman opens at level 5; Gambler at depth 10; Trainer & Enchanter at level 10.", "Transmuter opens on reaching Hardened; Bounty Board & Mystic on unlocking Hardened; Sellsword on reaching Brutal.", "Locked services still show in order, greyed, with their unlock requirement.", "Stash Vault renamed to Vault."] },
   { date: "2026-07-02", size: "medium", v: "Uncapped hits, tankier bosses, varied foes", by: "Claude", notes: [
@@ -173,7 +181,7 @@ export const CHANGELOG = [
   { date: "2026-07-02", size: "medium", v: "Pixel icons everywhere — no emoji fallbacks", by: "Claude", notes: ["Every game icon — items, gear, materials, food, currencies, HP/MP, enemies, bosses, NPCs, pets, summons, class & attribute icons, world features, status markers — now renders its pixel sprite directly instead of routing through an emoji. Removed the runtime emoji-to-sprite converter and every emoji fallback: the atlas is always drawn.", "Attribute icons now fit: Might shows a power tile and Luck a shine (were a warrior and a chest).", "Purely decorative header glyphs with no matching sprite are left as-is."] },
   { date: "2026-07-02", size: "medium", v: "Material drops gated & scarcer", by: "Claude", notes: ["Kill-drops gate by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four).", "Salvage is the main early route to a material your tier can't yet drop — it sheds by the item's rarity, not difficulty.", "Rarer mats from salvage are now a lucky roll, not guaranteed, so Core/Chaos stay scarce.", "Salvage quantity scales with item level on a curve that flattens as ilvl climbs.", "Every individual item salvages a little differently — two same-rarity pieces vary in drop rate and amount."] },
   { date: "2026-07-02", size: "small", v: "Volume tiles step up", by: "Claude", notes: ["Tapping the MUSIC or SFX tile now raises the volume a notch instead of lowering it; it wraps from full back to off."] },
-  { date: "2026-07-03", size: "small", v: "Fix: foes can't walk through furniture", by: "Claude", notes: ["Enemies now collide with solid furniture (crates, shelves, plants…) just like you do — no more clipping straight through it.", "Foes path around furniture and won't squeeze a diagonal between two pieces.", "Use furniture as a chokepoint to break a chase."] },
+  { date: "2026-07-02", size: "small", v: "Fix: foes can't walk through furniture", by: "Claude", notes: ["Enemies now collide with solid furniture (crates, shelves, plants…) just like you do — no more clipping straight through it.", "Foes path around furniture and won't squeeze a diagonal between two pieces.", "Use furniture as a chokepoint to break a chase."] },
   { date: "2026-07-02", size: "small", v: "Stairs arrow toggle", by: "Claude", notes: ["Toggle the off-screen down-stairs arrow in Settings → Visuals (on by default).", "Choice syncs across devices when signed in."] },
   { date: "2026-07-02", size: "small", v: "Fix: title screen wouldn't offer Continue", by: "Claude", notes: ["Settings sync could crash the boot before the title screen finished loading, so returning heroes never saw the Continue button — fixed.", "Re-applying your saved log/loot-drawer collapse state on load no longer counts as a fresh change, keeping cross-device sync timestamps accurate."] },
   { date: "2026-07-02", size: "small", v: "Smoother big fights", by: "Claude", notes: ["Enemy status tints (burning, poisoned, chilled…), the hit-flash, elite/boss auras and threat rings now use cached art instead of rebuilding pricey per-frame effects — much smoother with lots of foes on screen.", "Elite/boss/affix auras read as a soft coloured halo."] },
