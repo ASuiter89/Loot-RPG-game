@@ -6763,7 +6763,7 @@ window.gameGuide = function gameGuide(topic) {
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A quick key-tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
       `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
-      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The bottom bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right; the top-right has a menu (settings) and a bag button. Everything is also driveable from the keyboard, which stays live.`,
+      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right; the header holds the minimap, vitals, and the settings + bag buttons (top-right). The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
@@ -8437,9 +8437,9 @@ function resizeCanvas() {
   const dpr = touch ? Math.min(2, window.devicePixelRatio || 1) : 1;
   canvas.width  = Math.max(1, Math.round(cw * dpr));
   canvas.height = Math.max(1, Math.round(ch * dpr));
-  // Lift the follow-camera so the hero sits above the thumb cluster — a bigger
-  // band in portrait than landscape. 0 (centred) on desktop.
-  touchCamBiasPx = touch ? Math.round(canvas.height * (ch >= cw ? 0.16 : 0.11)) : 0;
+  // The touch map lives in its own area between the solid header/footer bands, so
+  // the hero just centres in the canvas — no camera bias needed (0 on desktop too).
+  touchCamBiasPx = 0;
 }
 resizeCanvas();
 // The desktop panel widths are vw-based (clamp), so they shift continuously as the
@@ -8630,10 +8630,21 @@ canvas.addEventListener('pointerleave', () => {
 // are NOT PointerEvents, so keying detection on pointerType avoids the classic
 // "touch immediately looks like a mouse" trap.
 function isTouchMode() { return document.body.classList.contains('touch'); }
+// Dungeon Loot is portrait-only on touch: in landscape we cover the game with the
+// rotate notice (CSS) AND pause play (this flag feeds rtPaused) so nothing happens
+// behind it. Desktop never sets body.touch, so it's never blocked.
+let touchLandscapeBlock = false;
+function updateOrientationBlock() {
+  let land = false;
+  try { land = matchMedia('(orientation: landscape)').matches; } catch (_) {}
+  touchLandscapeBlock = isTouchMode() && land;
+}
+try { matchMedia('(orientation: landscape)').addEventListener('change', () => { updateOrientationBlock(); clearHeld(); }); } catch (_) {}
 function setTouchMode(on) {
   if (isTouchMode() === on) return;
   document.body.classList.toggle('touch', on);
   if (!on) resetTouchStick();
+  updateOrientationBlock();
   try { resizeCanvas(); } catch (_) {}
   try { syncHudLayout(); } catch (_) {}
   try { renderSkillBar(); } catch (_) {}
@@ -27363,6 +27374,7 @@ function rtOverlayEls() {
 }
 function rtPaused() {
   if (gameHalted || inTown || player.hp <= 0) return true;
+  if (touchLandscapeBlock) return true;  // portrait-only on touch — frozen while the rotate notice is up
   if (portalTransiting()) return true;   // hero is mid-teleport (off the map) — no moving/fighting/being hit
   if (mapWarping()) return true;         // walking through a teleporter pad — frozen mid-traversal
   for (const o of rtOverlayEls()) {

@@ -607,6 +607,17 @@
   <div id="touch-cluster"></div>
 </div>
 
+<!-- Landscape block — Dungeon Loot is portrait-only on touch. Shown (and pauses
+     play) whenever a touch device is held in landscape; see #rotate-notice CSS
+     (scoped under body.touch) and updateOrientationBlock() in game.js. -->
+<div id="rotate-notice" aria-hidden="true">
+  <div class="rot-inner">
+    <svg class="rot-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/><path d="M2 12a10 10 0 0 1 10-10"/><polyline points="9 2 12 2 12 5"/></svg>
+    <div class="rot-title">Rotate to portrait</div>
+    <div class="rot-sub">Dungeon Loot plays best upright — turn your device back to portrait to keep delving.</div>
+  </div>
+</div>
+
 <div id="tooltip"></div>
 <div id="hovertip"></div>
 <div id="enemy-card" onclick="closeEnemyCard()"></div>
