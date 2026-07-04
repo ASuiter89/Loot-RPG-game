@@ -7,13 +7,22 @@ describe('SKILL_MILESTONES data validity', () => {
     expect(SKILL_MILESTONES.map(m => m.rank)).toEqual([3, 7, 10]);
   });
 
-  it('every entry has the full { rank, pips, name, perk, activeDesc, passiveDesc } shape', () => {
+  it('every entry has the full { rank, pips, name, activeDesc, passiveDesc } shape', () => {
     for (const [i, m] of SKILL_MILESTONES.entries()) {
       expect(typeof m.rank, `entry ${i} rank`).toBe('number');
-      for (const k of ['pips', 'name', 'perk', 'activeDesc', 'passiveDesc']) {
+      for (const k of ['pips', 'name', 'activeDesc', 'passiveDesc']) {
         expect(typeof m[k], `entry ${i} ${k}`).toBe('string');
         expect(m[k].length, `entry ${i} ${k} non-empty`).toBeGreaterThan(0);
       }
+    }
+  });
+
+  it('every description is specific — states a number (%, tile count, etc.)', () => {
+    // The whole point of this pass: no vague "a power surge" copy. Every milestone
+    // line must carry at least one concrete number so the player knows what it does.
+    for (const m of SKILL_MILESTONES) {
+      expect(/\d/.test(m.activeDesc), `${m.name} activeDesc has a number`).toBe(true);
+      expect(/\d/.test(m.passiveDesc), `${m.name} passiveDesc has a number`).toBe(true);
     }
   });
 
