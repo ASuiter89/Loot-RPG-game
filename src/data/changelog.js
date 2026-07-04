@@ -11,6 +11,9 @@ export const CHANGELOG = [
     "The roaming merchant now lays out at least six gear pieces, so the detour always pays off.",
     "Hover any ware to pop its full card beside your equipped piece — spot an upgrade before you spend a coin.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Watch page loads again", by: "Claude", notes: [
+    "The Watch spectator page now ships with the built site, so opening it no longer hits a 404.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Enchanter: Esc backs out one step at a time", by: "Jeff Louie", notes: [
     "With an item picked in the Enchanter, Esc now returns to the gear screen instead of jumping all the way out to town.",
   ] },
