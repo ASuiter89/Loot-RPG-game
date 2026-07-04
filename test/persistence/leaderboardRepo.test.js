@@ -38,10 +38,17 @@ describe('buildSubmitRequest', () => {
 describe('buildFetchUrl', () => {
   it('encodes the sort column and the Standard/Hardcore ladder', () => {
     expect(buildFetchUrl(CONFIG, 'max_floor', false)).toBe(
-      'https://proj.supabase.co/rest/v1/leaderboard?select=name,player_class,max_floor,level,gold,power,hardcore&hardcore=eq.false&order=max_floor.desc',
+      'https://proj.supabase.co/rest/v1/leaderboard?select=name,player_class,max_floor,level,gold,power,hardcore,ascension&hardcore=eq.false&order=max_floor.desc',
     );
     expect(buildFetchUrl(CONFIG, 'power', true)).toContain('hardcore=eq.true');
     expect(buildFetchUrl(CONFIG, 'power', true)).toContain('order=power.desc');
+  });
+  it('selects the ascension (subclass) column by default', () => {
+    expect(buildFetchUrl(CONFIG, 'level', false)).toContain('select=name,player_class');
+    expect(buildFetchUrl(CONFIG, 'level', false)).toContain(',ascension&');
+  });
+  it('accepts a custom column list (the pre-migration fallback set)', () => {
+    expect(buildFetchUrl(CONFIG, 'level', false, 'name,level')).toContain('select=name,level&');
   });
 });
 
@@ -98,10 +105,25 @@ describe('createLeaderboardRepo (mocked fetch — never hits the backend)', () =
     expect(fetchImpl.mock.calls[1][1].headers.Range).toBe('2-3'); // second window
   });
 
-  it('fetchBoard() throws on a non-OK response', async () => {
+  it('fetchBoard() throws on a non-OK response (real outage — not a 400)', async () => {
     const fetchImpl = vi.fn(() => Promise.resolve({ ok: false, status: 503 }));
     const repo = createLeaderboardRepo({ fetchImpl, ...CONFIG });
     await expect(repo.fetchBoard('level', false)).rejects.toThrow('HTTP 503');
+  });
+
+  it('fetchBoard() retries without the optional ascension column on a 400', async () => {
+    // A table that predates the ascension column 400s the full select; the repo
+    // should retry with the base columns so the board still loads pre-migration.
+    const page = [{ name: 'A' }, { name: 'B' }];
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 400 })
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(page) });
+    const repo = createLeaderboardRepo({ fetchImpl, ...CONFIG });
+    const rows = await repo.fetchBoard('level', false, { pageSize: 1000 });
+    expect(rows).toEqual(page);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[0][0]).toContain(',ascension&');    // full select first
+    expect(fetchImpl.mock.calls[1][0]).not.toContain('ascension');  // retry drops it
   });
 
   it('fetchBoard() arms and clears an abort timeout', async () => {

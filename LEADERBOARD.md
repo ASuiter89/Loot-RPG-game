@@ -44,6 +44,7 @@ policies:
 create table if not exists public.leaderboard (
   name         text not null,
   player_class text,
+  ascension    text,
   max_floor    int  not null default 1,
   level        int  not null default 1,
   gold         int  not null default 0,
@@ -55,6 +56,11 @@ create table if not exists public.leaderboard (
 
 -- If you created the table before the Power board existed, add the column:
 alter table public.leaderboard add column if not exists power int not null default 1;
+
+-- If you created the table before rows showed the hero's ascension (subclass),
+-- add the column. Until it exists the board still loads — the client selects it
+-- optionally and falls back to the base columns — so this is safe to run anytime.
+alter table public.leaderboard add column if not exists ascension text;
 
 alter table public.leaderboard enable row level security;
 
