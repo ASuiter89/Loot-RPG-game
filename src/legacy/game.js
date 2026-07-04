@@ -6674,7 +6674,7 @@ window.gameGuide = function gameGuide(topic) {
       `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, knocked back several floors, your bag dropped as a reclaimable grave on the death floor). The Dungeon Gate flags the tier + floor holding that grave (gameState().graveSite.where), so you can dive straight back to it.`,
       `Town is a menu of services; take the Dungeon Gate to drop back in (choose tier + floor). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
-      `Merchant (buy gear / pay to restock); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
+      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it); Gambler (wager gold for random gear — pick a slot to guarantee the type).`,
@@ -9910,13 +9910,22 @@ function handleQuestStep(nx, ny) {
   }
 }
 
+// Rarity distribution for merchant wares: the merchant deals only in uncommon+
+// gear — never junk (grey) or normal (white) — weighted toward the rarer tiers so
+// his table always beats a raw floor drop. Every tier from uncommon up is
+// reachable, with a slim shot at legendary / unique.
+const SHOP_TIER_WEIGHTS = {
+  uncommon: 40, rare: 34, epic: 16, legendary: 6, unique: 2,
+};
+
 // Roll a fresh merchant stock: `lo`..`hi` gear pieces geared to `ilvl`, each
 // gamble-priced. Shared by the dungeon wanderer, the town shop, and paid restocks.
 function rollShopStock(ilvl, lo, hi) {
   const stock = [];
   const n = rnd(lo, hi);
   for (let i = 0; i < n; i++) {
-    const item = generateItem(3, ilvl);
+    const tier = weighted(SHOP_TIER_WEIGHTS);
+    const item = generateItem(1, ilvl, tier);
     stock.push({ kind: 'gear', item, price: Math.max(10, Math.round(item.value * 1.4)) });
   }
   return stock;
