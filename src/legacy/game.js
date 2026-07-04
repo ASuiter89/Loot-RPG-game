@@ -41,6 +41,8 @@ import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
 import { mercCost } from '../systems/mercPricing.js';
 import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTints.js';
+import { elementOf, paletteFor, castArchetype, weaponArchetype, projectileElement, bossFxFor,
+  clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -7106,6 +7108,34 @@ function sfx(name) {
     case 'portalin':  // pillar-in + materialize: pitch dives in, then a low thump
       tone(1760, 0.42, t, 'sine', 0.32, 294); tone(880, 0.4, t + 0.04, 'triangle', 0.18, 220);
       noise(0.4, t, 0.2, 5200, 'highpass'); tone(120, 0.3, t + 0.24, 'sawtooth', 0.4, 60); break;
+    // ── ATTACK / SPELL CASTS ── short, element-flavoured sounds for weapon swings,
+    // fired shots and the per-shape/element spell casts (see castSoundFor). ──
+    case 'bowshot':  // a taut string release + arrow whoosh
+      tone(600, 0.06, t, 'triangle', 0.28, 240); noise(0.14, t + 0.02, 0.22, 3000, 'highpass'); break;
+    case 'magicbolt': // a quick zap
+      tone(880, 0.12, t, 'sine', 0.3, 320); tone(440, 0.1, t + 0.02, 'square', 0.16, 220); break;
+    case 'slash':    // a blade swoosh
+      noise(0.12, t, 0.3, 2600, 'bandpass'); tone(320, 0.05, t, 'triangle', 0.14, 520); break;
+    case 'novacast': // an outward whoomph
+      tone(140, 0.24, t, 'sine', 0.4, 60); noise(0.24, t, 0.28, 1600, 'lowpass'); break;
+    case 'beamcast': // a searing lance
+      tone(240, 0.34, t, 'sawtooth', 0.28, 760); noise(0.3, t, 0.18, 3200, 'bandpass'); break;
+    case 'buffcast': // a warm rising shimmer
+      [523, 659, 784].forEach((f, i) => tone(f, 0.16, t + i * 0.05, 'sine', 0.24)); break;
+    case 'summoncast': // an otherworldly swell
+      tone(196, 0.4, t, 'sawtooth', 0.28, 392); tone(294, 0.34, t + 0.05, 'triangle', 0.18, 588); noise(0.3, t, 0.14, 5000, 'highpass'); break;
+    case 'castfire': // a fwoosh
+      tone(180, 0.22, t, 'sawtooth', 0.3, 90); noise(0.2, t, 0.26, 1800, 'lowpass'); break;
+    case 'castice':  // a crystalline chime
+      [1568, 2093, 2637].forEach((f, i) => tone(f, 0.22, t + i * 0.03, 'sine', 0.16)); tone(200, 0.16, t, 'sine', 0.2, 120); break;
+    case 'castspark': // a crackle
+      noise(0.14, t, 0.3, 4200, 'highpass'); for (let i = 0; i < 3; i++) tone(1400 + i * 500, 0.04, t + i * 0.03, 'square', 0.2); break;
+    case 'castarcane': // a bright arcane ping
+      tone(660, 0.16, t, 'sine', 0.28, 990); tone(990, 0.14, t + 0.03, 'triangle', 0.16); break;
+    case 'castholy': // a soft radiant tone
+      [659, 988, 1319].forEach((f, i) => tone(f, 0.2, t + i * 0.03, 'sine', 0.2)); break;
+    case 'castvenom': // a wet, low bubble
+      tone(160, 0.2, t, 'sine', 0.28, 90); noise(0.16, t, 0.16, 1200, 'lowpass'); break;
     // ── ULTIMATE CASTS ── big, cinematic capstone-spell sounds. ──
     case 'ult': // huge generic impact — a deep, room-shaking boom
       tone(70, 0.7, t, 'sawtooth', 0.6, 30); tone(110, 0.6, t + 0.04, 'square', 0.4, 45);
@@ -8934,13 +8964,15 @@ function spawnProjectile(x, y, dx, dy, dmg, color, speed) {
 // sidestepping its path or ducking behind cover avoids the hit entirely. Carries
 // the firing foe `e` and its pre-rolled base damage so the hit resolves with that
 // foe's mitigation and on-hit procs when (and if) it lands.
-function spawnEnemyBolt(e, raw, color) {
+function spawnEnemyBolt(e, raw, color, kind) {
   const s = e.size || 1;
   const ox = e.x + s / 2, oy = e.y + s / 2;          // origin: centre of the foe's footprint
   const dx = player.fx - ox, dy = player.fy - oy, d = Math.hypot(dx, dy) || 1;
   const SP = 8;                                        // fast enough to threaten, slow enough to sidestep
   const life = (d + 1.5) / SP;                         // reaches the hero, overshoots a touch, then dies
-  projectiles.push({ x: ox, y: oy, vx: dx / d * SP, vy: dy / d * SP, dmg: raw, color: color || '#c77dff', life, enemyShot: true, e, label: enemyLabel(e) });
+  kind = kind || 'hex';                                // ranged foes sling magic/hex orbs, never fletched arrows
+  projectiles.push({ x: ox, y: oy, vx: dx / d * SP, vy: dy / d * SP, dmg: raw, color: color || '#c77dff', life,
+    enemyShot: true, e, label: enemyLabel(e), kind, element: projectileElement(kind), _seed: Math.random() * PI2 });
 }
 
 // Advance every bolt: move, die on a wall, or strike the hero on overlap.
@@ -8958,7 +8990,7 @@ function updateProjectiles(dt) {
       const SP = p.tx != null ? 15 : 12;   // player spell bolts fly a touch faster
       p.vx = dx / d * SP; p.vy = dy / d * SP;
       p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
-      if (d < 0.4 || p.life <= 0) { spawnParticles(p.x, p.y, p.color, p.orb ? 8 : 5, 0.08); p.life = 0; }
+      if (d < 0.4 || p.life <= 0) { if (p.kind || p.element) projectileArrive(p); else spawnParticles(p.x, p.y, p.color, p.orb ? 8 : 5, 0.08); p.life = 0; }
       continue;
     }
     p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
@@ -9371,6 +9403,7 @@ function generateMap() {
   if (floorMod.prepHint) log('💡 If this floor is too tough, retreat to town: strike a pact, cook a bowl, or forge gear, then come back ready.', 'important');
 
   projectiles = [];
+  clearAttackFx();
   placeTraps(reach);
   floorRooms = rooms;
   spawnEnemies();
@@ -10425,7 +10458,7 @@ function buildTown() {
   quest = null; teleporters = {}; shrineData = {};
   floorThemeOverride = null; furnitureMap = {}; decorMap = {}; // town is never an indoor-themed floor
   townShopStock = null;        // fresh merchant wares each town visit
-  traps = []; projectiles = []; bossHazards = []; // real-time hazards never linger into town
+  traps = []; projectiles = []; bossHazards = []; clearAttackFx(); // real-time hazards / fx never linger into town
   hasFountain = false; groundKey = null; hasKey = false;
   floorMod = FLOOR_MODS[0]; floorTint = 'rgba(120,90,40,0.10)';
   statusEffects = statusEffects.filter(s => s.target === 'player');
@@ -14694,6 +14727,14 @@ function draw() {
       ctx.restore();
     }
 
+    // ── PERSISTENT BOSS-BUFF AURA ── a shimmering blue ward while shielded and a
+    // pulsing red rage outline while enraged/berserk, so the active power state
+    // stays visible for its whole duration — not just the one-frame cast puff.
+    if (e.isBoss || e.isElite) {
+      if (e.shieldT > 0) { const wp = 0.5 + 0.5 * Math.sin(animNow() / 300); ringGlow(_scx, _scy, cw * (0.62 + 0.06 * wp), '150,216,255', 0.26 + 0.16 * wp); }
+      if (e.enraged || e.berserkT > 0) { const rp = 0.5 + 0.5 * Math.sin(animNow() / 180); glowUnder(_scx, _scy, cw * (0.58 + 0.08 * rp), `rgba(255,70,45,${(0.2 + 0.18 * rp).toFixed(3)})`); }
+    }
+
     // ── THREAT TELEGRAPH ── make "who can hit me, from where, right now" legible.
     // Ring any foe that can strike the hero on its next move (melee adjacent, or
     // ranged with line of sight in range); for ranged threats also draw a faint
@@ -14894,44 +14935,14 @@ function draw() {
     }
     ctx.restore();
   });
+  const _projNow = Date.now();
   projectiles.forEach(p => {
     const ppx = offX + p.x * tw, ppy = offY + p.y * th;     // bolts stay smooth (fast hazards)
     const m = Math.hypot(p.vx, p.vy) || 1, ux = p.vx / m, uy = p.vy / m; // forward
-    // Spell orbs: a glowing element-coloured ball with a bright core and a short
-    // trailing streak, rather than the arrow used for bolts/arrows.
-    if (p.orb) {
-      ctx.save();
-      ctx.shadowColor = p.color; ctx.shadowBlur = tw * 0.45;
-      ctx.strokeStyle = p.color; ctx.globalAlpha = 0.5; ctx.lineWidth = Math.max(1.5, tw * 0.1); ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(ppx - ux * tw * 0.32, ppy - uy * tw * 0.32); ctx.lineTo(ppx, ppy); ctx.stroke();
-      ctx.globalAlpha = 1; ctx.fillStyle = p.color;
-      ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.16, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.07, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-      return;
-    }
-    const nx = -uy, ny = ux;                                // perpendicular (barbs / fletching)
-    const half = tw * 0.24, head = tw * 0.17;               // shaft half-length, head size
-    const tipx = ppx + ux * half, tipy = ppy + uy * half;   // arrow tip (leading)
-    const tailx = ppx - ux * half, taily = ppy - uy * half; // nock (trailing)
+    // Each bolt renders as an element-tinted sprite chosen by its `kind` (arrow,
+    // magic orb, fireball, ice shard, spark, venom glob…) — see drawProjectileKind.
     ctx.save();
-    ctx.shadowColor = p.color; ctx.shadowBlur = tw * 0.25;
-    ctx.strokeStyle = p.color; ctx.fillStyle = p.color;
-    ctx.lineWidth = Math.max(1.3, tw * 0.05); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    // Shaft
-    ctx.beginPath(); ctx.moveTo(tailx, taily); ctx.lineTo(tipx, tipy); ctx.stroke();
-    // Arrowhead — a filled triangle at the tip
-    ctx.beginPath();
-    ctx.moveTo(tipx, tipy);
-    ctx.lineTo(tipx - ux * head + nx * head * 0.55, tipy - uy * head + ny * head * 0.55);
-    ctx.lineTo(tipx - ux * head - nx * head * 0.55, tipy - uy * head - ny * head * 0.55);
-    ctx.closePath(); ctx.fill();
-    // Fletching — two short barbs at the nock
-    ctx.beginPath();
-    ctx.moveTo(tailx, taily); ctx.lineTo(tailx - ux * head * 0.7 + nx * head * 0.7, taily - uy * head * 0.7 + ny * head * 0.7);
-    ctx.moveTo(tailx, taily); ctx.lineTo(tailx - ux * head * 0.7 - nx * head * 0.7, taily - uy * head * 0.7 - ny * head * 0.7);
-    ctx.stroke();
+    drawProjectileKind(p, ppx, ppy, ux, uy, tw, _projNow);
     ctx.restore();
   });
 
@@ -15068,6 +15079,11 @@ function draw() {
   }
   particles.length = pAlive;
   ctx.globalAlpha = 1;
+
+  // Attack / spell / monster-ability animations (slash arcs, novas, beams, chains,
+  // impacts, auras…) paint over the world with the cinematics, beneath the damage
+  // numbers so hits stay readable.
+  drawAttackFx(offX, offY, tw, th);
 
   // Ultimate-spell cinematics (meteor slam, frost nova, storm…) paint over the
   // world but beneath the floating damage numbers so hits stay readable.
@@ -15926,6 +15942,582 @@ function drawUltGeneric(e, el, cx, cy, tw) {
   const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, tw * 3.5);
   g.addColorStop(0, "rgba(200,180,150,0.5)"); g.addColorStop(1, "rgba(200,180,150,0)");
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, tw * 3.5, 0, Math.PI * 2); ctx.fill();
+}
+
+// ══════════════════════════════════════════
+// ATTACK / SPELL / MONSTER-ATTACK VFX ENGINE
+// ══════════════════════════════════════════
+// A transient, data-driven effect layer that gives EVERY skill, spell, weapon
+// swing and monster ability its own animation — the element palette and archetype
+// come from src/data/vfxPalette.js + src/systems/vfx.js, the drawing lives here at
+// the edge (like the ultimate cinematics and particles above). Effects are short,
+// pooled by a hard cap, age off on their own duration, and compact in place each
+// frame (never a per-frame .filter, per the hot-path rules).
+const PI2 = Math.PI * 2;
+const ATTACK_FX_CAP = 180;   // hard ceiling — a big pack fight can't wall the screen
+let attackFx = [];
+// Pre-roll the per-effect random detail ONCE at spawn (shard angles, ember scatter,
+// crack directions…) so the shape stays stable across frames instead of jittering.
+function _seedFxDetails(o) {
+  const R = Math.random;
+  switch (o.kind) {
+    case 'nova':
+      o.shards = Array.from({ length: o.shardN || 14 }, (_, i) => ({ a: (i / (o.shardN || 14)) * PI2 + R() * 0.25, len: 0.7 + R() * 0.5 }));
+      break;
+    case 'impact': case 'smash': case 'blink':
+      o.spikes = Array.from({ length: 7 }, (_, i) => ({ a: (i / 7) * PI2 + R() * 0.4, len: 0.8 + R() * 0.7 }));
+      break;
+    case 'cracks':
+      o.cracks = Array.from({ length: 9 }, (_, i) => ({ a: (i / 9) * PI2 + R() * 0.3, len: 0.6 + R() * 0.6, kinks: [R() * 2 - 1, R() * 2 - 1] }));
+      break;
+    case 'chain':
+      o.jag = (o.pts || []).map(() => Array.from({ length: 6 }, () => R() * 2 - 1));
+      break;
+    case 'cloud':
+      o.blobs = Array.from({ length: o.blobN || 8 }, () => ({ a: R() * PI2, d: R(), sz: 0.3 + R() * 0.55, ph: R() * PI2 }));
+      break;
+    case 'emberRain':
+      o.embers = Array.from({ length: 16 }, () => ({ dx: R() * 2 - 1, delay: R() * 0.45, sz: 1 + R() * 2, sway: R() * PI2 }));
+      break;
+    case 'aura':
+      o.motes = Array.from({ length: o.moteN || 12 }, (_, i) => ({ a: (i / (o.moteN || 12)) * PI2, d: 0.3 + R() * 0.7, rise: 0.5 + R(), sz: 1 + R() * 2 }));
+      break;
+    case 'swirl':
+      o.arms = Array.from({ length: 5 }, (_, i) => ({ a0: (i / 5) * PI2, sp: 0.8 + R() * 0.5 }));
+      break;
+    case 'beam':
+      o.wob = R() * PI2;
+      break;
+  }
+}
+// Push one effect (coords are CENTERED tile units, e.g. tileX + 0.5). `extra` carries
+// the per-kind fields (ang/spread/reach, r, x2/y2, pts, variant, dur, power…).
+function _fxPush(kind, cx, cy, pal, extra) {
+  const o = Object.assign({ kind, x: cx, y: cy, pal, dur: 380 }, extra || {});
+  o.born = Date.now();
+  _seedFxDetails(o);
+  if (attackFx.length >= ATTACK_FX_CAP) attackFx.shift();
+  attackFx.push(o);
+  return o;
+}
+function clearAttackFx() { attackFx.length = 0; }
+function _angTo(ax, ay, bx, by) { return Math.atan2(by - ay, bx - ax); }
+
+// ── Effect drawers ── each reads a normalized age t (0→1) and paints in screen space.
+function drawFxSlash(fx, t, cx, cy, tw) {
+  const reach = tw * (fx.reach || 0.75), spread = fx.spread || 0.95;
+  const a0 = fx.ang - spread, a1 = fx.ang + spread;
+  const lead = a0 + (a1 - a0) * easeOutCubic(Math.min(1, t * 1.35));
+  ctx.lineCap = 'round';
+  ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.5;
+  ctx.globalAlpha = 0.55 * (1 - t);
+  ctx.strokeStyle = fx.pal.trail; ctx.lineWidth = tw * 0.18 * (1 - 0.3 * t);
+  ctx.beginPath(); ctx.arc(cx, cy, reach, a0, lead); ctx.stroke();
+  ctx.globalAlpha = Math.max(0, 1 - t * 1.1);
+  ctx.strokeStyle = fx.pal.core; ctx.lineWidth = tw * 0.1;
+  ctx.beginPath(); ctx.arc(cx, cy, reach, Math.max(a0, lead - 0.6), lead); ctx.stroke();
+  ctx.shadowBlur = 0;
+  const gx = cx + Math.cos(lead) * reach, gy = cy + Math.sin(lead) * reach;
+  ctx.globalAlpha = Math.max(0, 1 - t); ctx.fillStyle = fx.pal.core;
+  ctx.beginPath(); ctx.arc(gx, gy, tw * 0.08, 0, PI2); ctx.fill();
+}
+function drawFxImpact(fx, t, cx, cy, tw) {
+  const k = easeOutCubic(t), p = fx.power || 1;
+  const r = tw * (0.12 + 0.55 * k * p);
+  ctx.globalAlpha = Math.max(0, 1 - t);
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  g.addColorStop(0, fx.pal.core); g.addColorStop(0.45, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, PI2); ctx.fill();
+  ctx.globalAlpha = 0.85 * (1 - t); ctx.strokeStyle = fx.pal.core; ctx.lineWidth = Math.max(1, tw * 0.07 * (1 - t));
+  ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.4;
+  ctx.beginPath(); ctx.arc(cx, cy, r * 1.05, 0, PI2); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.lineCap = 'round';
+  for (const s of fx.spikes || []) {
+    const len = r * (1.1 + 0.6 * s.len);
+    ctx.globalAlpha = 0.7 * (1 - t); ctx.strokeStyle = fx.pal.spark; ctx.lineWidth = tw * 0.05 * (1 - t);
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(s.a) * r * 0.5, cy + Math.sin(s.a) * r * 0.5);
+    ctx.lineTo(cx + Math.cos(s.a) * len, cy + Math.sin(s.a) * len); ctx.stroke();
+  }
+}
+function drawFxNova(fx, t, cx, cy, tw) {
+  const k = easeOutCubic(t), R = (fx.r || 1) * tw;
+  const rr = tw * 0.3 + R * k;
+  ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.6;
+  _ultRing(cx, cy, rr, tw * 0.28 * (1 - t), fx.pal.core, 0.85 * (1 - t));
+  _ultRing(cx, cy, rr * 0.7, tw * 0.18 * (1 - t), fx.pal.glow, 0.6 * (1 - t));
+  ctx.globalAlpha = Math.max(0, 0.5 * (1 - t * 1.4));
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rr);
+  g.addColorStop(0, fx.pal.core); g.addColorStop(0.5, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, PI2); ctx.fill();
+  ctx.shadowBlur = 0; ctx.lineCap = 'round';
+  for (const s of fx.shards || []) {
+    const d = rr * (0.7 + 0.3 * s.len);
+    ctx.globalAlpha = 0.7 * (1 - t); ctx.strokeStyle = fx.pal.spark; ctx.lineWidth = tw * 0.06 * (1 - t);
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(s.a) * rr * 0.5, cy + Math.sin(s.a) * rr * 0.5);
+    ctx.lineTo(cx + Math.cos(s.a) * d, cy + Math.sin(s.a) * d); ctx.stroke();
+  }
+}
+function drawFxBeam(fx, t, offX, offY, tw, th) {
+  const ax = offX + fx.x * tw, ay = offY + fx.y * th, bx = offX + fx.x2 * tw, by = offY + fx.y2 * th;
+  const grow = easeOutCubic(Math.min(1, t * 2.2));
+  const ix = ax + (bx - ax) * grow, iy = ay + (by - ay) * grow;
+  const fade = t < 0.55 ? 1 : Math.max(0, 1 - (t - 0.55) / 0.45);
+  const wob = 1 + 0.12 * Math.sin(t * fx.dur / 28 + (fx.wob || 0));
+  ctx.lineCap = 'round'; ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.8;
+  ctx.globalAlpha = 0.5 * fade; ctx.strokeStyle = fx.pal.glow; ctx.lineWidth = tw * 0.5 * wob;
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ix, iy); ctx.stroke();
+  ctx.globalAlpha = 0.9 * fade; ctx.strokeStyle = fx.pal.core; ctx.lineWidth = tw * 0.16 * wob;
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ix, iy); ctx.stroke();
+  ctx.globalAlpha = 0.8 * fade;
+  const g = ctx.createRadialGradient(ix, iy, 0, ix, iy, tw * 0.9);
+  g.addColorStop(0, fx.pal.core); g.addColorStop(0.5, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ix, iy, tw * 0.9, 0, PI2); ctx.fill();
+}
+function drawFxChain(fx, t, offX, offY, tw, th) {
+  const flick = 0.5 + 0.5 * Math.sin(t * fx.dur / 20);
+  const fade = Math.max(0, 1 - t), pts = fx.pts || [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const ax = offX + a.x * tw, ay = offY + a.y * th, bx = offX + b.x * tw, by = offY + b.y * th;
+    ctx.globalAlpha = fade * flick;
+    _ultBolt(ax, ay, bx, by, fx.jag[i], tw * 0.5, fx.pal.core, tw * 0.1 * flick + 1);
+    _ultBolt(ax, ay, bx, by, fx.jag[i], tw * 0.5, fx.pal.glow, tw * 0.05);
+  }
+  for (const p of pts) {
+    const px = offX + p.x * tw, py = offY + p.y * th;
+    ctx.globalAlpha = fade; ctx.fillStyle = fx.pal.core; ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.4;
+    ctx.beginPath(); ctx.arc(px, py, tw * 0.09, 0, PI2); ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+}
+function drawFxAura(fx, t, cx, cy, tw) {
+  const pal = fx.pal, v = fx.variant || 'buff';
+  if (v === 'ward') {
+    const fade = Math.min(1, Math.sin(Math.PI * t) * 1.5);
+    ctx.globalAlpha = 0.5 * fade; ctx.strokeStyle = pal.core; ctx.lineWidth = tw * 0.08;
+    ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.4;
+    ctx.beginPath(); ctx.arc(cx, cy - tw * 0.1, tw * 0.78, 0, PI2); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.globalAlpha = 0.18 * fade;
+    const g = ctx.createRadialGradient(cx, cy - tw * 0.1, tw * 0.2, cx, cy - tw * 0.1, tw * 0.85);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.8, pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy - tw * 0.1, tw * 0.85, 0, PI2); ctx.fill();
+    return;
+  }
+  const fade = 1 - t;
+  ctx.globalAlpha = 0.55 * fade; ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.5;
+  _ultRing(cx, cy + tw * 0.35, tw * (0.4 + easeOutCubic(t) * 0.9), tw * 0.12 * (1 - t), pal.glow, 0.6 * fade);
+  ctx.shadowBlur = 0;
+  for (const m of fx.motes || []) {
+    const rise = tw * m.rise * 2.2 * t;
+    const x = cx + Math.cos(m.a + t * 2) * tw * m.d * 0.9, y = cy + tw * 0.4 - rise;
+    ctx.globalAlpha = Math.max(0, (1 - t)) * 0.9;
+    ctx.fillStyle = v === 'flare' ? pal.glow : v === 'mend' ? pal.core : pal.spark;
+    if (v === 'mend') { const s = m.sz * 0.9; ctx.fillRect(x - s / 2, y - s * 1.5, s, s * 3); ctx.fillRect(x - s * 1.5, y - s / 2, s * 3, s); }
+    else ctx.fillRect(x - m.sz / 2, y - m.sz / 2, m.sz, m.sz);
+  }
+  ctx.globalAlpha = 0.5 * fade;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, tw * (0.8 + 0.6 * t));
+  g.addColorStop(0, pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, tw * (0.8 + 0.6 * t), 0, PI2); ctx.fill();
+  if (v === 'flare') _ultRing(cx, cy, tw * (0.4 + easeOutCubic(t) * 2.2), tw * 0.18 * (1 - t), pal.glow, 0.7 * (1 - t));
+  if (v === 'conjure') {
+    const rot = t * 4; ctx.globalAlpha = 0.6 * (1 - t); ctx.strokeStyle = pal.core; ctx.lineWidth = tw * 0.06;
+    ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.4;
+    ctx.beginPath();
+    for (let i = 0; i <= 6; i++) { const a = rot + i * Math.PI / 3, x = cx + Math.cos(a) * tw * 0.8, y = cy + Math.sin(a) * tw * 0.4; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.closePath(); ctx.stroke(); ctx.shadowBlur = 0;
+  }
+}
+function drawFxCloud(fx, t, cx, cy, tw) {
+  const fadeIn = Math.min(1, t * 4), fadeOut = t > 0.6 ? 1 - (t - 0.6) / 0.4 : 1;
+  const a = fadeIn * Math.max(0, fadeOut), R = (fx.r || 1) * tw;
+  for (const b of fx.blobs || []) {
+    const wob = Math.sin(t * fx.dur / 300 + b.ph);
+    const bx = cx + Math.cos(b.a) * R * b.d, by = cy + Math.sin(b.a) * R * b.d * 0.7 + wob * tw * 0.1;
+    const br = tw * b.sz * (0.85 + 0.15 * wob);
+    ctx.globalAlpha = 0.28 * a;
+    const g = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+    g.addColorStop(0, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bx, by, br, 0, PI2); ctx.fill();
+  }
+  ctx.globalAlpha = 0.6 * a; ctx.fillStyle = fx.pal.spark;
+  for (const b of fx.blobs || []) { const y = cy - t * tw * 1.2 + Math.sin(b.ph) * tw * 0.2, x = cx + Math.cos(b.a) * R * b.d; ctx.fillRect(x, y, 2, 2); }
+}
+function drawFxCracks(fx, t, cx, cy, tw) {
+  const k = easeOutCubic(t), fade = Math.max(0, 1 - t), R = (fx.r || 2) * tw;
+  ctx.lineCap = 'round'; ctx.strokeStyle = fx.pal.trail; ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.3;
+  for (const c of fx.cracks || []) {
+    const len = R * k * c.len, nx = Math.cos(c.a), ny = Math.sin(c.a), px = -ny, py = nx;
+    ctx.globalAlpha = 0.8 * fade; ctx.lineWidth = tw * 0.09 * fade;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + nx * len * 0.5 + px * c.kinks[0] * tw * 0.2, cy + ny * len * 0.5 + py * c.kinks[0] * tw * 0.2);
+    ctx.lineTo(cx + nx * len + px * c.kinks[1] * tw * 0.15, cy + ny * len + py * c.kinks[1] * tw * 0.15);
+    ctx.stroke();
+  }
+  ctx.shadowBlur = 0;
+  _ultRing(cx, cy, R * k * 0.8, tw * 0.2 * fade, fx.pal.glow, 0.5 * fade);
+  ctx.globalAlpha = 0.5 * fade;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, tw * 0.8);
+  g.addColorStop(0, fx.pal.core); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, tw * 0.8, 0, PI2); ctx.fill();
+}
+function drawFxSwirl(fx, t, cx, cy, tw) {
+  const fade = Math.max(0, 1 - t), R = (fx.r || 2) * tw;
+  ctx.lineCap = 'round'; ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.4;
+  for (const arm of fx.arms || []) {
+    ctx.globalAlpha = 0.6 * fade; ctx.strokeStyle = fx.pal.trail; ctx.lineWidth = tw * 0.08 * fade;
+    ctx.beginPath();
+    for (let s = 0; s <= 10; s++) {
+      const frac = s / 10, rad = R * (1 - frac) * (1 - 0.5 * t), ang = arm.a0 + frac * arm.sp * 6 + t * 4;
+      const x = cx + Math.cos(ang) * rad, y = cy + Math.sin(ang) * rad * 0.7;
+      s ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.shadowBlur = 0; ctx.globalAlpha = 0.6 * fade;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, tw * 0.9);
+  g.addColorStop(0, fx.pal.core); g.addColorStop(0.5, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, tw * 0.9, 0, PI2); ctx.fill();
+}
+function drawFxEmberRain(fx, t, cx, cy, tw) {
+  const R = (fx.r || 1.5) * tw;
+  for (const e of fx.embers || []) {
+    const lt = clamp01((t - e.delay) / (1 - e.delay || 1)); if (lt <= 0) continue;
+    const startY = cy - tw * 3.2, x = cx + e.dx * R + Math.sin(lt * 6 + e.sway) * tw * 0.15;
+    const y = startY + (cy - startY) * easeInCubic(lt);
+    ctx.globalAlpha = Math.max(0, 1 - lt) * 0.95; ctx.fillStyle = lt < 0.6 ? fx.pal.core : fx.pal.glow;
+    ctx.fillRect(x - e.sz / 2, y - e.sz / 2, e.sz, e.sz * 2.2);
+  }
+  ctx.globalAlpha = 0.45 * (1 - t);
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  g.addColorStop(0, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(cx, cy, R, R * 0.5, 0, 0, PI2); ctx.fill();
+}
+function drawFxSmash(fx, t, cx, cy, tw) {
+  const k = easeOutCubic(Math.min(1, t * 1.6)), fade = Math.max(0, 1 - t);
+  _ultRing(cx, cy, tw * (0.3 + k * 1.6), tw * 0.2 * fade, fx.pal.core, 0.8 * fade);
+  ctx.globalAlpha = 0.6 * fade;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, tw * 1.1 * k);
+  g.addColorStop(0, fx.pal.core); g.addColorStop(0.5, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, tw * 1.1 * k, 0, PI2); ctx.fill();
+  if (t < 0.4) {
+    const s = 1 - t / 0.4; ctx.globalAlpha = s; ctx.strokeStyle = fx.pal.core; ctx.lineWidth = tw * 0.12; ctx.lineCap = 'round';
+    ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.4;
+    ctx.beginPath(); ctx.moveTo(cx, cy - tw * 1.7 * s); ctx.lineTo(cx, cy); ctx.stroke(); ctx.shadowBlur = 0;
+  }
+}
+function drawFxBlink(fx, t, cx, cy, tw) {
+  const k = easeOutCubic(t), fade = Math.max(0, 1 - t);
+  ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.5;
+  _ultRing(cx, cy, Math.max(0, tw * (0.6 - 0.5 * k)) + tw * 0.1, tw * 0.1 * fade, fx.pal.core, 0.7 * fade);
+  _ultRing(cx, cy, tw * (0.2 + k * 0.9), tw * 0.12 * fade, fx.pal.glow, 0.6 * fade);
+  ctx.shadowBlur = 0; ctx.lineCap = 'round';
+  for (const s of fx.spikes || []) {
+    const len = tw * (0.4 + k * 0.9) * s.len;
+    ctx.globalAlpha = 0.7 * fade; ctx.strokeStyle = fx.pal.spark; ctx.lineWidth = tw * 0.05 * fade;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(s.a) * len, cy + Math.sin(s.a) * len); ctx.stroke();
+  }
+}
+// Render (and compact) every live attack/spell effect. Drawn over the world with
+// the particles/cinematics, beneath the floating damage numbers so hits stay legible.
+function drawAttackFx(offX, offY, tw, th) {
+  if (!attackFx.length) return;
+  const now = Date.now();
+  let alive = 0;
+  for (let i = 0; i < attackFx.length; i++) {
+    const fx = attackFx[i];
+    const el = now - fx.born;
+    if (el >= fx.dur) continue;
+    attackFx[alive++] = fx;
+    const t = clamp01(el / fx.dur);
+    const cx = offX + fx.x * tw, cy = offY + fx.y * th;
+    ctx.save();
+    switch (fx.kind) {
+      case 'slash': drawFxSlash(fx, t, cx, cy, tw); break;
+      case 'nova': drawFxNova(fx, t, cx, cy, tw); break;
+      case 'beam': drawFxBeam(fx, t, offX, offY, tw, th); break;
+      case 'chain': drawFxChain(fx, t, offX, offY, tw, th); break;
+      case 'aura': drawFxAura(fx, t, cx, cy, tw); break;
+      case 'cloud': drawFxCloud(fx, t, cx, cy, tw); break;
+      case 'cracks': drawFxCracks(fx, t, cx, cy, tw); break;
+      case 'swirl': drawFxSwirl(fx, t, cx, cy, tw); break;
+      case 'emberRain': drawFxEmberRain(fx, t, cx, cy, tw); break;
+      case 'smash': drawFxSmash(fx, t, cx, cy, tw); break;
+      case 'blink': drawFxBlink(fx, t, cx, cy, tw); break;
+      default: drawFxImpact(fx, t, cx, cy, tw);
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  attackFx.length = alive;
+}
+
+// ── Projectile look ── the flying-bolt SIMULATION is unchanged (still dodgeable);
+// only its rendering is upgraded here to a crisp, element-tinted sprite per `kind`,
+// replacing the thin vector arrow. Every projectile carries a `kind` (arrow / magic
+// / fire / ice / spark / venom / holy / blood / hex / bone) and an `element` palette.
+function projKindFor(el) {
+  return ({ fire: 'fire', ice: 'ice', lightning: 'spark', venom: 'venom', holy: 'holy',
+    blood: 'blood', arcane: 'magic', physical: 'arrow', gold: 'magic', force: 'magic', life: 'holy', earth: 'arrow' })[el] || 'magic';
+}
+function drawArrowProj(ppx, ppy, ux, uy, tw, pal) {
+  const nx = -uy, ny = ux, half = tw * 0.3, head = tw * 0.16, sw = tw * 0.05;
+  const tipx = ppx + ux * half, tipy = ppy + uy * half, tailx = ppx - ux * half, taily = ppy - uy * half;
+  ctx.globalAlpha = 0.35; ctx.strokeStyle = pal.trail; ctx.lineCap = 'round'; ctx.lineWidth = sw * 1.4;
+  ctx.beginPath(); ctx.moveTo(tailx - ux * tw * 0.4, taily - uy * tw * 0.4); ctx.lineTo(ppx, ppy); ctx.stroke();
+  ctx.globalAlpha = 1; ctx.lineCap = 'butt';
+  ctx.strokeStyle = pal.edge; ctx.lineWidth = sw * 1.7;
+  ctx.beginPath(); ctx.moveTo(tailx, taily); ctx.lineTo(tipx - ux * head * 0.8, tipy - uy * head * 0.8); ctx.stroke();
+  ctx.strokeStyle = pal.trail; ctx.lineWidth = sw * 0.7;
+  ctx.beginPath(); ctx.moveTo(tailx, taily); ctx.lineTo(tipx - ux * head * 0.8, tipy - uy * head * 0.8); ctx.stroke();
+  ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.15; ctx.fillStyle = pal.core;
+  ctx.beginPath();
+  ctx.moveTo(tipx, tipy);
+  ctx.lineTo(tipx - ux * head + nx * head * 0.5, tipy - uy * head + ny * head * 0.5);
+  ctx.lineTo(tipx - ux * head * 1.5, tipy - uy * head * 1.5);
+  ctx.lineTo(tipx - ux * head - nx * head * 0.5, tipy - uy * head - ny * head * 0.5);
+  ctx.closePath(); ctx.fill();
+  ctx.shadowBlur = 0; ctx.strokeStyle = pal.edge; ctx.lineWidth = Math.max(1, tw * 0.02); ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.fillStyle = pal.spark;
+  for (const sgn of [1, -1]) {
+    ctx.beginPath();
+    ctx.moveTo(tailx, taily);
+    ctx.lineTo(tailx - ux * head * 0.9 + sgn * nx * head * 0.8, taily - uy * head * 0.9 + sgn * ny * head * 0.8);
+    ctx.lineTo(tailx - ux * head * 0.3 + sgn * nx * head * 0.2, taily - uy * head * 0.3 + sgn * ny * head * 0.2);
+    ctx.closePath(); ctx.fill();
+  }
+}
+function drawMagicProj(ppx, ppy, ux, uy, tw, pal, now, seed) {
+  ctx.globalAlpha = 0.5; ctx.strokeStyle = pal.trail; ctx.lineCap = 'round'; ctx.lineWidth = tw * 0.14;
+  ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.5;
+  ctx.beginPath(); ctx.moveTo(ppx - ux * tw * 0.5, ppy - uy * tw * 0.5); ctx.lineTo(ppx, ppy); ctx.stroke();
+  ctx.globalAlpha = 0.95;
+  const g = ctx.createRadialGradient(ppx, ppy, 0, ppx, ppy, tw * 0.28);
+  g.addColorStop(0, pal.core); g.addColorStop(0.5, pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.28, 0, PI2); ctx.fill();
+  ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.07, 0, PI2); ctx.fill();
+  const a = now / 90 + seed; ctx.fillStyle = pal.spark;
+  for (let i = 0; i < 3; i++) { const aa = a + i * 2.1, rx = ppx + Math.cos(aa) * tw * 0.18, ry = ppy + Math.sin(aa) * tw * 0.18; ctx.fillRect(rx - 1, ry - 1, 2, 2); }
+}
+function drawFireProj(ppx, ppy, ux, uy, tw) {
+  for (let i = 3; i >= 1; i--) {
+    const bx = ppx - ux * tw * 0.18 * i, by = ppy - uy * tw * 0.18 * i, r = tw * (0.22 - 0.04 * i);
+    ctx.globalAlpha = 0.5 * (1 - i / 4);
+    const g = ctx.createRadialGradient(bx, by, 0, bx, by, r);
+    g.addColorStop(0, '#ffe08a'); g.addColorStop(1, 'rgba(255,80,20,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bx, by, r, 0, PI2); ctx.fill();
+  }
+  ctx.globalAlpha = 1; ctx.shadowColor = '#ff7a2a'; ctx.shadowBlur = tw * 0.5;
+  const g = ctx.createRadialGradient(ppx, ppy, 0, ppx, ppy, tw * 0.2);
+  g.addColorStop(0, '#fff'); g.addColorStop(0.4, '#ffd24a'); g.addColorStop(1, '#ff5a1a');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.2, 0, PI2); ctx.fill(); ctx.shadowBlur = 0;
+}
+function drawIceProj(ppx, ppy, ux, uy, tw, pal) {
+  const nx = -uy, ny = ux, L = tw * 0.28, W = tw * 0.12;
+  ctx.globalAlpha = 0.4; ctx.strokeStyle = pal.trail; ctx.lineCap = 'round'; ctx.lineWidth = tw * 0.08;
+  ctx.beginPath(); ctx.moveTo(ppx - ux * tw * 0.4, ppy - uy * tw * 0.4); ctx.lineTo(ppx, ppy); ctx.stroke();
+  ctx.globalAlpha = 1; ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.35; ctx.fillStyle = pal.core;
+  ctx.beginPath();
+  ctx.moveTo(ppx + ux * L, ppy + uy * L);
+  ctx.lineTo(ppx + nx * W, ppy + ny * W);
+  ctx.lineTo(ppx - ux * L * 0.7, ppy - uy * L * 0.7);
+  ctx.lineTo(ppx - nx * W, ppy - ny * W);
+  ctx.closePath(); ctx.fill();
+  ctx.shadowBlur = 0; ctx.strokeStyle = pal.edge; ctx.lineWidth = Math.max(1, tw * 0.02); ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.globalAlpha = 0.8; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(1, tw * 0.02);
+  ctx.beginPath(); ctx.moveTo(ppx + ux * L, ppy + uy * L); ctx.lineTo(ppx - nx * W, ppy - ny * W); ctx.stroke();
+}
+function drawSparkProj(ppx, ppy, ux, uy, tw, pal) {
+  const tailx = ppx - ux * tw * 0.5, taily = ppy - uy * tw * 0.5;
+  ctx.globalAlpha = 1;
+  _ultBolt(tailx, taily, ppx, ppy, [0.7, -0.8, 0.6, -0.5], tw * 0.35, pal.core, tw * 0.06 + 1);
+  _ultBolt(tailx, taily, ppx, ppy, [0.7, -0.8, 0.6, -0.5], tw * 0.35, pal.glow, tw * 0.03);
+  ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.4; ctx.fillStyle = pal.core;
+  ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.08, 0, PI2); ctx.fill(); ctx.shadowBlur = 0;
+}
+function drawVenomProj(ppx, ppy, ux, uy, tw, pal) {
+  ctx.globalAlpha = 0.45; ctx.strokeStyle = pal.trail; ctx.lineCap = 'round'; ctx.lineWidth = tw * 0.1;
+  ctx.beginPath(); ctx.moveTo(ppx - ux * tw * 0.4, ppy - uy * tw * 0.4); ctx.lineTo(ppx, ppy); ctx.stroke();
+  ctx.globalAlpha = 1; ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.4; ctx.fillStyle = pal.glow;
+  ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.17, 0, PI2); ctx.fill();
+  ctx.shadowBlur = 0; ctx.fillStyle = pal.core;
+  ctx.beginPath(); ctx.arc(ppx - ux * tw * 0.03, ppy - uy * tw * 0.03, tw * 0.07, 0, PI2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.beginPath(); ctx.arc(ppx + tw * 0.04, ppy - tw * 0.04, tw * 0.03, 0, PI2); ctx.fill();
+}
+function drawProjectileKind(p, ppx, ppy, ux, uy, tw, now) {
+  const kind = p.kind || 'arrow';
+  const pal = paletteFor(p.element || projectileElement(kind));
+  switch (kind) {
+    case 'magic': case 'holy': case 'blood': case 'hex': drawMagicProj(ppx, ppy, ux, uy, tw, pal, now, p._seed || 0); break;
+    case 'fire': drawFireProj(ppx, ppy, ux, uy, tw); break;
+    case 'ice': drawIceProj(ppx, ppy, ux, uy, tw, pal); break;
+    case 'spark': drawSparkProj(ppx, ppy, ux, uy, tw, pal); break;
+    case 'venom': drawVenomProj(ppx, ppy, ux, uy, tw, pal); break;
+    default: drawArrowProj(ppx, ppy, ux, uy, tw, pal); break;   // arrow / bone
+  }
+}
+// A cosmetic spell bolt from the hero to a struck foe (damage already resolved in
+// resolveCast) — element-tinted, with the arrival burst wired via projectileArrive.
+function spawnCastProjectile(tx, ty, element, kind, opts) {
+  opts = opts || {};
+  projectiles.push({ x: player.fx, y: player.fy, tx, ty, vx: 0, vy: 0, dmg: 0,
+    color: paletteFor(element).glow, life: 0.75, cosmetic: true, orb: kind === 'magic',
+    kind, element, burst: !!opts.burst, burstR: opts.burstR || 1.4, _seed: Math.random() * PI2 });
+}
+// A cosmetic bolt from a monster toward the hero (its damage was already dealt by
+// the ability) — sells a ranged boss trick as a real projectile hero-ward.
+function spawnBossProjectile(e, kind, element) {
+  const a = bossAnchor(e);
+  projectiles.push({ x: a.x + 0.5, y: a.y + 0.5, vx: 0, vy: 0, dmg: 0, color: paletteFor(element).glow,
+    life: 0.6, cosmetic: true, orb: kind === 'magic', kind, element, _seed: Math.random() * PI2 });
+}
+// Fired from updateProjectiles the instant a cosmetic bolt reaches its mark: an
+// element-appropriate impact (or a radial burst for a `blast` cast).
+function projectileArrive(p) {
+  const el = p.element || projectileElement(p.kind || 'magic');
+  const pal = paletteFor(el);
+  if (p.burst) _fxPush('nova', p.tx, p.ty, pal, { r: p.burstR || 1.4, dur: 460, shardN: 13 });
+  else _fxPush('impact', p.tx != null ? p.tx : player.fx, p.ty != null ? p.ty : player.fy, pal, { dur: 320, power: p.orb ? 0.9 : 0.7 });
+  spawnParticles(p.x - 0.5, p.y - 0.5, pal.spark, p.burst ? 10 : 5, p.burst ? 0.12 : 0.08);
+}
+
+// ── High-level VFX dispatchers ── one call per cast / swing / boss trick picks the
+// element + archetype and lays down the right animation, so the combat code stays
+// declarative and every source of damage looks distinct.
+function castSoundFor(c, el) {
+  if (c.summon) return 'summoncast';
+  if ((c.buff || c.heal) && !c.spell && !c.wpn) return 'buffcast';
+  if (c.shape === 'line') return 'beamcast';
+  if (c.shape === 'nova') return 'novacast';
+  if (c.wpn) return 'slash';
+  return ({ fire: 'castfire', ice: 'castice', lightning: 'castspark', holy: 'castholy',
+    venom: 'castvenom', arcane: 'castarcane', blood: 'castarcane' })[el] || 'castarcane';
+}
+// The whole animation + sound for one NON-epic cast (epics keep spawnUltimateFx).
+function playCastVfx(node, c, center, targets) {
+  const el = elementOf(node.name, node.icon, c.wpn ? 'physical' : 'gold');
+  const pal = paletteFor(el);
+  const arch = castArchetype(c.shape);
+  sfx(castSoundFor(c, el));
+  const px = player.x + 0.5, py = player.y + 0.5;
+  const tgts = (targets || []).filter(o => o && o.x != null);
+  switch (arch) {
+    case 'aura':
+      _fxPush('aura', px, py, c.heal ? paletteFor('life') : pal, { variant: c.heal ? 'mend' : 'buff', dur: 700, moteN: 14 });
+      break;
+    case 'slash':
+      for (const o of tgts) {
+        const ang = _angTo(player.x, player.y, o.x, o.y);
+        _fxPush('slash', o.x + 0.5, o.y + 0.5, pal, { ang, spread: 0.9, reach: 0.72, dur: 300 });
+        _fxPush('impact', o.x + 0.5, o.y + 0.5, pal, { dur: 300, power: 0.9 });
+      }
+      break;
+    case 'arcWide': {
+      const c0 = tgts[0] || center, ang = _angTo(player.x, player.y, c0.x, c0.y);
+      _fxPush('slash', px, py, pal, { ang, spread: 1.7, reach: 1.15, dur: 340 });
+      for (const o of tgts) _fxPush('impact', o.x + 0.5, o.y + 0.5, pal, { dur: 280, power: 0.8 });
+      break;
+    }
+    case 'nova':
+      _fxPush('nova', px, py, pal, { r: (c.radius || 1) + 0.4, dur: 520, shardN: 16 });
+      for (const o of tgts) _fxPush('impact', o.x + 0.5, o.y + 0.5, pal, { dur: 260, power: 0.7 });
+      if (el === 'venom') _fxPush('cloud', px, py, pal, { r: (c.radius || 1) + 0.3, dur: 900 });
+      break;
+    case 'projectile': {
+      const dests = (c.shape === 'chain' || c.shape === 'line' || c.shape === 'random') ? tgts : [center];
+      for (const o of dests) if (o && o.x != null) spawnCastProjectile(o.x + 0.5, o.y + 0.5, el, projKindFor(el), {});
+      break;
+    }
+    case 'blast':
+      spawnCastProjectile(center.x + 0.5, center.y + 0.5, el, projKindFor(el), { burst: true, burstR: (c.radius || 1) + 0.5 });
+      break;
+    case 'beam': {
+      let far = center;
+      for (const o of tgts) if (Math.abs(o.x - player.x) + Math.abs(o.y - player.y) > Math.abs(far.x - player.x) + Math.abs(far.y - player.y)) far = o;
+      const dx = far.x - player.x, dy = far.y - player.y, m = Math.hypot(dx, dy) || 1;
+      _fxPush('beam', px, py, pal, { x2: far.x + 0.5 + dx / m * 0.8, y2: far.y + 0.5 + dy / m * 0.8, dur: 520 });
+      for (const o of tgts) _fxPush('impact', o.x + 0.5, o.y + 0.5, pal, { dur: 260, power: 0.7 });
+      break;
+    }
+    case 'chain': {
+      const pts = [{ x: px, y: py }].concat(tgts.map(o => ({ x: o.x + 0.5, y: o.y + 0.5 })));
+      if (pts.length > 1) _fxPush('chain', px, py, pal, { pts, dur: 420 });
+      break;
+    }
+    case 'blinkStrike':
+      _fxPush('blink', px, py, pal, { dur: 360 });
+      for (const o of tgts) {
+        const ang = _angTo(player.x, player.y, o.x, o.y);
+        _fxPush('slash', o.x + 0.5, o.y + 0.5, pal, { ang, spread: 0.9, reach: 0.72, dur: 300 });
+        _fxPush('impact', o.x + 0.5, o.y + 0.5, pal, { dur: 300, power: 1 });
+      }
+      break;
+    case 'conjure':
+      _fxPush('aura', px, py, pal, { variant: 'conjure', dur: 760, moteN: 16 });
+      break;
+    case 'multiStrike':
+      for (const o of tgts) _fxPush('impact', o.x + 0.5, o.y + 0.5, pal, { dur: 320, power: 0.9 });
+      break;
+    default:
+      _fxPush('impact', (center.x || 0) + 0.5, (center.y || 0) + 0.5, pal, { dur: 320 });
+  }
+  if ((c.radius || 0) >= 3 || (c.wpn || 0) >= 2.2 || (c.spell || 0) >= 1.8) screenFlash(pal.glow);
+}
+// The animation for one basic weapon attack (auto-attack / move-into / ranged poke).
+function playWeaponVfx(style, targetE, ranged) {
+  if (!targetE || targetE.x == null) return;
+  const arch = weaponArchetype(style);
+  const pal = paletteFor('physical');
+  const ang = _angTo(player.x, player.y, targetE.x, targetE.y);
+  const tcx = targetE.x + 0.5, tcy = targetE.y + 0.5;
+  switch (arch) {
+    case 'arrow': spawnCastProjectile(tcx, tcy, 'physical', 'arrow', {}); break;
+    case 'magicBolt': spawnCastProjectile(tcx, tcy, 'arcane', 'magic', {}); break;
+    case 'thrust':
+      _fxPush('beam', player.x + 0.5, player.y + 0.5, pal, { x2: tcx, y2: tcy, dur: 240 });
+      _fxPush('impact', tcx, tcy, pal, { dur: 240, power: 0.7 });
+      break;
+    case 'smash': _fxPush('smash', tcx, tcy, pal, { dur: 340 }); break;
+    case 'slashDouble':
+      _fxPush('slash', tcx, tcy, pal, { ang: ang - 0.5, spread: 0.8, reach: 0.62, dur: 220 });
+      _fxPush('slash', tcx, tcy, pal, { ang: ang + 0.5, spread: 0.8, reach: 0.62, dur: 260 });
+      break;
+    case 'arcWide': _fxPush('slash', tcx, tcy, pal, { ang, spread: 1.5, reach: 0.9, dur: 300 }); break;
+    case 'scytheArc': _fxPush('slash', tcx, tcy, paletteFor('life'), { ang, spread: 1.45, reach: 0.98, dur: 340 }); break; // reap: a long green-tinged crescent (sells the lifesteal)
+    case 'jab': _fxPush('impact', tcx, tcy, pal, { dur: 220, power: 0.6 }); break;
+    default: _fxPush('slash', tcx, tcy, pal, { ang, spread: 0.95, reach: 0.72, dur: 260 });   // slashArc
+  }
+}
+// The animation for one boss / elite special (looked up by ability name). Runs
+// after the ability resolves; ranged tricks additionally loose a real bolt hero-ward.
+function playBossVfx(e, ab) {
+  const spec = bossFxFor(ab);
+  if (!spec) return;
+  const pal = paletteFor(spec.el);
+  const a = bossAnchor(e);
+  const bcx = a.x + 0.5, bcy = a.y + 0.5, pcx = player.x + 0.5, pcy = player.y + 0.5;
+  switch (spec.type) {
+    case 'flameLine': _fxPush('beam', bcx, bcy, pal, { x2: pcx, y2: pcy, dur: 360 }); _fxPush('emberRain', pcx, pcy, pal, { r: 1.6, dur: 640 }); break;
+    case 'emberRain': _fxPush('emberRain', pcx, pcy, pal, { r: 1.9, dur: 760 }); break;
+    case 'groundCracks': _fxPush('cracks', pcx, pcy, pal, { r: 2.4, dur: 560 }); break;
+    case 'shockRing': _fxPush('nova', bcx, bcy, pal, { r: 2.6, dur: 520, shardN: 14 }); break;
+    case 'frostBurst': _fxPush('nova', pcx, pcy, pal, { r: 1.8, dur: 520, shardN: 16 }); _fxPush('impact', pcx, pcy, pal, { dur: 420, power: 1 }); break;
+    case 'siphonBeam': _fxPush('beam', pcx, pcy, pal, { x2: bcx, y2: bcy, dur: 520 }); break;
+    case 'hexBolt': spawnBossProjectile(e, 'hex', 'arcane'); break;
+    case 'venomSpit': spawnBossProjectile(e, 'venom', 'venom'); _fxPush('cloud', pcx, pcy, pal, { r: 1.3, dur: 900 }); break;
+    case 'pullSwirl': _fxPush('swirl', bcx, bcy, pal, { r: 2.4, dur: 560 }); break;
+    case 'hookLine': _fxPush('beam', bcx, bcy, pal, { x2: pcx, y2: pcy, dur: 300 }); _fxPush('impact', pcx, pcy, pal, { dur: 280 }); break;
+    case 'spinArc': _fxPush('slash', bcx, bcy, pal, { ang: 0, spread: 3.1, reach: 1.2, dur: 360 }); break;
+    case 'dashTrail': _fxPush('beam', bcx, bcy, pal, { x2: pcx, y2: pcy, dur: 280 }); break;
+    case 'auraFlare': _fxPush('aura', bcx, bcy, pal, { variant: 'flare', dur: 640, moteN: 14 }); break;
+    case 'ward': _fxPush('aura', bcx, bcy, pal, { variant: 'ward', dur: 700 }); break;
+    case 'mendMotes': _fxPush('aura', bcx, bcy, pal, { variant: 'mend', dur: 760, moteN: 12 }); break;
+    case 'conjure': _fxPush('aura', bcx, bcy, pal, { variant: 'conjure', dur: 760, moteN: 14 }); break;
+    case 'blinkPuff': _fxPush('blink', bcx, bcy, pal, { dur: 400 }); break;
+    case 'volley': break;   // the fan of bolts is already loosed by the ability
+  }
 }
 
 // ══════════════════════════════════════════
@@ -18156,6 +18748,10 @@ function attackEnemy(e, opts = {}) {
   const style = opts.style || weaponStyle();
   const ranged = !!opts.ranged;
   const label = enemyLabel(e);
+  // Draw the swing itself: a slash/impact arc for melee, or a real fired arrow /
+  // magic bolt for a bow/staff (previously ranged attacks loosed NOTHING visible).
+  if (e) playWeaponVfx(style, e, ranged);
+  const atkSnd = style === 'shot' ? 'bowshot' : style === 'bolt' ? 'magicbolt' : 'attack';
   let anyCrit = false, dealtTotal = 0;
 
   let anyMiss = false;
@@ -18180,11 +18776,11 @@ function attackEnemy(e, opts = {}) {
 
   if (style === 'flurry') {
     // Dagger: two quick lighter strikes, extra crit rolled per hit.
-    sfx('attack'); swing(e, 0.62); swing(e, 0.62);
+    sfx(atkSnd); swing(e, 0.62); swing(e, 0.62);
     if (dealtTotal > 0) log(`${anyCrit ? '💥 ' : ''}<span data-spr=w_dagger></span> ${label} -${dealtTotal}`, anyCrit ? 'important' : '');
     else log(`🌬️ ${label} dodged`);
   } else {
-    sfx('attack');
+    sfx(atkSnd);
     swing(e);
     const vi = style === 'shot' ? '<span data-spr=w_bow></span>' : style === 'bolt' ? '<span data-spr=ic_orb></span>'
       : style === 'thrust' ? '<span data-spr=w_spear></span>' : style === 'cleave' ? '<span data-spr=w_axe></span>'
@@ -18697,25 +19293,13 @@ function resolveCast(node, rank) {
   // Feedback. Epic casts — every tree ULTIMATE capstone AND every ASCENSION-path
   // active — get a full-screen cinematic (meteor slam, frost nova, lightning storm,
   // searing beam, holy pillar, summoning vortex, ground slam) that carries its own
-  // sound, flash and camera shake in place of the small per-cast feedback below.
+  // sound, flash and camera shake. Every OTHER cast now routes through playCastVfx,
+  // which lays down the element- and shape-appropriate animation (a fire bolt, an
+  // ice nova, a lightning beam, a poison cloud, a weapon slash…) plus its sound and
+  // any flying projectiles — replacing the old one-orb-fits-all flying bolt.
   const _isUlt = isEpicCast(node);
-  if (_isUlt) {
-    spawnUltimateFx(node, c, center, targets);
-  } else {
-    sfx(c.shape === 'self' ? 'potion' : (c.summon ? 'shrine' : (targets.length > 2 ? 'boss' : 'attack')));
-    if (c.shape !== 'self' && c.shape !== 'summon') spawnFloatingText(center.x, center.y, '', '#ffe6a0');
-    if ((c.radius || 0) >= 3 || (c.wpn || 0) >= 2.2 || (c.spell || 0) >= 1.8) screenFlash('#ffd27a');
-  }
-
-  // ── FLYING BOLTS ── ranged casts loose a visible projectile from the hero to
-  // each struck foe, coloured to the spell's element (fire orange, ice blue,
-  // spark yellow, hex purple…). Melee/nova/self stay untouched (they hit around you).
-  // Ultimates skip this — their cinematic already sells the strike.
-  if (!_isUlt && targets.length && !['self', 'summon', 'melee', 'cleave', 'nova'].includes(c.shape)) {
-    const boltColor = castVisual(node);
-    const dests = (c.shape === 'chain' || c.shape === 'line' || c.shape === 'random') ? targets : [center];
-    for (const e of dests) if (e) spawnSpellBolt((e.x || 0) + 0.5, (e.y || 0) + 0.5, boltColor);
-  }
+  if (_isUlt) spawnUltimateFx(node, c, center, targets);
+  else playCastVfx(node, c, center, targets);
 
   // Summons short-circuit (no damage pass).
   if (c.summon) { doSummon(c.summon, rank); return true; }
@@ -18934,11 +19518,18 @@ function runMinionTurn() {
     return true;
   });
 }
+// Projectile look for a ranged summon's shot, by minion kind.
+const MINION_BOLT_KIND = { skelarcher: 'arrow', elemental: 'fire', spirit: 'holy', totem: 'spark' };
+function spawnMinionBolt(m, e) {
+  const kind = MINION_BOLT_KIND[m.kind] || 'magic';
+  projectiles.push({ x: m.x + 0.5, y: m.y + 0.5, tx: e.x + 0.5, ty: e.y + 0.5, vx: 0, vy: 0, dmg: 0,
+    color: m.color, life: 0.55, cosmetic: true, orb: kind === 'magic', kind, element: projectileElement(kind), _seed: Math.random() * PI2 });
+}
 function minionAttack(m, e, ranged) {
   let dmg = Math.round(m.dmg * rnd(85, 115) / 100);
   m.hitAt = Date.now();
   triggerAttackAnim(m, e.x, e.y); // quick lunge toward the foe it's striking
-  if (ranged) spawnFloatingText(m.x, m.y, '➳', m.color);
+  if (ranged) spawnMinionBolt(m, e); // a real flying bolt to the foe, not a static glyph
   dmg = Math.max(1, Math.min(dmg, Math.ceil(e.maxHp * (e.isBoss ? 0.2 : 0.5))));
   dealDamage(e, dmg, false);
 }
@@ -19299,6 +19890,17 @@ function goblinFlee(e) {
 }
 
 // A melee enemy strikes the player from an adjacent tile.
+// A monster's melee blow on the hero: a crimson claw/impact swipe oriented from the
+// foe, and a heavier ground-smash for brutes and big multi-tile foes — so a monster
+// attack reads as a real strike, not just the sprite's lunge.
+function playEnemyMeleeVfx(e, beh) {
+  const pal = paletteFor('blood');
+  const heavy = (beh && beh.hitMult && beh.hitMult >= 1.4) || (e.size || 1) > 1;
+  if (heavy) { _fxPush('smash', player.x + 0.5, player.y + 0.5, pal, { dur: 320 }); return; }
+  const ang = _angTo(e.x, e.y, player.x, player.y);
+  _fxPush('slash', player.x + 0.5, player.y + 0.5, pal, { ang, spread: 0.85, reach: 0.62, dur: 240 });
+  _fxPush('impact', player.x + 0.5, player.y + 0.5, pal, { dur: 220, power: 0.6 });
+}
 function enemyAttackPlayer(e) {
   if ((e.atkCd || 0) > 0) return;           // still winding up between swings
   e.atkCd = enemyAttackInterval(e);
@@ -19320,7 +19922,7 @@ function enemyAttackPlayer(e) {
   notePlayerDamage(dmg, enemyLabel(e));
   sfx('hurt');
   spawnFloatingText(player.x, player.y, `${dmg}`, '#ff3344');
-  if (dmg > 0) { spawnParticles(player.x, player.y, '#d22a3a', 6, 0.07); addShake(4); }
+  if (dmg > 0) { spawnParticles(player.x, player.y, '#d22a3a', 6, 0.07); addShake(4); playEnemyMeleeVfx(e, beh); }
   log(`💢 ${enemyLabel(e)} -${dmg}`);
   if (player.hp > 0 && player.hp <= player.maxHp * 0.25) fireSkillTrigger('lowhp', { enemy: e });
   if (player.hp <= player.maxHp * 0.25) screenFlash('#cc0000');
@@ -19358,8 +19960,11 @@ function enemyRangedAttack(e) {
   // and on-hit procs all resolve in landEnemyRangedHit — but only if the bolt
   // actually reaches the hero, so sidestepping its path avoids the hit entirely.
   const raw = Math.round(e.dmg * rnd(75, 110) / 100);
-  spawnEnemyBolt(e, raw, e.isBoss ? '#ff7766' : '#c77dff');
-  sfx('attack');                            // the twang of the loose; the thud plays on impact
+  // Bosses hurl a flaming energy bolt; lesser ranged foes (casters) sling a hex orb
+  // — never the fletched arrow, which now reads exclusively as archery (traps, bow).
+  const kind = e.isBoss ? 'fire' : 'hex';
+  spawnEnemyBolt(e, raw, e.isBoss ? '#ff8a4a' : '#c77dff', kind);
+  sfx(e.isBoss ? 'castfire' : 'magicbolt');  // the release; the thud plays on impact
 }
 
 // Resolve a foe's ranged bolt actually striking the hero (called from
@@ -19517,7 +20122,7 @@ function bossSpecial(e, dist, beh) {
     e.enraged = true;
     e.dmg = Math.round(e.dmg * 1.5);
     log(`<span data-spr=b_dragon></span> ${e.name} ROARS and flies into a rage!`, 'important');
-    sfx('boss'); screenFlash('#ff3344'); addShake(6);
+    sfx('boss'); screenFlash('#ff3344'); addShake(6); playBossVfx(e, 'enrage');
     return true;
   }
   e.cd = (e.cd || 0) - 1;
@@ -19532,6 +20137,11 @@ function bossSpecial(e, dist, beh) {
 // Fire one named special; returns true if it actually went off (each sets its own
 // cooldown on success). Returning false lets bossSpecial fall through to the next.
 function tryBossAbility(e, ab, dist) {
+  const fired = _dispatchBossAbility(e, ab, dist);
+  if (fired) playBossVfx(e, ab);   // lay down the ability's animation (telegraph / bolt / ring / aura)
+  return fired;
+}
+function _dispatchBossAbility(e, ab, dist) {
   switch (ab) {
     case 'summon':     return bossSummonWave(e, dist);
     case 'firewall':   return bossFirewall(e, dist);
@@ -19741,7 +20351,8 @@ function bossCurseBlast(e, dist) {
 // A boss-fired damaging bolt with a proper death-recap label (see updateProjectiles).
 function spawnBossBolt(x, y, dx, dy, dmg, color, e) {
   const m = Math.hypot(dx, dy) || 1;
-  projectiles.push({ x, y, vx: dx / m * 6, vy: dy / m * 6, dmg, color: color || '#ff9a3d', life: 3, label: enemyLabel(e) });
+  projectiles.push({ x, y, vx: dx / m * 6, vy: dy / m * 6, dmg, color: color || '#ff9a3d', life: 3,
+    label: enemyLabel(e), kind: 'fire', element: 'fire', _seed: Math.random() * PI2 });
 }
 
 // Charge: the boss lunges in a straight line toward the hero, then tramples on
@@ -26898,6 +27509,20 @@ const __DL_FN_BRIDGE = {
   spellElement,
   castVisual,
   spawnSpellBolt,
+  // Attack / spell / monster-attack VFX engine
+  spawnFx: _fxPush,
+  clearAttackFx,
+  drawAttackFx,
+  playCastVfx,
+  playWeaponVfx,
+  playBossVfx,
+  playEnemyMeleeVfx,
+  spawnCastProjectile,
+  spawnBossProjectile,
+  spawnMinionBolt,
+  drawProjectileKind,
+  projectileArrive,
+  projKindFor,
   enemiesAdjacent,
   spreadBurnFrom,
   staticStacks,

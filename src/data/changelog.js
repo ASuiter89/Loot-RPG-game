@@ -7,6 +7,15 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "large", v: "Full combat VFX overhaul", by: "Claude", notes: [
+    "Every skill, spell, weapon swing and monster attack now has its own animation, tinted to its element — fire, ice, lightning, holy, poison, blood, arcane.",
+    "Weapon swings draw on the canvas at last: a crescent slash (sword), a wide sweep (axe/scythe), a rapid double-flick (dagger), an overhead smash (mace), a reaching stab (spear).",
+    "Bows and staves finally fire something — a real arrow or magic bolt flies to the target, instead of the foe just taking damage from across the room with nothing visible.",
+    "Redrawn projectiles: crisp element sprites — fletched arrows, glowing orbs, flame-trailed fireballs, crystalline ice shards, jagged lightning, wet venom globs — replacing the old thin vector arrows. Ranged casters now sling hex orbs, not arrows.",
+    "Spells read at a glance: bolts fly and burst, novas ring outward, beams lance down a lane, lightning chains foe to foe, poison leaves a lingering cloud, buffs bloom an aura, summons open a rune circle.",
+    "Monsters animate their blows — a claw swipe each strike (a heavy ground-smash for brutes and bosses). Boss tricks get proper telegraphs: flame lines, ember rain, quake cracks, shockwave rings, frost bursts, life-siphon beams, hex and venom bolts, pull vortices. Shielded and enraged bosses now show a lasting aura.",
+    "New element-flavoured cast sounds for fired shots, weapon swings and each spell school.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Loot bag sorts by Power by default", by: "Claude", notes: [
     "Bag now opens sorted by Power instead of Rarity — strongest gear surfaces first. Switch back to Rarity, Slot or Value any time.",
   ] },
