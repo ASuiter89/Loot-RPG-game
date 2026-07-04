@@ -3,6 +3,15 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Mix the music — fade each layer to taste", by: "Claude", notes: [
+    "Audio settings now has four faders for the soundtrack: BASS, CHORDS, MELODY and DRUMS. Turn any layer up, down, or off, independently of the others.",
+    "Each fader steps like the volume controls — tap to raise it a notch, wrapping from full back to off — and remembers where you set it.",
+  ] },
+  { date: "2026-07-04", size: "medium", v: "Every music style gets a real bassline & chord groove", by: "Claude", notes: [
+    "The soundtrack no longer holds one flat chord per bar. Every style now plays a MOVING bassline — octave hops, syncopation, and walk-ups that lead into the next chord — plus a chord part with an actual rhythm instead of a single held note.",
+    "All ten styles get their own groove so each sounds distinct: driving for Cavern, machine-like for Forge, martial for March, lazy and swung for Tide, ambient and still for Mist and Veil, and pounding for the boss theme.",
+    "The music keeps its per-performance key, tempo, and melody variation on top, so it still never repeats note-for-note.",
+  ] },
   { date: "2026-07-03", size: "big", v: "Deep performance pass — the lag is gone", by: "Claude", notes: [
     "Frame rate stays smooth on deep floors and stays smooth however long the game has been open.",
     "Combat log keeps the newest 200 lines; endless growth was quietly slowing every message.",
