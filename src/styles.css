@@ -2542,10 +2542,13 @@
   .shop-row:hover .shop-buy-btn { color: var(--paper); opacity: 1; }
   .shop-buy-btn:active { background: transparent; color: var(--paper); }
   .shop-buy-btn:disabled { background: transparent; color: var(--btn-off); opacity: 0.55; cursor: not-allowed; }
-  /* Two-column layout for town service lists (bounty, merchant, mercs, transmuter). */
-  .shop-grid { display: grid; grid-template-columns: 1fr; gap: 6px; }
+  /* Fluid service lists (bounty, merchant, mercs, transmuter): one column on a
+     phone (the min(100%,…) floor keeps a lone card within the viewport), fanning
+     out to more as width allows so a wide unfolded foldable / desktop isn't stuck
+     at a single tall column. The hover-gated desktop block (below) refines the cap
+     further; this base is what every touch width uses. */
+  .shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(260px * var(--ui-scale,1))), 1fr)); gap: 6px; }
   .shop-grid .shop-row { margin-bottom: 0; }
-  @media (min-width: 760px) { .shop-grid { grid-template-columns: 1fr 1fr; } }
   /* Transmuter piece picker: each unlocked piece of the chosen rarity is a whole-
      row toggle; the ticked three are what the crucible spends (gold-accented). */
   .shop-row.transmute-pick { cursor: pointer; }
@@ -2664,7 +2667,9 @@
     border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--accent-teal) 6%, transparent);
   }
   #mystic-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; }
-  .pact-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  /* Fluid: one column on a phone (the min(100%,…) floor keeps a lone card within
+     the viewport), fanning out to two on a wide unfolded foldable / desktop. */
+  .pact-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(300px * var(--ui-scale,1))), 1fr)); gap: 12px; }
   .pact-card {
     position: relative; overflow: hidden;
     padding: 12px; border-radius: 10px;
@@ -2941,7 +2946,18 @@
   @keyframes tbBubble { 0% { opacity: 0; transform: translate(0,0) scale(.6); } 15% { opacity: .8; }
     90% { opacity: .5; } 100% { opacity: 0; transform: translate(var(--dx,14px), -90vh) scale(1); } }
   /* Town hub menu — town is a menu of services, not a walkable plaza. */
-  .town-menu { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  /* Fluid service grid: pack as many min-width columns as fit, but the
+     min(100%, …) floor means a single column can NEVER exceed the viewport — so a
+     narrow phone / foldable cover screen drops to ONE column and scrolls instead
+     of clipping the right column off-screen, while a wide unfolded foldable / the
+     desktop override below fans out to several. min-col scales with UI SIZE so
+     bigger text keeps roomy tiles (and simply drops a column) rather than
+     overflowing. */
+  .town-menu {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(230px * var(--ui-scale,1))), 1fr));
+    gap: 8px;
+  }
   /* Small opt-in toggle for the town's background chatter — lives under the menu. */
   .town-amb-foot { display: flex; justify-content: center; margin-top: 10px; }
   .town-amb-toggle {
@@ -3058,7 +3074,11 @@
     grid-column: auto;
     justify-self: auto;
     margin: 0;
-    flex: 1 1 0;
+    /* A real flex-basis (not 0) so the pair STACKS — one full-width CTA per row —
+       once the row is too narrow to seat both at ~210px (i.e. on a phone / foldable
+       cover screen), and only sits side by side when there's room. min-width:0 lets
+       a long label wrap rather than force overflow. */
+    flex: 1 1 210px;
     min-width: 0;
     padding: var(--space-7) var(--space-8);
   }
@@ -3619,7 +3639,11 @@
     color: var(--xp); font-size: 1.4rem; font-weight: bold; letter-spacing: 1px;
     margin: 12px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border);
   }
-  .gate-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  /* Fully dynamic floor picker: pack as many number tiles as fit, wrapping to a
+     new row instead of clipping the 5th column on a narrow / foldable cover screen
+     (deep Endless floors carry 3-digit numbers + grave/door icons that overflow a
+     fixed 5-up track). Floor scales with UI SIZE so bigger digits keep their tile. */
+  .gate-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(50px * var(--ui-scale,1))), 1fr)); gap: 8px; }
   .gate-floor {
     display: flex; align-items: center; justify-content: center;
     min-height: 64px; padding: 14px 0; border: 2px solid var(--border);
@@ -3648,7 +3672,10 @@
   }
   .gate-grave-note { color: var(--gold); }
   /* Difficulty tier picker at the top of the Dungeon Gate. */
-  .gate-diffs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
+  /* Fully dynamic difficulty picker: 4-up when there's room, reflowing to 2×2 / 1-up
+     on a narrow screen instead of clipping "Hardened"/"Endless" off the right edge.
+     Floor scales with UI SIZE so a longer label at a larger font keeps its tile. */
+  .gate-diffs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(80px * var(--ui-scale,1))), 1fr)); gap: 6px; margin-bottom: 8px; }
   .gate-diff {
     padding: 9px 0; border: 1px solid var(--border); border-radius: 5px;
     background: var(--orange-850); color: var(--gold-200); font-family: var(--font-ui);
@@ -3682,13 +3709,16 @@
   }
   .forge-grid { display: grid; gap: 5px; }
   .forge-slots, .forge-bases { grid-template-columns: repeat(2, 1fr); }
-  .forge-cats { grid-template-columns: repeat(4, 1fr); }
-  .forge-tiers { grid-template-columns: repeat(5, 1fr); }
-  /* No "loners": rather than strand a single trailing tile alone at the start of
-     a final row, centre it. The base list is two columns (centre a lone last
-     tile full-width at column size); the weapon-category grid is four. */
+  /* Category + tier pickers pack as many tiles as fit and wrap the rest, so they
+     never clip the last column on a narrow / foldable cover screen (and expand on a
+     wide unfolded one). Floors scale with UI SIZE so bigger labels keep their tile. */
+  .forge-cats { grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(70px * var(--ui-scale,1))), 1fr)); }
+  .forge-tiers { grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(58px * var(--ui-scale,1))), 1fr)); }
+  /* No "loners" in the two-column base list: centre a lone trailing tile rather
+     than stranding it. (The category/tier grids reflow dynamically via auto-fit, so
+     they don't carry a fixed-column-count centering hack — it would mis-span once
+     the column count changes with the viewport.) */
   .forge-bases .forge-opt:last-child:nth-child(2n+1) { grid-column: 1 / -1; justify-self: center; min-width: calc(50% - 3px); }
-  .forge-cats .forge-opt:last-child:nth-child(4n+1) { grid-column: 2 / 4; }
   .forge-opt {
     padding: 7px 6px; border: 1px solid var(--border); border-radius: 5px;
     background: var(--orange-850); color: var(--gold-200); font-family: var(--font-ui);
@@ -4390,11 +4420,15 @@
     text-align: center; white-space: nowrap; pointer-events: none;
   }
 
-  /* ── Landscape block ── Dungeon Loot is portrait-only on touch. In landscape,
-     this full-screen notice covers the game (and updateOrientationBlock() pauses
-     play). Scoped under body.touch so desktop never sees it. */
+  /* ── Landscape block ── Dungeon Loot is portrait-only on a phone held sideways.
+     The notice (and updateOrientationBlock() pausing play) only fires on a SHORT
+     landscape viewport — a real phone rotated. A large unfolded foldable / tablet
+     is wide-but-tall (near-square), so max-height:600px lets it keep playing in
+     either orientation instead of wrongly demanding a rotate. Keep this threshold
+     in sync with LANDSCAPE_BLOCK_MQ in game.js. Scoped under body.touch so desktop
+     never sees it. */
   #rotate-notice { display: none; }
-  @media (orientation: landscape) {
+  @media (orientation: landscape) and (max-height: 600px) {
     body.touch #rotate-notice {
       display: flex; position: fixed; inset: 0; z-index: var(--z-top);
       align-items: center; justify-content: center; text-align: center;
@@ -4458,6 +4492,26 @@
     padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   body.touch #town-content, body.touch #shop-content, body.touch #mystic-content { overflow-x: hidden; }
+  /* Keep the top-right utilities (Settings gear + Bag) reachable while a full-screen
+     town / shop / mystic sheet is open — otherwise the sheet buries them and there's
+     no way to open Settings or the Bag from town on a phone. #touch-topbar lives
+     inside #touch-hud, a fixed + z-indexed STACKING CONTEXT, so bumping the topbar's
+     own z-index can't lift it past a sheet that outranks the whole HUD layer — we
+     must raise the HUD LAYER itself above the open sheet. The footer skill cluster
+     (which the sheet was already covering) is dropped so ONLY the topbar floats over
+     the sheet, and the sheet header reserves room on the right so its centered title
+     never slides under the two tiles. The Bag sheet carries its own close chrome, so
+     drop the strip while it's open (it opens over the still-open town sheet). */
+  body.touch:has(#town-overlay.open, #shop-overlay.open, #mystic-overlay.open) #touch-hud {
+    z-index: calc(var(--z-modal) + 5);
+  }
+  body.touch:has(#town-overlay.open, #shop-overlay.open, #mystic-overlay.open) #touch-cluster {
+    display: none;
+  }
+  body.touch.bag-open #touch-topbar { display: none; }
+  body.touch #town-header, body.touch #shop-header, body.touch #mystic-header {
+    padding-right: calc(var(--tbar-w) + 8px);
+  }
   /* Settings menu on touch: ONE top-anchored scroll container. The scrim
      (#settings-menu) is already align-items:flex-start + overflow-y:auto; here it
      gets safe-area padding and scroll containment, and the card below is told NOT
