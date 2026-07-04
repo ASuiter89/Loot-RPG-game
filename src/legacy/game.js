@@ -15549,7 +15549,11 @@ function draw() {
     // and threat ring below stay anchored to the enemy's real tile.
     const _elunge = attackLungeOffset(e, tw, th);
     const _elx = _elunge ? _elunge.dx : 0, _ely = _elunge ? _elunge.dy : 0;
-    const _esz = Math.round(cw * (e.isBoss ? 1.0 : (e.isElite ? 0.96 : 0.9)));
+    // Spawn pop-in: a freshly-summoned foe scales up from small over ~300ms (ease-out)
+    // so it erupts into being instead of blinking in fully-formed.
+    const _bornK = e.spawnT ? Math.min(1, (Date.now() - e.spawnT) / 300) : 1;
+    const _bornSc = 0.4 + 0.6 * (1 - (1 - _bornK) * (1 - _bornK));
+    const _esz = Math.round(cw * (e.isBoss ? 1.0 : (e.isElite ? 0.96 : 0.9)) * _bornSc);
     const _scx = cx + _elx, _scy = py + ch/2 + th*0.02 + _ely;
     // Pop: a coloured halo marks elites/bosses/affixed foes so they stand out.
     // Painted as a cached radial glow behind the sprite (was a per-frame
@@ -15564,7 +15568,7 @@ function draw() {
         // These bespoke sprites are full characters (like the hero/NPC walk sheets),
         // so draw them at a matching scale, grounded a touch above centre — a plain
         // 0.9x tile read too small next to the ~1.7x hero.
-        const _msz = Math.round(cw * (e.isElite ? 1.5 : 1.4));
+        const _msz = Math.round(cw * (e.isElite ? 1.5 : 1.4) * _bornSc);
         const _mcy = _scy - th * 0.18;
         if (_tint) _drew = drawMonsterTintedC(e.type, _scx, _mcy, _msz, _tint);
         if (!_drew) _drew = drawMonsterC(e.type, _scx, _mcy, _msz);
@@ -21357,9 +21361,17 @@ function spawnVerminAt(boss, x, y) {
   if (boss.summoned >= 12) return false;
   if (!enemyTileFree(x, y) || (x === player.x && y === player.y)) return false;
   const hp = Math.max(1, Math.round(10 + dungeonLevel * 4));
+  // spawnT drives a scale/fade "pop-in" in the enemy draw so the vermin erupts
+  // into being rather than blinking in fully-formed.
   enemies.push({ x, y, hp, maxHp: hp, type: 'rat', level: dungeonLevel,
-    dmg: Math.max(1, Math.round(3 + dungeonLevel)), dead: false, behavior: 'swift', minion: true });
+    dmg: Math.max(1, Math.round(3 + dungeonLevel)), dead: false, behavior: 'swift', minion: true, spawnT: Date.now() });
   boss.summoned++; bumpEnemyPos();
+  // Spawn animation: a summoning burst so the vermin visibly erupts from the ground.
+  const sp = paletteFor('summon');
+  _fxPush('aura', x + 0.5, y + 0.5, sp, { variant: 'conjure', dur: 520, moteN: 12 });
+  _fxPush('nova', x + 0.5, y + 0.5, sp, { r: 0.9, dur: 420, shardN: 10 });
+  spawnParticles(x, y, sp.glow, 8, 0.1);
+  sfx('shrine');
   return true;
 }
 // Advance every telegraph on the frame clock, follow trackers through their early
@@ -21379,6 +21391,14 @@ function stepBossTelegraphs(dt) {
       if (t.dmg > 0 && telegraphDanger(t, hx, hy)) telegraphHitPlayer(t.src, t.dmg, t.label);
       if (t.onDetonate) { try { t.onDetonate(t); } catch (_e) {} }
       if (t.flash) { addShake(t.shakeAmt || 4); if (t.sfx) sfx(t.sfx); }
+      // Detonation animation: a burst of impact + shards at the zone, so every
+      // attack lands with a visible hit, never a silent flash.
+      if (t.dmg > 0) {
+        const pal = paletteFor(t.el || 'earth');
+        if (t.shape === 'ring') { _fxPush('nova', t.x, t.y, pal, { r: (t.r || 3) * 0.9, dur: 520, shardN: 18 }); }
+        else { _fxPush('impact', t.x, t.y, pal, { dur: 440, power: 1.3 }); _fxPush('nova', t.x, t.y, pal, { r: (t.r || 2) * 0.7, dur: 460, shardN: 14 }); }
+        spawnParticles(t.x, t.y, pal.glow, 10, 0.12);
+      }
     }
   }
   bossTelegraphs = bossTelegraphs.filter(t => telegraphPhase(t) !== TELE_DONE);
@@ -21445,18 +21465,21 @@ function ratKingTurn(e, dist) {
   const cx = e.x + (e.size || 1) / 2, cy = e.y + (e.size || 1) / 2;   // boss centre (tiles)
   const tell = ph === 1 ? 1.15 : ph === 2 ? 1.0 : 0.85;
   const raw = e.dmg, roll = Math.random();
+  // Cast tell: the boss flares as it begins winding up, so a launch always reads.
+  _fxPush('aura', cx, cy, paletteFor('summon'), { variant: 'flare', dur: Math.round(tell * 620), moteN: 10 });
+  triggerAttackAnim(e, player.x, player.y);   // a quick lunge/rear as it commits
   if (roll < 0.32) {
     // Quake Slam — a big disc around the boss. Dodge: sprint to the rim.
-    pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 4.6, tell, active: 0.14, dmg: Math.round(raw * 1.7), src: e, label: `${e.name}'s quake`, flash: true, shakeAmt: 7, sfx: 'boss' });
+    pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 4.6, tell, active: 0.14, dmg: Math.round(raw * 1.7), el: 'earth', src: e, label: `${e.name}'s quake`, flash: true, shakeAmt: 7, sfx: 'boss' });
     log(`<span data-spr=b_ratking></span> ${e.name} rears back for a ground-shaking slam!`);
   } else if (roll < 0.62) {
     // Pounce — a disc that tracks you, then locks. Dodge: keep moving.
-    pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 2.2, tell, active: 0.12, dmg: Math.round(raw * 1.4), src: e, label: `${e.name}'s pounce`, track: true, flash: true, shakeAmt: 5, sfx: 'hurt' });
-    if (ph === 3) pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 2.0, tell: tell + 0.3, active: 0.12, dmg: Math.round(raw * 1.3), src: e, label: `${e.name}'s pounce`, track: true, flash: true, shakeAmt: 5 });
+    pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 2.2, tell, active: 0.12, dmg: Math.round(raw * 1.4), el: 'physical', src: e, label: `${e.name}'s pounce`, track: true, flash: true, shakeAmt: 5, sfx: 'hurt' });
+    if (ph === 3) pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 2.0, tell: tell + 0.3, active: 0.12, dmg: Math.round(raw * 1.3), el: 'physical', src: e, label: `${e.name}'s pounce`, track: true, flash: true, shakeAmt: 5 });
     log(`<span data-spr=b_ratking></span> ${e.name} fixes on you and pounces!`);
   } else if (ph >= 2 && roll < 0.82) {
     // Tail Whirl — a lethal ring around the boss. Dodge: back away past its edge.
-    pushTelegraph({ shape: 'ring', x: cx, y: cy, innerR: 1.4, r: 5.4, tell, active: 0.16, dmg: Math.round(raw * 1.5), src: e, label: `${e.name}'s whirl`, flash: true, shakeAmt: 6, sfx: 'boss' });
+    pushTelegraph({ shape: 'ring', x: cx, y: cy, innerR: 1.4, r: 5.4, tell, active: 0.16, dmg: Math.round(raw * 1.5), el: 'earth', src: e, label: `${e.name}'s whirl`, flash: true, shakeAmt: 6, sfx: 'boss' });
     log(`<span data-spr=b_ratking></span> ${e.name} whirls its tail — get clear!`);
   } else {
     // Vermin Swarm — telegraphed spawn marks, then rats erupt where they landed.
