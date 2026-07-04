@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "large", v: "Every guardian now has its own telegraphed moveset", by: "Claude", notes: [
+    "All fifteen bosses now fight with bespoke, fully-telegraphed movesets — not just the Rat King. Each has a signature you learn and dodge: the Inferno Demon rains fire and floods the floor; the Elder Dragon breathes cones and charges; the Death Knight and Mortis Vane raise the dead behind bone-spear lanes; the All-Seer and Cindra weave spiralling bullet-storms; Emberbound spreads a burning floor; the Masquerade splits into mirror-decoys where only the real one strikes; Magmaw slams you back toward the lava; Vael and Ourok spin pinwheels of light; the Tidewarden floods and drags; the Shrike blinks and executes; and Kaggoroth shifts its whole moveset each phase.",
+    "Every attack is a floor indicator you beat by MOVING — bullets weave through gaps, rings are dodged by clearing their edge, cones by stepping to the flank, decoys by reading which one glows red. Each boss escalates at two-thirds and one-third health with tighter, denser patterns.",
+    "Boss attack speed scales with depth, so a Normal-floor guardian reads slowly and a deep-Endless one is brutal — and Normal bosses carry far lighter health pools (a mild challenge), Hardened a middling fight, with Brutal and Endless keeping the full deep pools.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Skills, spells & hybrids — and enemies that resist them differently", by: "Claude", notes: [
     "Every active now has a clear school — SKILL (weapon, leeches, scales Skill Power), SPELL (magic, scales Spell Power, sped by Cast Speed), or the new HYBRID that lands BOTH a weapon part and a magic part in one cast. Each ability's tooltip spells out how its damage is built, and a hybrid shows its physical + magic split so nothing is vague.",
     "Classes now sit on a spectrum: Warrior is pure weapon SKILLS, Mage is pure SPELLS, Rogue leans skill with shadow & toxic hybrids (Blink Strike, Venom Nova, Plague Lord and more), and Templar leans holy magic with holy-strike hybrids (Smite, Divine Storm, Redeemer). Each ability was hand-placed on the school that fits it.",

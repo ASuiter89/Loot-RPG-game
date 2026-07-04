@@ -6402,6 +6402,9 @@ let bossHazards = [];
 // detonate. Stepped per frame (stepBossTelegraphs), drawn under the sprites, and
 // resolved against the hero's continuous position — always dodgeable by moving out.
 let bossTelegraphs = [];
+// Time-based bullet/hazard emitters (spirals, pinwheels, spreading fire): each
+// { e, t, dur, interval, acc, n, fn } fires fn() every `interval` for `dur` secs.
+let bossEmitters = [];
 // Real-time traps and their projectiles. traps: arrow emitters that fire dodgeable
 // bolts down a lane, and fire vents that flare on/off. projectiles: traveling
 // bolts (trap- or boss-fired) you can step out of. Both cleared on floor change.
@@ -21503,6 +21506,7 @@ function bossSpecial(e, dist, beh) {
   // The Rat King runs its own fully-telegraphed moveset (the boss-overhaul model);
   // returns true when it launches an attack (ends the turn), false to keep chasing.
   if (e.type === 'ratking') return ratKingTurn(e, dist);
+  if (BOSS_MOVESETS[e.type]) return bossTurnGeneric(e);   // every other guardian's bespoke telegraphed moveset
   if (e.shieldT > 0) e.shieldT--; // age any active ward
   // Berserk fury runs out after a few turns, restoring the boss's base damage.
   if (e.berserkT > 0) { e.berserkT--; if (e.berserkT <= 0 && e.dmgBase) { e.dmg = e.dmgBase; e.dmgBase = 0; log(`${e.name}'s fury subsides.`); } }
@@ -21606,8 +21610,20 @@ function spawnVerminAt(boss, x, y) {
 // Advance every telegraph on the frame clock, follow trackers through their early
 // wind-up, and resolve the hit on the single frame each one detonates.
 function stepBossTelegraphs(dt) {
+  if (!enemies.some(e => !e.dead && e.isBoss)) {   // boss gone → drop pending zones + emitters
+    if (bossTelegraphs.length) bossTelegraphs = [];
+    if (bossEmitters.length) bossEmitters = [];
+    return;
+  }
+  // Time-based emitters (spiral/pinwheel bullets, spreading hazards).
+  if (bossEmitters.length) {
+    for (const em of bossEmitters) {
+      em.t += dt; em.acc += dt;
+      while (em.acc >= em.interval && em.t <= em.dur) { em.acc -= em.interval; try { em.fn(em, em.e); } catch (_e) {} em.n++; }
+    }
+    bossEmitters = bossEmitters.filter(em => em.t <= em.dur && em.e && !em.e.dead);
+  }
   if (!bossTelegraphs.length) return;
-  if (!enemies.some(e => !e.dead && e.isBoss)) { bossTelegraphs = []; return; } // boss gone → drop pending zones
   const hx = (player.fx != null ? player.fx : player.x + 0.5);
   const hy = (player.fy != null ? player.fy : player.y + 0.5);
   for (const t of bossTelegraphs) {
@@ -21617,7 +21633,12 @@ function stepBossTelegraphs(dt) {
     const r = stepTelegraph(t, dt);
     if (r.justDetonated) {
       t.resolved = true;
-      if (t.dmg > 0 && telegraphDanger(t, hx, hy)) telegraphHitPlayer(t.src, t.dmg, t.label);
+      if (t.dmg > 0 && telegraphDanger(t, hx, hy)) {
+        telegraphHitPlayer(t.src, t.dmg, t.label);
+        // Knockback: positive shoves the hero AWAY from the zone (into hazards if
+        // near); negative pulls INWARD (a whirlpool drag).
+        if (t.kb) knockPlayerFrom(t.x, t.y, t.kb);
+      }
       if (t.onDetonate) { try { t.onDetonate(t); } catch (_e) {} }
       if (t.flash) { addShake(t.shakeAmt || 4); if (t.sfx) sfx(t.sfx); }
       // Detonation animation: a burst of impact + shards at the zone, so every
@@ -21728,6 +21749,211 @@ function ratKingTurn(e, dist) {
     sfx('shrine');
   }
   e._tgCd = (ph === 1 ? 2.6 : ph === 2 ? 2.1 : 1.7) * pace;   // cadence tightens per phase, eased in shallow floors
+  return true;
+}
+
+// ── DATA-DRIVEN BOSS MOVESETS ────────────────────────────────────────────────
+// Every guardian past the Rat King is expressed as DATA: a signature element,
+// phase pools (p1/p2/p3) of telegraphed attack descriptors, and escalation gates
+// at 66% / 33% HP. A shared dispatcher (castBossAttack) turns each descriptor into
+// the right telegraph zone(s), bullet pattern, summon or hazard, and the generic
+// driver (bossTurnGeneric) manages phases + cadence, all paced by bossPace() so a
+// shallow floor is gentle. This is how all fourteen unique fights are built.
+const BOSS_MOVESETS = {
+  // ── Tier 1 (Normal) — the four original non-Rat-King guardians, telegraphed ──
+  inferno: { el: 'fire', roar: 'erupts — the floor catches flame!', flash: '#ff5522', cd: 2.4,
+    p1: [ { type: 'disc', targeted: true, r: 2.4, dmgMult: 1.4 }, { type: 'coneshot', count: 5, spread: 0.5, speed: 5, dmgMult: 1.1 } ],
+    p2: [ { type: 'disc', targeted: true, r: 2.2, dmgMult: 1.4 }, { type: 'radial', count: 12, speed: 3.4, dmgMult: 1.0 }, { type: 'hazard', dur: 2.5, dmgMult: 0.5 } ],
+    p3: [ { type: 'radial', count: 16, speed: 3.8, dmgMult: 1.0 }, { type: 'discBarrage', count: 5, r: 1.7, dmgMult: 1.1 }, { type: 'ring', innerR: 1.4, r: 5.6, dmgMult: 1.5 } ] },
+  dragon: { el: 'fire', roar: 'looses a world-shaking roar!', flash: '#ff8844', cd: 2.6,
+    p1: [ { type: 'cone', halfAngle: 0.55, r: 7, dmgMult: 1.6 }, { type: 'dash', len: 12, halfW: 1.3, dmgMult: 1.7 } ],
+    p2: [ { type: 'cone', halfAngle: 0.6, r: 7.5, dmgMult: 1.6 }, { type: 'ring', innerR: 1.6, r: 5.8, dmgMult: 1.5 }, { type: 'radial', count: 12, speed: 3.4, dmgMult: 1.0 } ],
+    p3: [ { type: 'dash', len: 13, halfW: 1.4, dmgMult: 1.8 }, { type: 'cone', halfAngle: 0.7, r: 8, dmgMult: 1.6 }, { type: 'radial', count: 16, speed: 3.8, dmgMult: 1.0 } ] },
+  deathknight: { el: 'blood', roar: 'raises its blade — the dead rise!', flash: '#8a2030', cd: 2.5,
+    p1: [ { type: 'lane', len: 11, halfW: 1.0, dmgMult: 1.5 }, { type: 'summon', count: 2, addType: 'skeleton' } ],
+    p2: [ { type: 'lane', len: 11, halfW: 1.1, dmgMult: 1.5 }, { type: 'disc', targeted: true, track: true, r: 2.2, dmgMult: 1.4 }, { type: 'summon', count: 2, addType: 'skeleton' } ],
+    p3: [ { type: 'lane', len: 12, halfW: 1.2, dmgMult: 1.6 }, { type: 'discBarrage', count: 4, r: 1.8, dmgMult: 1.2 }, { type: 'ring', innerR: 1.4, r: 5.4, dmgMult: 1.5 }, { type: 'summon', count: 3, addType: 'skeleton' } ] },
+  allseer: { el: 'arcane', roar: 'opens its eye — reality buckles!', flash: '#a060ff', cd: 2.3,
+    p1: [ { type: 'radial', count: 12, speed: 3.2, dmgMult: 1.0 }, { type: 'homing', count: 2, dmgMult: 1.2 } ],
+    p2: [ { type: 'spiral', arms: 1, turn: 130, dur: 2.2, speed: 3.0, dmgMult: 0.9 }, { type: 'cone', halfAngle: 0.5, r: 7, dmgMult: 1.4 }, { type: 'homing', count: 2, dmgMult: 1.2 } ],
+    p3: [ { type: 'spiral', arms: 2, turn: 150, dur: 2.6, speed: 3.2, dmgMult: 0.9 }, { type: 'radial', count: 16, speed: 3.6, dmgMult: 1.0 }, { type: 'homing', count: 3, dmgMult: 1.2 } ] },
+  // ── Tier 2 (Hardened) ──
+  cindra: { el: 'arcane', roar: 'weaves a denser storm!', flash: '#c77bff', cd: 2.3,
+    p1: [ { type: 'radial', count: 12, speed: 3.2, dmgMult: 1.0 }, { type: 'coneshot', count: 5, spread: 0.55, speed: 5, dmgMult: 1.1 } ],
+    p2: [ { type: 'spiral', arms: 1, turn: 140, dur: 2.4, speed: 3.0, dmgMult: 0.9 }, { type: 'homing', count: 2, dmgMult: 1.2 }, { type: 'blink' }, { type: 'radial', count: 14, speed: 3.4, dmgMult: 1.0 } ],
+    p3: [ { type: 'spiral', arms: 2, turn: 150, dur: 2.8, speed: 3.2, dmgMult: 0.9 }, { type: 'radial', count: 18, speed: 3.6, dmgMult: 1.0 }, { type: 'homing', count: 3, dmgMult: 1.2 }, { type: 'blink' } ] },
+  emberbound: { el: 'fire', roar: 'the fire spreads faster!', flash: '#ff6a22', cd: 2.5,
+    p1: [ { type: 'hazard', dur: 3.0, dmgMult: 0.5 }, { type: 'dash', len: 12, halfW: 1.2, dmgMult: 1.6 } ],
+    p2: [ { type: 'hazard', dur: 3.2, dmgMult: 0.55 }, { type: 'radial', count: 12, speed: 3.2, dmgMult: 1.0 }, { type: 'discBarrage', count: 4, r: 1.7, dmgMult: 1.1 } ],
+    p3: [ { type: 'hazard', dur: 3.6, dmgMult: 0.6 }, { type: 'dash', len: 13, halfW: 1.3, dmgMult: 1.7 }, { type: 'ring', innerR: 1.4, r: 5.6, dmgMult: 1.5 }, { type: 'radial', count: 16, speed: 3.6, dmgMult: 1.0 } ] },
+  masquerade: { el: 'arcane', roar: 'multiplies behind a hall of mirrors!', flash: '#7a6adf', cd: 2.4,
+    p1: [ { type: 'decoys', count: 3, r: 2.2, dmgMult: 1.4 }, { type: 'coneshot', count: 5, spread: 0.5, speed: 5.5, dmgMult: 1.1 } ],
+    p2: [ { type: 'decoys', count: 3, r: 2.1, dmgMult: 1.4 }, { type: 'blink' }, { type: 'summon', count: 2, addType: 'illusion' }, { type: 'coneshot', count: 6, spread: 0.6, speed: 5.5, dmgMult: 1.1 } ],
+    p3: [ { type: 'decoys', count: 4, r: 2.0, dmgMult: 1.4, tell: 0.8 }, { type: 'blink' }, { type: 'discBarrage', count: 4, r: 1.7, dmgMult: 1.1 }, { type: 'summon', count: 2, addType: 'illusion' } ] },
+  magmaw: { el: 'fire', roar: 'the lava rises — heat the arena!', flash: '#ff5a2a', cd: 2.7,
+    p1: [ { type: 'ring', innerR: 1.6, r: 5.6, dmgMult: 1.4, kb: 3.0 }, { type: 'disc', targeted: true, r: 2.6, dmgMult: 1.5 } ],
+    p2: [ { type: 'ring', innerR: 1.6, r: 5.8, dmgMult: 1.4, kb: 3.2 }, { type: 'leap', r: 2.8, dmgMult: 1.5 }, { type: 'hazard', dur: 2.8, dmgMult: 0.55 } ],
+    p3: [ { type: 'ring', innerR: 1.4, r: 6.0, dmgMult: 1.5, kb: 3.4 }, { type: 'leap', r: 3.0, dmgMult: 1.6 }, { type: 'radial', count: 14, speed: 3.4, dmgMult: 1.0 }, { type: 'hazard', dur: 3.2, dmgMult: 0.6 } ] },
+  mortisvane: { el: 'blood', roar: 'tears open the grave!', flash: '#5aa060', cd: 2.5,
+    p1: [ { type: 'summon', count: 2, addType: 'skeleton' }, { type: 'lane', len: 11, halfW: 1.0, dmgMult: 1.5 } ],
+    p2: [ { type: 'summon', count: 2, addType: 'skeleton' }, { type: 'disc', targeted: true, r: 2.2, dmgMult: 1.4 }, { type: 'lane', len: 11, halfW: 1.1, dmgMult: 1.5 } ],
+    p3: [ { type: 'summon', count: 3, addType: 'skeleton' }, { type: 'discBarrage', count: 4, r: 1.8, dmgMult: 1.2 }, { type: 'ring', innerR: 1.4, r: 5.4, dmgMult: 1.4 }, { type: 'lane', len: 12, halfW: 1.2, dmgMult: 1.5 } ] },
+  // ── Tier 3 (Brutal) ──
+  vael: { el: 'holy', roar: 'refracts into a storm of light!', flash: '#ffe89a', cd: 2.4,
+    p1: [ { type: 'pinwheel', arms: 3, turn: 70, dur: 3.0, speed: 3.2, dmgMult: 0.9 }, { type: 'radial', count: 14, speed: 3.4, dmgMult: 1.0 } ],
+    p2: [ { type: 'pinwheel', arms: 3, turn: 80, dur: 3.2, speed: 3.4, dmgMult: 0.9 }, { type: 'mines', count: 5, fuse: 1.8, r: 1.6, dmgMult: 1.3 }, { type: 'lane', len: 13, halfW: 0.9, dmgMult: 1.6 } ],
+    p3: [ { type: 'pinwheel', arms: 4, turn: 90, dur: 3.4, speed: 3.6, dmgMult: 0.9, dir: -1 }, { type: 'radial', count: 18, speed: 3.6, dmgMult: 1.0 }, { type: 'mines', count: 6, fuse: 1.6, r: 1.6, dmgMult: 1.3 } ] },
+  tidewarden: { el: 'ice', roar: 'the flood surges higher!', flash: '#4ad0d0', cd: 2.6,
+    p1: [ { type: 'hazard', dur: 3.0, dmgMult: 0.5 }, { type: 'lane', len: 12, halfW: 1.2, dmgMult: 1.5 } ],
+    p2: [ { type: 'hazard', dur: 3.2, dmgMult: 0.55 }, { type: 'ring', innerR: 0.6, r: 5.4, dmgMult: 1.3, kb: -2.4 }, { type: 'discBarrage', count: 4, r: 1.8, dmgMult: 1.1 } ],
+    p3: [ { type: 'hazard', dur: 3.6, dmgMult: 0.6 }, { type: 'ring', innerR: 0.6, r: 5.6, dmgMult: 1.4, kb: -2.6 }, { type: 'discBarrage', count: 5, r: 1.8, dmgMult: 1.2 }, { type: 'lane', len: 13, halfW: 1.3, dmgMult: 1.5 } ] },
+  shrike: { el: 'blood', roar: 'melts into the dark!', flash: '#c0203a', cd: 2.2,
+    p1: [ { type: 'blink' }, { type: 'lane', len: 12, halfW: 0.9, dmgMult: 1.7 }, { type: 'coneshot', count: 5, spread: 0.5, speed: 6, dmgMult: 1.1 } ],
+    p2: [ { type: 'blink' }, { type: 'dash', len: 12, halfW: 1.0, dmgMult: 1.6 }, { type: 'lane', len: 12, halfW: 0.9, dmgMult: 1.7 } ],
+    p3: [ { type: 'decoys', count: 3, r: 2.0, dmgMult: 1.5, tell: 0.8 }, { type: 'dash', len: 13, halfW: 1.0, dmgMult: 1.6 }, { type: 'blink' }, { type: 'lane', len: 12, halfW: 0.9, dmgMult: 1.8 } ] },
+  kaggoroth: { el: 'fire', roar: 'sheds its chains and shifts form!', flash: '#ffa040', cd: 2.6,
+    p1: [ { type: 'dash', len: 13, halfW: 1.4, dmgMult: 1.7 }, { type: 'disc', targeted: true, r: 2.6, dmgMult: 1.5 }, { type: 'ring', innerR: 1.5, r: 5.4, dmgMult: 1.4 } ],
+    p2: [ { type: 'discBarrage', count: 5, r: 1.8, dmgMult: 1.2 }, { type: 'cone', halfAngle: 0.6, r: 7, dmgMult: 1.5 }, { type: 'summon', count: 2, addType: 'imp' } ],
+    p3: [ { type: 'radial', count: 18, speed: 3.6, dmgMult: 1.0 }, { type: 'ring', innerR: 1.3, r: 6.0, dmgMult: 1.5 }, { type: 'discBarrage', count: 6, r: 1.7, dmgMult: 1.2 } ] },
+  ourok: { el: 'arcane', roar: 'reshapes the room around you!', flash: '#b060ff', cd: 2.3,
+    p1: [ { type: 'pinwheel', arms: 3, turn: 65, dur: 3.0, speed: 3.2, dmgMult: 0.9 }, { type: 'homing', count: 2, dmgMult: 1.2 } ],
+    p2: [ { type: 'summon', count: 2, addType: 'mote' }, { type: 'radial', count: 14, speed: 3.4, dmgMult: 1.0 }, { type: 'spiral', arms: 1, turn: 150, dur: 2.4, speed: 3.2, dmgMult: 0.9 } ],
+    p3: [ { type: 'pinwheel', arms: 4, turn: 90, dur: 3.4, speed: 3.6, dmgMult: 0.9, dir: -1 }, { type: 'radial', count: 18, speed: 3.6, dmgMult: 1.0 }, { type: 'ring', innerR: 1.4, r: 5.8, dmgMult: 1.5 }, { type: 'hazard', dur: 3.4, dmgMult: 0.6 } ] },
+};
+function bcenter(e) { const s = e.size || 1; return { x: e.x + s / 2, y: e.y + s / 2 }; }
+function bossBullet(e, x, y, ang, speed, dmg, color, life) {
+  if (projectiles.length > 240) return;   // safety cap — keep the densest phases readable + lag-free
+  projectiles.push({ x, y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, dmg, color: color || '#ff7ad0', life: life || 3.2, label: (e && e.name) || 'the guardian' });
+}
+function pushEmitter(e, dur, interval, fn) { bossEmitters.push({ e, t: 0, dur, interval: interval || 0.1, acc: 0, n: 0, fn }); }
+// Shove the hero away from a point (used by knockback slams — into hazards if near).
+function knockPlayerFrom(sx, sy, force) {
+  const dx = player.fx - sx, dy = player.fy - sy, d = Math.hypot(dx, dy) || 1;
+  movePlayerBy(dx / d * (force || 2.5), dy / d * (force || 2.5));
+}
+// Teleport/reposition a boss (dash landing, leap, blink) if its footprint fits.
+function bossReposition(e, tx, ty) {
+  const s = e.size || 1;
+  tx = Math.max(1, Math.min(MAP_W - s - 1, tx)); ty = Math.max(1, Math.min(MAP_H - s - 1, ty));
+  for (let dx = 0; dx < s; dx++) for (let dy = 0; dy < s; dy++) {
+    if (!enemyTileFree(tx + dx, ty + dy) && getEnemyAt(tx + dx, ty + dy) !== e) return false;
+  }
+  e.x = tx; e.y = ty; e.fx = tx + s / 2; e.fy = ty + s / 2; bumpEnemyPos();
+  _fxPush('blink', tx + s / 2, ty + s / 2, paletteFor('arcane'), { dur: 320 });
+  return true;
+}
+// Spawn one themed add for a summoner boss at a telegraphed tile (with a burst).
+function spawnBossAdd(e, x, y, type) {
+  e.summoned = e.summoned || 0;
+  if (e.summoned >= 12) return false;
+  if (!enemyTileFree(x, y) || (x === player.x && y === player.y)) return false;
+  const hp = Math.max(1, Math.round(10 + dungeonLevel * 4));
+  const etype = (typeof MONSTER_SPRITE_IDX === 'object' && MONSTER_SPRITE_IDX[type] !== undefined) ? type : 'rat';
+  enemies.push({ x, y, hp, maxHp: hp, type: etype, level: dungeonLevel, dmg: Math.max(1, Math.round(3 + dungeonLevel)), dead: false, behavior: 'swift', minion: true, spawnT: Date.now() });
+  e.summoned++; bumpEnemyPos();
+  const sp = paletteFor('summon');
+  _fxPush('aura', x + 0.5, y + 0.5, sp, { variant: 'conjure', dur: 500, moteN: 10 });
+  _fxPush('nova', x + 0.5, y + 0.5, sp, { r: 0.9, dur: 400, shardN: 9 });
+  spawnParticles(x, y, sp.glow, 7, 0.1);
+  return true;
+}
+// Turn one attack descriptor into its telegraph(s) / bullets / summon / hazard.
+function castBossAttack(e, a, ph, pace) {
+  const c = bcenter(e), hx = player.fx, hy = player.fy;
+  const tell = (a.tell || 0.95) * pace;
+  const dmg = Math.max(1, Math.round(e.dmg * (a.dmgMult || 1.3)));
+  const set = BOSS_MOVESETS[e.type] || {};
+  const el = a.el || set.el || 'arcane';
+  const pal = paletteFor(el);
+  _fxPush('aura', c.x, c.y, pal, { variant: 'flare', dur: Math.round(tell * 600), moteN: 9 });
+  triggerAttackAnim(e, player.x, player.y);
+  switch (a.type) {
+    case 'disc':
+      pushTelegraph({ shape: 'disc', x: a.targeted ? hx : c.x, y: a.targeted ? hy : c.y, r: a.r || 2.4, tell, active: 0.14, dmg, el, src: e, label: e.name, track: a.track, kb: a.kb, flash: true, shakeAmt: 6, sfx: 'boss' });
+      break;
+    case 'discBarrage':
+      for (let i = 0; i < (a.count || 4); i++) pushTelegraph({ shape: 'disc', x: hx, y: hy, r: a.r || 1.7, tell: tell + i * 0.33, active: 0.12, dmg, el, src: e, label: e.name, flash: true, shakeAmt: 4 });
+      break;
+    case 'ring':
+      pushTelegraph({ shape: 'ring', x: c.x, y: c.y, innerR: a.innerR || 1.5, r: a.r || 5.4, tell, active: 0.16, dmg, el, src: e, label: e.name, kb: a.kb, flash: true, shakeAmt: 7, sfx: 'boss' });
+      break;
+    case 'cone': {
+      const ang = Math.atan2(hy - c.y, hx - c.x);
+      pushTelegraph({ shape: 'cone', x: c.x, y: c.y, facing: ang, halfAngle: a.halfAngle || 0.55, r: a.r || 6.5, tell, active: 0.16, dmg, el, src: e, label: e.name, flash: true, shakeAmt: 6, sfx: 'boss' });
+      break; }
+    case 'lane': {
+      const ang = Math.atan2(hy - c.y, hx - c.x), len = a.len || 11;
+      pushTelegraph({ shape: 'lane', x1: c.x, y1: c.y, x2: c.x + Math.cos(ang) * len, y2: c.y + Math.sin(ang) * len, halfW: a.halfW || 1.0, tell, active: 0.14, dmg, el, src: e, label: e.name, flash: true, shakeAmt: 6, sfx: 'boss' });
+      break; }
+    case 'dash': {
+      const ang = Math.atan2(hy - c.y, hx - c.x), len = a.len || 12;
+      pushTelegraph({ shape: 'lane', x1: c.x, y1: c.y, x2: c.x + Math.cos(ang) * len, y2: c.y + Math.sin(ang) * len, halfW: a.halfW || 1.2, tell, active: 0.16, dmg, el, src: e, label: e.name, flash: true, shakeAmt: 8, sfx: 'boss',
+        onDetonate: () => bossReposition(e, Math.round(c.x + Math.cos(ang) * len * 0.6), Math.round(c.y + Math.sin(ang) * len * 0.6)) });
+      break; }
+    case 'leap':
+      pushTelegraph({ shape: 'disc', x: hx, y: hy, r: a.r || 2.6, tell: tell + 0.2, active: 0.16, dmg, el, src: e, label: e.name, flash: true, shakeAmt: 8, sfx: 'boss',
+        onDetonate: (tt) => { bossReposition(e, Math.round(tt.x), Math.round(tt.y)); pushTelegraph({ shape: 'ring', x: tt.x, y: tt.y, innerR: 0.6, r: 4.2, tell: 0.5 * pace, active: 0.16, dmg: Math.round(dmg * 0.7), el, src: e, label: e.name, flash: true, shakeAmt: 6 }); } });
+      break;
+    case 'radial': {
+      const n = a.count || 12, sp = a.speed || 3.2, off = Math.random() * 6.283;
+      for (let i = 0; i < n; i++) bossBullet(e, c.x, c.y, off + i / n * 6.283, sp, dmg, pal.glow, a.life || 3.4);
+      break; }
+    case 'coneshot': {
+      const base = Math.atan2(hy - c.y, hx - c.x), n = a.count || 5, spr = a.spread || 0.5, sp = a.speed || 5;
+      for (let i = 0; i < n; i++) bossBullet(e, c.x, c.y, base + (n > 1 ? (i / (n - 1) - 0.5) * 2 * spr : 0), sp, dmg, pal.glow, a.life || 2.8);
+      break; }
+    case 'spiral': {
+      const arms = a.arms || 1, sp = a.speed || 3.0, turn = (a.turn || 130) * Math.PI / 180, dur = a.dur || 2.2, iv = a.interval || 0.08, ang0 = Math.random() * 6.283;
+      pushEmitter(e, dur, iv, (em, be) => { const cc = bcenter(be), base = ang0 + em.n * turn * iv; for (let k = 0; k < arms; k++) bossBullet(be, cc.x, cc.y, base + k / arms * 6.283, sp, dmg, pal.glow, 3.6); });
+      break; }
+    case 'pinwheel': {
+      const arms = a.arms || 3, sp = a.speed || 3.2, turn = (a.turn || 70) * Math.PI / 180, dur = a.dur || 3.0, iv = a.interval || 0.1, dir = a.dir || 1, ang0 = Math.random() * 6.283;
+      pushEmitter(e, dur, iv, (em, be) => { const cc = bcenter(be), base = ang0 + dir * em.n * turn * iv; for (let k = 0; k < arms; k++) bossBullet(be, cc.x, cc.y, base + k / arms * 6.283, sp, dmg, pal.glow, 3.8); });
+      break; }
+    case 'homing':
+      for (let i = 0; i < (a.count || 2); i++) pushTelegraph({ shape: 'disc', x: c.x, y: c.y, r: a.r || 1.9, tell: tell + i * 0.4, active: 0.12, dmg, el, src: e, label: e.name, track: true, flash: true, shakeAmt: 5 });
+      break;
+    case 'mines':
+      for (let i = 0; i < (a.count || 5); i++) { const ang = Math.random() * 6.283, rr = 2 + Math.random() * 5; pushTelegraph({ shape: 'disc', x: c.x + Math.cos(ang) * rr, y: c.y + Math.sin(ang) * rr, r: a.r || 1.6, tell: (a.fuse || 1.8) * pace, active: 0.14, dmg, el, src: e, label: e.name, flash: true, shakeAmt: 4 }); }
+      break;
+    case 'summon':
+      for (let i = 0; i < (a.count || 2); i++) { const ang = Math.random() * 6.283, rr = 3 + Math.random() * 3; pushTelegraph({ shape: 'disc', x: c.x + Math.cos(ang) * rr, y: c.y + Math.sin(ang) * rr, r: 1.0, tell, active: 0.1, dmg: 0, el: 'summon', src: e, onDetonate: (tt) => spawnBossAdd(e, Math.round(tt.x), Math.round(tt.y), a.addType) }); }
+      break;
+    case 'hazard':
+      pushEmitter(e, a.dur || 3.0, a.interval || 0.5, (em, be) => {
+        const tx = Math.round(player.fx + (Math.random() - 0.5) * 4), ty = Math.round(player.fy + (Math.random() - 0.5) * 4);
+        if (tx > 0 && ty > 0 && tx < MAP_W - 1 && ty < MAP_H - 1 && isFloorPassable(mapData[ty][tx])) addHazard(tx, ty, 'fire', 3, Math.max(2, Math.round(be.dmg * (a.dmgMult || 0.5))));
+      });
+      break;
+    case 'decoys': {
+      const n = a.count || 3, real = Math.floor(Math.random() * n);
+      for (let i = 0; i < n; i++) { const ang = Math.random() * 6.283, rr = 2 + Math.random() * 4; pushTelegraph({ shape: 'disc', x: c.x + Math.cos(ang) * rr, y: c.y + Math.sin(ang) * rr, r: a.r || 2.2, tell, active: 0.14, dmg: i === real ? dmg : 0, el: i === real ? el : 'arcane', src: e, label: e.name, flash: i === real, shakeAmt: i === real ? 6 : 0 }); }
+      break; }
+    case 'blink':
+      bossReposition(e, Math.round(c.x + (Math.random() - 0.5) * 8), Math.round(c.y + (Math.random() - 0.5) * 8));
+      break;
+  }
+}
+// Generic phased driver for a data-defined boss. Returns true when it launches.
+function bossTurnGeneric(e) {
+  const set = BOSS_MOVESETS[e.type]; if (!set) return false;
+  if (e._phase == null) e._phase = 1;
+  const ph = bossPhaseOf(e);
+  if (ph > e._phase) {                       // crossed a HP gate → roar + brief breather
+    e._phase = ph;
+    log(`${bossIcon(e.type, 16) || ''} ${e.name} ${set.roar || 'gathers new fury!'}`, 'important');
+    sfx('boss'); screenFlash(set.flash || '#ff5a5a'); addShake(6);
+    const c = bcenter(e); _fxPush('aura', c.x, c.y, paletteFor(set.el || 'arcane'), { variant: 'flare', dur: 700, moteN: 12 });
+    e._tgCd = 1.1 * bossPace();
+    return true;
+  }
+  e._tgCd = (e._tgCd || 0) - WORLD_TICK_SECONDS;
+  if (e._tgCd > 0) return false;
+  const pace = bossPace();
+  const pool = ph === 1 ? set.p1 : ph === 2 ? (set.p2 || set.p1) : (set.p3 || set.p2 || set.p1);
+  const a = pool[Math.floor(Math.random() * pool.length)];
+  castBossAttack(e, a, ph, pace);
+  e._tgCd = (a.cd || set.cd || 2.4) * pace * (ph === 3 ? 0.82 : ph === 2 ? 0.9 : 1);
   return true;
 }
 
