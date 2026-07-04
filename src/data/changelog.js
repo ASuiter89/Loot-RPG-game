@@ -3,6 +3,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Power reads short in the HUD", by: "Claude", notes: [
+    "Once your Power passes 1,000 the HUD readout shortens (e.g. 4,225 → 4.2k), matching how gold already displays, so a big Power no longer crowds the bar.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Skill cards: shorter text, wider card", by: "Claude", notes: [
     "Every passive and keystone description rewritten terse — stats first, filler words and leftover internal tags gone.",
     "Skill detail card is wider with slightly smaller text, so each stat line fits without wrapping mid-phrase.",

@@ -7877,7 +7877,7 @@ function showGraveyard() {
         + `<span class="gy-info"><span class="gy-name">${escapeHtml(su.name || 'Adventurer')}${hcMark}${cur}</span>`
         + `<span class="gy-sub">${escapeHtml(clsName)} · Lv ${su.level}</span></span>`
         + `<span class="gy-stats"><span class="gy-floor">${floorLabel(su.floor)}</span>`
-        + `<span class="gy-meta"><span data-spr=ic_money></span>${fmtGold(su.gold)} · ${formatPlayTime(ms)}</span></span>`
+        + `<span class="gy-meta"><span data-spr=ic_money></span>${fmtCompact(su.gold)} · ${formatPlayTime(ms)}</span></span>`
         + `</div>`;
     }).join('');
     const graveHtml = list.map(r => {
@@ -7890,7 +7890,7 @@ function showGraveyard() {
         + `<span class="gy-info"><span class="gy-name">${escapeHtml(r.name || 'Adventurer')}${hcMark}</span>`
         + `<span class="gy-sub">${escapeHtml(clsName)} · Lv ${r.level}</span></span>`
         + `<span class="gy-stats"><span class="gy-floor">${floorLabel(r.floor)}</span>`
-        + `<span class="gy-meta"><span data-spr=ic_money></span>${fmtGold(r.gold)} · ${formatPlayTime(r.playMs || 0)}${date ? ' · ' + date : ''}</span></span>`
+        + `<span class="gy-meta"><span data-spr=ic_money></span>${fmtCompact(r.gold)} · ${formatPlayTime(r.playMs || 0)}${date ? ' · ' + date : ''}</span></span>`
         + `</div>`;
     }).join('');
     bodyEl.innerHTML =
@@ -9810,7 +9810,7 @@ function shopClose() {
 }
 
 function renderShop() {
-  document.getElementById('shop-gold-count').textContent = fmtGold(player.gold);
+  document.getElementById('shop-gold-count').textContent = fmtCompact(player.gold);
   const el = document.getElementById('shop-content');
   if (!merchant) { closeShop(); return; }
   const _bt = document.getElementById('shoptab-buy'), _st = document.getElementById('shoptab-sell');
@@ -9945,7 +9945,7 @@ function mysticClose() {
 }
 
 function renderMystic() {
-  document.getElementById('mystic-gold-count').textContent = fmtGold(player.gold);
+  document.getElementById('mystic-gold-count').textContent = fmtCompact(player.gold);
   // Active-pact banner.
   const active = document.getElementById('mystic-active');
   if (pact) {
@@ -10776,7 +10776,7 @@ function closeTown() {
 }
 function setTownContent(html) {
   hideHoverTip(); // any hovered element is replaced; drop a lingering popup
-  document.getElementById('town-gold-count').textContent = fmtGold(player.gold);
+  document.getElementById('town-gold-count').textContent = fmtCompact(player.gold);
   const mt = document.getElementById('town-mats');
   if (mt) mt.innerHTML = matStripHTML();
   document.getElementById('town-content').innerHTML = html;
@@ -20277,7 +20277,7 @@ function updateBars() {
   const dm = diffMeta();
   setPending('hp-pending', player.hp, player.maxHp, pendHeal);
   setPending('mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
-  document.getElementById('gold-count').textContent = fmtGold(player.gold);
+  document.getElementById('gold-count').textContent = fmtCompact(player.gold);
 
   // ── Desktop bottom HUD (web layout only): big flanking HP/MP bars, the
   // segmented XP strip, and the name / power / gold chips mirror the same data. ──
@@ -20294,8 +20294,8 @@ function updateBars() {
     const dhXp = document.getElementById('dh-xp-fill');
     if (dhXp) dhXp.style.width = Math.min(100, player.xp / xpForLevel(player.level) * 100) + '%';
     dset('dh-xp-lvl', 'Lv ' + player.level);
-    dset('dh-power-num', power);
-    dset('dh-gold-num', fmtGold(player.gold));
+    dset('dh-power-num', fmtCompact(power));
+    dset('dh-gold-num', fmtCompact(player.gold));
     const dhName = document.getElementById('dh-name');
     if (dhName) { dhName.textContent = player.name || ''; dhName.style.display = player.name ? '' : 'none'; }
   }
@@ -20330,7 +20330,7 @@ function updateBars() {
     const doorHtml = dlIcon('feat_door', 14);
     if (doorHtml !== _clearStatusHtml) { _clearStatusHtml = doorHtml; clearEl.innerHTML = doorHtml; }
   }
-  setText('power-num', power);
+  setText('power-num', fmtCompact(power));
 
   // Desktop map-corner readout mirrors the floor + foe count (mobile keeps
   // these in the header). No lock icon: the foes pill simply hides once the
@@ -23436,11 +23436,9 @@ if (typeof window !== 'undefined') {
   window.addEventListener('pagehide', () => { try { saveGame(); } catch (e) {} try { cloudFlush(); } catch (e) {} });
 }
 
-// Format a millisecond span as a compact human play-time string: "3h 12m",
-// "12m", or "45s" for brand-new heroes. Always returns at least "0s".
-// Compact gold display: exact under 1000, short form (1.2k, 12k, 3.4m) above so
-// big totals don't overflow the HUD / shop panels.
-function fmtGold(n) {
+// Compact number display: exact under 1000, short form (1.2k, 12k, 3.4m) above so
+// big totals (gold, Power) don't overflow the HUD / shop chips.
+function fmtCompact(n) {
   n = Math.floor(n || 0);
   if (n < 1000) return String(n);
   for (const [div, suf] of [[1e9, 'b'], [1e6, 'm'], [1e3, 'k']]) {
@@ -23450,6 +23448,8 @@ function fmtGold(n) {
     }
   }
 }
+// Format a millisecond span as a compact human play-time string: "3h 12m",
+// "12m", or "45s" for brand-new heroes. Always returns at least "0s".
 function formatPlayTime(ms) {
   let s = Math.floor((ms || 0) / 1000);
   const h = Math.floor(s / 3600); s -= h * 3600;
@@ -25002,7 +25002,7 @@ function heroCardHtml() {
   const nm = escapeHtml(player.name || 'Adventurer');
   const lvl = player.level || 1;
   const deepest = player.maxFloor || 1;
-  const gold = fmtGold ? fmtGold(player.gold || 0) : (player.gold || 0);
+  const gold = fmtCompact ? fmtCompact(player.gold || 0) : (player.gold || 0);
   const hcTag = player.hardcore ? `<div><span class="hc-tag">${hcIcon(11)} HARDCORE · ONE LIFE</span></div>` : '';
   // An animated walking hero sprite sits to the RIGHT of the left-aligned text,
   // standing a bit taller than the stacked name/class/stats block so it reads big.
@@ -26804,7 +26804,7 @@ const __DL_FN_BRIDGE = {
   hcBuryDeadSave,
   wipeSave,
   playTimeBeat,
-  fmtGold,
+  fmtCompact,
   formatPlayTime,
   slotSummary,
   slotTimeAgo,
