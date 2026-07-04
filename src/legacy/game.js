@@ -6704,7 +6704,7 @@ window.gameGuide = function gameGuide(topic) {
     controls: [
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A single tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
-      `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. HOVERING a foe pops its codex card (known stats) under the map. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
+      `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
@@ -8434,9 +8434,11 @@ function setMoveTargetFromClient(cx, cy) {
   let wy = Math.max(0.5, Math.min(MAP_H - 0.5, w.wy));
   // Clicked a SOLID tile (wall, water, closed/locked door, NPC, furniture, boss
   // barrier)? Walk up to its nearest walkable EDGE instead of mushing into the face.
-  // Foes aren't solid to the planner — a foe click is handled as a chase in endJoy.
+  // EXCEPT a cracked wall (tile 10): you break those by shoving INTO them from any
+  // side, so a click/hold on one must drive the hero into it (trySmashWalls does the
+  // rest). Foes aren't solid to the planner — a foe click is a chase (see endJoy).
   const tx = Math.floor(wx), ty = Math.floor(wy);
-  if (pathCellBlocked(tx, ty)) {
+  if (pathCellBlocked(tx, ty) && tileAtCell(tx, ty) !== 10) {
     const edge = nearestWalkableEdge(tx, ty);
     if (edge) { wx = edge.x + 0.5; wy = edge.y + 0.5; }   // else fully enclosed — leave as-is
   }
@@ -8531,7 +8533,7 @@ canvas.addEventListener('pointerleave', () => {
 
 // ── INSPECT: enemy codex card ──
 // A concise stat card for a foe: hovering one on desktop pops it (clicking a foe
-// paths to it instead); on touch a tap opens it. It shows under the map, semi-
+// paths to it instead); on touch a tap opens it. It shows under the minimap, semi-
 // transparent, so it never hides the foe you're pointing at. Its numbers stay
 // hidden as ??? until you've killed enough of that species to "learn" them — each
 // kill rolls toward revealing more, fully unlocked at 10 kills. Bosses are an open
@@ -8642,15 +8644,18 @@ function renderEnemyCard(e) {
   // A desktop hover card is a passive read-out (never eats a map click); a touch
   // card stays tappable so a tap dismisses it.
   el.style.pointerEvents = isWebLayout() ? 'none' : 'auto';
-  // Pin UNDER the map: centred along the bottom edge of the canvas, clamped to the
-  // viewport. Semi-transparent (see #enemy-card in styles.css) so it never hides
-  // the foe you're pointing at.
+  // Sit it right UNDER the minimap (top-left of the map), aligned to the minimap's
+  // left edge, clamped to the viewport. Semi-transparent (see #enemy-card in
+  // styles.css) so it never hides the foe you're pointing at. If the minimap is
+  // hidden (town / between floors) fall back to the map's top-left corner.
   el.style.display = 'block';
-  const cr = canvas.getBoundingClientRect();
   const r = el.getBoundingClientRect();
-  const gap = 12;
-  let left = cr.left + (cr.width - r.width) / 2;
-  let top = cr.bottom - r.height - gap;
+  const gap = 8;
+  const mm = document.getElementById('minimap');
+  const mr = mm ? mm.getBoundingClientRect() : null;
+  let left, top;
+  if (mr && mr.width > 0 && mr.height > 0) { left = mr.left; top = mr.bottom + gap; }
+  else { const cr = canvas.getBoundingClientRect(); left = cr.left + gap; top = cr.top + gap; }
   left = Math.max(gap, Math.min(left, window.innerWidth - r.width - gap));
   top = Math.max(gap, Math.min(top, window.innerHeight - r.height - gap));
   el.style.left = left + 'px';

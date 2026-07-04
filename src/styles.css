@@ -2270,9 +2270,9 @@
   #hovertip .ht-line { color: var(--meta); }
   #hovertip .ht-sub  { color: var(--meta); font-size: 1.2rem; margin-top: 3px; }
 
-  /* Enemy codex card — pops on hover (desktop) or tap (touch), pinned UNDER the map
-     and laid out as a tidy stat grid. Semi-transparent (and blurred behind) so it
-     never hides the foe you're pointing at; JS sets pointer-events per input mode
+  /* Enemy codex card — pops on hover (desktop) or tap (touch), pinned right UNDER the
+     minimap and laid out as a tidy stat grid. Semi-transparent (and blurred behind) so
+     it never hides the foe you're pointing at; JS sets pointer-events per input mode
      (none on desktop hover, auto on touch so a tap dismisses it). */
   #enemy-card {
     position: fixed; display: none;

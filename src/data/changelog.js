@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Cracked walls break again; foe card sits under the minimap", by: "Claude", notes: [
+    "Clicking (or holding on) a cracked wall once more walks you INTO it so you shove it down — the walk-up-to-the-edge behaviour now skips cracked walls, which you break by pressing into them. Routes still go around them.",
+    "The hovered-foe codex card now sits right under the minimap instead of floating at the bottom-centre of the screen.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Click a wall or object to walk up to it", by: "Claude", notes: [
     "Clicking a solid tile — a wall, water, a closed or locked door, an NPC, or furniture — now walks you up to its nearest edge instead of grinding the hero into its face.",
     "The hero routes to the reachable tile beside what you clicked and stops there, so you can line up on a door, chest or shopkeeper with one click.",
