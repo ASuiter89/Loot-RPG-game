@@ -38,6 +38,10 @@ export const CHANGELOG = [
     "Rebuilt the soundtrack's synth engine so styles no longer share the same three sounds. New instruments: deep round sub bass, a detuned drum-&-bass reese, a squelchy acid bass, big super-saw leads and chords, metallic FM bells, plucky bell/marimba tones, and hollow reed leads — each style now picks the ones that fit it.",
     "Fixed the bass: it used to be forced to the same punchy sawtooth in every style (the 'polka' feel). Basslines now use rounder, smoother sub tones and less on-the-beat bounce, so each style's low end has its own character.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Clearing a floor banks the next as your deepest", by: "Claude", notes: [
+    "Clearing a floor's foes unseals its down-stairs — which now opens the NEXT floor at the Dungeon Gate right away, so it counts as your deepest the moment you clear.",
+    "Port to town after a clear and you can drop straight back onto the floor you opened, instead of re-clearing the one you just finished.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Loading splash on startup", by: "Claude", notes: [
     "A brief loading screen now covers the cold-start moment while the game boots. The title no longer flashes its new-game look before recognising your saved hero — you land straight on CONTINUE with your character shown.",
   ] },

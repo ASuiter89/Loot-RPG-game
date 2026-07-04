@@ -26,6 +26,7 @@ import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
+import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
@@ -3294,14 +3295,30 @@ function diffDebuffMult() { return Math.pow(DEV.conquestScar, diffClearedCount()
 // Gate frontier (the floors you can re-enter). A death can later shove gateFloor
 // back; fighting forward raises it again here, re-opening the locked floors.
 function recordDepth() {
-  const prevMax = player.maxFloor || 1;
-  player.maxFloor = Math.max(prevMax, dungeonLevel);
-  player.gateFloor = Math.max(player.gateFloor || 1, dungeonLevel);
+  markDepthReached(dungeonLevel);
+  // Depth MILESTONES (the every-5-floors cache) pay out on physically SETTING FOOT
+  // on a new deepest floor — tracked on `milestoneFloor`, NOT `maxFloor`. maxFloor
+  // now also jumps a floor early when you clear one (its unsealed stairs make the
+  // next floor re-enterable at the Gate), so keying the fanfare off it would fire a
+  // "floor N reached" banner while you're still standing on floor N-1.
+  const prevMilestone = player.milestoneFloor || 1;
+  player.milestoneFloor = Math.max(prevMilestone, dungeonLevel);
   // A fresh floor clears the transient combo/greed state and refreshes the chip.
   clearGreed(); updateObjectiveChip();
-  if (player.maxFloor > prevMax) depthMilestone(prevMax, player.maxFloor);
+  if (player.milestoneFloor > prevMilestone) depthMilestone(prevMilestone, player.milestoneFloor);
   // Offer the optional risk/reward gate once this floor has finished building.
   setTimeout(() => { try { maybeGreedGate(); } catch (e) {} }, 0);
+}
+
+// Fold a floor into the deepest-reached (`maxFloor`) and currently re-enterable
+// (`gateFloor`) trackers — WITHOUT the floor-arrival side effects (greed gate,
+// milestone fanfare). Called both on arrival (via recordDepth) and the moment a
+// clear unlocks the next floor at the Gate, before the hero has descended.
+function markDepthReached(dl) {
+  if (dl == null) return;
+  const folded = foldReached(player.maxFloor, player.gateFloor, dl);
+  player.maxFloor = folded.maxFloor;
+  player.gateFloor = folded.gateFloor;
 }
 
 // ── MATERIAL GATING (natural kill-drops) ──
@@ -5655,6 +5672,11 @@ function updateFloorClear() {
       sfx('stairs');
       tutorialStage('cave');
     } else {
+      // Clearing this floor unsealed its down-stairs, which opens the NEXT floor at
+      // the town Gate — so that floor now counts as your deepest and is re-enterable
+      // even if you port to town before descending. (Physically arriving there still
+      // pays the depth milestone — see recordDepth.)
+      markDepthReached(floorUnlockedByClear(dungeonLevel, false));
       log('<span data-spr=feat_door></span> The floor is clear — the stairs down unseal!', 'important');
       sfx('stairs');
     }
@@ -5816,7 +5838,15 @@ let player = { x: 5, y: 5,
   name: null, maxGold: 0, maxPower: 0,
   // Deepest dungeon floor reached — the Dungeon Gate in town shows every floor up
   // to this so you keep your progress and can backtrack to grind levels and gear.
+  // Clearing a floor unseals its down-stairs, so it advances this to the NEXT
+  // floor the moment you clear (that floor is re-enterable at the Gate even if you
+  // leave without descending) — not only once you actually step down.
   maxFloor: 1,
+  // Deepest floor the hero has physically SET FOOT ON. Distinct from maxFloor,
+  // which now runs a floor ahead after a clear. Depth milestones (the every-5
+  // cache + fanfare) fire off this on arrival, so the "floor N reached" banner
+  // never triggers while you're still standing on floor N-1.
+  milestoneFloor: 1,
   // Deepest floor currently *re-enterable* at the Gate. Normally tracks maxFloor,
   // but a death in your frontier tier shoves it back to your return floor: the
   // deeper floors you'd reached re-lock (, unclickable) until you fight back
@@ -6672,7 +6702,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     town: [
       `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, knocked back several floors, your bag dropped as a reclaimable grave on the death floor). The Dungeon Gate flags the tier + floor holding that grave (gameState().graveSite.where), so you can dive straight back to it.`,
-      `Town is a menu of services; take the Dungeon Gate to drop back in (choose tier + floor). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
+      `Town is a menu of services; take the Dungeon Gate to drop back in (choose tier + floor). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and is re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
@@ -9537,8 +9567,11 @@ function generateMap() {
   if (player.clearedFloors && player.clearedFloors[dungeonLevel]) {
     floorCleared = true;
   } else if (hostilesRemaining() === 0) {
+    // A floor that spawns with no blockers is cleared on arrival — its stairs down
+    // open at once, so (like a fought clear) it banks the next floor as your deepest.
     floorCleared = true;
     if (player.clearedFloors) player.clearedFloors[dungeonLevel] = true;
+    markDepthReached(floorUnlockedByClear(dungeonLevel, isLastFiniteFloor()));
   } else if (isLastFiniteFloor()) {
     log(`<span data-spr=b_ratking></span> The dungeon's final guardian holds this floor. ${clearConditionLabel()}`, 'important');
   } else {
@@ -24197,6 +24230,11 @@ function loadGame() {
     normSkillSlots();
     // Migrate saves that predate the deepest-floor tracker / town hub.
     if (player.maxFloor == null) player.maxFloor = data.dungeonLevel || 1;
+    // Milestones used to fire off maxFloor; now that a clear advances maxFloor a
+    // floor early, they fire off the physically-reached floor instead. Seed it to
+    // the deepest reached so existing heroes don't re-collect milestones already
+    // earned (and, harmlessly, so a mid-run reload doesn't re-award the current one).
+    if (player.milestoneFloor == null) player.milestoneFloor = player.maxFloor || 1;
     // Migrate saves that predate the re-enterable-floor tracker (the Gate lock).
     // Seed it to the deepest reached so existing heroes keep full access — the
     // lock only starts biting on their next death.
