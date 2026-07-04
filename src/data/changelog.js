@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Cloud saves are harder to lose", by: "Claude", notes: [
+    "Which copy of a hero wins a sync is now decided by total play-time, not the device clock — a phone or PC with a wrong clock can no longer overwrite your more-played save with a stale one.",
+    "While a newer save is pulled onto the hero you're playing, saving pauses until the game reloads onto it, so a background autosave can't clobber the copy you just synced.",
+    "If a hero ever ended up stored twice on your account, the sync now keeps the more-advanced copy and clears the stale duplicate.",
+    "Signing in now checks the hardcore death record before merging, so a hero who fell on another device can't come back to life on sign-in.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Fired attacks hit on impact, not on cast", by: "Claude", notes: [
     "Bow and staff shots, ranged summon bolts, and bolt/blast spells now deal their damage the instant the projectile REACHES the target — a foe no longer dies (and vanishes) before the bolt visibly connects.",
     "The release sound still fires as you loose the shot; the hit, its numbers and any crit land as the bolt arrives.",

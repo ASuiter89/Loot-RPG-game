@@ -20,8 +20,17 @@ function hero(cid, ts, extra = {}) {
 }
 function blank() { return { player: { class: null, level: 1, gold: 0 } }; }
 
+// The game's clock-skew-proof comparator: monotonic play-time first, ts as tiebreak.
+const playOrder = (a, b) => {
+  const pa = (a && a.player && a.player.playMs) || 0;
+  const pb = (b && b.player && b.player.playMs) || 0;
+  if (pa !== pb) return pa - pb;
+  return ((a && a.ts) || 0) - ((b && b.ts) || 0);
+};
+
 // A plan builder wired with the standard predicates; dead/deleted are cid sets.
-function plan(cloudRows, localRows, { activeSlot = 0, dead = [], deleted = [] } = {}) {
+// Pass `order` to exercise the clock-skew-proof comparator (default: ts only).
+function plan(cloudRows, localRows, { activeSlot = 0, dead = [], deleted = [], order } = {}) {
   const deadSet = new Set(dead);
   const delSet = new Set(deleted);
   return planReconcile({
@@ -33,6 +42,7 @@ function plan(cloudRows, localRows, { activeSlot = 0, dead = [], deleted = [] } 
     isDead: d => !!(d && d.player && d.player.cid && deadSet.has(d.player.cid)),
     isDeleted: d => !!(d && d.player && d.player.cid && delSet.has(d.player.cid)),
     lowestFree,
+    ...(order ? { saveOrder: order } : {}),
   });
 }
 
@@ -293,5 +303,84 @@ describe('planReconcile — blanks and empties', () => {
     const w = p.localWrites.find(w => w.slot === 2);
     expect(w.data.player.cid).toBe('A');
     expect(p.uploads).not.toContain(2);            // already in the cloud
+  });
+});
+
+describe('planReconcile — clock-skew-proof ordering (monotonic play-time)', () => {
+  it('a more-PLAYED local copy wins even when its wall-clock ts is OLDER (skewed clock)', () => {
+    // The clock-skew trap: the cloud copy carries a newer ts (a device whose clock
+    // ran fast stamped it), but the local copy has strictly more play-time, so it is
+    // genuinely the more-advanced save. Play-time ordering keeps it; ts alone would
+    // have dropped it and lost real progress.
+    const cloudRows = [{ slot: 0, data: hero('A', 9999, { playMs: 100, level: 3 }) }];
+    const localRows = [{ slot: 0, data: hero('A', 1000, { playMs: 500, level: 9 }) }];
+    const p = plan(cloudRows, localRows, { activeSlot: 0, order: playOrder });
+    expect(p.uploads).toContain(0);                             // more-played local pushed up
+    expect(p.localWrites.find(w => w.slot === 0)).toBeUndefined(); // local already the winner
+  });
+
+  it('adopts the cloud copy when it has more play-time despite an older ts', () => {
+    const cloudRows = [{ slot: 0, data: hero('A', 1000, { playMs: 800, level: 12 }) }];
+    const localRows = [{ slot: 0, data: hero('A', 9999, { playMs: 200, level: 4 }) }];
+    const p = plan(cloudRows, localRows, { activeSlot: 0, order: playOrder });
+    const w = p.localWrites.find(w => w.slot === 0);
+    expect(w.data.player.level).toBe(12);                       // more-played cloud adopted locally
+    expect(p.uploads).not.toContain(0);
+    expect(p.activeChanged).toBe(true);
+  });
+
+  it('breaks equal play-time ties by ts', () => {
+    const cloudRows = [{ slot: 0, data: hero('A', 100, { playMs: 500, level: 5 }) }];
+    const localRows = [{ slot: 0, data: hero('A', 200, { playMs: 500, level: 6 }) }];
+    const p = plan(cloudRows, localRows, { activeSlot: 0, order: playOrder });
+    expect(p.uploads).toContain(0);                             // newer ts wins the tie → local pushed
+  });
+});
+
+describe('planReconcile — duplicate-cid cloud rows are de-duplicated', () => {
+  it('keeps the more-advanced duplicate and DELETES the stale one', () => {
+    // Two cloud rows carry the same hero (a leftover from an earlier bug/race). The
+    // newer copy is kept at its slot; the stale duplicate row is deleted so the hero
+    // can never appear twice on the account.
+    const cloudRows = [
+      { slot: 1, data: hero('A', 100, { level: 4 }) },
+      { slot: 3, data: hero('A', 500, { level: 9 }) },
+    ];
+    const localRows = [];
+    const p = plan(cloudRows, localRows, { activeSlot: 0 });
+    expect(p.cloudDeletes).toContain(1);                        // stale duplicate row deleted
+    expect(p.cloudDeletes).not.toContain(3);
+    // The surviving row (slot 3, level 9) is pulled down; the deleted slot is not written.
+    const w3 = p.localWrites.find(w => w.slot === 3);
+    expect(w3.data.player.level).toBe(9);
+    expect(p.localWrites.find(w => w.slot === 1)).toBeUndefined();
+  });
+
+  it('a local copy of a de-duplicated hero folds onto the surviving slot, not the deleted one', () => {
+    const cloudRows = [
+      { slot: 1, data: hero('A', 100, { level: 4 }) },   // stale duplicate → deleted
+      { slot: 3, data: hero('A', 500, { level: 9 }) },   // survivor
+    ];
+    const localRows = [{ slot: 0, data: hero('A', 900, { level: 12 }) }]; // newest of all
+    const p = plan(cloudRows, localRows, { activeSlot: 0 });
+    expect(p.cloudDeletes).toContain(1);
+    // Newest local (level 12) wins and lands on the survivor's slot 3; slot 0's stale
+    // local copy is cleared (the hero moved).
+    const w3 = p.localWrites.find(w => w.slot === 3);
+    expect(w3.data.player.level).toBe(12);
+    expect(p.uploads).toContain(3);
+    expect(p.localRemovals).toContain(0);
+  });
+
+  it('does not treat two distinct legacy (id-less) rows as duplicates', () => {
+    // Legacy id-less saves key on their slot index, so different slots are different
+    // heroes — they must never be de-duplicated into one.
+    const cloudRows = [
+      { slot: 0, data: hero(null, 100, { level: 3 }) },
+      { slot: 1, data: hero(null, 100, { level: 7 }) },
+    ];
+    const localRows = [];
+    const p = plan(cloudRows, localRows, { activeSlot: 9 });
+    expect(p.cloudDeletes).toHaveLength(0);                     // both kept
   });
 });
