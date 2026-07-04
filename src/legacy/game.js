@@ -17207,7 +17207,7 @@ function updatePlayer(dt) {
   // An in-progress dash overrides normal control for its brief window. A dash
   // slammed into a cracked wall shoves it too (use the pre-collision velocity, as
   // movePlayerBy zeroes the component that hit the wall).
-  if (player.dashT > 0) { player.dashT -= dt; const dvx = player.vx, dvy = player.vy; movePlayerBy(dvx * dt, dvy * dt); trySmashWalls(dvx, dvy); return; }
+  if (player.dashT > 0) { player.dashT -= dt; const dvx = player.vx, dvy = player.vy; movePlayerBy(dvx * dt, dvy * dt); if (mapWarping()) return; trySmashWalls(dvx, dvy); return; }
 
   // Input vector — keyboard / d-pad, or the analog joystick when it's active.
   let ix = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
@@ -17477,6 +17477,7 @@ function teleportPad(nx, ny) {
   if (!dest) return;
   if (dest.x === nx && dest.y === ny) return;   // degenerate self-pad — nothing to do
   clearHeld();                                  // cancel held input + any click-to-move path (don't walk back)
+  player.dashT = 0;                             // and end any in-progress dash — the portal took over
   const sx = nx + 0.5, sy = ny + 0.5;           // pad the hero leaves (tile centre)
   setPlayerCell(dest.x, dest.y);                // move now; the animation is purely visual
   beginMapWarp(sx, sy, dest.x + 0.5, dest.y + 0.5);
@@ -27212,6 +27213,7 @@ __dlLive("keybindCapture", () => keybindCapture, (v) => { keybindCapture = v; })
 __dlLive("lbMode", () => lbMode, (v) => { lbMode = v; });
 __dlLive("lbTab", () => lbTab, (v) => { lbTab = v; });
 __dlLive("merchant", () => merchant, (v) => { merchant = v; });
+__dlLive("moveTarget", () => moveTarget, undefined);   // read-only handle (a const object) — lets tests inspect the click-to-move route
 __dlLive("newGameArmed", () => newGameArmed, (v) => { newGameArmed = v; });
 __dlLive("pact", () => pact, (v) => { pact = v; });
 __dlLive("player", () => player, (v) => { player = v; });

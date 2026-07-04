@@ -84,15 +84,23 @@ async function main() {
     if (preStep.mode !== 'dungeon') failures.push(`not in a live dungeon before step (mode=${preStep.mode})`);
     if (preStep.rtPaused !== false) failures.push(`world unexpectedly paused before step (rtPaused=${preStep.rtPaused})`);
 
-    // Step the hero onto a pad, then read the immediate post-step state.
+    // Step the hero onto a pad, then read the immediate post-step state. Before the
+    // step we ARM a real click-to-move route pointing back at the SOURCE pad — exactly
+    // the "walked here via click, then warped" case the headline fix targets. If the
+    // warp fails to clear it, the hero would path back toward the source after control
+    // returns. moveTargetActive proves the route was cancelled synchronously.
     if (setup.padCount >= 1) stepped = await page.evaluate(() => {
       const pad = window.gameState().teleporters[0];
       window.setPlayerCell(pad.x, pad.y);
-      window.onEnterCell(pad.x, pad.y);   // fires teleportPad → beginMapWarp
+      const mt = window.moveTarget;
+      mt.active = true; mt.hold = false; mt.path = null; mt.pathIdx = 0;
+      mt.wx = pad.x + 0.5; mt.wy = pad.y + 0.5;   // route target sits on the SOURCE pad we're leaving
+      window.onEnterCell(pad.x, pad.y);   // fires teleportPad → clearHeld() + beginMapWarp
       const s = window.gameState();
       return {
         src: { x: pad.x, y: pad.y }, dest: { x: pad.toX, y: pad.toY },
         transit: s.transit, canMove: s.canMove, rtPaused: window.rtPaused(),
+        moveTargetActive: window.moveTarget.active,
         heroX: window.player.x, heroY: window.player.y,
         heroVx: window.player.vx, heroVy: window.player.vy,
       };
@@ -102,6 +110,7 @@ async function main() {
       if (stepped.transit !== 'warp') failures.push(`transit not 'warp' right after step (got ${JSON.stringify(stepped.transit)})`);
       if (stepped.canMove !== false) failures.push(`canMove not false during warp (got ${stepped.canMove})`);
       if (stepped.rtPaused !== true) failures.push(`world not frozen during warp (rtPaused=${stepped.rtPaused})`);
+      if (stepped.moveTargetActive !== false) failures.push(`click-to-move route not cleared on warp (moveTarget.active=${stepped.moveTargetActive}) — the headline fix`);
       if (stepped.heroX !== stepped.dest.x || stepped.heroY !== stepped.dest.y)
         failures.push(`hero not moved to dest pad: at (${stepped.heroX},${stepped.heroY}), dest (${stepped.dest.x},${stepped.dest.y})`);
       if (stepped.heroVx !== 0 || stepped.heroVy !== 0)
