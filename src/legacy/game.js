@@ -2786,7 +2786,7 @@ const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', H
   // Spell Power amps spells; Cast Speed shortens the recharge of spell actives the
   // way Attack Speed quickens auto-attacks. Both are gated to matching gear.
   SKILLPWR:'Skill Power %', CASTSPD:'Cast Speed %',
-  CDR:'Cooldown Reduc %', MCR:'Mana Cost Reduc %',
+  CDR:'Cooldown Rating', MCR:'Mana Cost Reduc %',
   // ── weapon-flavour stats ── BLEED chance to open a bleeding wound (a DoT);
   // STUNPWR raises crushing weapons' stun chance & duration.
   BLEED:'Bleed Chance %', STUNPWR:'Stun Power %', ATKSPD:'Attack Speed %',
@@ -2807,7 +2807,7 @@ const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', MP:'MP
 // effective % they currently produce. CRITDMG stays a % (it's a damage multiplier).
 const PCT_STATS = new Set(['CRITDMG','LEECH','MPLEECH','IDMG',
   'DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','GOLDFIND','XPGAIN','MAGICFIND','MATFIND',
-  'SPELLPWR','SKILLPWR','CASTSPD','CDR','MCR','BLEED','STUNPWR','ATKSPD','TENAC']);
+  'SPELLPWR','SKILLPWR','CASTSPD','MCR','BLEED','STUNPWR','ATKSPD','TENAC']);
 // One-line "what this stat does" blurbs, surfaced by hovering a stat name (see
 // statMeaningTip) in the Enchanter, hero sheet and item cards.
 const STAT_DESC = {
@@ -2843,7 +2843,7 @@ const STAT_DESC = {
   SPELLPWR: 'Amplifies your spell damage.',
   SKILLPWR: 'Amplifies your weapon-based (martial) skills.',
   CASTSPD: 'Spell skills recharge faster.',
-  CDR: 'All skills recharge faster.',
+  CDR: 'Shortens every skill\'s cooldown. A rating: the % it cuts is CDR/(CDR+100), so it climbs toward but never reaches 100% — more is always better, each point a little less than the last.',
   MCR: 'Skills cost less mana.',
   BLEED: 'Chance to open a bleeding wound (damage over time).',
   STUNPWR: 'Raises stun chance and duration of crushing hits.',
@@ -3618,6 +3618,16 @@ function playerCritRating() {
 }
 function playerBlockRating() { return Math.max(0, totalStat('BLOCK') + ratePct(skillBonus('block'))); }
 function playerDRRating()    { return Math.max(0, totalStat('DR') + ratePct(skillBonus('dr'))); }
+
+// Cooldown Reduction is a RATING like crit/evasion, but ABSOLUTE — its opposition is
+// a fixed constant (not the foe's level), because a shorter cooldown works the same
+// against any monster. The fraction it actually cuts off every skill's cooldown is
+// rated(CDR, CDR_SCALE) = CDR/(CDR+CDR_SCALE), which climbs toward but never reaches
+// 1.0 — so cooldowns shrink with diminishing returns and can never hit zero. This is
+// exactly the reduction the cast pipeline applies (cd = base/(1+CDR/CDR_SCALE)); the
+// hero sheet, tooltips and gameState all report THIS %, not the raw rating.
+const CDR_SCALE = 100;
+function cooldownReductionFrac() { return rated(totalStat('CDR'), CDR_SCALE); }
 
 // ── EFFECTIVE CHANCES (what combat actually rolls; e is the foe, or {level} for UI) ──
 function dodgeChanceVs(e) { return rated(playerEvasionRating(), enemyAccuracyRating(e)); } // player avoids the blow
@@ -6499,11 +6509,15 @@ window.gameState = function gameState(radius) {
       // Offense-scaling gear stats (all %), so an agent can see which build a hero is
       // geared for without reading tooltips. skillPower amps MARTIAL skills, spellPower
       // amps SPELLS; attackSpeed quickens auto-attacks, castSpeed the recharge of spell
-      // actives, and cooldownReduction the recharge of every active.
+      // actives. cooldownReduction is the effective FRACTION (0..1) your cooldowns are
+      // cut — CDR is a rating (cooldownRating), turned into an asymptotic % via
+      // rating/(rating+100) that nears but never reaches 1.0.
       offense: (typeof totalStat === 'function') ? {
         skillPower: totalStat('SKILLPWR'), spellPower: totalStat('SPELLPWR'),
         increasedDmg: totalStat('IDMG'),
-        attackSpeed: totalStat('ATKSPD'), castSpeed: totalStat('CASTSPD'), cooldownReduction: totalStat('CDR'),
+        attackSpeed: totalStat('ATKSPD'), castSpeed: totalStat('CASTSPD'),
+        cooldownRating: totalStat('CDR'),
+        cooldownReduction: (typeof cooldownReductionFrac === 'function') ? Math.round(cooldownReductionFrac() * 1000) / 1000 : 0,
       } : null,
       // Auto-attack reach of the equipped weapon, resolved by SUB-TYPE (a Rapier
       // reaches 2, a Pike 3, a Longbow 5) — read this rather than guessing from category.
@@ -6753,8 +6767,8 @@ window.gameGuide = function gameGuide(topic) {
       `The bar has ${SKILL_SLOTS} MANUAL slots (cast by hand with ${key('skill1')}-${key('skill' + SKILL_SLOTS)}) plus ONE dedicated auto-cast slot. You choose what goes where — drag a learned active onto a slot, or use the SKILLS-tab slot buttons; a freshly-learned active auto-fills the first open manual slot.`,
       `gameState().skills lists each filled manual slot's number key, MP cost (already reduced by your Mana Cost Reduction), cooldown remaining, ready flag, and what the skill DOES — its shape, range/radius and the damages/heals/buffs/summons flags — so you can pick one without inspecting it. The auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
       `Every active is either a SKILL (martial/weapon-based) or a SPELL (magic) — shown as a SKILL / SPELL badge on its tree node and in gameState().skills[i].school. A SKILL scales with your weapon damage + Skill Power gear; a SPELL scales with Spirit + Spell Power gear. Gear those stats to match the actives you lean on.`,
-      `Cooldowns are real seconds (spam-floored at 0.5s). Recharge is MULTIPLICATIVE haste, like attack speed: cd = base / (1 + CDR/100), and for SPELL actives times a further (1 + CastSpeed/100). There is NO cap — 60% CDR + 35% Cast Speed divides a spell's cooldown by 1.6×1.35 ≈ 2.16, and stacking more only ever approaches (never reaches) instant. +MCR likewise divides MP cost (base / (1 + MCR/100)); +Attack Speed quickens auto-attacks the same way. +CDR speeds every active, +Cast Speed spells only, and a rank-7 skill gets an extra ×1.2.`,
-      `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. ~50% CDR + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
+      `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and a rank-7 skill adds an extra ×1.2. The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
+      `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
       `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — a big power surge, then a shorter cooldown, then wider reach — so deepening a key skill outpaces its rising mana cost.`,
       `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. Its detail card shows a Surge chip, milestone pips by the rank, and the bigger jump in the on-rank-up preview. Keystones stay single-rank, so they don't surge.`,
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
@@ -6765,10 +6779,10 @@ window.gameGuide = function gameGuide(topic) {
     damage: [
       `Damage comes from THREE distinct sources, each with its own scaling lane — build into one and you don't accidentally buff the others:`,
       `AUTO-ATTACK: your automatic weapon swing. Scales with weapon Damage + Attack (ATK) + your class's damage attributes (e.g. Might). Dedicated amp: Increased Dmg % (IDMG). Speed lever: Attack Speed % (ATKSPD) — faster swings. Can MISS (accuracy vs the foe's evasion).`,
-      `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction % (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
+      `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
       `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
       `So NO — Attack does not feed everything: ATK + weapon Damage power auto-attacks and martial skills only; spells ignore them and live on Spirit + Spell Power. The three % amps (IDMG / Skill Power / Spell Power) are one-per-source and never cross over.`,
-      `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). gameState().player.offense reports your current skillPower / spellPower / increasedDmg / attackSpeed / castSpeed / cooldownReduction totals.`,
+      `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). CDR is a RATING, not a flat %: the fraction it actually cuts off a cooldown is CDR/(CDR+100), so it climbs toward but never reaches 100% (no cap — the math just can't get there), and the hero sheet / tooltips show that real % — a cooldown drops by exactly the amount shown. gameState().player.offense reports skillPower / spellPower / increasedDmg / attackSpeed / castSpeed, the raw cooldownRating, and cooldownReduction as the 0..1 fraction it yields.`,
       `TOOLTIP READOUT: each damage skill's tooltip (and its skill-tree card) shows two pills versus a typical foe at your current depth. "Damage lo–hi" is the absolute min to absolute max a single ACTIVATION deals to that foe — the weapon roll, ATK, your damage attributes, gear IDMG/Skill/Spell Power, the skill's coefficient & rank, synergies and the foe's armour are all folded in, and a multi-strike skill's hits are summed into the range — but crit and other chance-only effects (status/elemental procs) and external buffs (shrines, food, war-cries) are EXCLUDED, so it's a stable floor–ceiling. "DPS" is the effective sustained damage per second: that range's midpoint, lifted by your crit chance × crit damage, times how many times a second the skill can be cast. The cooldown shown in the tooltip is the real one AFTER your Cooldown Reduction / Cast Speed. Big numbers abbreviate (1.2k, 3.4M). gameState() skills carry { damage:{min,max}, dps, cooldownFull }.`,
       `Gear gating is thoughtful: a MELEE/RANGED weapon can only roll Skill Power & Attack Speed; a WAND/STAFF only Spell Power & Cast Speed. Gloves & rings lean martial (Skill Power); amulets & caster off-hands lean arcane (Spell/Cast). So the weapon you wield already points your build at one lane.`,
     ],
@@ -19423,7 +19437,9 @@ function castSkillById(id, opts) {
   // than the last and the cooldown asymptotes toward — but never reaches — zero,
   // so it's functionally impossible to trivialise it even with extreme gear. The
   // 0.5s floor is only a spam guard on the final number, not a cap on the stats.
-  let haste = 1 + Math.max(0, totalStat('CDR')) / 100;                              // every active
+  // Reduction form: cd = base × (1 − CDR/(CDR+CDR_SCALE)) = base / (1 + CDR/CDR_SCALE).
+  // Same rating→asymptotic-% curve the hero sheet shows (cooldownReductionFrac).
+  let haste = 1 + Math.max(0, totalStat('CDR')) / CDR_SCALE;                        // every active
   if (castKind(sk) === 'spell') haste *= 1 + Math.max(0, totalStat('CASTSPD')) / 100; // spells only
   if (skillRank(id) >= 7) haste *= 1.20;                                            // ✦✦ Honed milestone
   setSkillCd(id, Math.max(0.5, sk.cd / haste));
@@ -22473,7 +22489,7 @@ function renderHero(el) {
     ['LEECH','ic_heart','Life leech'], ['MPLEECH','ic_orb','Mana leech'], ['HPKILL','ic_heart','Life on kill'],
     ['MPKILL','ic_orb','Mana on kill'], ['THORNS','spikes_up','Thorns'],
     ['SKILLPWR','w_scythe','Skill power'], ['SPELLPWR','ic_orb','Spell power'],
-    ['ATKSPD','w_dagger','Attack speed'], ['CASTSPD','ic_wand','Cast speed'], ['CDR','ic_wand','Cooldown reduc'],
+    ['ATKSPD','w_dagger','Attack speed'], ['CASTSPD','ic_wand','Cast speed'],
     ['MCR','ui_mp','Mana cost reduc'], ['GOLDFIND','ic_money','Gold find'], ['XPGAIN','scroll','XP gain'],
     ['MAGICFIND','chest','Magic find'], ['MATFIND','mat_scrap','Material find'],
     ['BLEED','ic_heart','Bleed chance'], ['STUNPWR','ic_stun','Stun power'],
@@ -22493,6 +22509,7 @@ function renderHero(el) {
       ${stat('Attack power', Math.round(totalStat('ATK') + attrDamage()))}
       ${stat('Attack speed', '+' + Math.round(playerAttackSpeedPct()) + '% <span style="opacity:0.6">→ ' + (1 / playerAttackInterval()).toFixed(2) + '/s</span>')}
       ${stat('Move speed', '+' + Math.round(((1 + totalStat('MOVESPD') / 100) * agiMoveMult() - 1) * 100) + '%')}
+      ${totalStat('CDR') > 0 ? stat('Cooldown reduction', `${Math.round(totalStat('CDR'))} <span style="opacity:0.6">→ ${Math.round(cooldownReductionFrac() * 100)}%</span>`) : ''}
       ${stat('Max Stamina', Math.round(player.maxStamina || baseMaxStamina()))}
       ${stat('Stamina regen', '+' + (Math.round(staminaRegenPerSec() * 10) / 10) + '/s')}
       ${stat('Defense', Math.round(playerDefense()))}

@@ -17,6 +17,11 @@ export const CHANGELOG = [
   { date: "2026-07-04", size: "small", v: "Sellsword camp cards show a big mercenary portrait", by: "Claude", notes: [
     "Each Sellsword hire card now matches the hero card: name and description sit left-aligned, with the mercenary's walking sprite standing tall on the right instead of a small icon crammed beside the name.",
   ] },
+  { date: "2026-07-04", size: "small", v: "Cooldown Reduction now reads as the honest % it cuts", by: "Claude", notes: [
+    "Cooldown Reduction was shown as a flat % but worked like a rating — \"100% CDR\" only ever halved a cooldown, which read as broken. It's now presented honestly, exactly like Crit and Evasion: gear shows a raw Cooldown Rating, and the hero sheet + skill tooltips show the real % it cuts.",
+    "That % is rating/(rating+100), so it climbs toward but never reaches 100% — there's no hard cap, the math simply can't get you to zero cooldown — and a cooldown now drops by exactly the amount shown.",
+    "Your actual cooldowns are unchanged — the game was already doing this; only the number you see was misleading. Nothing was buffed or nerfed.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Skill damage pills: a true range, clearer DPS, real cooldown", by: "Claude", notes: [
     "The skill tooltip's Damage pill now shows a real low–high range — the absolute minimum to absolute maximum a single cast deals to a foe at your depth. A multi-strike skill's hits are summed into the range instead of showing a confusing \"×N\" tag.",
     "DPS is its own pill now: the range's midpoint, adjusted for your crit chance and crit damage, times how often the skill can be cast per second.",
