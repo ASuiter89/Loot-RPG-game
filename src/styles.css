@@ -2218,8 +2218,8 @@
     border: 1px solid var(--border);
     padding: 8px 10px;
     font-size: 1.3rem;
-    min-width: 160px;
-    max-width: 220px;
+    min-width: 320px;
+    max-width: 440px;
     /* Above the side panel (200) and control bar (210) so it never hides
        behind the drawer; below the non-interactive screen flash (300). */
     z-index: 250;
@@ -2241,9 +2241,9 @@
   .range-cap { font-size: 1.2rem; color: var(--orange-400); margin-left: 6px; vertical-align: middle; letter-spacing: .5px; }
   #tooltip .tt-tier { font-size: 1.2rem; opacity: 0.7; }
   /* Side-by-side compare: hovered item next to the currently-equipped piece. */
-  #tooltip.comparing { max-width: 440px; }
+  #tooltip.comparing { max-width: 880px; }
   #tooltip .tt-compare { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
-  #tooltip .tt-card { flex: 1 1 150px; min-width: 150px; }
+  #tooltip .tt-card { flex: 1 1 300px; min-width: 300px; }
   #tooltip .tt-card-equipped { border-left: 1px solid var(--border); padding-left: 10px; opacity: 0.9; }
   #tooltip .tt-cardlabel { font-size: 1.2rem; letter-spacing: 1px; text-transform: uppercase; color: var(--junk); margin-bottom: 3px; }
 
