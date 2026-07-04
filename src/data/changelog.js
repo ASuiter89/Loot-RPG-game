@@ -8,6 +8,11 @@ export const CHANGELOG = [
     "Tall scenery — trees, tall furniture — no longer vanishes the moment its base scrolls off the bottom of the screen; its crown keeps drawing while any part of it is still in view.",
     "Monsters no longer spawn trapped inside a solid object: a tree, table or crate is never dropped onto a monster's tile, so nothing gets walled in unable to move.",
   ] },
+  { date: "2026-07-04", size: "small", v: "Walk-through-portal teleporters", by: "Claude", notes: [
+    "Stepping onto a teleporter pad no longer snaps you across the floor. The portal now swallows you in a purple swirl, the camera pans over to the partner pad, and you step back out of it — so it reads as walking through the portal.",
+    "Fixed: a teleporter now clears your click-to-move route. Before, warping mid-walk left you auto-walking straight back toward the pad you'd clicked near.",
+    "The world holds still for the brief crossing (~0.9s) and you can't be hit during it.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Icons fill their space instead of floating small", by: "Claude", notes: [
     "Menu and HUD icons now size to their actual artwork instead of the whole tile, so they read as tall as the text beside them and fill their slots — no more shrunken icons stranded inside transparent padding.",
     "Most visible on the gold and crafting-material counts (Scrap, Glimmer, Core, Chaos), whose art filled as little as a third of its tile; also sharpens icons across the bag, shop, forge, enchanter, reward lines and message log.",
