@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "medium", v: "Sets have their own size and slots", by: "Claude", notes: [
+    "Each equipment set now has its own fixed number of pieces and its own list of slots — and sets vary: Herald's Fortune is 2 trinkets, Reaver's Wrath 3, Arcanist's Regalia 4, Warden's Bastion 5, and Stalker's Shroud 6.",
+    "A set piece only rolls for a slot its set actually uses, so \"Worn: n / size\" counts against the set's real size instead of every gear slot. Sets larger than four pieces grant bonus tiers beyond the four-piece mark.",
+    "Two new sets join the chase: Stalker's Shroud (Ghost Step — dodge + double-strike) and Herald's Fortune (Golden Windfall — more gold, rarer loot, richer materials).",
+    "The set tooltip is wider and lists only the slots that set has pieces for, each in the set's own colour.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Top upgrade row's highlight no longer clipped", by: "Claude", notes: [
     "When the first item in the bag is an upgrade, its green highlight now shows its full top edge instead of having the border and glow cut off under the frozen stat-key bar. A small gap sets the top row clear of the pinned header.",
   ] },

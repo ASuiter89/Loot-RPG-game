@@ -54,6 +54,9 @@ import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTin
 import { elementOf, paletteFor, castArchetype, weaponArchetype, projectileElement, bossFxFor,
   archetypeIsProjectile, clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
 import { UNIQUES, uniqueForBase, uniquesForSlot } from '../data/uniques.js';
+import { ITEM_SETS } from '../data/itemSets.js';
+import { setPieceCount, setComplete as setIsComplete, setStatContribution,
+  rollItemSetId } from '../systems/itemSets.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -6546,7 +6549,7 @@ window.gameState = function gameState(radius) {
     // shows a golden aura on the hero. Mirrors the "… set" tooltip.
     sets: (typeof wornSetCounts === 'function') ? Object.entries(wornSetCounts()).map(([sid, n]) => {
       const s = ITEM_SETS[sid], done = setComplete(sid, n);
-      return { id: sid, name: s.name, worn: n, need: setMaxTier(s), complete: done,
+      return { id: sid, name: s.name, worn: n, need: setPieceCount(s), complete: done,
         power: s.power ? { name: s.power.name, active: done, effect: Object.assign({}, s.power.stats) } : null };
     }) : [],
     // The manual hotbar: each filled slot's number key (1..4), what it casts, MP
@@ -6800,7 +6803,7 @@ window.gameGuide = function gameGuide(topic) {
       `Rarity is COLOUR ONLY (no text labels), lowest to highest: grey → white → green → blue → purple → orange → red. Higher tiers allow more bonus affixes.`,
       `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike every other rarity it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and its own signature power (a "legendary modifier" like Vampiric). Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. gameState() marks worn/held uniques with a "unique" id and "fixed":true.`,
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a depth-milestone cache, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
-      `Set pieces are a distinct top-rarity class shown in teal (not the red of a unique). They drop only at the top tier — as rare as any unique — and grant escalating stat bonuses at 2 and 4 matched pieces worn. Wearing the full set (4 pieces = complete) also unlocks its SIGNATURE POWER — a unique effect, not just more stats: Warden's Aegis Wall (block + reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), or Arcanist's Arcane Overflow (cooldown reduction + mana leech). A completed set wraps the hero in a golden aura and its "… set" tag turns gold with a ✦. A piece can roll for any slot; hover/press-hold the tag to see the bonuses, the power, which slots you're wearing, and your count. gameState().sets lists worn sets, completion and active powers.`,
+      `Set pieces are a distinct top-rarity class shown in teal (not the red of a unique). They drop only at the top tier — as rare as any unique — and grant escalating stat bonuses as you match more pieces. Each set has its OWN fixed size and list of slots, and sets deliberately vary: Herald's Fortune is 2 trinkets (fast, all spoils), Reaver's Wrath 3, Arcanist's Regalia 4, Warden's Bastion 5, Stalker's Shroud 6 (the long chase). A piece only ever rolls for a slot ITS set uses, so "Worn: n / size" counts against that set's real size — not every gear slot. Wearing EVERY piece completes a set: its top bonus tier AND its SIGNATURE POWER turn on — a unique effect, not just stats (Warden's Aegis Wall = block + reflect, Reaver's Bloodfrenzy = cleave + leech + execute, Arcanist's Arcane Overflow = cooldowns + mana leech, Stalker's Ghost Step = dodge + double-strike, Herald's Golden Windfall = gold + rarity + materials). A completed set wraps the hero in a golden aura and its "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the slots, each tier's bonus, the power, and your count. gameState().sets lists worn sets, completion (worn / need) and active powers.`,
       `Item power is driven more by item level (ilvl, geared to current depth) than by rarity alone. gameState().menu.inventory gives brief items; read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
@@ -13649,8 +13652,9 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   // power; lower tiers get neither.
   if (tier === 'unique') {
     // A hand-crafted unique already returned above; reaching here means this red
-    // drop rolled as a chase SET piece instead.
-    item.set = rollItemSet();
+    // drop rolled as a chase SET piece instead. The set is chosen from those that
+    // cover this item's slot, so the piece always belongs to a set it can fill.
+    item.set = rollItemSet(slot);
   } else if (tier === 'legendary') {
     item.power = rollItemPower();
   }
@@ -17389,25 +17393,10 @@ function itemPowerStatBonus(name) {
   }
   return sum;
 }
-// Each set: escalating stat bonuses at 2 pieces, then completing it (the top
-// threshold = every tier defined here) unlocks a signature `power` — a unique
-// effect (leech, cleave, reflect, cooldowns…) folded into totalStat, NOT just
-// more raw stats — plus a golden completion aura on the hero.
-const ITEM_SETS = {
-  warden:   { name: "Warden's",   color: '#7fd0ff',
-    bonus: { 2: { DEF: 12, HP: 40 }, 4: { DEF: 30, HP: 120, BLOCK: 10 } },
-    power: { name: 'Aegis Wall', stats: { DR: 8, THORNS: 8, BLOCK: 8 },
-      desc: 'Turn aside more blows and reflect a slice of every hit back at attackers.' } },
-  reaver:   { name: "Reaver's",   color: '#ff7a5c',
-    bonus: { 2: { ATK: 10, CRIT: 6 }, 4: { ATK: 26, CRIT: 14, IDMG: 12 } },
-    power: { name: 'Bloodfrenzy', stats: { LEECH: 8, CLEAVE: 30, EXEC: 12 },
-      desc: 'Hits cleave into nearby foes, leech their life, and execute the wounded.' } },
-  arcanist: { name: "Arcanist's", color: '#c77bff',
-    bonus: { 2: { SPELLPWR: 8, MP: 40 }, 4: { SPELLPWR: 20, MP: 120, CDR: 8 } },
-    power: { name: 'Arcane Overflow', stats: { CDR: 10, MPLEECH: 10, SPELLPWR: 12 },
-      desc: 'Skills recharge faster and the damage you deal refunds mana.' } },
-};
-function rollItemSet() { const ks = Object.keys(ITEM_SETS); return ks[Math.floor(Math.random() * ks.length)]; }
+// The set roster + its pure helpers now live in src/data/itemSets.js and
+// src/systems/itemSets.js (imported at the top). A piece only ever rolls for a
+// slot its set actually covers, so `slot` is required here.
+function rollItemSet(slot) { return rollItemSetId(slot, Math.random, ITEM_SETS); }
 function wornSetCounts() {
   const c = {};
   const active = activeSlots();
@@ -17418,10 +17407,10 @@ function wornSetCounts() {
   }
   return c;
 }
-// The top worn-count threshold a set defines. Reaching it "completes" the set:
-// its final bonus tier AND its unique power turn on, and the hero gains the aura.
-function setMaxTier(set) { return Math.max(...Object.keys(set.bonus).map(Number)); }
-function setComplete(sid, n) { const s = ITEM_SETS[sid]; return !!s && n >= setMaxTier(s); }
+// A set completes when every one of its pieces is worn (see setPieceCount —
+// its size). Completion turns on the top bonus tier AND the signature power and
+// grants the golden aura.
+function setComplete(sid, n) { return setIsComplete(ITEM_SETS[sid], n); }
 // Set ids currently worn at full completion — powers active, golden aura on.
 function completedSets() {
   const out = [], counts = wornSetCounts();
@@ -17429,8 +17418,7 @@ function completedSets() {
   return out;
 }
 // Extra value of a stat granted by whatever set thresholds are currently met,
-// plus the signature power of any completed set. Generalised over each set's
-// declared tiers so future sets can define their own thresholds.
+// plus the signature power of any completed set (see setStatContribution).
 // Fast path: totalStat calls this constantly — bail before the active resolve
 // whenever no set pieces are worn at all (the overwhelmingly common case).
 function setStatBonus(name) {
@@ -17439,50 +17427,55 @@ function setStatBonus(name) {
   if (!anySet) return 0;
   let sum = 0;
   const counts = wornSetCounts();
-  for (const sid in counts) {
-    const set = ITEM_SETS[sid], n = counts[sid];
-    for (const t of Object.keys(set.bonus)) if (n >= +t && set.bonus[t][name] != null) sum += set.bonus[t][name];
-    if (set.power && set.power.stats && n >= setMaxTier(set) && set.power.stats[name] != null) sum += set.power.stats[name];
-  }
+  for (const sid in counts) sum += setStatContribution(ITEM_SETS[sid], counts[sid], name);
   return sum;
 }
-// Rich hover card for a set-name tag: which slots the set can fill (lit for the
-// ones you currently wear it in), and each worn-count threshold's bonus (lit when
-// active, dimmed when not yet met). Reads live worn state so it tracks as you gear
-// up. Single-quoted attributes only — hoverTip escapes double quotes.
+// Rich hover card for a set-name tag: exactly the slots THIS set has pieces for
+// (lit for the ones you currently wear it in), and each worn-count threshold's
+// bonus (lit when active, dimmed when not yet met). Reads live worn state so it
+// tracks as you gear up. The `.set-tip` wrapper widens the card (see styles.css).
+// Single-quoted attributes only — hoverTip escapes double quotes.
 function setTooltipHTML(setId) {
   const s = ITEM_SETS[setId];
   if (!s) return '';
   const worn = wornSetCounts()[setId] || 0;
-  // A set piece can roll for ANY slot; show every slot, lighting the ones you're
-  // currently wearing a piece of THIS set in.
-  const slotList = SLOT_KEYS.map(slot => {
-    const has = equipped[slot] && equipped[slot].set === setId;
-    const label = SLOTS[slot].label;
-    return has ? `<span style='color:${SET_RARITY_COLOR}'>${label} ✓</span>`
-               : `<span style='opacity:.45'>${label}</span>`;
-  }).join(' · ');
-  const maxT = setMaxTier(s);
-  const complete = worn >= maxT;
+  const pieces = setPieceCount(s);
+  const complete = worn >= pieces;
+  // A completed set glows gold like its aura; otherwise it wears its own colour,
+  // giving each set its own identity in the tooltip.
+  const accent = complete ? 'var(--gold)' : s.color;
+  // This set's OWN pieces only — a piece never rolls for a slot the set doesn't
+  // cover, so we list exactly the set's slots (in gear order), lighting the ones
+  // you're wearing a piece of THIS set in.
+  const slotList = s.slots.slice()
+    .sort((a, b) => SLOT_KEYS.indexOf(a) - SLOT_KEYS.indexOf(b))
+    .map(slot => {
+      const has = equipped[slot] && equipped[slot].set === setId;
+      const label = SLOTS[slot].label;
+      return has ? `<span style='color:${accent}'>${label} ✓</span>`
+                 : `<span style='opacity:.45'>${label}</span>`;
+    }).join(' · ');
   // Each worn-count threshold and what it grants, lit when currently active.
   const bonusLines = Object.keys(s.bonus).map(Number).sort((a, b) => a - b).map(t => {
     const b = s.bonus[t];
     const stats = Object.entries(b)
       .map(([k, v]) => `+${v}${PCT_STATS.has(k) ? '%' : ''} ${STAT_SHORT[k] || k}`).join(' · ');
     const met = worn >= t;
-    return `<div style='color:${met ? SET_RARITY_COLOR : 'var(--junk)'}'>${met ? '✓ ' : ''}${t} pieces: ${stats}</div>`;
+    return `<div style='color:${met ? accent : 'var(--junk)'}'>${met ? '✓ ' : ''}${t} pieces: ${stats}</div>`;
   }).join('');
   // The signature power — the completion reward. Gold and lit once the set is
   // complete, dimmed with its unlock count while you're still collecting.
   const powerLine = s.power
     ? `<div style='color:${complete ? 'var(--gold)' : 'var(--junk)'};margin-top:3px'>` +
-      `${complete ? '✦ ' : `${maxT} pieces — `}<b>${s.power.name}</b>: ${s.power.desc}</div>` +
+      `${complete ? '✦ ' : `${pieces} pieces — `}<b>${s.power.name}</b>: ${s.power.desc}</div>` +
       (complete ? `<div style='color:var(--gold)'>★ Set complete — a golden aura surrounds you.</div>` : '')
     : '';
-  return `<div class='ht-name' style='color:${SET_RARITY_COLOR}'>${s.name} Set${complete ? " <span style='color:var(--gold)'>✦</span>" : ''}</div>` +
-    `<div class='ht-line'>A set piece can drop for any gear slot. Match pieces for escalating bonuses; complete the set (${maxT}) to unlock its power and a golden aura.</div>` +
-    `<div class='ht-sub'><b>Worn: ${worn}/${maxT}</b> — ${slotList}</div>` +
-    `<div class='ht-sub'>${bonusLines}${powerLine}</div>`;
+  return `<div class='set-tip'>` +
+    `<div class='ht-name' style='color:${accent}'>${s.name} Set${complete ? " <span style='color:var(--gold)'>✦</span>" : ''}</div>` +
+    `<div class='ht-line'>A ${pieces}-piece set — a piece can drop for any of its slots. Match pieces for escalating bonuses; wear all ${pieces} to unlock its power and a golden aura.</div>` +
+    `<div class='ht-sub'><b>Worn: ${worn}/${pieces}</b> — ${slotList}</div>` +
+    `<div class='ht-sub'>${bonusLines}${powerLine}</div>` +
+    `</div>`;
 }
 // Short markup describing an item's special power / set membership, appended to its
 // stat line so the build-defining bit is visible wherever gear is listed.
@@ -23926,6 +23919,8 @@ function renderHoverTip(el, htmlOverride) {
   const html = htmlOverride || (el && el.dataset ? el.dataset.tip : '');
   if (!html) return;
   hoverTipEl.innerHTML = html;
+  // The wider set card opts in via a .set-tip wrapper; every other card stays narrow.
+  hoverTipEl.classList.toggle('wide', !!hoverTipEl.querySelector('.set-tip'));
   hoverTipEl.style.display = 'block';
   // Pop out beside the element like every other tooltip (see
   // placeTooltipBesideAnchor): to the side, never over the thing you're pointing at.
@@ -28202,7 +28197,7 @@ const __DL_FN_BRIDGE = {
   itemPowerStatBonus,
   rollItemSet,
   wornSetCounts,
-  setMaxTier,
+  setPieceCount,
   setComplete,
   completedSets,
   setStatBonus,

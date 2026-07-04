@@ -2199,6 +2199,10 @@
   #hovertip .ht-name { font-weight: bold; font-size: 1.4rem; margin-bottom: 4px; color: var(--gold-350); }
   #hovertip .ht-line { color: var(--meta); }
   #hovertip .ht-sub  { color: var(--meta); font-size: 1.2rem; margin-top: 3px; }
+  /* The set card packs slot lists, several bonus tiers and a power blurb, so it
+     gets roughly double the standard hovertip width to read comfortably. The
+     .wide class is toggled on when the card holds a .set-tip (see renderHoverTip). */
+  #hovertip.wide { max-width: 480px; }
 
   /* Enemy codex card — pops on hover (desktop) or tap (touch), pinned right UNDER the
      minimap and laid out as a tidy stat grid. Semi-transparent (and blurred behind) so

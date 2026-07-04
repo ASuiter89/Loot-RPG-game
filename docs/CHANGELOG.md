@@ -8,6 +8,26 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — equipment sets get their own size + slots
+
+- 📦 The set **roster** moved out of `src/legacy/game.js` into
+  `src/data/itemSets.js` (`ITEM_SETS`, now with a per-set `slots` list), and the
+  pure set helpers into `src/systems/itemSets.js` (`setPieceCount`, `setTopTier`,
+  `setComplete`, `setStatContribution`, `rollItemSetId`, `setsCoverAllSlots`).
+  The monolith imports them back; its inline `ITEM_SETS` and `setMaxTier` are
+  gone, `rollItemSet(slot)`/`setComplete`/`setStatBonus` delegate to the
+  extracted logic, and `window.setMaxTier` is replaced by `window.setPieceCount`.
+- Each set now has a fixed size = its slot count, and sets vary (2 → 6 pieces).
+  A piece only rolls for a slot its set covers; completion, the "Worn: n / size"
+  tooltip denominator and the top bonus tier all key off the real size. Two new
+  sets (Stalker's Shroud, Herald's Fortune) join the roster.
+- The set tooltip lists only that set's slots and is ~2× wider (`#hovertip.wide`,
+  toggled when the card holds a `.set-tip`, in `src/styles.css`).
+- 🧪 `test/systems/itemSets.test.js` (piece counts, completion, stat
+  contribution, slot-scoped rolls, coverage) and `test/data/itemSets.test.js`
+  (roster validity: real distinct slots, top tier == size, known stat keys, full
+  slot coverage).
+
 ## Feature — Sellsword multi-floor hire + pricing overhaul
 
 - 📦 Mercenary **content + pricing** moved out of `src/legacy/game.js`:
