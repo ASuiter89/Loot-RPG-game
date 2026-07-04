@@ -24,6 +24,8 @@ import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.j
 import { footprintSealsPath } from '../systems/decorPlacement.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
+import { abbreviateNumber, formatDamageRange } from '../utils/format.js';
+import { castHaste, castsPerSecond, effectiveDps } from '../systems/skillDamage.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
@@ -6393,6 +6395,13 @@ window.gameState = function gameState(radius) {
       range: c ? (c.range || null) : null,
       radius: c ? (c.radius || null) : null,
     };
+    // Damage preview: the raw per-hit range (crit excluded) and effective single-
+    // target DPS (crit + cast rate folded in) versus a typical foe at this depth —
+    // what the skill's tooltip shows. Null for non-damage actives. See the "damage"
+    // topic in gameGuide() and skillDamagePreview() for the exact model.
+    const dp = (typeof skillDamagePreview === 'function') ? skillDamagePreview(node, rank) : null;
+    o.damage = dp ? { min: dp.min, max: dp.max, hits: dp.hits } : null;
+    o.dps = dp ? Math.round(dp.dps) : null;
     if (idx != null) {
       o.slot = idx + 1;
       o.key = (typeof skillKeyLabel === 'function') ? skillKeyLabel(idx + 1) : String(idx + 1);
@@ -6737,6 +6746,7 @@ window.gameGuide = function gameGuide(topic) {
       `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
       `So NO — Attack does not feed everything: ATK + weapon Damage power auto-attacks and martial skills only; spells ignore them and live on Spirit + Spell Power. The three % amps (IDMG / Skill Power / Spell Power) are one-per-source and never cross over.`,
       `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). gameState().player.offense reports your current skillPower / spellPower / increasedDmg / attackSpeed / castSpeed / cooldownReduction totals.`,
+      `TOOLTIP READOUT: each damage skill's tooltip (and its skill-tree card) shows two numbers versus a typical foe at your current depth — "Damage lo–hi", the raw per-hit range a single strike can roll (crit EXCLUDED, but folding in the weapon roll, ATK, your damage attributes, gear IDMG/Skill/Spell Power, the skill's coefficient & rank, synergies, and the foe's armour at this depth) — and "DPS", the effective single-target damage per second (that range averaged with your crit chance & crit damage, times hits-per-cast, times how often the skill fires with your CDR/Cast Speed). Big numbers abbreviate (1.2k, 3.4M). Situational spikes (boss damage, execute, rage, transient buffs) are left out so it stays a stable baseline. gameState() skills carry the same as { damage:{min,max,hits}, dps }.`,
       `Gear gating is thoughtful: a MELEE/RANGED weapon can only roll Skill Power & Attack Speed; a WAND/STAFF only Spell Power & Cast Speed. Gloves & rings lean martial (Skill Power); amulets & caster off-hands lean arcane (Spell/Cast). So the weapon you wield already points your build at one lane.`,
     ],
     autocast: [
@@ -19431,6 +19441,96 @@ function skillSpellDamage(e, cast, mult, rank) {
   return Math.max(1, Math.round(dmg));
 }
 
+// ── SKILL DAMAGE PREVIEW (for tooltips + the AI-play API) ────────────────────
+// The min/max weapon roll of the active weapon (or bare fists), WITHOUT rolling —
+// the range source for weapon-based skills. Mirrors getWeaponDamage()'s split.
+function weaponDmgRange() {
+  const w = activeWeapon();
+  if (w && w.stats && w.stats.DMG) {
+    const [lo, hi] = String(w.stats.DMG).split('-').map(Number);
+    if (Number.isFinite(lo) && Number.isFinite(hi)) return [lo, hi];
+  }
+  return [1, 3]; // bare fists
+}
+
+// A preview of what an active skill hits for RIGHT NOW, for its tooltip. Two numbers:
+//   • min/max — the literal per-hit damage RANGE a single strike can roll, crit
+//     EXCLUDED, folding in everything persistent that scales the hit: the weapon
+//     roll, flat ATK, the class's damage attributes, gear Increased/Skill/Spell
+//     Power, the skill's own coefficient and rank, synergies, the difficulty scar,
+//     and the armour a typical foe at THIS depth carries. (Situational spikes —
+//     boss damage, execute, rage-from-missing-HP, transient combat buffs — are
+//     left out so the number stays a stable baseline, matching the {level}-foe shim
+//     the hero sheet already uses.)
+//   • dps — effective single-target DPS: the range averaged with crit chance/damage,
+//     times hits-per-cast, times how often the skill can fire with current haste.
+// Returns null for a non-damage active (pure buff/heal/summon) or a passive. This
+// intentionally mirrors resolveCast()/skillPhys|SpellDamage() — keep them in step.
+function skillDamagePreview(node, rank) {
+  const cast0 = node && node.cast;
+  if (!cast0) return null;
+  const c = applyCastMods(node, cast0); // owned passives can add wpn/spell/repeat/…
+  // A hybrid cast (both wpn AND spell) lands its WEAPON value only — resolveCast's
+  // damage branch is `if (c.wpn) … else if (c.spell) …` — so test wpn first.
+  const isWeapon = c.wpn != null;
+  const isSpellDmg = !isWeapon && c.spell != null;
+  if (!isWeapon && !isSpellDmg) return null; // no direct damage → no readout
+
+  const r = rank || 1;
+  // Rank-10 "Mastered" grants an extra strike (resolveCast bumps repeat) — the only
+  // mastery step that changes single-target damage; the rest only widen targeting.
+  let hits = Math.max(1, c.repeat || 1);
+  if ((rank || 0) >= 10 && c.repeat) hits = c.repeat + 1;
+
+  const synM = synergyMult(node);
+  const rs = rankScale(r);
+  // A representative normal foe at the current depth: no boss/elite armour bump, so
+  // its armour (and the crit opposition below) scale with depth alone.
+  const foe = { level: curDepth() };
+  const armor = enemyArmorPct(foe);
+  const armorFactor = armor > 0 ? (1 - armor * (1 - armorPenFrac())) : 1;
+
+  let min, max;
+  if (isWeapon) {
+    const [wLo, wHi] = weaponDmgRange();
+    const flat = player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
+    const mult = c.wpn * synM * rs * skillPowerMult();
+    // The always-on weapon multipliers from applyOffenseMods (crit + situational
+    // spikes deliberately excluded): class damage, difficulty scar, gear IDMG, armour.
+    const off = classDmgDealtMult() * diffDebuffMult() * (1 + totalStat('IDMG') / 100) * armorFactor;
+    min = Math.max(1, Math.round((wLo + flat) * mult * off));
+    max = Math.max(1, Math.round((wHi + flat) * mult * off));
+  } else {
+    // Spells have no roll — spellBase is deterministic, so min === max.
+    const base = spellBase(c.flat || 12, c.perLvl || 2) * c.spell * synM * rs;
+    const off = diffDebuffMult() * armorFactor; // spells skip class-dmg & IDMG (isSpell path)
+    min = max = Math.max(1, Math.round(base * off));
+  }
+
+  const critChance = critChanceVs(foe);
+  const critMult = critDamageMult();
+  // Cast rate: base cooldown shortened by the same haste the real cast applies —
+  // CDR for every active, Cast Speed for spells (keyed off castKind, so a hybrid's
+  // spell tag still speeds it), and the rank-7 Honed factor.
+  const haste = castHaste({
+    cdr: totalStat('CDR'), castSpd: totalStat('CASTSPD'),
+    isSpell: castKind(node) === 'spell', honed: r >= 7,
+  });
+  const cps = castsPerSecond(node.cd, haste);
+  const dps = effectiveDps({ min, max, critChance, critMult, hitsPerCast: hits, castsPerSec: cps });
+  return { min, max, hits, dps, kind: isWeapon ? 'weapon' : 'spell' };
+}
+
+// One compact tooltip line (`.ht-sub`) for a damage skill: the raw per-hit range
+// and the effective single-target DPS, both abbreviated when large. '' otherwise.
+function skillDmgTipLine(node, rank) {
+  const p = skillDamagePreview(node, rank);
+  if (!p) return '';
+  const rng = formatDamageRange(p.min, p.max);
+  const hits = p.hits > 1 ? ` <span style="opacity:.75">×${p.hits}</span>` : '';
+  return `<div class='ht-sub'>Damage <b>${rng}</b>${hits} · DPS <b style='color:var(--gold)'>${abbreviateNumber(p.dps)}</b></div>`;
+}
+
 // Direction (cardinal) toward the nearest foe in range, for line/beam shapes.
 function nearestFoeDir(range) {
   const f = nearestFoeInRange(range);
@@ -22560,7 +22660,7 @@ function renderSkills(el) {
       <div class="ty">${typeTxt}</div>
       ${skillRecoveryTag(sn)}
       <div class="ds">${sn.desc}</div>
-      ${skillMechHtml(sn)}
+      ${skillMechHtml(sn, rank)}
       ${ruHtml}
       ${reqHtml}
       ${buyBtn}
@@ -22765,7 +22865,8 @@ function modLabel(m) {
 }
 // The structured mechanics of a node as {tag, color, desc} rows — rendered as
 // styled chips in the click popover and as plain lines in the hover card.
-function skillMechList(n) {
+function skillMechList(n, rank) {
+  if (rank == null) rank = (n && typeof skillRank === 'function') ? skillRank(n.id) : 0;
   const rows = [];
   const add = (tag, color, desc) => rows.push({ tag, color, desc });
   if (n.charge) add('Charge', '#e8c267', `Stack up to ${n.charge.max} <b>${n.charge.id}</b> — each grants ${fxOneLine(n.charge.fx)}.`);
@@ -22790,6 +22891,15 @@ function skillMechList(n) {
     // a player which gear stats power this ability.
     if (castKind(n) === 'spell') add('Spell', '#b08ad8', 'Magic — scales with Spell Power; Cooldown Reduction &amp; Cast Speed shorten its recharge.');
     else add('Skill', '#e0a24b', 'Martial — scales with your weapon damage &amp; Skill Power; Cooldown Reduction shortens its recharge.');
+    // Live damage readout — the raw per-hit range and the effective single-target
+    // DPS, folding in gear, attributes, rank, crit and cast rate against a foe at
+    // this depth. Only for actives that actually deal direct damage (wpn/spell).
+    const dp = skillDamagePreview(n, rank);
+    if (dp) {
+      const rng = formatDamageRange(dp.min, dp.max);
+      const hitsTxt = dp.hits > 1 ? ` ×${dp.hits} hits` : '';
+      add('Damage', '#e05a4b', `<b>${rng}</b> per hit${hitsTxt} · about <b>${abbreviateNumber(dp.dps)}</b> DPS vs. a depth-${curDepth()} foe.`);
+    }
     // Movement first — gap-closers/pulls/escapes are the headline of a mobility skill.
     if (c.shape === 'teleport') add('Gap-closer', '#5fc9c0', `Blink up to ${c.range || 6} tiles onto the nearest foe and strike — closes on ranged attackers.`);
     if (c.pull) add('Pull', '#5fc9c0', 'Yanks a distant foe across the gap to you.');
@@ -22814,8 +22924,8 @@ function skillMechList(n) {
   return rows;
 }
 // Styled-chip version for the click popover.
-function skillMechHtml(n) {
-  const rows = skillMechList(n);
+function skillMechHtml(n, rank) {
+  const rows = skillMechList(n, rank);
   if (!rows.length) return '';
   return `<div class="mech">` + rows.map(r =>
     `<div class="mech-row"><span class="mech-t" style="background:${r.color}22;color:${r.color}">${r.tag}</span><span class="mech-d">${r.desc}</span></div>`
@@ -23050,7 +23160,7 @@ function renderSkillBar() {
     // Desktop names the number key; touch (no keyboard, reached by long-press) says "tap to cast".
     const castHint = touchUI() ? ' · tap to cast' : (key ? ` · press ${key}` : '');
     const moveHint = touchUI() ? 'tap the SKILLS tab to re-slot' : 'drag to rearrange · drag a tree skill to swap';
-    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown${castHint}</div><div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
+    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
     return cell(kbShort(key), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}',${i})" ondragend="skillDragEnd()" ${dropAttrs(i)} ${hoverTip(tip)} onclick="castSkillById('${s.id}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
@@ -23072,7 +23182,7 @@ function renderSkillBar() {
     const s = autoS;
     const cd = skillCd(s.id);
     const ready = cd <= 0 && player.mp >= s.mp && player.hp > 0;
-    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown · casts itself the moment it's ready</div><div class='ht-sub' style='opacity:.7'>${touchUI() ? 'tap to change or clear' : 'drag a skill here to change · tap to edit'}</div>`;
+    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${touchUI() ? 'tap to change or clear' : 'drag a skill here to change · tap to edit'}</div>`;
     autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}','${AUTO_SLOT}')" ondragend="skillDragEnd()" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
