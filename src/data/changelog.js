@@ -3,6 +3,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Icons fill their space instead of floating small", by: "Claude", notes: [
+    "Menu and HUD icons now size to their actual artwork instead of the whole tile, so they read as tall as the text beside them and fill their slots — no more shrunken icons stranded inside transparent padding.",
+    "Most visible on the gold and crafting-material counts (Scrap, Glimmer, Core, Chaos), whose art filled as little as a third of its tile; also sharpens icons across the bag, shop, forge, enchanter, reward lines and message log.",
+  ] },
   { date: "2026-07-04", size: "medium", v: "Four dance styles join the soundtrack", by: "Claude", notes: [
     "New generative styles: Pulse (deep house), Neon (festival EDM), Lagoon (tropical house), and Rush (drum & bass) — each a full kit with its own key, groove, and instruments.",
     "Four-on-the-floor kicks and off-beat basslines for the house styles; a fast rolling breakbeat and deep sub for drum & bass.",
