@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Cursed items rebalanced — strong, fair, and permanent", by: "Claude", notes: [
+    "Cursed items now swing each stat relative to the stat itself, so a curse is powerful for whatever it lands on without the wild out-of-band rolls a bug used to produce (a ~300% attack-speed item is no longer possible).",
+    "A curse's drawback is now exactly as strong as its boost — great power, matching price.",
+    "Cursed items can no longer be augmented or reforged at the Enchanter: a curse binds power to price, so the trade is permanent.",
+    "Old saves are repaired on load — any existing over-inflated cursed stat is pulled back in-band automatically.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Menus flow to any screen; foldables play unfolded", by: "Claude", notes: [
     "Town and every other menu now reshape to whatever screen you're on — a narrow phone or a folded cover screen drops to a single scrollable column instead of running the buttons off the right edge, and a wide unfolded screen fans the tiles out into more columns. The difficulty and floor pickers and the craftsman's tiles reflow the same way.",
     "You can now reach Settings and the Bag while you're in Town on a phone — the two buttons stay tappable over the town menu instead of being hidden behind it.",

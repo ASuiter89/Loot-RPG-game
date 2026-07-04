@@ -41,6 +41,7 @@ import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMa
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
 import { forgeSections } from '../systems/forgeFlow.js';
+import { CURSE_STAT_MULT, isTinyCurseStat, tinyCurseSwing, statCurseSwing, cursedStatCeiling } from '../systems/curseRoll.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
@@ -7094,6 +7095,7 @@ window.gameGuide = function gameGuide(topic) {
       `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike the random rarities it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and its own signature power (a "legendary modifier" like Vampiric). Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. (Set pieces — see below — are the OTHER fixed, named red artifacts.) gameState() marks worn/held uniques with a "unique" id and "fixed":true.`,
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a depth-milestone cache, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
       `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
+      `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. Each swing is sized to the stat it lands on, so it's powerful for whatever it hits without absurd out-of-band numbers. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
       `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
@@ -13099,7 +13101,7 @@ function afterEnchant(item) {
 function enchantAugment(id) {
   const g = findGear(id); if (!g) return;
   const item = g.item;
-  if (isFixedItem(item)) return; // uniques are fixed on drop — no new properties
+  if (isEnchantLocked(item)) return; // uniques & cursed items can't gain properties
   const cost = augmentCost(item);
   const stat = canAddStat(item), attr = canAddAttr(item);
   if ((!stat && !attr) || !canAfford(cost)) return;
@@ -13116,7 +13118,7 @@ function enchantAugment(id) {
 function enchantRerollAll(id) {
   const g = findGear(id); if (!g) return;
   const item = g.item;
-  if (isFixedItem(item)) return; // a unique's properties are locked on drop
+  if (isEnchantLocked(item)) return; // unique/cursed — properties are locked
   const cost = rerollAllCost(item);
   const caps = TIER_AFFIX_CAPS[item.tier] || { stat:0, attr:0 };
   if (!canAfford(cost) || (caps.stat + caps.attr) === 0) return;
@@ -13138,7 +13140,7 @@ function enchantRerollAll(id) {
 function enchantRerollValue(id, kind, key) {
   const g = findGear(id); if (!g) return;
   const item = g.item;
-  if (isFixedItem(item)) return; // fixed unique — values can't be reforged
+  if (isEnchantLocked(item)) return; // unique/cursed — values can't be reforged
   const cost = rerollValueCost(item);
   if (!canAfford(cost)) return;
   const mult = tierMult(item.tier);
@@ -13160,7 +13162,7 @@ function enchantRerollValue(id, kind, key) {
 function enchantRerollType(id, kind, key) {
   const g = findGear(id); if (!g) return;
   const item = g.item;
-  if (isFixedItem(item)) return; // fixed unique — modifiers can't be transmuted
+  if (isEnchantLocked(item)) return; // unique/cursed — modifiers can't be swapped
   const cost = rerollTypeCost(item);
   if (!canAfford(cost)) return;
   const mult = tierMult(item.tier);
@@ -13237,10 +13239,10 @@ function enchantPick(id) { hideTooltip(); enchantSel = id; renderEnchanter(); }
 function enchantBack()   { hideTooltip(); enchantSel = null; renderEnchanter(); }
 
 function renderEnchantItem(item) {
-  // A hand-crafted unique is fixed on drop: every property is locked, so the
-  // Enchanter can only admire it. Show its properties read-only with a clear note
-  // instead of the reroll/augment machinery.
-  if (isFixedItem(item)) { renderFixedEnchantItem(item); return; }
+  // A hand-crafted unique is fixed on drop, and a cursed item is bound power-to-price:
+  // both are locked, so the Enchanter can only admire them. Show their properties
+  // read-only with a clear note instead of the reroll/augment machinery.
+  if (isEnchantLocked(item)) { renderFixedEnchantItem(item); return; }
   const caps = TIER_AFFIX_CAPS[item.tier] || { stat:0, attr:0 };
   const { statN, attrN } = itemAffixCounts(item);
   const head = headlineStats(item);
@@ -13344,30 +13346,45 @@ function renderEnchantItem(item) {
 // native/attribute/curse tag) and there are no reroll or augment controls — a
 // unique is fixed on drop, so its modifiers can never be reforged.
 function renderFixedEnchantItem(item) {
+  // Two locked kinds share this read-only panel: a fixed unique/set piece, and a
+  // CURSED item (bound power-to-price). They differ only in the copy and the tags.
+  const cursed = !isFixedItem(item) && !!item.cursed;
   const head = headlineStats(item);
-  const line = (k, valStr, tag) =>
-    `<div class="hc-line" style="opacity:0.85"><span data-spr=feat_door></span> ${valStr} <span class="stat-abbr" ${hoverTip(statMeaningTip('stat', k))}>${STAT_LABELS[k] || k}</span> <span style="font-size:1.2rem">${tag}</span></div>`;
+  const penaltyStats = cursed ? lockedStats(item).filter(k => !head.includes(k)) : [];
+  const line = (k, valStr, tag, danger) =>
+    `<div class="hc-line" style="opacity:0.85${danger ? ';color:var(--danger)' : ''}"><span data-spr=feat_door></span> ${valStr} <span class="stat-abbr" ${hoverTip(statMeaningTip('stat', k))}>${STAT_LABELS[k] || k}</span> <span style="font-size:1.2rem">${tag}</span></div>`;
   const statRows = Object.entries(item.stats).map(([k, v]) => {
     const valStr = (typeof v === 'string') ? v : (v < 0 ? '' : '+') + v;
-    return line(k, valStr, head.includes(k) ? '(native)' : '(fixed)');
+    let tag, danger = false;
+    if (head.includes(k)) tag = cursed ? '(headline)' : '(native)';
+    else if (cursed) { danger = penaltyStats.includes(k); tag = danger ? '(cursed)' : '(locked)'; }
+    else tag = '(fixed)';
+    return line(k, valStr, tag, danger);
   }).join('');
   const attrRows = Object.entries(item.attrs || {}).map(([k, v]) =>
-    `<div class="hc-line" style="opacity:0.85;color:var(--gold)"><span data-spr=feat_door></span> +${v} <span class="stat-abbr" ${hoverTip(statMeaningTip('attr', k))}>${(ATTRIBUTES[k] || {}).label || k}</span> <span style="font-size:1.2rem">(fixed)</span></div>`).join('');
+    `<div class="hc-line" style="opacity:0.85;color:var(--gold)"><span data-spr=feat_door></span> +${v} <span class="stat-abbr" ${hoverTip(statMeaningTip('attr', k))}>${(ATTRIBUTES[k] || {}).label || k}</span> <span style="font-size:1.2rem">${cursed ? '(locked)' : '(fixed)'}</span></div>`).join('');
   const powHtml = itemPowerFront(item);
   const powLine = powHtml ? `<div class="hc-line" style="opacity:0.9">${powHtml}</div>` : '';
   // Set pieces are fixed artifacts too — label them as a set piece (with the set
-  // tag), not a "unique", so the read-only panel reads true.
-  const isSet = !!item.set;
-  const kindWord = isSet ? 'set piece' : 'unique';
+  // tag), not a "unique", so the read-only panel reads true. Cursed items get their
+  // own word and copy, since they're locked for a different reason.
+  const isSet = !cursed && !!item.set;
+  const kindWord = cursed ? 'cursed item' : (isSet ? 'set piece' : 'unique');
   const setTag = isSet ? itemSetTag(item) : '';
+  const legend = cursed
+    ? `A cursed item's power and its price are bound together — the Enchanter can't augment or reforge it.`
+    : `A ${kindWord} is fixed the moment it drops — its properties can't be augmented or reforged.`;
+  const footer = cursed
+    ? `The curse holds every property in place — its strong boost and its equally strong drawback are here to stay.`
+    : `This artifact's modifiers are set for good. Its values were rolled once, scaled to the depth it dropped on, and locked.`;
   setTownContent(`
     <div class="shop-row has-actions"><button class="modal-nav-btn" onclick="enchantBack()">‹ Back</button>
-      <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${item.name}</div>
+      <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${curseMark(item)}${item.name}</div>
       <div class="shop-row-sub">${SLOTS[item.slot].label} · ilvl ${item.ilvl} · ${kindWord}${setTag}</div></div></div>
-    <div class="ench-legend">A ${kindWord} is fixed the moment it drops — its properties can't be augmented or reforged.</div>
+    <div class="ench-legend">${legend}</div>
     ${powLine}
     ${statRows}${attrRows}
-    <div class="hc-line" style="opacity:0.6;margin-top:4px">This artifact's modifiers are set for good. Its values were rolled once, scaled to the depth it dropped on, and locked.</div>`);
+    <div class="hc-line" style="opacity:0.6;margin-top:4px">${footer}</div>`);
 }
 
 // ── DUNGEON GATE — choose a difficulty, then a floor, to re-enter ──
@@ -14206,15 +14223,33 @@ function affixAttrRange(lvl, mult) {
   const base = (2 + lvl * 0.5) * mult * 0.5;
   return { min: Math.max(1, Math.round(base * 0.7)), max: Math.max(1, Math.round(base * 1.3)) };
 }
-// Size of a cursed item's boost (or penalty) for one stat. Crit chance (CRIT/LCK)
-// only ranges 0–100% in play, so its swings stay tiny and capped — a single item
-// must never shift crit chance by tens of percent. Every other stat — crit damage
-// included — gets the big "great power at a price" numbers in either direction.
-function curseSwing(stat, lvl, mult, boost) {
-  if (stat === 'CRIT' || stat === 'LCK') {
-    return Math.max(1, Math.min(5, Math.round((1 + lvl * 0.1) * mult)));
+// Size of a cursed item's boost (or penalty) for one stat, sized RELATIVE to the stat
+// it lands on (see src/systems/curseRoll.js): a curse swings a stat by a fixed
+// multiple of that stat's normal ceiling, so it's strong for whatever property it
+// hits without blowing a low-cap percent stat (Attack Speed, Leech, …) out to
+// hundreds of percent. The boost and the penalty share this ONE size, so a curse's
+// drawback is always as strong as its gift. Crit chance / Luck keep a tiny clamp,
+// since they only range 0–100% in play and a big swing would break them.
+function curseSwing(stat, lvl, mult) {
+  if (isTinyCurseStat(stat)) return tinyCurseSwing(lvl, mult);
+  return statCurseSwing(affixStatRange(stat, lvl, mult).max);
+}
+// Repair for the pre-fix uncapped-curse bug: a cursed drop used to add a FLAT swing to
+// a percent stat with no regard for that stat's ceiling, so items like a ~300% Attack
+// Speed weapon could exist. Pull any stat back to the most a curse can now grant it (a
+// full normal roll + a stat-aware swing), preserving sign so a curse penalty stays a
+// penalty. Legit rolls sit at or below this bound, so they're never touched; the pass
+// is idempotent and runs on every item at load (bag, worn, stash).
+function repairCurseOverflow(item) {
+  if (!item || !item.stats) return;
+  const lvl = Math.max(1, Math.round(item.ilvl || 1));
+  const mult = tierMult(item.tier);
+  for (const [k, v] of Object.entries(item.stats)) {
+    if (typeof v !== 'number') continue;      // DMG is a "lo-hi" range string
+    if (isTinyCurseStat(k)) continue;         // crit chance / Luck were never inflated
+    const ceil = cursedStatCeiling(affixStatRange(k, lvl, mult).max);
+    if (Math.abs(v) > ceil) item.stats[k] = Math.sign(v) * ceil;
   }
-  return Math.max(1, Math.round((boost ? 10 + lvl * 2 : 6 + lvl) * mult));
 }
 // Roll how many of a pool's affix slots actually fill — up to `max`, biased high
 // so rarer gear tends to be fuller, but a sparse roll is always possible.
@@ -14349,6 +14384,11 @@ function pickSetPiece(forceSlot) {
 }
 // Is this a fixed item (a hand-crafted unique)? Fixed items never reroll/augment.
 function isFixedItem(item) { return !!(item && item.fixed); }
+// Is this item locked out of the Enchanter? Fixed uniques/set pieces are — and so are
+// CURSED items: a curse binds an item's power to its price, so you can't reforge the
+// drawback away and keep the gift. Every enchant action and the Enchanter panel gate
+// on this, so the two locked kinds behave identically (read-only, no reroll/augment).
+function isEnchantLocked(item) { return isFixedItem(item) || !!(item && item.cursed); }
 
 function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null) {
   // Item level: how deep this drop is geared for. Higher item level means
@@ -14415,20 +14455,22 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
     item.power = rollItemPower();
   }
 
-  // Cursed items (~12% of uncommon+): a big stat boost paired with a penalty.
-  // The negative stat flows straight through totalStat(), so the drawback is real.
-  // Swing sizes come from curseSwing(), which keeps crit chance incremental while
-  // letting crit damage and flat stats take the large hits.
+  // Cursed items (~12% of uncommon+): a STRONG stat boost paired with an equally
+  // strong drawback on another stat. Both flow straight through totalStat(), so the
+  // penalty is real. Swing sizes come from curseSwing() (stat-aware — a big number
+  // for whatever stat it lands on, never an out-of-band percent), and boost and
+  // penalty share that one size. A curse binds power to price: cursed items can't be
+  // augmented or reforged at the Enchanter (see isEnchantLocked), so the trade sticks.
   const tierRank = Object.keys(TIERS).indexOf(tier);
   if (tierRank >= 2 && Math.random() < 0.12) {
     const pool = itemStatPool(item).length ? itemStatPool(item) : STAT_NAMES.filter(s => s !== 'DMG');
     const boostStat = pick(pool);
     const curseStat = pick(pool.filter(s => s !== boostStat));
-    stats[boostStat] = (stats[boostStat] || 0) + curseSwing(boostStat, lvl, mult, true);
-    if (curseStat) stats[curseStat] = (stats[curseStat] || 0) - curseSwing(curseStat, lvl, mult, false); // negative = penalty
+    stats[boostStat] = (stats[boostStat] || 0) + curseSwing(boostStat, lvl, mult);
+    if (curseStat) stats[curseStat] = (stats[curseStat] || 0) - curseSwing(curseStat, lvl, mult); // negative = penalty
     item.cursed = true;
-    // Remember which property carries the curse penalty so the Enchanter can lock
-    // it — a curse is a curse, you can't simply reroll the drawback away.
+    // Remember which property carries the curse penalty so displays can tag it — a
+    // curse is a curse, and the whole item is locked out of the Enchanter anyway.
     if (curseStat) item.curseStat = curseStat;
     // The curse is flagged (item.cursed), not baked into the name — displays draw
     // the cursed pixel icon (ic_cursed) from the flag via curseMark(), so no emoji
@@ -25909,7 +25951,7 @@ function newStashTag() { return 't' + Date.now().toString(36) + Math.random().to
 // Re-stamp icons and ensure an attrs block on every stashed item — the same
 // healing the bag/equipped gear gets in loadGame().
 function healStashItems() {
-  stash.items.forEach(it => { if (it.slot) it.icon = itemIcon(it); if (!it.attrs) it.attrs = {}; if (it.name) it.name = stripLegacyCurseMark(it.name); });
+  stash.items.forEach(it => { if (it.slot) it.icon = itemIcon(it); if (!it.attrs) it.attrs = {}; if (it.name) it.name = stripLegacyCurseMark(it.name); repairCurseOverflow(it); });
 }
 // Write the shared stash to its own key (no cloud push — callers decide that).
 function writeStashLocal() { try { localStorage.setItem(STASH_KEY, JSON.stringify(stash)); } catch (e) {} }
@@ -26212,6 +26254,10 @@ function loadGame() {
     // the affix/enchant code can treat every item uniformly.
     inventory.forEach(it => { if (it && !it.attrs) it.attrs = {}; });
     wornItems.forEach(it => { if (!it.attrs) it.attrs = {}; });
+    // Repair items made before curse swings respected each stat's ceiling (e.g. a
+    // ~300% Attack Speed drop): clamp any out-of-band stat back in-band. Idempotent.
+    inventory.forEach(repairCurseOverflow);
+    wornItems.forEach(repairCurseOverflow);
     for (const slot of VISUAL_SLOTS) {
       const seen = new Set();
       player.wardrobe[slot] = (player.wardrobe[slot] || [])
