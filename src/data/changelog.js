@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Skill descriptions read their damage inline", by: "Claude", notes: [
+    "Every damage skill's description now weaves its damage range into the sentence — e.g. \"Hurl a bolt of flame that deals 16k–22k damage and sets a foe ablaze\" — instead of tacking it on as a separate trailing line.",
+    "A multi-strike skill shows a (×N) badge right after the range, and the Damage pill reads \"per hit (×3)\" so the single-hit number and the strike count stay clearly separate.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Spells roll a damage range; skill cards rebuilt around per-hit damage", by: "Claude", notes: [
     "Spells now roll a damage RANGE instead of a fixed number. Each spell has its own width — a focused Arcane Missile rolls tight, a chaotic Meteor rolls wild — so no two feel the same. The average is unchanged, so this adds texture without shifting balance.",
     "Weapon and spell rolls are now fine-grained before your buffs and gear scale them, so even a small weapon lands varied, organic hits instead of two or three repeating numbers. The damage finally dealt is still a whole number.",
