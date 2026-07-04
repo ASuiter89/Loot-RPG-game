@@ -222,6 +222,90 @@ export const MUSIC_SECTIONS = [
       kickPat: ['main', null, null, null, 'mid', null, null, null],
       hatPat:  [0,1,0,1,0,1,0,1] } },
 
+  // Deep house — a warm four-on-the-floor pulse in A minor, ~122 BPM. Bass: the
+  // classic OFF-beat house bounce that pumps between the kicks (root/octave/fifth,
+  // walking into the next chord). Comp: short syncopated organ stabs up high.
+  { name: 'Pulse',   tempo: 0.245,
+    scale: [0, 2, 3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 24],
+    progs: [
+      [[0,3,7],[8,12,15],[3,7,10],[10,14,17]],    // Am  F   C   G
+      [[0,3,7],[5,8,12],[10,14,17],[3,7,10]],      // Am  Dm  G   C
+    ],
+    bass: { type: 'sawtooth', cutoff: 640,  q: 3, detune: 4, vol: 0.30 },
+    pad:  { type: 'sawtooth', cutoff: 1600, q: 2, detune: 5, vol: 0.12 },
+    lead: { type: 'triangle', cutoff: 3000, q: 1, detune: 5, vol: 0.17 },
+    leadDensity: 0.4, arpDensity: 0.3,
+    kickVol: 1.0, kickMidVol: 1.0, hatVol: 0.08,
+    groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 2, arpVel: 0.6, chordOct: 12,
+      leadLong: 0.3, leadRest: 0.2,
+      bassPat: [null, {d:'8',l:0.6,v:0.9}, null, {d:'8',l:0.6,v:0.85,p:0.9}, null, {d:'5',l:0.6,v:0.85}, null, {d:'n2',l:0.6,v:0.9,p:0.85}],
+      chordPat: [null, {l:0.4,v:0.8,voi:'inv1',p:0.7}, {l:0.5,v:0.85,voi:'root'}, null, null, {l:0.4,v:0.8,voi:'open',p:0.7}, {l:0.5,v:0.85,voi:'inv1'}, {l:0.4,v:0.7,voi:'root',p:0.6,next:true}],
+      kickPat: ['main', null, 'main', null, 'main', null, 'main', null],
+      hatPat:  [0,1,0,1,0,1,0,1] } },
+
+  // Festival EDM — a big, bright four-on-the-floor anthem in C major, ~128 BPM.
+  // Bass: a driving root pulse locked to the kick, hammering hard into each chord.
+  // Comp: huge wide super-saw chords; a rolling arp sparkles on every eighth.
+  { name: 'Neon',    tempo: 0.234,
+    scale: [3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 20, 22, 24],
+    progs: [
+      [[12,15,19],[8,12,15],[3,7,10],[10,14,17]],  // Am  F   C   G   (vi IV I V)
+      [[3,7,10],[10,14,17],[12,15,19],[8,12,15]],   // C   G   Am  F
+    ],
+    bass: { type: 'sawtooth', cutoff: 720,  q: 3, detune: 6, vol: 0.30 },
+    pad:  { type: 'sawtooth', cutoff: 2000, q: 1, detune: 8, vol: 0.13 },
+    lead: { type: 'sawtooth', cutoff: 3600, q: 1, detune: 8, vol: 0.18 },
+    leadDensity: 0.6, arpDensity: 0.45,
+    kickVol: 1.15, kickMidVol: 1.15, hatVol: 0.09,
+    groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 1, arpVel: 0.7, chordOct: 0,
+      leadLong: 0.4, leadRest: 0.12,
+      bassPat: [{d:'r',l:0.9,v:1.0}, null, {d:'8',l:0.7,v:0.8,p:0.9}, null, {d:'r',l:0.9,v:1.0}, null, {d:'n2',l:0.7,v:0.85}, {d:'n2',l:0.6,v:0.9,p:0.9}],
+      chordPat: [{l:1.6,v:1.0,voi:'wide'}, null, null, {l:0.6,v:0.8,voi:'inv1',p:0.7}, {l:1.4,v:0.95,voi:'open'}, null, {l:0.7,v:0.8,voi:'root',p:0.7}, {l:0.8,v:0.85,voi:'open',p:0.75,next:true}],
+      kickPat: ['main', null, 'main', null, 'main', null, 'main', null],
+      hatPat:  [1,1,1,1,1,1,1,1] } },
+
+  // Tropical house — a sunlit, laid-back groove in D major, ~112 BPM. Bass: a soft
+  // bouncing off-beat pluck. Comp/arp: bright marimba-like plucks carry the melody.
+  // A touch of swing keeps it easy; the kick sits gently under it all.
+  { name: 'Lagoon',  tempo: 0.268,
+    scale: [5, 7, 9, 10, 12, 14, 16, 17, 19, 21, 22, 24, 26],
+    progs: [
+      [[5,9,12],[12,16,19],[14,17,21],[10,14,17]],  // D   A   Bm  G
+      [[14,17,21],[10,14,17],[5,9,12],[12,16,19]],   // Bm  G   D   A
+    ],
+    bass: { type: 'triangle', cutoff: 720,  q: 2, detune: 4, vol: 0.26 },
+    pad:  { type: 'sine',     cutoff: 2200, q: 1, detune: 5, vol: 0.12 },
+    lead: { type: 'triangle', cutoff: 3200, q: 1, detune: 3, vol: 0.18 },
+    leadDensity: 0.5, arpDensity: 0.6,
+    kickVol: 0.75, kickMidVol: 0.7, hatVol: 0.06,
+    groove: { swing: 0.06, leadOct: 12, arpOct: 12, arpEvery: 1, arpVel: 0.8, chordOct: 12,
+      leadLong: 0.3, leadRest: 0.18,
+      bassPat: [{d:'r',l:1.0,v:1.0}, null, {d:'8',l:0.6,v:0.7,p:0.8}, null, {d:'5',l:0.8,v:0.8}, null, {d:'8',l:0.5,v:0.65,p:0.7}, {d:'n2',l:0.6,v:0.75,p:0.8}],
+      chordPat: [{l:0.7,v:0.8,voi:'root'}, null, {l:0.6,v:0.75,voi:'open',p:0.8}, null, {l:0.7,v:0.8,voi:'inv1'}, null, {l:0.6,v:0.72,voi:'open',p:0.75}, {l:0.5,v:0.66,voi:'inv2',p:0.6,next:true}],
+      kickPat: ['main', null, 'main', null, 'main', null, 'main', null],
+      hatPat:  [0,1,0,1,0,1,0,1] } },
+
+  // Drum & bass — a fast rolling breakbeat over a deep sub in A minor, ~174 BPM.
+  // Bass: a heavy detuned Reese sub that rolls and slides between chords. Comp:
+  // lush, long liquid pads. Two-step kick, snappy backbeat snare, busy hats.
+  { name: 'Rush',    tempo: 0.172,
+    scale: [0, 2, 3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 24],
+    progs: [
+      [[0,3,7],[8,12,15],[3,7,10],[10,14,17]],    // Am  F   C   G
+      [[0,3,7],[7,10,14],[10,14,17],[5,8,12]],     // Am  Em  G   Dm
+    ],
+    bass: { type: 'sawtooth', cutoff: 480,  q: 4, detune: 10, vol: 0.32 },
+    pad:  { type: 'sawtooth', cutoff: 1700, q: 1, detune: 6, vol: 0.12 },
+    lead: { type: 'sine',     cutoff: 3200, q: 1, detune: 4, vol: 0.16 },
+    leadDensity: 0.4, arpDensity: 0.35,
+    kickVol: 1.1, kickMidVol: 0.9, hatVol: 0.10,
+    groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 2, arpVel: 0.55, chordOct: 0,
+      leadLong: 0.45, leadRest: 0.2,
+      bassPat: [{d:'r',l:1.4,v:1.0}, null, {d:'8',l:0.7,v:0.8,p:0.7}, null, {d:'r',l:1.2,v:0.95}, null, {d:'5',l:0.7,v:0.82,p:0.8}, {d:'n2',l:0.7,v:0.9,p:0.85}],
+      chordPat: [{l:2.0,v:0.85,voi:'open'}, null, null, {l:0.7,v:0.7,voi:'inv1',p:0.6}, {l:1.8,v:0.8,voi:'inv2'}, null, null, {l:0.8,v:0.72,voi:'open',p:0.6,next:true}],
+      kickPat: ['main', null, null, null, null, 'main', null, null],
+      hatPat:  [1,1,1,1,1,1,1,1] } },
+
   // BOSS — only plays during boss fights. Fast, menacing A Phrygian-dominant with a
   // pounding kick. Bass: a relentless pounding pedal with half-step chromatic pushes
   // (the b2 is the menace). Comp: dense, driving, aggressive stabs. Kept LAST so the

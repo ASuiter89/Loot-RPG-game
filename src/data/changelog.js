@@ -3,6 +3,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "medium", v: "Four dance styles join the soundtrack", by: "Claude", notes: [
+    "New generative styles: Pulse (deep house), Neon (festival EDM), Lagoon (tropical house), and Rush (drum & bass) — each a full kit with its own key, groove, and instruments.",
+    "Four-on-the-floor kicks and off-beat basslines for the house styles; a fast rolling breakbeat and deep sub for drum & bass.",
+    "Pick any of them from Settings ▸ Audio, or leave it on Shuffle to drift through the lot.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Skill cards: shorter text, wider card", by: "Claude", notes: [
     "Every passive and keystone description rewritten terse — stats first, filler words and leftover internal tags gone.",
     "Skill detail card is wider with slightly smaller text, so each stat line fits without wrapping mid-phrase.",
