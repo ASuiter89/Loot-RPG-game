@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "The Craftsman opens one step at a time", by: "Claude", notes: [
+    "The Forge now opens with nothing selected — only the item-type row shows. Pick a type to open its base picker, then a base to reveal rarity, the preview and the FORGE button.",
+    "Weapons still pick a category then a type; the type list only opens once you choose a category, and no base is pre-selected along the way.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Bounty board cards drop the left sprite", by: "Claude", notes: [
     "Bounty board contract cards no longer show a little figure on the left — the name, objective and reward now use the full card width.",
   ] },
