@@ -193,10 +193,31 @@ async function main() {
       if (holdCast) failures.push('a long-press on the potion button fired its action (a hold should only inspect)');
     }
 
+    // 6) Multi-touch isolation: a hold armed by ONE finger must not be cancelled by
+    //    a DIFFERENT finger moving (e.g. steering the joystick). The press is keyed
+    //    by pointerId, so finger B's travel leaves finger A's pending hold intact.
+    let multiTip = null, multiCast = null;
+    if (potBox) {
+      await armPotion();
+      await fireTouch(page, POT_SEL, 'pointerdown', potBox.x, potBox.y, 20);          // finger A holds the potion
+      // finger B (a different pointerId) sweeps far across the map, as if steering:
+      await fireTouch(page, '#canvas', 'pointermove', canvasBox.left + 40, canvasBox.top + 40, 21);
+      await fireTouch(page, '#canvas', 'pointermove', canvasBox.left + 220, canvasBox.top + 340, 21);
+      await page.waitForTimeout(600);                                                 // A held still past the threshold
+      multiTip = await page.evaluate(() => getComputedStyle(document.getElementById('hovertip')).display);
+      await fireTouch(page, POT_SEL, 'pointerup', potBox.x, potBox.y, 20);
+      await page.evaluate((sel) => document.querySelector(sel).click(), POT_SEL);
+      await page.waitForTimeout(60);
+      multiCast = await page.evaluate(() => window.player.potionCd > 0);
+      if (multiTip === 'none') failures.push('multi-touch: a second finger moving cancelled the long-press (tip never showed)');
+      if (multiCast) failures.push('multi-touch: the long-press fired the action despite raising the tip');
+    }
+
     if (pageErrors.length) failures.push(`uncaught page errors:\n  - ${pageErrors.join('\n  - ')}`);
 
     console.log('touch: reveal', revealed, '| moved', moved, '| joyCleared', !rest.joyOn, '| tap', tapped,
-      '| tapCast', tapCast, 'tapTip', tapTip, '| holdTip', holdTip, 'holdCast', holdCast);
+      '| tapCast', tapCast, 'tapTip', tapTip, '| holdTip', holdTip, 'holdCast', holdCast,
+      '| multiTip', multiTip, 'multiCast', multiCast);
   } catch (e) {
     failures.push(`touch drive failed: ${String(e).split('\n')[0]}`);
   } finally {

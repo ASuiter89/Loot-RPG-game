@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Touch: steadier skill hold-to-read", by: "Claude", notes: [
+    "You can now hold a skill to read it while steering with your other thumb — moving the joystick no longer cancels the hold.",
+    "Fixed a rare case on touch laptops where a cancelled hold could swallow the next mouse click.",
+    "Long-pressing a buff or info icon to read it, then tapping it again, now cleanly closes the card instead of flickering it back open.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Every guardian now has its own telegraphed moveset", by: "Claude", notes: [
     "All fifteen bosses now fight with bespoke, fully-telegraphed movesets — not just the Rat King. Each has a signature you learn and dodge: the Inferno Demon rains fire and floods the floor; the Elder Dragon breathes cones and charges; the Death Knight and Mortis Vane raise the dead behind bone-spear lanes; the All-Seer and Cindra weave spiralling bullet-storms; Emberbound spreads a burning floor; the Masquerade splits into mirror-decoys where only the real one strikes; Magmaw slams you back toward the lava; Vael and Ourok spin pinwheels of light; the Tidewarden floods and drags; the Shrike blinks and executes; and Kaggoroth shifts its whole moveset each phase.",
     "Every attack is a floor indicator you beat by MOVING — bullets weave through gaps, rings are dodged by clearing their edge, cones by stepping to the flank, decoys by reading which one glows red. Each boss escalates at two-thirds and one-third health with tighter, denser patterns.",
