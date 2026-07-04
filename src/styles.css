@@ -1482,10 +1482,11 @@
   /* Mechanics readout: one tagged chip per engine piece (charge, trigger,
      synergy, transform, detonate…) so a node reads how it actually plays. */
   .sk-pop .mech { margin-top: 5px; display: flex; flex-direction: column; gap: 3px; }
-  .sk-pop .mech-row { display: flex; gap: 5px; align-items: baseline; font-size: 1.1rem; line-height: 1.4; }
+  .sk-pop .mech-row { display: flex; gap: 5px; align-items: baseline; font-size: 1.1rem; line-height: 1.4;
+    justify-content: space-between; }
   .sk-pop .mech-t { flex: 0 0 auto; font-size: 1.1rem; font-weight: 700; letter-spacing: 0.4px;
     text-transform: uppercase; padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
-  .sk-pop .mech-d { color: var(--purple-50); }
+  .sk-pop .mech-d { color: var(--purple-50); margin-left: auto; text-align: right; }
   .sk-pop .mech-d b { color: var(--purple-50); font-weight: 700; }
   /* "On rank up" preview: shows the concrete buff each point buys (now → next). */
   .sk-pop .ru { margin-top: 5px; padding: 4px 6px; background: var(--panel); border: 1px solid var(--panel-raised); border-radius: 6px; }
