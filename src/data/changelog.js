@@ -12,6 +12,43 @@ export const CHANGELOG = [
     "Deletions now sync. Removing a hero records it in a shared deletion ledger that every device merges on sign-in and Sync Now, so the character is scrubbed everywhere and never pushed back up. Delete once, it's gone on all your devices.",
     "Deletes now target a hero by its stable id, not its slot number, so a delete can't ever hit the wrong character when two devices' slots haven't lined up yet.",
   ] },
+  { date: "2026-07-03", size: "large", v: "Uniques reborn — one hand-crafted red for every gear type", by: "Claude", notes: [
+    "Red items are no longer randomly-rolled: every unique is now a hand-crafted, named artifact — the one-of-a-kind version of a specific gear type, with one for every weapon, off-hand, armour and jewelry base in the game.",
+    "Each unique always wears the SAME signature stat and the SAME six modifiers, hand-picked for the class and fantasy its name promises, plus its own signature power (a legendary modifier like Vampiric). Only the numbers change — they roll scaled to the depth it drops on.",
+    "A unique is fixed the moment it drops: its values lock in and it can never be augmented, rerolled or transmuted at the Enchanter. Its detail card flags the fixed properties and shows the signature power.",
+    "Every unique carries its own flavour text and feels distinct from the rest — no two share a name or a build.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Wandering merchant: fuller stock, hover to compare", by: "Jeff Louie", notes: [
+    "The roaming merchant now lays out at least six gear pieces, so the detour always pays off.",
+    "Hover any ware to pop its full card beside your equipped piece — spot an upgrade before you spend a coin.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Watch page loads again", by: "Claude", notes: [
+    "The Watch spectator page now ships with the built site, so opening it no longer hits a 404.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Enchanter: Esc backs out one step at a time", by: "Jeff Louie", notes: [
+    "With an item picked in the Enchanter, Esc now returns to the gear screen instead of jumping all the way out to town.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Leaderboard rows show class, subclass & all stats", by: "Jeff Louie", notes: [
+    "Each board row now carries a second line: the hero's specialization — their ascension (subclass) in its signature colour, or their base class — plus a sigil.",
+    "Every row shows floor, level, gold and Power together, not just the ranked stat, so you can compare heroes fully whichever board you're on. Big counts abbreviate (12.3k).",
+  ] },
+  { date: "2026-07-03", size: "medium", v: "AI-play console tools see the whole game", by: "Claude", notes: [
+    "gameState() surfaces what a console-driving agent was blind to: floor quests and their objective tiles, the cursed-floor 'greed' choice, the rainbow conquest gate, your hired Sellsword and active bounty, boss enrage/berserk phases, enemy affixes, your weapon's true reach, and a full survivability read-out (defense, crit, dodge, block, damage reduction, tenacity).",
+    "canMove no longer misreports: every world-pausing overlay (the greed prompt, tier-conquest banner, hardcore death, leaderboard and more) now flips it false with the right mode, so an agent never fires dead movement keys.",
+    "gameGuide() corrects stale rules — per-sub-type weapon reach, the Wisdom shrine's real 50%-HP heal, pack rush, mana-cost-reduced skill costs — and adds how-tos for the Transmuter, floor quests, the greed gate and the conquest scar.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Merchant stocks rarer gear", by: "Jeff Louie", notes: [
+    "The merchant no longer lays out grey or white gear — every ware is uncommon or better, weighted toward the rarer tiers, so his table always beats a raw floor drop.",
+  ] },
+  { date: "2026-07-03", size: "large", v: "Full combat VFX overhaul", by: "Claude", notes: [
+    "Every skill, spell, weapon swing and monster attack now has its own animation, tinted to its element — fire, ice, lightning, holy, poison, blood, arcane.",
+    "Weapon swings draw on the canvas at last: a crescent slash (sword), a wide sweep (axe/scythe), a rapid double-flick (dagger), an overhead smash (mace), a reaching stab (spear).",
+    "Bows and staves finally fire something — a real arrow or magic bolt flies to the target, instead of the foe just taking damage from across the room with nothing visible.",
+    "Redrawn projectiles: crisp element sprites — fletched arrows, glowing orbs, flame-trailed fireballs, crystalline ice shards, jagged lightning, wet venom globs — replacing the old thin vector arrows. Ranged casters now sling hex orbs, not arrows.",
+    "Spells read at a glance: bolts fly and burst, novas ring outward, beams lance down a lane, lightning chains foe to foe, poison leaves a lingering cloud, buffs bloom an aura, summons open a rune circle.",
+    "Monsters animate their blows — a claw swipe each strike (a heavy ground-smash for brutes and bosses). Boss tricks get proper telegraphs: flame lines, ember rain, quake cracks, shockwave rings, frost bursts, life-siphon beams, hex and venom bolts, pull vortices. Shielded and enraged bosses now show a lasting aura.",
+    "New element-flavoured cast sounds for fired shots, weapon swings and each spell school.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Loot bag sorts by Power by default", by: "Claude", notes: [
     "Bag now opens sorted by Power instead of Rarity — strongest gear surfaces first. Switch back to Rarity, Slot or Value any time.",
   ] },
@@ -30,6 +67,13 @@ export const CHANGELOG = [
   { date: "2026-07-03", size: "medium", v: "A full rack of new synth instruments", by: "Claude", notes: [
     "Rebuilt the soundtrack's synth engine so styles no longer share the same three sounds. New instruments: deep round sub bass, a detuned drum-&-bass reese, a squelchy acid bass, big super-saw leads and chords, metallic FM bells, plucky bell/marimba tones, and hollow reed leads — each style now picks the ones that fit it.",
     "Fixed the bass: it used to be forced to the same punchy sawtooth in every style (the 'polka' feel). Basslines now use rounder, smoother sub tones and less on-the-beat bounce, so each style's low end has its own character.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Clearing a floor banks the next as your deepest", by: "Claude", notes: [
+    "Clearing a floor's foes unseals its down-stairs — which now opens the NEXT floor at the Dungeon Gate right away, so it counts as your deepest the moment you clear.",
+    "Port to town after a clear and you can drop straight back onto the floor you opened, instead of re-clearing the one you just finished.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Loading splash on startup", by: "Claude", notes: [
+    "A brief loading screen now covers the cold-start moment while the game boots. The title no longer flashes its new-game look before recognising your saved hero — you land straight on CONTINUE with your character shown.",
   ] },
   { date: "2026-07-03", size: "small", v: "Wider item tooltips", by: "Claude", notes: [
     "Item tooltips are now twice as wide, so long stat lines and the side-by-side gear compare stop wrapping mid-line and read at a glance.",

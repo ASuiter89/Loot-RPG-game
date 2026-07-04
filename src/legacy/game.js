@@ -26,6 +26,7 @@ import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
+import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
@@ -43,6 +44,9 @@ import { planReconcile, freshDelMeta, sanitizeDelMeta, isTombstoned, addTombston
 import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
 import { mercCost } from '../systems/mercPricing.js';
 import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTints.js';
+import { elementOf, paletteFor, castArchetype, weaponArchetype, projectileElement, bossFxFor,
+  clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
+import { UNIQUES, uniqueForBase, uniquesForSlot } from '../data/uniques.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -281,6 +285,9 @@ const SUBTYPE_KEYS = Object.keys(WEAPON_SUBTYPES).sort((a, b) => b.length - a.le
 // legacy bare-category weapon ("Ancient Sword of Power" → null, resolved by the
 // category fallback in weaponBaseType).
 function weaponSubType(item) {
+  // A hand-crafted unique carries its sub-type explicitly on item.base (its fancy
+  // name won't contain the sub-type word), so prefer that; else read the name.
+  if (item && item.base && WEAPON_SUBTYPES[item.base]) return item.base;
   const nm = (item && item.name) || '';
   for (const s of SUBTYPE_KEYS) if (nm.includes(s)) return s;
   return null;
@@ -3294,14 +3301,30 @@ function diffDebuffMult() { return Math.pow(DEV.conquestScar, diffClearedCount()
 // Gate frontier (the floors you can re-enter). A death can later shove gateFloor
 // back; fighting forward raises it again here, re-opening the locked floors.
 function recordDepth() {
-  const prevMax = player.maxFloor || 1;
-  player.maxFloor = Math.max(prevMax, dungeonLevel);
-  player.gateFloor = Math.max(player.gateFloor || 1, dungeonLevel);
+  markDepthReached(dungeonLevel);
+  // Depth MILESTONES (the every-5-floors cache) pay out on physically SETTING FOOT
+  // on a new deepest floor — tracked on `milestoneFloor`, NOT `maxFloor`. maxFloor
+  // now also jumps a floor early when you clear one (its unsealed stairs make the
+  // next floor re-enterable at the Gate), so keying the fanfare off it would fire a
+  // "floor N reached" banner while you're still standing on floor N-1.
+  const prevMilestone = player.milestoneFloor || 1;
+  player.milestoneFloor = Math.max(prevMilestone, dungeonLevel);
   // A fresh floor clears the transient combo/greed state and refreshes the chip.
   clearGreed(); updateObjectiveChip();
-  if (player.maxFloor > prevMax) depthMilestone(prevMax, player.maxFloor);
+  if (player.milestoneFloor > prevMilestone) depthMilestone(prevMilestone, player.milestoneFloor);
   // Offer the optional risk/reward gate once this floor has finished building.
   setTimeout(() => { try { maybeGreedGate(); } catch (e) {} }, 0);
+}
+
+// Fold a floor into the deepest-reached (`maxFloor`) and currently re-enterable
+// (`gateFloor`) trackers — WITHOUT the floor-arrival side effects (greed gate,
+// milestone fanfare). Called both on arrival (via recordDepth) and the moment a
+// clear unlocks the next floor at the Gate, before the hero has descended.
+function markDepthReached(dl) {
+  if (dl == null) return;
+  const folded = foldReached(player.maxFloor, player.gateFloor, dl);
+  player.maxFloor = folded.maxFloor;
+  player.gateFloor = folded.gateFloor;
 }
 
 // ── MATERIAL GATING (natural kill-drops) ──
@@ -4285,6 +4308,7 @@ for (const s in ARMOR_REQ) ARMOR_REQ_KEYS[s] = Object.keys(ARMOR_REQ[s]).sort((a
 function armorReqDef(item) {
   const tbl = ARMOR_REQ[item.slot];
   if (!tbl) return null;
+  if (item.base && tbl[item.base]) return tbl[item.base]; // hand-crafted unique carries its base
   const nm = item.name || '';
   for (const k of ARMOR_REQ_KEYS[item.slot]) if (nm.includes(k)) return tbl[k];
   return null;
@@ -4322,7 +4346,8 @@ function itemAttrReq(item) {
     def = (sub && WEAPON_REQ[sub]) || WEAPON_REQ[weaponBaseType(item)] || null;
   } else if (item.slot === 'offhand') {
     const nm = item.name || '';
-    for (const k of OFFHAND_REQ_KEYS) if (nm.includes(k)) { def = OFFHAND_REQ[k]; break; }
+    if (item.base && OFFHAND_REQ[item.base]) def = OFFHAND_REQ[item.base]; // unique carries its base
+    else for (const k of OFFHAND_REQ_KEYS) if (nm.includes(k)) { def = OFFHAND_REQ[k]; break; }
   } else if (ARMOR_REQ[item.slot]) {
     def = armorReqDef(item);
   }
@@ -5655,6 +5680,11 @@ function updateFloorClear() {
       sfx('stairs');
       tutorialStage('cave');
     } else {
+      // Clearing this floor unsealed its down-stairs, which opens the NEXT floor at
+      // the town Gate — so that floor now counts as your deepest and is re-enterable
+      // even if you port to town before descending. (Physically arriving there still
+      // pays the depth milestone — see recordDepth.)
+      markDepthReached(floorUnlockedByClear(dungeonLevel, false));
       log('<span data-spr=feat_door></span> The floor is clear — the stairs down unseal!', 'important');
       sfx('stairs');
     }
@@ -5816,7 +5846,15 @@ let player = { x: 5, y: 5,
   name: null, maxGold: 0, maxPower: 0,
   // Deepest dungeon floor reached — the Dungeon Gate in town shows every floor up
   // to this so you keep your progress and can backtrack to grind levels and gear.
+  // Clearing a floor unseals its down-stairs, so it advances this to the NEXT
+  // floor the moment you clear (that floor is re-enterable at the Gate even if you
+  // leave without descending) — not only once you actually step down.
   maxFloor: 1,
+  // Deepest floor the hero has physically SET FOOT ON. Distinct from maxFloor,
+  // which now runs a floor ahead after a clear. Depth milestones (the every-5
+  // cache + fanfare) fire off this on arrival, so the "floor N reached" banner
+  // never triggers while you're still standing on floor N-1.
+  milestoneFloor: 1,
   // Deepest floor currently *re-enterable* at the Gate. Normally tracks maxFloor,
   // but a death in your frontier tier shoves it back to your return floor: the
   // deeper floors you'd reached re-lock (, unclickable) until you fight back
@@ -6202,7 +6240,15 @@ window.gameState = function gameState(radius) {
   const R = (typeof radius === 'number' && radius > 0) ? Math.floor(radius) : 10;
   const live = (enemies || []).filter(e => e && !e.dead);
   const dist = e => Math.abs(e.x - player.x) + Math.abs(e.y - player.y);
-  const brief = it => it ? { name: it.name, slot: it.slot, tier: it.tier, stats: it.stats } : null;
+  // A compact item view for the AI-play API. Attributes, the signature power and
+  // the unique/fixed flags matter to a driving agent (a fixed unique can't be
+  // reforged), so they ride along with the stats.
+  const brief = it => it ? {
+    name: it.name, slot: it.slot, tier: it.tier, stats: it.stats,
+    ...(it.attrs && Object.keys(it.attrs).length ? { attrs: it.attrs } : {}),
+    ...(it.power && ITEM_POWERS[it.power] ? { power: ITEM_POWERS[it.power].name } : {}),
+    ...(it.unique ? { unique: it.unique, fixed: !!it.fixed } : {}),
+  } : null;
 
   // ── ASCII overlay map centred on the player ──
   // Terrain glyphs include the spike hazard floor (") an agent must respect;
@@ -6230,6 +6276,14 @@ window.gameState = function gameState(radius) {
   if (merchant) put(merchant.x, merchant.y, 'M');
   if (mystic) put(mystic.x, mystic.y, '?');
   if (quest && quest.npc) put(quest.npc.x, quest.npc.y, 'N');
+  // Floor-quest objective tiles (relic to fetch, tribute/grave spot, gather markers).
+  if (quest) {
+    if (quest.item && !quest.hasItem) put(quest.item.x, quest.item.y, 'Q');
+    if (quest.spot) put(quest.spot.x, quest.spot.y, 'Q');
+    if (quest.markers) quest.markers.forEach(m => { if (m && !m.done) put(m.x, m.y, 'Q'); });
+  }
+  // Rainbow conquest gate: step on it to dive into the next difficulty (floor 1).
+  if (typeof nextDiffPortal !== 'undefined' && nextDiffPortal) put(nextDiffPortal.x, nextDiffPortal.y, 'R');
   // Bolts in flight last (just under the player) — the most urgent thing to dodge.
   (typeof projectiles !== 'undefined' ? projectiles || [] : []).forEach(p => put(Math.floor(p.x), Math.floor(p.y), '!'));
   put(player.x, player.y, '@');
@@ -6248,11 +6302,17 @@ window.gameState = function gameState(radius) {
   // permanent sidebar (panelOpen is always true) and does NOT block movement, so
   // it's only treated as a menu in the compact layout.
   const ovOpen = id => { const el = document.getElementById(id); return !!(el && el.classList.contains('open')); };
+  // Every movement-blocking overlay → the mode it puts the game in. This MUST stay a
+  // superset of RT_BLOCKING_OVERLAYS (the world-freeze list rtPaused() uses): any
+  // overlay that pauses the world but is missing here makes canMove wrongly read true.
   const MODALS = [
-    ['title-overlay', 'title'], ['class-overlay', 'classSelect'], ['name-overlay', 'nameSelect'], ['death-overlay', 'dead'],
+    ['title-overlay', 'title'], ['class-overlay', 'classSelect'], ['name-overlay', 'nameSelect'],
+    ['hc-death-overlay', 'dead'], ['death-overlay', 'dead'],
     ['settings-menu', 'settings'], ['version-overlay', 'changelog'],
     ['howto-overlay', 'howto'], ['autoloot-overlay', 'autoloot'], ['keybind-overlay', 'keybinds'],
-    ['slotpick-overlay', 'slotpick'],
+    ['slotpick-overlay', 'slotpick'], ['newrun-overlay', 'newrun'], ['slots-overlay', 'slots'],
+    ['account-overlay', 'account'], ['lb-overlay', 'leaderboard'], ['graveyard-overlay', 'graveyard'],
+    ['conquest-overlay', 'conquest'], ['greed-overlay', 'greed'],
     ['shop-overlay', 'shop'], ['mystic-overlay', 'mystic'], ['town-overlay', 'town'],
   ];
   let mode = 'dungeon', blockingOverlay = null;
@@ -6309,7 +6369,12 @@ window.gameState = function gameState(radius) {
     const node = (typeof skillNode === 'function') ? skillNode(id) : null;
     const rank = (typeof skillRank === 'function') ? skillRank(id) : 0;
     const cd = (typeof skillCd === 'function') ? skillCd(id) : 0;
-    const mpCost = (node && typeof skillManaCost === 'function') ? skillManaCost(node, rank) : (node ? node.mp : null);
+    const baseMp = (node && typeof skillManaCost === 'function') ? skillManaCost(node, rank) : (node ? node.mp : null);
+    // Match the real cast: Mana Cost Reduction divides the base cost (min 1), so the
+    // reported mp — and the affordability check in `ready` — mirror what it will charge.
+    const mcr = (typeof totalStat === 'function') ? Math.max(0, totalStat('MCR')) : 0;
+    const mpCost = (baseMp == null) ? null : Math.max(1, Math.round(baseMp / (1 + mcr / 100)));
+    const c = node && node.cast;
     const o = {
       id, name: node ? node.name : id, rank,
       mp: mpCost, cooldown: Math.round(cd * 10) / 10,
@@ -6317,6 +6382,15 @@ window.gameState = function gameState(radius) {
       // 'skill' (martial: scales with weapon + Skill Power) or 'spell' (magic:
       // scales with Spell Power; also sped by Cast Speed). Null for non-actives.
       school: (node && node.cast && typeof castKind === 'function') ? castKind(node) : null,
+      // WHAT it does + its reach, so an agent can pick a skill without inspecting the
+      // node. A skill may be several at once (e.g. a nova that also heals).
+      shape: c ? (c.shape || null) : null,          // self|bolt|blast|nova|line|summon|…
+      damages: !!(c && (c.wpn != null || c.spell != null)),
+      heals: !!(c && c.heal),
+      buffs: !!(c && c.buff),
+      summons: !!(c && c.summon),
+      range: c ? (c.range || null) : null,
+      radius: c ? (c.radius || null) : null,
     };
     if (idx != null) {
       o.slot = idx + 1;
@@ -6352,7 +6426,7 @@ window.gameState = function gameState(radius) {
   return {
     // What's on screen and whether walking keys work right now. If canMove is
     // false, interact with the menu/overlay instead of pressing movement keys.
-    mode,            // dungeon | town | bag | title | classSelect | nameSelect | dead | shop | mystic | settings | changelog | playtime
+    mode,            // dungeon|town|bag|title|classSelect|nameSelect|dead|shop|mystic|settings|changelog|howto|autoloot|keybinds|slotpick|newrun|slots|account|leaderboard|graveyard|conquest|greed
     canMove,         // true only when mode === 'dungeon' and not mid-teleport
     blockingOverlay, // DOM id of the open modal, or null
     // Teleport ANIMATION in flight, else null. 'out' (fading out to town) or 'in'
@@ -6402,6 +6476,21 @@ window.gameState = function gameState(radius) {
         increasedDmg: totalStat('IDMG'),
         attackSpeed: totalStat('ATKSPD'), castSpeed: totalStat('CASTSPD'), cooldownReduction: totalStat('CDR'),
       } : null,
+      // Auto-attack reach of the equipped weapon, resolved by SUB-TYPE (a Rapier
+      // reaches 2, a Pike 3, a Longbow 5) — read this rather than guessing from category.
+      weaponReach: (typeof weaponRangeOf === 'function') ? weaponRangeOf((equipped || {}).weapon) : null,
+      // Survivability — the defensive counterpart to `offense`, mirroring the HERO sheet.
+      // The chance fields are 0..1 fractions measured against the current floor's threat.
+      defense: (typeof playerDefense === 'function') ? {
+        defense: Math.round(playerDefense()),
+        critChance: Math.round(playerCritChance() * 1000) / 1000,
+        critDamage: Math.round(critDamageMult() * 100) / 100,
+        hitChance: Math.round(hitChanceVs({ level: curDepth() }) * 1000) / 1000,
+        dodge: Math.round(playerDodge() * 1000) / 1000,
+        block: Math.round(blockChanceVs(curDepth()) * 1000) / 1000,
+        dmgReduction: Math.round(drFractionVs(curDepth()) * 1000) / 1000,
+        tenacity: (typeof playerTenacity === 'function') ? Math.round(playerTenacity() * 1000) / 1000 : null,
+      } : null,
     },
     // Buffs & debuffs currently on the hero (see effect names; turns or floors left).
     effects,
@@ -6428,6 +6517,9 @@ window.gameState = function gameState(radius) {
       ranged: !!(beh && beh.ranged), range: beh ? (beh.range || 1) : 1,
       aggro: !!e.aggro,                        // true = actively hunting you
       warded: (e.shieldT || 0) > 0,            // boss ward up → your damage is HALVED
+      enraged: !!e.enraged,                    // boss permanently hits +50% (triggers below 40% HP)
+      berserk: (e.berserkT || 0) > 0,          // boss temporary damage spike — wait it out like a ward
+      affix: e.affix || null,                  // elite-style modifier on ~22% of ordinary foes (see gameGuide "enemies")
       status: enemyStatus(e),                  // e.g. ['stun'], ['slow','poison']
     }; }),
     chests: (groundItems || []).map(g => ({ x: g.x, y: g.y })),
@@ -6465,6 +6557,35 @@ window.gameState = function gameState(radius) {
       const c = k.split(','); return { x: +c[1], y: +c[0], kind: (shrineData[k] || {}).kind }; }) : [], // power|guard|fortune|blood|wisdom
     teleporters: (typeof teleporters !== 'undefined' && teleporters) ? Object.keys(teleporters).map(k => {
       const c = k.split(','), d = teleporters[k] || {}; return { x: +c[1], y: +c[0], toX: d.x, toY: d.y }; }) : [],
+    // Active floor mini-quest (rescue/escort/hunt/fetch/tribute/forage/…). Its
+    // objective tiles are painted on the ASCII map (NPC 'N', objective 'Q'); see
+    // gameGuide("quests"). Null when the floor has no quest.
+    quest: quest ? {
+      type: quest.type, done: !!quest.done,
+      npc: quest.npc ? { name: quest.npc.name, x: quest.npc.x, y: quest.npc.y, following: !!quest.npc.following } : null,
+      item: (quest.item && !quest.hasItem) ? { x: quest.item.x, y: quest.item.y } : null,
+      hasItem: !!quest.hasItem,
+      spot: quest.spot ? { x: quest.spot.x, y: quest.spot.y } : null,
+      markers: quest.markers ? quest.markers.map(m => ({ x: m.x, y: m.y, done: !!m.done })) : null,
+      collected: (quest.collected != null) ? quest.collected : null,
+      need: (quest.need != null) ? quest.need : null,
+      cost: (quest.cost != null) ? quest.cost : null,
+      target: quest.name || null,   // 'hunt': the Wanted foe's name
+    } : null,
+    // Walk-on rainbow gate that opens on a conquered floor (glyph 'R'): step onto it
+    // to dive straight into the next difficulty at floor 1 (no town trip needed).
+    conquestGate: (typeof nextDiffPortal !== 'undefined' && nextDiffPortal) ? {
+      x: nextDiffPortal.x, y: nextDiffPortal.y,
+      toTier: (typeof DIFFS !== 'undefined') ? ((DIFFS[nextDiffPortal.diff - 1] || {}).name || null) : null,
+    } : null,
+    // Cursed-floor "greed" gate. pending → an accept/decline prompt is up (blockingOverlay
+    // 'greed-overlay'; mode 'greed'): call acceptGreed() for DOUBLED loot & gold + tougher
+    // foes, or declineGreed() to skip. active → this floor's greed bonus is already on.
+    greed: {
+      active: (typeof floorGreed !== 'undefined' ? floorGreed : 1) > 1,
+      mult: (typeof floorGreed !== 'undefined' ? floorGreed : 1),
+      pending: ovOpen('greed-overlay'),
+    },
     // Menu / DOM-panel state, so an agent never has to read the bag, shop or
     // town screen off the rendered pixels. `i` indexes into the live list.
     menu: {
@@ -6486,6 +6607,15 @@ window.gameState = function gameState(radius) {
       autoLoot: player.autoLoot ? Object.assign({}, player.autoLoot) : null,       // per-rarity keep/scrap/sell
       foodBuff: player.foodBuff ? { name: player.foodBuff.name, floors: player.foodBuff.floors } : null,
       pact: (typeof pact !== 'undefined' && pact) ? { name: pact.name, floors: pact.floors } : null,
+      merc: (player.merc && player.merc.floors > 0) ? (() => {
+        const t = (typeof MERC_TYPES !== 'undefined') ? MERC_TYPES.find(x => x.id === player.merc.kind) : null;
+        return { kind: player.merc.kind, name: t ? t.name : player.merc.kind, floors: player.merc.floors };
+      })() : null,   // hired Sellsword companion on a multi-floor contract
+      bounty: (player.bounty && typeof bountyProgress === 'function') ? {
+        kind: player.bounty.kind, desc: player.bounty.desc,
+        progress: Math.min(bountyProgress(player.bounty), player.bounty.need), need: player.bounty.need,
+        done: bountyDone(player.bounty), reward: { gold: player.bounty.gold, ilvl: player.bounty.ilvl },
+      } : null,   // accepted Bounty Board contract + live progress
       activeGearSet: (activeGearSet || 0) + 1,  // 1 or 2 — which loadout is worn
       equipped: Object.fromEntries(Object.entries(equipped || {}).map(([slot, it]) => [slot, brief(it)])),
       inventory: (inventory || []).map((it, i) => Object.assign({ i }, brief(it))),
@@ -6499,7 +6629,7 @@ window.gameState = function gameState(radius) {
         };
       }) : null,
     },
-    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
+    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
     // Any Dev-tab difficulty overrides currently in effect (empty when every knob
@@ -6568,7 +6698,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     combat: [
       `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight). A red crosshair marks the foe currently locked on (Settings → Visuals → CROSSHAIR toggles it; the 🎯 TARGET focus in Settings → Play picks which foe wins).`,
-      `Weapon reach: Staff & Bow = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
+      `Weapon reach is set by the weapon's SUB-TYPE (its name), not just its category. Category defaults: Staff & Bow = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee — but several sub-types override that: a Rapier (Sword) reaches 2, a Pike (Spear) 3, a Longbow (Bow) 5, a War Scythe (Scythe) 2. gameState().player.weaponReach reports your equipped weapon's actual reach. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
       `There is NO per-hit damage cap — a big swing, skill or crit lands its full number, so burst and crits are fully rewarded. A foe's actual HP is the only limiter: bosses carry deep HP pools (and hit harder), so they're a genuine, tanky fight rather than a one-shot.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear), and EVERY damage source can crit — auto-attacks, martial skills and spells all roll critical hits, land the big crit number, and fire your on-crit passives (combo/zeal charges, primed crits, mana refunds). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
@@ -6587,7 +6717,7 @@ window.gameGuide = function gameGuide(topic) {
     skills: [
       `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready.`,
       `The bar has ${SKILL_SLOTS} MANUAL slots (cast by hand with ${key('skill1')}-${key('skill' + SKILL_SLOTS)}) plus ONE dedicated auto-cast slot. You choose what goes where — drag a learned active onto a slot, or use the SKILLS-tab slot buttons; a freshly-learned active auto-fills the first open manual slot.`,
-      `gameState().skills lists each filled manual slot's number key, MP cost, cooldown remaining and ready flag; the auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
+      `gameState().skills lists each filled manual slot's number key, MP cost (already reduced by your Mana Cost Reduction), cooldown remaining, ready flag, and what the skill DOES — its shape, range/radius and the damages/heals/buffs/summons flags — so you can pick one without inspecting it. The auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
       `Every active is either a SKILL (martial/weapon-based) or a SPELL (magic) — shown as a SKILL / SPELL badge on its tree node and in gameState().skills[i].school. A SKILL scales with your weapon damage + Skill Power gear; a SPELL scales with Spirit + Spell Power gear. Gear those stats to match the actives you lean on.`,
       `Cooldowns are real seconds (spam-floored at 0.5s). Recharge is MULTIPLICATIVE haste, like attack speed: cd = base / (1 + CDR/100), and for SPELL actives times a further (1 + CastSpeed/100). There is NO cap — 60% CDR + 35% Cast Speed divides a spell's cooldown by 1.6×1.35 ≈ 2.16, and stacking more only ever approaches (never reaches) instant. +MCR likewise divides MP cost (base / (1 + MCR/100)); +Attack Speed quickens auto-attacks the same way. +CDR speeds every active, +Cast Speed spells only, and a rank-7 skill gets an extra ×1.2.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. ~50% CDR + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
@@ -6616,6 +6746,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     loot: [
       `Rarity is COLOUR ONLY (no text labels), lowest to highest: grey → white → green → blue → purple → orange → red. Higher tiers allow more bonus affixes.`,
+      `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike every other rarity it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and its own signature power (a "legendary modifier" like Vampiric). Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. gameState() marks worn/held uniques with a "unique" id and "fixed":true.`,
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a depth-milestone cache, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
       `Set pieces are a distinct top-rarity class shown in teal (not the red of a unique). They drop only at the top tier — as rare as any unique — and grant escalating stat bonuses at 2 and 4 matched pieces worn. Wearing the full set (4 pieces = complete) also unlocks its SIGNATURE POWER — a unique effect, not just more stats: Warden's Aegis Wall (block + reflect), Reaver's Bloodfrenzy (cleave + life leech + execute), or Arcanist's Arcane Overflow (cooldown reduction + mana leech). A completed set wraps the hero in a golden aura and its "… set" tag turns gold with a ✦. A piece can roll for any slot; hover/press-hold the tag to see the bonuses, the power, which slots you're wearing, and your count. gameState().sets lists worn sets, completion and active powers.`,
       `Item power is driven more by item level (ilvl, geared to current depth) than by rarity alone. gameState().menu.inventory gives brief items; read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
@@ -6636,27 +6767,34 @@ window.gameGuide = function gameGuide(topic) {
       `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" (tier being any rarity or "set") then call saveGame().`,
     ],
     hazards: [
-      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (shove into it from any side; a few hits to break), o teleporter, * shrine, f fountain, > stairs down, < stairs up.`,
+      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (shove into it from any side; a few hits to break), o teleporter, * shrine, f fountain, > stairs down, < stairs up, N quest npc, Q quest objective, R rainbow conquest gate.`,
       `Lava and spikes hurt but never kill outright (HP clamps to 1), and the generator never forces you across one — route around them.`,
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
-      `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom is a full heal, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
+      `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom restores 50% of max HP and refills MP to full, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one plays a short walk-through-portal animation — the portal swallows you, the camera pans across to the partner pad, and you step out there (~0.9s, world frozen, unhittable; gameState().transit reads 'warp'). It also clears any click-to-move route, so you won't auto-walk back toward the pad you clicked. Use it deliberately, not while fleeing.`,
       `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground; carryingKey true once held) and seal a rich vault chest.`,
+      `CURSED FLOOR (the "greed" gate): rarely, on descending to a non-boss floor from depth 3+, a WORLD-PAUSING prompt offers to brave the floor for DOUBLED loot & gold at the cost of tougher non-boss foes (more HP and damage). Movement freezes until you choose — gameState().greed.pending is true, mode is 'greed' and blockingOverlay is 'greed-overlay'; call acceptGreed() to take it (gameState().greed.active then reads true, mult 2) or declineGreed() to skip.`,
     ],
     enemies: [
-      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), and status (e.g. ["stun"], ["slow"]).`,
+      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), affix (an elite-style modifier), and status (e.g. ["stun"], ["slow"]).`,
       `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
-      `Behaviors: chaser (steady), swift & pack (move 2 tiles/turn; wolves/packs rush when you drop below 50% HP), brute & chilled (slow — act every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand).`,
+      `Behaviors (gameState().enemies[i].behavior): chaser (steady, 1 tile/turn), swift (2 tiles/turn), pack (1 tile/turn, but rushes to 2 when you drop below 50% HP — wolves/tigers), erratic (darts unpredictably), brute (slow — acts every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand). A foe with the ice CHILL status is likewise dragged to that half-cadence, but chill is a STATUS (it shows in enemies[i].status), not a behavior.`,
       `Each archetype also has its OWN toughness & punch, not just movement: brutes are tanky and hit hard but swing slowly; swift vermin and erratic flyers are frail and jab for less; casters are squishy but strike from range; lurkers ambush for a heavier blow; packs are individually weak but swarm. So two foes on the same floor can differ a lot — read the behavior, not just the sprite.`,
+      `ENEMY AFFIXES (gameState().enemies[i].affix): roughly a fifth of ordinary (non-elite) foes carry ONE modifier, shown by a coloured aura and a name prefix — tough (+HP), fierce (+damage), venomous (poison-on-hit), accurate (cuts through your dodge), evasive (your hits often whiff — bring Accuracy), chill (snares you on hit). Read the affix, not just the sprite.`,
       `Ranged foes fire DODGEABLE bolts, not guaranteed hits — a bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
       `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly.`,
       `Treasure Goblins (isGoblin) flee, never attack, and do NOT block the exit — chase fast for jackpot loot (they vanish ~15 ticks after first hit) or ignore them.`,
-      `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs; return to town and pick the next tier at the Gate).`,
+      `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
       `Summoned allies (gameState().allies) act before foes and soak hits, but expire after ttl turns and have capped damage — resummon and don't expect them to solo a boss.`,
       `On a fresh floor you get a brief moment of arrival immunity — use it to reposition out of a bad spawn before engaging.`,
+    ],
+    quests: [
+      `Floor mini-quests: about a third of non-boss floors (depth 2+) spawn ONE optional quest for a bonus reward (gold + XP + a gear chest). gameState().quest reports the active one (type, objective tiles, live progress) or null; its tiles are drawn on the ASCII map — 'N' a quest NPC, 'Q' an objective tile (relic to fetch, tribute/grave spot, or a gather marker).`,
+      `Kinds: rescue / jailbreak / lostpet / wounded (reach the NPC and interact); escort / courier (the freed NPC follows you — quest.npc.following — get it to the stairs alive); hunt (kill the named "Wanted" foe — quest.target); cleanse (kill every foe on the floor); forage / beacons (visit each marker — quest.markers with collected/need); fetch (carry the relic 'Q' to the quest NPC — quest.hasItem flips true once held); tribute (pay quest.cost gold at the altar spot); grave (disturb the marked grave — expect a fight).`,
+      `Quests never seal the stairs and are safe to skip, but the reward scales with depth — grab the cheap ones on your way to the exit.`,
     ],
     progression: [
       `Four classes: Warrior (Might/Vitality, tanky melee), Rogue (Agility/Might, crit & dodge), Mage (Spirit/Luck, spells & big MP), Templar (Vitality/Spirit, durable hybrid). Class gates which weapons you can equip.`,
@@ -6672,14 +6810,14 @@ window.gameGuide = function gameGuide(topic) {
     ],
     town: [
       `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, knocked back several floors, your bag dropped as a reclaimable grave on the death floor). The Dungeon Gate flags the tier + floor holding that grave (gameState().graveSite.where), so you can dive straight back to it.`,
-      `Town is a menu of services; take the Dungeon Gate to drop back in (choose tier + floor). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
+      `Town is a menu of services; take the Dungeon Gate to drop back in (choose tier + floor). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and is re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
-      `Merchant (buy gear / pay to restock); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
+      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
-      `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract.`,
-      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it); Gambler (wager gold for random gear — pick a slot to guarantee the type).`,
+      `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
+      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse 3 UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost — it spends your 3 lowest-value pieces of that rarity, so lock keepers first (needs 3+ unlocked of a rarity).`,
       `Services unlock as you progress and show in a fixed order (Dungeon Gate on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
-      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically.`,
+      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress.`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
     tips: [
@@ -6707,11 +6845,12 @@ window.gameGuide = function gameGuide(topic) {
     damage: 'damage', dmg: 'damage', spell: 'damage', spells: 'damage', spellpower: 'damage', skillpower: 'damage', attackspeed: 'damage', castspeed: 'damage', cooldown: 'damage', cdr: 'damage', scaling: 'damage', attack: 'damage', autoattack: 'damage',
     autoloot: 'autoloot', autoscrap: 'autoloot', scrap: 'autoloot', sell: 'autoloot', salvage: 'autoloot', material: 'autoloot', materials: 'autoloot', mats: 'autoloot',
     item: 'loot', items: 'loot', gear: 'loot', rarity: 'loot', loots: 'loot',
-    hazard: 'hazards', trap: 'hazards', traps: 'hazards', projectile: 'hazards', barrier: 'hazards', fire: 'hazards', terrain: 'hazards', tiles: 'hazards',
-    enemy: 'enemies', boss: 'enemies', bosses: 'enemies', ai: 'enemies', minion: 'enemies', minions: 'enemies', ally: 'enemies', allies: 'enemies',
+    hazard: 'hazards', trap: 'hazards', traps: 'hazards', projectile: 'hazards', barrier: 'hazards', fire: 'hazards', terrain: 'hazards', tiles: 'hazards', greed: 'hazards', cursed: 'hazards', curse: 'hazards', shrine: 'hazards', teleporter: 'hazards', fountain: 'hazards',
+    enemy: 'enemies', boss: 'enemies', bosses: 'enemies', ai: 'enemies', minion: 'enemies', minions: 'enemies', ally: 'enemies', allies: 'enemies', affix: 'enemies', enrage: 'enemies', berserk: 'enemies', conquest: 'enemies', scar: 'enemies', rainbow: 'enemies',
+    quest: 'quests', quests: 'quests', escort: 'quests', rescue: 'quests', fetch: 'quests', tribute: 'quests', forage: 'quests', beacon: 'quests', beacons: 'quests', objective: 'quests', bounty: 'town',
     classs: 'progression', classes: 'progression', clas: 'progression', attribute: 'progression', attributes: 'progression', level: 'progression', leveling: 'progression', skilltree: 'progression', ascension: 'progression', ascend: 'progression', xp: 'progression',
     character: 'character', creation: 'character', create: 'character', sex: 'character', gender: 'character', male: 'character', female: 'character', name: 'character', naming: 'character', newgame: 'character', body: 'character',
-    shop: 'town', merchant: 'town', craft: 'town', crafting: 'town', forge: 'town', ramen: 'town', mystic: 'town', stash: 'town', portal: 'town',
+    shop: 'town', merchant: 'town', craft: 'town', crafting: 'town', forge: 'town', ramen: 'town', mystic: 'town', stash: 'town', portal: 'town', transmuter: 'town', transmute: 'town', fuse: 'town', vault: 'town', gambler: 'town', gamble: 'town', sellsword: 'town', merc: 'town', mercenary: 'town', trainer: 'town', healer: 'town', enchanter: 'town', enchant: 'town',
     control: 'controls', key: 'controls', keys: 'controls', keybind: 'controls', keybinds: 'controls', keybinding: 'controls',
     heal: 'healing', healing: 'healing', recovery: 'healing', regen: 'healing', regeneration: 'healing', potion: 'healing', potions: 'healing', mana: 'healing', mp: 'healing', leech: 'healing', lifesteal: 'healing', overtime: 'healing', pending: 'healing', hp: 'healing', hitpoints: 'healing', sustain: 'healing',
     drive: 'driving', driving: 'driving', api: 'driving', act: 'driving', acting: 'driving', input: 'driving',
@@ -7108,6 +7247,34 @@ function sfx(name) {
     case 'portalin':  // pillar-in + materialize: pitch dives in, then a low thump
       tone(1760, 0.42, t, 'sine', 0.32, 294); tone(880, 0.4, t + 0.04, 'triangle', 0.18, 220);
       noise(0.4, t, 0.2, 5200, 'highpass'); tone(120, 0.3, t + 0.24, 'sawtooth', 0.4, 60); break;
+    // ── ATTACK / SPELL CASTS ── short, element-flavoured sounds for weapon swings,
+    // fired shots and the per-shape/element spell casts (see castSoundFor). ──
+    case 'bowshot':  // a taut string release + arrow whoosh
+      tone(600, 0.06, t, 'triangle', 0.28, 240); noise(0.14, t + 0.02, 0.22, 3000, 'highpass'); break;
+    case 'magicbolt': // a quick zap
+      tone(880, 0.12, t, 'sine', 0.3, 320); tone(440, 0.1, t + 0.02, 'square', 0.16, 220); break;
+    case 'slash':    // a blade swoosh
+      noise(0.12, t, 0.3, 2600, 'bandpass'); tone(320, 0.05, t, 'triangle', 0.14, 520); break;
+    case 'novacast': // an outward whoomph
+      tone(140, 0.24, t, 'sine', 0.4, 60); noise(0.24, t, 0.28, 1600, 'lowpass'); break;
+    case 'beamcast': // a searing lance
+      tone(240, 0.34, t, 'sawtooth', 0.28, 760); noise(0.3, t, 0.18, 3200, 'bandpass'); break;
+    case 'buffcast': // a warm rising shimmer
+      [523, 659, 784].forEach((f, i) => tone(f, 0.16, t + i * 0.05, 'sine', 0.24)); break;
+    case 'summoncast': // an otherworldly swell
+      tone(196, 0.4, t, 'sawtooth', 0.28, 392); tone(294, 0.34, t + 0.05, 'triangle', 0.18, 588); noise(0.3, t, 0.14, 5000, 'highpass'); break;
+    case 'castfire': // a fwoosh
+      tone(180, 0.22, t, 'sawtooth', 0.3, 90); noise(0.2, t, 0.26, 1800, 'lowpass'); break;
+    case 'castice':  // a crystalline chime
+      [1568, 2093, 2637].forEach((f, i) => tone(f, 0.22, t + i * 0.03, 'sine', 0.16)); tone(200, 0.16, t, 'sine', 0.2, 120); break;
+    case 'castspark': // a crackle
+      noise(0.14, t, 0.3, 4200, 'highpass'); for (let i = 0; i < 3; i++) tone(1400 + i * 500, 0.04, t + i * 0.03, 'square', 0.2); break;
+    case 'castarcane': // a bright arcane ping
+      tone(660, 0.16, t, 'sine', 0.28, 990); tone(990, 0.14, t + 0.03, 'triangle', 0.16); break;
+    case 'castholy': // a soft radiant tone
+      [659, 988, 1319].forEach((f, i) => tone(f, 0.2, t + i * 0.03, 'sine', 0.2)); break;
+    case 'castvenom': // a wet, low bubble
+      tone(160, 0.2, t, 'sine', 0.28, 90); noise(0.16, t, 0.16, 1200, 'lowpass'); break;
     // ── ULTIMATE CASTS ── big, cinematic capstone-spell sounds. ──
     case 'ult': // huge generic impact — a deep, room-shaking boom
       tone(70, 0.7, t, 'sawtooth', 0.6, 30); tone(110, 0.6, t + 0.04, 'square', 0.4, 45);
@@ -8936,13 +9103,15 @@ function spawnProjectile(x, y, dx, dy, dmg, color, speed) {
 // sidestepping its path or ducking behind cover avoids the hit entirely. Carries
 // the firing foe `e` and its pre-rolled base damage so the hit resolves with that
 // foe's mitigation and on-hit procs when (and if) it lands.
-function spawnEnemyBolt(e, raw, color) {
+function spawnEnemyBolt(e, raw, color, kind) {
   const s = e.size || 1;
   const ox = e.x + s / 2, oy = e.y + s / 2;          // origin: centre of the foe's footprint
   const dx = player.fx - ox, dy = player.fy - oy, d = Math.hypot(dx, dy) || 1;
   const SP = 8;                                        // fast enough to threaten, slow enough to sidestep
   const life = (d + 1.5) / SP;                         // reaches the hero, overshoots a touch, then dies
-  projectiles.push({ x: ox, y: oy, vx: dx / d * SP, vy: dy / d * SP, dmg: raw, color: color || '#c77dff', life, enemyShot: true, e, label: enemyLabel(e) });
+  kind = kind || 'hex';                                // ranged foes sling magic/hex orbs, never fletched arrows
+  projectiles.push({ x: ox, y: oy, vx: dx / d * SP, vy: dy / d * SP, dmg: raw, color: color || '#c77dff', life,
+    enemyShot: true, e, label: enemyLabel(e), kind, element: projectileElement(kind), _seed: Math.random() * PI2 });
 }
 
 // Advance every bolt: move, die on a wall, or strike the hero on overlap.
@@ -8960,7 +9129,7 @@ function updateProjectiles(dt) {
       const SP = p.tx != null ? 15 : 12;   // player spell bolts fly a touch faster
       p.vx = dx / d * SP; p.vy = dy / d * SP;
       p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
-      if (d < 0.4 || p.life <= 0) { spawnParticles(p.x, p.y, p.color, p.orb ? 8 : 5, 0.08); p.life = 0; }
+      if (d < 0.4 || p.life <= 0) { if (p.kind || p.element) projectileArrive(p); else spawnParticles(p.x, p.y, p.color, p.orb ? 8 : 5, 0.08); p.life = 0; }
       continue;
     }
     p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
@@ -9373,6 +9542,7 @@ function generateMap() {
   if (floorMod.prepHint) log('💡 If this floor is too tough, retreat to town: strike a pact, cook a bowl, or forge gear, then come back ready.', 'important');
 
   projectiles = [];
+  clearAttackFx();
   placeTraps(reach);
   floorRooms = rooms;
   spawnEnemies();
@@ -9506,8 +9676,11 @@ function generateMap() {
   if (player.clearedFloors && player.clearedFloors[dungeonLevel]) {
     floorCleared = true;
   } else if (hostilesRemaining() === 0) {
+    // A floor that spawns with no blockers is cleared on arrival — its stairs down
+    // open at once, so (like a fought clear) it banks the next floor as your deepest.
     floorCleared = true;
     if (player.clearedFloors) player.clearedFloors[dungeonLevel] = true;
+    markDepthReached(floorUnlockedByClear(dungeonLevel, isLastFiniteFloor()));
   } else if (isLastFiniteFloor()) {
     log(`<span data-spr=b_ratking></span> The dungeon's final guardian holds this floor. ${clearConditionLabel()}`, 'important');
   } else {
@@ -9879,13 +10052,22 @@ function handleQuestStep(nx, ny) {
   }
 }
 
+// Rarity distribution for merchant wares: the merchant deals only in uncommon+
+// gear — never junk (grey) or normal (white) — weighted toward the rarer tiers so
+// his table always beats a raw floor drop. Every tier from uncommon up is
+// reachable, with a slim shot at legendary / unique.
+const SHOP_TIER_WEIGHTS = {
+  uncommon: 40, rare: 34, epic: 16, legendary: 6, unique: 2,
+};
+
 // Roll a fresh merchant stock: `lo`..`hi` gear pieces geared to `ilvl`, each
 // gamble-priced. Shared by the dungeon wanderer, the town shop, and paid restocks.
 function rollShopStock(ilvl, lo, hi) {
   const stock = [];
   const n = rnd(lo, hi);
   for (let i = 0; i < n; i++) {
-    const item = generateItem(3, ilvl);
+    const tier = weighted(SHOP_TIER_WEIGHTS);
+    const item = generateItem(1, ilvl, tier);
     stock.push({ kind: 'gear', item, price: Math.max(10, Math.round(item.value * 1.4)) });
   }
   return stock;
@@ -9919,12 +10101,13 @@ function spawnMerchant(footReach) {
   } while ((mapData[my][mx] !== 0 || (mx === player.x && my === player.y) || getEnemyAt(mx,my)
             || isChokePoint(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
   if (tries >= 100) return;
-  // A small randomized stock of gamble-priced gear pieces. (Potions are no longer
-  // sold — they're a built-in skill now.) ilvl/range stored so a paid restock can
-  // re-roll the same kind of wares.
+  // A full randomized stock of gamble-priced gear pieces — at least six, so the
+  // wanderer is always worth the detour. (Potions are no longer sold — they're a
+  // built-in skill now.) ilvl/range stored so a paid restock re-rolls the same
+  // kind of wares.
   const ilvl = dungeonLevel + 1;
   const sale = Math.random() < 0.25 ? 0.7 : 1; // sometimes a 30%-off flash sale
-  merchant = { x: mx, y: my, stock: rollShopStock(ilvl, 2, 3), sale, ilvl, stockLo: 2, stockHi: 3 };
+  merchant = { x: mx, y: my, stock: rollShopStock(ilvl, 6, 8), sale, ilvl, stockLo: 6, stockHi: 8 };
   log('<span data-spr=mat_glimmer></span> A robed merchant has wandered onto this floor...', 'important');
   if (sale < 1) log('<span data-spr=scroll></span> The merchant is holding a flash sale — 30% off everything!', 'important');
 }
@@ -10097,7 +10280,7 @@ function renderShop() {
     const scolor = tierColor(s.item);
     return `<div class="shop-row has-actions ${isUpgrade?'upgrade':''} ${afford?'':'cant-afford'}">
       <span class="loot-icon">${iconMarkup(sicon, scolor)}</span>
-      <div class="shop-row-info ${cls}">
+      <div class="shop-row-info ${cls}" onmouseenter="showShopTooltip(event,${i})" onmouseleave="hideTooltip()">
         <div class="shop-row-name">${name}</div>
         <div class="shop-row-sub">${sub}</div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
@@ -10427,7 +10610,7 @@ function buildTown() {
   quest = null; teleporters = {}; shrineData = {};
   floorThemeOverride = null; furnitureMap = {}; decorMap = {}; // town is never an indoor-themed floor
   townShopStock = null;        // fresh merchant wares each town visit
-  traps = []; projectiles = []; bossHazards = []; // real-time hazards never linger into town
+  traps = []; projectiles = []; bossHazards = []; clearAttackFx(); // real-time hazards / fx never linger into town
   hasFountain = false; groundKey = null; hasKey = false;
   floorMod = FLOOR_MODS[0]; floorTint = 'rgba(120,90,40,0.10)';
   statusEffects = statusEffects.filter(s => s.target === 'player');
@@ -12131,6 +12314,7 @@ function afterEnchant(item) {
 function enchantAugment(id) {
   const g = findGear(id); if (!g) return;
   const item = g.item;
+  if (isFixedItem(item)) return; // uniques are fixed on drop — no new properties
   const cost = augmentCost(item);
   const stat = canAddStat(item), attr = canAddAttr(item);
   if ((!stat && !attr) || !canAfford(cost)) return;
@@ -12147,6 +12331,7 @@ function enchantAugment(id) {
 function enchantRerollAll(id) {
   const g = findGear(id); if (!g) return;
   const item = g.item;
+  if (isFixedItem(item)) return; // a unique's properties are locked on drop
   const cost = rerollAllCost(item);
   const caps = TIER_AFFIX_CAPS[item.tier] || { stat:0, attr:0 };
   if (!canAfford(cost) || (caps.stat + caps.attr) === 0) return;
@@ -12168,6 +12353,7 @@ function enchantRerollAll(id) {
 function enchantRerollValue(id, kind, key) {
   const g = findGear(id); if (!g) return;
   const item = g.item;
+  if (isFixedItem(item)) return; // fixed unique — values can't be reforged
   const cost = rerollValueCost(item);
   if (!canAfford(cost)) return;
   const mult = tierMult(item.tier);
@@ -12189,6 +12375,7 @@ function enchantRerollValue(id, kind, key) {
 function enchantRerollType(id, kind, key) {
   const g = findGear(id); if (!g) return;
   const item = g.item;
+  if (isFixedItem(item)) return; // fixed unique — modifiers can't be transmuted
   const cost = rerollTypeCost(item);
   if (!canAfford(cost)) return;
   const mult = tierMult(item.tier);
@@ -12263,6 +12450,10 @@ function enchantPick(id) { hideTooltip(); enchantSel = id; renderEnchanter(); }
 function enchantBack()   { hideTooltip(); enchantSel = null; renderEnchanter(); }
 
 function renderEnchantItem(item) {
+  // A hand-crafted unique is fixed on drop: every property is locked, so the
+  // Enchanter can only admire it. Show its properties read-only with a clear note
+  // instead of the reroll/augment machinery.
+  if (isFixedItem(item)) { renderFixedEnchantItem(item); return; }
   const caps = TIER_AFFIX_CAPS[item.tier] || { stat:0, attr:0 };
   const { statN, attrN } = itemAffixCounts(item);
   const head = headlineStats(item);
@@ -12360,6 +12551,31 @@ function renderEnchantItem(item) {
     <div class="ench-actbar">${augBtn}${allBtn}</div>
     ${blockMsg ? `<div class="hc-line" style="opacity:0.6;margin-top:4px">${blockMsg}</div>` : ''}
     ${poolPanel}`);
+}
+
+// The Enchanter view for a FIXED unique: every property is shown locked (with a
+// native/attribute/curse tag) and there are no reroll or augment controls — a
+// unique is fixed on drop, so its modifiers can never be reforged.
+function renderFixedEnchantItem(item) {
+  const head = headlineStats(item);
+  const line = (k, valStr, tag) =>
+    `<div class="hc-line" style="opacity:0.85"><span data-spr=feat_door></span> ${valStr} <span class="stat-abbr" ${hoverTip(statMeaningTip('stat', k))}>${STAT_LABELS[k] || k}</span> <span style="font-size:1.2rem">${tag}</span></div>`;
+  const statRows = Object.entries(item.stats).map(([k, v]) => {
+    const valStr = (typeof v === 'string') ? v : (v < 0 ? '' : '+') + v;
+    return line(k, valStr, head.includes(k) ? '(native)' : '(fixed)');
+  }).join('');
+  const attrRows = Object.entries(item.attrs || {}).map(([k, v]) =>
+    `<div class="hc-line" style="opacity:0.85;color:var(--gold)"><span data-spr=feat_door></span> +${v} <span class="stat-abbr" ${hoverTip(statMeaningTip('attr', k))}>${(ATTRIBUTES[k] || {}).label || k}</span> <span style="font-size:1.2rem">(fixed)</span></div>`).join('');
+  const powHtml = itemPowerFront(item);
+  const powLine = powHtml ? `<div class="hc-line" style="opacity:0.9">${powHtml}</div>` : '';
+  setTownContent(`
+    <div class="shop-row has-actions"><button class="modal-nav-btn" onclick="enchantBack()">‹ Back</button>
+      <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${item.name}</div>
+      <div class="shop-row-sub">${SLOTS[item.slot].label} · ilvl ${item.ilvl} · unique</div></div></div>
+    <div class="ench-legend">A unique is fixed the moment it drops — its properties can't be augmented or reforged.</div>
+    ${powLine}
+    ${statRows}${attrRows}
+    <div class="hc-line" style="opacity:0.6;margin-top:4px">This artifact's modifiers are set for good. Its values were rolled once, scaled to the depth it dropped on, and locked.</div>`);
 }
 
 // ── DUNGEON GATE — choose a difficulty, then a floor, to re-enter ──
@@ -13248,6 +13464,70 @@ function lockedStats(item) {
   return locked;
 }
 
+// ── HAND-CRAFTED UNIQUES ──
+// The rarest tier (red) is NOT a randomly-affixed drop like every other rarity. Each
+// unique is a hand-authored, NAMED artifact (see src/data/uniques.js): one per gear
+// type, with a FIXED set of six modifiers plus a signature "native" stat and its own
+// legendary power. Only the VALUES roll — scaled by depth (ilvl) exactly once at drop
+// — after which they're locked: a unique can never be augmented or rerolled (see
+// isFixedItem + the Enchanter guards). A share of red drops still roll as chase SET
+// pieces instead (UNIQUE_SET_CHANCE); the rest are these fixed uniques.
+const UNIQUE_SET_CHANCE = 0.4;
+// Which stats a slot's headline OWNS automatically (protected, never a native/mod):
+// DMG for weapons, DEF (+ATK on hands) for armour, the family headline for off-hands,
+// and nothing for jewelry (its native IS the headline).
+function uniqueMandatoryHeadline(slot, familyHeadline) {
+  if (slot === 'weapon') return ['DMG'];
+  if (slot === 'hands')  return ['DEF', 'ATK'];
+  if (slot === 'head' || slot === 'chest' || slot === 'legs') return ['DEF'];
+  if (slot === 'offhand') return familyHeadline.slice();
+  return []; // ring / amulet
+}
+// Build a fully-formed FIXED unique from a definition, rolling each property's VALUE
+// by depth (ilvl) once. applyBaseStats lays down the auto headline (DMG/DEF/family);
+// the definition's `native` then replaces the base's default innate signature, and
+// its six `mods` (five stats + one attribute) fill the rest. The result is marked
+// `fixed` so the Enchanter leaves it alone.
+function buildUnique(def, lvl) {
+  const tier = 'unique';
+  const mult = tierMult(tier);
+  const dmgMult = 2.6;
+  const slot = def.slot;
+  const baseName = def.base;
+  const value = Math.round(5000 * (1 + lvl * 0.12));
+  const item = { id: Math.random(), name: def.name, tier, slot, ilvl: lvl,
+    stats: {}, attrs: {}, value, flavor: def.flavor, icon: iconForBase(slot, baseName),
+    base: baseName, unique: def.id, fixed: true, power: def.power };
+  // Auto headline (DMG / DEF+ATK / off-hand family), rolled within its depth band.
+  applyBaseStats(item, baseName, lvl + rnd(0, 2) * 0.6, mult, dmgMult);
+  const baseInnate = (item.baseStats || []).slice(); // what applyBaseStats protected
+  if (slot === 'offhand') {
+    // Keep the family headline (DEF/BLOCK/SPELLPWR/ATK); native is an EXTRA signature.
+    if (!(def.native in item.stats)) item.stats[def.native] = affixStatValue(def.native, lvl, mult);
+    item.baseStats = [...baseInnate.filter(s => s !== def.native), def.native];
+  } else {
+    // Weapon/armour/jewelry: the unique's native replaces the base's default innate.
+    for (const s of baseInnate) if (s !== def.native) delete item.stats[s];
+    item.stats[def.native] = affixStatValue(def.native, lvl, mult);
+    item.baseStats = [def.native];
+  }
+  // The six fixed modifiers — their values vary by depth, then lock.
+  for (const m of def.mods) {
+    if (m.kind === 'attr') item.attrs[m.key] = affixAttrValue(lvl, mult);
+    else item.stats[m.key] = affixStatValue(m.key, lvl, mult);
+  }
+  return item;
+}
+// Pick a unique definition for a drop — any of them, or (when a slot is forced, e.g.
+// the town gambler targeting a gear type) one that fits that slot.
+function pickUnique(forceSlot) {
+  let pool = UNIQUES;
+  if (forceSlot && SLOTS[forceSlot]) { const s = uniquesForSlot(forceSlot); if (s.length) pool = s; }
+  return pick(pool);
+}
+// Is this a fixed item (a hand-crafted unique)? Fixed items never reroll/augment.
+function isFixedItem(item) { return !!(item && item.fixed); }
+
 function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null) {
   // Item level: how deep this drop is geared for. Higher item level means
   // bigger raw stats regardless of rarity, so loot from deeper floors steadily
@@ -13259,6 +13539,12 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   // forceSlot pins the equipment slot (also used by the gambler, when the player
   // pays to target a specific item type); otherwise the slot is rolled.
   const tier = forceTier || rollTier(rolls, lvl);
+  // The red tier is either a hand-crafted unique (fixed, named artifact) or — a
+  // minority of the time — a chase set piece. A unique short-circuits the whole
+  // random-affix pipeline: its stats come from its definition, not a roll.
+  if (tier === 'unique' && Math.random() >= UNIQUE_SET_CHANCE) {
+    return buildUnique(pickUnique(forceSlot), lvl);
+  }
   const slot = (forceSlot && SLOTS[forceSlot]) ? forceSlot : weighted(SLOT_WEIGHTS);
   const baseName = rollBaseName(slot);
 
@@ -13300,7 +13586,9 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   // own colour — so completing a set is a real chase. Legendaries always carry a
   // power; lower tiers get neither.
   if (tier === 'unique') {
-    if (Math.random() < 0.4) item.set = rollItemSet(); else item.power = rollItemPower();
+    // A hand-crafted unique already returned above; reaching here means this red
+    // drop rolled as a chase SET piece instead.
+    item.set = rollItemSet();
   } else if (tier === 'legendary') {
     item.power = rollItemPower();
   }
@@ -14696,6 +14984,14 @@ function draw() {
       ctx.restore();
     }
 
+    // ── PERSISTENT BOSS-BUFF AURA ── a shimmering blue ward while shielded and a
+    // pulsing red rage outline while enraged/berserk, so the active power state
+    // stays visible for its whole duration — not just the one-frame cast puff.
+    if (e.isBoss || e.isElite) {
+      if (e.shieldT > 0) { const wp = 0.5 + 0.5 * Math.sin(animNow() / 300); ringGlow(_scx, _scy, cw * (0.62 + 0.06 * wp), '150,216,255', 0.26 + 0.16 * wp); }
+      if (e.enraged || e.berserkT > 0) { const rp = 0.5 + 0.5 * Math.sin(animNow() / 180); glowUnder(_scx, _scy, cw * (0.58 + 0.08 * rp), `rgba(255,70,45,${(0.2 + 0.18 * rp).toFixed(3)})`); }
+    }
+
     // ── THREAT TELEGRAPH ── make "who can hit me, from where, right now" legible.
     // Ring any foe that can strike the hero on its next move (melee adjacent, or
     // ranged with line of sight in range); for ranged threats also draw a faint
@@ -14896,44 +15192,14 @@ function draw() {
     }
     ctx.restore();
   });
+  const _projNow = Date.now();
   projectiles.forEach(p => {
     const ppx = offX + p.x * tw, ppy = offY + p.y * th;     // bolts stay smooth (fast hazards)
     const m = Math.hypot(p.vx, p.vy) || 1, ux = p.vx / m, uy = p.vy / m; // forward
-    // Spell orbs: a glowing element-coloured ball with a bright core and a short
-    // trailing streak, rather than the arrow used for bolts/arrows.
-    if (p.orb) {
-      ctx.save();
-      ctx.shadowColor = p.color; ctx.shadowBlur = tw * 0.45;
-      ctx.strokeStyle = p.color; ctx.globalAlpha = 0.5; ctx.lineWidth = Math.max(1.5, tw * 0.1); ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(ppx - ux * tw * 0.32, ppy - uy * tw * 0.32); ctx.lineTo(ppx, ppy); ctx.stroke();
-      ctx.globalAlpha = 1; ctx.fillStyle = p.color;
-      ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.16, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.07, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-      return;
-    }
-    const nx = -uy, ny = ux;                                // perpendicular (barbs / fletching)
-    const half = tw * 0.24, head = tw * 0.17;               // shaft half-length, head size
-    const tipx = ppx + ux * half, tipy = ppy + uy * half;   // arrow tip (leading)
-    const tailx = ppx - ux * half, taily = ppy - uy * half; // nock (trailing)
+    // Each bolt renders as an element-tinted sprite chosen by its `kind` (arrow,
+    // magic orb, fireball, ice shard, spark, venom glob…) — see drawProjectileKind.
     ctx.save();
-    ctx.shadowColor = p.color; ctx.shadowBlur = tw * 0.25;
-    ctx.strokeStyle = p.color; ctx.fillStyle = p.color;
-    ctx.lineWidth = Math.max(1.3, tw * 0.05); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    // Shaft
-    ctx.beginPath(); ctx.moveTo(tailx, taily); ctx.lineTo(tipx, tipy); ctx.stroke();
-    // Arrowhead — a filled triangle at the tip
-    ctx.beginPath();
-    ctx.moveTo(tipx, tipy);
-    ctx.lineTo(tipx - ux * head + nx * head * 0.55, tipy - uy * head + ny * head * 0.55);
-    ctx.lineTo(tipx - ux * head - nx * head * 0.55, tipy - uy * head - ny * head * 0.55);
-    ctx.closePath(); ctx.fill();
-    // Fletching — two short barbs at the nock
-    ctx.beginPath();
-    ctx.moveTo(tailx, taily); ctx.lineTo(tailx - ux * head * 0.7 + nx * head * 0.7, taily - uy * head * 0.7 + ny * head * 0.7);
-    ctx.moveTo(tailx, taily); ctx.lineTo(tailx - ux * head * 0.7 - nx * head * 0.7, taily - uy * head * 0.7 - ny * head * 0.7);
-    ctx.stroke();
+    drawProjectileKind(p, ppx, ppy, ux, uy, tw, _projNow);
     ctx.restore();
   });
 
@@ -15070,6 +15336,11 @@ function draw() {
   }
   particles.length = pAlive;
   ctx.globalAlpha = 1;
+
+  // Attack / spell / monster-ability animations (slash arcs, novas, beams, chains,
+  // impacts, auras…) paint over the world with the cinematics, beneath the damage
+  // numbers so hits stay readable.
+  drawAttackFx(offX, offY, tw, th);
 
   // Ultimate-spell cinematics (meteor slam, frost nova, storm…) paint over the
   // world but beneath the floating damage numbers so hits stay readable.
@@ -15928,6 +16199,582 @@ function drawUltGeneric(e, el, cx, cy, tw) {
   const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, tw * 3.5);
   g.addColorStop(0, "rgba(200,180,150,0.5)"); g.addColorStop(1, "rgba(200,180,150,0)");
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, tw * 3.5, 0, Math.PI * 2); ctx.fill();
+}
+
+// ══════════════════════════════════════════
+// ATTACK / SPELL / MONSTER-ATTACK VFX ENGINE
+// ══════════════════════════════════════════
+// A transient, data-driven effect layer that gives EVERY skill, spell, weapon
+// swing and monster ability its own animation — the element palette and archetype
+// come from src/data/vfxPalette.js + src/systems/vfx.js, the drawing lives here at
+// the edge (like the ultimate cinematics and particles above). Effects are short,
+// pooled by a hard cap, age off on their own duration, and compact in place each
+// frame (never a per-frame .filter, per the hot-path rules).
+const PI2 = Math.PI * 2;
+const ATTACK_FX_CAP = 180;   // hard ceiling — a big pack fight can't wall the screen
+let attackFx = [];
+// Pre-roll the per-effect random detail ONCE at spawn (shard angles, ember scatter,
+// crack directions…) so the shape stays stable across frames instead of jittering.
+function _seedFxDetails(o) {
+  const R = Math.random;
+  switch (o.kind) {
+    case 'nova':
+      o.shards = Array.from({ length: o.shardN || 14 }, (_, i) => ({ a: (i / (o.shardN || 14)) * PI2 + R() * 0.25, len: 0.7 + R() * 0.5 }));
+      break;
+    case 'impact': case 'smash': case 'blink':
+      o.spikes = Array.from({ length: 7 }, (_, i) => ({ a: (i / 7) * PI2 + R() * 0.4, len: 0.8 + R() * 0.7 }));
+      break;
+    case 'cracks':
+      o.cracks = Array.from({ length: 9 }, (_, i) => ({ a: (i / 9) * PI2 + R() * 0.3, len: 0.6 + R() * 0.6, kinks: [R() * 2 - 1, R() * 2 - 1] }));
+      break;
+    case 'chain':
+      o.jag = (o.pts || []).map(() => Array.from({ length: 6 }, () => R() * 2 - 1));
+      break;
+    case 'cloud':
+      o.blobs = Array.from({ length: o.blobN || 8 }, () => ({ a: R() * PI2, d: R(), sz: 0.3 + R() * 0.55, ph: R() * PI2 }));
+      break;
+    case 'emberRain':
+      o.embers = Array.from({ length: 16 }, () => ({ dx: R() * 2 - 1, delay: R() * 0.45, sz: 1 + R() * 2, sway: R() * PI2 }));
+      break;
+    case 'aura':
+      o.motes = Array.from({ length: o.moteN || 12 }, (_, i) => ({ a: (i / (o.moteN || 12)) * PI2, d: 0.3 + R() * 0.7, rise: 0.5 + R(), sz: 1 + R() * 2 }));
+      break;
+    case 'swirl':
+      o.arms = Array.from({ length: 5 }, (_, i) => ({ a0: (i / 5) * PI2, sp: 0.8 + R() * 0.5 }));
+      break;
+    case 'beam':
+      o.wob = R() * PI2;
+      break;
+  }
+}
+// Push one effect (coords are CENTERED tile units, e.g. tileX + 0.5). `extra` carries
+// the per-kind fields (ang/spread/reach, r, x2/y2, pts, variant, dur, power…).
+function _fxPush(kind, cx, cy, pal, extra) {
+  const o = Object.assign({ kind, x: cx, y: cy, pal, dur: 380 }, extra || {});
+  o.born = Date.now();
+  _seedFxDetails(o);
+  if (attackFx.length >= ATTACK_FX_CAP) attackFx.shift();
+  attackFx.push(o);
+  return o;
+}
+function clearAttackFx() { attackFx.length = 0; }
+function _angTo(ax, ay, bx, by) { return Math.atan2(by - ay, bx - ax); }
+
+// ── Effect drawers ── each reads a normalized age t (0→1) and paints in screen space.
+function drawFxSlash(fx, t, cx, cy, tw) {
+  const reach = tw * (fx.reach || 0.75), spread = fx.spread || 0.95;
+  const a0 = fx.ang - spread, a1 = fx.ang + spread;
+  const lead = a0 + (a1 - a0) * easeOutCubic(Math.min(1, t * 1.35));
+  ctx.lineCap = 'round';
+  ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.5;
+  ctx.globalAlpha = 0.55 * (1 - t);
+  ctx.strokeStyle = fx.pal.trail; ctx.lineWidth = tw * 0.18 * (1 - 0.3 * t);
+  ctx.beginPath(); ctx.arc(cx, cy, reach, a0, lead); ctx.stroke();
+  ctx.globalAlpha = Math.max(0, 1 - t * 1.1);
+  ctx.strokeStyle = fx.pal.core; ctx.lineWidth = tw * 0.1;
+  ctx.beginPath(); ctx.arc(cx, cy, reach, Math.max(a0, lead - 0.6), lead); ctx.stroke();
+  ctx.shadowBlur = 0;
+  const gx = cx + Math.cos(lead) * reach, gy = cy + Math.sin(lead) * reach;
+  ctx.globalAlpha = Math.max(0, 1 - t); ctx.fillStyle = fx.pal.core;
+  ctx.beginPath(); ctx.arc(gx, gy, tw * 0.08, 0, PI2); ctx.fill();
+}
+function drawFxImpact(fx, t, cx, cy, tw) {
+  const k = easeOutCubic(t), p = fx.power || 1;
+  const r = tw * (0.12 + 0.55 * k * p);
+  ctx.globalAlpha = Math.max(0, 1 - t);
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  g.addColorStop(0, fx.pal.core); g.addColorStop(0.45, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, PI2); ctx.fill();
+  ctx.globalAlpha = 0.85 * (1 - t); ctx.strokeStyle = fx.pal.core; ctx.lineWidth = Math.max(1, tw * 0.07 * (1 - t));
+  ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.4;
+  ctx.beginPath(); ctx.arc(cx, cy, r * 1.05, 0, PI2); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.lineCap = 'round';
+  for (const s of fx.spikes || []) {
+    const len = r * (1.1 + 0.6 * s.len);
+    ctx.globalAlpha = 0.7 * (1 - t); ctx.strokeStyle = fx.pal.spark; ctx.lineWidth = tw * 0.05 * (1 - t);
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(s.a) * r * 0.5, cy + Math.sin(s.a) * r * 0.5);
+    ctx.lineTo(cx + Math.cos(s.a) * len, cy + Math.sin(s.a) * len); ctx.stroke();
+  }
+}
+function drawFxNova(fx, t, cx, cy, tw) {
+  const k = easeOutCubic(t), R = (fx.r || 1) * tw;
+  const rr = tw * 0.3 + R * k;
+  ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.6;
+  _ultRing(cx, cy, rr, tw * 0.28 * (1 - t), fx.pal.core, 0.85 * (1 - t));
+  _ultRing(cx, cy, rr * 0.7, tw * 0.18 * (1 - t), fx.pal.glow, 0.6 * (1 - t));
+  ctx.globalAlpha = Math.max(0, 0.5 * (1 - t * 1.4));
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rr);
+  g.addColorStop(0, fx.pal.core); g.addColorStop(0.5, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, PI2); ctx.fill();
+  ctx.shadowBlur = 0; ctx.lineCap = 'round';
+  for (const s of fx.shards || []) {
+    const d = rr * (0.7 + 0.3 * s.len);
+    ctx.globalAlpha = 0.7 * (1 - t); ctx.strokeStyle = fx.pal.spark; ctx.lineWidth = tw * 0.06 * (1 - t);
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(s.a) * rr * 0.5, cy + Math.sin(s.a) * rr * 0.5);
+    ctx.lineTo(cx + Math.cos(s.a) * d, cy + Math.sin(s.a) * d); ctx.stroke();
+  }
+}
+function drawFxBeam(fx, t, offX, offY, tw, th) {
+  const ax = offX + fx.x * tw, ay = offY + fx.y * th, bx = offX + fx.x2 * tw, by = offY + fx.y2 * th;
+  const grow = easeOutCubic(Math.min(1, t * 2.2));
+  const ix = ax + (bx - ax) * grow, iy = ay + (by - ay) * grow;
+  const fade = t < 0.55 ? 1 : Math.max(0, 1 - (t - 0.55) / 0.45);
+  const wob = 1 + 0.12 * Math.sin(t * fx.dur / 28 + (fx.wob || 0));
+  ctx.lineCap = 'round'; ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.8;
+  ctx.globalAlpha = 0.5 * fade; ctx.strokeStyle = fx.pal.glow; ctx.lineWidth = tw * 0.5 * wob;
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ix, iy); ctx.stroke();
+  ctx.globalAlpha = 0.9 * fade; ctx.strokeStyle = fx.pal.core; ctx.lineWidth = tw * 0.16 * wob;
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ix, iy); ctx.stroke();
+  ctx.globalAlpha = 0.8 * fade;
+  const g = ctx.createRadialGradient(ix, iy, 0, ix, iy, tw * 0.9);
+  g.addColorStop(0, fx.pal.core); g.addColorStop(0.5, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ix, iy, tw * 0.9, 0, PI2); ctx.fill();
+}
+function drawFxChain(fx, t, offX, offY, tw, th) {
+  const flick = 0.5 + 0.5 * Math.sin(t * fx.dur / 20);
+  const fade = Math.max(0, 1 - t), pts = fx.pts || [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const ax = offX + a.x * tw, ay = offY + a.y * th, bx = offX + b.x * tw, by = offY + b.y * th;
+    ctx.globalAlpha = fade * flick;
+    _ultBolt(ax, ay, bx, by, fx.jag[i], tw * 0.5, fx.pal.core, tw * 0.1 * flick + 1);
+    _ultBolt(ax, ay, bx, by, fx.jag[i], tw * 0.5, fx.pal.glow, tw * 0.05);
+  }
+  for (const p of pts) {
+    const px = offX + p.x * tw, py = offY + p.y * th;
+    ctx.globalAlpha = fade; ctx.fillStyle = fx.pal.core; ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.4;
+    ctx.beginPath(); ctx.arc(px, py, tw * 0.09, 0, PI2); ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+}
+function drawFxAura(fx, t, cx, cy, tw) {
+  const pal = fx.pal, v = fx.variant || 'buff';
+  if (v === 'ward') {
+    const fade = Math.min(1, Math.sin(Math.PI * t) * 1.5);
+    ctx.globalAlpha = 0.5 * fade; ctx.strokeStyle = pal.core; ctx.lineWidth = tw * 0.08;
+    ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.4;
+    ctx.beginPath(); ctx.arc(cx, cy - tw * 0.1, tw * 0.78, 0, PI2); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.globalAlpha = 0.18 * fade;
+    const g = ctx.createRadialGradient(cx, cy - tw * 0.1, tw * 0.2, cx, cy - tw * 0.1, tw * 0.85);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.8, pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy - tw * 0.1, tw * 0.85, 0, PI2); ctx.fill();
+    return;
+  }
+  const fade = 1 - t;
+  ctx.globalAlpha = 0.55 * fade; ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.5;
+  _ultRing(cx, cy + tw * 0.35, tw * (0.4 + easeOutCubic(t) * 0.9), tw * 0.12 * (1 - t), pal.glow, 0.6 * fade);
+  ctx.shadowBlur = 0;
+  for (const m of fx.motes || []) {
+    const rise = tw * m.rise * 2.2 * t;
+    const x = cx + Math.cos(m.a + t * 2) * tw * m.d * 0.9, y = cy + tw * 0.4 - rise;
+    ctx.globalAlpha = Math.max(0, (1 - t)) * 0.9;
+    ctx.fillStyle = v === 'flare' ? pal.glow : v === 'mend' ? pal.core : pal.spark;
+    if (v === 'mend') { const s = m.sz * 0.9; ctx.fillRect(x - s / 2, y - s * 1.5, s, s * 3); ctx.fillRect(x - s * 1.5, y - s / 2, s * 3, s); }
+    else ctx.fillRect(x - m.sz / 2, y - m.sz / 2, m.sz, m.sz);
+  }
+  ctx.globalAlpha = 0.5 * fade;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, tw * (0.8 + 0.6 * t));
+  g.addColorStop(0, pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, tw * (0.8 + 0.6 * t), 0, PI2); ctx.fill();
+  if (v === 'flare') _ultRing(cx, cy, tw * (0.4 + easeOutCubic(t) * 2.2), tw * 0.18 * (1 - t), pal.glow, 0.7 * (1 - t));
+  if (v === 'conjure') {
+    const rot = t * 4; ctx.globalAlpha = 0.6 * (1 - t); ctx.strokeStyle = pal.core; ctx.lineWidth = tw * 0.06;
+    ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.4;
+    ctx.beginPath();
+    for (let i = 0; i <= 6; i++) { const a = rot + i * Math.PI / 3, x = cx + Math.cos(a) * tw * 0.8, y = cy + Math.sin(a) * tw * 0.4; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.closePath(); ctx.stroke(); ctx.shadowBlur = 0;
+  }
+}
+function drawFxCloud(fx, t, cx, cy, tw) {
+  const fadeIn = Math.min(1, t * 4), fadeOut = t > 0.6 ? 1 - (t - 0.6) / 0.4 : 1;
+  const a = fadeIn * Math.max(0, fadeOut), R = (fx.r || 1) * tw;
+  for (const b of fx.blobs || []) {
+    const wob = Math.sin(t * fx.dur / 300 + b.ph);
+    const bx = cx + Math.cos(b.a) * R * b.d, by = cy + Math.sin(b.a) * R * b.d * 0.7 + wob * tw * 0.1;
+    const br = tw * b.sz * (0.85 + 0.15 * wob);
+    ctx.globalAlpha = 0.28 * a;
+    const g = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+    g.addColorStop(0, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bx, by, br, 0, PI2); ctx.fill();
+  }
+  ctx.globalAlpha = 0.6 * a; ctx.fillStyle = fx.pal.spark;
+  for (const b of fx.blobs || []) { const y = cy - t * tw * 1.2 + Math.sin(b.ph) * tw * 0.2, x = cx + Math.cos(b.a) * R * b.d; ctx.fillRect(x, y, 2, 2); }
+}
+function drawFxCracks(fx, t, cx, cy, tw) {
+  const k = easeOutCubic(t), fade = Math.max(0, 1 - t), R = (fx.r || 2) * tw;
+  ctx.lineCap = 'round'; ctx.strokeStyle = fx.pal.trail; ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.3;
+  for (const c of fx.cracks || []) {
+    const len = R * k * c.len, nx = Math.cos(c.a), ny = Math.sin(c.a), px = -ny, py = nx;
+    ctx.globalAlpha = 0.8 * fade; ctx.lineWidth = tw * 0.09 * fade;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + nx * len * 0.5 + px * c.kinks[0] * tw * 0.2, cy + ny * len * 0.5 + py * c.kinks[0] * tw * 0.2);
+    ctx.lineTo(cx + nx * len + px * c.kinks[1] * tw * 0.15, cy + ny * len + py * c.kinks[1] * tw * 0.15);
+    ctx.stroke();
+  }
+  ctx.shadowBlur = 0;
+  _ultRing(cx, cy, R * k * 0.8, tw * 0.2 * fade, fx.pal.glow, 0.5 * fade);
+  ctx.globalAlpha = 0.5 * fade;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, tw * 0.8);
+  g.addColorStop(0, fx.pal.core); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, tw * 0.8, 0, PI2); ctx.fill();
+}
+function drawFxSwirl(fx, t, cx, cy, tw) {
+  const fade = Math.max(0, 1 - t), R = (fx.r || 2) * tw;
+  ctx.lineCap = 'round'; ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.4;
+  for (const arm of fx.arms || []) {
+    ctx.globalAlpha = 0.6 * fade; ctx.strokeStyle = fx.pal.trail; ctx.lineWidth = tw * 0.08 * fade;
+    ctx.beginPath();
+    for (let s = 0; s <= 10; s++) {
+      const frac = s / 10, rad = R * (1 - frac) * (1 - 0.5 * t), ang = arm.a0 + frac * arm.sp * 6 + t * 4;
+      const x = cx + Math.cos(ang) * rad, y = cy + Math.sin(ang) * rad * 0.7;
+      s ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.shadowBlur = 0; ctx.globalAlpha = 0.6 * fade;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, tw * 0.9);
+  g.addColorStop(0, fx.pal.core); g.addColorStop(0.5, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, tw * 0.9, 0, PI2); ctx.fill();
+}
+function drawFxEmberRain(fx, t, cx, cy, tw) {
+  const R = (fx.r || 1.5) * tw;
+  for (const e of fx.embers || []) {
+    const lt = clamp01((t - e.delay) / (1 - e.delay || 1)); if (lt <= 0) continue;
+    const startY = cy - tw * 3.2, x = cx + e.dx * R + Math.sin(lt * 6 + e.sway) * tw * 0.15;
+    const y = startY + (cy - startY) * easeInCubic(lt);
+    ctx.globalAlpha = Math.max(0, 1 - lt) * 0.95; ctx.fillStyle = lt < 0.6 ? fx.pal.core : fx.pal.glow;
+    ctx.fillRect(x - e.sz / 2, y - e.sz / 2, e.sz, e.sz * 2.2);
+  }
+  ctx.globalAlpha = 0.45 * (1 - t);
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  g.addColorStop(0, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(cx, cy, R, R * 0.5, 0, 0, PI2); ctx.fill();
+}
+function drawFxSmash(fx, t, cx, cy, tw) {
+  const k = easeOutCubic(Math.min(1, t * 1.6)), fade = Math.max(0, 1 - t);
+  _ultRing(cx, cy, tw * (0.3 + k * 1.6), tw * 0.2 * fade, fx.pal.core, 0.8 * fade);
+  ctx.globalAlpha = 0.6 * fade;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, tw * 1.1 * k);
+  g.addColorStop(0, fx.pal.core); g.addColorStop(0.5, fx.pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, tw * 1.1 * k, 0, PI2); ctx.fill();
+  if (t < 0.4) {
+    const s = 1 - t / 0.4; ctx.globalAlpha = s; ctx.strokeStyle = fx.pal.core; ctx.lineWidth = tw * 0.12; ctx.lineCap = 'round';
+    ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.4;
+    ctx.beginPath(); ctx.moveTo(cx, cy - tw * 1.7 * s); ctx.lineTo(cx, cy); ctx.stroke(); ctx.shadowBlur = 0;
+  }
+}
+function drawFxBlink(fx, t, cx, cy, tw) {
+  const k = easeOutCubic(t), fade = Math.max(0, 1 - t);
+  ctx.shadowColor = fx.pal.glow; ctx.shadowBlur = tw * 0.5;
+  _ultRing(cx, cy, Math.max(0, tw * (0.6 - 0.5 * k)) + tw * 0.1, tw * 0.1 * fade, fx.pal.core, 0.7 * fade);
+  _ultRing(cx, cy, tw * (0.2 + k * 0.9), tw * 0.12 * fade, fx.pal.glow, 0.6 * fade);
+  ctx.shadowBlur = 0; ctx.lineCap = 'round';
+  for (const s of fx.spikes || []) {
+    const len = tw * (0.4 + k * 0.9) * s.len;
+    ctx.globalAlpha = 0.7 * fade; ctx.strokeStyle = fx.pal.spark; ctx.lineWidth = tw * 0.05 * fade;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(s.a) * len, cy + Math.sin(s.a) * len); ctx.stroke();
+  }
+}
+// Render (and compact) every live attack/spell effect. Drawn over the world with
+// the particles/cinematics, beneath the floating damage numbers so hits stay legible.
+function drawAttackFx(offX, offY, tw, th) {
+  if (!attackFx.length) return;
+  const now = Date.now();
+  let alive = 0;
+  for (let i = 0; i < attackFx.length; i++) {
+    const fx = attackFx[i];
+    const el = now - fx.born;
+    if (el >= fx.dur) continue;
+    attackFx[alive++] = fx;
+    const t = clamp01(el / fx.dur);
+    const cx = offX + fx.x * tw, cy = offY + fx.y * th;
+    ctx.save();
+    switch (fx.kind) {
+      case 'slash': drawFxSlash(fx, t, cx, cy, tw); break;
+      case 'nova': drawFxNova(fx, t, cx, cy, tw); break;
+      case 'beam': drawFxBeam(fx, t, offX, offY, tw, th); break;
+      case 'chain': drawFxChain(fx, t, offX, offY, tw, th); break;
+      case 'aura': drawFxAura(fx, t, cx, cy, tw); break;
+      case 'cloud': drawFxCloud(fx, t, cx, cy, tw); break;
+      case 'cracks': drawFxCracks(fx, t, cx, cy, tw); break;
+      case 'swirl': drawFxSwirl(fx, t, cx, cy, tw); break;
+      case 'emberRain': drawFxEmberRain(fx, t, cx, cy, tw); break;
+      case 'smash': drawFxSmash(fx, t, cx, cy, tw); break;
+      case 'blink': drawFxBlink(fx, t, cx, cy, tw); break;
+      default: drawFxImpact(fx, t, cx, cy, tw);
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  attackFx.length = alive;
+}
+
+// ── Projectile look ── the flying-bolt SIMULATION is unchanged (still dodgeable);
+// only its rendering is upgraded here to a crisp, element-tinted sprite per `kind`,
+// replacing the thin vector arrow. Every projectile carries a `kind` (arrow / magic
+// / fire / ice / spark / venom / holy / blood / hex / bone) and an `element` palette.
+function projKindFor(el) {
+  return ({ fire: 'fire', ice: 'ice', lightning: 'spark', venom: 'venom', holy: 'holy',
+    blood: 'blood', arcane: 'magic', physical: 'arrow', gold: 'magic', force: 'magic', life: 'holy', earth: 'arrow' })[el] || 'magic';
+}
+function drawArrowProj(ppx, ppy, ux, uy, tw, pal) {
+  const nx = -uy, ny = ux, half = tw * 0.3, head = tw * 0.16, sw = tw * 0.05;
+  const tipx = ppx + ux * half, tipy = ppy + uy * half, tailx = ppx - ux * half, taily = ppy - uy * half;
+  ctx.globalAlpha = 0.35; ctx.strokeStyle = pal.trail; ctx.lineCap = 'round'; ctx.lineWidth = sw * 1.4;
+  ctx.beginPath(); ctx.moveTo(tailx - ux * tw * 0.4, taily - uy * tw * 0.4); ctx.lineTo(ppx, ppy); ctx.stroke();
+  ctx.globalAlpha = 1; ctx.lineCap = 'butt';
+  ctx.strokeStyle = pal.edge; ctx.lineWidth = sw * 1.7;
+  ctx.beginPath(); ctx.moveTo(tailx, taily); ctx.lineTo(tipx - ux * head * 0.8, tipy - uy * head * 0.8); ctx.stroke();
+  ctx.strokeStyle = pal.trail; ctx.lineWidth = sw * 0.7;
+  ctx.beginPath(); ctx.moveTo(tailx, taily); ctx.lineTo(tipx - ux * head * 0.8, tipy - uy * head * 0.8); ctx.stroke();
+  ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.15; ctx.fillStyle = pal.core;
+  ctx.beginPath();
+  ctx.moveTo(tipx, tipy);
+  ctx.lineTo(tipx - ux * head + nx * head * 0.5, tipy - uy * head + ny * head * 0.5);
+  ctx.lineTo(tipx - ux * head * 1.5, tipy - uy * head * 1.5);
+  ctx.lineTo(tipx - ux * head - nx * head * 0.5, tipy - uy * head - ny * head * 0.5);
+  ctx.closePath(); ctx.fill();
+  ctx.shadowBlur = 0; ctx.strokeStyle = pal.edge; ctx.lineWidth = Math.max(1, tw * 0.02); ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.fillStyle = pal.spark;
+  for (const sgn of [1, -1]) {
+    ctx.beginPath();
+    ctx.moveTo(tailx, taily);
+    ctx.lineTo(tailx - ux * head * 0.9 + sgn * nx * head * 0.8, taily - uy * head * 0.9 + sgn * ny * head * 0.8);
+    ctx.lineTo(tailx - ux * head * 0.3 + sgn * nx * head * 0.2, taily - uy * head * 0.3 + sgn * ny * head * 0.2);
+    ctx.closePath(); ctx.fill();
+  }
+}
+function drawMagicProj(ppx, ppy, ux, uy, tw, pal, now, seed) {
+  ctx.globalAlpha = 0.5; ctx.strokeStyle = pal.trail; ctx.lineCap = 'round'; ctx.lineWidth = tw * 0.14;
+  ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.5;
+  ctx.beginPath(); ctx.moveTo(ppx - ux * tw * 0.5, ppy - uy * tw * 0.5); ctx.lineTo(ppx, ppy); ctx.stroke();
+  ctx.globalAlpha = 0.95;
+  const g = ctx.createRadialGradient(ppx, ppy, 0, ppx, ppy, tw * 0.28);
+  g.addColorStop(0, pal.core); g.addColorStop(0.5, pal.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.28, 0, PI2); ctx.fill();
+  ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.07, 0, PI2); ctx.fill();
+  const a = now / 90 + seed; ctx.fillStyle = pal.spark;
+  for (let i = 0; i < 3; i++) { const aa = a + i * 2.1, rx = ppx + Math.cos(aa) * tw * 0.18, ry = ppy + Math.sin(aa) * tw * 0.18; ctx.fillRect(rx - 1, ry - 1, 2, 2); }
+}
+function drawFireProj(ppx, ppy, ux, uy, tw) {
+  for (let i = 3; i >= 1; i--) {
+    const bx = ppx - ux * tw * 0.18 * i, by = ppy - uy * tw * 0.18 * i, r = tw * (0.22 - 0.04 * i);
+    ctx.globalAlpha = 0.5 * (1 - i / 4);
+    const g = ctx.createRadialGradient(bx, by, 0, bx, by, r);
+    g.addColorStop(0, '#ffe08a'); g.addColorStop(1, 'rgba(255,80,20,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bx, by, r, 0, PI2); ctx.fill();
+  }
+  ctx.globalAlpha = 1; ctx.shadowColor = '#ff7a2a'; ctx.shadowBlur = tw * 0.5;
+  const g = ctx.createRadialGradient(ppx, ppy, 0, ppx, ppy, tw * 0.2);
+  g.addColorStop(0, '#fff'); g.addColorStop(0.4, '#ffd24a'); g.addColorStop(1, '#ff5a1a');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.2, 0, PI2); ctx.fill(); ctx.shadowBlur = 0;
+}
+function drawIceProj(ppx, ppy, ux, uy, tw, pal) {
+  const nx = -uy, ny = ux, L = tw * 0.28, W = tw * 0.12;
+  ctx.globalAlpha = 0.4; ctx.strokeStyle = pal.trail; ctx.lineCap = 'round'; ctx.lineWidth = tw * 0.08;
+  ctx.beginPath(); ctx.moveTo(ppx - ux * tw * 0.4, ppy - uy * tw * 0.4); ctx.lineTo(ppx, ppy); ctx.stroke();
+  ctx.globalAlpha = 1; ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.35; ctx.fillStyle = pal.core;
+  ctx.beginPath();
+  ctx.moveTo(ppx + ux * L, ppy + uy * L);
+  ctx.lineTo(ppx + nx * W, ppy + ny * W);
+  ctx.lineTo(ppx - ux * L * 0.7, ppy - uy * L * 0.7);
+  ctx.lineTo(ppx - nx * W, ppy - ny * W);
+  ctx.closePath(); ctx.fill();
+  ctx.shadowBlur = 0; ctx.strokeStyle = pal.edge; ctx.lineWidth = Math.max(1, tw * 0.02); ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.globalAlpha = 0.8; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(1, tw * 0.02);
+  ctx.beginPath(); ctx.moveTo(ppx + ux * L, ppy + uy * L); ctx.lineTo(ppx - nx * W, ppy - ny * W); ctx.stroke();
+}
+function drawSparkProj(ppx, ppy, ux, uy, tw, pal) {
+  const tailx = ppx - ux * tw * 0.5, taily = ppy - uy * tw * 0.5;
+  ctx.globalAlpha = 1;
+  _ultBolt(tailx, taily, ppx, ppy, [0.7, -0.8, 0.6, -0.5], tw * 0.35, pal.core, tw * 0.06 + 1);
+  _ultBolt(tailx, taily, ppx, ppy, [0.7, -0.8, 0.6, -0.5], tw * 0.35, pal.glow, tw * 0.03);
+  ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.4; ctx.fillStyle = pal.core;
+  ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.08, 0, PI2); ctx.fill(); ctx.shadowBlur = 0;
+}
+function drawVenomProj(ppx, ppy, ux, uy, tw, pal) {
+  ctx.globalAlpha = 0.45; ctx.strokeStyle = pal.trail; ctx.lineCap = 'round'; ctx.lineWidth = tw * 0.1;
+  ctx.beginPath(); ctx.moveTo(ppx - ux * tw * 0.4, ppy - uy * tw * 0.4); ctx.lineTo(ppx, ppy); ctx.stroke();
+  ctx.globalAlpha = 1; ctx.shadowColor = pal.glow; ctx.shadowBlur = tw * 0.4; ctx.fillStyle = pal.glow;
+  ctx.beginPath(); ctx.arc(ppx, ppy, tw * 0.17, 0, PI2); ctx.fill();
+  ctx.shadowBlur = 0; ctx.fillStyle = pal.core;
+  ctx.beginPath(); ctx.arc(ppx - ux * tw * 0.03, ppy - uy * tw * 0.03, tw * 0.07, 0, PI2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.beginPath(); ctx.arc(ppx + tw * 0.04, ppy - tw * 0.04, tw * 0.03, 0, PI2); ctx.fill();
+}
+function drawProjectileKind(p, ppx, ppy, ux, uy, tw, now) {
+  const kind = p.kind || 'arrow';
+  const pal = paletteFor(p.element || projectileElement(kind));
+  switch (kind) {
+    case 'magic': case 'holy': case 'blood': case 'hex': drawMagicProj(ppx, ppy, ux, uy, tw, pal, now, p._seed || 0); break;
+    case 'fire': drawFireProj(ppx, ppy, ux, uy, tw); break;
+    case 'ice': drawIceProj(ppx, ppy, ux, uy, tw, pal); break;
+    case 'spark': drawSparkProj(ppx, ppy, ux, uy, tw, pal); break;
+    case 'venom': drawVenomProj(ppx, ppy, ux, uy, tw, pal); break;
+    default: drawArrowProj(ppx, ppy, ux, uy, tw, pal); break;   // arrow / bone
+  }
+}
+// A cosmetic spell bolt from the hero to a struck foe (damage already resolved in
+// resolveCast) — element-tinted, with the arrival burst wired via projectileArrive.
+function spawnCastProjectile(tx, ty, element, kind, opts) {
+  opts = opts || {};
+  projectiles.push({ x: player.fx, y: player.fy, tx, ty, vx: 0, vy: 0, dmg: 0,
+    color: paletteFor(element).glow, life: 0.75, cosmetic: true, orb: kind === 'magic',
+    kind, element, burst: !!opts.burst, burstR: opts.burstR || 1.4, _seed: Math.random() * PI2 });
+}
+// A cosmetic bolt from a monster toward the hero (its damage was already dealt by
+// the ability) — sells a ranged boss trick as a real projectile hero-ward.
+function spawnBossProjectile(e, kind, element) {
+  const a = bossAnchor(e);
+  projectiles.push({ x: a.x + 0.5, y: a.y + 0.5, vx: 0, vy: 0, dmg: 0, color: paletteFor(element).glow,
+    life: 0.6, cosmetic: true, orb: kind === 'magic', kind, element, _seed: Math.random() * PI2 });
+}
+// Fired from updateProjectiles the instant a cosmetic bolt reaches its mark: an
+// element-appropriate impact (or a radial burst for a `blast` cast).
+function projectileArrive(p) {
+  const el = p.element || projectileElement(p.kind || 'magic');
+  const pal = paletteFor(el);
+  if (p.burst) _fxPush('nova', p.tx, p.ty, pal, { r: p.burstR || 1.4, dur: 460, shardN: 13 });
+  else _fxPush('impact', p.tx != null ? p.tx : player.fx, p.ty != null ? p.ty : player.fy, pal, { dur: 320, power: p.orb ? 0.9 : 0.7 });
+  spawnParticles(p.x - 0.5, p.y - 0.5, pal.spark, p.burst ? 10 : 5, p.burst ? 0.12 : 0.08);
+}
+
+// ── High-level VFX dispatchers ── one call per cast / swing / boss trick picks the
+// element + archetype and lays down the right animation, so the combat code stays
+// declarative and every source of damage looks distinct.
+function castSoundFor(c, el) {
+  if (c.summon) return 'summoncast';
+  if ((c.buff || c.heal) && !c.spell && !c.wpn) return 'buffcast';
+  if (c.shape === 'line') return 'beamcast';
+  if (c.shape === 'nova') return 'novacast';
+  if (c.wpn) return 'slash';
+  return ({ fire: 'castfire', ice: 'castice', lightning: 'castspark', holy: 'castholy',
+    venom: 'castvenom', arcane: 'castarcane', blood: 'castarcane' })[el] || 'castarcane';
+}
+// The whole animation + sound for one NON-epic cast (epics keep spawnUltimateFx).
+function playCastVfx(node, c, center, targets) {
+  const el = elementOf(node.name, node.icon, c.wpn ? 'physical' : 'gold');
+  const pal = paletteFor(el);
+  const arch = castArchetype(c.shape);
+  sfx(castSoundFor(c, el));
+  const px = player.x + 0.5, py = player.y + 0.5;
+  const tgts = (targets || []).filter(o => o && o.x != null);
+  switch (arch) {
+    case 'aura':
+      _fxPush('aura', px, py, c.heal ? paletteFor('life') : pal, { variant: c.heal ? 'mend' : 'buff', dur: 700, moteN: 14 });
+      break;
+    case 'slash':
+      for (const o of tgts) {
+        const ang = _angTo(player.x, player.y, o.x, o.y);
+        _fxPush('slash', o.x + 0.5, o.y + 0.5, pal, { ang, spread: 0.9, reach: 0.72, dur: 300 });
+        _fxPush('impact', o.x + 0.5, o.y + 0.5, pal, { dur: 300, power: 0.9 });
+      }
+      break;
+    case 'arcWide': {
+      const c0 = tgts[0] || center, ang = _angTo(player.x, player.y, c0.x, c0.y);
+      _fxPush('slash', px, py, pal, { ang, spread: 1.7, reach: 1.15, dur: 340 });
+      for (const o of tgts) _fxPush('impact', o.x + 0.5, o.y + 0.5, pal, { dur: 280, power: 0.8 });
+      break;
+    }
+    case 'nova':
+      _fxPush('nova', px, py, pal, { r: (c.radius || 1) + 0.4, dur: 520, shardN: 16 });
+      for (const o of tgts) _fxPush('impact', o.x + 0.5, o.y + 0.5, pal, { dur: 260, power: 0.7 });
+      if (el === 'venom') _fxPush('cloud', px, py, pal, { r: (c.radius || 1) + 0.3, dur: 900 });
+      break;
+    case 'projectile': {
+      const dests = (c.shape === 'chain' || c.shape === 'line' || c.shape === 'random') ? tgts : [center];
+      for (const o of dests) if (o && o.x != null) spawnCastProjectile(o.x + 0.5, o.y + 0.5, el, projKindFor(el), {});
+      break;
+    }
+    case 'blast':
+      spawnCastProjectile(center.x + 0.5, center.y + 0.5, el, projKindFor(el), { burst: true, burstR: (c.radius || 1) + 0.5 });
+      break;
+    case 'beam': {
+      let far = center;
+      for (const o of tgts) if (Math.abs(o.x - player.x) + Math.abs(o.y - player.y) > Math.abs(far.x - player.x) + Math.abs(far.y - player.y)) far = o;
+      const dx = far.x - player.x, dy = far.y - player.y, m = Math.hypot(dx, dy) || 1;
+      _fxPush('beam', px, py, pal, { x2: far.x + 0.5 + dx / m * 0.8, y2: far.y + 0.5 + dy / m * 0.8, dur: 520 });
+      for (const o of tgts) _fxPush('impact', o.x + 0.5, o.y + 0.5, pal, { dur: 260, power: 0.7 });
+      break;
+    }
+    case 'chain': {
+      const pts = [{ x: px, y: py }].concat(tgts.map(o => ({ x: o.x + 0.5, y: o.y + 0.5 })));
+      if (pts.length > 1) _fxPush('chain', px, py, pal, { pts, dur: 420 });
+      break;
+    }
+    case 'blinkStrike':
+      _fxPush('blink', px, py, pal, { dur: 360 });
+      for (const o of tgts) {
+        const ang = _angTo(player.x, player.y, o.x, o.y);
+        _fxPush('slash', o.x + 0.5, o.y + 0.5, pal, { ang, spread: 0.9, reach: 0.72, dur: 300 });
+        _fxPush('impact', o.x + 0.5, o.y + 0.5, pal, { dur: 300, power: 1 });
+      }
+      break;
+    case 'conjure':
+      _fxPush('aura', px, py, pal, { variant: 'conjure', dur: 760, moteN: 16 });
+      break;
+    case 'multiStrike':
+      for (const o of tgts) _fxPush('impact', o.x + 0.5, o.y + 0.5, pal, { dur: 320, power: 0.9 });
+      break;
+    default:
+      _fxPush('impact', (center.x || 0) + 0.5, (center.y || 0) + 0.5, pal, { dur: 320 });
+  }
+  if ((c.radius || 0) >= 3 || (c.wpn || 0) >= 2.2 || (c.spell || 0) >= 1.8) screenFlash(pal.glow);
+}
+// The animation for one basic weapon attack (auto-attack / move-into / ranged poke).
+function playWeaponVfx(style, targetE, ranged) {
+  if (!targetE || targetE.x == null) return;
+  const arch = weaponArchetype(style);
+  const pal = paletteFor('physical');
+  const ang = _angTo(player.x, player.y, targetE.x, targetE.y);
+  const tcx = targetE.x + 0.5, tcy = targetE.y + 0.5;
+  switch (arch) {
+    case 'arrow': spawnCastProjectile(tcx, tcy, 'physical', 'arrow', {}); break;
+    case 'magicBolt': spawnCastProjectile(tcx, tcy, 'arcane', 'magic', {}); break;
+    case 'thrust':
+      _fxPush('beam', player.x + 0.5, player.y + 0.5, pal, { x2: tcx, y2: tcy, dur: 240 });
+      _fxPush('impact', tcx, tcy, pal, { dur: 240, power: 0.7 });
+      break;
+    case 'smash': _fxPush('smash', tcx, tcy, pal, { dur: 340 }); break;
+    case 'slashDouble':
+      _fxPush('slash', tcx, tcy, pal, { ang: ang - 0.5, spread: 0.8, reach: 0.62, dur: 220 });
+      _fxPush('slash', tcx, tcy, pal, { ang: ang + 0.5, spread: 0.8, reach: 0.62, dur: 260 });
+      break;
+    case 'arcWide': _fxPush('slash', tcx, tcy, pal, { ang, spread: 1.5, reach: 0.9, dur: 300 }); break;
+    case 'scytheArc': _fxPush('slash', tcx, tcy, paletteFor('life'), { ang, spread: 1.45, reach: 0.98, dur: 340 }); break; // reap: a long green-tinged crescent (sells the lifesteal)
+    case 'jab': _fxPush('impact', tcx, tcy, pal, { dur: 220, power: 0.6 }); break;
+    default: _fxPush('slash', tcx, tcy, pal, { ang, spread: 0.95, reach: 0.72, dur: 260 });   // slashArc
+  }
+}
+// The animation for one boss / elite special (looked up by ability name). Runs
+// after the ability resolves; ranged tricks additionally loose a real bolt hero-ward.
+function playBossVfx(e, ab) {
+  const spec = bossFxFor(ab);
+  if (!spec) return;
+  const pal = paletteFor(spec.el);
+  const a = bossAnchor(e);
+  const bcx = a.x + 0.5, bcy = a.y + 0.5, pcx = player.x + 0.5, pcy = player.y + 0.5;
+  switch (spec.type) {
+    case 'flameLine': _fxPush('beam', bcx, bcy, pal, { x2: pcx, y2: pcy, dur: 360 }); _fxPush('emberRain', pcx, pcy, pal, { r: 1.6, dur: 640 }); break;
+    case 'emberRain': _fxPush('emberRain', pcx, pcy, pal, { r: 1.9, dur: 760 }); break;
+    case 'groundCracks': _fxPush('cracks', pcx, pcy, pal, { r: 2.4, dur: 560 }); break;
+    case 'shockRing': _fxPush('nova', bcx, bcy, pal, { r: 2.6, dur: 520, shardN: 14 }); break;
+    case 'frostBurst': _fxPush('nova', pcx, pcy, pal, { r: 1.8, dur: 520, shardN: 16 }); _fxPush('impact', pcx, pcy, pal, { dur: 420, power: 1 }); break;
+    case 'siphonBeam': _fxPush('beam', pcx, pcy, pal, { x2: bcx, y2: bcy, dur: 520 }); break;
+    case 'hexBolt': spawnBossProjectile(e, 'hex', 'arcane'); break;
+    case 'venomSpit': spawnBossProjectile(e, 'venom', 'venom'); _fxPush('cloud', pcx, pcy, pal, { r: 1.3, dur: 900 }); break;
+    case 'pullSwirl': _fxPush('swirl', bcx, bcy, pal, { r: 2.4, dur: 560 }); break;
+    case 'hookLine': _fxPush('beam', bcx, bcy, pal, { x2: pcx, y2: pcy, dur: 300 }); _fxPush('impact', pcx, pcy, pal, { dur: 280 }); break;
+    case 'spinArc': _fxPush('slash', bcx, bcy, pal, { ang: 0, spread: 3.1, reach: 1.2, dur: 360 }); break;
+    case 'dashTrail': _fxPush('beam', bcx, bcy, pal, { x2: pcx, y2: pcy, dur: 280 }); break;
+    case 'auraFlare': _fxPush('aura', bcx, bcy, pal, { variant: 'flare', dur: 640, moteN: 14 }); break;
+    case 'ward': _fxPush('aura', bcx, bcy, pal, { variant: 'ward', dur: 700 }); break;
+    case 'mendMotes': _fxPush('aura', bcx, bcy, pal, { variant: 'mend', dur: 760, moteN: 12 }); break;
+    case 'conjure': _fxPush('aura', bcx, bcy, pal, { variant: 'conjure', dur: 760, moteN: 14 }); break;
+    case 'blinkPuff': _fxPush('blink', bcx, bcy, pal, { dur: 400 }); break;
+    case 'volley': break;   // the fan of bolts is already loosed by the ability
+  }
 }
 
 // ══════════════════════════════════════════
@@ -18158,6 +19005,10 @@ function attackEnemy(e, opts = {}) {
   const style = opts.style || weaponStyle();
   const ranged = !!opts.ranged;
   const label = enemyLabel(e);
+  // Draw the swing itself: a slash/impact arc for melee, or a real fired arrow /
+  // magic bolt for a bow/staff (previously ranged attacks loosed NOTHING visible).
+  if (e) playWeaponVfx(style, e, ranged);
+  const atkSnd = style === 'shot' ? 'bowshot' : style === 'bolt' ? 'magicbolt' : 'attack';
   let anyCrit = false, dealtTotal = 0;
 
   let anyMiss = false;
@@ -18182,11 +19033,11 @@ function attackEnemy(e, opts = {}) {
 
   if (style === 'flurry') {
     // Dagger: two quick lighter strikes, extra crit rolled per hit.
-    sfx('attack'); swing(e, 0.62); swing(e, 0.62);
+    sfx(atkSnd); swing(e, 0.62); swing(e, 0.62);
     if (dealtTotal > 0) log(`${anyCrit ? '💥 ' : ''}<span data-spr=w_dagger></span> ${label} -${dealtTotal}`, anyCrit ? 'important' : '');
     else log(`🌬️ ${label} dodged`);
   } else {
-    sfx('attack');
+    sfx(atkSnd);
     swing(e);
     const vi = style === 'shot' ? '<span data-spr=w_bow></span>' : style === 'bolt' ? '<span data-spr=ic_orb></span>'
       : style === 'thrust' ? '<span data-spr=w_spear></span>' : style === 'cleave' ? '<span data-spr=w_axe></span>'
@@ -18699,25 +19550,13 @@ function resolveCast(node, rank) {
   // Feedback. Epic casts — every tree ULTIMATE capstone AND every ASCENSION-path
   // active — get a full-screen cinematic (meteor slam, frost nova, lightning storm,
   // searing beam, holy pillar, summoning vortex, ground slam) that carries its own
-  // sound, flash and camera shake in place of the small per-cast feedback below.
+  // sound, flash and camera shake. Every OTHER cast now routes through playCastVfx,
+  // which lays down the element- and shape-appropriate animation (a fire bolt, an
+  // ice nova, a lightning beam, a poison cloud, a weapon slash…) plus its sound and
+  // any flying projectiles — replacing the old one-orb-fits-all flying bolt.
   const _isUlt = isEpicCast(node);
-  if (_isUlt) {
-    spawnUltimateFx(node, c, center, targets);
-  } else {
-    sfx(c.shape === 'self' ? 'potion' : (c.summon ? 'shrine' : (targets.length > 2 ? 'boss' : 'attack')));
-    if (c.shape !== 'self' && c.shape !== 'summon') spawnFloatingText(center.x, center.y, '', '#ffe6a0');
-    if ((c.radius || 0) >= 3 || (c.wpn || 0) >= 2.2 || (c.spell || 0) >= 1.8) screenFlash('#ffd27a');
-  }
-
-  // ── FLYING BOLTS ── ranged casts loose a visible projectile from the hero to
-  // each struck foe, coloured to the spell's element (fire orange, ice blue,
-  // spark yellow, hex purple…). Melee/nova/self stay untouched (they hit around you).
-  // Ultimates skip this — their cinematic already sells the strike.
-  if (!_isUlt && targets.length && !['self', 'summon', 'melee', 'cleave', 'nova'].includes(c.shape)) {
-    const boltColor = castVisual(node);
-    const dests = (c.shape === 'chain' || c.shape === 'line' || c.shape === 'random') ? targets : [center];
-    for (const e of dests) if (e) spawnSpellBolt((e.x || 0) + 0.5, (e.y || 0) + 0.5, boltColor);
-  }
+  if (_isUlt) spawnUltimateFx(node, c, center, targets);
+  else playCastVfx(node, c, center, targets);
 
   // Summons short-circuit (no damage pass).
   if (c.summon) { doSummon(c.summon, rank); return true; }
@@ -18936,11 +19775,18 @@ function runMinionTurn() {
     return true;
   });
 }
+// Projectile look for a ranged summon's shot, by minion kind.
+const MINION_BOLT_KIND = { skelarcher: 'arrow', elemental: 'fire', spirit: 'holy', totem: 'spark' };
+function spawnMinionBolt(m, e) {
+  const kind = MINION_BOLT_KIND[m.kind] || 'magic';
+  projectiles.push({ x: m.x + 0.5, y: m.y + 0.5, tx: e.x + 0.5, ty: e.y + 0.5, vx: 0, vy: 0, dmg: 0,
+    color: m.color, life: 0.55, cosmetic: true, orb: kind === 'magic', kind, element: projectileElement(kind), _seed: Math.random() * PI2 });
+}
 function minionAttack(m, e, ranged) {
   let dmg = Math.round(m.dmg * rnd(85, 115) / 100);
   m.hitAt = Date.now();
   triggerAttackAnim(m, e.x, e.y); // quick lunge toward the foe it's striking
-  if (ranged) spawnFloatingText(m.x, m.y, '➳', m.color);
+  if (ranged) spawnMinionBolt(m, e); // a real flying bolt to the foe, not a static glyph
   dmg = Math.max(1, Math.min(dmg, Math.ceil(e.maxHp * (e.isBoss ? 0.2 : 0.5))));
   dealDamage(e, dmg, false);
 }
@@ -19301,6 +20147,17 @@ function goblinFlee(e) {
 }
 
 // A melee enemy strikes the player from an adjacent tile.
+// A monster's melee blow on the hero: a crimson claw/impact swipe oriented from the
+// foe, and a heavier ground-smash for brutes and big multi-tile foes — so a monster
+// attack reads as a real strike, not just the sprite's lunge.
+function playEnemyMeleeVfx(e, beh) {
+  const pal = paletteFor('blood');
+  const heavy = (beh && beh.hitMult && beh.hitMult >= 1.4) || (e.size || 1) > 1;
+  if (heavy) { _fxPush('smash', player.x + 0.5, player.y + 0.5, pal, { dur: 320 }); return; }
+  const ang = _angTo(e.x, e.y, player.x, player.y);
+  _fxPush('slash', player.x + 0.5, player.y + 0.5, pal, { ang, spread: 0.85, reach: 0.62, dur: 240 });
+  _fxPush('impact', player.x + 0.5, player.y + 0.5, pal, { dur: 220, power: 0.6 });
+}
 function enemyAttackPlayer(e) {
   if ((e.atkCd || 0) > 0) return;           // still winding up between swings
   e.atkCd = enemyAttackInterval(e);
@@ -19322,7 +20179,7 @@ function enemyAttackPlayer(e) {
   notePlayerDamage(dmg, enemyLabel(e));
   sfx('hurt');
   spawnFloatingText(player.x, player.y, `${dmg}`, '#ff3344');
-  if (dmg > 0) { spawnParticles(player.x, player.y, '#d22a3a', 6, 0.07); addShake(4); }
+  if (dmg > 0) { spawnParticles(player.x, player.y, '#d22a3a', 6, 0.07); addShake(4); playEnemyMeleeVfx(e, beh); }
   log(`💢 ${enemyLabel(e)} -${dmg}`);
   if (player.hp > 0 && player.hp <= player.maxHp * 0.25) fireSkillTrigger('lowhp', { enemy: e });
   if (player.hp <= player.maxHp * 0.25) screenFlash('#cc0000');
@@ -19360,8 +20217,11 @@ function enemyRangedAttack(e) {
   // and on-hit procs all resolve in landEnemyRangedHit — but only if the bolt
   // actually reaches the hero, so sidestepping its path avoids the hit entirely.
   const raw = Math.round(e.dmg * rnd(75, 110) / 100);
-  spawnEnemyBolt(e, raw, e.isBoss ? '#ff7766' : '#c77dff');
-  sfx('attack');                            // the twang of the loose; the thud plays on impact
+  // Bosses hurl a flaming energy bolt; lesser ranged foes (casters) sling a hex orb
+  // — never the fletched arrow, which now reads exclusively as archery (traps, bow).
+  const kind = e.isBoss ? 'fire' : 'hex';
+  spawnEnemyBolt(e, raw, e.isBoss ? '#ff8a4a' : '#c77dff', kind);
+  sfx(e.isBoss ? 'castfire' : 'magicbolt');  // the release; the thud plays on impact
 }
 
 // Resolve a foe's ranged bolt actually striking the hero (called from
@@ -19519,7 +20379,7 @@ function bossSpecial(e, dist, beh) {
     e.enraged = true;
     e.dmg = Math.round(e.dmg * 1.5);
     log(`<span data-spr=b_dragon></span> ${e.name} ROARS and flies into a rage!`, 'important');
-    sfx('boss'); screenFlash('#ff3344'); addShake(6);
+    sfx('boss'); screenFlash('#ff3344'); addShake(6); playBossVfx(e, 'enrage');
     return true;
   }
   e.cd = (e.cd || 0) - 1;
@@ -19534,6 +20394,11 @@ function bossSpecial(e, dist, beh) {
 // Fire one named special; returns true if it actually went off (each sets its own
 // cooldown on success). Returning false lets bossSpecial fall through to the next.
 function tryBossAbility(e, ab, dist) {
+  const fired = _dispatchBossAbility(e, ab, dist);
+  if (fired) playBossVfx(e, ab);   // lay down the ability's animation (telegraph / bolt / ring / aura)
+  return fired;
+}
+function _dispatchBossAbility(e, ab, dist) {
   switch (ab) {
     case 'summon':     return bossSummonWave(e, dist);
     case 'firewall':   return bossFirewall(e, dist);
@@ -19743,7 +20608,8 @@ function bossCurseBlast(e, dist) {
 // A boss-fired damaging bolt with a proper death-recap label (see updateProjectiles).
 function spawnBossBolt(x, y, dx, dy, dmg, color, e) {
   const m = Math.hypot(dx, dy) || 1;
-  projectiles.push({ x, y, vx: dx / m * 6, vy: dy / m * 6, dmg, color: color || '#ff9a3d', life: 3, label: enemyLabel(e) });
+  projectiles.push({ x, y, vx: dx / m * 6, vy: dy / m * 6, dmg, color: color || '#ff9a3d', life: 3,
+    label: enemyLabel(e), kind: 'fire', element: 'fire', _seed: Math.random() * PI2 });
 }
 
 // Charge: the boss lunges in a straight line toward the hero, then tramples on
@@ -22618,6 +23484,14 @@ function showTooltip(e, i) {
   showTooltipForItem(inventory[i], e.currentTarget);
 }
 
+// Merchant wares mirror the bag: hovering a ware pops the same item card,
+// side-by-side with whatever you have equipped in that slot, so an upgrade reads
+// at a glance before you spend a coin.
+function showShopTooltip(e, i) {
+  const s = merchant && merchant.stock[i];
+  if (s) showTooltipForItem(s.item, e.currentTarget);
+}
+
 // ── Shared tooltip placement ─────────────────────────────────────────────────
 // The ONE positioner every floating hover card uses (item tooltip, skill popover,
 // button/stat hovertip). It pops the card out to the SIDE of its anchor and never
@@ -22704,6 +23578,15 @@ function itemCardHTML(item, opts = {}) {
     }
   }
   const power = item.slot ? itemPower(item) : 0;
+  // Signature power (Vampiric, Cleaving, …) — the build-defining "legendary
+  // modifier" a legendary/unique carries. Its glowing tag isn't in the stat list,
+  // so surface it here in the detail card too.
+  const powTag = item.slot ? itemPowerFront(item) : '';
+  const powerLine = powTag ? `<div style="margin:3px 0">${powTag}</div>` : '';
+  // A hand-crafted unique wears its identity on its sleeve: its properties are
+  // fixed on drop and can never be reforged.
+  const uniqueLine = item.fixed
+    ? `<div style="color:${(TIERS.unique || {}).color || '#ff2222'};font-size:1.2rem;font-weight:bold;margin:2px 0">✦ Unique — properties fixed on drop</div>` : '';
   // Item level: drives raw stat size, so it's worth surfacing alongside power.
   const ilvlLine = (item.slot && item.ilvl)
     ? `<span style="color:var(--blue-250);font-weight:bold">ilvl ${item.ilvl}</span>` : '';
@@ -22721,6 +23604,8 @@ function itemCardHTML(item, opts = {}) {
     <div class="tt-name" style="color:${tierColor(item)}">${curseMark(item)}${item.name}</div>
     <div class="tt-tier" style="color:${tierColor(item)}">${item.slot ? `<span data-spr=${SLOTS[item.slot].sprite}></span> ${SLOTS[item.slot].label}` : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</div>
     ${item.slot ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${power}</div>` : ''}
+    ${powerLine}
+    ${uniqueLine}
     ${reqLine}
     ${stats}
     ${weaponLine}
@@ -23042,7 +23927,12 @@ function handleEscape() {
   // in the dungeon, and what the header's button does on tap.
   const tov = document.getElementById('town-overlay');
   if (tov && tov.classList.contains('open')) {
-    if (townView === 'service') { townBack(); return true; }
+    if (townView === 'service') {
+      // In the Enchanter, a picked item sits one screen deeper than the paper
+      // doll — Esc backs out to the doll first, and only then to the town hub.
+      if (townServiceKind === 'enchanter' && enchantSel != null) { enchantBack(); return true; }
+      townBack(); return true;
+    }
     toggleSettingsMenu(); return true;
   }
   if (panelOpen && !isWebLayout()) { togglePanel(); return true; }
@@ -23579,6 +24469,11 @@ function loadGame() {
     normSkillSlots();
     // Migrate saves that predate the deepest-floor tracker / town hub.
     if (player.maxFloor == null) player.maxFloor = data.dungeonLevel || 1;
+    // Milestones used to fire off maxFloor; now that a clear advances maxFloor a
+    // floor early, they fire off the physically-reached floor instead. Seed it to
+    // the deepest reached so existing heroes don't re-collect milestones already
+    // earned (and, harmlessly, so a mid-run reload doesn't re-award the current one).
+    if (player.milestoneFloor == null) player.milestoneFloor = player.maxFloor || 1;
     // Migrate saves that predate the re-enterable-floor tracker (the Gate lock).
     // Seed it to the deepest reached so existing heroes keep full access — the
     // lock only starts biting on their next death.
@@ -24227,6 +25122,7 @@ function lbEntryFromPlayer() {
   return {
     name: String(player.name || 'Adventurer').slice(0, 16),
     player_class: player.class || null,
+    ascension: player.ascension || null,
     max_floor: lbInt(player.maxFloor || 1, 1),
     level: lbInt(player.level || 1, 1),
     gold: lbInt(player.maxGold || player.gold || 0, 0),
@@ -24241,7 +25137,7 @@ function lbScheduleSubmit() {
   if (!player || !player.name) return;
   player.maxGold = Math.max(player.maxGold || 0, player.gold || 0);
   player.maxPower = Math.max(player.maxPower || 0, playerPower() || 0);
-  const sig = [player.name, player.maxFloor || 1, player.level || 1, player.maxGold || 0, player.maxPower || 0, player.class || '', player.hardcore ? 'hc' : ''].join('|');
+  const sig = [player.name, player.maxFloor || 1, player.level || 1, player.maxGold || 0, player.maxPower || 0, player.class || '', player.ascension || '', player.hardcore ? 'hc' : ''].join('|');
   if (sig === lbLastSig) return;
   lbLastSig = sig;
   if (lbSubmitTimer) return; // a write is already queued; it'll pick up the latest stats
@@ -24268,6 +25164,7 @@ function lbSubmitLocal(entry) {
       all[i] = {
         name: entry.name,
         player_class: entry.player_class,
+        ascension: entry.ascension,
         max_floor: Math.max(all[i].max_floor || 1, entry.max_floor),
         level: Math.max(all[i].level || 1, entry.level),
         gold: Math.max(all[i].gold || 0, entry.gold),
@@ -24338,6 +25235,27 @@ function setLbMode(mode) {
   syncLbButtons();
   renderLeaderboard();
 }
+// A row's specialization label: the ascension (subclass) name in its signature
+// colour once the hero has ascended, otherwise the plain base-class name. Older
+// rows with an unknown/missing class read as "Wanderer".
+function lbSubclassLabel(r) {
+  const asc = r.ascension && typeof ASCENSIONS === 'object' && ASCENSIONS[r.ascension];
+  if (asc) return `<span class="lb-asc" style="color:${asc.color}">${dlIcon(asc.icon, 14) || ''}${escapeHtml(asc.name)}</span>`;
+  const c = r.player_class && typeof CLASSES === 'object' && CLASSES[r.player_class];
+  return `<span class="lb-cls">${c ? escapeHtml(c.name) : 'Wanderer'}</span>`;
+}
+// One compact stat chip for a board row. The three metrics OTHER than the current
+// sort ride the meta line, so every hero shows floor / level / gold / power at a
+// glance no matter which board you're on. Big counts abbreviate (12.3k) to fit.
+function lbStatChip(kind, r) {
+  switch (kind) {
+    case 'floor': return `<span class="lb-chip">${lbFloorLabel(r.max_floor || 1)}</span>`;
+    case 'level': return `<span class="lb-chip">Lv ${r.level || 1}</span>`;
+    case 'gold':  return `<span class="lb-chip"><span data-spr=ic_money></span>${fmtGold(r.gold || 0)}</span>`;
+    case 'power': return `<span class="lb-chip">${PWR_GLYPH}${fmtGold(r.power || 1)}</span>`;
+    default: return '';
+  }
+}
 async function renderLeaderboard() {
   const list = document.getElementById('lb-list');
   const status = document.getElementById('lb-status');
@@ -24369,11 +25287,23 @@ async function renderLeaderboard() {
     // everyone else is a plain row. The rank is always a plain number.
     const top = i < 3 ? ` lb-top-${i + 1}` : '';
     const me = myName && r.name === myName ? ' me' : '';
+    // Second line: the hero's specialization (subclass) on the left, and the
+    // stats OTHER than the one being sorted on the right — so a row shows class,
+    // ascension, floor, level, gold and power together, not just the ranked stat.
+    const meta = ['floor', 'level', 'gold', 'power']
+      .filter(k => k !== lbTab)
+      .map(k => lbStatChip(k, r)).join('');
     return `<div class="lb-row${top}${me}">
-      <span class="lb-rank">${i + 1}</span>
-      <span class="lb-class">${cls}</span>
-      <span class="lb-name">${escapeHtml(r.name)}</span>
-      <span class="lb-val">${sort.fmt(r[sort.col] || 0)}</span>
+      <div class="lb-row-main">
+        <span class="lb-rank">${i + 1}</span>
+        <span class="lb-class">${cls}</span>
+        <span class="lb-name">${escapeHtml(r.name)}</span>
+        <span class="lb-val">${sort.fmt(r[sort.col] || 0)}</span>
+      </div>
+      <div class="lb-row-meta">
+        <span class="lb-sub">${lbSubclassLabel(r)}</span>
+        <span class="lb-meta">${meta}</span>
+      </div>
     </div>`;
   }).join('');
 }
@@ -25624,6 +26554,12 @@ function showTitle() {
   ov.classList.add('open');
 }
 function closeTitle() { const ov = document.getElementById('title-overlay'); if (ov) ov.classList.remove('open'); }
+// Dismiss the boot splash (index.html #boot-overlay) once init has painted the
+// real title underneath — showTitle() has already flipped ENTER → CONTINUE and
+// filled the hero card, so fading the loader reveals the correct state with no
+// new-game flash. Adds .boot-done (fades out, drops pointer-events immediately);
+// idempotent, so the index.html failsafe re-adding it later is harmless.
+function hideBootLoader() { const b = document.getElementById('boot-overlay'); if (b) b.classList.add('boot-done'); }
 function titlePlay() {
   closeTitle();
   audioUnlock();
@@ -25679,6 +26615,9 @@ updateObjectiveChip();   // paint the goal chip for the starting state
 // it; titlePlay() dismisses the title and runs onboarding (name then class) for
 // a brand-new or class-less hero. Returning heroes just resume on CONTINUE.
 showTitle();
+// The real title is now correct (CONTINUE + hero card for a returning hero), so
+// fade out the boot splash that has been masking the cold-load flash until here.
+hideBootLoader();
 
 // Paint the optional cloud-save callout, then — if already signed in — reconcile
 // this device's slots with the account in the background (may reload into a
@@ -27016,6 +27955,20 @@ const __DL_FN_BRIDGE = {
   spellElement,
   castVisual,
   spawnSpellBolt,
+  // Attack / spell / monster-attack VFX engine
+  spawnFx: _fxPush,
+  clearAttackFx,
+  drawAttackFx,
+  playCastVfx,
+  playWeaponVfx,
+  playBossVfx,
+  playEnemyMeleeVfx,
+  spawnCastProjectile,
+  spawnBossProjectile,
+  spawnMinionBolt,
+  drawProjectileKind,
+  projectileArrive,
+  projKindFor,
   enemiesAdjacent,
   spreadBurnFrom,
   staticStacks,
@@ -27301,6 +28254,7 @@ const __DL_FN_BRIDGE = {
   hoverSlot,
   selectItem,
   showTooltip,
+  showShopTooltip,
   placeTooltipBesideAnchor,
   positionTooltip,
   itemCardHTML,

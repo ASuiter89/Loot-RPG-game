@@ -52,15 +52,15 @@ if (!existsSync(target)) {
 // Full observed contract at baseline (index.html @ bf3e1b4). Every one of these
 // must remain present through the refactor; add to the list only intentionally.
 const EXPECTED_STATE_KEYS = [
-  'mode', 'canMove', 'blockingOverlay', 'inTown', 'floor', 'floorDisplay', 'tier',
+  'mode', 'canMove', 'blockingOverlay', 'transit', 'inTown', 'floor', 'floorDisplay', 'tier',
   'isBossFloor', 'floorCleared', 'hostilesLeft', 'stairs', 'player', 'effects',
   'sets', 'skills', 'autoSkill', 'enemies', 'chests', 'coins', 'food', 'vaultKey',
-  'carryingKey', 'grave', 'npcs', 'allies', 'hazards', 'shrines', 'teleporters',
-  'menu', 'legend', 'guide', 'devTuning', 'map',
+  'carryingKey', 'grave', 'graveSite', 'npcs', 'allies', 'hazards', 'shrines', 'teleporters',
+  'quest', 'conquestGate', 'greed', 'menu', 'legend', 'guide', 'devTuning', 'map',
 ];
 const EXPECTED_GUIDE_TOPICS = [
   'overview', 'driving', 'controls', 'movement', 'combat', 'healing', 'skills',
-  'damage', 'autocast', 'loot', 'autoloot', 'hazards', 'enemies', 'progression',
+  'damage', 'autocast', 'loot', 'autoloot', 'hazards', 'enemies', 'quests', 'progression',
   'character', 'town', 'tips', 'dev',
 ];
 
@@ -121,10 +121,21 @@ async function main() {
       try {
         const g = window.gameGuide();
         out.guideTopics = g && g.topics ? g.topics : null;
+        // New topics must be reachable via their aliases (returns the topic array,
+        // not the {error, topics} object) so an agent can look them up.
+        out.aliasTopics = ['transmuter', 'quests', 'greed', 'conquest', 'merc']
+          .map((t) => Array.isArray(window.gameGuide(t)));
       } catch (e) {
         out.ok = false;
         out.guideError = String(e);
       }
+      // The survivability + reach fields an agent reads off player must exist.
+      out.playerHasDefense = (() => {
+        try {
+          const p = window.gameState().player;
+          return !!(p && 'defense' in p && 'weaponReach' in p);
+        } catch (e) { return false; }
+      })();
       out.canvasSized = (() => {
         const c = document.getElementById('canvas');
         return !!(c && c.width > 0 && c.height > 0);
@@ -156,6 +167,12 @@ async function main() {
       if (!result.guideTopics || !result.guideTopics.includes(t)) {
         failures.push(`gameGuide().topics missing: ${t}`);
       }
+    }
+    if (!result.aliasTopics || result.aliasTopics.some((ok) => !ok)) {
+      failures.push('gameGuide alias(es) do not resolve (transmuter/quests/greed/conquest/merc)');
+    }
+    if (!result.playerHasDefense) {
+      failures.push('gameState().player missing defense/weaponReach fields');
     }
 
     // --- window bridge verification (strangler migration) ---
