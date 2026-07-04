@@ -11325,18 +11325,17 @@ function renderForge() {
     ${baseHint}
     <div class="forge-label">Rarity <span style="opacity:.6">(stat + attr slots)</span></div>
     <div class="forge-grid forge-tiers">${tierBtns}</div>
-    <div class="shop-row" style="margin-top:10px">
+    <div class="shop-row has-actions" style="margin-top:10px">
       <span class="loot-icon">${iconMarkup(itemIcon(preview), tierColor(preview))}</span>
-      <div class="shop-row-info ${rarityClass(preview)}">
-        <div class="shop-row-name">${preview.name}${craftedMark(preview)}</div>
-        <div class="shop-row-stats">${itemStatLine(preview)} · ${caps.stat} stat / ${caps.attr} attr slots</div>
-        ${forgeReqLine}
+      <div class="shop-row-info">
+        <div class="${rarityClass(preview)}">
+          <div class="shop-row-name">${preview.name}${craftedMark(preview)}</div>
+          <div class="shop-row-stats">${itemStatLine(preview)} · ${caps.stat} stat / ${caps.attr} attr slots</div>
+          ${forgeReqLine}
+        </div>
+        <div class="shop-row-sub" style="margin-top:5px">${costLabelHi(cost)}</div>
+        <div class="shop-row-sub" style="color:var(--text-muted);font-style:italic">${craftCharacterNote(forgeSlot, forgeBase)}</div>
       </div>
-    </div>
-    <div class="shop-row has-actions">
-      <div class="shop-row-info"><div class="shop-row-name">Forge cost</div>
-        <div class="shop-row-sub">${costLabelHi(cost)}</div>
-        <div class="shop-row-sub" style="color:var(--text-muted);font-style:italic">${craftCharacterNote(forgeSlot, forgeBase)}</div></div>
       <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="craftItem()"><span data-spr=ic_mallet></span> FORGE</button>
     </div>`);
 }

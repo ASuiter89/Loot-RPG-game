@@ -3566,13 +3566,14 @@
     color: var(--xp); font-size: 1.3rem; font-weight: bold; letter-spacing: 1px; margin: 9px 0 4px;
   }
   .forge-grid { display: grid; gap: 5px; }
-  .forge-slots, .forge-bases { grid-template-columns: repeat(2, 1fr); }
+  .forge-slots, .forge-bases { grid-template-columns: repeat(3, 1fr); }
   .forge-cats { grid-template-columns: repeat(4, 1fr); }
   .forge-tiers { grid-template-columns: repeat(5, 1fr); }
   /* No "loners": rather than strand a single trailing tile alone at the start of
-     a final row, centre it. The base list is two columns (centre a lone last
-     tile full-width at column size); the weapon-category grid is four. */
-  .forge-bases .forge-opt:last-child:nth-child(2n+1) { grid-column: 1 / -1; justify-self: center; min-width: calc(50% - 3px); }
+     a final row, centre it. Slots/bases are three columns (drop a lone last tile
+     into the middle column); the weapon-category grid is four. */
+  .forge-slots .forge-opt:last-child:nth-child(3n+1),
+  .forge-bases .forge-opt:last-child:nth-child(3n+1) { grid-column: 2 / 3; }
   .forge-cats .forge-opt:last-child:nth-child(4n+1) { grid-column: 2 / 4; }
   .forge-opt {
     padding: 7px 6px; border: 1px solid var(--border); border-radius: 5px;

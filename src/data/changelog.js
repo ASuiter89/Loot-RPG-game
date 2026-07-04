@@ -3,6 +3,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Tighter Craftsman: one-tap forge, 3-wide pickers", by: "Jeff Louie", notes: [
+    "The forged-item preview and its cost now share one row — the FORGE button sits right on the item it makes, so you forge exactly what you see.",
+    "Item-type and base pickers go three across instead of two, killing the wasted space; a lone last tile centres instead of stranding.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Terrain & scenery fixes", by: "Claude", notes: [
     "Fixed ground that sometimes showed a hard-edged square of the base floor punching through a patch of accent ground — one terrain was missing a diagonal blend tile, so its edges broke at corners. Added the tile, and the ground now falls back to a seamless fill rather than a hard patch if any blend tile is ever absent.",
     "Tall scenery — trees, tall furniture — no longer vanishes the moment its base scrolls off the bottom of the screen; its crown keeps drawing while any part of it is still in view.",
