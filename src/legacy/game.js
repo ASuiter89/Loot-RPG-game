@@ -38,6 +38,8 @@ import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
 import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
 import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKILL_ICON_ATLAS } from '../assets/skillIconsAtlas.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
+import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
+import { mercCost } from '../systems/mercPricing.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -6621,6 +6623,7 @@ window.gameGuide = function gameGuide(topic) {
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
       `Merchant (buy gear / pay to restock); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
+      `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death); Gambler (wager gold for random gear — pick a slot to guarantee the type).`,
       `Services unlock as you progress and show in a fixed order (Dungeon Gate on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically.`,
@@ -10373,20 +10376,8 @@ function buildTown() {
 // Classic ARPG hireling: pay gold for a companion that spawns beside you on each
 // floor of its contract and fights like a summon (but stronger, and it revives
 // between floors). player.merc = { kind, floors, mult } — saved with the hero.
-const MERC_TYPES = [
-  { id: 'blade',   name: 'Sellsword',  minion: 'shadow',    mult: 1.15, desc: 'A swift blade — fast, hits hard.' },
-  { id: 'marks',   name: 'Marksman',   minion: 'skelarcher',mult: 1.10, desc: 'Fires on foes from across the room.' },
-  { id: 'warden',  name: 'Warden',     minion: 'golem',     mult: 1.30, desc: 'A hulking tank — huge health, steady.' },
-  { id: 'hound',   name: 'Hound',      minion: 'wolf',      mult: 1.12, desc: 'A snarling hound — quick, darts in and out.' },
-  { id: 'pyre',    name: 'Flame Adept',minion: 'elemental', mult: 1.20, desc: 'Hurls fire on foes across the room.' },
-  { id: 'seer',    name: 'Acolyte',    minion: 'spirit',    mult: 1.22, desc: 'A holy spirit — smites foes from afar.' },
-];
-// Which animated town-NPC walk sprite each merc type draws with — in the hire
-// list and as the companion on the dungeon map. Types without a bespoke walk
-// sheet fall back to their (real) minion sprite in both places.
-const MERC_ART = { blade: 'sellsword', marks: 'marks', warden: 'warden' };
-const MERC_FLOORS = 5;   // floors a contract lasts
-function mercCost(t) { return Math.round((160 + (player.maxFloor || 1) * 22) * (t.mult || 1)); }
+// MERC_TYPES / MERC_ART / MERC_DURATIONS and the pricing live in the extracted
+// data + systems modules (see src/data/mercenaries.js, src/systems/mercPricing.js).
 // Spawn the hired companion beside the hero at floor start; burns one contract floor.
 function spawnMerc() {
   if (inTown || tutorialActive || !player.merc || (player.merc.floors || 0) <= 0) return;
@@ -10407,35 +10398,47 @@ function spawnMerc() {
   if (player.merc.floors <= 0) { log(`<span data-spr=a_shield></span> Your ${t.name}'s contract ends after this floor.`, 'important'); }
 }
 function openMercCamp() { openTownModal('Sellsword', 'a_shield'); renderMercCamp(); }
+// The camp reuses the Mystic's pact-card component: one card per merc type, each
+// with a button per contract length (1 / 10 / 30 floors) — so you can hire a
+// companion for a quick test or a long delve, just like sealing a pact.
 function renderMercCamp() {
   const active = player.merc && player.merc.floors > 0;
   const cur = active ? MERC_TYPES.find(x => x.id === player.merc.kind) : null;
-  let html = `<div class="town-blurb">Hire a companion to fight at your side. They join you on every floor for the length of the contract, reviving between floors — then their coin runs out.</div>`;
+  let html = `<div class="town-blurb">Hire a companion to fight at your side. They join you on every floor of the contract, reviving between floors — then their coin runs out. Sign on for a single floor, a short delve, or a long haul; the longer the contract, the less each floor costs.</div>`;
   if (active && cur) {
-    html += `<div class="town-blurb" style="color:var(--green-450)"><span data-spr=w_sword></span> <b>${cur.name}</b> is under contract — <b>${player.merc.floors}</b> floor${player.merc.floors === 1 ? '' : 's'} left. Hire again to swap or extend.</div>`;
+    html += `<div class="town-blurb" style="color:var(--green-450)"><span data-spr=w_sword></span> <b>${cur.name}</b> is under contract — <b>${player.merc.floors}</b> floor${player.merc.floors === 1 ? '' : 's'} left. Hire again to replace it.</div>`;
   }
-  html += '<div class="shop-grid">' + MERC_TYPES.map(t => {
-    const cost = mercCost(t);
-    const afford = player.gold >= cost;
-    return `<div class="shop-row has-actions">
-      <span class="loot-icon">${townWalkIcon(MERC_ART[t.id], 26) || dlIcon((typeof MINION_SPRITE === 'object' && MINION_SPRITE && MINION_SPRITE[t.minion]) || 'hero_warrior', 22)}</span>
-      <div class="shop-row-info">
-        <div class="shop-row-name">${t.name}</div>
-        <div class="shop-row-stats">${t.desc} · ${MERC_FLOORS} floors</div>
-      </div>
-      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="hireMerc('${t.id}')"><span data-spr=ic_money></span>${cost}</button>
+  const depth = player.maxFloor || 1;
+  html += '<div class="pact-grid">' + MERC_TYPES.map(t => {
+    const accent = t.accent || '#7fe0a0';
+    const icon = townWalkIcon(MERC_ART[t.id], 22) || dlIcon((typeof MINION_SPRITE === 'object' && MINION_SPRITE && MINION_SPRITE[t.minion]) || 'hero_warrior', 22);
+    const buttons = MERC_DURATIONS.map(dur => {
+      const cost = mercCost(t.mult, depth, dur.mult);
+      const afford = player.gold >= cost;
+      const label = dur.floors === 1 ? '1 floor' : `${dur.floors} floors`;
+      return `<button class="pact-buy-btn" ${afford ? '' : 'disabled'} onclick="hireMerc('${t.id}', ${dur.floors})">
+        <span class="pact-floors">${label}</span>
+        <span class="pact-cost${afford ? '' : ' cost-short'}"><span data-spr=ic_money></span>${cost.toLocaleString()}</span>
+      </button>`;
+    }).join('');
+    return `<div class="pact-card" style="--accent:${accent};--accentSoft:${hexA(accent, 0.14)}">
+      <div class="pact-head"><span class="pact-ic">${icon}</span><span class="pact-name">${t.name}</span></div>
+      <div class="pact-desc">${t.desc}</div>
+      <div class="pact-buy-label">Hire for</div>
+      <div class="pact-durations">${buttons}</div>
     </div>`;
   }).join('') + '</div>';
   setTownContent(html);
 }
-function hireMerc(id) {
+function hireMerc(id, floors) {
   const t = MERC_TYPES.find(x => x.id === id); if (!t) return;
-  const cost = mercCost(t);
+  const dur = MERC_DURATIONS.find(d => d.floors === floors) || MERC_DURATIONS[0];
+  const cost = mercCost(t.mult, player.maxFloor || 1, dur.mult);
   if (player.gold < cost) { log('Not enough gold to hire.'); sfx('denied'); return; }
   player.gold -= cost;
-  player.merc = { kind: t.id, floors: MERC_FLOORS, mult: t.mult };
+  player.merc = { kind: t.id, floors: dur.floors, mult: t.mult };
   sfx('buy');
-  log(`<span data-spr=a_shield></span> You hire a ${t.name} for <span data-spr=ic_money></span>${cost} — they'll join you for ${MERC_FLOORS} floors.`, 'important');
+  log(`<span data-spr=a_shield></span> You hire a ${t.name} for <span data-spr=ic_money></span>${cost.toLocaleString()} — they'll join you for ${dur.floors} floor${dur.floors === 1 ? '' : 's'}.`, 'important');
   updateBars(); renderMercCamp(); saveGame();
 }
 
