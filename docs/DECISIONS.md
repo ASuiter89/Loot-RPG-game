@@ -109,7 +109,7 @@ src/
   render/        Canvas drawing: sprites, terrain, hero, particles, HUD-on-canvas,
                  minimap. Reads state + data; imported by the loop, never by systems.
   audio/         WebAudio engine, sfx, music, ambience. Effect at the edge.
-  input/         Keyboard/pointer/touch handlers + keybind model. Dispatches to actions.
+  input/         Keyboard/pointer handlers + keybind model. Dispatches to actions.
   ui/            DOM panels/overlays/modals (shop, town, settings, bag, leaderboard…).
                  May call systems for data and render for icons; owns innerHTML.
   persistence/   The ONLY place Supabase and localStorage are touched (repository pattern):

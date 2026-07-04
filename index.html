@@ -6,7 +6,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dungeon Loot</title>
 <link rel="stylesheet" href="./src/styles.css">
 </head>
@@ -79,9 +79,6 @@
   <div class="hud-item" id="pact-hud" style="display:none" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr=ic_orb></span> <span class="hud-val" id="pact-num"></span></div>
   <div class="hud-item" id="food-hud" style="display:none" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"></div>
   <div id="gold-display" data-tip="<div class='ht-name' style='color:var(--gold)'><span data-spr=ic_money></span> Gold</div><div class='ht-line'>The dungeon's main currency. Spend it at the town shops, the Forge, the Enchanter, and the Stash.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr=ic_money></span> <span id="gold-count">0</span></div>
-  <!-- Touch-only <span data-spr=ic_mallet></span> gear: opens Settings on mobile (where there's no Esc key).
-       Hidden on desktop, which uses Esc and hides the whole header anyway. -->
-  <button id="settings-gear" onclick="toggleSettingsMenu(event)" aria-label="Settings" title="Settings"><span data-spr=ic_mallet></span></button>
 </div>
 
 <!-- MAIN -->
@@ -92,10 +89,9 @@
          title screen, tinted to the current floor's theme so the play area never
          feels flat/static. Decorative; seeded once and theme-tinted by JS. -->
     <div id="ambient-embers" aria-hidden="true"></div>
-    <!-- Desktop-only floor / foes readout pinned to the top-left of the map.
-         On mobile these stay in the header (this whole block is display:none),
-         so mobile is unchanged. No lock icon: foes remaining already signals a
-         sealed floor, and the pill is simply hidden once the floor is clear. -->
+    <!-- Floor / foes readout pinned to the top-left of the map. No lock icon: foes
+         remaining already signals a sealed floor, and the pill is simply hidden
+         once the floor is clear. -->
     <div id="map-info">
       <div id="map-floor"><span data-spr=feat_gate_red></span> <span id="map-floor-num">1</span><span class="floor-diff" id="map-floor-diff"></span></div>
       <div id="map-foes"><span data-spr="ui_foes"></span> <span id="map-foes-num">0</span> foes</div>
@@ -110,17 +106,15 @@
     <canvas id="minimap" style="display:none" onclick="toggleMinimap()"></canvas>
     <!-- The combat bar: Town/Health/Mana on the left, the auto-cast slot in the
          middle, the four active skill slots on the right. Sits between the map and
-         the log so it's reachable in the thumb zone on mobile. Populated by
-         renderSkillBar(); hidden in town /
-         before any active is learned. -->
+         the log. Populated by renderSkillBar(); hidden in town / before any active
+         is learned. -->
     <div id="skill-bar" style="display:none"></div>
-    <!-- ── DESKTOP BOTTOM HUD ── (web layout only; see the desktop media query)
-         Takes its own row under the map, spanning the space BETWEEN the log and
-         loot panels, so it reflows when the log collapses or the drawer widens.
-         Big flanking HP (left) and MP (right) bars are the dominant elements; the
-         middle carries the name, power/gold, a slim stamina bar and all the
-         skill slots (the #skill-bar is re-homed here by syncDesktopHud). A
-         segmented XP bar runs along the very bottom. Hidden on mobile; the bars /
+    <!-- ── BOTTOM HUD ── Takes its own row under the map, spanning the space
+         BETWEEN the log and loot panels, so it reflows when the log collapses or
+         the drawer widens. Big flanking HP (left) and MP (right) bars are the
+         dominant elements; the middle carries the name, power/gold, a slim stamina
+         bar and all the skill slots (the #skill-bar is re-homed here by
+         syncDesktopHud). A segmented XP bar runs along the very bottom; the bars /
          XP / END are filled by updateBars + renderStaminaBar. -->
     <div id="desktop-hud">
       <div class="dh-top">
@@ -159,17 +153,6 @@
       <div id="log"></div>
     </div>
     <div id="control-bar">
-      <div id="dpad">
-        <div></div>
-        <button class="dpad-btn" data-dir="up" aria-label="Move up"></button>
-        <div></div>
-        <button class="dpad-btn" data-dir="left" aria-label="Move left"></button>
-        <button class="dpad-btn dpad-center" data-dir="pickup" aria-label="Use / grab"><svg class="dp-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/></svg></button>
-        <button class="dpad-btn" data-dir="right" aria-label="Move right"></button>
-        <div></div>
-        <button class="dpad-btn" data-dir="down" aria-label="Move down"></button>
-        <div></div>
-      </div>
       <div id="action-buttons">
         <!-- The Health Potion now lives at the far left of the skill bar
              (rendered by renderSkillBar), so it's dropped from this nav row. -->
@@ -295,18 +278,6 @@
           </button>
         </div>
 
-        <!-- Movement-pad position & opacity. Hidden on desktop (no touch d-pad);
-             populated by renderDpadControls() when the menu opens. -->
-        <div id="dpad-settings">
-          <div class="settings-dpad-label">MOVE PAD</div>
-          <div class="settings-dpad-row" id="dpad-pos-row"></div>
-          <div class="settings-dpad-label">OPACITY</div>
-          <div class="settings-dpad-row" id="dpad-op-row"></div>
-          <div class="settings-dpad-label">STYLE</div>
-          <div class="settings-dpad-row" id="dpad-style-row"></div>
-          <div class="settings-dpad-label">COLOUR</div>
-          <div class="settings-dpad-row" id="dpad-color-row"></div>
-        </div>
         </div>
 
         <!-- ── VISUALS ── on-screen overlays, interface scale, font and cursor. -->
@@ -436,9 +407,9 @@
     </div>
   </div>
 
-  <!-- Skill-slot assign picker — tap a slot (bar or SKILLS-tab tray) to choose
-       which learned active fills it, or clear it. The touch-friendly counterpart
-       to dragging a skill onto the slot. -->
+  <!-- Skill-slot assign picker — click a slot (bar or SKILLS-tab tray) to choose
+       which learned active fills it, or clear it. The counterpart to dragging a
+       skill onto the slot. -->
   <div id="slotpick-overlay" onclick="if(event.target.id==='slotpick-overlay')closeSlotPicker()">
     <div id="slotpick-card"><div id="slotpick-body"></div></div>
   </div>
@@ -502,16 +473,16 @@
       <div class="version-head">How to Play <button class="version-x" onclick="closeHowTo()">✕</button></div>
       <div class="howto-sec"><span data-spr=ui_agility></span> Goal</div>
       <div class="howto-line">Delve floor by floor, grab ever-better <b>loot</b>, and survive as deep as you can. Death sends you back to <b>Town</b>, lighter — but your hero lives on.</div>
-      <div class="howto-sec">🕹️ Moving &amp; fighting</div>
-      <div class="howto-ctrl"><span class="hk">Move</span><span>Joystick (drag anywhere), arrows / WASD, or click the map — the hero routes around walls to get there; hold to keep going, diagonals included.</span></div>
-      <div class="howto-ctrl"><span class="hk">Sprint</span><span>Hold <b>Shift</b>, or push the stick to its edge.</span></div>
+      <div class="howto-sec"><span data-spr=w_sword></span> Moving &amp; fighting</div>
+      <div class="howto-ctrl"><span class="hk">Move</span><span>Arrow keys / WASD, or click the map — the hero routes around walls to get there; hold to keep going, diagonals included.</span></div>
+      <div class="howto-ctrl"><span class="hk">Sprint</span><span>Hold <b>Shift</b> (or set Sprint to TOGGLE in Settings to auto-sprint).</span></div>
       <div class="howto-ctrl"><span class="hk">Dash</span><span><b>Space</b>. Sprint &amp; Dash burn stamina, which refills as you ease off.</span></div>
       <div class="howto-ctrl"><span class="hk">Attack</span><span>Automatic on any foe in reach.</span></div>
       <div class="howto-ctrl"><span class="hk">Skills</span><span>Skill bar or number keys (cost MP).</span></div>
-      <div class="howto-ctrl"><span class="hk">Use</span><span><b>E</b> / tap — grab loot, talk to NPCs.</span></div>
+      <div class="howto-ctrl"><span class="hk">Use</span><span><b>E</b> — grab loot, talk to NPCs.</span></div>
       <div class="howto-line" style="margin-top:5px">Mind your footing — ice slips, mud slows, arrow traps &amp; fire vents can be dodged. Foes roam and give chase when you're close.</div>
       <div class="howto-sec"><span data-spr=mat_glimmer></span> Loot rarity<span class="howto-tiers"><i style="background:var(--junk)"></i><i style="background:var(--normal)"></i><i style="background:var(--uncommon)"></i><i style="background:var(--rare)"></i><i style="background:var(--epic)"></i><i style="background:var(--legendary)"></i><i style="background:var(--unique)"></i></span></div>
-      <div class="howto-line">Colour is rarity: grey → white → green → blue → purple → orange → red (Mythic). Tap loot in your <b>bag</b> to equip, sell, or scrap it.</div>
+      <div class="howto-line">Colour is rarity: grey → white → green → blue → purple → orange → red (Mythic). Click loot in your <b>bag</b> to equip, sell, or scrap it.</div>
       <div class="howto-line"><b style="color:var(--set)">Teal</b> marks a <b>set piece</b> — its own top-rarity class, as rare as red. Wear 2 or 4 matching pieces for escalating bonuses; <b>completing</b> a set unlocks a unique <b>power</b> and a golden aura. Hover a "<span style="color:var(--set)">… set</span>" tag to see them.</div>
       <div class="howto-sec"><span data-spr=mat_glimmer></span> Skills &amp; potions</div>
       <div class="howto-line">Skills cost <b>MP</b> and each has its own cooldown in <b>seconds</b>; their buttons glow gold when ready. Health &amp; mana <b>potions</b> share a brief cooldown and pulse when ready to drink.</div>
@@ -545,21 +516,10 @@
     </div>
   </div>
 
-  <!-- Floating movement pad (touch only). Pinned over the bottom of the map by
-       positionTouchDpad(); reuses the .dpad-btn / data-dir movement wiring. -->
-  <div id="touch-dpad">
-    <button class="dpad-btn" data-dir="up" aria-label="Move up"></button>
-    <button class="dpad-btn" data-dir="left" aria-label="Move left"></button>
-    <button class="dpad-btn dpad-center" data-dir="pickup" aria-label="Use / grab"><svg class="dp-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/></svg></button>
-    <button class="dpad-btn" data-dir="right" aria-label="Move right"></button>
-    <button class="dpad-btn" data-dir="down" aria-label="Move down"></button>
-  </div>
-
   <div id="side-panel" class="collapsed">
-    <!-- Desktop-only collapse spine on the drawer's inner (map-facing) edge — a
-         vertical bar that folds the loot drawer down to a slim strip, mirroring
-         the combat log's toggle. Hidden on mobile, where the BAG button opens
-         the full-screen drawer instead. -->
+    <!-- Collapse spine on the drawer's inner (map-facing) edge — a vertical bar
+         that folds the loot drawer down to a slim strip, mirroring the combat
+         log's toggle. -->
     <button id="panel-toggle" onclick="togglePanelCollapse()" aria-label="Toggle loot drawer">
       <span class="log-caret">▾</span><span>Bag</span>
     </button>
@@ -574,10 +534,9 @@
     </div>
   </div>
 
-  <!-- Town / shop / mystic service menus live INSIDE #main so that on web they
-       can fill exactly the MAP column (between the log and the loot drawer) and
-       leave the header, log, and LOOT/GEAR/HERO tabs fully usable. On mobile
-       they fall back to full-screen fixed overlays. -->
+  <!-- Town / shop / mystic service menus live INSIDE #main so they can fill
+       exactly the MAP column (between the log and the loot drawer) and leave the
+       header, log, and LOOT/GEAR/HERO tabs fully usable. -->
   <div id="shop-overlay" onclick="if(event.target===this)closeShop()">
     <div id="shop-modal">
       <div id="shop-header">
@@ -627,13 +586,6 @@
 <div id="tooltip"></div>
 <div id="hovertip"></div>
 <div id="enemy-card" onclick="closeEnemyCard()"></div>
-
-<!-- Shown only on a touch device held in landscape — the game is portrait-only. -->
-<div id="rotate-overlay">
-  <div class="rot-icon">📱</div>
-  <div class="rot-title">Please rotate your device</div>
-  <div class="rot-sub">Dungeon Loot plays best upright — turn your phone back to portrait to keep delving.</div>
-</div>
 
 <div id="screen-flash"></div>
 
@@ -688,7 +640,7 @@
      action plus the same controls that live behind the <span data-spr=ic_mallet></span> settings dropdown. -->
 <!-- Open by default so the landing screen paints on the FIRST frame, before the
      big game script finishes parsing. Otherwise the raw canvas (a blank map)
-     flashes for a beat on slower phones until showTitle() runs at script end.
+     flashes for a beat on slower machines until showTitle() runs at script end.
      showTitle() then just refines the content (CONTINUE for a returning hero). -->
 <div id="title-overlay" class="open">
   <div id="title-glow" aria-hidden="true"></div>

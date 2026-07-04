@@ -243,8 +243,8 @@
        covers any glyph the chosen face lacks (em dash, arrows, symbols). */
     --font-ui: 'Cinzel', Georgia, 'Times New Roman', serif;
 
-    /* Height of the mobile bottom navigation bar. The bag/stats drawer stops
-       above this so its lower rows are never hidden behind the buttons. */
+    /* Height of the bottom control bar, used to sit the tutorial hint chip just
+       above it. */
     --bar-h: 60px;
   }
 
@@ -316,18 +316,6 @@
     flex-shrink: 0;
   }
   #header h1 { color: var(--gold); font-size: 1.6rem; letter-spacing: 2px; text-shadow: 0 0 6px color-mix(in srgb, var(--gold) 50%, transparent); }
-  /* Mobile-only Settings gear in the header (desktop opens Settings with Esc and
-     hides the header entirely). Pinned to the right edge of the HUD row. */
-  #settings-gear {
-    display: none;
-    align-items: center; justify-content: center;
-    width: calc(32px * var(--ui-scale,1)); height: calc(32px * var(--ui-scale,1)); margin-left: auto; flex: 0 0 auto;
-    border: 1px solid var(--frame); border-radius: 8px;
-    background: color-mix(in srgb, var(--panel) 70%, transparent); color: var(--gold); font-size: 1.8rem; line-height: 1;
-    cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
-  }
-  #settings-gear:active { background: var(--panel-raised); }
-  @media (pointer: coarse) { #settings-gear { display: flex; } }
   #stats { display: flex; align-items: center; gap: 14px; font-size: 1.3rem; }
   /* Hero nameplate sitting to the left of the HP bar in the header. */
   .hero-name-hud { display: flex; align-items: center; font-weight: bold; color: var(--gold); font-size: 1.4rem; letter-spacing: 0.5px; text-shadow: 0 0 5px color-mix(in srgb, var(--gold) 50%, transparent); white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
@@ -566,8 +554,6 @@
   #objective-chip .obj-text b { color: var(--gold); }
   #objective-chip .obj-text .obj-done { color: var(--green-500); }
   #objective-chip .obj-streak { color: var(--orange-800); font-weight: bold; }
-  /* Nudge the chip below the top HUD bar on the mobile layout so it never overlaps. */
-  @media (pointer: coarse) { #objective-chip { top: 2px; } }
 
   /* Greed gate — the risk/reward "cursed floor" choice modal. */
   #greed-overlay {
@@ -1142,19 +1128,7 @@
   .pt-val { flex: 0 0 auto; font-size: 1.4rem; color: var(--orange-400); font-variant-numeric: tabular-nums; }
   .pt-empty { font-size: 1.3rem; color: var(--orange-500); text-align: center; padding: 10px; }
 
-  /* Movement-pad controls tucked into the settings popup. The floating d-pad
-     only exists on touch devices, so these controls are hidden unless the
-     pointer is coarse (i.e. on mobile). */
-  #dpad-settings {
-    display: none;
-    flex-direction: column;
-    gap: 4px;
-    margin-top: 2px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
-  }
-  @media (pointer: coarse) { #dpad-settings { display: flex; } }
-  /* Cursor picker is the opposite: only useful where there's a real mouse. */
+  /* Cursor picker: only useful where there's a real mouse. */
   #cursor-settings {
     display: none;
     flex-direction: column;
@@ -1198,46 +1172,6 @@
   /* The UI FONT picker is a native <select> styled by the shared
      #music-vibe-select, #ui-font-select rule above (same chrome as the Audio
      tab's music dropdown). */
-
-  /* Horizontally-scrollable d-pad theme picker (settings → STYLE). Each swatch
-     previews the themed arrow button; scroll the row to browse all 20 themes. */
-  #dpad-style-row {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    gap: 8px;
-    padding-bottom: 6px;
-    scrollbar-width: thin;
-    -webkit-overflow-scrolling: touch;
-    /* Stay within the capped popup so the row scrolls rather than widening it. */
-    max-width: 100%;
-    min-width: 0;
-  }
-  .dp-sw {
-    flex: 0 0 auto;
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
-    padding: 3px;
-    border: 2px solid transparent;
-    border-radius: 10px;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .dp-sw.sel { border-color: var(--paper); background: color-mix(in srgb, var(--paper) 6%, transparent); }
-  .dp-sw-face {
-    width: 2.6rem; height: 2.6rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 2.4rem; line-height: 1;
-  }
-  /* Colour picker: a wrapping row of round swatches, ring on the chosen one. */
-  #dpad-color-row { flex-wrap: wrap; gap: 7px; }
-  .dp-color-sw {
-    flex: 0 0 auto;
-    width: 26px; height: 26px;
-    border-radius: 50%;
-    border: 2px solid transparent;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .dp-color-sw.sel { border-color: var(--paper); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 45%, transparent); }
 
   .heal-btn {
     background: var(--red-700);
@@ -1786,23 +1720,6 @@
   .skillbar-btn.town-locked:active { transform: none; background: var(--red-700); }
   .skillbar-btn.town-locked.mana:active { background: var(--blue-700); }
   .skillbar-btn.town.town-locked:active { transform: none; background: var(--green-800); }
-
-  /* On touch devices the cast bar is your only way to fire spells/potions, so make
-     the buttons and their icons noticeably bigger for easier tapping. (Desktop has
-     its own larger sizing in the wide-layout media query above.) */
-  @media (pointer: coarse) {
-    #skill-bar { gap: 6px; }
-    #skill-bar { --sb-size: calc(50px * var(--ui-scale,1)); }
-    /* skill slots share --sb-size; no per-variant min-width */
-    /* Icons fill the tile (base .sb-icon fill rules); only the empty-slot ＋ glyph
-       reads off font-size, bumped up for the larger touch tiles. */
-    #skill-bar .skillbar-btn .sb-icon { font-size: 2.2rem; }
-    #skill-bar .skillbar-btn .sb-icon.big { font-size: 3.2rem; }
-    #skill-bar .sb-pill { font-size: var(--fs-sub); }
-    #skill-bar .skillbar-btn .sb-info { font-size: 1.1rem; }
-    /* Lay the 4 skill slots out as a tidy 2x2 block, not 3-on-top-1-below. */
-    #skill-bar .sb-right { display: grid; grid-template-columns: repeat(2, auto); justify-content: flex-end; justify-items: end; gap: 5px; }
-  }
 
   /* SKILLS-tab loadout tray — the bank of slots you drag learned actives into. It
      sits above the skill tree so the source nodes and the slots are co-visible. */
@@ -2495,36 +2412,6 @@
     font-family: ui-monospace, Menlo, Consolas, monospace;
     font-size: var(--fs-fine); line-height: 1.5;
     white-space: pre; pointer-events: none;
-  }
-
-  /* ── CONTROLS (mobile) ── */
-  #dpad {
-    display: grid;
-    grid-template-columns: repeat(3, 52px);
-    grid-template-rows: repeat(3, 52px);
-    gap: 4px;
-    flex-shrink: 0;
-  }
-  .dpad-btn {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    font-size: 2.3rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-  }
-  .dpad-btn:active { background: var(--panel); }
-  .dpad-center {
-    background: var(--panel);
-    border-color: var(--gold);
-    color: var(--gold);
-    font-size: 1.4rem;
-    letter-spacing: 0;
   }
 
   #empty-panel { color: var(--magenta-750); text-align: center; padding: 20px 0; font-size: 1.3rem; }
@@ -4022,13 +3909,13 @@
     /* The map area starts after the log column on desktop, so the minimap shifts
        right by it to stay pinned to the play area's top-left corner. */
     #minimap { left: calc(var(--log-col) + 10px); }
-    /* Tutorial / move hints are viewport-centred by default, which on desktop
-       drifts them right and tucks them under the loot drawer. Re-centre over the
-       MAP column (between the log and the drawer), sit them above the bottom HUD,
-       and cap their width to the map so nothing clips. */
-    /* body-prefixed so these beat the base #tutorial-hint / #move-hint rules,
-       which live later in the file (equal specificity → later would win). */
-    body #tutorial-hint, body #move-hint {
+    /* The tutorial hint is viewport-centred by default, which on desktop drifts it
+       right and tucks it under the loot drawer. Re-centre over the MAP column
+       (between the log and the drawer), sit it above the bottom HUD, and cap its
+       width to the map so nothing clips. */
+    /* body-prefixed so this beats the base #tutorial-hint rule, which lives later
+       in the file (equal specificity → later would win). */
+    body #tutorial-hint {
       left: calc(var(--log-col) + (100vw - var(--log-col) - var(--panel-col)) / 2);
       bottom: calc(var(--dhud-h) + 16px);
       max-width: calc(100vw - var(--log-col) - var(--panel-col) - 36px);
@@ -4163,8 +4050,7 @@
     }
     #action-buttons { flex-direction: row; gap: 8px; }
     .action-btn { width: 46px; flex: none; }
-    /* Keyboard replaces the d-pad; the drawer stays open so no bag toggle. */
-    #dpad { display: none; }
+    /* The drawer stays open, so no bag toggle. */
     .bag-btn { display: none; }
     /* The primary skill now lives on the skill bar, so drop the redundant
        <span data-spr=ic_stun></span> button from the top-right nav (matches the mobile layout). */
@@ -4173,163 +4059,6 @@
        nav — on desktop that nav is now empty (Settings opens with Esc). */
     .town-action { display: none !important; }
   }
-
-  /* ── FORCE PORTRAIT ON MOBILE ──
-     Landscape on a phone squashes the map and scatters the controls, so the
-     game is portrait-only on touch devices. A held-sideways phone gets a
-     full-screen "rotate" prompt that covers everything (including the class
-     picker) until it's turned upright. True orientation locking isn't
-     available to web pages on iOS, so this prompt is the reliable mechanism. */
-  #rotate-overlay { display: none; }
-  @media (orientation: landscape) and (pointer: coarse) {
-    #rotate-overlay {
-      display: flex;
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 14px;
-      padding: 24px;
-      text-align: center;
-      background: radial-gradient(circle at 50% 40%, var(--panel) 0%, var(--panel) 70%, var(--bg) 100%);
-      color: var(--text);
-    }
-    #rotate-overlay .rot-icon { font-size: 5.4rem; animation: rotNudge 2s ease-in-out infinite; }
-    #rotate-overlay .rot-title { font-size: 1.8rem; color: var(--gold); letter-spacing: 1px; }
-    #rotate-overlay .rot-sub { font-size: 1.4rem; color: var(--meta); max-width: 320px; line-height: 1.5; }
-  }
-  @keyframes rotNudge {
-    0%, 60%, 100% { transform: rotate(0deg); }
-    80% { transform: rotate(-90deg); }
-  }
-
-  /* ── MOBILE PORTRAIT LAYOUT ──
-     A phone held upright. The old design crammed a 3×3 d-pad plus a tall column
-     of action buttons into the bottom, and the loot/stats drawer ran the full
-     height of the play area so its lower rows hid behind that control block.
-     The redesign: movement is a small translucent d-pad floated over the bottom
-     of the map (see #touch-dpad), and the bottom becomes a single fixed-height
-     navigation bar of evenly-spaced buttons — a normal mobile app tab bar.
-     The drawer stops ABOVE that bar so
-     nothing it shows (bag rows, HERO attributes) is ever covered, and it opens
-     full-width over the dungeon, leaving only the bar visible.
-     Gated to portrait + coarse so the web and landscape layouts are untouched. */
-  @media (orientation: portrait) and (pointer: coarse) {
-    /* Reserve room for the iOS home indicator / Android gesture bar. */
-    :root { --bar-h: calc(58px + env(safe-area-inset-bottom)); }
-
-    /* Bottom navigation bar: one full-width row of equal buttons. */
-    #control-bar {
-      height: var(--bar-h);
-      align-items: center;
-      justify-content: center;
-      gap: 0;
-      padding: 4px 6px;
-      padding-bottom: calc(4px + env(safe-area-inset-bottom));
-    }
-    #action-buttons {
-      flex: 1;
-      flex-direction: row;
-      align-items: stretch;
-      justify-content: space-around;
-      gap: 5px;
-      height: 100%;
-    }
-    .action-btn {
-      flex: 1 1 0;
-      width: auto;
-      min-width: 0;
-      max-width: 96px;
-      height: 100%;
-      gap: 2px;
-    }
-    .action-icon { font-size: 2.2rem; }
-    .action-label { font-size: 1.2rem; }
-    /* The primary skill now lives on the skill bar (above the log), so drop the
-       redundant <span data-spr=ic_stun></span> button from the bottom nav to keep it uncluttered. */
-    .skill-btn { display: none !important; }
-
-    /* Drawer: full-width sheet over the dungeon, stopping above the nav bar so
-       its bottom rows stay readable instead of slipping behind the buttons.
-       Lifted above the town / shop / mystic menus (200/210) so the bag can be
-       opened ON TOP of the town hub — e.g. after dying you can assess your loot
-       and gear before deciding what to sell, forge, or stash. It stops above the
-       nav bar, so the BAG/CLOSE toggle stays reachable to flip back to town. */
-    #side-panel {
-      left: 0;
-      right: auto;
-      width: 100%;
-      bottom: var(--bar-h);
-      border-left: none;
-      box-shadow: 0 -4px 16px color-mix(in srgb, var(--ink) 60%, transparent);
-      z-index: 230;
-    }
-  }
-
-  /* The old control-bar d-pad is dropped on touch; movement is the floating
-     #touch-dpad instead. A narrow desktop window keeps the old one as a mouse
-     fallback (alongside the keyboard). */
-  @media (pointer: coarse) { #dpad { display: none; } }
-
-  /* ── FLOATING MOVEMENT PAD (touch) ──
-     A small, mostly-transparent d-pad pinned over the bottom of the map by JS
-     (positionTouchDpad keeps it on the canvas's bottom-centre). Direction is
-     read from the pad itself — up/down/left/right around a central USE button —
-     so it's obvious which way you're heading, unlike tapping relative to the
-     hero. Reuses the .dpad-btn / data-dir wiring, so no extra movement JS.
-     z-index sits above the map but below the drawer / menus, which simply
-     cover it when open. Shown only on touch; hidden on the keyboard web layout. */
-  #touch-dpad {
-    display: none;
-    position: fixed;
-    left: 50%;
-    bottom: 200px;
-    transform: translateX(-50%);
-    grid-template-columns: repeat(3, 46px);
-    grid-template-rows: repeat(3, 46px);
-    gap: 5px;
-    z-index: 50;
-    touch-action: manipulation;
-  }
-  @media (pointer: coarse) { #touch-dpad { display: grid; } }
-  /* Cross layout: arrows on the edges, USE in the middle, corners empty. */
-  #touch-dpad .dpad-btn[data-dir="up"]     { grid-area: 1 / 2; }
-  #touch-dpad .dpad-btn[data-dir="left"]   { grid-area: 2 / 1; }
-  #touch-dpad .dpad-btn[data-dir="pickup"] { grid-area: 2 / 2; }
-  #touch-dpad .dpad-btn[data-dir="right"]  { grid-area: 2 / 3; }
-  #touch-dpad .dpad-btn[data-dir="down"]   { grid-area: 3 / 2; }
-  #touch-dpad .dpad-btn,
-  #dpad .dpad-btn { display: flex; align-items: center; justify-content: center; }
-  /* Clean floating arrows: no borders, just a faint backdrop and the tinted
-     glyph. STYLE picks the glyph (--dp-glyph), COLOUR tints it (--dp-arrow). */
-  #touch-dpad .dpad-btn {
-    background: color-mix(in srgb, var(--bg) 30%, transparent);
-    border: none;
-    border-radius: 11px;
-    color: var(--dp-arrow, var(--gold));
-    font-size: 2.3rem;
-    backdrop-filter: blur(1px);
-    -webkit-backdrop-filter: blur(1px);
-  }
-  /* One glyph, rotated per direction. */
-  #touch-dpad .dpad-btn[data-dir]:not(.dpad-center)::before,
-  #dpad .dpad-btn[data-dir]:not(.dpad-center)::before {
-    content: var(--dp-glyph, '\25B6');
-    display: block; line-height: 1;
-    transform: rotate(var(--dp-rot, 0deg));
-  }
-  .dpad-btn[data-dir="up"]    { --dp-rot: -90deg; }
-  .dpad-btn[data-dir="down"]  { --dp-rot: 90deg; }
-  .dpad-btn[data-dir="left"]  { --dp-rot: 180deg; }
-  .dpad-btn[data-dir="right"] { --dp-rot: 0deg; }
-  #touch-dpad .dpad-btn:active {
-    background: color-mix(in srgb, var(--paper) 14%, transparent);
-  }
-  /* Centre button is the USE / interact control — a faint, colourless clock. */
-  #touch-dpad .dpad-center { color: color-mix(in srgb, var(--paper) 50%, transparent); }
-  .dpad-center .dp-clock { width: calc(20px * var(--ui-scale,1)); height: calc(20px * var(--ui-scale,1)); display: block; }
 
   /* Beach-tutorial hint chip — an optional "?" help affordance pinned just above
      the bottom action bar while the tutorial is active. The whole chip is
@@ -4374,134 +4103,11 @@
     to   { opacity: 1; transform: translateX(-50%) translateY(0); }
   }
 
-  /* One-time hint that teaches the movement pad after the d-pad's removal.
-     Floats just above the bottom bar and fades itself out. */
-  #move-hint {
-    position: fixed;
-    left: 50%;
-    bottom: calc(var(--bar-h) + 14px);
-    transform: translateX(-50%);
-    z-index: 215;
-    max-width: 86vw;
-    padding: 7px 13px;
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--bg) 92%, transparent);
-    border: 1px solid var(--frame);
-    color: var(--text);
-    font-size: 1.3rem;
-    text-align: center;
-    line-height: 1.4;
-    pointer-events: none;
-    box-shadow: 0 4px 14px color-mix(in srgb, var(--ink) 60%, transparent);
-    animation: moveHintFade 5.5s ease-in-out forwards;
-  }
-  @keyframes moveHintFade {
-    0%   { opacity: 0; transform: translateX(-50%) translateY(8px); }
-    10%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-    80%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-    100% { opacity: 0; transform: translateX(-50%) translateY(8px); }
-  }
-
-  /* On the web layout the bottom HUD takes a tall row, so lift the floating
-     tutorial / move hint chips clear of it — they sit just above the HUD over the
-     map. Placed after the base rules so it wins on source order. */
+  /* The bottom HUD takes a tall row, so lift the floating tutorial hint chip clear
+     of it — it sits just above the HUD over the map. Placed after the base rules so
+     it wins on source order. */
   @media (min-width: 760px) and (hover: hover) and (pointer: fine) {
-    #tutorial-hint, #move-hint { bottom: calc(var(--dhud-h, 122px) + 14px); }
-  }
-
-  /* ── MOBILE PORTRAIT LAYOUT ──
-     A phone held upright. The old design crammed a 3×3 d-pad plus a tall column
-     of action buttons into the bottom, and the loot/stats drawer ran the full
-     height of the play area so its lower rows hid behind that control block.
-     The redesign: movement is by tapping / swiping the map (no d-pad), and the
-     bottom becomes a single fixed-height navigation bar of evenly-spaced
-     buttons — a normal mobile app tab bar. The drawer stops ABOVE that bar so
-     nothing it shows (bag rows, HERO attributes) is ever covered, and it opens
-     full-width over the dungeon, leaving only the bar visible.
-     Gated to portrait + coarse so the web and landscape layouts are untouched. */
-  @media (orientation: portrait) and (pointer: coarse) {
-    /* Reserve room for the iOS home indicator / Android gesture bar. */
-    :root { --bar-h: calc(58px + env(safe-area-inset-bottom)); }
-
-    /* Bottom navigation bar: one full-width row of equal buttons. */
-    #control-bar {
-      height: var(--bar-h);
-      align-items: center;
-      justify-content: center;
-      gap: 0;
-      padding: 4px 6px;
-      padding-bottom: calc(4px + env(safe-area-inset-bottom));
-    }
-    #action-buttons {
-      flex: 1;
-      flex-direction: row;
-      align-items: stretch;
-      justify-content: space-around;
-      gap: 5px;
-      height: 100%;
-    }
-    .action-btn {
-      flex: 1 1 0;
-      width: auto;
-      min-width: 0;
-      max-width: 96px;
-      height: 100%;
-      gap: 2px;
-    }
-    .action-icon { font-size: 2.2rem; }
-    .action-label { font-size: 1.2rem; }
-    /* The primary skill now lives on the skill bar (above the log), so drop the
-       redundant <span data-spr=ic_stun></span> button from the bottom nav to keep it uncluttered. */
-    .skill-btn { display: none !important; }
-
-    /* Drawer: full-width sheet over the dungeon, stopping above the nav bar so
-       its bottom rows stay readable instead of slipping behind the buttons.
-       Lifted above the town / shop / mystic menus (200/210) so the bag can be
-       opened ON TOP of the town hub — e.g. after dying you can assess your loot
-       and gear before deciding what to sell, forge, or stash. It stops above the
-       nav bar, so the BAG/CLOSE toggle stays reachable to flip back to town. */
-    #side-panel {
-      left: 0;
-      right: auto;
-      width: 100%;
-      bottom: var(--bar-h);
-      border-left: none;
-      box-shadow: 0 -4px 16px color-mix(in srgb, var(--ink) 60%, transparent);
-      z-index: 230;
-    }
-  }
-
-  /* Touch devices drive movement by tapping / swiping the map, so the on-screen
-     d-pad is dropped entirely (it only ever existed for thumbs). A narrow
-     desktop window keeps it as a mouse fallback. */
-  @media (pointer: coarse) { #dpad { display: none; } }
-
-  /* One-time hint that teaches the tap/swipe controls after the d-pad's removal.
-     Floats just above the bottom bar and fades itself out. */
-  #move-hint {
-    position: fixed;
-    left: 50%;
-    bottom: calc(var(--bar-h) + 14px);
-    transform: translateX(-50%);
-    z-index: 215;
-    max-width: 86vw;
-    padding: 7px 13px;
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--bg) 92%, transparent);
-    border: 1px solid var(--frame);
-    color: var(--text);
-    font-size: 1.3rem;
-    text-align: center;
-    line-height: 1.4;
-    pointer-events: none;
-    box-shadow: 0 4px 14px color-mix(in srgb, var(--ink) 60%, transparent);
-    animation: moveHintFade 5.5s ease-in-out forwards;
-  }
-  @keyframes moveHintFade {
-    0%   { opacity: 0; transform: translateX(-50%) translateY(8px); }
-    10%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-    80%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-    100% { opacity: 0; transform: translateX(-50%) translateY(8px); }
+    #tutorial-hint { bottom: calc(var(--dhud-h, 122px) + 14px); }
   }
 
   /* ── Ramen House / cooking UI ── */
