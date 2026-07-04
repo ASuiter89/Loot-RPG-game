@@ -11,6 +11,12 @@ export const CHANGELOG = [
     "The account-wide Vault now merges across devices instead of one copy winning: deposit gold or gear on your phone while your PC is offline, and after syncing you keep both — no deposit is ever dropped.",
     "Taking an item out of the Vault sticks everywhere, and a re-stored item won't vanish. Your existing Vault carries over untouched.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Skill tooltips show damage and DPS", by: "Claude", notes: [
+    "Every damage skill's tooltip — on the action bar and its skill-tree card — now shows two numbers: the raw per-hit damage RANGE a single strike can roll, and its effective single-target DPS.",
+    "The range folds in everything that scales the hit: the weapon roll, Attack, your class's damage attributes, Increased/Skill/Spell Power, the skill's own coefficient and rank, synergies, and the armour a typical foe carries at your current depth — everything except crit, which rolls.",
+    "DPS layers the randoms back on: the range averaged with your crit chance and crit damage, times hits per cast, times how often the skill can fire with your Cooldown Reduction and Cast Speed.",
+    "Big numbers abbreviate (1.2k, 3.4M) so they never overflow the tooltip. Numbers reflect your current gear, attributes and skills; situational spikes (boss damage, execute, rage) stay out so the readout is a stable baseline.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Cloud saves are harder to lose", by: "Claude", notes: [
     "Which copy of a hero wins a sync is now decided by total play-time, not the device clock — a phone or PC with a wrong clock can no longer overwrite your more-played save with a stale one.",
     "While a newer save is pulled onto the hero you're playing, saving pauses until the game reloads onto it, so a background autosave can't clobber the copy you just synced.",
