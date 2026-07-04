@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { footprintSealsPath } from '../../src/systems/decorPlacement.js';
+import { footprintSealsPath, inOpenArea } from '../../src/systems/decorPlacement.js';
 
 // footprintSealsPath answers "would walling off this footprint cut the floor in two?"
 // The grids below are ASCII maps: '#' = wall, '.' = open floor. We build an isWalkable
@@ -85,5 +85,69 @@ describe('footprintSealsPath', () => {
       '#######',
     ]);
     expect(footprintSealsPath([[5, 3]], W, H, isWalkable)).toBe(false);
+  });
+});
+
+// inOpenArea answers "does this tile sit in a fully-open 2x2 block?" — the guard
+// that keeps a solid obstacle out of a 1-tile-wide path, junction, or dead end even
+// when a detour exists (so footprintSealsPath alone wouldn't reject it).
+describe('inOpenArea', () => {
+  it('is true for a tile in the middle of an open field', () => {
+    const { isWalkable } = grid([
+      '#####',
+      '#...#',
+      '#...#',
+      '#...#',
+      '#####',
+    ]);
+    expect(inOpenArea(2, 2, isWalkable)).toBe(true);
+  });
+
+  it('is false for the middle of a 1-wide corridor', () => {
+    const { isWalkable } = grid([
+      '#####',
+      '##.##',
+      '##.##',
+      '##.##',
+      '#####',
+    ]);
+    expect(inOpenArea(2, 2, isWalkable)).toBe(false);
+  });
+
+  it('is false at a junction of 1-wide corridors (3-4 open neighbours, still 1 wide)', () => {
+    // A '+' crossing: the centre has 4 open orthogonal neighbours yet every arm is
+    // 1 tile wide — an obstacle here blocks the way. The old openN>=3 test passed it.
+    const { isWalkable } = grid([
+      '#####',
+      '##.##',
+      '#...#',
+      '##.##',
+      '#####',
+    ]);
+    expect(inOpenArea(2, 2, isWalkable)).toBe(false);
+  });
+
+  it('is false at a corridor mouth opening into a field', () => {
+    // (2,3) is where the 1-wide corridor meets the field below: 3 open neighbours,
+    // but no 2x2 of open floor contains it, so an obstacle there plugs the mouth.
+    const { isWalkable } = grid([
+      '#####',
+      '##.##',
+      '##.##',
+      '#...#',
+      '#####',
+    ]);
+    expect(inOpenArea(2, 3, isWalkable)).toBe(false);
+  });
+
+  it('is true for a tile on the edge of a wide room (open 2x2 to one side)', () => {
+    const { isWalkable } = grid([
+      '#####',
+      '#...#',
+      '#...#',
+      '#####',
+    ]);
+    // (1,1) hugs the left wall but still anchors a full open 2x2 to its right/down.
+    expect(inOpenArea(1, 1, isWalkable)).toBe(true);
   });
 });

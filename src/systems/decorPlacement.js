@@ -21,6 +21,26 @@
 //   isWalkable (x, y) → boolean: an in-bounds floor tile you could stand on today
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
+// True when (x, y) sits inside a fully-open 2x2 block of walkable floor — i.e. it
+// is genuine open ground, not a 1-tile-wide corridor, a junction of them, or a
+// path end. A solid obstacle (tree/rock/furniture) dropped here can never plug a
+// narrow passage: an open 2x2 always leaves a side-step around the piece. The
+// anchor-only "3+ open orthogonal neighbours" test is NOT enough — a corridor
+// junction or path mouth has 3-4 open neighbours yet is still 1 tile wide, so an
+// obstacle there blocks the way even when a detour exists. `isWalkable(x, y)` is
+// true for an in-bounds floor tile you could stand on today (not a wall / existing
+// solid decor).
+export function inOpenArea(x, y, isWalkable) {
+  // The four 2x2 quads that include (x, y) — anchor at each of the quad's corners.
+  const quads = [[0, 0], [-1, 0], [0, -1], [-1, -1]];
+  for (const [ox, oy] of quads) {
+    const qx = x + ox, qy = y + oy;
+    if (isWalkable(qx, qy) && isWalkable(qx + 1, qy)
+      && isWalkable(qx, qy + 1) && isWalkable(qx + 1, qy + 1)) return true;
+  }
+  return false;
+}
+
 export function footprintSealsPath(footprint, W, H, isWalkable) {
   const inFoot = new Set(footprint.map(([x, y]) => x + ',' + y));
   const open = (x, y) => !inFoot.has(x + ',' + y) && isWalkable(x, y);

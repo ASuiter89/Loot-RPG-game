@@ -21,7 +21,7 @@ import { glideVitalFill } from '../systems/vitalFill.js';
 import { offscreenArrows, tileOnScreen } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
 import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.js';
-import { footprintSealsPath } from '../systems/decorPlacement.js';
+import { footprintSealsPath, inOpenArea } from '../systems/decorPlacement.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
@@ -2269,25 +2269,34 @@ function placeOutdoorDecor(theme) {
     && mapData[y][x] === 0 && furnitureMap[y + ',' + x] === undefined && decorMap[y + ',' + x] === undefined
     && !getEnemyAt(x, y)   // never drop a piece onto a foe — a SOLID one walls it into the tile
     && !tileReserved(x, y) && (Math.abs(x - player.x) + Math.abs(y - player.y)) >= 3;
-  const openN = (x, y) => (mapData[y - 1][x] === 0 ? 1 : 0) + (mapData[y + 1][x] === 0 ? 1 : 0)
-    + (mapData[y][x - 1] === 0 ? 1 : 0) + (mapData[y][x + 1] === 0 ? 1 : 0);
+  // A tile is "open ground" only if it's plain floor with no solid decor already
+  // on it — that's what inOpenArea flood-tests a 2x2 of to prove the spot isn't a
+  // 1-wide corridor, a junction of them, or a path end.
+  const openFloor = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H
+    && mapData[y][x] === 0 && furnitureMap[y + ',' + x] === undefined;
   // Obstacles (trees/big cacti outdoors; furniture/containers/braziers indoors):
-  // SOLID. Placed only on tiles with >=3 open neighbours so they can never seal a
-  // corridor. Marked solid in furnitureMap so every collision/path/LoS check
-  // treats them as walls; rendered from decorMap. Interiors are furnished denser.
+  // SOLID. Placed only where every footprint tile sits in a fully-open 2x2 block
+  // (inOpenArea), so a piece can never plug a 1-tile-wide path, its junction, or its
+  // dead end — the old "3+ open neighbours" test still passed at corridor junctions
+  // and mouths (3-4 open neighbours yet 1 tile wide) and dropped trees right in the
+  // way. Marked solid in furnitureMap so every collision/path/LoS check treats them
+  // as walls; rendered from decorMap. Interiors are furnished denser.
   if (obstacles.length) {
     const nObs = indoor
       ? Math.max(4, Math.min(20, Math.round(MAP_W * MAP_H / 70)))
       : Math.max(1, Math.min(9, Math.round(MAP_W * MAP_H / 150)));
     for (let placed = 0, t = 0; placed < nObs && t < nObs * 40; t++) {
       const x = 1 + ((Math.random() * (MAP_W - 2)) | 0), y = 1 + ((Math.random() * (MAP_H - 2)) | 0);
-      if (!free(x, y) || openN(x, y) < 3) continue;
+      if (!free(x, y) || !inOpenArea(x, y, openFloor)) continue;
       const id = obstacles[(Math.random() * obstacles.length) | 0];
       // Multi-tile pieces (beds, tables, sofas) must land on an entirely clear
       // footprint — otherwise the off-anchor tiles overlap walls/other props and
       // leave gaps you can walk through. Trees only need their trunk tile.
       const foot = decorFootprint(id, x, y);
       if (!foot.every(([fx, fy]) => free(fx, fy))) continue;
+      // Every solid tile of a multi-tile piece must also sit in open ground, so a
+      // wide table's far half can't reach into a corridor the anchor test cleared.
+      if (!foot.every(([fx, fy]) => inOpenArea(fx, fy, openFloor))) continue;
       // …and the piece must not wall off a path. The anchor's >=3-open-neighbours
       // test only vets one tile: a wide table can plug a (2-wide) corridor with its
       // far half, and — since it counts a furnished floor tile as "open" — a lone
