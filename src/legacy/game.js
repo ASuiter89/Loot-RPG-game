@@ -491,13 +491,18 @@ function matColor(m) { return MATERIALS[m] || m; }
 // frame is drawn behind it (the `color`) so deeper loot reads as rarer without
 // recolouring the object. Non-key values (potion or other emoji) pass straight
 // through, so the same call sites render both.
-function iconMarkup(val, color, frame = true) {
+function iconMarkup(val, color, frame = true, px = null) {
+  // `px` (base pixels, pre-UI-scale) forces one exact size regardless of whether
+  // the piece has a bespoke vector icon or reuses a DawnLike atlas tile — so a
+  // mixed gear list (a vector ring beside an atlas-tile shield) renders every
+  // icon the same size instead of the vector's 18px vs the atlas tile's 32px.
   const layers = ICON_PATHS[val];
   if (!layers) {
     // Not a vector key. If it's a DawnLike atlas key (off-hands reuse 'a_shield',
     // 'ic_orb', 'w_bow', 'w_dagger' — no new sprites), render it from the existing
     // atlas. Otherwise pass the raw value through (legacy emoji).
-    const dl = (val && SPRITE_IDX[val] !== undefined) ? dlIcon(val, 30) : '';
+    const dl = (val && SPRITE_IDX[val] !== undefined)
+      ? (px ? dlIconAt(val, px) : dlIcon(val, 30)) : '';
     return dl || val || '';
   }
   const c = color || ICON_EMPTY_COLOR;
@@ -508,7 +513,10 @@ function iconMarkup(val, color, frame = true) {
   const rim = frame
     ? `<rect x="3" y="3" width="94" height="94" rx="16" fill="${c}" fill-opacity="0.14" stroke="${c}" stroke-width="4" stroke-opacity="0.9"/>`
     : '';
-  return `<svg class="svg-icon" viewBox="0 0 100 100" aria-hidden="true">${rim}${paths}</svg>`;
+  // Match the atlas branch: size the SVG in UI-scaled pixels so both paths land at
+  // the same on-screen size (the .svg-icon default is 18px; override when asked).
+  const sz = px ? ` style="width:calc(${px}px*var(--ui-scale,1));height:calc(${px}px*var(--ui-scale,1))"` : '';
+  return `<svg class="svg-icon"${sz} viewBox="0 0 100 100" aria-hidden="true">${rim}${paths}</svg>`;
 }
 // shadeColor / hexA extracted to src/utils/color.js (imported at top).
 // Draw a vector icon key onto the canvas, centred at (cx,cy) and `size` px wide.
@@ -10387,10 +10395,12 @@ function renderShop() {
     // Flag wares your current attributes can't yet wield so the warning is right
     // on the row you'd buy from — not just in the hover card (see equipReqBadge).
     const reqBadge = equipReqBadge(s.item);
-    return `<div class="shop-row has-actions ${isUpgrade?'upgrade':''} ${afford?'':'cant-afford'} ${reqBadge?'cant-equip':''}">
-      <span class="loot-icon">${iconMarkup(sicon, scolor)}</span>
+    // Card layout: the icon sits INLINE with the name on the first line (one fixed
+    // size for every piece), and every following line — slot/power, stats, the
+    // can't-equip note — is left-aligned to the card edge (see .shop-card in CSS).
+    return `<div class="shop-row shop-card has-actions ${isUpgrade?'upgrade':''} ${afford?'':'cant-afford'} ${reqBadge?'cant-equip':''}">
       <div class="shop-row-info ${cls}" onmouseenter="showShopTooltip(event,${i})" onmouseleave="hideTooltip()">
-        <div class="shop-row-name">${name}</div>
+        <div class="shop-row-name"><span class="loot-icon">${iconMarkup(sicon, scolor, true, 20)}</span>${name}</div>
         <div class="shop-row-sub">${sub}</div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
         ${reqBadge}
