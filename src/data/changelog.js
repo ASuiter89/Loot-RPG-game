@@ -22,6 +22,12 @@ export const CHANGELOG = [
     "Four-on-the-floor kicks and off-beat basslines for the house styles; a fast rolling breakbeat and deep sub for drum & bass.",
     "Pick any of them from Settings ▸ Audio, or leave it on Shuffle to drift through the lot.",
   ] },
+  { date: "2026-07-04", size: "medium", v: "Sellsword: pick your contract, pay real wages", by: "Claude", notes: [
+    "Hire a companion for 1, 10, or 30 floors — pick a contract length like a Mystic pact, instead of one fixed run.",
+    "Hiring costs far more than before and now climbs steeply with the deepest floor you've reached — a companion is a real investment, not pocket change.",
+    "Longer contracts shave a little off each floor's cost, so a long haul is a touch cheaper per floor.",
+    "Each merc gets its own hire card, matching the Mystic's pact layout.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Skill cards: shorter text, wider card", by: "Claude", notes: [
     "Every passive and keystone description rewritten terse — stats first, filler words and leftover internal tags gone.",
     "Skill detail card is wider with slightly smaller text, so each stat line fits without wrapping mid-phrase.",

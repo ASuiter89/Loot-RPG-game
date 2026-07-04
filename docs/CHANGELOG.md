@@ -8,6 +8,21 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — Sellsword multi-floor hire + pricing overhaul
+
+- 📦 Mercenary **content + pricing** moved out of `src/legacy/game.js`:
+  `MERC_TYPES` (now with a per-merc `accent`), `MERC_ART`, the new
+  `MERC_DURATIONS` (1/10/30-floor contracts) and `MERC_PRICE` tuning live in
+  `src/data/mercenaries.js`; the pure cost model (`mercFloorRate`, `mercCost`)
+  lives in `src/systems/mercPricing.js`. The monolith imports them back and its
+  old `MERC_FLOORS`/`mercCost`/`MERC_TYPES`/`MERC_ART` definitions are gone.
+- The Sellsword camp now hires for a chosen contract length (like a Mystic pact),
+  the per-floor cost is far higher and scales with the deepest floor reached, and
+  longer contracts get a gentle per-floor discount. `renderMercCamp` reuses the
+  `.pact-card` component; `hireMerc(id, floors)` takes the duration.
+- 🧪 `test/systems/mercPricing.test.js` (depth scaling, gentle bulk discount,
+  drastic-increase check) and `test/data/mercenaries.test.js` (data shape).
+
 ## Feature — ascendancy skill points (own pool)
 
 - 📦 The skill-point **economy** moved from `src/legacy/game.js` into
