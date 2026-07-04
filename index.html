@@ -600,14 +600,14 @@
       <span class="tb-badge" id="tb-bag-badge"></span>
     </button>
   </div>
+  <!-- Bottom action bar: a sprint toggle, then the live #skill-bar (town portal,
+       potions, auto-cast, skill slots 1–4) re-homed here in one row by
+       syncHudLayout(). No USE/DASH buttons — tap the map to use what's there, and
+       double-tap-drag the joystick to dash. -->
   <div id="touch-cluster">
-    <button class="touch-act tb-use" id="tb-use" onclick="pickup()" aria-label="Use / grab">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
-      <span class="tb-lbl">USE</span>
-    </button>
-    <button class="touch-act tb-dash" id="tb-dash" onclick="doDash()" aria-label="Dash">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 7 11 12 6 17"/><polyline points="13 7 18 12 13 17"/></svg>
-      <span class="tb-lbl">DASH</span>
+    <button class="touch-act tb-sprint" id="tb-sprint" onclick="toggleTouchSprint()" aria-label="Toggle sprint">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg>
+      <span class="tb-lbl">RUN</span>
     </button>
   </div>
 </div>

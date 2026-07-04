@@ -4187,7 +4187,7 @@
      top-button cluster width, --mm-w the minimap box. */
   body.touch {
     --tb-w: 108px;   /* two 48px utility buttons + gap + edge */
-    --mm-w: 82px;    /* touch minimap box */
+    --mm-w: 108px;   /* touch minimap box */
   }
   body.touch #header {
     position: absolute; top: 0; left: 0; right: 0; z-index: var(--z-hud);
@@ -4224,12 +4224,17 @@
     top: calc(env(safe-area-inset-top, 0px) + 6px);
     right: calc(env(safe-area-inset-right, 0px) + 8px);
   }
+  /* ── Bottom action bar ── one full-width row: a sprint toggle on the left, then
+     the live #skill-bar (town portal · potions · auto-cast · skills 1–4) re-homed
+     here by syncHudLayout(). Scrolls horizontally if the tiles overflow a very
+     narrow screen. No USE/DASH buttons — tap the map to use, double-tap-drag the
+     joystick to dash. */
   body.touch #touch-cluster {
     position: absolute; pointer-events: auto;
-    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: flex-end;
-    gap: 8px; max-width: 66vw;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
-    right: calc(env(safe-area-inset-right, 0px) + 10px);
+    display: flex; align-items: center; gap: 8px;
+    left: calc(env(safe-area-inset-left, 0px) + 6px);
+    right: calc(env(safe-area-inset-right, 0px) + 6px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
   }
 
   /* Utility buttons (menu, bag): 48px round translucent tiles. */
@@ -4251,38 +4256,48 @@
   }
   .tb-badge:empty { display: none; }
 
-  /* Action buttons (USE, DASH): 56px tiles in the thumb cluster. */
+  /* Sprint toggle: pinned at the left of the bar; lights gold when auto-sprint is on. */
   .touch-act {
-    width: 56px; height: 56px; border-radius: var(--radius-lg);
+    flex: 0 0 auto; width: clamp(42px, 11vw, 50px); height: clamp(42px, 11vw, 50px); border-radius: var(--radius-lg);
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
     background: color-mix(in srgb, var(--panel-raised) 82%, transparent);
     border: 1px solid var(--border); color: var(--text);
     box-shadow: var(--shadow-sm); cursor: pointer;
     -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   }
-  .touch-act svg { width: 26px; height: 26px; }
-  .touch-act .tb-lbl { font-size: 1.1rem; letter-spacing: 0.4px; opacity: 0.85; }
-  .touch-act.tb-dash { border-color: var(--gold); color: var(--gold); }
-  .touch-act.tb-use { border-color: var(--accent-teal); color: var(--accent-teal); }
+  .touch-act svg { width: 23px; height: 23px; }
+  .touch-act .tb-lbl { font-size: 1.1rem; letter-spacing: 0.3px; opacity: 0.8; }
   .touch-act:active { transform: scale(0.94); }
-
-  /* The re-homed live #skill-bar inside the cluster: a compact wrap of ≥48px
-     tiles (the same buttons/onclick/cooldowns as desktop, just re-laid). */
-  body.touch #touch-cluster #skill-bar {
-    display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: flex-end;
-    gap: 6px; padding: 0; background: none; border: none; box-shadow: none;
-    width: auto; max-width: 100%; --sb-size: 52px;
+  .touch-act.tb-sprint.on {
+    border-color: var(--gold); color: var(--gold);
+    background: color-mix(in srgb, var(--gold) 22%, var(--panel));
+    box-shadow: 0 0 10px color-mix(in srgb, var(--gold) 55%, transparent);
   }
+
+  /* The re-homed live #skill-bar fills the rest of the bar as one scrolling row
+     (same buttons / onclick / cooldowns as desktop, just re-laid). */
+  body.touch #touch-cluster #skill-bar {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: center; flex-wrap: nowrap;
+    /* Centre when the row fits; when it overflows a narrow screen, "safe" falls
+       back to start-alignment so the first tiles (town, potions) are never clipped
+       — you swipe the bar to reach the rest. */
+    justify-content: safe center;
+    gap: 5px; padding: 3px 2px; background: none; border: none; box-shadow: none;
+    overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
+    --sb-size: clamp(40px, 10.5vw, 50px);
+  }
+  body.touch #touch-cluster #skill-bar::-webkit-scrollbar { display: none; }
   body.touch #touch-cluster #skill-bar .sb-left,
   body.touch #touch-cluster #skill-bar .sb-right,
   body.touch #touch-cluster #skill-bar .sb-auto-wrap {
-    flex: 0 0 auto; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; min-width: 0;
+    flex: 0 0 auto; display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; min-width: 0;
   }
   body.touch #touch-cluster .skillbar-btn { width: var(--sb-size); height: var(--sb-size); }
-  body.touch #touch-cluster .sb-cell { display: flex; flex-direction: column; align-items: center; }
-  /* Town isn't needed in the combat cluster on touch (reach it from the menu). */
-  body.touch #touch-cluster #skill-bar .sb-left .skillbar-btn.town { display: none; }
-  body.touch #touch-cluster #skill-bar .sb-left .sb-cell:has(.skillbar-btn.town) { display: none; }
+  body.touch #touch-cluster .sb-cell { flex: 0 0 auto; display: flex; align-items: center; }
+  /* Drop the keyboard hotkey pills (Q/R/1–4) on touch — there's no keyboard, and
+     it keeps the bar to a single tidy row of icons. */
+  body.touch #touch-cluster #skill-bar .sb-pill { display: none; }
 
   /* ── Floating joystick rings ── placed in viewport px by showJoyVisual(); shown
      only while the stick is engaged. Decorative (pointer-events:none). */
@@ -4345,3 +4360,10 @@
     left: 50%; transform: translateX(-50%); max-width: 82vw; font-size: var(--fs-sub);
   }
   body.touch.bag-open #tutorial-hint { display: none; }
+
+  /* Objective/bounty chip: dock it just above the bottom action bar on touch so it
+     never sits under the top vitals or the menu/bag buttons. */
+  body.touch #objective-chip {
+    top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+    max-width: 82vw;
+  }

@@ -28,7 +28,7 @@ import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../uti
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
-import { joystickVector, sprintFromMagnitude, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
+import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
 import { forgeSections } from '../systems/forgeFlow.js';
@@ -6051,6 +6051,7 @@ let autoAttackTarget = null;
 // position each frame and clears once it's in weapon reach or dies — clicking a
 // foe paths you straight to it (see updatePlayer / the pointerup tap handler).
 const moveTarget = { active: false, hold: false, wx: 0, wy: 0, path: null, pathIdx: 0, foe: null,
+                     interactOnArrive: false,
                      _repathT: 0, _stallT: 0, _px: 0, _py: 0, _pathDX: -1, _pathDY: -1 };
 const MOVE_ARRIVE = 0.18;   // tiles — how close counts as "reached the click point"
 // ── TOUCH JOYSTICK ──
@@ -6062,18 +6063,33 @@ const MOVE_ARRIVE = 0.18;   // tiles — how close counts as "reached the click 
 // sprint — push the stick to the rim to run. Everything here is inert until the
 // device reveals itself as touch (body.touch); desktop mouse input is untouched.
 const JOY_RADIUS = 56;   // thumb throw distance (CSS px) for a full-magnitude push
-const touchStick = { pointerId: null, pending: false, active: false,
+const DOUBLE_TAP_MS = 320;   // window for a double-tap-drag to fire a dash
+const touchStick = { pointerId: null, pending: false, active: false, dashArmed: false,
                      ox: 0, oy: 0, cx: 0, cy: 0, ix: 0, iy: 0, mag: 0 };
+let _lastStickUpAt = 0;      // performance.now() of the last stick release (double-tap timing)
 function resetTouchStick() {
   touchStick.pointerId = null; touchStick.pending = false; touchStick.active = false;
+  touchStick.dashArmed = false;
   touchStick.ix = 0; touchStick.iy = 0; touchStick.mag = 0;
   hideJoyVisual();
+}
+// Touch sprint is an explicit on/off toggle (the sprint button) rather than a
+// push-to-rim gesture — it just latches the same auto-sprint the keyboard uses.
+function toggleTouchSprint() {
+  sprintLatched = !sprintLatched;
+  if (typeof sfx === 'function') sfx('click');
+  updateTouchSprintBtn();
+}
+function updateTouchSprintBtn() {
+  const b = document.getElementById('tb-sprint');
+  if (b) b.classList.toggle('on', !!sprintLatched);
 }
 function heldDir(d) { return keyHeld[d]; }
 function clearHeld() {
   keyHeld.up = keyHeld.down = keyHeld.left = keyHeld.right = false;
   sprintHeld = false;
   moveTarget.active = false; moveTarget.hold = false; moveTarget.path = null; moveTarget.foe = null;
+  moveTarget.interactOnArrive = false;
   resetTouchStick();   // drop any active on-screen stick too (blur / floor change / halt)
 }
 // Move the hero to a grid cell AND sync the smooth float position to its centre.
@@ -6747,7 +6763,7 @@ window.gameGuide = function gameGuide(topic) {
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A quick key-tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
       `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
-      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer — push the stick to its rim to sprint. A quick TAP still walks-to-that-tile / taps a foe to chase it. The right-hand thumb cluster holds the potion + skill buttons plus a DASH and a USE (grab/talk) button; the top-right has a menu (settings) and a bag button. Everything is also driveable from the keyboard, which stays live.`,
+      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. DOUBLE-TAP-and-drag the joystick to DASH in that direction. The bottom bar is one row: a RUN toggle (auto-sprint on/off), the town portal, potions and skill slots 1–4; the top-right has a menu (settings) and a bag button. Everything is also driveable from the keyboard, which stays live.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
@@ -8512,6 +8528,9 @@ canvas.addEventListener('pointerdown', e => {
     if (rtPaused()) return;
     touchStick.pointerId = e.pointerId;
     touchStick.pending = true; touchStick.active = false;
+    // A fresh press soon after the last release arms a dash: drag from here and the
+    // hero dashes in that direction (a "double-tap in a direction").
+    touchStick.dashArmed = (performance.now() - _lastStickUpAt) < DOUBLE_TAP_MS;
     touchStick.ox = touchStick.cx = e.clientX;
     touchStick.oy = touchStick.cy = e.clientY;
     touchStick.ix = touchStick.iy = touchStick.mag = 0;
@@ -8538,6 +8557,8 @@ canvas.addEventListener('pointermove', e => {
       touchStick.ox = o.x; touchStick.oy = o.y;
       const v = joystickVector(o, { x: e.clientX, y: e.clientY }, JOY_RADIUS, JOY_DEFAULTS.deadZone);
       touchStick.ix = v.ix; touchStick.iy = v.iy; touchStick.mag = v.mag;
+      // Double-tap-drag → dash in the drag direction, once, as the stick engages.
+      if (touchStick.dashArmed && v.mag > 0.35) { touchStick.dashArmed = false; doDash(); }
       showJoyVisual();
     }
     return;
@@ -8552,12 +8573,16 @@ function endJoy(e, isUp) {
   // tap → run the normal tap path (chase a tapped foe, else walk to the point).
   if (touchStick.pointerId === e.pointerId) {
     const wasTap = !touchStick.active;
+    _lastStickUpAt = performance.now();   // for double-tap-drag dash detection
     resetTouchStick();
     gestureStart = null;
     if (isUp && wasTap && !rtPaused()) {
       const foe = (gestureFoe && !gestureFoe.dead) ? gestureFoe : enemyAtClient(e.clientX, e.clientY);
-      if (foe) { moveTarget.foe = foe; moveTarget.active = true; updateMoveTargetPath(true); }
-      else setMoveTargetFromClient(e.clientX, e.clientY);
+      if (foe) { moveTarget.foe = foe; moveTarget.active = true; moveTarget.interactOnArrive = false; updateMoveTargetPath(true); }
+      // Tap-to-move doubles as tap-to-USE on touch: walk to the spot and, on
+      // arrival, run pickup() (opens a chest underfoot / talks to an adjacent NPC;
+      // most loot is auto-grabbed on walk-over anyway).
+      else { setMoveTargetFromClient(e.clientX, e.clientY); moveTarget.interactOnArrive = true; }
     }
     return;
   }
@@ -8611,6 +8636,7 @@ function setTouchMode(on) {
   try { resizeCanvas(); } catch (_) {}
   try { syncHudLayout(); } catch (_) {}
   try { renderSkillBar(); } catch (_) {}
+  try { updateTouchSprintBtn(); } catch (_) {}
   try { markHudDirty(); } catch (_) {}
 }
 // Initial hint: a coarse, hover-less PRIMARY pointer is almost certainly a phone /
@@ -8659,7 +8685,7 @@ function syncHudLayout() {
   if (!bar) return;
   if (isTouchMode()) {
     const cluster = document.getElementById('touch-cluster');
-    if (cluster && bar.parentNode !== cluster) cluster.insertBefore(bar, cluster.firstChild);
+    if (cluster && bar.parentNode !== cluster) cluster.appendChild(bar);   // after the sprint toggle
   } else {
     syncDesktopHud();
   }
@@ -18454,6 +18480,9 @@ function doDash() {
   if ((player.dashCd || 0) > 0 || player.stamina < DASH_COST) return;
   let dx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let dy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
+  // Touch: dash in the joystick's current push direction (a double-tap-drag on the
+  // stick triggers this — see the pointer handlers).
+  if (dx === 0 && dy === 0 && touchStick.active && touchStick.mag > 0) { dx = touchStick.ix; dy = touchStick.iy; }
   // Click-to-move: with no manual direction, dash toward the target — or, when a
   // route around a wall is planned, toward the next waypoint so we don't dash into it.
   if (dx === 0 && dy === 0 && moveTarget.active) {
@@ -18556,6 +18585,8 @@ function updatePlayer(dt) {
       const finalDist = Math.hypot(moveTarget.wx - player.fx, moveTarget.wy - player.fy);
       if (!moveTarget.hold && onFinalLeg && finalDist <= MOVE_ARRIVE) {
         moveTarget.active = false; moveTarget.path = null; moveTarget.foe = null;   // reached the point — stop
+        // Tap-to-use: on arrival, open a chest underfoot / talk to an adjacent NPC.
+        if (moveTarget.interactOnArrive) { moveTarget.interactOnArrive = false; if (typeof pickup === 'function') pickup(); }
       } else if (Math.hypot(tdx, tdy) > 0.02) {
         [ix, iy] = steerToward(tdx, tdy);      // head for the waypoint; slide along any wall
         // Give up only when truly stuck: no real ground covered for a beat (a wall or
@@ -18575,8 +18606,7 @@ function updatePlayer(dt) {
 
   // Sprint: wanting it + moving + stamina. Held Shift or a latched auto-sprint
   // toggle counts. Drains stamina; otherwise it refills.
-  const touchSprint = touchStick.active && sprintFromMagnitude(touchStick.mag);
-  const wantSprint = moving && player.stamina > 0 && (sprintHeld || sprintLatched || touchSprint);
+  const wantSprint = moving && player.stamina > 0 && (sprintHeld || sprintLatched);
   if (wantSprint) { player.stamina = Math.max(0, player.stamina - SPRINT_DRAIN * dt); player._stamDelay = STAM_DELAY; }
   else regenStamina(dt);
 
@@ -28032,6 +28062,7 @@ const __DL_FN_BRIDGE = {
   resizeCanvas,
   togglePanel,
   toggleBag,
+  toggleTouchSprint,
   setMoveTargetFromClient,
   endJoy,
   bestiaryKey,
