@@ -25,9 +25,11 @@ lives in `src/legacy/game.js` and shrinks as code is extracted.)
   runtime dependency, framework, or CDN `<script>`. Dev tooling (Vite, Vitest,
   Playwright) is fine — it never ships. Vite `base` is `'./'`; keep asset URLs
   relative so the bundle works at a domain root or a Pages subpath.
-- **Desktop-first.** Optimize for desktop (mouse + keyboard, landscape) unless a
-  request says otherwise. Keep cheap mobile behavior working, never at desktop's
-  expense.
+- **Desktop-only.** This game targets desktop browsers (mouse + keyboard,
+  landscape) exclusively. There is no touch/mobile support — do not add d-pads,
+  on-screen sticks, tap/swipe steering, orientation gates, `@media (pointer:coarse)`
+  branches, or `isWebLayout()`/`touchUI()`-style layout forks. Keyboard and pointer
+  (mouse) are the only input surfaces.
 - **Pull latest `main` before starting; work on a branch and open a PR — never
   commit straight to `main`.** Make reasonable decisions and implement them; land
   every change through a feature branch + PR so GitHub gates the merge. Resolve
@@ -65,7 +67,7 @@ Two invariants drive everything:
 | `src/state/` | Central mutable game state + explicit transitions. | `data`, `utils` | `render`/`ui`/network |
 | `src/render/` | Canvas drawing (sprites, terrain, hero, particles, minimap). | `data`, `utils`, `state`, `assets` | be imported by `systems` |
 | `src/audio/` | WebAudio engine, sfx, music, ambience. | `data`, `utils` | `systems` |
-| `src/input/` | Keyboard/pointer/touch handlers, keybind model. | `state`, dispatch into actions | own game logic |
+| `src/input/` | Keyboard/pointer handlers, keybind model. | `state`, dispatch into actions | own game logic |
 | `src/ui/` | DOM panels/overlays/modals. Owns `innerHTML`. | `systems`, `render` (for icons), `state` | Supabase/`localStorage` directly |
 | `src/persistence/` | **The only place Supabase + `localStorage` are touched** (repository pattern, injected `fetch`). | `data`, `utils` | game logic |
 | `src/api/` | `window.gameState()` / `gameGuide()` console API. | reads `state`/`systems` | mutate state |

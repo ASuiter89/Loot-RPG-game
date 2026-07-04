@@ -15,6 +15,13 @@ export const CHANGELOG = [
     "Every damage skill's description now reads its own base range — \"deals X to Y damage\" — and the redundant synergy sentence moved out of the description text (it already has its own pill).",
     "Ranking a damage skill up now previews the new damage range instead of a bare effect-power percent.",
   ] },
+  { date: "2026-07-04", size: "small", v: "Top upgrade row's highlight no longer clipped", by: "Claude", notes: [
+    "When the first item in the bag is an upgrade, its green highlight now shows its full top edge instead of having the border and glow cut off under the frozen stat-key bar. A small gap sets the top row clear of the pinned header.",
+  ] },
+  { date: "2026-07-04", size: "medium", v: "Desktop-only controls", by: "Claude", notes: [
+    "The game is now built for mouse and keyboard only. The on-screen move pad, the floating movement stick, tap-and-swipe steering, the rotate-your-device prompt and the touch settings gear have all been removed.",
+    "Nothing changes for mouse-and-keyboard play — every control works exactly as before.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Merchant wares read left-to-right, one icon size", by: "Claude", notes: [
     "Merchant buy cards are realigned: the gear icon now sits inline at the head of the name, and the slot, stats and can't-equip note all start at the card's left edge instead of being pushed to the right past the icon.",
     "Every gear icon in the shop is drawn at the same size — off-hand shields no longer tower over rings and other pieces.",
