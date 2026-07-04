@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Click a wall or object to walk up to it", by: "Claude", notes: [
+    "Clicking a solid tile — a wall, water, a closed or locked door, an NPC, or furniture — now walks you up to its nearest edge instead of grinding the hero into its face.",
+    "The hero routes to the reachable tile beside what you clicked and stops there, so you can line up on a door, chest or shopkeeper with one click.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Hover to inspect a foe, click to charge it", by: "Claude", notes: [
     "Point at a foe (desktop) to pop its codex card — it now shows under the map and is semi-transparent, so it never covers the enemy you're reading.",
     "Clicking a foe no longer opens that card: it paths you straight to it. The hero chases the foe into weapon reach and auto-attack takes over.",
