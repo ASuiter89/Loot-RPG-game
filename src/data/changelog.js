@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Merchant wares read left-to-right, one icon size", by: "Claude", notes: [
+    "Merchant buy cards are realigned: the gear icon now sits inline at the head of the name, and the slot, stats and can't-equip note all start at the card's left edge instead of being pushed to the right past the icon.",
+    "Every gear icon in the shop is drawn at the same size — off-hand shields no longer tower over rings and other pieces.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Top loot row no longer opens the stat key", by: "Claude", notes: [
     "The frozen stat-key bar no longer overlaps the first item in the bag, so clicking the top row — usually the upgrade-highlighted one — selects it (with its Sell / Scrap / Lock actions) instead of toggling the Stat abbreviations panel.",
   ] },
