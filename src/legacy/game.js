@@ -26,6 +26,8 @@ import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
+import { rollDamage, spreadRange } from '../systems/damageRoll.js';
+import { spellSpreadFor } from '../data/spellSpread.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
@@ -6425,13 +6427,13 @@ window.gameState = function gameState(radius) {
       range: c ? (c.range || null) : null,
       radius: c ? (c.radius || null) : null,
     };
-    // Damage preview: the min–max a single activation deals to a foe at this depth
-    // (crit and chance procs excluded, multi-hit folded in), the effective sustained
-    // DPS (crit + cast rate factored), and the CDR-adjusted cooldown — what the
-    // skill's tooltip shows. Null for non-damage actives. See the "damage" topic in
-    // gameGuide() and skillDamagePreview() for the exact model.
+    // Damage preview mirrors the tooltip: `damage` is the PER-HIT range (crit, cast
+    // rate and chance procs excluded) with `hits` = strikes per cast and `base` = the
+    // pre-buff/pre-armour range shown in the description; `dps` folds crit + cast rate;
+    // `cooldownFull` is the CDR-adjusted recharge. Null for non-damage actives. See the
+    // "damage" topic in gameGuide() and skillDamagePreview() for the exact model.
     const dp = (typeof skillDamagePreview === 'function') ? skillDamagePreview(node, rank) : null;
-    o.damage = dp ? { min: dp.min, max: dp.max } : null;
+    o.damage = dp ? { min: dp.min, max: dp.max, hits: dp.strikes, base: { min: dp.baseMin, max: dp.baseMax } } : null;
     o.dps = dp ? Math.round(dp.dps) : null;
     o.cooldownFull = (typeof effectiveSkillCd === 'function') ? Math.round(effectiveSkillCd(node, rank) * 10) / 10 : (node ? node.cd : null);
     if (idx != null) {
@@ -6785,8 +6787,9 @@ window.gameGuide = function gameGuide(topic) {
       `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
       `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
       `So NO — Attack does not feed everything: ATK + weapon Damage power auto-attacks and martial skills only; spells ignore them and live on Spirit + Spell Power. The three % amps (IDMG / Skill Power / Spell Power) are one-per-source and never cross over.`,
+      `RANGES & ROLLS: weapons and spells both deal a RANGE, not one fixed number. A weapon rolls its printed min–max; a SPELL now rolls too — around its base by a per-spell spread (a focused magic missile rolls tight, a chaotic meteor rolls wild), so no two spells feel the same. Each roll is taken at fine (fractional) precision BEFORE your multipliers apply, so even a small weapon produces organic, varied hits instead of two or three repeating numbers — the damage finally dealt is still a whole number. Every range is symmetric about the old value, so averages (and balance) are unchanged; only the texture is new.`,
       `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). CDR is a RATING, not a flat %: the fraction it actually cuts off a cooldown is CDR/(CDR+100), so it climbs toward but never reaches 100% (no cap — the math just can't get there), and the hero sheet / tooltips show that real % — a cooldown drops by exactly the amount shown. gameState().player.offense reports skillPower / spellPower / increasedDmg / attackSpeed / castSpeed, the raw cooldownRating, and cooldownReduction as the 0..1 fraction it yields.`,
-      `TOOLTIP READOUT: each damage skill's tooltip (and its skill-tree card) shows two pills versus a typical foe at your current depth. "Damage lo–hi" is the absolute min to absolute max a single ACTIVATION deals to that foe — the weapon roll, ATK, your damage attributes, gear IDMG/Skill/Spell Power, the skill's coefficient & rank, synergies and the foe's armour are all folded in, and a multi-strike skill's hits are summed into the range — but crit and other chance-only effects (status/elemental procs) and external buffs (shrines, food, war-cries) are EXCLUDED, so it's a stable floor–ceiling. "DPS" is the effective sustained damage per second: that range's midpoint, lifted by your crit chance × crit damage, times how many times a second the skill can be cast. The cooldown shown in the tooltip is the real one AFTER your Cooldown Reduction / Cast Speed. Big numbers abbreviate (1.2k, 3.4M). gameState() skills carry { damage:{min,max}, dps, cooldownFull }.`,
+      `TOOLTIP READOUT: each damage skill's description reads "deals X to Y damage" — its ABSOLUTE base per-hit range (the ability's own damage: rank, coefficient and your caster power — weapon roll/ATK/attributes for a skill, Spirit for a spell — before ANY situational buff, depth armour or crit). Below it sit two pills versus a typical foe at your current depth. "Damage lo–hi per hit" is that base after everything PERSISTENT except crit and cast rate — class %, gear IDMG/Skill/Spell Power, the difficulty scar and the foe's armour — the honest number that pops over a foe on ONE strike. A multi-strike cast shows a "×N" badge instead of inflating the range; status/elemental procs and transient buffs (shrines, food, war-cries) stay out. "DPS" is the effective sustained damage per second: that per-hit range's midpoint, lifted by crit chance × crit damage, times hits-per-cast, times how often the skill can be cast (cooldown after Cooldown Reduction / Cast Speed). Crit and cast rate live ONLY in DPS — never in the Damage pill. On rank-up the preview shows the new base range, not a bare %. Big numbers abbreviate (1.2k, 3.4M). gameState() skills carry { damage:{min,max,hits,base:{min,max}}, dps, cooldownFull }.`,
       `Gear gating is thoughtful: a MELEE/RANGED weapon can only roll Skill Power & Attack Speed; a WAND/STAFF only Spell Power & Cast Speed. Gloves & rings lean martial (Skill Power); amulets & caster off-hands lean arcane (Spell/Cast). So the weapon you wield already points your build at one lane.`,
     ],
     autocast: [
@@ -18663,9 +18666,12 @@ function getWeaponDamage() {
   const w = activeWeapon();   // a red/ignored weapon gives no damage — bare fists
   if (w && w.stats.DMG) {
     const [lo, hi] = w.stats.DMG.split('-').map(Number);
-    return rnd(lo, hi);
+    // Fractional roll (see systems/damageRoll.js): a continuous value kept to ~3 sig
+    // figs, so a tight weapon range still yields organic damage once buffs scale it —
+    // not just two or three discrete numbers. The final hit is rounded by the caller.
+    return rollDamage(lo, hi, Math.random);
   }
-  return rnd(1, 3); // bare fists
+  return rollDamage(1, 3, Math.random); // bare fists
 }
 
 // Sum a flat stat (ATK, DEF, etc.) across all equipped gear. Titan's Grip lets you
@@ -18820,35 +18826,38 @@ function rollPlayerHit(e) {
   // otherwise roll crit against THIS foe's level (rating-vs-level system).
   const isCrit = skillPrimed.crit || isCritical(Math.random(), critChanceVs(e));
   if (skillPrimed.crit) skillPrimed.crit = false;
+  // Keep the whole chain in floating point so the weapon's fractional roll survives to
+  // the end — rounding after every step would collapse a small range back into a
+  // handful of integers once buffs scale it. One Math.round at the finish; ≥1 floor.
   let dmg = getWeaponDamage() + player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
-  if (buffs.power) dmg = Math.round(dmg * 1.5);
-  if (foodFx('dmgPct')) dmg = Math.round(dmg * (1 + foodFx('dmgPct'))); // ramen damage buff
-  dmg = Math.round(dmg * classDmgDealtMult()); // Warrior + damage passives
-  if (diffClearedCount()) dmg = Math.round(dmg * diffDebuffMult()); // permanent per-tier scar
+  if (buffs.power) dmg *= 1.5;
+  if (foodFx('dmgPct')) dmg *= 1 + foodFx('dmgPct'); // ramen damage buff
+  dmg *= classDmgDealtMult(); // Warrior + damage passives
+  if (diffClearedCount()) dmg *= diffDebuffMult(); // permanent per-tier scar
   const dmgUp = buffMag('dmgUp'); // War Cry / Frenzy / Avatar self-buffs
-  if (dmgUp > 0) dmg = Math.round(dmg * (1 + dmgUp));
+  if (dmgUp > 0) dmg *= 1 + dmgUp;
   // Increased Damage % (gear): a flat multiplier on every hit.
   const idmg = totalStat('IDMG');
-  if (idmg > 0) dmg = Math.round(dmg * (1 + idmg / 100));
+  if (idmg > 0) dmg *= 1 + idmg / 100;
   // Dmg vs Bosses % (gear): extra punch against bosses and elites.
   const bossDmg = totalStat('BOSSDMG');
-  if (bossDmg > 0 && e && (e.isBoss || e.isElite)) dmg = Math.round(dmg * (1 + bossDmg / 100));
+  if (bossDmg > 0 && e && (e.isBoss || e.isElite)) dmg *= 1 + bossDmg / 100;
   // Zeal/Fervor (Templar): more damage the lower your health.
   const zeal = skillBonus('zeal');
-  if (zeal > 0) dmg = Math.round(dmg * (1 + zeal * (1 - player.hp / player.maxHp)));
+  if (zeal > 0) dmg *= 1 + zeal * (1 - player.hp / player.maxHp);
   // Opportunist/Executioner (skill) + Execute % (gear): bonus to badly-wounded foes.
   const lowHp = skillBonus('lowHpDmg') + totalStat('EXEC') / 100;
-  if (lowHp > 0 && e && e.hp < e.maxHp * 0.35) dmg = Math.round(dmg * (1 + lowHp));
-  if (isCrit) dmg = Math.round(dmg * critDamageMult());
+  if (lowHp > 0 && e && e.hp < e.maxHp * 0.35) dmg *= 1 + lowHp;
+  if (isCrit) dmg *= critDamageMult();
   // Enemy armor mitigates a slice of the blow; Armor Pen % (gear) ignores part of
   // it. Armor is light on rank-and-file foes and heavier on elites/bosses, so Pen
   // shines against the toughest enemies (and pairs naturally with Dmg vs Bosses).
   const armor = enemyArmorPct(e);
   if (armor > 0) {
     const pen = armorPenFrac();
-    dmg = Math.round(dmg * (1 - armor * (1 - pen)));
+    dmg *= 1 - armor * (1 - pen);
   }
-  return { dmg: Math.max(1, dmg), isCrit };
+  return { dmg: Math.max(1, Math.round(dmg)), isCrit };
 }
 
 // Fraction of a player's blow an enemy shrugs off via armor. Modest by default so
@@ -19521,9 +19530,14 @@ function skillPhysDamage(e, mult, rank, forceCrit) {
   return Math.max(1, Math.round(dmg));
 }
 // One spell-based blow for an active (scales with Spirit + spell passives/buffs). No
-// per-hit cap either.
-function skillSpellDamage(e, cast, mult, rank) {
-  let dmg = applyOffenseMods(spellBase(cast.flat || 12, cast.perLvl || 2) * mult * rankScale(rank), e, false, true);
+// per-hit cap either. Spells roll a RANGE now: `spellBase` is the CENTER and `spread`
+// (per-spell, see data/spellSpread.js) widens it symmetrically, so the average — and
+// thus balance — is unchanged and only the variance is new. The rolled base is a
+// fractional value (systems/damageRoll.js) so it survives the multiplier chain.
+function skillSpellDamage(e, cast, mult, rank, spread) {
+  const center = spellBase(cast.flat || 12, cast.perLvl || 2);
+  const [lo, hi] = spreadRange(center, spread || 0);
+  let dmg = applyOffenseMods(rollDamage(lo, hi, Math.random) * mult * rankScale(rank), e, false, true);
   return Math.max(1, Math.round(dmg));
 }
 
@@ -19564,8 +19578,9 @@ function skillDamagePreview(node, rank) {
 
   const r = rank || 1;
   // Multi-strike: a cast that lands several hits on the SAME target (cast.repeat);
-  // rank-10 "Mastered" adds one more. Folded into the range below so the pill shows
-  // the whole damage ONE activation does to a foe, not a single tick of it.
+  // rank-10 "Mastered" adds one more. Reported SEPARATELY (as a ×N badge): the Damage
+  // range below is PER HIT — the number that pops over a foe on each strike — not the
+  // whole activation. DPS folds the strikes back in (hitsPerCast).
   let strikes = Math.max(1, c.repeat || 1);
   if ((rank || 0) >= 10 && c.repeat) strikes = c.repeat + 1;
 
@@ -19577,38 +19592,47 @@ function skillDamagePreview(node, rank) {
   const armor = enemyArmorPct(foe);
   const armorFactor = armor > 0 ? (1 - armor * (1 - armorPenFrac())) : 1;
 
-  // Per-strike min/max — the honest floor/ceiling of a single hit, crit and all
-  // chance-based procs (status, elemental) EXCLUDED, and transient/external buffs
-  // (shrine Power, food, war-cry) left out so the range is a stable baseline.
-  let hitMin, hitMax;
+  // Two PER-HIT ranges, each crit- and cast-rate-free:
+  //   • BASE (baseMin..baseMax) — the ability's own damage: rank + coefficient (+ your
+  //     ATK / Spirit / Skill|Spell Power, the way a weapon's own damage scales) folded
+  //     in, but NOTHING situational — no gear damage%, class %, difficulty scar, depth
+  //     armour or crit. This is the "deals X to Y" printed in the description and the
+  //     number the rank-up preview compares.
+  //   • DAMAGE (hitMin..hitMax) — BASE times everything persistent EXCEPT crit and cast
+  //     rate: class %, gear Increased Damage, the difficulty scar and this depth's
+  //     armour. Transient shrine/food/war-cry buffs stay out so the readout is stable.
+  let baseMin, baseMax, off;
   if (isWeapon) {
     const [wLo, wHi] = weaponDmgRange();
     const flat = player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
     const mult = c.wpn * synM * rs * skillPowerMult();
+    baseMin = (wLo + flat) * mult;
+    baseMax = (wHi + flat) * mult;
     // The always-on weapon multipliers from applyOffenseMods: class damage,
     // difficulty scar, gear IDMG, armour (crit + situational spikes excluded).
-    const off = classDmgDealtMult() * diffDebuffMult() * (1 + totalStat('IDMG') / 100) * armorFactor;
-    hitMin = Math.max(1, Math.round((wLo + flat) * mult * off));
-    hitMax = Math.max(1, Math.round((wHi + flat) * mult * off));
+    off = classDmgDealtMult() * diffDebuffMult() * (1 + totalStat('IDMG') / 100) * armorFactor;
   } else {
-    // Spells have no roll — spellBase is deterministic, so hitMin === hitMax.
-    const base = spellBase(c.flat || 12, c.perLvl || 2) * c.spell * synM * rs;
-    const off = diffDebuffMult() * armorFactor; // spells skip class-dmg & IDMG (isSpell path)
-    hitMin = hitMax = Math.max(1, Math.round(base * off));
+    // Spells roll a range now: spellBase is the CENTER, the per-spell spread widens it.
+    const centerBase = spellBase(c.flat || 12, c.perLvl || 2) * c.spell * synM * rs;
+    [baseMin, baseMax] = spreadRange(centerBase, spellSpreadFor(node.id));
+    off = diffDebuffMult() * armorFactor; // spells skip class-dmg & IDMG (isSpell path)
   }
-  // Fold the strikes in: the absolute min/max a single ACTIVATION deals to a foe.
-  const min = hitMin * strikes;
-  const max = hitMax * strikes;
+  const hitMin = Math.max(1, Math.round(baseMin * off));
+  const hitMax = Math.max(1, Math.round(baseMax * off));
 
   const critChance = critChanceVs(foe);
   const critMult = critDamageMult();
-  // Effective DPS = the range's midpoint, lifted by the expected crit multiplier,
-  // times how many times a second the skill can actually be cast (its cooldown after
-  // CDR / Cast Speed / the rank-7 Honed cut, honouring the 0.5s floor). Strikes are
-  // already in min/max, so hitsPerCast is 1 here.
+  // Effective DPS = the PER-HIT range's midpoint, lifted by the expected crit
+  // multiplier, times hits-per-cast (strikes), times how often the skill can fire (its
+  // cooldown after CDR / Cast Speed / the rank-7 Honed cut, honouring the 0.5s floor).
+  // The only readout that folds in crit and cast rate.
   const effCd = effectiveSkillCd(node, r);
-  const dps = effectiveDps({ min, max, critChance, critMult, hitsPerCast: 1, castsPerSec: 1 / effCd });
-  return { min, max, dps, effectiveCd: effCd };
+  const dps = effectiveDps({ min: hitMin, max: hitMax, critChance, critMult, hitsPerCast: strikes, castsPerSec: 1 / effCd });
+  return {
+    min: hitMin, max: hitMax,                                              // per-hit Damage range (no crit/cadence)
+    baseMin: Math.max(1, Math.round(baseMin)), baseMax: Math.max(1, Math.round(baseMax)), // per-hit absolute base
+    strikes, dps, effectiveCd: effCd,
+  };
 }
 
 // The recharge an active ACTUALLY has right now, in seconds: its base cooldown
@@ -19631,8 +19655,35 @@ function fmtCd(secs) { return `${Math.round((secs || 0) * 10) / 10}`; }
 function skillDmgTipLine(node, rank) {
   const p = skillDamagePreview(node, rank);
   if (!p) return '';
-  return `<div class='ht-sub'>Damage <b>${formatDamageRange(p.min, p.max)}</b></div>`
+  // Damage = per-HIT range (no crit, no cast rate). A multi-strike cast shows a ×N
+  // badge instead of inflating the range. DPS folds in crit + how often it fires.
+  const hits = p.strikes > 1 ? ` <span style='opacity:0.75'>×${p.strikes}</span>` : '';
+  return `<div class='ht-sub'>Damage <b>${formatDamageRange(p.min, p.max)}</b>${hits} <span style='opacity:0.6'>per hit</span></div>`
     + `<div class='ht-sub'>DPS <b style='color:var(--gold)'>${abbreviateNumber(p.dps)}</b></div>`;
+}
+
+// A skill/spell node's flavor description prepared for display. Two touch-ups:
+//   • the redundant "+N% damage per point in X" synergy sentence is stripped — it's
+//     already shown as its own Synergy pill, per the copy cleanup.
+//   • for a direct-damage active, its ABSOLUTE base per-hit damage range (rank +
+//     coefficient + your caster power, before any situational buff/armour/crit) is
+//     woven in: a `{dmg}` token in the desc is replaced in place (so copy can read
+//     "…deals X–Y damage and…"), otherwise the range is appended as its own sentence.
+//     A multi-strike cast carries a ×N badge.
+function skillDescHtml(node, rank) {
+  let d = (node && node.desc) || '';
+  d = d.replace(/\s*\+\d+%\s+damage per point in [^.]+\.?/gi, '').trim();
+  const dp = (node && node.cast) ? skillDamagePreview(node, rank) : null;
+  if (dp) {
+    const hits = dp.strikes > 1 ? ` <span style='opacity:0.75'>×${dp.strikes}</span>` : '';
+    const range = `<b>${formatDamageRange(dp.baseMin, dp.baseMax)}</b>${hits}`;
+    if (/\{dmg\}/.test(d)) d = d.replace(/\{dmg\}/g, range);
+    else {
+      const clause = `Deals ${range} damage${dp.strikes > 1 ? ' per hit' : ''}.`;
+      d = d ? `${d} ${clause}` : clause;
+    }
+  }
+  return d;
 }
 
 // Direction (cardinal) toward the nearest foe in range, for line/beam shapes.
@@ -19707,6 +19758,7 @@ function resolveCast(node, rank) {
   // D2 synergy: this ability's damage scales with hard points in related skills.
   const synM = synergyMult(node);
   const rs = rankScale(rank);
+  const spSpread = spellSpreadFor(node.id); // how wide this spell's damage rolls (data/spellSpread.js)
   let targets = [], center = { x: player.x, y: player.y };
 
   switch (c.shape) {
@@ -19824,7 +19876,7 @@ function resolveCast(node, rank) {
       // Crit is rolled inside applyOffenseMods for weapon actives AND spells; read
       // it back so skills and spells show the crit and fire on-crit triggers.
       if (c.wpn) { dmg = skillPhysDamage(e, c.wpn * falloff * synM, rank, c.crit); crit = _lastOffenseCrit; }
-      else if (c.spell) { dmg = skillSpellDamage(e, c, c.spell * falloff * synM, rank); crit = _lastOffenseCrit; }
+      else if (c.spell) { dmg = skillSpellDamage(e, c, c.spell * falloff * synM, rank, spSpread); crit = _lastOffenseCrit; }
       // Execute: a wounded, non-boss foe is finished outright; bosses just bleed extra.
       if (c.execute && dmg > 0) {
         if (!e.isBoss && e.hp <= e.maxHp * c.execute) dmg = Math.max(dmg, e.hp);
@@ -19857,7 +19909,7 @@ function resolveCast(node, rank) {
     const physBurst = detonateIsPhysical(c);   // a spell cast's burst is spell damage — no leech
     for (const e of targets.slice()) {
       if (e.dead || !statusEffects.some(s => s.target === e && s.effect === 'vuln')) continue;
-      const burst = c.spell ? skillSpellDamage(e, c, c.detonate, rank) : skillPhysDamage(e, c.detonate, rank);
+      const burst = c.spell ? skillSpellDamage(e, c, c.detonate, rank, spSpread) : skillPhysDamage(e, c.detonate, rank);
       for (const o of enemiesNear(c.detRadius || 1, e.x, e.y)) { if (!o.dead) { total += burst; if (physBurst) physTotal += burst; dealDamage(o, burst, true); spawnFloatingText(o.x, o.y, `💥${burst}`, '#ff8a3a'); } }
       statusEffects = statusEffects.filter(s => !(s.target === e && s.effect === 'vuln')); // consume the mark
       spawnParticles(e.x, e.y, '#ff8a3a', 14, 0.13); boomed = true;
@@ -21997,7 +22049,7 @@ function updateBars() {
       const cd = skillCd(sk.id);
       const ready = cd <= 0 && player.mp >= sk.mp && !inTown;
       if (label) label.textContent = cd > 0 ? `${Math.ceil(cd)}s` : `${sk.mp}MP`;
-      skillBtn.dataset.tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(sk.icon,16)||''} ${sk.name}</div><div class='ht-line'>${sk.desc}</div><div class='ht-sub'>${sk.mp} MP · ${sk.cd}s cooldown · ${'press ' + skillKeyLabel(1)}</div>`;
+      skillBtn.dataset.tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(sk.icon,16)||''} ${sk.name}</div><div class='ht-line'>${skillDescHtml(sk.node, skillRank(sk.id))}</div><div class='ht-sub'>${sk.mp} MP · ${sk.cd}s cooldown · ${'press ' + skillKeyLabel(1)}</div>`;
       skillBtn.classList.toggle('disabled', !ready);
       skillBtn.classList.toggle('ready', ready && player.hp > 0);
     } else {
@@ -22457,7 +22509,7 @@ function renderHero(el) {
       <div class="hc-line">${cls.passive}</div>
       <div class="hc-line"><span data-spr=w_sword></span> Damage scales with <b>${ATTRIBUTES[dmgA.primary].label}</b>${dmgA.secondary ? ` & ${ATTRIBUTES[dmgA.secondary].label}` : ''}</div>
       ${(() => { const pri = primarySkill(), sig = classSignature(player.class);
-        return pri ? `<div class="hc-line">${dlIcon(pri.icon,18)||''} <b>${pri.name}</b> — ${pri.desc} <span style="opacity:0.7">(${pri.mp} MP · ${'press ' + skillKeyLabel(1)})</span></div>`
+        return pri ? `<div class="hc-line">${dlIcon(pri.icon,18)||''} <b>${pri.name}</b> — ${skillDescHtml(pri.node, skillRank(pri.id))} <span style="opacity:0.7">(${pri.mp} MP · ${'press ' + skillKeyLabel(1)})</span></div>`
           : (sig ? `<div class="hc-line" style="opacity:0.8">Spend a skill point to learn ${dlIcon(sig.icon,16)||''} <b>${sig.name}</b> (SKILLS tab)</div>` : ''); })()}
       ${ascData() ? `<div class="hc-line" style="color:${ascData().color}">${dlIcon(ascData().icon,18)||''} <b>${ascData().name}</b> — ${ascData().blurb}</div>`
         : (cls && (player.level || 1) >= ASCEND_LEVEL ? `<div class="hc-line" style="color:var(--gold)"><span data-spr=mat_glimmer></span> Ready to ascend — visit the Trainer <span data-spr=town_trainer></span></div>` : '')}
@@ -22767,7 +22819,7 @@ function renderSkills(el) {
       <b>${dlIcon(sn.icon,18)||''} ${sn.name}</b>${rankTxt}
       <div class="ty">${typeTxt}</div>
       ${skillRecoveryTag(sn)}
-      <div class="ds">${sn.desc}</div>
+      <div class="ds">${skillDescHtml(sn, rank)}</div>
       ${skillMechHtml(sn, rank)}
       ${ruHtml}
       ${reqHtml}
@@ -22999,13 +23051,14 @@ function skillMechList(n, rank) {
     // a player which gear stats power this ability.
     if (castKind(n) === 'spell') add('Spell', '#b08ad8', 'Magic — scales with Spell Power; Cooldown Reduction &amp; Cast Speed shorten its recharge.');
     else add('Skill', '#e0a24b', 'Martial — scales with your weapon damage &amp; Skill Power; Cooldown Reduction shortens its recharge.');
-    // Two live readout pills — the min–max a single activation deals to a foe at
-    // this depth (gear/attributes/rank folded in, crit and chance procs excluded),
-    // and the effective sustained DPS (that range's midpoint × crit × how often it
-    // fires). Only for actives that deal direct damage (wpn/spell).
+    // Two live readout pills — the per-HIT damage range at this depth (gear/attributes/
+    // rank folded in; crit, cast rate and chance procs excluded; a ×N badge marks a
+    // multi-strike cast), and the effective sustained DPS (that range's midpoint × crit
+    // × hits-per-cast × how often it fires). Only for direct-damage actives (wpn/spell).
     const dp = skillDamagePreview(n, rank);
     if (dp) {
-      add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b>`);
+      const hits = dp.strikes > 1 ? ` <span style="opacity:0.75">×${dp.strikes}</span>` : '';
+      add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b>${hits} <span style="opacity:0.6">per hit</span>`);
       add('DPS', '#e0a24b', `<b>${abbreviateNumber(dp.dps)}</b>`);
     }
     // Movement first — gap-closers/pulls/escapes are the headline of a mobility skill.
@@ -23075,9 +23128,21 @@ function skillRankUpRows(node, rank) {
       }
     }
   } else if (node.type === 'active' && node.cast) {
-    const cur = Math.round(rankScale(rank || 1) * 100);
-    const next = Math.round(rankScale(rank + 1) * 100);
-    rows.push(['effect power', rank > 0 ? `${cur}% → <b>${next}%</b>` : `<b>100%</b>`]);
+    // Damaging actives preview the concrete base per-hit range each rank buys (what the
+    // "deals X to Y" description shows); pure buff/summon/heal actives keep the abstract
+    // effect-power % since there's no damage number to move.
+    const dpCur = skillDamagePreview(node, rank || 1);
+    const dpNext = skillDamagePreview(node, rank + 1);
+    if (dpCur && dpNext) {
+      const curR = formatDamageRange(dpCur.baseMin, dpCur.baseMax);
+      const nextR = formatDamageRange(dpNext.baseMin, dpNext.baseMax);
+      const hits = dpNext.strikes > 1 ? ` ×${dpNext.strikes}` : '';
+      rows.push(['damage', rank > 0 ? `${curR} → <b>${nextR}</b>${hits}` : `<b>${nextR}</b>${hits}`]);
+    } else {
+      const cur = Math.round(rankScale(rank || 1) * 100);
+      const next = Math.round(rankScale(rank + 1) * 100);
+      rows.push(['effect power', rank > 0 ? `${cur}% → <b>${next}%</b>` : `<b>100%</b>`]);
+    }
     // Mana cost climbs with each rank — show the next-rank price so the trade-off
     // (more power for more mana) is clear before you spend the point.
     const curMp = skillManaCost(node, rank || 1);
