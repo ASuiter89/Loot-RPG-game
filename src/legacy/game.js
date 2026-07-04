@@ -26,6 +26,8 @@ import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
+import { rollDamage, spreadRange } from '../systems/damageRoll.js';
+import { spellSpreadFor } from '../data/spellSpread.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
@@ -4685,34 +4687,34 @@ const SKILL_TREES = {
     ], 'passive'),
     active: buildWeb([
       {"id":"w_a00","name":"Brace","icon":"sk_wa_brace","mp":8,"cd":11,"cast":{"shape":"self","buff":[{"id":"shield","dur":5,"mag":50},{"id":"defUp","dur":5,"mag":0.25}]},"desc":"Hunker down for a defensive shield and damage reduction.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"w_a01","name":"Rend","icon":"sk_wa_rend","mp":7,"cd":3,"cast":{"shape":"melee","wpn":1.4,"lifesteal":0.15,"status":{"effect":"poison","dur":3,"chance":1}},"desc":"A bleeding strike that poisons the target and steals life.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"w_a02","name":"Cleave","icon":"sk_wa_cleave","mp":7,"cd":2,"cast":{"shape":"cleave","wpn":1.5},"desc":"Swing wide, striking all foes in front of you.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"w_a03","name":"Bash","icon":"sk_wa_bash","mp":8,"cd":4,"cast":{"shape":"melee","wpn":1.6,"crit":true,"status":{"effect":"stun","dur":1,"chance":1}},"desc":"A heavy guaranteed-crit blow that stuns the target.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"w_a04","name":"Shield Bash","icon":"sk_wa04","mp":8,"cd":4,"cast":{"shape":"melee","wpn":1.3,"status":{"effect":"stun","dur":2,"chance":1},"buff":[{"id":"shield","dur":4,"mag":45}]},"desc":"Slam with your shield to stun and gain a brief guard.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"w_a01","name":"Rend","icon":"sk_wa_rend","mp":7,"cd":3,"cast":{"shape":"melee","wpn":1.4,"lifesteal":0.15,"status":{"effect":"poison","dur":3,"chance":1}},"desc":"A bleeding strike that deals {dmg}, poisons the target and steals life.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"w_a02","name":"Cleave","icon":"sk_wa_cleave","mp":7,"cd":2,"cast":{"shape":"cleave","wpn":1.5},"desc":"Swing wide for {dmg}, striking all foes in front of you.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"w_a03","name":"Bash","icon":"sk_wa_bash","mp":8,"cd":4,"cast":{"shape":"melee","wpn":1.6,"crit":true,"status":{"effect":"stun","dur":1,"chance":1}},"desc":"A heavy guaranteed-crit blow that deals {dmg} and stuns the target.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"w_a04","name":"Shield Bash","icon":"sk_wa04","mp":8,"cd":4,"cast":{"shape":"melee","wpn":1.3,"status":{"effect":"stun","dur":2,"chance":1},"buff":[{"id":"shield","dur":4,"mag":45}]},"desc":"Slam with your shield for {dmg}, stunning the foe and gaining a brief guard.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"w_a10","name":"Taunt","icon":"sk_wa_roar","mp":10,"cd":15,"cast":{"shape":"self","buff":[{"id":"thorns","dur":6,"mag":30},{"id":"regen","dur":6,"mag":6}]},"desc":"A defiant shout granting thorns and regeneration.","br":0,"x":0.28,"y":0.34,"band":1,"req":["w_a00"]},
-      {"id":"w_a11","name":"Blood Drinker","icon":"sk_wa11","mp":18,"cd":5,"cast":{"shape":"melee","wpn":1.7,"lifesteal":0.25,"heal":{"pctDmg":0.15}},"desc":"A vampiric strike healing for a share of the damage dealt.","br":1,"x":0.28,"y":0.34,"band":1,"req":["w_a01"]},
-      {"id":"w_a12","name":"Hamstring Swing","icon":"sk_wa12","mp":9,"cd":4,"cast":{"shape":"cleave","wpn":1.7,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A wide cleave that makes struck foes vulnerable.","br":2,"x":0.28,"y":0.34,"band":1,"req":["w_a02"]},
-      {"id":"w_a13","name":"Throw Blade","icon":"sk_wa_throw","mp":8,"cd":3,"cast":{"shape":"bolt","range":6,"wpn":1.8,"crit":true},"desc":"Hurl a weapon at a distant foe with deadly precision.","br":3,"x":0.28,"y":0.34,"band":1,"req":["w_a03"]},
+      {"id":"w_a11","name":"Blood Drinker","icon":"sk_wa11","mp":18,"cd":5,"cast":{"shape":"melee","wpn":1.7,"lifesteal":0.25,"heal":{"pctDmg":0.15}},"desc":"A vampiric strike dealing {dmg}, healing you for a share of it.","br":1,"x":0.28,"y":0.34,"band":1,"req":["w_a01"]},
+      {"id":"w_a12","name":"Hamstring Swing","icon":"sk_wa12","mp":9,"cd":4,"cast":{"shape":"cleave","wpn":1.7,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A wide cleave dealing {dmg} that leaves struck foes vulnerable.","br":2,"x":0.28,"y":0.34,"band":1,"req":["w_a02"]},
+      {"id":"w_a13","name":"Throw Blade","icon":"sk_wa_throw","mp":8,"cd":3,"cast":{"shape":"bolt","range":6,"wpn":1.8,"crit":true},"desc":"Hurl a weapon at a distant foe for {dmg} with deadly precision.","br":3,"x":0.28,"y":0.34,"band":1,"req":["w_a03"]},
       {"id":"w_a14","name":"Fortify","icon":"sk_wa_fortify","mp":10,"cd":15,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":70},{"id":"thorns","dur":6,"mag":35}]},"desc":"Raise your guard for a heavy shield and reflected thorns.","br":4,"x":0.28,"y":0.34,"band":1,"req":["w_a04"]},
       {"id":"w_a20","name":"Last Stand","icon":"sk_wa_laststand","mp":14,"cd":19,"cast":{"shape":"self","buff":[{"id":"shield","dur":7,"mag":110},{"id":"defUp","dur":7,"mag":0.4}]},"desc":"Plant your feet for a massive shield and damage reduction.","br":0,"x":0.72,"y":0.34,"band":1,"req":["w_a00"]},
-      {"id":"w_a21","name":"Onslaught","icon":"sk_wa_rampage","mp":18,"cd":5,"cast":{"shape":"melee","wpn":1.6,"repeat":2,"lifesteal":0.2},"desc":"A frenzy of strikes hitting twice and stealing heavy life.","br":1,"x":0.72,"y":0.34,"band":1,"req":["w_a01"]},
-      {"id":"w_a22","name":"Slam","icon":"sk_wa_slam","mp":12,"cd":5,"cast":{"shape":"nova","radius":2,"wpn":1.9,"status":{"effect":"stun","dur":2,"chance":0.6}},"desc":"Smash the ground for a shockwave that stuns nearby foes.","br":2,"x":0.72,"y":0.34,"band":1,"req":["w_a02"]},
-      {"id":"w_a23","name":"Impale","icon":"sk_wa_impale","mp":12,"cd":5,"cast":{"shape":"line","range":5,"wpn":2,"crit":true,"execute":0.25},"desc":"A piercing line strike that executes weakened foes.","br":3,"x":0.72,"y":0.34,"band":1,"req":["w_a03"]},
-      {"id":"w_a24","name":"Shield Charge","icon":"sk_wa_charge","mp":12,"cd":6,"cast":{"shape":"teleport","range":5,"wpn":1.6,"status":{"effect":"stun","dur":2,"chance":1},"buff":[{"id":"shield","dur":5,"mag":70}]},"desc":"Charge the nearest foe — stun it and gain a shield. Reaches ranged attackers.","br":4,"x":0.72,"y":0.34,"band":1,"req":["w_a04"]},
-      {"id":"w_a30","name":"Warstomp","icon":"sk_wa_warstomp","mp":14,"cd":6,"cast":{"shape":"nova","radius":3,"wpn":1.6,"knockback":2,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Stomp the earth to knock back and stun all around you.","br":0,"x":0.28,"y":0.58,"band":2,"req":["w_a10"]},
+      {"id":"w_a21","name":"Onslaught","icon":"sk_wa_rampage","mp":18,"cd":5,"cast":{"shape":"melee","wpn":1.6,"repeat":2,"lifesteal":0.2},"desc":"A frenzy of strikes for {dmg}, hitting twice and stealing heavy life.","br":1,"x":0.72,"y":0.34,"band":1,"req":["w_a01"]},
+      {"id":"w_a22","name":"Slam","icon":"sk_wa_slam","mp":12,"cd":5,"cast":{"shape":"nova","radius":2,"wpn":1.9,"status":{"effect":"stun","dur":2,"chance":0.6}},"desc":"Smash the ground for a shockwave dealing {dmg}, stunning nearby foes.","br":2,"x":0.72,"y":0.34,"band":1,"req":["w_a02"]},
+      {"id":"w_a23","name":"Impale","icon":"sk_wa_impale","mp":12,"cd":5,"cast":{"shape":"line","range":5,"wpn":2,"crit":true,"execute":0.25},"desc":"A piercing line strike dealing {dmg} that executes weakened foes.","br":3,"x":0.72,"y":0.34,"band":1,"req":["w_a03"]},
+      {"id":"w_a24","name":"Shield Charge","icon":"sk_wa_charge","mp":12,"cd":6,"cast":{"shape":"teleport","range":5,"wpn":1.6,"status":{"effect":"stun","dur":2,"chance":1},"buff":[{"id":"shield","dur":5,"mag":70}]},"desc":"Charge the nearest foe for {dmg} — stunning it and gaining a shield. Reaches ranged attackers.","br":4,"x":0.72,"y":0.34,"band":1,"req":["w_a04"]},
+      {"id":"w_a30","name":"Warstomp","icon":"sk_wa_warstomp","mp":14,"cd":6,"cast":{"shape":"nova","radius":3,"wpn":1.6,"knockback":2,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Stomp the earth for {dmg}, knocking back and stunning all around you.","br":0,"x":0.28,"y":0.58,"band":2,"req":["w_a10"]},
       {"id":"w_a31","name":"War Cry","icon":"sk_wa_warcry","mp":14,"cd":20,"cast":{"shape":"self","buff":[{"id":"dmgUp","dur":7,"mag":0.4},{"id":"lifestealUp","dur":7,"mag":0.15}]},"desc":"Enter a rage boosting damage and lifesteal as you fight.","br":1,"x":0.28,"y":0.58,"band":2,"req":["w_a11"]},
-      {"id":"w_a32","name":"Whirlwind","icon":"sk_wa_whirl","mp":15,"cd":5,"syn":{"skill":"w_p22","per":0.05},"cast":{"shape":"nova","radius":2,"wpn":1.7,"repeat":2},"desc":"Spin furiously, striking everything around you twice.","br":2,"x":0.28,"y":0.58,"band":2,"req":["w_a12"]},
-      {"id":"w_a33","name":"Hook","icon":"sk_wa_hook","mp":12,"cd":5,"cast":{"shape":"bolt","range":7,"wpn":2,"pull":true,"crit":true,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"Yank a distant foe to you with a vicious crit.","br":3,"x":0.28,"y":0.58,"band":2,"req":["w_a13"]},
+      {"id":"w_a32","name":"Whirlwind","icon":"sk_wa_whirl","mp":15,"cd":5,"syn":{"skill":"w_p22","per":0.05},"cast":{"shape":"nova","radius":2,"wpn":1.7,"repeat":2},"desc":"Spin furiously for {dmg}, striking everything around you twice.","br":2,"x":0.28,"y":0.58,"band":2,"req":["w_a12"]},
+      {"id":"w_a33","name":"Hook","icon":"sk_wa_hook","mp":12,"cd":5,"cast":{"shape":"bolt","range":7,"wpn":2,"pull":true,"crit":true,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"Yank a distant foe to you and strike for {dmg} with a vicious crit.","br":3,"x":0.28,"y":0.58,"band":2,"req":["w_a13"]},
       {"id":"w_a34","name":"Rally","icon":"sk_wa_rally","mp":14,"cd":22,"cast":{"shape":"self","buff":[{"id":"shield","dur":8,"mag":120},{"id":"thorns","dur":8,"mag":50},{"id":"defUp","dur":8,"mag":0.3}]},"desc":"Plant a banner granting a shield and reflective thorns.","br":4,"x":0.28,"y":0.58,"band":2,"req":["w_a14"]},
       {"id":"w_a40","name":"Unbreakable","icon":"sk_wa40","mp":20,"cd":22,"cast":{"shape":"self","buff":[{"id":"shield","dur":8,"mag":180},{"id":"defUp","dur":8,"mag":0.5},{"id":"regen","dur":8,"mag":12}]},"desc":"Become a living wall with an immense shield and regeneration.","br":0,"x":0.72,"y":0.58,"band":2,"req":["w_a20"]},
-      {"id":"w_a41","name":"Reaping Swing","icon":"sk_wa_reaping","mp":18,"cd":5,"cast":{"shape":"cleave","wpn":2.2,"lifesteal":0.3,"execute":0.3},"desc":"A wide reaping cleave that drains life and executes the weak.","br":1,"x":0.72,"y":0.58,"band":2,"req":["w_a21"]},
-      {"id":"w_a42","name":"Colossus Smash","icon":"sk_wa_colossus","mp":18,"cd":7,"syn":{"skill":"w_p32","per":0.05},"cast":{"shape":"nova","radius":3,"wpn":2.6,"status":{"effect":"vuln","dur":4,"chance":1},"knockback":2},"desc":"A devastating shockwave that shatters and stuns all foes.","br":2,"x":0.72,"y":0.58,"band":2,"req":["w_a22"]},
-      {"id":"w_a43","name":"Executioner's Strike","icon":"sk_wa43","mp":16,"cd":6,"cast":{"shape":"line","range":6,"wpn":2.6,"crit":true,"execute":0.35,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A guaranteed-crit line that pierces and executes wounded foes.","br":3,"x":0.72,"y":0.58,"band":2,"req":["w_a23"]},
+      {"id":"w_a41","name":"Reaping Swing","icon":"sk_wa_reaping","mp":18,"cd":5,"cast":{"shape":"cleave","wpn":2.2,"lifesteal":0.3,"execute":0.3},"desc":"A wide reaping cleave dealing {dmg} that drains life and executes the weak.","br":1,"x":0.72,"y":0.58,"band":2,"req":["w_a21"]},
+      {"id":"w_a42","name":"Colossus Smash","icon":"sk_wa_colossus","mp":18,"cd":7,"syn":{"skill":"w_p32","per":0.05},"cast":{"shape":"nova","radius":3,"wpn":2.6,"status":{"effect":"vuln","dur":4,"chance":1},"knockback":2},"desc":"A devastating shockwave dealing {dmg} that shatters and stuns all foes.","br":2,"x":0.72,"y":0.58,"band":2,"req":["w_a22"]},
+      {"id":"w_a43","name":"Executioner's Strike","icon":"sk_wa43","mp":16,"cd":6,"cast":{"shape":"line","range":6,"wpn":2.6,"crit":true,"execute":0.35,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A guaranteed-crit line dealing {dmg} that pierces and executes wounded foes.","br":3,"x":0.72,"y":0.58,"band":2,"req":["w_a23"]},
       {"id":"w_a44","name":"Bulwark Aura","icon":"sk_wa_banner","mp":18,"cd":27,"cast":{"shape":"self","buff":[{"id":"shield","dur":9,"mag":160},{"id":"thorns","dur":9,"mag":70},{"id":"dodgeUp","dur":9,"mag":0.2}]},"desc":"Raise an aura granting a vast shield and heavy thorns.","br":4,"x":0.72,"y":0.58,"band":2,"req":["w_a24"]},
       {"id":"w_a50","name":"Titan Form","icon":"sk_wa_avatar","mp":30,"cd":29,"cast":{"shape":"self","buff":[{"id":"shield","dur":10,"mag":260},{"id":"defUp","dur":10,"mag":0.6},{"id":"dmgUp","dur":10,"mag":0.5},{"id":"regen","dur":10,"mag":16}]},"desc":"Transform into an unstoppable titan with a colossal shield and surging power.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a30","w_a40"]},
-      {"id":"w_a51","name":"Bloodstorm","icon":"sk_wa_apocalypse","mp":28,"cd":8,"cast":{"shape":"melee","wpn":2.4,"repeat":3,"lifesteal":0.35,"execute":0.3},"desc":"A storm of bloody strikes hitting three times, draining heavy life and executing the wounded.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a31","w_a41"]},
-      {"id":"w_a52","name":"Cataclysm","icon":"sk_wa_cataclysm","mp":34,"cd":11,"syn":{"skill":"w_p42","per":0.04},"cast":{"shape":"nova","radius":4,"wpn":3.4,"knockback":2,"status":{"effect":"stun","dur":3,"chance":0.8}},"desc":"A titanic two-handed quake that obliterates everything around you.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a32","w_a42"]},
-      {"id":"w_a53","name":"Decapitate","icon":"sk_wa_titanleap","mp":24,"cd":9,"cast":{"shape":"teleport","range":7,"wpn":3,"crit":true,"execute":0.4,"status":{"effect":"vuln","dur":4,"chance":1}},"desc":"Leap onto a foe with a guaranteed crit; executes non-bosses. Reaches ranged attackers.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a33","w_a43"]},
+      {"id":"w_a51","name":"Bloodstorm","icon":"sk_wa_apocalypse","mp":28,"cd":8,"cast":{"shape":"melee","wpn":2.4,"repeat":3,"lifesteal":0.35,"execute":0.3},"desc":"A storm of bloody strikes for {dmg}, hitting three times, draining heavy life and executing the wounded.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a31","w_a41"]},
+      {"id":"w_a52","name":"Cataclysm","icon":"sk_wa_cataclysm","mp":34,"cd":11,"syn":{"skill":"w_p42","per":0.04},"cast":{"shape":"nova","radius":4,"wpn":3.4,"knockback":2,"status":{"effect":"stun","dur":3,"chance":0.8}},"desc":"A titanic two-handed quake dealing {dmg} that obliterates everything around you.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a32","w_a42"]},
+      {"id":"w_a53","name":"Decapitate","icon":"sk_wa_titanleap","mp":24,"cd":9,"cast":{"shape":"teleport","range":7,"wpn":3,"crit":true,"execute":0.4,"status":{"effect":"vuln","dur":4,"chance":1}},"desc":"Leap onto a foe for {dmg} with a guaranteed crit; executes non-bosses. Reaches ranged attackers.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a33","w_a43"]},
       {"id":"w_a54","name":"War Machine","icon":"sk_wa_warmachine","mp":30,"cd":35,"cast":{"shape":"self","buff":[{"id":"shield","dur":12,"mag":300},{"id":"thorns","dur":12,"mag":110},{"id":"defUp","dur":12,"mag":0.5},{"id":"regen","dur":12,"mag":18}]},"desc":"Become an impregnable fortress with an immense shield, thorns, and relentless regeneration.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["w_a34","w_a44"]}
     ], 'active'),
   },
@@ -4751,36 +4753,36 @@ const SKILL_TREES = {
       {"id":"r_p54","name":"Death Dealer","icon":"sk_rp54","fx":{"critDmg":0.4,"pen":0.08},"cfx":{"critDmg":0.3,"pen":0.05},"cond":"cat:Bow","trigger":{"on":"crit","effect":{"charge":"combo","buff":{"id":"dmgUp","dur":3,"mag":0.25}}},"keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: +40% crit damage, +8% pen; bow: +30% crit damage, +5% pen more. On crit: shred armor (+25% damage), +1 Combo.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["r_p34","r_p44"]}
     ], 'passive'),
     active: buildWeb([
-      {"id":"r_a00","name":"Backstab","icon":"sk_ra_backstab","mp":7,"cd":2,"syn":{"skill":"r_p00","per":0.05},"cast":{"shape":"melee","wpn":1.6,"crit":true},"desc":"A guaranteed-critical strike that hits harder against wounded foes. +5% damage per point in Killer Instinct.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"r_a01","name":"Riposte","icon":"sk_ra_gut","mp":7,"cd":3,"cast":{"shape":"melee","wpn":1.5,"buff":[{"id":"dmgUp","dur":2,"mag":0.25}]},"desc":"A swift dueling thrust that buffs your damage briefly after striking.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"r_a00","name":"Backstab","icon":"sk_ra_backstab","mp":7,"cd":2,"syn":{"skill":"r_p00","per":0.05},"cast":{"shape":"melee","wpn":1.6,"crit":true},"desc":"A guaranteed-critical strike that deals {dmg}, hitting harder against wounded foes.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"r_a01","name":"Riposte","icon":"sk_ra_gut","mp":7,"cd":3,"cast":{"shape":"melee","wpn":1.5,"buff":[{"id":"dmgUp","dur":2,"mag":0.25}]},"desc":"A swift dueling thrust dealing {dmg} that buffs your damage briefly after striking.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"r_a02","name":"Smoke Bomb","icon":"sk_ra_smoke","mp":8,"cd":5,"cast":{"shape":"self","buff":[{"id":"dodgeUp","dur":4,"mag":0.35}]},"desc":"Drop a smoke cloud, granting a burst of dodge to slip away and feed Momentum.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"r_a03","name":"Poison Dart","icon":"sk_ra_poison","mp":7,"cd":3,"syn":{"skill":"r_p03","per":0.05},"cast":{"shape":"bolt","wpn":1.1,"range":5,"status":{"effect":"poison","dur":4,"chance":1}},"desc":"Fling a venomous dart that poisons the target. +5% damage per point in Venom.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"r_a04","name":"Throw Knife","icon":"sk_ra_throwknife","mp":6,"cd":2,"syn":{"skill":"r_p04","per":0.05},"cast":{"shape":"bolt","wpn":1.5,"range":6},"desc":"Hurl a knife at a distant enemy for solid ranged damage. +5% damage per point in Precision.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"r_a10","name":"Gut","icon":"sk_ra10","mp":9,"cd":3,"cast":{"shape":"melee","wpn":1.8,"status":{"effect":"vuln","dur":4,"chance":1}},"desc":"A vicious opening cut that makes the target vulnerable.","br":0,"x":0.28,"y":0.34,"band":1,"req":["r_a00"]},
-      {"id":"r_a11","name":"Blade Dance","icon":"sk_ra_bladeflurry","mp":10,"cd":3,"syn":{"skill":"r_p11","per":0.05},"cast":{"shape":"melee","wpn":1.3,"repeat":2},"desc":"A rapid two-hit flurry against a single foe. +5% damage per point in Opportunist.","br":1,"x":0.28,"y":0.34,"band":1,"req":["r_a01"]},
+      {"id":"r_a03","name":"Poison Dart","icon":"sk_ra_poison","mp":7,"cd":3,"syn":{"skill":"r_p03","per":0.05},"cast":{"shape":"bolt","wpn":1.1,"range":5,"status":{"effect":"poison","dur":4,"chance":1}},"desc":"Fling a venomous dart for {dmg} that poisons the target.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"r_a04","name":"Throw Knife","icon":"sk_ra_throwknife","mp":6,"cd":2,"syn":{"skill":"r_p04","per":0.05},"cast":{"shape":"bolt","wpn":1.5,"range":6},"desc":"Hurl a knife at a distant enemy for {dmg}.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"r_a10","name":"Gut","icon":"sk_ra10","mp":9,"cd":3,"cast":{"shape":"melee","wpn":1.8,"status":{"effect":"vuln","dur":4,"chance":1}},"desc":"A vicious opening cut dealing {dmg} that leaves the target vulnerable.","br":0,"x":0.28,"y":0.34,"band":1,"req":["r_a00"]},
+      {"id":"r_a11","name":"Blade Dance","icon":"sk_ra_bladeflurry","mp":10,"cd":3,"syn":{"skill":"r_p11","per":0.05},"cast":{"shape":"melee","wpn":1.3,"repeat":2},"desc":"A rapid two-hit flurry against a single foe for {dmg}.","br":1,"x":0.28,"y":0.34,"band":1,"req":["r_a01"]},
       {"id":"r_a12","name":"Dash","icon":"sk_ra_dash","mp":8,"cd":4,"cast":{"shape":"teleport","range":5,"buff":[{"id":"dodgeUp","dur":3,"mag":0.25}]},"desc":"Blink a short distance and gain a fleeting dodge buff.","br":2,"x":0.28,"y":0.34,"band":1,"req":["r_a02"]},
-      {"id":"r_a13","name":"Caltrops","icon":"sk_ra_caltrops","mp":10,"cd":4,"cast":{"shape":"nova","wpn":1,"radius":2,"status":{"effect":"poison","dur":4,"chance":1}},"desc":"Scatter spiked caltrops in a nova that poisons nearby foes.","br":3,"x":0.28,"y":0.34,"band":1,"req":["r_a03"]},
-      {"id":"r_a14","name":"Pin","icon":"sk_ra_pin","mp":9,"cd":4,"cast":{"shape":"bolt","wpn":1.6,"range":6,"status":{"effect":"stun","dur":1,"chance":1}},"desc":"A piercing shot that stuns the target in place.","br":4,"x":0.28,"y":0.34,"band":1,"req":["r_a04"]},
-      {"id":"r_a20","name":"Eviscerate","icon":"sk_ra_eviscerate","mp":12,"cd":4,"syn":{"skill":"r_p10","per":0.05},"cast":{"shape":"melee","wpn":2,"execute":0.2,"crit":true},"desc":"A guaranteed-critical strike that finishes off badly wounded foes. +5% damage per point in Deadly Strikes.","br":0,"x":0.72,"y":0.34,"band":1,"req":["r_a00"]},
+      {"id":"r_a13","name":"Caltrops","icon":"sk_ra_caltrops","mp":10,"cd":4,"cast":{"shape":"nova","wpn":1,"radius":2,"status":{"effect":"poison","dur":4,"chance":1}},"desc":"Scatter spiked caltrops in a nova dealing {dmg} that poisons nearby foes.","br":3,"x":0.28,"y":0.34,"band":1,"req":["r_a03"]},
+      {"id":"r_a14","name":"Pin","icon":"sk_ra_pin","mp":9,"cd":4,"cast":{"shape":"bolt","wpn":1.6,"range":6,"status":{"effect":"stun","dur":1,"chance":1}},"desc":"A piercing shot dealing {dmg} that stuns the target in place.","br":4,"x":0.28,"y":0.34,"band":1,"req":["r_a04"]},
+      {"id":"r_a20","name":"Eviscerate","icon":"sk_ra_eviscerate","mp":12,"cd":4,"syn":{"skill":"r_p10","per":0.05},"cast":{"shape":"melee","wpn":2,"execute":0.2,"crit":true},"desc":"A guaranteed-critical strike dealing {dmg} that finishes off badly wounded foes.","br":0,"x":0.72,"y":0.34,"band":1,"req":["r_a00"]},
       {"id":"r_a21","name":"Focus","icon":"sk_ra_focusbuff","mp":11,"cd":6,"cast":{"shape":"self","buff":[{"id":"critUp","dur":5,"mag":0.3},{"id":"dmgUp","dur":5,"mag":0.25}]},"desc":"Center yourself, sharply raising crit and damage for a time.","br":1,"x":0.72,"y":0.34,"band":1,"req":["r_a01"]},
-      {"id":"r_a22","name":"Blink Strike","icon":"sk_ra_blink","mp":18,"cd":5,"syn":{"skill":"r_p12","per":0.05},"cast":{"shape":"teleport","wpn":1.6,"lifesteal":0.2,"range":5},"desc":"Teleport to a foe and cut them, leeching life on the hit. +5% damage per point in Fleet Footed.","br":2,"x":0.72,"y":0.34,"band":1,"req":["r_a02"]},
-      {"id":"r_a23","name":"Venom Nova","icon":"sk_ra_venomnova","mp":13,"cd":5,"syn":{"skill":"r_p13","per":0.05},"cast":{"shape":"nova","wpn":1.4,"radius":3,"status":{"effect":"poison","dur":5,"chance":1}},"desc":"Burst a cloud of poison around you, poisoning every nearby foe. +5% damage per point in Virulent Toxins.","br":3,"x":0.72,"y":0.34,"band":1,"req":["r_a03"]},
-      {"id":"r_a24","name":"Volley","icon":"sk_ra_volley","mp":12,"cd":4,"cast":{"shape":"line","wpn":1.7,"range":7},"desc":"Loose a line of arrows that pierce everything in their path.","br":4,"x":0.72,"y":0.34,"band":1,"req":["r_a04"]},
-      {"id":"r_a30","name":"Death Mark","icon":"sk_ra_deathmark","mp":14,"cd":5,"cast":{"shape":"bolt","wpn":2,"range":6,"crit":true,"status":{"effect":"vuln","dur":5,"chance":1}},"desc":"Brand a foe with a guaranteed-critical mark and make them vulnerable.","br":0,"x":0.28,"y":0.58,"band":2,"req":["r_a10"]},
-      {"id":"r_a31","name":"Fan of Knives","icon":"sk_ra_fanknives","mp":14,"cd":5,"cast":{"shape":"nova","wpn":1.3,"radius":3,"repeat":2},"desc":"Spray blades in a nova that strikes all nearby foes twice.","br":1,"x":0.28,"y":0.58,"band":2,"req":["r_a11"]},
+      {"id":"r_a22","name":"Blink Strike","icon":"sk_ra_blink","mp":18,"cd":5,"syn":{"skill":"r_p12","per":0.05},"cast":{"shape":"teleport","wpn":1.6,"lifesteal":0.2,"range":5},"desc":"Teleport to a foe and cut them for {dmg}, leeching life on the hit.","br":2,"x":0.72,"y":0.34,"band":1,"req":["r_a02"]},
+      {"id":"r_a23","name":"Venom Nova","icon":"sk_ra_venomnova","mp":13,"cd":5,"syn":{"skill":"r_p13","per":0.05},"cast":{"shape":"nova","wpn":1.4,"radius":3,"status":{"effect":"poison","dur":5,"chance":1}},"desc":"Burst a cloud of poison around you for {dmg}, poisoning every nearby foe.","br":3,"x":0.72,"y":0.34,"band":1,"req":["r_a03"]},
+      {"id":"r_a24","name":"Volley","icon":"sk_ra_volley","mp":12,"cd":4,"cast":{"shape":"line","wpn":1.7,"range":7},"desc":"Loose a line of arrows dealing {dmg} that pierce everything in their path.","br":4,"x":0.72,"y":0.34,"band":1,"req":["r_a04"]},
+      {"id":"r_a30","name":"Death Mark","icon":"sk_ra_deathmark","mp":14,"cd":5,"cast":{"shape":"bolt","wpn":2,"range":6,"crit":true,"status":{"effect":"vuln","dur":5,"chance":1}},"desc":"Brand a foe for {dmg} with a guaranteed-critical mark, leaving them vulnerable.","br":0,"x":0.28,"y":0.58,"band":2,"req":["r_a10"]},
+      {"id":"r_a31","name":"Fan of Knives","icon":"sk_ra_fanknives","mp":14,"cd":5,"cast":{"shape":"nova","wpn":1.3,"radius":3,"repeat":2},"desc":"Spray blades in a nova for {dmg}, striking all nearby foes twice.","br":1,"x":0.28,"y":0.58,"band":2,"req":["r_a11"]},
       {"id":"r_a32","name":"Shadow Clone","icon":"sk_ra_shadowclone","mp":15,"cd":7,"syn":{"skill":"r_p32","per":0.05},"cast":{"shape":"summon","buff":[{"id":"dodgeUp","dur":6,"mag":0.25}],"summon":{"kind":"shadow","count":2,"ttl":16}},"desc":"Conjure shadow doubles to fight alongside you and grant dodge. +5% potency per point in Untouchable.","br":2,"x":0.28,"y":0.58,"band":2,"req":["r_a12"]},
-      {"id":"r_a33","name":"Plague Bomb","icon":"sk_ra_plaguebomb","mp":15,"cd":5,"syn":{"skill":"r_p33","per":0.05},"cast":{"shape":"blast","wpn":1.6,"radius":3,"range":6,"status":{"effect":"poison","dur":6,"chance":1}},"desc":"Lob a toxic bomb that blasts an area and poisons all caught in it. +5% damage per point in Plaguebearer.","br":3,"x":0.28,"y":0.58,"band":2,"req":["r_a13"]},
-      {"id":"r_a34","name":"Pierce","icon":"sk_ra_pierce","mp":13,"cd":4,"syn":{"skill":"r_p34","per":0.05},"cast":{"shape":"line","wpn":2.2,"range":8},"desc":"A penetrating long-range shot that ignores armor for big damage. +5% damage per point in Deadeye.","br":4,"x":0.28,"y":0.58,"band":2,"req":["r_a14"]},
-      {"id":"r_a40","name":"Executioner","icon":"sk_ra_executioner","mp":18,"cd":6,"syn":{"skill":"r_p40","per":0.05},"cast":{"shape":"melee","wpn":2.6,"execute":0.3,"crit":true},"desc":"A guaranteed-critical execution that slays non-boss foes under 30% health. +5% damage per point in Assassinate.","br":0,"x":0.72,"y":0.58,"band":2,"req":["r_a20"]},
-      {"id":"r_a41","name":"Twin Strike","icon":"sk_ra_twinclone","mp":17,"cd":5,"cast":{"shape":"melee","wpn":1.5,"lifesteal":0.15,"repeat":3},"desc":"A three-hit dual-blade barrage on one foe that leeches life.","br":1,"x":0.72,"y":0.58,"band":2,"req":["r_a21"]},
+      {"id":"r_a33","name":"Plague Bomb","icon":"sk_ra_plaguebomb","mp":15,"cd":5,"syn":{"skill":"r_p33","per":0.05},"cast":{"shape":"blast","wpn":1.6,"radius":3,"range":6,"status":{"effect":"poison","dur":6,"chance":1}},"desc":"Lob a toxic bomb dealing {dmg} that blasts an area and poisons all caught in it.","br":3,"x":0.28,"y":0.58,"band":2,"req":["r_a13"]},
+      {"id":"r_a34","name":"Pierce","icon":"sk_ra_pierce","mp":13,"cd":4,"syn":{"skill":"r_p34","per":0.05},"cast":{"shape":"line","wpn":2.2,"range":8},"desc":"A penetrating long-range shot that ignores armor to deal {dmg}.","br":4,"x":0.28,"y":0.58,"band":2,"req":["r_a14"]},
+      {"id":"r_a40","name":"Executioner","icon":"sk_ra_executioner","mp":18,"cd":6,"syn":{"skill":"r_p40","per":0.05},"cast":{"shape":"melee","wpn":2.6,"execute":0.3,"crit":true},"desc":"A guaranteed-critical execution dealing {dmg} that slays non-boss foes under 30% health.","br":0,"x":0.72,"y":0.58,"band":2,"req":["r_a20"]},
+      {"id":"r_a41","name":"Twin Strike","icon":"sk_ra_twinclone","mp":17,"cd":5,"cast":{"shape":"melee","wpn":1.5,"lifesteal":0.15,"repeat":3},"desc":"A three-hit dual-blade barrage on one foe for {dmg} that leeches life.","br":1,"x":0.72,"y":0.58,"band":2,"req":["r_a21"]},
       {"id":"r_a42","name":"Vanish","icon":"sk_ra_vanish","mp":16,"cd":7,"cast":{"shape":"teleport","range":7,"buff":[{"id":"dodgeUp","dur":6,"mag":0.4},{"id":"dmgUp","dur":6,"mag":0.3}]},"desc":"Vanish into shadow, teleporting away with a strong dodge and damage buff.","br":2,"x":0.72,"y":0.58,"band":2,"req":["r_a22"]},
-      {"id":"r_a43","name":"Death Rain","icon":"sk_ra_deathrain","mp":18,"cd":6,"syn":{"skill":"r_p43","per":0.05},"cast":{"shape":"blast","wpn":2,"radius":4,"range":7,"status":{"effect":"poison","dur":6,"chance":1}},"desc":"Rain venomous blades across a wide area, poisoning every foe struck. +5% damage per point in Venomlord.","br":3,"x":0.72,"y":0.58,"band":2,"req":["r_a23"]},
-      {"id":"r_a44","name":"Kill Shot","icon":"sk_ra_killshot","mp":17,"cd":5,"syn":{"skill":"r_p44","per":0.05},"cast":{"shape":"line","wpn":2.4,"range":9,"crit":true},"desc":"A guaranteed-critical long-range shot that pierces a line of enemies. +5% damage per point in Sharpshooter.","br":4,"x":0.72,"y":0.58,"band":2,"req":["r_a24"]},
-      {"id":"r_a50","name":"Perfect Vanish","icon":"sk_ra_perfectvanish","mp":24,"cd":10,"cast":{"shape":"teleport","wpn":3.4,"execute":0.4,"range":7,"crit":true,"buff":[{"id":"critUp","dur":6,"mag":0.4}]},"desc":"Strike from nowhere for a guaranteed-critical killing blow that executes wounded non-boss foes and buffs your crit.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a30","r_a40"]},
-      {"id":"r_a51","name":"Thousand Cuts","icon":"sk_ra_thousandcuts","mp":26,"cd":10,"syn":{"skill":"r_p51","per":0.04},"cast":{"shape":"nova","wpn":1.8,"lifesteal":0.12,"radius":4,"repeat":3},"desc":"Unleash a blinding flurry of three nova-wide blade sweeps around you. +4% damage per point in Dual Mastery.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a31","r_a41"]},
-      {"id":"r_a52","name":"Phantom Dash","icon":"sk_ra_phantomdash","mp":25,"cd":11,"cast":{"shape":"teleport","wpn":2.6,"range":8,"buff":[{"id":"dodgeUp","dur":7,"mag":0.45}],"summon":{"kind":"shadow","count":3,"ttl":18}},"desc":"Become a phantom, teleporting through foes while summoning shadows to fight on.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a32","r_a42"]},
-      {"id":"r_a53","name":"Plague Lord","icon":"sk_ra53","mp":28,"cd":11,"syn":{"skill":"r_p53","per":0.04},"cast":{"shape":"nova","wpn":2.4,"lifesteal":0.2,"radius":4,"status":{"effect":"poison","dur":8,"chance":1}},"desc":"Detonate a massive plague nova that poisons and rots every foe around you. +4% damage per point in Apex Plague.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a33","r_a43"]},
-      {"id":"r_a54","name":"Death Rain Volley","icon":"sk_ra54","mp":28,"cd":11,"syn":{"skill":"r_p54","per":0.04},"cast":{"shape":"blast","wpn":3,"radius":4,"range":9,"repeat":2,"crit":true},"desc":"Blanket a huge area in a guaranteed-critical storm of piercing arrows. +4% damage per point in Death Dealer.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a34","r_a44"]}
+      {"id":"r_a43","name":"Death Rain","icon":"sk_ra_deathrain","mp":18,"cd":6,"syn":{"skill":"r_p43","per":0.05},"cast":{"shape":"blast","wpn":2,"radius":4,"range":7,"status":{"effect":"poison","dur":6,"chance":1}},"desc":"Rain venomous blades across a wide area for {dmg}, poisoning every foe struck.","br":3,"x":0.72,"y":0.58,"band":2,"req":["r_a23"]},
+      {"id":"r_a44","name":"Kill Shot","icon":"sk_ra_killshot","mp":17,"cd":5,"syn":{"skill":"r_p44","per":0.05},"cast":{"shape":"line","wpn":2.4,"range":9,"crit":true},"desc":"A guaranteed-critical long-range shot dealing {dmg} that pierces a line of enemies.","br":4,"x":0.72,"y":0.58,"band":2,"req":["r_a24"]},
+      {"id":"r_a50","name":"Perfect Vanish","icon":"sk_ra_perfectvanish","mp":24,"cd":10,"cast":{"shape":"teleport","wpn":3.4,"execute":0.4,"range":7,"crit":true,"buff":[{"id":"critUp","dur":6,"mag":0.4}]},"desc":"Strike from nowhere for a guaranteed-critical killing blow of {dmg} that executes wounded non-boss foes and buffs your crit.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a30","r_a40"]},
+      {"id":"r_a51","name":"Thousand Cuts","icon":"sk_ra_thousandcuts","mp":26,"cd":10,"syn":{"skill":"r_p51","per":0.04},"cast":{"shape":"nova","wpn":1.8,"lifesteal":0.12,"radius":4,"repeat":3},"desc":"Unleash a blinding flurry of three nova-wide blade sweeps around you for {dmg}.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a31","r_a41"]},
+      {"id":"r_a52","name":"Phantom Dash","icon":"sk_ra_phantomdash","mp":25,"cd":11,"cast":{"shape":"teleport","wpn":2.6,"range":8,"buff":[{"id":"dodgeUp","dur":7,"mag":0.45}],"summon":{"kind":"shadow","count":3,"ttl":18}},"desc":"Become a phantom, teleporting through foes for {dmg} while summoning shadows to fight on.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a32","r_a42"]},
+      {"id":"r_a53","name":"Plague Lord","icon":"sk_ra53","mp":28,"cd":11,"syn":{"skill":"r_p53","per":0.04},"cast":{"shape":"nova","wpn":2.4,"lifesteal":0.2,"radius":4,"status":{"effect":"poison","dur":8,"chance":1}},"desc":"Detonate a massive plague nova dealing {dmg} that poisons and rots every foe around you.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a33","r_a43"]},
+      {"id":"r_a54","name":"Death Rain Volley","icon":"sk_ra54","mp":28,"cd":11,"syn":{"skill":"r_p54","per":0.04},"cast":{"shape":"blast","wpn":3,"radius":4,"range":9,"repeat":2,"crit":true},"desc":"Blanket a huge area in a guaranteed-critical storm of piercing arrows dealing {dmg}.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["r_a34","r_a44"]}
     ], 'active'),
   },
 
@@ -4818,35 +4820,35 @@ const SKILL_TREES = {
       {"id":"m_p54","name":"Blood Pact","icon":"sk_m_omniscience","fx":{"spell":0.28,"lifesteal":0.1,"hpRegen":3},"cfx":{"lifesteal":0.06,"spell":0.2},"cond":"lowhp","kflag":"bloodpact","keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: spells cost LIFE, not mana. Heavy lifesteal and regen; wounded: more.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p34","m_p44"]}
     ], 'passive'),
     active: buildWeb([
-      {"id":"m_a00","name":"Firebolt","icon":"sk_ma_firebolt","mp":6,"cd":1,"syn":{"skill":"m_p00","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Hurl a bolt of flame that sets a foe ablaze. +5% damage per point in Kindling.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a01","name":"Frost Shard","icon":"sk_ma_frostshard","mp":6,"cd":1,"syn":{"skill":"m_p01","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"stun","dur":1,"chance":0.6}},"desc":"Fire an icy shard that may freeze a foe. +5% damage per point in Frost Touch.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a02","name":"Spark","icon":"sk_ma_spark","mp":6,"cd":1,"syn":{"skill":"m_p02","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":7},"desc":"Loose a crackling spark at a distant foe. +5% damage per point in Static Charge.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a03","name":"Arcane Missile","icon":"sk_ma_arcaneorb","mp":7,"cd":1,"syn":{"skill":"m_p03","per":0.05},"cast":{"shape":"bolt","spell":1.2,"drainMp":0.1,"range":5},"desc":"Launch an unerring arcane missile that saps mana. +5% damage per point in Arcane Study.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a00","name":"Firebolt","icon":"sk_ma_firebolt","mp":6,"cd":1,"syn":{"skill":"m_p00","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Hurl a bolt of flame that deals {dmg} and sets a foe ablaze.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a01","name":"Frost Shard","icon":"sk_ma_frostshard","mp":6,"cd":1,"syn":{"skill":"m_p01","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"stun","dur":1,"chance":0.6}},"desc":"Fire an icy shard that deals {dmg} and may freeze a foe.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a02","name":"Spark","icon":"sk_ma_spark","mp":6,"cd":1,"syn":{"skill":"m_p02","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":7},"desc":"Loose a crackling spark at a distant foe for {dmg}.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a03","name":"Arcane Missile","icon":"sk_ma_arcaneorb","mp":7,"cd":1,"syn":{"skill":"m_p03","per":0.05},"cast":{"shape":"bolt","spell":1.2,"drainMp":0.1,"range":5},"desc":"Launch an unerring arcane missile that deals {dmg} and saps mana.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"m_a04","name":"Mana Barrier","icon":"sk_ma_barrier","mp":10,"cd":15,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":40}]},"desc":"Conjure a shield that absorbs incoming damage.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"m_a10","name":"Ember Surge","icon":"sk_ma_emberbuff","mp":12,"cd":6,"cast":{"shape":"self","buff":[{"id":"spellUp","dur":5,"mag":0.4}]},"desc":"Empower yourself, sharply increasing spell damage for several seconds.","br":0,"x":0.28,"y":0.34,"band":1,"req":["m_a00"]},
-      {"id":"m_a11","name":"Frost Nova","icon":"sk_ma_frostnova","mp":12,"cd":4,"syn":{"skill":"m_p11","per":0.05},"cast":{"shape":"nova","spell":1,"radius":2,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Erupt with frost, freezing nearby foes. +5% damage per point in Cold Bones.","br":1,"x":0.28,"y":0.34,"band":1,"req":["m_a01"]},
-      {"id":"m_a12","name":"Chain Spark","icon":"sk_ma_chainlightning","mp":12,"cd":3,"syn":{"skill":"m_p12","per":0.05},"cast":{"shape":"chain","spell":1,"range":6,"chain":3},"desc":"Lightning leaps between several nearby foes. +5% damage per point in Conduction.","br":2,"x":0.28,"y":0.34,"band":1,"req":["m_a02"]},
-      {"id":"m_a13","name":"Arcane Blast","icon":"sk_ma_arcanepower","mp":13,"cd":3,"syn":{"skill":"m_p13","per":0.04},"cast":{"shape":"blast","spell":1.2,"radius":2,"range":4},"desc":"Detonate arcane force in a radius around a point. +4% damage per point in Mana Pool.","br":3,"x":0.28,"y":0.34,"band":1,"req":["m_a03"]},
+      {"id":"m_a11","name":"Frost Nova","icon":"sk_ma_frostnova","mp":12,"cd":4,"syn":{"skill":"m_p11","per":0.05},"cast":{"shape":"nova","spell":1,"radius":2,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Erupt with frost for {dmg}, freezing nearby foes.","br":1,"x":0.28,"y":0.34,"band":1,"req":["m_a01"]},
+      {"id":"m_a12","name":"Chain Spark","icon":"sk_ma_chainlightning","mp":12,"cd":3,"syn":{"skill":"m_p12","per":0.05},"cast":{"shape":"chain","spell":1,"range":6,"chain":3},"desc":"Lightning leaps between several nearby foes for {dmg}.","br":2,"x":0.28,"y":0.34,"band":1,"req":["m_a02"]},
+      {"id":"m_a13","name":"Arcane Blast","icon":"sk_ma_arcanepower","mp":13,"cd":3,"syn":{"skill":"m_p13","per":0.04},"cast":{"shape":"blast","spell":1.2,"radius":2,"range":4},"desc":"Detonate arcane force for {dmg} in a radius around a point.","br":3,"x":0.28,"y":0.34,"band":1,"req":["m_a03"]},
       {"id":"m_a14","name":"Blink","icon":"sk_ma_blink","mp":8,"cd":4,"cast":{"shape":"teleport","range":5,"buff":[{"id":"dodgeUp","dur":2,"mag":0.4}]},"desc":"Teleport a short distance to reposition instantly and slip attacks.","br":4,"x":0.28,"y":0.34,"band":1,"req":["m_a04"]},
-      {"id":"m_a20","name":"Fireball","icon":"sk_ma_fireball","mp":15,"cd":3,"syn":{"skill":"m_p10","per":0.05},"cast":{"shape":"blast","spell":1.4,"radius":2,"range":5,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Lob a fireball that explodes and burns all caught in the blast. +5% damage per point in Smoldering.","br":0,"x":0.72,"y":0.34,"band":1,"req":["m_a00"]},
-      {"id":"m_a21","name":"Ice Prison","icon":"sk_ma_iceprison","mp":14,"cd":4,"syn":{"skill":"m_p21","per":0.05},"cast":{"shape":"bolt","spell":1.3,"range":6,"status":{"effect":"stun","dur":3,"chance":1}},"desc":"Lock a foe in ice, stunning it and leaving it vulnerable. +5% damage per point in Permafrost.","br":1,"x":0.72,"y":0.34,"band":1,"req":["m_a01"]},
-      {"id":"m_a22","name":"Voltaic Bolt","icon":"sk_ma_voltaic","mp":14,"cd":3,"syn":{"skill":"m_p22","per":0.05},"cast":{"shape":"line","spell":1.4,"range":7,"status":{"effect":"stun","dur":1,"chance":0.5}},"desc":"A piercing bolt of lightning that may shock a foe senseless. +5% damage per point in Arc Lightning.","br":2,"x":0.72,"y":0.34,"band":1,"req":["m_a02"]},
-      {"id":"m_a23","name":"Arcane Orb","icon":"sk_ma23","mp":15,"cd":3,"syn":{"skill":"m_p23","per":0.05},"cast":{"shape":"bolt","spell":1.6,"drainMp":0.2,"range":5},"desc":"Conjure a heavy orb that strikes hard and drains the target's mana. +5% damage per point in Arcane Surge.","br":3,"x":0.72,"y":0.34,"band":1,"req":["m_a03"]},
+      {"id":"m_a20","name":"Fireball","icon":"sk_ma_fireball","mp":15,"cd":3,"syn":{"skill":"m_p10","per":0.05},"cast":{"shape":"blast","spell":1.4,"radius":2,"range":5,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Lob a fireball that explodes for {dmg}, burning all caught in the blast.","br":0,"x":0.72,"y":0.34,"band":1,"req":["m_a00"]},
+      {"id":"m_a21","name":"Ice Prison","icon":"sk_ma_iceprison","mp":14,"cd":4,"syn":{"skill":"m_p21","per":0.05},"cast":{"shape":"bolt","spell":1.3,"range":6,"status":{"effect":"stun","dur":3,"chance":1}},"desc":"Lock a foe in ice for {dmg}, stunning it and leaving it vulnerable.","br":1,"x":0.72,"y":0.34,"band":1,"req":["m_a01"]},
+      {"id":"m_a22","name":"Voltaic Bolt","icon":"sk_ma_voltaic","mp":14,"cd":3,"syn":{"skill":"m_p22","per":0.05},"cast":{"shape":"line","spell":1.4,"range":7,"status":{"effect":"stun","dur":1,"chance":0.5}},"desc":"A piercing bolt of lightning dealing {dmg} that may shock a foe senseless.","br":2,"x":0.72,"y":0.34,"band":1,"req":["m_a02"]},
+      {"id":"m_a23","name":"Arcane Orb","icon":"sk_ma23","mp":15,"cd":3,"syn":{"skill":"m_p23","per":0.05},"cast":{"shape":"bolt","spell":1.6,"drainMp":0.2,"range":5},"desc":"Conjure a heavy orb that strikes for {dmg} and drains the target's mana.","br":3,"x":0.72,"y":0.34,"band":1,"req":["m_a03"]},
       {"id":"m_a24","name":"Spell Ward","icon":"sk_ma24","mp":16,"cd":15,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":70},{"id":"regen","dur":6,"mag":6}]},"desc":"Raise a barrier and a regenerating ward over yourself.","br":4,"x":0.72,"y":0.34,"band":1,"req":["m_a04"]},
-      {"id":"m_a30","name":"Flame Wave","icon":"sk_ma_flamewave","mp":18,"cd":4,"syn":{"skill":"m_p30","per":0.05},"cast":{"shape":"line","spell":1.6,"range":7,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Send a wave of fire scorching across a line of foes. +5% damage per point in Conflagration.","br":0,"x":0.28,"y":0.58,"band":2,"req":["m_a10"]},
-      {"id":"m_a31","name":"Blizzard","icon":"sk_ma_blizzard","mp":20,"cd":5,"cast":{"shape":"blast","spell":1.5,"radius":3,"range":6,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Call a storm of ice over an area, freezing everything beneath.","br":1,"x":0.28,"y":0.58,"band":2,"req":["m_a11"]},
-      {"id":"m_a32","name":"Thunderstorm","icon":"sk_ma_thunderstorm","mp":20,"cd":4,"syn":{"skill":"m_p32","per":0.04},"cast":{"shape":"chain","spell":1.4,"range":7,"chain":5,"status":{"effect":"stun","dur":1,"chance":0.4}},"desc":"Lightning arcs wildly between many foes around you. +4% damage per point in Overcharge.","br":2,"x":0.28,"y":0.58,"band":2,"req":["m_a12"]},
-      {"id":"m_a33","name":"Disintegrate","icon":"sk_ma_disintegrate","mp":20,"cd":4,"syn":{"skill":"m_p33","per":0.05},"cast":{"shape":"line","spell":1.7,"execute":0.25,"drainMp":0.2,"range":5},"desc":"A withering beam that drains mana and executes weakened foes. +5% damage per point in Arcane Power.","br":3,"x":0.28,"y":0.58,"band":2,"req":["m_a13"]},
+      {"id":"m_a30","name":"Flame Wave","icon":"sk_ma_flamewave","mp":18,"cd":4,"syn":{"skill":"m_p30","per":0.05},"cast":{"shape":"line","spell":1.6,"range":7,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Send a wave of fire for {dmg}, scorching across a line of foes.","br":0,"x":0.28,"y":0.58,"band":2,"req":["m_a10"]},
+      {"id":"m_a31","name":"Blizzard","icon":"sk_ma_blizzard","mp":20,"cd":5,"cast":{"shape":"blast","spell":1.5,"radius":3,"range":6,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Call a storm of ice over an area for {dmg}, freezing everything beneath.","br":1,"x":0.28,"y":0.58,"band":2,"req":["m_a11"]},
+      {"id":"m_a32","name":"Thunderstorm","icon":"sk_ma_thunderstorm","mp":20,"cd":4,"syn":{"skill":"m_p32","per":0.04},"cast":{"shape":"chain","spell":1.4,"range":7,"chain":5,"status":{"effect":"stun","dur":1,"chance":0.4}},"desc":"Lightning arcs wildly between many foes around you for {dmg}.","br":2,"x":0.28,"y":0.58,"band":2,"req":["m_a12"]},
+      {"id":"m_a33","name":"Disintegrate","icon":"sk_ma_disintegrate","mp":20,"cd":4,"syn":{"skill":"m_p33","per":0.05},"cast":{"shape":"line","spell":1.7,"execute":0.25,"drainMp":0.2,"range":5},"desc":"A withering beam dealing {dmg} that drains mana and executes weakened foes.","br":3,"x":0.28,"y":0.58,"band":2,"req":["m_a13"]},
       {"id":"m_a34","name":"Conjure Elemental","icon":"sk_ma_elemental","mp":18,"cd":7,"cast":{"shape":"summon","summon":{"kind":"elemental","count":1,"ttl":18}},"desc":"Summon an arcane elemental to fight at your side.","br":4,"x":0.28,"y":0.58,"band":2,"req":["m_a14"]},
-      {"id":"m_a40","name":"Firestorm","icon":"sk_ma_firestorm","mp":24,"cd":5,"syn":{"skill":"m_p40","per":0.04},"cast":{"shape":"blast","spell":1.8,"radius":3,"range":6,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Rain fire over a wide area, burning all within. +4% damage per point in Living Flame.","br":0,"x":0.72,"y":0.58,"band":2,"req":["m_a20"]},
-      {"id":"m_a41","name":"Ice Age","icon":"sk_ma_iceage","mp":26,"cd":6,"cast":{"shape":"nova","spell":1.7,"radius":3,"status":{"effect":"stun","dur":3,"chance":1}},"desc":"Freeze the battlefield, stunning and weakening every foe near you.","br":1,"x":0.72,"y":0.58,"band":2,"req":["m_a21"]},
-      {"id":"m_a42","name":"Storm Call","icon":"sk_ma_stormcall","mp":26,"cd":5,"syn":{"skill":"m_p42","per":0.04},"cast":{"shape":"random","spell":1.6,"range":8,"count":5,"status":{"effect":"stun","dur":1,"chance":0.5}},"desc":"Summon a barrage of lightning bolts striking foes at random. +4% damage per point in Tesla Field.","br":2,"x":0.72,"y":0.58,"band":2,"req":["m_a22"]},
+      {"id":"m_a40","name":"Firestorm","icon":"sk_ma_firestorm","mp":24,"cd":5,"syn":{"skill":"m_p40","per":0.04},"cast":{"shape":"blast","spell":1.8,"radius":3,"range":6,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Rain fire over a wide area for {dmg}, burning all within.","br":0,"x":0.72,"y":0.58,"band":2,"req":["m_a20"]},
+      {"id":"m_a41","name":"Ice Age","icon":"sk_ma_iceage","mp":26,"cd":6,"cast":{"shape":"nova","spell":1.7,"radius":3,"status":{"effect":"stun","dur":3,"chance":1}},"desc":"Freeze the battlefield for {dmg}, stunning and weakening every foe near you.","br":1,"x":0.72,"y":0.58,"band":2,"req":["m_a21"]},
+      {"id":"m_a42","name":"Storm Call","icon":"sk_ma_stormcall","mp":26,"cd":5,"syn":{"skill":"m_p42","per":0.04},"cast":{"shape":"random","spell":1.6,"range":8,"count":5,"status":{"effect":"stun","dur":1,"chance":0.5}},"desc":"Summon a barrage of lightning bolts for {dmg}, striking foes at random.","br":2,"x":0.72,"y":0.58,"band":2,"req":["m_a22"]},
       {"id":"m_a43","name":"Twin Elemental","icon":"sk_ma_twinelemental","mp":28,"cd":8,"cast":{"shape":"summon","summon":{"kind":"elemental","count":2,"ttl":20,"strong":true}},"desc":"Summon a pair of mighty arcane elementals to wage war for you.","br":3,"x":0.72,"y":0.58,"band":2,"req":["m_a23"]},
       {"id":"m_a44","name":"Arcane Golem","icon":"sk_ma_golem","mp":26,"cd":9,"cast":{"shape":"summon","buff":[{"id":"shield","dur":6,"mag":90}],"summon":{"kind":"golem","count":1,"ttl":22,"strong":true}},"desc":"Conjure a hulking golem to guard you and shield yourself.","br":4,"x":0.72,"y":0.58,"band":2,"req":["m_a24"]},
-      {"id":"m_a50","name":"Meteor","icon":"sk_ma_meteor","mp":34,"cd":8,"syn":{"skill":"m_p40","per":0.05},"cast":{"shape":"blast","spell":2.2,"radius":4,"range":6,"knockback":2,"status":{"effect":"burn","dur":5,"chance":1}},"desc":"Call a colossal meteor that obliterates an area in fire. +5% damage per point in Living Flame.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a30","m_a40"]},
-      {"id":"m_a51","name":"Absolute Zero","icon":"sk_ma_absolutezero","mp":34,"cd":9,"cast":{"shape":"nova","spell":2,"radius":4,"pull":true,"status":{"effect":"stun","dur":4,"chance":1}},"desc":"Plunge the field into killing cold, freezing all foes solid and leaving them vulnerable.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a31","m_a41"]},
-      {"id":"m_a52","name":"Apocalypse","icon":"sk_ma_apocalypse","mp":36,"cd":10,"syn":{"skill":"m_p42","per":0.05},"cast":{"shape":"chain","spell":2,"range":9,"chain":8,"status":{"effect":"stun","dur":2,"chance":0.6}},"desc":"Unleash a cataclysm of chained lightning that ravages the whole battlefield. +5% damage per point in Tesla Field.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a32","m_a42"]},
-      {"id":"m_a53","name":"Disintegration Ray","icon":"sk_ma53","mp":38,"cd":10,"syn":{"skill":"m_p43","per":0.05},"cast":{"shape":"line","spell":2.2,"execute":0.35,"drainMp":0.3,"range":9,"crit":true},"desc":"A perfected annihilation beam that always crits, drains deeply and executes the weak. +5% damage per point in Spell Weave.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a33","m_a43"]},
+      {"id":"m_a50","name":"Meteor","icon":"sk_ma_meteor","mp":34,"cd":8,"syn":{"skill":"m_p40","per":0.05},"cast":{"shape":"blast","spell":2.2,"radius":4,"range":6,"knockback":2,"status":{"effect":"burn","dur":5,"chance":1}},"desc":"Call a colossal meteor that obliterates an area in fire for {dmg}.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a30","m_a40"]},
+      {"id":"m_a51","name":"Absolute Zero","icon":"sk_ma_absolutezero","mp":34,"cd":9,"cast":{"shape":"nova","spell":2,"radius":4,"pull":true,"status":{"effect":"stun","dur":4,"chance":1}},"desc":"Plunge the field into killing cold for {dmg}, freezing all foes solid and leaving them vulnerable.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a31","m_a41"]},
+      {"id":"m_a52","name":"Apocalypse","icon":"sk_ma_apocalypse","mp":36,"cd":10,"syn":{"skill":"m_p42","per":0.05},"cast":{"shape":"chain","spell":2,"range":9,"chain":8,"status":{"effect":"stun","dur":2,"chance":0.6}},"desc":"Unleash a cataclysm of chained lightning that ravages the whole battlefield for {dmg}.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a32","m_a42"]},
+      {"id":"m_a53","name":"Disintegration Ray","icon":"sk_ma53","mp":38,"cd":10,"syn":{"skill":"m_p43","per":0.05},"cast":{"shape":"line","spell":2.2,"execute":0.35,"drainMp":0.3,"range":9,"crit":true},"desc":"A perfected annihilation beam dealing {dmg} that always crits, drains deeply and executes the weak.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a33","m_a43"]},
       {"id":"m_a54","name":"Elemental Army","icon":"sk_ma_elementarmy","mp":40,"cd":12,"cast":{"shape":"summon","buff":[{"id":"shield","dur":8,"mag":140}],"summon":{"kind":"elemental","count":4,"ttl":24,"strong":true}},"desc":"Conjure an entire host of arcane elementals and shield yourself behind them.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["m_a34","m_a44"]}
     ], 'active'),
   },
@@ -4885,36 +4887,36 @@ const SKILL_TREES = {
       {"id":"t_p54","name":"Archon","icon":"sk_t_archon","fx":{"spell":0.25,"pen":0.06,"crit":0.05},"cfx":{"spell":0.15},"cond":"casteroff","trigger":{"on":"crit","effect":{"nextCrit":true}},"keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: +25% holy spell power, +6% pen, +5% crit; caster off-hand: +15% spell. Each holy crit guarantees the next.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["t_p34","t_p44"]}
     ], 'passive'),
     active: buildWeb([
-      {"id":"t_a00","name":"Smite","icon":"sk_ta_smite","mp":7,"cd":2,"syn":{"skill":"t_p00","per":0.05},"cast":{"shape":"melee","wpn":1.3,"spell":0.6,"crit":true},"desc":"A righteous blow infused with holy power that strikes true.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"t_a00","name":"Smite","icon":"sk_ta_smite","mp":7,"cd":2,"syn":{"skill":"t_p00","per":0.05},"cast":{"shape":"melee","wpn":1.3,"spell":0.6,"crit":true},"desc":"A righteous blow infused with holy power that strikes true for {dmg}.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"t_a01","name":"Shield of Faith","icon":"sk_ta_shieldself","mp":8,"cd":11,"cast":{"shape":"self","buff":[{"id":"shield","dur":5,"mag":55},{"id":"defUp","dur":5,"mag":0.25}]},"desc":"Raise a holy ward granting a shield and damage reduction.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"t_a02","name":"Thorn Ward","icon":"sk_ta_aegisfield","mp":8,"cd":15,"syn":{"skill":"t_p02","per":0.05},"cast":{"shape":"self","buff":[{"id":"thorns","dur":6,"mag":35},{"id":"regen","dur":6,"mag":6}]},"desc":"Surround yourself with retaliatory thorns and regeneration.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"t_a03","name":"Mend","icon":"sk_ta_mend","mp":18,"cd":6,"cast":{"shape":"self","heal":{"flat":40,"perLevel":4}},"desc":"Channel divine light to mend your wounds.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"t_a04","name":"Holy Bolt","icon":"sk_ta_smiteline","mp":8,"cd":3,"syn":{"skill":"t_p04","per":0.05},"cast":{"shape":"bolt","spell":1.2,"range":6,"crit":true},"desc":"Hurl a searing bolt of holy light at a distant foe.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"t_a10","name":"Chastise","icon":"sk_ta_chastise","mp":9,"cd":4,"syn":{"skill":"t_p00","per":0.05},"cast":{"shape":"melee","wpn":1.5,"spell":0.8,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"A scorching holy strike that sets the target ablaze.","br":0,"x":0.28,"y":0.34,"band":1,"req":["t_a00"]},
+      {"id":"t_a04","name":"Holy Bolt","icon":"sk_ta_smiteline","mp":8,"cd":3,"syn":{"skill":"t_p04","per":0.05},"cast":{"shape":"bolt","spell":1.2,"range":6,"crit":true},"desc":"Hurl a searing bolt of holy light at a distant foe for {dmg}.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"t_a10","name":"Chastise","icon":"sk_ta_chastise","mp":9,"cd":4,"syn":{"skill":"t_p00","per":0.05},"cast":{"shape":"melee","wpn":1.5,"spell":0.8,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"A scorching holy strike that deals {dmg} and sets the target ablaze.","br":0,"x":0.28,"y":0.34,"band":1,"req":["t_a00"]},
       {"id":"t_a11","name":"Guardian","icon":"sk_ta_guardian","mp":12,"cd":16,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":80},{"id":"thorns","dur":6,"mag":40}]},"desc":"A guardian aura granting a heavy shield and reflective thorns.","br":1,"x":0.28,"y":0.34,"band":1,"req":["t_a01"]},
-      {"id":"t_a12","name":"Retribution","icon":"sk_ta_strike","mp":9,"cd":4,"syn":{"skill":"t_p02","per":0.05},"cast":{"shape":"cleave","wpn":1.6,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A vengeful cleave that leaves struck foes vulnerable.","br":2,"x":0.28,"y":0.34,"band":1,"req":["t_a02"]},
+      {"id":"t_a12","name":"Retribution","icon":"sk_ta_strike","mp":9,"cd":4,"syn":{"skill":"t_p02","per":0.05},"cast":{"shape":"cleave","wpn":1.6,"status":{"effect":"vuln","dur":3,"chance":1}},"desc":"A vengeful cleave dealing {dmg} that leaves struck foes vulnerable.","br":2,"x":0.28,"y":0.34,"band":1,"req":["t_a02"]},
       {"id":"t_a13","name":"Bless","icon":"sk_ta_blessbuff","mp":10,"cd":19,"cast":{"shape":"self","buff":[{"id":"regen","dur":7,"mag":10},{"id":"dmgUp","dur":7,"mag":0.2}]},"desc":"Bless yourself with renewing regeneration and surging might.","br":3,"x":0.28,"y":0.34,"band":1,"req":["t_a03"]},
-      {"id":"t_a14","name":"Holy Fire","icon":"sk_ta_holyfire","mp":12,"cd":5,"syn":{"skill":"t_p04","per":0.05},"cast":{"shape":"nova","spell":1.3,"radius":2,"status":{"effect":"burn","dur":3,"chance":0.8}},"desc":"Erupt in holy flame, scorching all foes around you.","br":4,"x":0.28,"y":0.34,"band":1,"req":["t_a04"]},
-      {"id":"t_a20","name":"Zealous Charge","icon":"sk_ta20","mp":12,"cd":5,"syn":{"skill":"t_p20","per":0.05},"cast":{"shape":"teleport","range":5,"wpn":1.7,"spell":0.9,"lifesteal":0.15,"repeat":2,"buff":[{"id":"dodgeUp","dur":2,"mag":0.3}]},"desc":"Charge the nearest foe, striking twice and draining life. Reaches ranged attackers.","br":0,"x":0.72,"y":0.34,"band":1,"req":["t_a00"]},
+      {"id":"t_a14","name":"Holy Fire","icon":"sk_ta_holyfire","mp":12,"cd":5,"syn":{"skill":"t_p04","per":0.05},"cast":{"shape":"nova","spell":1.3,"radius":2,"status":{"effect":"burn","dur":3,"chance":0.8}},"desc":"Erupt in holy flame for {dmg}, scorching all foes around you.","br":4,"x":0.28,"y":0.34,"band":1,"req":["t_a04"]},
+      {"id":"t_a20","name":"Zealous Charge","icon":"sk_ta20","mp":12,"cd":5,"syn":{"skill":"t_p20","per":0.05},"cast":{"shape":"teleport","range":5,"wpn":1.7,"spell":0.9,"lifesteal":0.15,"repeat":2,"buff":[{"id":"dodgeUp","dur":2,"mag":0.3}]},"desc":"Charge the nearest foe for {dmg}, striking twice and draining life. Reaches ranged attackers.","br":0,"x":0.72,"y":0.34,"band":1,"req":["t_a00"]},
       {"id":"t_a21","name":"Aegis Field","icon":"sk_ta21","mp":14,"cd":22,"cast":{"shape":"self","buff":[{"id":"shield","dur":8,"mag":130},{"id":"defUp","dur":8,"mag":0.35},{"id":"regen","dur":8,"mag":10}]},"desc":"Project a vast aegis granting a great shield, defense, and regeneration.","br":1,"x":0.72,"y":0.34,"band":1,"req":["t_a01"]},
-      {"id":"t_a22","name":"Condemn","icon":"sk_ta_condemn","mp":12,"cd":5,"syn":{"skill":"t_p22","per":0.05},"cast":{"shape":"blast","spell":1.4,"radius":2,"range":5,"knockback":2,"status":{"effect":"stun","dur":2,"chance":0.7}},"desc":"Hurl a damning blast that knocks back and stuns the guilty.","br":2,"x":0.72,"y":0.34,"band":1,"req":["t_a02"]},
-      {"id":"t_a23","name":"Consecrate","icon":"sk_ta_consecrate","mp":18,"cd":6,"syn":{"skill":"t_p23","per":0.05},"cast":{"shape":"nova","spell":1,"radius":3,"heal":{"flat":50,"perLevel":4},"buff":[{"id":"regen","dur":6,"mag":12}]},"desc":"Hallow the ground, searing foes while mending your wounds.","br":3,"x":0.72,"y":0.34,"band":1,"req":["t_a03"]},
-      {"id":"t_a24","name":"Judgment","icon":"sk_ta_judgment","mp":14,"cd":5,"syn":{"skill":"t_p24","per":0.05},"cast":{"shape":"bolt","spell":1.7,"execute":0.25,"range":7,"crit":true},"desc":"Pass divine judgment on a foe, executing the weak.","br":4,"x":0.72,"y":0.34,"band":1,"req":["t_a04"]},
-      {"id":"t_a30","name":"Hammer of Wrath","icon":"sk_ta_hammer","mp":16,"cd":6,"syn":{"skill":"t_p30","per":0.05},"cast":{"shape":"blast","wpn":2,"spell":1.2,"radius":2,"range":6,"crit":true,"status":{"effect":"stun","dur":2,"chance":1}},"desc":"Hurl a holy hammer that detonates, stunning all it strikes.","br":0,"x":0.28,"y":0.58,"band":2,"req":["t_a10"]},
+      {"id":"t_a22","name":"Condemn","icon":"sk_ta_condemn","mp":12,"cd":5,"syn":{"skill":"t_p22","per":0.05},"cast":{"shape":"blast","spell":1.4,"radius":2,"range":5,"knockback":2,"status":{"effect":"stun","dur":2,"chance":0.7}},"desc":"Hurl a damning blast dealing {dmg} that knocks back and stuns the guilty.","br":2,"x":0.72,"y":0.34,"band":1,"req":["t_a02"]},
+      {"id":"t_a23","name":"Consecrate","icon":"sk_ta_consecrate","mp":18,"cd":6,"syn":{"skill":"t_p23","per":0.05},"cast":{"shape":"nova","spell":1,"radius":3,"heal":{"flat":50,"perLevel":4},"buff":[{"id":"regen","dur":6,"mag":12}]},"desc":"Hallow the ground for {dmg}, searing foes while mending your wounds.","br":3,"x":0.72,"y":0.34,"band":1,"req":["t_a03"]},
+      {"id":"t_a24","name":"Judgment","icon":"sk_ta_judgment","mp":14,"cd":5,"syn":{"skill":"t_p24","per":0.05},"cast":{"shape":"bolt","spell":1.7,"execute":0.25,"range":7,"crit":true},"desc":"Pass divine judgment on a foe for {dmg}, executing the weak.","br":4,"x":0.72,"y":0.34,"band":1,"req":["t_a04"]},
+      {"id":"t_a30","name":"Hammer of Wrath","icon":"sk_ta_hammer","mp":16,"cd":6,"syn":{"skill":"t_p30","per":0.05},"cast":{"shape":"blast","wpn":2,"spell":1.2,"radius":2,"range":6,"crit":true,"status":{"effect":"stun","dur":2,"chance":1}},"desc":"Hurl a holy hammer that detonates for {dmg}, stunning all it strikes.","br":0,"x":0.28,"y":0.58,"band":2,"req":["t_a10"]},
       {"id":"t_a31","name":"Twin Guardian","icon":"sk_ta_twinguardian","mp":18,"cd":8,"cast":{"shape":"summon","buff":[{"id":"shield","dur":8,"mag":120}],"summon":{"kind":"spirit","count":2,"ttl":6}},"desc":"Summon two guardian spirits to fight at your side behind a holy shield.","br":1,"x":0.28,"y":0.58,"band":2,"req":["t_a11"]},
-      {"id":"t_a32","name":"Holy Ground","icon":"sk_ta_holyground","mp":16,"cd":6,"syn":{"skill":"t_p32","per":0.05},"cast":{"shape":"nova","spell":1.3,"radius":3,"status":{"effect":"vuln","dur":4,"chance":1},"buff":[{"id":"thorns","dur":8,"mag":60}]},"desc":"Sanctify the ground, weakening foes and cloaking you in thorns.","br":2,"x":0.28,"y":0.58,"band":2,"req":["t_a12"]},
+      {"id":"t_a32","name":"Holy Ground","icon":"sk_ta_holyground","mp":16,"cd":6,"syn":{"skill":"t_p32","per":0.05},"cast":{"shape":"nova","spell":1.3,"radius":3,"status":{"effect":"vuln","dur":4,"chance":1},"buff":[{"id":"thorns","dur":8,"mag":60}]},"desc":"Sanctify the ground for {dmg}, weakening foes and cloaking you in thorns.","br":2,"x":0.28,"y":0.58,"band":2,"req":["t_a12"]},
       {"id":"t_a33","name":"Sanctuary","icon":"sk_ta_sanctuary","mp":20,"cd":22,"syn":{"skill":"t_p33","per":0.05},"cast":{"shape":"self","heal":{"flat":70,"perLevel":6},"buff":[{"id":"shield","dur":8,"mag":150},{"id":"regen","dur":8,"mag":14}]},"desc":"Invoke a sanctuary that heals greatly and shelters you behind light.","br":3,"x":0.28,"y":0.58,"band":2,"req":["t_a13"]},
-      {"id":"t_a34","name":"Wrath of Heaven","icon":"sk_ta_wrath","mp":18,"cd":6,"syn":{"skill":"t_p34","per":0.05},"cast":{"shape":"line","spell":2,"range":6,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Call down a searing beam of holy wrath that pierces and burns.","br":4,"x":0.28,"y":0.58,"band":2,"req":["t_a14"]},
-      {"id":"t_a40","name":"Divine Storm","icon":"sk_ta_divinestorm","mp":22,"cd":6,"syn":{"skill":"t_p40","per":0.05},"cast":{"shape":"nova","wpn":2,"spell":1,"lifesteal":0.2,"radius":3,"repeat":2},"desc":"Whirl in a storm of holy blades, striking all around you twice and draining life.","br":0,"x":0.72,"y":0.58,"band":2,"req":["t_a20"]},
+      {"id":"t_a34","name":"Wrath of Heaven","icon":"sk_ta_wrath","mp":18,"cd":6,"syn":{"skill":"t_p34","per":0.05},"cast":{"shape":"line","spell":2,"range":6,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Call down a searing beam of holy wrath that deals {dmg}, piercing and burning.","br":4,"x":0.28,"y":0.58,"band":2,"req":["t_a14"]},
+      {"id":"t_a40","name":"Divine Storm","icon":"sk_ta_divinestorm","mp":22,"cd":6,"syn":{"skill":"t_p40","per":0.05},"cast":{"shape":"nova","wpn":2,"spell":1,"lifesteal":0.2,"radius":3,"repeat":2},"desc":"Whirl in a storm of holy blades for {dmg}, striking all around you twice and draining life.","br":0,"x":0.72,"y":0.58,"band":2,"req":["t_a20"]},
       {"id":"t_a41","name":"Bastion","icon":"sk_ta_bastion","mp":24,"cd":31,"cast":{"shape":"self","buff":[{"id":"shield","dur":10,"mag":220},{"id":"defUp","dur":10,"mag":0.5},{"id":"thorns","dur":10,"mag":80},{"id":"regen","dur":10,"mag":14}]},"desc":"Become an unbreakable bastion with an immense shield, defense, and thorns.","br":1,"x":0.72,"y":0.58,"band":2,"req":["t_a21"]},
-      {"id":"t_a42","name":"Redeemer","icon":"sk_ta_redeemer","mp":20,"cd":7,"syn":{"skill":"t_p42","per":0.05},"cast":{"shape":"cleave","wpn":2.2,"spell":1,"status":{"effect":"vuln","dur":4,"chance":1},"buff":[{"id":"thorns","dur":8,"mag":90}]},"desc":"A redeeming sweep that weakens foes and wreathes you in punishing thorns.","br":2,"x":0.72,"y":0.58,"band":2,"req":["t_a22"]},
-      {"id":"t_a43","name":"Holy Nova","icon":"sk_ta_holynova","mp":22,"cd":6,"syn":{"skill":"t_p43","per":0.05},"cast":{"shape":"nova","spell":1.5,"radius":3,"heal":{"pctDmg":0.4},"buff":[{"id":"regen","dur":8,"mag":16}]},"desc":"Detonate a nova of holy light, searing foes and healing for a share of the damage.","br":3,"x":0.72,"y":0.58,"band":2,"req":["t_a23"]},
-      {"id":"t_a44","name":"Sunbeam","icon":"sk_ta_sunbeam","mp":22,"cd":6,"syn":{"skill":"t_p44","per":0.05},"cast":{"shape":"line","spell":2.4,"execute":0.3,"range":7,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Channel a piercing sunbeam that incinerates and executes the wounded.","br":4,"x":0.72,"y":0.58,"band":2,"req":["t_a24"]},
+      {"id":"t_a42","name":"Redeemer","icon":"sk_ta_redeemer","mp":20,"cd":7,"syn":{"skill":"t_p42","per":0.05},"cast":{"shape":"cleave","wpn":2.2,"spell":1,"status":{"effect":"vuln","dur":4,"chance":1},"buff":[{"id":"thorns","dur":8,"mag":90}]},"desc":"A redeeming sweep dealing {dmg} that weakens foes and wreathes you in punishing thorns.","br":2,"x":0.72,"y":0.58,"band":2,"req":["t_a22"]},
+      {"id":"t_a43","name":"Holy Nova","icon":"sk_ta_holynova","mp":22,"cd":6,"syn":{"skill":"t_p43","per":0.05},"cast":{"shape":"nova","spell":1.5,"radius":3,"heal":{"pctDmg":0.4},"buff":[{"id":"regen","dur":8,"mag":16}]},"desc":"Detonate a nova of holy light for {dmg}, searing foes and healing for a share of the damage.","br":3,"x":0.72,"y":0.58,"band":2,"req":["t_a23"]},
+      {"id":"t_a44","name":"Sunbeam","icon":"sk_ta_sunbeam","mp":22,"cd":6,"syn":{"skill":"t_p44","per":0.05},"cast":{"shape":"line","spell":2.4,"execute":0.3,"range":7,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Channel a piercing sunbeam dealing {dmg} that incinerates and executes the wounded.","br":4,"x":0.72,"y":0.58,"band":2,"req":["t_a24"]},
       {"id":"t_a50","name":"Avatar","icon":"sk_ta_avatar","mp":30,"cd":29,"syn":{"skill":"t_p50","per":0.04},"cast":{"shape":"self","buff":[{"id":"dmgUp","dur":10,"mag":0.5},{"id":"critUp","dur":10,"mag":0.3},{"id":"lifestealUp","dur":10,"mag":0.2},{"id":"shield","dur":10,"mag":180}]},"desc":"Ascend into a radiant avatar, surging with holy power, crit, and lifesteal.","br":0,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a30","t_a40"]},
       {"id":"t_a51","name":"Celestial Host","icon":"sk_ta_celestialhost","mp":30,"cd":12,"cast":{"shape":"summon","buff":[{"id":"shield","dur":5,"mag":260},{"id":"defUp","dur":5,"mag":0.4}],"summon":{"kind":"spirit","count":3,"ttl":8,"strong":true}},"desc":"Call down a host of celestial guardians behind a colossal shield.","br":1,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a31","t_a41"]},
       {"id":"t_a52","name":"Avatar of Vengeance","icon":"sk_ta_archon","mp":28,"cd":35,"syn":{"skill":"t_p52","per":0.04},"cast":{"shape":"self","buff":[{"id":"thorns","dur":12,"mag":160},{"id":"defUp","dur":12,"mag":0.3},{"id":"dmgUp","dur":12,"mag":0.3},{"id":"shield","dur":12,"mag":200}]},"desc":"Become an avatar of vengeance, hurling back devastating thorns behind a holy shield.","br":2,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a32","t_a42"]},
-      {"id":"t_a53","name":"Light of Heaven","icon":"sk_ta_lightofheaven","mp":28,"cd":9,"syn":{"skill":"t_p53","per":0.04},"cast":{"shape":"nova","spell":1.8,"radius":4,"heal":{"flat":120,"perLevel":8},"buff":[{"id":"shield","dur":4,"mag":240},{"id":"regen","dur":4,"mag":20}]},"desc":"Unleash the light of heaven, searing all foes and flooding you with healing and protection.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a33","t_a43"]},
-      {"id":"t_a54","name":"Judgment Day","icon":"sk_ta_judgmentday","mp":34,"cd":11,"syn":{"skill":"t_p54","per":0.04},"cast":{"shape":"nova","spell":3.2,"execute":0.35,"radius":4,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Call down judgment day, a cataclysm of holy fire that obliterates and executes all around you.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a34","t_a44"]}
+      {"id":"t_a53","name":"Light of Heaven","icon":"sk_ta_lightofheaven","mp":28,"cd":9,"syn":{"skill":"t_p53","per":0.04},"cast":{"shape":"nova","spell":1.8,"radius":4,"heal":{"flat":120,"perLevel":8},"buff":[{"id":"shield","dur":4,"mag":240},{"id":"regen","dur":4,"mag":20}]},"desc":"Unleash the light of heaven for {dmg}, searing all foes and flooding you with healing and protection.","br":3,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a33","t_a43"]},
+      {"id":"t_a54","name":"Judgment Day","icon":"sk_ta_judgmentday","mp":34,"cd":11,"syn":{"skill":"t_p54","per":0.04},"cast":{"shape":"nova","spell":3.2,"execute":0.35,"radius":4,"crit":true,"status":{"effect":"burn","dur":4,"chance":1}},"desc":"Call down judgment day for {dmg}, a cataclysm of holy fire that obliterates and executes all around you.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["t_a34","t_a44"]}
     ], 'active'),
   },
 };
@@ -6459,13 +6461,13 @@ window.gameState = function gameState(radius) {
       range: c ? (c.range || null) : null,
       radius: c ? (c.radius || null) : null,
     };
-    // Damage preview: the min–max a single activation deals to a foe at this depth
-    // (crit and chance procs excluded, multi-hit folded in), the effective sustained
-    // DPS (crit + cast rate factored), and the CDR-adjusted cooldown — what the
-    // skill's tooltip shows. Null for non-damage actives. See the "damage" topic in
-    // gameGuide() and skillDamagePreview() for the exact model.
+    // Damage preview mirrors the tooltip: `damage` is the PER-HIT range (crit, cast
+    // rate and chance procs excluded) with `hits` = strikes per cast and `base` = the
+    // pre-buff/pre-armour range shown in the description; `dps` folds crit + cast rate;
+    // `cooldownFull` is the CDR-adjusted recharge. Null for non-damage actives. See the
+    // "damage" topic in gameGuide() and skillDamagePreview() for the exact model.
     const dp = (typeof skillDamagePreview === 'function') ? skillDamagePreview(node, rank) : null;
-    o.damage = dp ? { min: dp.min, max: dp.max } : null;
+    o.damage = dp ? { min: dp.min, max: dp.max, hits: dp.strikes, base: { min: dp.baseMin, max: dp.baseMax } } : null;
     o.dps = dp ? Math.round(dp.dps) : null;
     o.cooldownFull = (typeof effectiveSkillCd === 'function') ? Math.round(effectiveSkillCd(node, rank) * 10) / 10 : (node ? node.cd : null);
     if (idx != null) {
@@ -6824,8 +6826,9 @@ window.gameGuide = function gameGuide(topic) {
       `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
       `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
       `So NO — Attack does not feed everything: ATK + weapon Damage power auto-attacks and martial skills only; spells ignore them and live on Spirit + Spell Power. The three % amps (IDMG / Skill Power / Spell Power) are one-per-source and never cross over.`,
+      `RANGES & ROLLS: weapons and spells both deal a RANGE, not one fixed number. A weapon rolls its printed min–max; a SPELL now rolls too — around its base by a per-spell spread (a focused magic missile rolls tight, a chaotic meteor rolls wild), so no two spells feel the same. Each roll is taken at fine (fractional) precision BEFORE your multipliers apply, so even a small weapon produces organic, varied hits instead of two or three repeating numbers — the damage finally dealt is still a whole number. Every range is symmetric about the old value, so averages (and balance) are unchanged; only the texture is new.`,
       `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). CDR is a RATING, not a flat %: the fraction it actually cuts off a cooldown is CDR/(CDR+100), so it climbs toward but never reaches 100% (no cap — the math just can't get there), and the hero sheet / tooltips show that real % — a cooldown drops by exactly the amount shown. gameState().player.offense reports skillPower / spellPower / increasedDmg / attackSpeed / castSpeed, the raw cooldownRating, and cooldownReduction as the 0..1 fraction it yields.`,
-      `TOOLTIP READOUT: each damage skill's tooltip (and its skill-tree card) shows two pills versus a typical foe at your current depth. "Damage lo–hi" is the absolute min to absolute max a single ACTIVATION deals to that foe — the weapon roll, ATK, your damage attributes, gear IDMG/Skill/Spell Power, the skill's coefficient & rank, synergies and the foe's armour are all folded in, and a multi-strike skill's hits are summed into the range — but crit and other chance-only effects (status/elemental procs) and external buffs (shrines, food, war-cries) are EXCLUDED, so it's a stable floor–ceiling. "DPS" is the effective sustained damage per second: that range's midpoint, lifted by your crit chance × crit damage, times how many times a second the skill can be cast. The cooldown shown in the tooltip is the real one AFTER your Cooldown Reduction / Cast Speed. Big numbers abbreviate (1.2k, 3.4M). gameState() skills carry { damage:{min,max}, dps, cooldownFull }.`,
+      `TOOLTIP READOUT: each damage skill's description reads "deals X to Y damage" — its ABSOLUTE base per-hit range (the ability's own damage: rank, coefficient and your caster power — weapon roll/ATK/attributes for a skill, Spirit for a spell — before ANY situational buff, depth armour or crit). Below it sit two pills versus a typical foe at your current depth. "Damage lo–hi per hit" is that base after everything PERSISTENT except crit and cast rate — class %, gear IDMG/Skill/Spell Power, the difficulty scar and the foe's armour — the honest number that pops over a foe on ONE strike. A multi-strike cast shows a "×N" badge instead of inflating the range; status/elemental procs and transient buffs (shrines, food, war-cries) stay out. "DPS" is the effective sustained damage per second: that per-hit range's midpoint, lifted by crit chance × crit damage, times hits-per-cast, times how often the skill can be cast (cooldown after Cooldown Reduction / Cast Speed). Crit and cast rate live ONLY in DPS — never in the Damage pill. On rank-up the preview shows the new base range, not a bare %. Big numbers abbreviate (1.2k, 3.4M). gameState() skills carry { damage:{min,max,hits,base:{min,max}}, dps, cooldownFull }.`,
       `Gear gating is thoughtful: a MELEE/RANGED weapon can only roll Skill Power & Attack Speed; a WAND/STAFF only Spell Power & Cast Speed. Gloves & rings lean martial (Skill Power); amulets & caster off-hands lean arcane (Spell/Cast). So the weapon you wield already points your build at one lane.`,
     ],
     autocast: [
@@ -18865,9 +18868,12 @@ function getWeaponDamage() {
   const w = activeWeapon();   // a red/ignored weapon gives no damage — bare fists
   if (w && w.stats.DMG) {
     const [lo, hi] = w.stats.DMG.split('-').map(Number);
-    return rnd(lo, hi);
+    // Fractional roll (see systems/damageRoll.js): a continuous value kept to ~3 sig
+    // figs, so a tight weapon range still yields organic damage once buffs scale it —
+    // not just two or three discrete numbers. The final hit is rounded by the caller.
+    return rollDamage(lo, hi, Math.random);
   }
-  return rnd(1, 3); // bare fists
+  return rollDamage(1, 3, Math.random); // bare fists
 }
 
 // Sum a flat stat (ATK, DEF, etc.) across all equipped gear. Titan's Grip lets you
@@ -19022,35 +19028,38 @@ function rollPlayerHit(e) {
   // otherwise roll crit against THIS foe's level (rating-vs-level system).
   const isCrit = skillPrimed.crit || isCritical(Math.random(), critChanceVs(e));
   if (skillPrimed.crit) skillPrimed.crit = false;
+  // Keep the whole chain in floating point so the weapon's fractional roll survives to
+  // the end — rounding after every step would collapse a small range back into a
+  // handful of integers once buffs scale it. One Math.round at the finish; ≥1 floor.
   let dmg = getWeaponDamage() + player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
-  if (buffs.power) dmg = Math.round(dmg * 1.5);
-  if (foodFx('dmgPct')) dmg = Math.round(dmg * (1 + foodFx('dmgPct'))); // ramen damage buff
-  dmg = Math.round(dmg * classDmgDealtMult()); // Warrior + damage passives
-  if (diffClearedCount()) dmg = Math.round(dmg * diffDebuffMult()); // permanent per-tier scar
+  if (buffs.power) dmg *= 1.5;
+  if (foodFx('dmgPct')) dmg *= 1 + foodFx('dmgPct'); // ramen damage buff
+  dmg *= classDmgDealtMult(); // Warrior + damage passives
+  if (diffClearedCount()) dmg *= diffDebuffMult(); // permanent per-tier scar
   const dmgUp = buffMag('dmgUp'); // War Cry / Frenzy / Avatar self-buffs
-  if (dmgUp > 0) dmg = Math.round(dmg * (1 + dmgUp));
+  if (dmgUp > 0) dmg *= 1 + dmgUp;
   // Increased Damage % (gear): a flat multiplier on every hit.
   const idmg = totalStat('IDMG');
-  if (idmg > 0) dmg = Math.round(dmg * (1 + idmg / 100));
+  if (idmg > 0) dmg *= 1 + idmg / 100;
   // Dmg vs Bosses % (gear): extra punch against bosses and elites.
   const bossDmg = totalStat('BOSSDMG');
-  if (bossDmg > 0 && e && (e.isBoss || e.isElite)) dmg = Math.round(dmg * (1 + bossDmg / 100));
+  if (bossDmg > 0 && e && (e.isBoss || e.isElite)) dmg *= 1 + bossDmg / 100;
   // Zeal/Fervor (Templar): more damage the lower your health.
   const zeal = skillBonus('zeal');
-  if (zeal > 0) dmg = Math.round(dmg * (1 + zeal * (1 - player.hp / player.maxHp)));
+  if (zeal > 0) dmg *= 1 + zeal * (1 - player.hp / player.maxHp);
   // Opportunist/Executioner (skill) + Execute % (gear): bonus to badly-wounded foes.
   const lowHp = skillBonus('lowHpDmg') + totalStat('EXEC') / 100;
-  if (lowHp > 0 && e && e.hp < e.maxHp * 0.35) dmg = Math.round(dmg * (1 + lowHp));
-  if (isCrit) dmg = Math.round(dmg * critDamageMult());
+  if (lowHp > 0 && e && e.hp < e.maxHp * 0.35) dmg *= 1 + lowHp;
+  if (isCrit) dmg *= critDamageMult();
   // Enemy armor mitigates a slice of the blow; Armor Pen % (gear) ignores part of
   // it. Armor is light on rank-and-file foes and heavier on elites/bosses, so Pen
   // shines against the toughest enemies (and pairs naturally with Dmg vs Bosses).
   const armor = enemyArmorPct(e);
   if (armor > 0) {
     const pen = armorPenFrac();
-    dmg = Math.round(dmg * (1 - armor * (1 - pen)));
+    dmg *= 1 - armor * (1 - pen);
   }
-  return { dmg: Math.max(1, dmg), isCrit };
+  return { dmg: Math.max(1, Math.round(dmg)), isCrit };
 }
 
 // Fraction of a player's blow an enemy shrugs off via armor. Modest by default so
@@ -19723,9 +19732,14 @@ function skillPhysDamage(e, mult, rank, forceCrit) {
   return Math.max(1, Math.round(dmg));
 }
 // One spell-based blow for an active (scales with Spirit + spell passives/buffs). No
-// per-hit cap either.
-function skillSpellDamage(e, cast, mult, rank) {
-  let dmg = applyOffenseMods(spellBase(cast.flat || 12, cast.perLvl || 2) * mult * rankScale(rank), e, false, true);
+// per-hit cap either. Spells roll a RANGE now: `spellBase` is the CENTER and `spread`
+// (per-spell, see data/spellSpread.js) widens it symmetrically, so the average — and
+// thus balance — is unchanged and only the variance is new. The rolled base is a
+// fractional value (systems/damageRoll.js) so it survives the multiplier chain.
+function skillSpellDamage(e, cast, mult, rank, spread) {
+  const center = spellBase(cast.flat || 12, cast.perLvl || 2);
+  const [lo, hi] = spreadRange(center, spread || 0);
+  let dmg = applyOffenseMods(rollDamage(lo, hi, Math.random) * mult * rankScale(rank), e, false, true);
   return Math.max(1, Math.round(dmg));
 }
 
@@ -19766,8 +19780,9 @@ function skillDamagePreview(node, rank) {
 
   const r = rank || 1;
   // Multi-strike: a cast that lands several hits on the SAME target (cast.repeat);
-  // rank-10 "Mastered" adds one more. Folded into the range below so the pill shows
-  // the whole damage ONE activation does to a foe, not a single tick of it.
+  // rank-10 "Mastered" adds one more. Reported SEPARATELY (as a ×N badge): the Damage
+  // range below is PER HIT — the number that pops over a foe on each strike — not the
+  // whole activation. DPS folds the strikes back in (hitsPerCast).
   let strikes = Math.max(1, c.repeat || 1);
   if ((rank || 0) >= 10 && c.repeat) strikes = c.repeat + 1;
 
@@ -19779,38 +19794,47 @@ function skillDamagePreview(node, rank) {
   const armor = enemyArmorPct(foe);
   const armorFactor = armor > 0 ? (1 - armor * (1 - armorPenFrac())) : 1;
 
-  // Per-strike min/max — the honest floor/ceiling of a single hit, crit and all
-  // chance-based procs (status, elemental) EXCLUDED, and transient/external buffs
-  // (shrine Power, food, war-cry) left out so the range is a stable baseline.
-  let hitMin, hitMax;
+  // Two PER-HIT ranges, each crit- and cast-rate-free:
+  //   • BASE (baseMin..baseMax) — the ability's own damage: rank + coefficient (+ your
+  //     ATK / Spirit / Skill|Spell Power, the way a weapon's own damage scales) folded
+  //     in, but NOTHING situational — no gear damage%, class %, difficulty scar, depth
+  //     armour or crit. This is the "deals X to Y" printed in the description and the
+  //     number the rank-up preview compares.
+  //   • DAMAGE (hitMin..hitMax) — BASE times everything persistent EXCEPT crit and cast
+  //     rate: class %, gear Increased Damage, the difficulty scar and this depth's
+  //     armour. Transient shrine/food/war-cry buffs stay out so the readout is stable.
+  let baseMin, baseMax, off;
   if (isWeapon) {
     const [wLo, wHi] = weaponDmgRange();
     const flat = player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
     const mult = c.wpn * synM * rs * skillPowerMult();
+    baseMin = (wLo + flat) * mult;
+    baseMax = (wHi + flat) * mult;
     // The always-on weapon multipliers from applyOffenseMods: class damage,
     // difficulty scar, gear IDMG, armour (crit + situational spikes excluded).
-    const off = classDmgDealtMult() * diffDebuffMult() * (1 + totalStat('IDMG') / 100) * armorFactor;
-    hitMin = Math.max(1, Math.round((wLo + flat) * mult * off));
-    hitMax = Math.max(1, Math.round((wHi + flat) * mult * off));
+    off = classDmgDealtMult() * diffDebuffMult() * (1 + totalStat('IDMG') / 100) * armorFactor;
   } else {
-    // Spells have no roll — spellBase is deterministic, so hitMin === hitMax.
-    const base = spellBase(c.flat || 12, c.perLvl || 2) * c.spell * synM * rs;
-    const off = diffDebuffMult() * armorFactor; // spells skip class-dmg & IDMG (isSpell path)
-    hitMin = hitMax = Math.max(1, Math.round(base * off));
+    // Spells roll a range now: spellBase is the CENTER, the per-spell spread widens it.
+    const centerBase = spellBase(c.flat || 12, c.perLvl || 2) * c.spell * synM * rs;
+    [baseMin, baseMax] = spreadRange(centerBase, spellSpreadFor(node.id));
+    off = diffDebuffMult() * armorFactor; // spells skip class-dmg & IDMG (isSpell path)
   }
-  // Fold the strikes in: the absolute min/max a single ACTIVATION deals to a foe.
-  const min = hitMin * strikes;
-  const max = hitMax * strikes;
+  const hitMin = Math.max(1, Math.round(baseMin * off));
+  const hitMax = Math.max(1, Math.round(baseMax * off));
 
   const critChance = critChanceVs(foe);
   const critMult = critDamageMult();
-  // Effective DPS = the range's midpoint, lifted by the expected crit multiplier,
-  // times how many times a second the skill can actually be cast (its cooldown after
-  // CDR / Cast Speed / the rank-7 Honed cut, honouring the 0.5s floor). Strikes are
-  // already in min/max, so hitsPerCast is 1 here.
+  // Effective DPS = the PER-HIT range's midpoint, lifted by the expected crit
+  // multiplier, times hits-per-cast (strikes), times how often the skill can fire (its
+  // cooldown after CDR / Cast Speed / the rank-7 Honed cut, honouring the 0.5s floor).
+  // The only readout that folds in crit and cast rate.
   const effCd = effectiveSkillCd(node, r);
-  const dps = effectiveDps({ min, max, critChance, critMult, hitsPerCast: 1, castsPerSec: 1 / effCd });
-  return { min, max, dps, effectiveCd: effCd };
+  const dps = effectiveDps({ min: hitMin, max: hitMax, critChance, critMult, hitsPerCast: strikes, castsPerSec: 1 / effCd });
+  return {
+    min: hitMin, max: hitMax,                                              // per-hit Damage range (no crit/cadence)
+    baseMin: Math.max(1, Math.round(baseMin)), baseMax: Math.max(1, Math.round(baseMax)), // per-hit absolute base
+    strikes, dps, effectiveCd: effCd,
+  };
 }
 
 // The recharge an active ACTUALLY has right now, in seconds: its base cooldown
@@ -19833,8 +19857,33 @@ function fmtCd(secs) { return `${Math.round((secs || 0) * 10) / 10}`; }
 function skillDmgTipLine(node, rank) {
   const p = skillDamagePreview(node, rank);
   if (!p) return '';
-  return `<div class='ht-sub'>Damage <b>${formatDamageRange(p.min, p.max)}</b></div>`
+  // Damage = per-HIT range (no crit, no cast rate). A multi-strike cast shows a ×N
+  // badge instead of inflating the range. DPS folds in crit + how often it fires.
+  const hits = p.strikes > 1 ? ` <span style='opacity:0.75'>(×${p.strikes})</span>` : '';
+  return `<div class='ht-sub'>Damage <b>${formatDamageRange(p.min, p.max)}</b> <span style='opacity:0.6'>per hit</span>${hits}</div>`
     + `<div class='ht-sub'>DPS <b style='color:var(--gold)'>${abbreviateNumber(p.dps)}</b></div>`;
+}
+
+// A skill/spell node's flavor description prepared for display. Two touch-ups:
+//   • the redundant "+N% damage per point in X" synergy sentence is stripped — it's
+//     already shown as its own Synergy pill, per the copy cleanup.
+//   • for a direct-damage active, its ABSOLUTE base per-hit damage range (rank +
+//     coefficient + your caster power, before any situational buff/armour/crit) is
+//     woven in where a `{dmg}` token sits, so copy reads "…deals X–Y damage (×N) and…".
+//     `{dmg}` expands to the whole phrase ("16k–22k damage", plus a "(×N)" badge for a
+//     multi-strike cast) — a desc writes "deals {dmg} and …", not "{dmg} damage". A desc
+//     with no token falls back to the phrase appended as its own sentence.
+function skillDescHtml(node, rank) {
+  let d = (node && node.desc) || '';
+  d = d.replace(/\s*\+\d+%\s+damage per point in [^.]+\.?/gi, '').trim();
+  const dp = (node && node.cast) ? skillDamagePreview(node, rank) : null;
+  if (dp) {
+    const hits = dp.strikes > 1 ? ` <span style='opacity:0.75'>(×${dp.strikes})</span>` : '';
+    const phrase = `<b>${formatDamageRange(dp.baseMin, dp.baseMax)}</b> damage${hits}`;
+    if (/\{dmg\}/.test(d)) d = d.replace(/\{dmg\}/g, phrase);
+    else d = d ? `${d} Deals ${phrase}.` : `Deals ${phrase}.`;
+  }
+  return d;
 }
 
 // Direction (cardinal) toward the nearest foe in range, for line/beam shapes.
@@ -19909,6 +19958,7 @@ function resolveCast(node, rank) {
   // D2 synergy: this ability's damage scales with hard points in related skills.
   const synM = synergyMult(node);
   const rs = rankScale(rank);
+  const spSpread = spellSpreadFor(node.id); // how wide this spell's damage rolls (data/spellSpread.js)
   let targets = [], center = { x: player.x, y: player.y };
 
   switch (c.shape) {
@@ -20026,7 +20076,7 @@ function resolveCast(node, rank) {
       // Crit is rolled inside applyOffenseMods for weapon actives AND spells; read
       // it back so skills and spells show the crit and fire on-crit triggers.
       if (c.wpn) { dmg = skillPhysDamage(e, c.wpn * falloff * synM, rank, c.crit); crit = _lastOffenseCrit; }
-      else if (c.spell) { dmg = skillSpellDamage(e, c, c.spell * falloff * synM, rank); crit = _lastOffenseCrit; }
+      else if (c.spell) { dmg = skillSpellDamage(e, c, c.spell * falloff * synM, rank, spSpread); crit = _lastOffenseCrit; }
       // Execute: a wounded, non-boss foe is finished outright; bosses just bleed extra.
       if (c.execute && dmg > 0) {
         if (!e.isBoss && e.hp <= e.maxHp * c.execute) dmg = Math.max(dmg, e.hp);
@@ -20059,7 +20109,7 @@ function resolveCast(node, rank) {
     const physBurst = detonateIsPhysical(c);   // a spell cast's burst is spell damage — no leech
     for (const e of targets.slice()) {
       if (e.dead || !statusEffects.some(s => s.target === e && s.effect === 'vuln')) continue;
-      const burst = c.spell ? skillSpellDamage(e, c, c.detonate, rank) : skillPhysDamage(e, c.detonate, rank);
+      const burst = c.spell ? skillSpellDamage(e, c, c.detonate, rank, spSpread) : skillPhysDamage(e, c.detonate, rank);
       for (const o of enemiesNear(c.detRadius || 1, e.x, e.y)) { if (!o.dead) { total += burst; if (physBurst) physTotal += burst; dealDamage(o, burst, true); spawnFloatingText(o.x, o.y, `💥${burst}`, '#ff8a3a'); } }
       statusEffects = statusEffects.filter(s => !(s.target === e && s.effect === 'vuln')); // consume the mark
       spawnParticles(e.x, e.y, '#ff8a3a', 14, 0.13); boomed = true;
@@ -22202,7 +22252,7 @@ function updateBars() {
       const cd = skillCd(sk.id);
       const ready = cd <= 0 && player.mp >= sk.mp && !inTown;
       if (label) label.textContent = cd > 0 ? `${Math.ceil(cd)}s` : `${sk.mp}MP`;
-      skillBtn.dataset.tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(sk.icon,16)||''} ${sk.name}</div><div class='ht-line'>${sk.desc}</div><div class='ht-sub'>${sk.mp} MP · ${sk.cd}s cooldown · ${'press ' + skillKeyLabel(1)}</div>`;
+      skillBtn.dataset.tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(sk.icon,16)||''} ${sk.name}</div><div class='ht-line'>${skillDescHtml(sk.node, skillRank(sk.id))}</div><div class='ht-sub'>${sk.mp} MP · ${sk.cd}s cooldown · ${'press ' + skillKeyLabel(1)}</div>`;
       skillBtn.classList.toggle('disabled', !ready);
       skillBtn.classList.toggle('ready', ready && player.hp > 0);
     } else {
@@ -22662,7 +22712,7 @@ function renderHero(el) {
       <div class="hc-line">${cls.passive}</div>
       <div class="hc-line"><span data-spr=w_sword></span> Damage scales with <b>${ATTRIBUTES[dmgA.primary].label}</b>${dmgA.secondary ? ` & ${ATTRIBUTES[dmgA.secondary].label}` : ''}</div>
       ${(() => { const pri = primarySkill(), sig = classSignature(player.class);
-        return pri ? `<div class="hc-line">${dlIcon(pri.icon,18)||''} <b>${pri.name}</b> — ${pri.desc} <span style="opacity:0.7">(${pri.mp} MP · ${'press ' + skillKeyLabel(1)})</span></div>`
+        return pri ? `<div class="hc-line">${dlIcon(pri.icon,18)||''} <b>${pri.name}</b> — ${skillDescHtml(pri.node, skillRank(pri.id))} <span style="opacity:0.7">(${pri.mp} MP · ${'press ' + skillKeyLabel(1)})</span></div>`
           : (sig ? `<div class="hc-line" style="opacity:0.8">Spend a skill point to learn ${dlIcon(sig.icon,16)||''} <b>${sig.name}</b> (SKILLS tab)</div>` : ''); })()}
       ${ascData() ? `<div class="hc-line" style="color:${ascData().color}">${dlIcon(ascData().icon,18)||''} <b>${ascData().name}</b> — ${ascData().blurb}</div>`
         : (cls && (player.level || 1) >= ASCEND_LEVEL ? `<div class="hc-line" style="color:var(--gold)"><span data-spr=mat_glimmer></span> Ready to ascend — visit the Trainer <span data-spr=town_trainer></span></div>` : '')}
@@ -22972,7 +23022,7 @@ function renderSkills(el) {
       <b>${dlIcon(sn.icon,18)||''} ${sn.name}</b>${rankTxt}
       <div class="ty">${typeTxt}</div>
       ${skillRecoveryTag(sn)}
-      <div class="ds">${sn.desc}</div>
+      <div class="ds">${skillDescHtml(sn, rank)}</div>
       ${skillMechHtml(sn, rank)}
       ${ruHtml}
       ${reqHtml}
@@ -23204,13 +23254,14 @@ function skillMechList(n, rank) {
     // a player which gear stats power this ability.
     if (castKind(n) === 'spell') add('Spell', '#b08ad8', 'Magic — scales with Spell Power; Cooldown Reduction &amp; Cast Speed shorten its recharge.');
     else add('Skill', '#e0a24b', 'Martial — scales with your weapon damage &amp; Skill Power; Cooldown Reduction shortens its recharge.');
-    // Two live readout pills — the min–max a single activation deals to a foe at
-    // this depth (gear/attributes/rank folded in, crit and chance procs excluded),
-    // and the effective sustained DPS (that range's midpoint × crit × how often it
-    // fires). Only for actives that deal direct damage (wpn/spell).
+    // Two live readout pills — the per-HIT damage range at this depth (gear/attributes/
+    // rank folded in; crit, cast rate and chance procs excluded; a ×N badge marks a
+    // multi-strike cast), and the effective sustained DPS (that range's midpoint × crit
+    // × hits-per-cast × how often it fires). Only for direct-damage actives (wpn/spell).
     const dp = skillDamagePreview(n, rank);
     if (dp) {
-      add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b>`);
+      const hits = dp.strikes > 1 ? ` <span style="opacity:0.75">(×${dp.strikes})</span>` : '';
+      add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b> <span style="opacity:0.6">per hit</span>${hits}`);
       add('DPS', '#e0a24b', `<b>${abbreviateNumber(dp.dps)}</b>`);
     }
     // Movement first — gap-closers/pulls/escapes are the headline of a mobility skill.
@@ -23280,9 +23331,21 @@ function skillRankUpRows(node, rank) {
       }
     }
   } else if (node.type === 'active' && node.cast) {
-    const cur = Math.round(rankScale(rank || 1) * 100);
-    const next = Math.round(rankScale(rank + 1) * 100);
-    rows.push(['effect power', rank > 0 ? `${cur}% → <b>${next}%</b>` : `<b>100%</b>`]);
+    // Damaging actives preview the concrete base per-hit range each rank buys (what the
+    // "deals X to Y" description shows); pure buff/summon/heal actives keep the abstract
+    // effect-power % since there's no damage number to move.
+    const dpCur = skillDamagePreview(node, rank || 1);
+    const dpNext = skillDamagePreview(node, rank + 1);
+    if (dpCur && dpNext) {
+      const curR = formatDamageRange(dpCur.baseMin, dpCur.baseMax);
+      const nextR = formatDamageRange(dpNext.baseMin, dpNext.baseMax);
+      const hits = dpNext.strikes > 1 ? ` ×${dpNext.strikes}` : '';
+      rows.push(['damage', rank > 0 ? `${curR} → <b>${nextR}</b>${hits}` : `<b>${nextR}</b>${hits}`]);
+    } else {
+      const cur = Math.round(rankScale(rank || 1) * 100);
+      const next = Math.round(rankScale(rank + 1) * 100);
+      rows.push(['effect power', rank > 0 ? `${cur}% → <b>${next}%</b>` : `<b>100%</b>`]);
+    }
     // Mana cost climbs with each rank — show the next-rank price so the trade-off
     // (more power for more mana) is clear before you spend the point.
     const curMp = skillManaCost(node, rank || 1);
