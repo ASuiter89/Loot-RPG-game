@@ -18,6 +18,8 @@ import { milestonePower, rankScale, passiveRankScale, skillManaCost,
   earnedSkillPoints, earnedAscPoints,
   SKILL_POINTS_PER_LEVEL, SKILL_POINTS_AT_START, ASCEND_LEVEL, ASC_POINT_EVERY } from '../systems/skillMath.js';
 import { glideVitalFill } from '../systems/vitalFill.js';
+import { telegraphPhase, telegraphFill, telegraphDanger, stepTelegraph,
+  TELE_ACTIVE, TELE_DONE } from '../systems/telegraph.js';
 import { offscreenArrows, tileOnScreen } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
 import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.js';
@@ -6208,6 +6210,10 @@ let statusEffects = [];
 // barriers that block movement. Each { x, y, kind:'fire'|'wall', secs, dmg }.
 // Never saved — cleared on floor change / town / death like other combat state.
 let bossHazards = [];
+// Active boss telegraphs: real-time floor indicators that wind up, flash, then
+// detonate. Stepped per frame (stepBossTelegraphs), drawn under the sprites, and
+// resolved against the hero's continuous position — always dodgeable by moving out.
+let bossTelegraphs = [];
 // Real-time traps and their projectiles. traps: arrow emitters that fire dodgeable
 // bolts down a lane, and fire vents that flare on/off. projectiles: traveling
 // bolts (trap- or boss-fired) you can step out of. Both cleared on floor change.
@@ -6645,6 +6651,15 @@ window.gameState = function gameState(radius) {
       // Boss-conjured tiles: kind 'fire' burns when stood on, 'wall' blocks movement.
       boss: (typeof bossHazards !== 'undefined' ? bossHazards || [] : []).map(h => ({
         kind: h.kind, x: h.x, y: h.y, secs: Math.round(h.secs * 10) / 10, dmg: h.dmg, blocks: h.kind === 'wall' })),
+      // Boss telegraphs: floor-indicator attacks winding up to detonate. Read the
+      // shape + centre + radius to find the danger zone and step out before
+      // `secsToHit` reaches 0 (danger:true = it will hurt). See gameGuide("bosses").
+      telegraphs: (typeof bossTelegraphs !== 'undefined' ? bossTelegraphs || [] : []).map(t => ({
+        shape: t.shape, danger: t.dmg > 0, phase: telegraphPhase(t),
+        secsToHit: Math.max(0, Math.round((t.tell - t.age) * 10) / 10),
+        x: Math.round((t.x || 0) * 10) / 10, y: Math.round((t.y || 0) * 10) / 10,
+        r: t.r, innerR: t.innerR, x1: t.x1, y1: t.y1, x2: t.x2, y2: t.y2,
+        facing: t.facing, halfAngle: t.halfAngle, dmg: t.dmg })),
     },
     // Static interactables whose effect the tile glyph alone can't tell you.
     shrines: (typeof shrineData !== 'undefined' && shrineData) ? Object.keys(shrineData).map(k => {
@@ -6873,6 +6888,8 @@ window.gameGuide = function gameGuide(topic) {
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
+      `BOSS TELEGRAPHS (gameState().hazards.telegraphs) are a guardian's wind-up attacks — a floor indicator that fills, flashes, then detonates. Each carries its shape (disc = filled circle; ring = donut, lethal in the band between innerR and r but SAFE in the centre hole and beyond r; lane = beam between (x1,y1)-(x2,y2); cone = wedge of radius r opening ±halfAngle around facing), its centre (x,y)/geometry, seconds until it lands (secsToHit), and danger:true when it hurts. They are ALWAYS dodgeable by MOVING out of the zone before secsToHit hits 0 (for a ring, step past r or into the hole) — never an RNG dodge. Red = damage; cyan = a benign spawn marker. A tracking disc follows you early in its wind-up, then locks — keep moving and it lands where you were.`,
+      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, the exit is north, and four pillars give cover. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom restores 50% of max HP and refills MP to full, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one plays a short walk-through-portal animation — the portal swallows you, the camera pans across to the partner pad, and you step out there (~0.9s, world frozen, unhittable; gameState().transit reads 'warp'). It also clears any click-to-move route, so you won't auto-walk back toward the pad you clicked. Use it deliberately, not while fleeing.`,
@@ -9329,7 +9346,7 @@ function generateMap() {
   groundKey = null;
   hasKey = false;
   quest = null;
-  bossHazards = [];
+  bossHazards = []; bossTelegraphs = [];
 
   // Start as solid rock; rooms and passages are carved out of it.
   mapData = []; wallCracks = {};
@@ -9754,7 +9771,7 @@ function buildBossArena() {
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null;
   shrineData = {}; hasFountain = false; groundKey = null; hasKey = false;
   quest = null; teleporters = {}; nextDiffPortal = null; floorRooms = [];
-  bossHazards = []; projectiles = []; clearAttackFx();
+  bossHazards = []; bossTelegraphs = []; projectiles = []; clearAttackFx();
   floorThemeOverride = null;      // a bare stone arena, not a themed interior
   // Rebuild the terrain + pathfinding caches for the hand-authored layout.
   bumpMapEpoch(); pathGridDirty();
@@ -9790,7 +9807,7 @@ function buildTutorialMap() {
   // Wipe any lingering floor state so nothing bleeds into the tutorial.
   enemies = []; merchant = null; mystic = null; minions = []; combatBuffs = {};
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null;
-  quest = null; teleporters = {}; shrineData = {}; bossHazards = [];
+  quest = null; teleporters = {}; shrineData = {}; bossHazards = []; bossTelegraphs = [];
   hasFountain = false; groundKey = null; hasKey = false;
   floorMod = FLOOR_MODS[0]; floorTint = null;
   floatingTexts = [];
@@ -10676,7 +10693,7 @@ function warpToTown() {
   if (inTown) { openTownHub(); return; }
   closeShop(); closeMystic(); closeTown();
   dungeonReturn = dungeonLevel;
-  bossHazards = [];
+  bossHazards = []; bossTelegraphs = [];
   buildTown();
   sfx('stairs');
   log('<span data-spr=feat_gate_red></span> The portal opens and you step through into the safety of town.', 'important');
@@ -10703,7 +10720,7 @@ function buildTown() {
   quest = null; teleporters = {}; shrineData = {};
   floorThemeOverride = null; furnitureMap = {}; decorMap = {}; // town is never an indoor-themed floor
   townShopStock = null;        // fresh merchant wares each town visit
-  traps = []; projectiles = []; bossHazards = []; clearAttackFx(); // real-time hazards / fx never linger into town
+  traps = []; projectiles = []; bossHazards = []; bossTelegraphs = []; clearAttackFx(); // real-time hazards / fx never linger into town
   hasFountain = false; groundKey = null; hasKey = false;
   floorMod = FLOOR_MODS[0]; floorTint = 'rgba(120,90,40,0.10)';
   statusEffects = statusEffects.filter(s => s.target === 'player');
@@ -14984,6 +15001,10 @@ function draw() {
       ctx.restore();
     }
   });
+
+  // Boss telegraphs — floor indicators for incoming boss attacks, painted on the
+  // ground under the sprites so the danger zone reads clearly.
+  drawBossTelegraphs(offX, offY, tw, th, x0, y0, x1, y1);
 
   // Ground chests — a classic brown chest with gold trim, drawn by hand so it
   // looks the same on every device. Lucky chests glow brighter gold.
@@ -20881,6 +20902,9 @@ function bossHitPlayer(raw, e, color) {
 // Bosses carry a `specials` kit; this rolls the shared cooldown, then tries each
 // trick (shuffled) until one fits the situation. Low-health bosses lean on them.
 function bossSpecial(e, dist, beh) {
+  // The Rat King runs its own fully-telegraphed moveset (the boss-overhaul model);
+  // returns true when it launches an attack (ends the turn), false to keep chasing.
+  if (e.type === 'ratking') return ratKingTurn(e, dist);
   if (e.shieldT > 0) e.shieldT--; // age any active ward
   // Berserk fury runs out after a few turns, restoring the boss's base damage.
   if (e.berserkT > 0) { e.berserkT--; if (e.berserkT <= 0 && e.dmgBase) { e.dmg = e.dmgBase; e.dmgBase = 0; log(`${e.name}'s fury subsides.`); } }
@@ -20932,6 +20956,156 @@ function _dispatchBossAbility(e, ab, dist) {
     case 'summonelite':return bossSummonElite(e, dist);
   }
   return false;
+}
+
+// ── BOSS TELEGRAPH RUNTIME ───────────────────────────────────────────────────
+// The engine's geometry + timing live in systems/telegraph.js; this is the edge:
+// it steps telegraphs on the real frame clock, resolves a hit the frame each one
+// detonates, and draws the floor indicators. Every telegraphed hit is lethal and
+// mitigable (unlike the floored DoT hazards) — dodged by MOVING out of the zone,
+// so being caught is a positional miss, never an RNG dodge-roll.
+function telegraphHitPlayer(src, raw, label) {
+  if (entryGuard) return;                              // arrival grace
+  if (typeof buffs !== 'undefined' && buffs && buffs.guard) raw = Math.round(raw * 0.6);
+  const dmg = applyIncomingMods(absorbWithMana(mitigateDamage(raw, src ? src.level : dungeonLevel)), src);
+  player.hp = Math.max(0, player.hp - dmg);
+  notePlayerDamage(dmg, label || 'the guardian');
+  sfx('hurt');
+  spawnFloatingText(player.x, player.y, `${dmg}`, '#ff3344');
+  if (dmg > 0) { spawnParticles(player.x, player.y, '#d22a3a', 7, 0.08); addShake(5); }
+  if (player.hp > 0 && player.hp <= player.maxHp * 0.25) { screenFlash('#cc0000'); fireSkillTrigger('lowhp', { enemy: src }); }
+  markHudDirty();
+  if (player.hp === 0) handleDeath();
+}
+// Queue a telegraph, stamping defaults + capping the live count so a frantic phase
+// can't carpet the whole floor (the "≤ a few concurrent" fairness rule).
+function pushTelegraph(t) {
+  if (bossTelegraphs.length > 12) return null;
+  t.age = 0; t.resolved = false;
+  if (t.active == null) t.active = 0.12;
+  bossTelegraphs.push(t);
+  return t;
+}
+// One tile-targeted vermin (the Rat King's telegraphed swarm lands where it marked).
+function spawnVerminAt(boss, x, y) {
+  boss.summoned = boss.summoned || 0;
+  if (boss.summoned >= 12) return false;
+  if (!enemyTileFree(x, y) || (x === player.x && y === player.y)) return false;
+  const hp = Math.max(1, Math.round(10 + dungeonLevel * 4));
+  enemies.push({ x, y, hp, maxHp: hp, type: 'rat', level: dungeonLevel,
+    dmg: Math.max(1, Math.round(3 + dungeonLevel)), dead: false, behavior: 'swift', minion: true });
+  boss.summoned++; bumpEnemyPos();
+  return true;
+}
+// Advance every telegraph on the frame clock, follow trackers through their early
+// wind-up, and resolve the hit on the single frame each one detonates.
+function stepBossTelegraphs(dt) {
+  if (!bossTelegraphs.length) return;
+  if (!enemies.some(e => !e.dead && e.isBoss)) { bossTelegraphs = []; return; } // boss gone → drop pending zones
+  const hx = (player.fx != null ? player.fx : player.x + 0.5);
+  const hy = (player.fy != null ? player.fy : player.y + 0.5);
+  for (const t of bossTelegraphs) {
+    // Trackers home on the hero for the first ~62% of the wind-up, then hard-lock
+    // so the now-frozen zone is dodgeable (never track through detonation).
+    if (t.track && t.age < t.tell * 0.62) { t.x = hx; t.y = hy; }
+    const r = stepTelegraph(t, dt);
+    if (r.justDetonated) {
+      t.resolved = true;
+      if (t.dmg > 0 && telegraphDanger(t, hx, hy)) telegraphHitPlayer(t.src, t.dmg, t.label);
+      if (t.onDetonate) { try { t.onDetonate(t); } catch (_e) {} }
+      if (t.flash) { addShake(t.shakeAmt || 4); if (t.sfx) sfx(t.sfx); }
+    }
+  }
+  bossTelegraphs = bossTelegraphs.filter(t => telegraphPhase(t) !== TELE_DONE);
+}
+// Draw the floor indicators (under the sprites). Red = incoming damage, cyan = a
+// benign spawn marker; the fill grows over the wind-up, pulses in the last beat,
+// and flashes white on detonation. Culled to the visible tile window.
+function drawBossTelegraphs(offX, offY, tw, th, x0, y0, x1, y1) {
+  if (!bossTelegraphs.length) return;
+  for (const t of bossTelegraphs) {
+    const ph = telegraphPhase(t), fill = telegraphFill(t), deton = ph === TELE_ACTIVE;
+    const cxT = t.x != null ? t.x : 0, cyT = t.y != null ? t.y : 0, rad = (t.r || 3) + 1;
+    if (t.shape !== 'lane' && (cxT + rad < x0 || cxT - rad > x1 || cyT + rad < y0 || cyT - rad > y1)) continue;
+    const danger = t.dmg > 0;
+    const strokeC = deton ? '#ffffff' : (danger ? 'rgba(255,70,70,0.95)' : 'rgba(120,230,255,0.95)');
+    const fillC = deton ? 'rgba(255,255,255,0.5)' : (danger ? `rgba(220,40,40,${0.10 + fill * 0.20})` : 'rgba(120,230,255,0.12)');
+    const pulse = fill > 0.8 ? 0.55 + 0.45 * Math.abs(Math.sin(fill * 42)) : 1;
+    const sx = offX + cxT * tw, sy = offY + cyT * th;
+    ctx.save();
+    ctx.lineWidth = Math.max(2, tw * 0.06);
+    if (t.shape === 'disc') {
+      ctx.beginPath(); ctx.arc(sx, sy, t.r * tw, 0, Math.PI * 2);
+      ctx.fillStyle = fillC; ctx.fill();
+      ctx.globalAlpha = pulse; ctx.strokeStyle = strokeC; ctx.stroke();
+    } else if (t.shape === 'ring') {
+      ctx.beginPath(); ctx.arc(sx, sy, t.r * tw, 0, Math.PI * 2); ctx.arc(sx, sy, (t.innerR || 0) * tw, 0, Math.PI * 2, true);
+      ctx.fillStyle = fillC; ctx.fill('evenodd');
+      ctx.globalAlpha = pulse; ctx.strokeStyle = strokeC;
+      ctx.beginPath(); ctx.arc(sx, sy, t.r * tw, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(sx, sy, (t.innerR || 0) * tw, 0, Math.PI * 2); ctx.stroke();
+    } else if (t.shape === 'lane') {
+      const x1p = offX + t.x1 * tw, y1p = offY + t.y1 * th, x2p = offX + t.x2 * tw, y2p = offY + t.y2 * th;
+      const ang = Math.atan2(y2p - y1p, x2p - x1p), len = Math.hypot(x2p - x1p, y2p - y1p), hw = t.halfW * tw;
+      ctx.translate(x1p, y1p); ctx.rotate(ang);
+      ctx.fillStyle = fillC; ctx.fillRect(0, -hw, len, hw * 2);
+      ctx.globalAlpha = pulse; ctx.strokeStyle = strokeC; ctx.strokeRect(0, -hw, len, hw * 2);
+    } else if (t.shape === 'cone') {
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.arc(sx, sy, t.r * tw, t.facing - t.halfAngle, t.facing + t.halfAngle); ctx.closePath();
+      ctx.fillStyle = fillC; ctx.fill();
+      ctx.globalAlpha = pulse; ctx.strokeStyle = strokeC; ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+// ── RAT KING — full telegraphed moveset (the first boss, Normal floor 5) ──
+// The Swarm Tyrant: a ground-control summoner. Every threat is a readable floor
+// indicator you dodge by moving. Three phases at 66% / 33% HP tighten the tells
+// and unlock the ring + double pounce. Between casts it lumbers after you, so the
+// fight is kite-and-punish. Replaces the generic special pool for this boss.
+function bossPhaseOf(e) { const f = e.maxHp ? e.hp / e.maxHp : 1; return f > 0.66 ? 1 : f > 0.33 ? 2 : 3; }
+function ratKingTurn(e, dist) {
+  if (e._phase == null) e._phase = 1;
+  const ph = bossPhaseOf(e);
+  if (ph > e._phase) {                       // crossed a HP gate → roar + brief breather
+    e._phase = ph;
+    log(`<span data-spr=b_ratking></span> ${e.name} shrieks — the swarm grows bolder!`, 'important');
+    sfx('boss'); screenFlash('#ffd24b'); addShake(6); playBossVfx(e, 'summon');
+    e._tgCd = 1.2;
+    return true;
+  }
+  e._tgCd = (e._tgCd || 0) - WORLD_TICK_SECONDS;
+  if (e._tgCd > 0) return false;              // between casts → let it chase you
+  const cx = e.x + (e.size || 1) / 2, cy = e.y + (e.size || 1) / 2;   // boss centre (tiles)
+  const tell = ph === 1 ? 1.15 : ph === 2 ? 1.0 : 0.85;
+  const raw = e.dmg, roll = Math.random();
+  if (roll < 0.32) {
+    // Quake Slam — a big disc around the boss. Dodge: sprint to the rim.
+    pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 4.6, tell, active: 0.14, dmg: Math.round(raw * 1.7), src: e, label: `${e.name}'s quake`, flash: true, shakeAmt: 7, sfx: 'boss' });
+    log(`<span data-spr=b_ratking></span> ${e.name} rears back for a ground-shaking slam!`);
+  } else if (roll < 0.62) {
+    // Pounce — a disc that tracks you, then locks. Dodge: keep moving.
+    pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 2.2, tell, active: 0.12, dmg: Math.round(raw * 1.4), src: e, label: `${e.name}'s pounce`, track: true, flash: true, shakeAmt: 5, sfx: 'hurt' });
+    if (ph === 3) pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 2.0, tell: tell + 0.3, active: 0.12, dmg: Math.round(raw * 1.3), src: e, label: `${e.name}'s pounce`, track: true, flash: true, shakeAmt: 5 });
+    log(`<span data-spr=b_ratking></span> ${e.name} fixes on you and pounces!`);
+  } else if (ph >= 2 && roll < 0.82) {
+    // Tail Whirl — a lethal ring around the boss. Dodge: back away past its edge.
+    pushTelegraph({ shape: 'ring', x: cx, y: cy, innerR: 1.4, r: 5.4, tell, active: 0.16, dmg: Math.round(raw * 1.5), src: e, label: `${e.name}'s whirl`, flash: true, shakeAmt: 6, sfx: 'boss' });
+    log(`<span data-spr=b_ratking></span> ${e.name} whirls its tail — get clear!`);
+  } else {
+    // Vermin Swarm — telegraphed spawn marks, then rats erupt where they landed.
+    const n = ph === 3 ? 3 : 2;
+    for (let i = 0; i < n; i++) {
+      const ang = Math.random() * Math.PI * 2, rr = 3 + Math.random() * 4;
+      pushTelegraph({ shape: 'disc', x: cx + Math.cos(ang) * rr, y: cy + Math.sin(ang) * rr, r: 1.1, tell, active: 0.1, dmg: 0,
+        onDetonate: (tt) => spawnVerminAt(e, Math.round(tt.x), Math.round(tt.y)) });
+    }
+    log(`<span data-spr=b_ratking></span> ${e.name} calls vermin to swarm you!`, 'important');
+    sfx('shrine');
+  }
+  e._tgCd = ph === 1 ? 2.6 : ph === 2 ? 2.1 : 1.7;   // cadence tightens per phase
+  return true;
 }
 
 function bossSummonWave(e, dist) {
@@ -21459,7 +21633,7 @@ function handleDeath() {
   inventory = [];
   graveMarker = null; // re-placed when that floor is next generated
   statusEffects = statusEffects.filter(s => s.target !== 'player');
-  player.skillCds = {}; combatBuffs = {}; minions = []; bossHazards = []; clearCharges(); // revived fresh — skills ready again
+  player.skillCds = {}; combatBuffs = {}; minions = []; bossHazards = []; bossTelegraphs = []; clearCharges(); // revived fresh — skills ready again
   sfx('death');
   screenFlash('#cc0000');
   // Knocked back deeper the harder the tier — but never out of the difficulty you
@@ -27661,7 +27835,7 @@ function gameLoop(ts) {
     if (!rtPaused()) safeStep('cooldowns', () => tickCooldowns(dt));  // skill/potion cooldowns burn in seconds
     if (!rtPaused()) safeStep('autocast', () => tickAutoCast(dt));    // fire any auto-cast skills that are ready
     if (!rtPaused()) safeStep('world', () => stepWorldClock(dt));
-    if (!rtPaused()) safeStep('hazards', () => { updateTraps(dt); updateProjectiles(dt); });
+    if (!rtPaused()) safeStep('hazards', () => { updateTraps(dt); updateProjectiles(dt); stepBossTelegraphs(dt); });
   } else if (inTown && !clockPaused()) {
     // In town the hero can't move or fight, but time still flows just like standing
     // still in the dungeon: HP/MP regen, skill & potion cooldowns, and status/buff

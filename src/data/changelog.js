@@ -7,6 +7,14 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "large", v: "Boss overhaul: 15 guardians, sealed arenas, and a fully telegraphed Rat King", by: "Claude", notes: [
+    "Ten all-new bosses join the roster, bringing it to fifteen. Each difficulty now has its OWN five guardians — Normal keeps the original five, while Hardened and Brutal each get five new ones, and Endless rolls any of the fifteen at random. Every newcomer is bespoke pixel art.",
+    "Every boss floor is now a fixed circular arena: you enter from the stairs at the south, the guardian holds the centre, the exit is at the north, and pillars give cover. No wandering trash and no loot clutter — just you and the boss.",
+    "Stepping onto a boss floor asks first. A prompt warns that every exit seals once you enter — then it is beat the guardian or die: both staircases AND the town portal stay locked until it falls, and all reopen the instant it does.",
+    "Guardians carry far deeper health pools, so a boss is a real, drawn-out fight now instead of a speed bump.",
+    "Enemies and following companions now glide between tiles at a steady pace like the hero — smooth movement in every direction instead of hopping tile to tile.",
+    "The Rat King is fully reworked as the first of the new-style fights: it telegraphs every attack with a floor indicator you dodge by moving — a ground-shaking slam, a pounce that locks onto you, a tail-whirl to back clear of, and vermin that erupt where they are marked. It grows fiercer at two-thirds and one-third health. The rest of the roster's bespoke movesets are coming next.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Spells roll a damage range; skill cards rebuilt around per-hit damage", by: "Claude", notes: [
     "Spells now roll a damage RANGE instead of a fixed number. Each spell has its own width — a focused Arcane Missile rolls tight, a chaotic Meteor rolls wild — so no two feel the same. The average is unchanged, so this adds texture without shifting balance.",
     "Weapon and spell rolls are now fine-grained before your buffs and gear scale them, so even a small weapon lands varied, organic hits instead of two or three repeating numbers. The damage finally dealt is still a whole number.",
