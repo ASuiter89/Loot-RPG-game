@@ -49,3 +49,15 @@ export function voiceChord(triad, voi) {
     default:     return [r, th, fi];
   }
 }
+
+// Detune offsets (in cents) for a stacked-oscillator "super-saw"/"reese" voice:
+// `n` copies spread evenly across ±`cents`, symmetric about 0 so the cluster stays
+// centred on the true pitch. n=1 → [0]; even n straddles 0 (no on-pitch voice);
+// odd n keeps one voice dead-centre. Used by the synth engine (in legacy) to build
+// the big detuned EDM leads / pads and the drum-&-bass reese bass.
+export function voiceSpread(n, cents) {
+  if (n <= 1) return [0];
+  const out = [];
+  for (let i = 0; i < n; i++) out.push((i / (n - 1) - 0.5) * 2 * cents);
+  return out;
+}

@@ -32,9 +32,9 @@ export const MUSIC_SECTIONS = [
       [[0,3,7],[8,12,15],[3,7,10],[10,14,17]],   // Am  F   C   G
       [[0,3,7],[5,8,12],[7,10,14],[0,3,7]],       // Am  Dm  Em  Am
     ],
-    bass: { type: 'sawtooth', cutoff: 620,  q: 3, detune: 4, vol: 0.30 },
-    pad:  { type: 'sine',     cutoff: 1500, q: 1, detune: 4, vol: 0.13 },
-    lead: { type: 'triangle', cutoff: 3000, q: 1, detune: 5, vol: 0.20 },
+    bass: { type: 'sawtooth', voice: 'saw',  cutoff: 620,  q: 3, detune: 4, vol: 0.30 },
+    pad:  { type: 'sine',     voice: 'warm', cutoff: 1500, q: 1, detune: 4, vol: 0.13 },
+    lead: { type: 'triangle', voice: 'sing', cutoff: 3000, q: 1, detune: 5, vol: 0.20 },
     leadDensity: 0.66, arpDensity: 0.22,
     kickVol: 1.0, kickMidVol: 0.9, hatVol: 0.05,
     groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 4, arpVel: 0.5, chordOct: 0,
@@ -54,9 +54,9 @@ export const MUSIC_SECTIONS = [
       [[5,8,12],[10,14,17],[5,8,12],[10,14,17]], // Dm  G   Dm  G   (Dorian IV)
       [[5,8,12],[7,10,14],[10,14,17],[3,7,10]],   // Dm  Em  G   C
     ],
-    bass: { type: 'triangle', cutoff: 900,  q: 2, detune: 4, vol: 0.24 },
-    pad:  { type: 'triangle', cutoff: 2600, q: 1, detune: 6, vol: 0.12 },
-    lead: { type: 'sine',     cutoff: 4600, q: 1, detune: 3, vol: 0.17 },
+    bass: { type: 'triangle', voice: 'sub',   cutoff: 900,  q: 2, detune: 4, vol: 0.24 },
+    pad:  { type: 'triangle', voice: 'pluck', cutoff: 2600, q: 1, detune: 6, vol: 0.12 },
+    lead: { type: 'sine',     voice: 'fm',    cutoff: 4600, q: 1, detune: 3, vol: 0.17 },
     leadDensity: 0.5, arpDensity: 0.72,
     kickVol: 0.5, kickMidVol: 0.3, hatVol: 0.04,
     groove: { swing: 0.12, leadOct: 24, arpOct: 12, arpEvery: 1, arpVel: 0.95, chordOct: 12,
@@ -77,9 +77,9 @@ export const MUSIC_SECTIONS = [
       [[0,3,7],[5,8,12],[7,11,14],[0,3,7]],       // Am  Dm  E   Am  (harmonic-minor V)
       [[0,3,7],[8,12,15],[7,11,14],[0,3,7]],       // Am  F   E   Am
     ],
-    bass: { type: 'square',   cutoff: 520,  q: 4, detune: 6, vol: 0.22 },
-    pad:  { type: 'sawtooth', cutoff: 1200, q: 2, detune: 4, vol: 0.10 },
-    lead: { type: 'square',   cutoff: 2500, q: 1, detune: 5, vol: 0.15 },
+    bass: { type: 'square',   voice: 'acid',   cutoff: 520,  q: 4, detune: 6, vol: 0.22 },
+    pad:  { type: 'sawtooth', voice: 'warm',   cutoff: 1200, q: 2, detune: 4, vol: 0.10 },
+    lead: { type: 'square',   voice: 'square', cutoff: 2500, q: 1, detune: 5, vol: 0.15 },
     leadDensity: 0.8, arpDensity: 0.28,
     kickVol: 1.1, kickMidVol: 0.85, hatVol: 0.07,
     groove: { swing: 0.0, leadOct: 0, arpOct: 12, arpEvery: 4, arpVel: 0.5, chordOct: 0,
@@ -100,9 +100,9 @@ export const MUSIC_SECTIONS = [
       [[3,7,10],[5,9,12],[3,7,10],[10,14,17]],   // C   D   C   G   (Lydian II)
       [[3,7,10],[10,14,17],[5,9,12],[3,7,10]],     // C   G   D   C
     ],
-    bass: { type: 'sine',     cutoff: 400,  q: 1, detune: 3, vol: 0.30 },
-    pad:  { type: 'sine',     cutoff: 1100, q: 1, detune: 4, vol: 0.15 },
-    lead: { type: 'triangle', cutoff: 2400, q: 1, detune: 4, vol: 0.17 },
+    bass: { type: 'sine',     voice: 'sub',  cutoff: 400,  q: 1, detune: 3, vol: 0.30 },
+    pad:  { type: 'sine',     voice: 'warm', cutoff: 1100, q: 1, detune: 4, vol: 0.15 },
+    lead: { type: 'triangle', voice: 'fm',   cutoff: 2400, q: 1, detune: 4, vol: 0.17 },
     leadDensity: 0.35, arpDensity: 0.2,
     kickVol: 0.0, kickMidVol: 0.0, hatVol: 0.0,
     groove: { swing: 0.0, leadOct: 24, arpOct: 12, arpEvery: 4, arpVel: 0.8, chordOct: 0,
@@ -120,9 +120,9 @@ export const MUSIC_SECTIONS = [
       [[0,3,7],[3,7,10],[5,8,12],[0,3,7]],         // Am  C   Dm  Am
       [[0,3,7],[10,14,17],[3,7,10],[5,8,12]],       // Am  G   C   Dm
     ],
-    bass: { type: 'sawtooth', cutoff: 700,  q: 3, detune: 5, vol: 0.28 },
-    pad:  { type: 'square',   cutoff: 1400, q: 2, detune: 5, vol: 0.10 },
-    lead: { type: 'triangle', cutoff: 2800, q: 1, detune: 6, vol: 0.19 },
+    bass: { type: 'sawtooth', voice: 'sub',  cutoff: 700,  q: 3, detune: 5, vol: 0.28 },
+    pad:  { type: 'square',   voice: 'warm', cutoff: 1400, q: 2, detune: 5, vol: 0.10 },
+    lead: { type: 'triangle', voice: 'sing', cutoff: 2800, q: 1, detune: 6, vol: 0.19 },
     leadDensity: 0.6, arpDensity: 0.2,
     kickVol: 0.85, kickMidVol: 0.6, hatVol: 0.05,
     groove: { swing: 0.3, leadOct: 12, arpOct: 12, arpEvery: 4, arpVel: 0.55, chordOct: 12,
@@ -142,9 +142,9 @@ export const MUSIC_SECTIONS = [
       [[0,3,7],[7,10,14],[8,12,15],[0,3,7]],       // Am  Em  F   Am
       [[0,3,7],[8,12,15],[10,14,17],[7,10,14]],     // Am  F   G   Em
     ],
-    bass: { type: 'sawtooth', cutoff: 700,  q: 3, detune: 5, vol: 0.30 },
-    pad:  { type: 'sawtooth', cutoff: 1700, q: 1, detune: 6, vol: 0.12 },
-    lead: { type: 'sawtooth', cutoff: 3200, q: 1, detune: 6, vol: 0.18 },
+    bass: { type: 'sawtooth', voice: 'saw',  cutoff: 700,  q: 3, detune: 5, vol: 0.30 },
+    pad:  { type: 'sawtooth', voice: 'warm', cutoff: 1700, q: 1, detune: 6, vol: 0.12 },
+    lead: { type: 'sawtooth', voice: 'sing', cutoff: 3200, q: 1, detune: 6, vol: 0.18 },
     leadDensity: 0.7, arpDensity: 0.25,
     kickVol: 1.1, kickMidVol: 0.9, hatVol: 0.06,
     groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 4, arpVel: 0.5, chordOct: 0,
@@ -156,23 +156,23 @@ export const MUSIC_SECTIONS = [
       kickPat: ['main', null, 'mid', null, 'main', null, 'mid', null],
       hatPat:  [0,1,0,1,0,1,0,1] } },
 
-  // Bright, hopeful C major — uplifting bells over a gentle pulse. Bass: a bouncing
-  // major root-fifth-octave line. Comp: a warm broken-chord comp, gently syncopated.
+  // Bright, hopeful C major — uplifting bells over a gentle pulse. Bass: a warm,
+  // sustained root that leans into passing tones. Comp: a warm broken-chord comp.
   { name: 'Bloom',   tempo: 0.24,
     scale: [3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 20, 22, 24],
     progs: [
       [[3,7,10],[10,14,17],[12,15,19],[8,12,15]],   // C   G   Am  F
       [[3,7,10],[8,12,15],[10,14,17],[3,7,10]],      // C   F   G   C
     ],
-    bass: { type: 'triangle', cutoff: 800,  q: 2, detune: 3, vol: 0.24 },
-    pad:  { type: 'sine',     cutoff: 2400, q: 1, detune: 5, vol: 0.13 },
-    lead: { type: 'sine',     cutoff: 4800, q: 1, detune: 3, vol: 0.17 },
+    bass: { type: 'triangle', voice: 'sub',   cutoff: 800,  q: 2, detune: 3, vol: 0.24 },
+    pad:  { type: 'sine',     voice: 'fm',    cutoff: 2400, q: 1, detune: 5, vol: 0.13 },
+    lead: { type: 'sine',     voice: 'pluck', cutoff: 4800, q: 1, detune: 3, vol: 0.17 },
     leadDensity: 0.55, arpDensity: 0.55,
     kickVol: 0.6, kickMidVol: 0.45, hatVol: 0.05,
     groove: { swing: 0.08, leadOct: 24, arpOct: 12, arpEvery: 1, arpVel: 0.85, chordOct: 12,
       leadLong: 0.45, leadRest: 0.16,
-      bassPat: [{d:'r',l:1.2,v:1.0}, null, {d:'5',l:0.7,v:0.8,p:0.85}, null,
-                {d:'8',l:0.9,v:0.85}, null, {d:'3',l:0.6,v:0.7,p:0.7}, {d:'n2',l:0.7,v:0.8,p:0.85}],
+      bassPat: [{d:'r',l:1.6,v:1.0}, null, null, {d:'5',l:0.7,v:0.76,p:0.7},
+                {d:'8',l:1.0,v:0.82}, null, {d:'na',l:0.7,v:0.7,p:0.65}, {d:'n2',l:0.7,v:0.8,p:0.85}],
       chordPat: [{l:1.0,v:0.9,voi:'root'}, null, {l:0.8,v:0.8,voi:'inv1',p:0.8}, null,
                  {l:1.0,v:0.9,voi:'open'}, null, {l:0.7,v:0.75,voi:'inv2',p:0.7}, {l:0.8,v:0.7,voi:'root',p:0.6,next:true}],
       kickPat: ['mid', null, null, null, 'mid', null, null, null],
@@ -187,9 +187,9 @@ export const MUSIC_SECTIONS = [
       [[0,4,8],[2,6,10],[0,4,8],[6,10,14]],         // aug shifts
       [[0,4,8],[6,10,14],[4,8,12],[2,6,10]],
     ],
-    bass: { type: 'sine',     cutoff: 420,  q: 1, detune: 4, vol: 0.28 },
-    pad:  { type: 'triangle', cutoff: 1300, q: 1, detune: 7, vol: 0.14 },
-    lead: { type: 'sine',     cutoff: 2200, q: 1, detune: 4, vol: 0.15 },
+    bass: { type: 'sine',     voice: 'sub',  cutoff: 420,  q: 1, detune: 4, vol: 0.28 },
+    pad:  { type: 'triangle', voice: 'warm', cutoff: 1300, q: 1, detune: 7, vol: 0.14 },
+    lead: { type: 'sine',     voice: 'fm',   cutoff: 2200, q: 1, detune: 4, vol: 0.15 },
     leadDensity: 0.4, arpDensity: 0.25,
     kickVol: 0.0, kickMidVol: 0.0, hatVol: 0.0,
     groove: { swing: 0.0, leadOct: 24, arpOct: 12, arpEvery: 4, arpVel: 0.75, chordOct: 0,
@@ -208,9 +208,9 @@ export const MUSIC_SECTIONS = [
       [[5,8,12],[10,14,17],[7,10,14],[5,8,12]],     // Dm  G   Em  Dm
       [[5,8,12],[3,7,10],[10,14,17],[7,10,14]],      // Dm  C   G   Em
     ],
-    bass: { type: 'sine',     cutoff: 600,  q: 2, detune: 4, vol: 0.28 },
-    pad:  { type: 'triangle', cutoff: 1600, q: 1, detune: 6, vol: 0.12 },
-    lead: { type: 'triangle', cutoff: 2600, q: 1, detune: 5, vol: 0.18 },
+    bass: { type: 'sine',     voice: 'sub',  cutoff: 600,  q: 2, detune: 4, vol: 0.28 },
+    pad:  { type: 'triangle', voice: 'warm', cutoff: 1600, q: 1, detune: 6, vol: 0.12 },
+    lead: { type: 'triangle', voice: 'sing', cutoff: 2600, q: 1, detune: 5, vol: 0.18 },
     leadDensity: 0.5, arpDensity: 0.2,
     kickVol: 0.7, kickMidVol: 0.5, hatVol: 0.06,
     groove: { swing: 0.38, leadOct: 12, arpOct: 12, arpEvery: 4, arpVel: 0.6, chordOct: 0,
@@ -231,9 +231,9 @@ export const MUSIC_SECTIONS = [
       [[0,3,7],[8,12,15],[3,7,10],[10,14,17]],    // Am  F   C   G
       [[0,3,7],[5,8,12],[10,14,17],[3,7,10]],      // Am  Dm  G   C
     ],
-    bass: { type: 'sawtooth', cutoff: 640,  q: 3, detune: 4, vol: 0.30 },
-    pad:  { type: 'sawtooth', cutoff: 1600, q: 2, detune: 5, vol: 0.12 },
-    lead: { type: 'triangle', cutoff: 3000, q: 1, detune: 5, vol: 0.17 },
+    bass: { type: 'sawtooth', voice: 'sub',   cutoff: 640,  q: 3, detune: 4, vol: 0.30 },
+    pad:  { type: 'sawtooth', voice: 'pluck', cutoff: 1600, q: 2, detune: 5, vol: 0.12 },
+    lead: { type: 'triangle', voice: 'pluck', cutoff: 3000, q: 1, detune: 5, vol: 0.17 },
     leadDensity: 0.4, arpDensity: 0.3,
     kickVol: 1.0, kickMidVol: 1.0, hatVol: 0.08,
     groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 2, arpVel: 0.6, chordOct: 12,
@@ -252,9 +252,9 @@ export const MUSIC_SECTIONS = [
       [[12,15,19],[8,12,15],[3,7,10],[10,14,17]],  // Am  F   C   G   (vi IV I V)
       [[3,7,10],[10,14,17],[12,15,19],[8,12,15]],   // C   G   Am  F
     ],
-    bass: { type: 'sawtooth', cutoff: 720,  q: 3, detune: 6, vol: 0.30 },
-    pad:  { type: 'sawtooth', cutoff: 2000, q: 1, detune: 8, vol: 0.13 },
-    lead: { type: 'sawtooth', cutoff: 3600, q: 1, detune: 8, vol: 0.18 },
+    bass: { type: 'sawtooth', voice: 'acid',     cutoff: 720,  q: 3, detune: 6, vol: 0.30 },
+    pad:  { type: 'sawtooth', voice: 'supersaw', cutoff: 2000, q: 1, detune: 8, vol: 0.13 },
+    lead: { type: 'sawtooth', voice: 'supersaw', cutoff: 3600, q: 1, detune: 8, vol: 0.18 },
     leadDensity: 0.6, arpDensity: 0.45,
     kickVol: 1.15, kickMidVol: 1.15, hatVol: 0.09,
     groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 1, arpVel: 0.7, chordOct: 0,
@@ -273,9 +273,9 @@ export const MUSIC_SECTIONS = [
       [[5,9,12],[12,16,19],[14,17,21],[10,14,17]],  // D   A   Bm  G
       [[14,17,21],[10,14,17],[5,9,12],[12,16,19]],   // Bm  G   D   A
     ],
-    bass: { type: 'triangle', cutoff: 720,  q: 2, detune: 4, vol: 0.26 },
-    pad:  { type: 'sine',     cutoff: 2200, q: 1, detune: 5, vol: 0.12 },
-    lead: { type: 'triangle', cutoff: 3200, q: 1, detune: 3, vol: 0.18 },
+    bass: { type: 'triangle', voice: 'sub',   cutoff: 720,  q: 2, detune: 4, vol: 0.26 },
+    pad:  { type: 'sine',     voice: 'pluck', cutoff: 2200, q: 1, detune: 5, vol: 0.12 },
+    lead: { type: 'triangle', voice: 'pluck', cutoff: 3200, q: 1, detune: 3, vol: 0.18 },
     leadDensity: 0.5, arpDensity: 0.6,
     kickVol: 0.75, kickMidVol: 0.7, hatVol: 0.06,
     groove: { swing: 0.06, leadOct: 12, arpOct: 12, arpEvery: 1, arpVel: 0.8, chordOct: 12,
@@ -294,9 +294,9 @@ export const MUSIC_SECTIONS = [
       [[0,3,7],[8,12,15],[3,7,10],[10,14,17]],    // Am  F   C   G
       [[0,3,7],[7,10,14],[10,14,17],[5,8,12]],     // Am  Em  G   Dm
     ],
-    bass: { type: 'sawtooth', cutoff: 480,  q: 4, detune: 10, vol: 0.32 },
-    pad:  { type: 'sawtooth', cutoff: 1700, q: 1, detune: 6, vol: 0.12 },
-    lead: { type: 'sine',     cutoff: 3200, q: 1, detune: 4, vol: 0.16 },
+    bass: { type: 'sawtooth', voice: 'reese', cutoff: 480,  q: 4, detune: 10, vol: 0.32 },
+    pad:  { type: 'sawtooth', voice: 'warm',  cutoff: 1700, q: 1, detune: 6, vol: 0.12 },
+    lead: { type: 'sine',     voice: 'fm',    cutoff: 3200, q: 1, detune: 4, vol: 0.16 },
     leadDensity: 0.4, arpDensity: 0.35,
     kickVol: 1.1, kickMidVol: 0.9, hatVol: 0.10,
     groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 2, arpVel: 0.55, chordOct: 0,
@@ -315,9 +315,9 @@ export const MUSIC_SECTIONS = [
       [[0,3,7],[7,10,14],[8,12,15],[3,7,10]],      // Am  Em  F   C
       [[5,8,12],[0,3,7],[7,10,14],[10,14,17]],      // Dm  Am  Em  G
     ],
-    bass: { type: 'sawtooth', cutoff: 600,  q: 3, detune: 5, vol: 0.30 },
-    pad:  { type: 'sawtooth', cutoff: 1500, q: 2, detune: 6, vol: 0.12 },
-    lead: { type: 'sawtooth', cutoff: 3000, q: 1, detune: 5, vol: 0.16 },
+    bass: { type: 'sawtooth', voice: 'acid',     cutoff: 600,  q: 3, detune: 5, vol: 0.30 },
+    pad:  { type: 'sawtooth', voice: 'supersaw', cutoff: 1500, q: 2, detune: 6, vol: 0.12 },
+    lead: { type: 'sawtooth', voice: 'supersaw', cutoff: 3000, q: 1, detune: 5, vol: 0.16 },
     leadDensity: 0.35, arpDensity: 0.7,
     kickVol: 1.0, kickMidVol: 1.0, hatVol: 0.07,
     groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 1, arpVel: 0.85, chordOct: 12,
@@ -336,9 +336,9 @@ export const MUSIC_SECTIONS = [
       [[3,7,10],[10,14,17],[7,10,14],[5,9,12]],    // C   G   Em  D
       [[12,15,19],[7,10,14],[3,7,10],[5,9,12]],     // Am  Em  C   D
     ],
-    bass: { type: 'triangle', cutoff: 560,  q: 2, detune: 4, vol: 0.28 },
-    pad:  { type: 'sawtooth', cutoff: 2400, q: 1, detune: 12, vol: 0.14 },
-    lead: { type: 'triangle', cutoff: 3400, q: 1, detune: 6, vol: 0.16 },
+    bass: { type: 'triangle', voice: 'sub',      cutoff: 560,  q: 2, detune: 4, vol: 0.28 },
+    pad:  { type: 'sawtooth', voice: 'supersaw', cutoff: 2400, q: 1, detune: 12, vol: 0.14 },
+    lead: { type: 'triangle', voice: 'fm',       cutoff: 3400, q: 1, detune: 6, vol: 0.16 },
     leadDensity: 0.45, arpDensity: 0.5,
     kickVol: 0.85, kickMidVol: 0.55, hatVol: 0.08,
     groove: { swing: 0.0, leadOct: 24, arpOct: 12, arpEvery: 2, arpVel: 0.7, chordOct: 12,
@@ -357,9 +357,9 @@ export const MUSIC_SECTIONS = [
       [[5,9,12],[10,14,17],[14,17,21],[12,16,19]],  // D   G   Bm  A
       [[7,10,14],[12,16,19],[5,9,12],[10,14,17]],    // Em  A   D   G
     ],
-    bass: { type: 'sawtooth', cutoff: 620,  q: 3, detune: 4, vol: 0.28 },
-    pad:  { type: 'triangle', cutoff: 2000, q: 1, detune: 6, vol: 0.13 },
-    lead: { type: 'sine',     cutoff: 4200, q: 1, detune: 3, vol: 0.17 },
+    bass: { type: 'sawtooth', voice: 'sub',  cutoff: 620,  q: 3, detune: 4, vol: 0.28 },
+    pad:  { type: 'triangle', voice: 'warm', cutoff: 2000, q: 1, detune: 6, vol: 0.13 },
+    lead: { type: 'sine',     voice: 'fm',   cutoff: 4200, q: 1, detune: 3, vol: 0.17 },
     leadDensity: 0.55, arpDensity: 0.5,
     kickVol: 1.0, kickMidVol: 0.85, hatVol: 0.05,
     groove: { swing: 0.0, leadOct: 24, arpOct: 12, arpEvery: 2, arpVel: 0.75, chordOct: 0,
@@ -371,21 +371,21 @@ export const MUSIC_SECTIONS = [
 
   // Melodic house (Avicii-inspired) — bright, folk-tinged C major, ~126 BPM. A
   // catchy plucky lead carries the song; piano-style stabs bounce underneath. Bass:
-  // a bouncing four-on-the-floor pluck. Euphoric drop energy, straight beat.
+  // a round, sustained root that slides up into each chord. Euphoric, straight beat.
   { name: 'Levels',  tempo: 0.238,
     scale: [3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 20, 22, 24],
     progs: [
       [[3,7,10],[10,14,17],[12,15,19],[8,12,15]],   // C   G   Am  F
       [[8,12,15],[3,7,10],[10,14,17],[12,15,19]],    // F   C   G   Am
     ],
-    bass: { type: 'sawtooth', cutoff: 700,  q: 3, detune: 5, vol: 0.29 },
-    pad:  { type: 'triangle', cutoff: 2600, q: 1, detune: 4, vol: 0.12 },
-    lead: { type: 'triangle', cutoff: 3600, q: 1, detune: 4, vol: 0.19 },
+    bass: { type: 'sawtooth', voice: 'sub',   cutoff: 700,  q: 3, detune: 5, vol: 0.29 },
+    pad:  { type: 'triangle', voice: 'pluck', cutoff: 2600, q: 1, detune: 4, vol: 0.12 },
+    lead: { type: 'triangle', voice: 'pluck', cutoff: 3600, q: 1, detune: 4, vol: 0.19 },
     leadDensity: 0.75, arpDensity: 0.4,
     kickVol: 1.1, kickMidVol: 1.1, hatVol: 0.08,
     groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 2, arpVel: 0.65, chordOct: 12,
       leadLong: 0.35, leadRest: 0.12,
-      bassPat: [{d:'r',l:0.7,v:1.0}, {d:'8',l:0.5,v:0.7,p:0.6}, null, {d:'5',l:0.6,v:0.8,p:0.8}, {d:'r',l:0.7,v:1.0}, {d:'8',l:0.5,v:0.7,p:0.6}, null, {d:'n2',l:0.6,v:0.88,p:0.85}],
+      bassPat: [{d:'r',l:1.5,v:1.0}, null, {d:'8',l:0.6,v:0.72,p:0.6}, null, {d:'5',l:0.9,v:0.8,p:0.85}, null, null, {d:'n2',l:0.7,v:0.86,p:0.85}],
       chordPat: [{l:0.6,v:0.9,voi:'root'}, null, {l:0.5,v:0.8,voi:'inv1',p:0.8}, {l:0.5,v:0.8,voi:'open',p:0.7}, {l:0.6,v:0.9,voi:'root'}, null, {l:0.5,v:0.8,voi:'inv1',p:0.8}, {l:0.5,v:0.75,voi:'open',p:0.7,next:true}],
       kickPat: ['main', null, 'main', null, 'main', null, 'main', null],
       hatPat:  [0,1,0,1,0,1,0,1] } },
@@ -399,9 +399,9 @@ export const MUSIC_SECTIONS = [
       [[0,3,7],[8,12,15],[7,10,14],[0,3,7]],       // Am  F   Em  Am
       [[0,3,7],[5,8,12],[8,12,15],[7,10,14]],       // Am  Dm  F   Em
     ],
-    bass: { type: 'sawtooth', cutoff: 560,  q: 4, detune: 6, vol: 0.31 },
-    pad:  { type: 'square',   cutoff: 1500, q: 2, detune: 5, vol: 0.11 },
-    lead: { type: 'sawtooth', cutoff: 3000, q: 1, detune: 5, vol: 0.17 },
+    bass: { type: 'sawtooth', voice: 'reese',  cutoff: 560,  q: 4, detune: 6, vol: 0.31 },
+    pad:  { type: 'square',   voice: 'square', cutoff: 1500, q: 2, detune: 5, vol: 0.11 },
+    lead: { type: 'sawtooth', voice: 'sing',   cutoff: 3000, q: 1, detune: 5, vol: 0.17 },
     leadDensity: 0.5, arpDensity: 0.3,
     kickVol: 1.05, kickMidVol: 0.9, hatVol: 0.08,
     groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 4, arpVel: 0.55, chordOct: 12,
@@ -421,9 +421,9 @@ export const MUSIC_SECTIONS = [
       [[0,4,7],[1,5,8],[0,4,7],[7,10,13]],          // A  Bb  A  E(ish) — menacing
       [[0,4,7],[8,12,15],[1,5,8],[0,4,7]],
     ],
-    bass: { type: 'square',   cutoff: 560,  q: 5, detune: 7, vol: 0.30 },
-    pad:  { type: 'sawtooth', cutoff: 1400, q: 2, detune: 5, vol: 0.12 },
-    lead: { type: 'square',   cutoff: 2800, q: 1, detune: 6, vol: 0.18 },
+    bass: { type: 'square',   voice: 'saw',    cutoff: 560,  q: 5, detune: 7, vol: 0.30 },
+    pad:  { type: 'sawtooth', voice: 'warm',   cutoff: 1400, q: 2, detune: 5, vol: 0.12 },
+    lead: { type: 'square',   voice: 'square', cutoff: 2800, q: 1, detune: 6, vol: 0.18 },
     leadDensity: 0.9, arpDensity: 0.35,
     kickVol: 1.25, kickMidVol: 1.0, hatVol: 0.09,
     groove: { swing: 0.0, leadOct: 0, arpOct: 12, arpEvery: 4, arpVel: 0.55, chordOct: 0,

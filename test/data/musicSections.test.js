@@ -5,6 +5,9 @@ import { bassSemi, voiceChord } from '../../src/systems/musicGroove.js';
 const STEPS_PER_BAR = 8;
 const BASS_DEGREES = new Set(['r', '8', '5', '5h', '3', 'n1', 'n2', 'na']);
 const VOICINGS = new Set(['root', 'inv1', 'inv2', 'open', 'wide']);
+// The synth-engine instrument recipes (mVoice in src/legacy/game.js). Every
+// timbre's `voice` must name one, or the engine falls back to a default shape.
+const VOICES = new Set(['saw', 'sub', 'reese', 'acid', 'sing', 'pluck', 'fm', 'square', 'supersaw', 'warm']);
 
 describe('MUSIC_SECTIONS data validity', () => {
   it('is a non-empty array with Boss kept last', () => {
@@ -33,6 +36,7 @@ describe('MUSIC_SECTIONS data validity', () => {
       for (const role of ['bass', 'pad', 'lead']) {
         const p = s[role];
         expect(typeof p.type, `${at} ${role}.type`).toBe('string');
+        expect(VOICES.has(p.voice), `${at} ${role}.voice ${p.voice}`).toBe(true);
         for (const k of ['cutoff', 'q', 'detune', 'vol']) {
           expect(Number.isFinite(p[k]), `${at} ${role}.${k}`).toBe(true);
         }

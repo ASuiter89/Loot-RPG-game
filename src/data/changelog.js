@@ -11,6 +11,10 @@ export const CHANGELOG = [
     "Deepening one passive now pays off in jumps, not just a steady drip: its always-on bonus spikes at ranks 3, 7 and 10 — the same milestone ranks that already power up active skills (up to +30% of the stat total at rank 10).",
     "The skill card flags the surge with a chip and rank pips, previews the bigger jump on rank-up, and the level-up line calls out each milestone as you cross it. Keystones stay single-rank, so they don't surge.",
   ] },
+  { date: "2026-07-04", size: "medium", v: "A full rack of new synth instruments", by: "Claude", notes: [
+    "Rebuilt the soundtrack's synth engine so styles no longer share the same three sounds. New instruments: deep round sub bass, a detuned drum-&-bass reese, a squelchy acid bass, big super-saw leads and chords, metallic FM bells, plucky bell/marimba tones, and hollow reed leads — each style now picks the ones that fit it.",
+    "Fixed the bass: it used to be forced to the same punchy sawtooth in every style (the 'polka' feel). Basslines now use rounder, smoother sub tones and less on-the-beat bounce, so each style's low end has its own character.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Hidden heroes glow their class colour", by: "Claude", notes: [
     "When you slip behind a tree or tall furniture, your see-through silhouette now takes your class colour — Warrior red, Mage yellow, Templar blue, Rogue green — so you can still read who you are at a glance.",
     "Enemies hidden behind scenery now show a distinct magenta silhouette, so a lurking foe never blurs into a red Warrior.",
