@@ -25,7 +25,7 @@ import { footprintSealsPath } from '../systems/decorPlacement.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
-import { castHaste, castsPerSecond, effectiveDps } from '../systems/skillDamage.js';
+import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
@@ -2786,7 +2786,7 @@ const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', H
   // Spell Power amps spells; Cast Speed shortens the recharge of spell actives the
   // way Attack Speed quickens auto-attacks. Both are gated to matching gear.
   SKILLPWR:'Skill Power %', CASTSPD:'Cast Speed %',
-  CDR:'Cooldown Reduc %', MCR:'Mana Cost Reduc %',
+  CDR:'Cooldown Rating', MCR:'Mana Cost Reduc %',
   // ── weapon-flavour stats ── BLEED chance to open a bleeding wound (a DoT);
   // STUNPWR raises crushing weapons' stun chance & duration.
   BLEED:'Bleed Chance %', STUNPWR:'Stun Power %', ATKSPD:'Attack Speed %',
@@ -2807,7 +2807,7 @@ const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', MP:'MP
 // effective % they currently produce. CRITDMG stays a % (it's a damage multiplier).
 const PCT_STATS = new Set(['CRITDMG','LEECH','MPLEECH','IDMG',
   'DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','GOLDFIND','XPGAIN','MAGICFIND','MATFIND',
-  'SPELLPWR','SKILLPWR','CASTSPD','CDR','MCR','BLEED','STUNPWR','ATKSPD','TENAC']);
+  'SPELLPWR','SKILLPWR','CASTSPD','MCR','BLEED','STUNPWR','ATKSPD','TENAC']);
 // One-line "what this stat does" blurbs, surfaced by hovering a stat name (see
 // statMeaningTip) in the Enchanter, hero sheet and item cards.
 const STAT_DESC = {
@@ -2843,7 +2843,7 @@ const STAT_DESC = {
   SPELLPWR: 'Amplifies your spell damage.',
   SKILLPWR: 'Amplifies your weapon-based (martial) skills.',
   CASTSPD: 'Spell skills recharge faster.',
-  CDR: 'All skills recharge faster.',
+  CDR: 'Shortens every skill\'s cooldown. A rating: the % it cuts is CDR/(CDR+100), so it climbs toward but never reaches 100% — more is always better, each point a little less than the last.',
   MCR: 'Skills cost less mana.',
   BLEED: 'Chance to open a bleeding wound (damage over time).',
   STUNPWR: 'Raises stun chance and duration of crushing hits.',
@@ -3618,6 +3618,16 @@ function playerCritRating() {
 }
 function playerBlockRating() { return Math.max(0, totalStat('BLOCK') + ratePct(skillBonus('block'))); }
 function playerDRRating()    { return Math.max(0, totalStat('DR') + ratePct(skillBonus('dr'))); }
+
+// Cooldown Reduction is a RATING like crit/evasion, but ABSOLUTE — its opposition is
+// a fixed constant (not the foe's level), because a shorter cooldown works the same
+// against any monster. The fraction it actually cuts off every skill's cooldown is
+// rated(CDR, CDR_SCALE) = CDR/(CDR+CDR_SCALE), which climbs toward but never reaches
+// 1.0 — so cooldowns shrink with diminishing returns and can never hit zero. This is
+// exactly the reduction the cast pipeline applies (cd = base/(1+CDR/CDR_SCALE)); the
+// hero sheet, tooltips and gameState all report THIS %, not the raw rating.
+const CDR_SCALE = 100;
+function cooldownReductionFrac() { return rated(totalStat('CDR'), CDR_SCALE); }
 
 // ── EFFECTIVE CHANCES (what combat actually rolls; e is the foe, or {level} for UI) ──
 function dodgeChanceVs(e) { return rated(playerEvasionRating(), enemyAccuracyRating(e)); } // player avoids the blow
@@ -6412,13 +6422,15 @@ window.gameState = function gameState(radius) {
       range: c ? (c.range || null) : null,
       radius: c ? (c.radius || null) : null,
     };
-    // Damage preview: the raw per-hit range (crit excluded) and effective single-
-    // target DPS (crit + cast rate folded in) versus a typical foe at this depth —
-    // what the skill's tooltip shows. Null for non-damage actives. See the "damage"
-    // topic in gameGuide() and skillDamagePreview() for the exact model.
+    // Damage preview: the min–max a single activation deals to a foe at this depth
+    // (crit and chance procs excluded, multi-hit folded in), the effective sustained
+    // DPS (crit + cast rate factored), and the CDR-adjusted cooldown — what the
+    // skill's tooltip shows. Null for non-damage actives. See the "damage" topic in
+    // gameGuide() and skillDamagePreview() for the exact model.
     const dp = (typeof skillDamagePreview === 'function') ? skillDamagePreview(node, rank) : null;
-    o.damage = dp ? { min: dp.min, max: dp.max, hits: dp.hits } : null;
+    o.damage = dp ? { min: dp.min, max: dp.max } : null;
     o.dps = dp ? Math.round(dp.dps) : null;
+    o.cooldownFull = (typeof effectiveSkillCd === 'function') ? Math.round(effectiveSkillCd(node, rank) * 10) / 10 : (node ? node.cd : null);
     if (idx != null) {
       o.slot = idx + 1;
       o.key = (typeof skillKeyLabel === 'function') ? skillKeyLabel(idx + 1) : String(idx + 1);
@@ -6497,11 +6509,15 @@ window.gameState = function gameState(radius) {
       // Offense-scaling gear stats (all %), so an agent can see which build a hero is
       // geared for without reading tooltips. skillPower amps MARTIAL skills, spellPower
       // amps SPELLS; attackSpeed quickens auto-attacks, castSpeed the recharge of spell
-      // actives, and cooldownReduction the recharge of every active.
+      // actives. cooldownReduction is the effective FRACTION (0..1) your cooldowns are
+      // cut — CDR is a rating (cooldownRating), turned into an asymptotic % via
+      // rating/(rating+100) that nears but never reaches 1.0.
       offense: (typeof totalStat === 'function') ? {
         skillPower: totalStat('SKILLPWR'), spellPower: totalStat('SPELLPWR'),
         increasedDmg: totalStat('IDMG'),
-        attackSpeed: totalStat('ATKSPD'), castSpeed: totalStat('CASTSPD'), cooldownReduction: totalStat('CDR'),
+        attackSpeed: totalStat('ATKSPD'), castSpeed: totalStat('CASTSPD'),
+        cooldownRating: totalStat('CDR'),
+        cooldownReduction: (typeof cooldownReductionFrac === 'function') ? Math.round(cooldownReductionFrac() * 1000) / 1000 : 0,
       } : null,
       // Auto-attack reach of the equipped weapon, resolved by SUB-TYPE (a Rapier
       // reaches 2, a Pike 3, a Longbow 5) — read this rather than guessing from category.
@@ -6751,8 +6767,8 @@ window.gameGuide = function gameGuide(topic) {
       `The bar has ${SKILL_SLOTS} MANUAL slots (cast by hand with ${key('skill1')}-${key('skill' + SKILL_SLOTS)}) plus ONE dedicated auto-cast slot. You choose what goes where — drag a learned active onto a slot, or use the SKILLS-tab slot buttons; a freshly-learned active auto-fills the first open manual slot.`,
       `gameState().skills lists each filled manual slot's number key, MP cost (already reduced by your Mana Cost Reduction), cooldown remaining, ready flag, and what the skill DOES — its shape, range/radius and the damages/heals/buffs/summons flags — so you can pick one without inspecting it. The auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
       `Every active is either a SKILL (martial/weapon-based) or a SPELL (magic) — shown as a SKILL / SPELL badge on its tree node and in gameState().skills[i].school. A SKILL scales with your weapon damage + Skill Power gear; a SPELL scales with Spirit + Spell Power gear. Gear those stats to match the actives you lean on.`,
-      `Cooldowns are real seconds (spam-floored at 0.5s). Recharge is MULTIPLICATIVE haste, like attack speed: cd = base / (1 + CDR/100), and for SPELL actives times a further (1 + CastSpeed/100). There is NO cap — 60% CDR + 35% Cast Speed divides a spell's cooldown by 1.6×1.35 ≈ 2.16, and stacking more only ever approaches (never reaches) instant. +MCR likewise divides MP cost (base / (1 + MCR/100)); +Attack Speed quickens auto-attacks the same way. +CDR speeds every active, +Cast Speed spells only, and a rank-7 skill gets an extra ×1.2.`,
-      `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. ~50% CDR + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
+      `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and a rank-7 skill adds an extra ×1.2. The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
+      `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
       `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — a big power surge, then a shorter cooldown, then wider reach — so deepening a key skill outpaces its rising mana cost.`,
       `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. Its detail card shows a Surge chip, milestone pips by the rank, and the bigger jump in the on-rank-up preview. Keystones stay single-rank, so they don't surge.`,
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
@@ -6763,11 +6779,11 @@ window.gameGuide = function gameGuide(topic) {
     damage: [
       `Damage comes from THREE distinct sources, each with its own scaling lane — build into one and you don't accidentally buff the others:`,
       `AUTO-ATTACK: your automatic weapon swing. Scales with weapon Damage + Attack (ATK) + your class's damage attributes (e.g. Might). Dedicated amp: Increased Dmg % (IDMG). Speed lever: Attack Speed % (ATKSPD) — faster swings. Can MISS (accuracy vs the foe's evasion).`,
-      `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction % (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
+      `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
       `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
       `So NO — Attack does not feed everything: ATK + weapon Damage power auto-attacks and martial skills only; spells ignore them and live on Spirit + Spell Power. The three % amps (IDMG / Skill Power / Spell Power) are one-per-source and never cross over.`,
-      `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). gameState().player.offense reports your current skillPower / spellPower / increasedDmg / attackSpeed / castSpeed / cooldownReduction totals.`,
-      `TOOLTIP READOUT: each damage skill's tooltip (and its skill-tree card) shows two numbers versus a typical foe at your current depth — "Damage lo–hi", the raw per-hit range a single strike can roll (crit EXCLUDED, but folding in the weapon roll, ATK, your damage attributes, gear IDMG/Skill/Spell Power, the skill's coefficient & rank, synergies, and the foe's armour at this depth) — and "DPS", the effective single-target damage per second (that range averaged with your crit chance & crit damage, times hits-per-cast, times how often the skill fires with your CDR/Cast Speed). Big numbers abbreviate (1.2k, 3.4M). Situational spikes (boss damage, execute, rage, transient buffs) are left out so it stays a stable baseline. gameState() skills carry the same as { damage:{min,max,hits}, dps }.`,
+      `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). CDR is a RATING, not a flat %: the fraction it actually cuts off a cooldown is CDR/(CDR+100), so it climbs toward but never reaches 100% (no cap — the math just can't get there), and the hero sheet / tooltips show that real % — a cooldown drops by exactly the amount shown. gameState().player.offense reports skillPower / spellPower / increasedDmg / attackSpeed / castSpeed, the raw cooldownRating, and cooldownReduction as the 0..1 fraction it yields.`,
+      `TOOLTIP READOUT: each damage skill's tooltip (and its skill-tree card) shows two pills versus a typical foe at your current depth. "Damage lo–hi" is the absolute min to absolute max a single ACTIVATION deals to that foe — the weapon roll, ATK, your damage attributes, gear IDMG/Skill/Spell Power, the skill's coefficient & rank, synergies and the foe's armour are all folded in, and a multi-strike skill's hits are summed into the range — but crit and other chance-only effects (status/elemental procs) and external buffs (shrines, food, war-cries) are EXCLUDED, so it's a stable floor–ceiling. "DPS" is the effective sustained damage per second: that range's midpoint, lifted by your crit chance × crit damage, times how many times a second the skill can be cast. The cooldown shown in the tooltip is the real one AFTER your Cooldown Reduction / Cast Speed. Big numbers abbreviate (1.2k, 3.4M). gameState() skills carry { damage:{min,max}, dps, cooldownFull }.`,
       `Gear gating is thoughtful: a MELEE/RANGED weapon can only roll Skill Power & Attack Speed; a WAND/STAFF only Spell Power & Cast Speed. Gloves & rings lean martial (Skill Power); amulets & caster off-hands lean arcane (Spell/Cast). So the weapon you wield already points your build at one lane.`,
     ],
     autocast: [
@@ -19421,7 +19437,9 @@ function castSkillById(id, opts) {
   // than the last and the cooldown asymptotes toward — but never reaches — zero,
   // so it's functionally impossible to trivialise it even with extreme gear. The
   // 0.5s floor is only a spam guard on the final number, not a cap on the stats.
-  let haste = 1 + Math.max(0, totalStat('CDR')) / 100;                              // every active
+  // Reduction form: cd = base × (1 − CDR/(CDR+CDR_SCALE)) = base / (1 + CDR/CDR_SCALE).
+  // Same rating→asymptotic-% curve the hero sheet shows (cooldownReductionFrac).
+  let haste = 1 + Math.max(0, totalStat('CDR')) / CDR_SCALE;                        // every active
   if (castKind(sk) === 'spell') haste *= 1 + Math.max(0, totalStat('CASTSPD')) / 100; // spells only
   if (skillRank(id) >= 7) haste *= 1.20;                                            // ✦✦ Honed milestone
   setSkillCd(id, Math.max(0.5, sk.cd / haste));
@@ -19627,10 +19645,11 @@ function skillDamagePreview(node, rank) {
   if (!isWeapon && !isSpellDmg) return null; // no direct damage → no readout
 
   const r = rank || 1;
-  // Rank-10 "Mastered" grants an extra strike (resolveCast bumps repeat) — the only
-  // mastery step that changes single-target damage; the rest only widen targeting.
-  let hits = Math.max(1, c.repeat || 1);
-  if ((rank || 0) >= 10 && c.repeat) hits = c.repeat + 1;
+  // Multi-strike: a cast that lands several hits on the SAME target (cast.repeat);
+  // rank-10 "Mastered" adds one more. Folded into the range below so the pill shows
+  // the whole damage ONE activation does to a foe, not a single tick of it.
+  let strikes = Math.max(1, c.repeat || 1);
+  if ((rank || 0) >= 10 && c.repeat) strikes = c.repeat + 1;
 
   const synM = synergyMult(node);
   const rs = rankScale(r);
@@ -19640,45 +19659,62 @@ function skillDamagePreview(node, rank) {
   const armor = enemyArmorPct(foe);
   const armorFactor = armor > 0 ? (1 - armor * (1 - armorPenFrac())) : 1;
 
-  let min, max;
+  // Per-strike min/max — the honest floor/ceiling of a single hit, crit and all
+  // chance-based procs (status, elemental) EXCLUDED, and transient/external buffs
+  // (shrine Power, food, war-cry) left out so the range is a stable baseline.
+  let hitMin, hitMax;
   if (isWeapon) {
     const [wLo, wHi] = weaponDmgRange();
     const flat = player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
     const mult = c.wpn * synM * rs * skillPowerMult();
-    // The always-on weapon multipliers from applyOffenseMods (crit + situational
-    // spikes deliberately excluded): class damage, difficulty scar, gear IDMG, armour.
+    // The always-on weapon multipliers from applyOffenseMods: class damage,
+    // difficulty scar, gear IDMG, armour (crit + situational spikes excluded).
     const off = classDmgDealtMult() * diffDebuffMult() * (1 + totalStat('IDMG') / 100) * armorFactor;
-    min = Math.max(1, Math.round((wLo + flat) * mult * off));
-    max = Math.max(1, Math.round((wHi + flat) * mult * off));
+    hitMin = Math.max(1, Math.round((wLo + flat) * mult * off));
+    hitMax = Math.max(1, Math.round((wHi + flat) * mult * off));
   } else {
-    // Spells have no roll — spellBase is deterministic, so min === max.
+    // Spells have no roll — spellBase is deterministic, so hitMin === hitMax.
     const base = spellBase(c.flat || 12, c.perLvl || 2) * c.spell * synM * rs;
     const off = diffDebuffMult() * armorFactor; // spells skip class-dmg & IDMG (isSpell path)
-    min = max = Math.max(1, Math.round(base * off));
+    hitMin = hitMax = Math.max(1, Math.round(base * off));
   }
+  // Fold the strikes in: the absolute min/max a single ACTIVATION deals to a foe.
+  const min = hitMin * strikes;
+  const max = hitMax * strikes;
 
   const critChance = critChanceVs(foe);
   const critMult = critDamageMult();
-  // Cast rate: base cooldown shortened by the same haste the real cast applies —
-  // CDR for every active, Cast Speed for spells (keyed off castKind, so a hybrid's
-  // spell tag still speeds it), and the rank-7 Honed factor.
-  const haste = castHaste({
-    cdr: totalStat('CDR'), castSpd: totalStat('CASTSPD'),
-    isSpell: castKind(node) === 'spell', honed: r >= 7,
-  });
-  const cps = castsPerSecond(node.cd, haste);
-  const dps = effectiveDps({ min, max, critChance, critMult, hitsPerCast: hits, castsPerSec: cps });
-  return { min, max, hits, dps, kind: isWeapon ? 'weapon' : 'spell' };
+  // Effective DPS = the range's midpoint, lifted by the expected crit multiplier,
+  // times how many times a second the skill can actually be cast (its cooldown after
+  // CDR / Cast Speed / the rank-7 Honed cut, honouring the 0.5s floor). Strikes are
+  // already in min/max, so hitsPerCast is 1 here.
+  const effCd = effectiveSkillCd(node, r);
+  const dps = effectiveDps({ min, max, critChance, critMult, hitsPerCast: 1, castsPerSec: 1 / effCd });
+  return { min, max, dps, effectiveCd: effCd };
 }
 
-// One compact tooltip line (`.ht-sub`) for a damage skill: the raw per-hit range
-// and the effective single-target DPS, both abbreviated when large. '' otherwise.
+// The recharge an active ACTUALLY has right now, in seconds: its base cooldown
+// shortened by the same haste the cast applies — Cooldown Reduction for every
+// active, Cast Speed for spells, the rank-7 Honed cut — floored at 0.5s. Works for
+// any active (buffs/heals too), so tooltips can show the real, CDR-adjusted cd.
+function effectiveSkillCd(node, rank) {
+  const haste = castHaste({
+    cdr: totalStat('CDR'), castSpd: totalStat('CASTSPD'),
+    isSpell: castKind(node) === 'spell', honed: (rank || 1) >= 7,
+  });
+  return effectiveCooldown((node && node.cd) || 0, haste);
+}
+// Round a cooldown to a tidy one-decimal seconds string ("3s", "3.2s").
+function fmtCd(secs) { return `${Math.round((secs || 0) * 10) / 10}`; }
+
+// Two tooltip pills (`.ht-sub` lines) for a damage skill: the min–max a single
+// activation deals to a foe (pre-crit), and the effective sustained DPS. Both
+// abbreviate when large. '' for a non-damage active.
 function skillDmgTipLine(node, rank) {
   const p = skillDamagePreview(node, rank);
   if (!p) return '';
-  const rng = formatDamageRange(p.min, p.max);
-  const hits = p.hits > 1 ? ` <span style="opacity:.75">×${p.hits}</span>` : '';
-  return `<div class='ht-sub'>Damage <b>${rng}</b>${hits} · DPS <b style='color:var(--gold)'>${abbreviateNumber(p.dps)}</b></div>`;
+  return `<div class='ht-sub'>Damage <b>${formatDamageRange(p.min, p.max)}</b></div>`
+    + `<div class='ht-sub'>DPS <b style='color:var(--gold)'>${abbreviateNumber(p.dps)}</b></div>`;
 }
 
 // Direction (cardinal) toward the nearest foe in range, for line/beam shapes.
@@ -22453,7 +22489,7 @@ function renderHero(el) {
     ['LEECH','ic_heart','Life leech'], ['MPLEECH','ic_orb','Mana leech'], ['HPKILL','ic_heart','Life on kill'],
     ['MPKILL','ic_orb','Mana on kill'], ['THORNS','spikes_up','Thorns'],
     ['SKILLPWR','w_scythe','Skill power'], ['SPELLPWR','ic_orb','Spell power'],
-    ['ATKSPD','w_dagger','Attack speed'], ['CASTSPD','ic_wand','Cast speed'], ['CDR','ic_wand','Cooldown reduc'],
+    ['ATKSPD','w_dagger','Attack speed'], ['CASTSPD','ic_wand','Cast speed'],
     ['MCR','ui_mp','Mana cost reduc'], ['GOLDFIND','ic_money','Gold find'], ['XPGAIN','scroll','XP gain'],
     ['MAGICFIND','chest','Magic find'], ['MATFIND','mat_scrap','Material find'],
     ['BLEED','ic_heart','Bleed chance'], ['STUNPWR','ic_stun','Stun power'],
@@ -22473,6 +22509,7 @@ function renderHero(el) {
       ${stat('Attack power', Math.round(totalStat('ATK') + attrDamage()))}
       ${stat('Attack speed', '+' + Math.round(playerAttackSpeedPct()) + '% <span style="opacity:0.6">→ ' + (1 / playerAttackInterval()).toFixed(2) + '/s</span>')}
       ${stat('Move speed', '+' + Math.round(((1 + totalStat('MOVESPD') / 100) * agiMoveMult() - 1) * 100) + '%')}
+      ${totalStat('CDR') > 0 ? stat('Cooldown reduction', `${Math.round(totalStat('CDR'))} <span style="opacity:0.6">→ ${Math.round(cooldownReductionFrac() * 100)}%</span>`) : ''}
       ${stat('Max Stamina', Math.round(player.maxStamina || baseMaxStamina()))}
       ${stat('Stamina regen', '+' + (Math.round(staminaRegenPerSec() * 10) / 10) + '/s')}
       ${stat('Defense', Math.round(playerDefense()))}
@@ -22737,7 +22774,7 @@ function renderSkills(el) {
   const sn = selectedSkillId ? byId[selectedSkillId] : null;
   if (sn) {
     const rank = skillRank(sn.id);
-    const typeTxt = sn.type === 'active' ? `<span data-spr=ic_stun></span> ACTIVE · ${castKind(sn) === 'spell' ? '<span data-spr=ic_orb></span> SPELL' : '<span data-spr=w_sword></span> SKILL'} · ${skillManaCost(sn, rank)}MP · ${sn.cd}s cd · ${castShapeLabel(sn.cast)}` : 'PASSIVE';
+    const typeTxt = sn.type === 'active' ? `<span data-spr=ic_stun></span> ACTIVE · ${castKind(sn) === 'spell' ? '<span data-spr=ic_orb></span> SPELL' : '<span data-spr=w_sword></span> SKILL'} · ${skillManaCost(sn, rank)}MP · ${fmtCd(effectiveSkillCd(sn, rank))}s cd · ${castShapeLabel(sn.cast)}` : 'PASSIVE';
     const pips = (sn.type === 'active' || (sn.type === 'passive' && !sn.keystone)) ? milestonePips(rank) : '';
     const rankTxt = ` <span style="color:var(--gold)">${rank}/${sn.max}${pips ? ' ' + pips : ''}</span>`;
     const reqRows = [];
@@ -23041,14 +23078,14 @@ function skillMechList(n, rank) {
     // a player which gear stats power this ability.
     if (castKind(n) === 'spell') add('Spell', '#b08ad8', 'Magic — scales with Spell Power; Cooldown Reduction &amp; Cast Speed shorten its recharge.');
     else add('Skill', '#e0a24b', 'Martial — scales with your weapon damage &amp; Skill Power; Cooldown Reduction shortens its recharge.');
-    // Live damage readout — the raw per-hit range and the effective single-target
-    // DPS, folding in gear, attributes, rank, crit and cast rate against a foe at
-    // this depth. Only for actives that actually deal direct damage (wpn/spell).
+    // Two live readout pills — the min–max a single activation deals to a foe at
+    // this depth (gear/attributes/rank folded in, crit and chance procs excluded),
+    // and the effective sustained DPS (that range's midpoint × crit × how often it
+    // fires). Only for actives that deal direct damage (wpn/spell).
     const dp = skillDamagePreview(n, rank);
     if (dp) {
-      const rng = formatDamageRange(dp.min, dp.max);
-      const hitsTxt = dp.hits > 1 ? ` ×${dp.hits} hits` : '';
-      add('Damage', '#e05a4b', `<b>${rng}</b> per hit${hitsTxt} · about <b>${abbreviateNumber(dp.dps)}</b> DPS vs. a depth-${curDepth()} foe.`);
+      add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b> to a foe at this depth, before crit.`);
+      add('DPS', '#e0a24b', `about <b>${abbreviateNumber(dp.dps)}</b> sustained — crit chance/damage and cast rate factored in.`);
     }
     // Movement first — gap-closers/pulls/escapes are the headline of a mobility skill.
     if (c.shape === 'teleport') add('Gap-closer', '#5fc9c0', `Blink up to ${c.range || 6} tiles onto the nearest foe and strike — closes on ranged attackers.`);
@@ -23310,7 +23347,7 @@ function renderSkillBar() {
     // Desktop names the number key; touch (no keyboard, reached by long-press) says "tap to cast".
     const castHint = touchUI() ? ' · tap to cast' : (key ? ` · press ${key}` : '');
     const moveHint = touchUI() ? 'tap the SKILLS tab to re-slot' : 'drag to rearrange · drag a tree skill to swap';
-    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
+    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
     return cell(kbShort(key), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}',${i})" ondragend="skillDragEnd()" ${dropAttrs(i)} ${hoverTip(tip)} onclick="castSkillById('${s.id}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
@@ -23332,7 +23369,7 @@ function renderSkillBar() {
     const s = autoS;
     const cd = skillCd(s.id);
     const ready = cd <= 0 && player.mp >= s.mp && player.hp > 0;
-    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${s.cd}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${touchUI() ? 'tap to change or clear' : 'drag a skill here to change · tap to edit'}</div>`;
+    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${touchUI() ? 'tap to change or clear' : 'drag a skill here to change · tap to edit'}</div>`;
     autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}','${AUTO_SLOT}')" ondragend="skillDragEnd()" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
