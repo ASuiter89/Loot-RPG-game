@@ -20963,15 +20963,34 @@ function enemyWander(e) {
 }
 
 // ── REAL-TIME ENEMY AI (wander ↔ aggro) ──
-// Idle drift for an un-engaged foe: most ticks it holds position, otherwise it
-// takes one lazy step that never closes onto the hero (it isn't hunting yet).
+// Organic roaming for an un-engaged foe: it strolls toward a wander waypoint a few
+// tiles off, stepping EVERY tick so the render glides continuously (no pop-pause),
+// and only pauses briefly when it reaches the waypoint — a foe "looking around"
+// before ambling somewhere new. It never closes onto the hero (aggro takes over
+// once you're near). Greedy diagonal-first stepping keeps it cheap (no per-tick BFS).
 function wanderStep(e) {
-  if (Math.random() < 0.55) return;                 // mostly idle
-  const dirs = ENEMY_DIRS.slice().sort(() => Math.random() - 0.5);
-  for (const [mx, my] of dirs) {
-    if (e.x + mx === player.x && e.y + my === player.y) continue; // don't drift onto the hero
+  if (e._wanderPause > 0) { e._wanderPause--; return; }   // a natural beat of standing still
+  // Reached the waypoint (or never had one) → sometimes pause, then pick a fresh one.
+  if (!e._wanderTo || (e.x === e._wanderTo.x && e.y === e._wanderTo.y)) {
+    if (Math.random() < 0.3) { e._wanderPause = rnd(1, 3); e._wanderTo = null; return; }
+    e._wanderTo = null;
+    for (let t = 0; t < 8; t++) {
+      const ang = Math.random() * Math.PI * 2, r = rnd(2, 4);
+      const wx = Math.round(e.x + Math.cos(ang) * r), wy = Math.round(e.y + Math.sin(ang) * r);
+      if (wx > 0 && wy > 0 && wx < MAP_W - 1 && wy < MAP_H - 1 && enemyTileFree(wx, wy)) { e._wanderTo = { x: wx, y: wy }; break; }
+    }
+    if (!e._wanderTo) { e._wanderPause = rnd(1, 2); return; }
+  }
+  // Greedy step toward the waypoint (diagonal first), never onto the hero.
+  const sx = Math.sign(e._wanderTo.x - e.x), sy = Math.sign(e._wanderTo.y - e.y);
+  const tries = Math.abs(e._wanderTo.x - e.x) >= Math.abs(e._wanderTo.y - e.y)
+    ? [[sx, sy], [sx, 0], [0, sy]] : [[sx, sy], [0, sy], [sx, 0]];
+  for (const [mx, my] of tries) {
+    if (!mx && !my) continue;
+    if (e.x + mx === player.x && e.y + my === player.y) continue;  // don't stroll onto the hero
     if (enemyStep(e, mx, my)) return;
   }
+  e._wanderTo = null; e._wanderPause = rnd(0, 2);                    // stuck → repick after a beat
 }
 
 // One world-tick of behaviour for a single foe. Bosses always hunt. Otherwise a
@@ -21450,6 +21469,11 @@ function drawBossTelegraphs(offX, offY, tw, th, x0, y0, x1, y1) {
 // and unlock the ring + double pounce. Between casts it lumbers after you, so the
 // fight is kite-and-punish. Replaces the generic special pool for this boss.
 function bossPhaseOf(e) { const f = e.maxHp ? e.hp / e.maxHp : 1; return f > 0.66 ? 1 : f > 0.33 ? 2 : 3; }
+// Attacks are gentler in the shallow floors and get faster with depth: a floor-5
+// guardian reads slowly and comfortably, while a deep-Endless one is brutal. The
+// multiplier (>1 early) stretches BOTH the wind-up and the gap between casts, easing
+// toward and past 1× as you descend. Every boss will pace itself through this.
+function bossPace() { return Math.max(0.7, Math.min(1.6, 1.6 - (dungeonLevel || 1) * 0.012)); }
 function ratKingTurn(e, dist) {
   if (e._phase == null) e._phase = 1;
   const ph = bossPhaseOf(e);
@@ -21457,13 +21481,14 @@ function ratKingTurn(e, dist) {
     e._phase = ph;
     log(`<span data-spr=b_ratking></span> ${e.name} shrieks — the swarm grows bolder!`, 'important');
     sfx('boss'); screenFlash('#ffd24b'); addShake(6); playBossVfx(e, 'summon');
-    e._tgCd = 1.2;
+    e._tgCd = 1.2 * bossPace();
     return true;
   }
   e._tgCd = (e._tgCd || 0) - WORLD_TICK_SECONDS;
   if (e._tgCd > 0) return false;              // between casts → let it chase you
+  const pace = bossPace();                    // stretch wind-ups + cadence in shallow floors
   const cx = e.x + (e.size || 1) / 2, cy = e.y + (e.size || 1) / 2;   // boss centre (tiles)
-  const tell = ph === 1 ? 1.15 : ph === 2 ? 1.0 : 0.85;
+  const tell = (ph === 1 ? 1.15 : ph === 2 ? 1.0 : 0.85) * pace;
   const raw = e.dmg, roll = Math.random();
   // Cast tell: the boss flares as it begins winding up, so a launch always reads.
   _fxPush('aura', cx, cy, paletteFor('summon'), { variant: 'flare', dur: Math.round(tell * 620), moteN: 10 });
@@ -21492,7 +21517,7 @@ function ratKingTurn(e, dist) {
     log(`<span data-spr=b_ratking></span> ${e.name} calls vermin to swarm you!`, 'important');
     sfx('shrine');
   }
-  e._tgCd = ph === 1 ? 2.6 : ph === 2 ? 2.1 : 1.7;   // cadence tightens per phase
+  e._tgCd = (ph === 1 ? 2.6 : ph === 2 ? 2.1 : 1.7) * pace;   // cadence tightens per phase, eased in shallow floors
   return true;
 }
 
@@ -28131,7 +28156,9 @@ function updateCooldownDials() {
 // tile; `gsp` is the glide speed (tiles/sec). Returns the heading for facing.
 function glideActor(a, tx, ty, dt) {
   if (a.fx == null) { a.fx = tx; a.fy = ty; a._gx0 = tx; a._gy0 = ty; a._gsp = 0; return; }
-  if (Math.abs(tx - a.fx) > 1.6 || Math.abs(ty - a.fy) > 1.6) { a.fx = tx; a.fy = ty; a._gx0 = tx; a._gy0 = ty; a._gsp = 0; return; }
+  // Only a real teleport (blink, floor rebuild) snaps; a normal 1-2 tile step — even
+  // a swift foe's double step or a diagonal — glides. (1.6 used to snap those.)
+  if (Math.abs(tx - a.fx) > 3.2 || Math.abs(ty - a.fy) > 3.2) { a.fx = tx; a.fy = ty; a._gx0 = tx; a._gy0 = ty; a._gsp = 0; return; }
   if (tx !== a._gx0 || ty !== a._gy0) {                 // stepped to a new tile
     const gap = Math.hypot(tx - a.fx, ty - a.fy);
     a._gsp = gap / WORLD_TICK_SECONDS;                  // cover it in one beat → constant speed
