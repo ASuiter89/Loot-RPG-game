@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "large", v: "Play on your phone — a real touch interface", by: "Claude", notes: [
+    "The game now has a full mobile layout. The first time you touch the screen it switches to a phone interface; a mouse switches it back — nothing changes for keyboard-and-mouse play.",
+    "Drag anywhere on the map to raise a floating joystick and steer the hero. Push the stick to its rim to sprint. A quick tap still walks you to that spot, or chases a tapped foe.",
+    "A right-hand thumb cluster holds your potions and skill buttons plus a Dash and a Use (grab / talk) button. A menu and a bag button sit in the top corner; your health, mana and floor read across the top.",
+    "The map fills the whole screen and the camera lifts the hero clear of your thumbs. Works in both portrait and landscape, and stays crisp on high-resolution screens.",
+    "Menus, shops and the bag open as full-screen sheets with big tap targets, and merchant cards now open on a tap since there's no mouse hover.",
+  ] },
   { date: "2026-07-04", size: "medium", v: "Desktop-only controls", by: "Claude", notes: [
     "The game is now built for mouse and keyboard only. The on-screen move pad, the floating movement stick, tap-and-swipe steering, the rotate-your-device prompt and the touch settings gear have all been removed.",
     "Nothing changes for mouse-and-keyboard play — every control works exactly as before.",

@@ -6,7 +6,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Dungeon Loot</title>
 <link rel="stylesheet" href="./src/styles.css">
 </head>
@@ -580,6 +580,35 @@
       <div id="town-mats"></div>
       <div id="town-content"></div>
     </div>
+  </div>
+</div>
+
+<!-- ── TOUCH CONTROLS ── Revealed only on a touch device (body.touch; see
+     setTouchMode in game.js). Desktop never shows these and is unaffected.
+     Floating joystick rings, placed in viewport px by showJoyVisual(). -->
+<div id="joy-base" aria-hidden="true"><span id="joy-knob"></span></div>
+<!-- Thumb HUD: a top-right utility strip, and a bottom-right action cluster. The
+     live #skill-bar (potions + 4 skill slots) is re-homed into #touch-cluster by
+     syncHudLayout(), joined by touch-only USE (grab/interact) and DASH buttons. -->
+<div id="touch-hud">
+  <div id="touch-topbar">
+    <button class="touch-util" id="tb-menu" onclick="toggleSettingsMenu(event)" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <button class="touch-util" id="tb-bag" onclick="toggleBag()" aria-label="Bag">
+      <svg viewBox="0 0 20 20" fill="none"><rect x="7" y="2" width="6" height="3" rx="1.2" fill="currentColor"/><path d="M5 6 q5 -2 10 0 q2.5 6 0.5 10 q-5.5 2.5 -11 0 q-2 -4 0.5 -10 z" fill="currentColor" opacity="0.85"/></svg>
+      <span class="tb-badge" id="tb-bag-badge"></span>
+    </button>
+  </div>
+  <div id="touch-cluster">
+    <button class="touch-act tb-use" id="tb-use" onclick="pickup()" aria-label="Use / grab">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
+      <span class="tb-lbl">USE</span>
+    </button>
+    <button class="touch-act tb-dash" id="tb-dash" onclick="doDash()" aria-label="Dash">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 7 11 12 6 17"/><polyline points="13 7 18 12 13 17"/></svg>
+      <span class="tb-lbl">DASH</span>
+    </button>
   </div>
 </div>
 

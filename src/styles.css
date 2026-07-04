@@ -234,7 +234,7 @@
     --shadow-glow: 0 0 8px var(--interactive);
 
     /* ---- Z-index layers ---- */
-    --z-hud: 50; --z-overlay: 200; --z-modal: 210; --z-top: 300;
+    --z-hud: 50; --z-touch: 120; --z-overlay: 200; --z-modal: 210; --z-top: 300;
 
     /* ── UI FONT ── one knob for the whole interface. The player picks a face in
        <span data-spr=ic_mallet></span> Settings → Visuals → UI FONT; setUiFont() overrides this custom property at
@@ -4153,3 +4153,179 @@
   .food-row.eatable:hover { border-color: var(--uncommon); background: var(--green-800); }
   .food-row.eatable:hover .eat-btn { background: var(--green-550); }
   .food-row.eatable:active { background: var(--green-800); }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     TOUCH UI — additive mobile layer, keyed ENTIRELY off body.touch (set by
+     setTouchMode() in game.js on the first real touch pointer). A desktop machine
+     never matches body.touch, so this whole section is inert on desktop and the
+     mouse-only smoke test never enters it. Both orientations are first-class;
+     portrait/landscape differences use @media (orientation:…) SCOPED under
+     body.touch, so they can never affect a desktop layout.
+     Colours/sizes come from :root tokens (see styles-lint); translucency uses
+     color-mix so no raw rgba() escapes the token layer.
+     ═══════════════════════════════════════════════════════════════════════════ */
+
+  /* Full-screen map: the canvas fills the viewport; desktop chrome (combat log,
+     bottom action row, desktop HUD, map-corner pill) is hidden. Vitals move to a
+     slim top overlay; controls move to the thumb clusters. */
+  body.touch #main { position: relative; flex: 1; min-height: 0; }
+  body.touch #game-wrap { position: relative; flex: 1; min-height: 0; width: 100%; }
+  body.touch #game-wrap > canvas { width: 100%; height: 100%; }
+  body.touch #bottom-row,
+  body.touch #control-bar,
+  body.touch #desktop-hud,
+  body.touch #map-info { display: none !important; }
+
+  /* ── Top vitals strip ── the existing #header, reused as a translucent overlay
+     pinned to the top and safe-area padded. pointer-events:none so a tap on the
+     map's top edge falls through to the canvas (steer / tap-to-move). */
+  body.touch #header {
+    position: absolute; top: 0; left: 0; right: 0; z-index: var(--z-touch);
+    flex-wrap: wrap; gap: 4px 10px; justify-content: flex-start;
+    padding: calc(env(safe-area-inset-top, 0px) + 4px) calc(env(safe-area-inset-right, 0px) + 8px) 5px calc(env(safe-area-inset-left, 0px) + 8px);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 80%, transparent), transparent);
+    border-bottom: none; box-shadow: none; pointer-events: none;
+  }
+  body.touch #stats { gap: 8px; font-size: 1.2rem; }
+  body.touch .bar-track { width: 62px; height: 12px; }
+  body.touch #header .hud-item { font-size: 1.2rem; }
+  /* Trim the least-critical chips on a small screen (all still read in the HERO
+     tab); keep HP/MP/stamina, floor, foes and gold. */
+  body.touch #level-hud, body.touch #power-hud, body.touch #hero-name-hud,
+  body.touch #pact-hud, body.touch #food-hud { display: none; }
+
+  /* Minimap clears the top vitals strip. */
+  body.touch #minimap {
+    top: calc(env(safe-area-inset-top, 0px) + 42px) !important;
+    left: calc(env(safe-area-inset-left, 0px) + 6px) !important;
+  }
+
+  /* ── Touch HUD overlay ── a full-screen pass-through layer; only its buttons
+     catch pointers, so taps on the open map still reach the canvas. */
+  #touch-hud { display: none; }
+  body.touch #touch-hud { display: block; position: fixed; inset: 0; z-index: var(--z-touch); pointer-events: none; }
+  body.touch #touch-topbar {
+    position: absolute; pointer-events: auto; display: flex; gap: 8px;
+    top: calc(env(safe-area-inset-top, 0px) + 6px);
+    right: calc(env(safe-area-inset-right, 0px) + 8px);
+  }
+  body.touch #touch-cluster {
+    position: absolute; pointer-events: auto;
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: flex-end;
+    gap: 8px; max-width: 66vw;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+    right: calc(env(safe-area-inset-right, 0px) + 10px);
+  }
+
+  /* Utility buttons (menu, bag): 48px round translucent tiles. */
+  .touch-util {
+    width: 48px; height: 48px; border-radius: var(--radius-pill); position: relative;
+    display: flex; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--panel-raised) 76%, transparent);
+    border: 1px solid var(--border); color: var(--purple-200);
+    box-shadow: var(--shadow-sm); cursor: pointer;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .touch-util svg { width: 24px; height: 24px; }
+  .touch-util:active { background: color-mix(in srgb, var(--interactive) 32%, var(--panel)); }
+  .tb-badge {
+    position: absolute; top: -3px; right: -3px; min-width: 16px; height: 16px; padding: 0 3px;
+    border-radius: var(--radius-pill); background: var(--gold); color: var(--ink);
+    font-size: 1.1rem; font-weight: bold; line-height: 16px; text-align: center;
+    box-shadow: 0 0 5px color-mix(in srgb, var(--gold) 70%, transparent);
+  }
+  .tb-badge:empty { display: none; }
+
+  /* Action buttons (USE, DASH): 56px tiles in the thumb cluster. */
+  .touch-act {
+    width: 56px; height: 56px; border-radius: var(--radius-lg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    background: color-mix(in srgb, var(--panel-raised) 82%, transparent);
+    border: 1px solid var(--border); color: var(--text);
+    box-shadow: var(--shadow-sm); cursor: pointer;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .touch-act svg { width: 26px; height: 26px; }
+  .touch-act .tb-lbl { font-size: 1.1rem; letter-spacing: 0.4px; opacity: 0.85; }
+  .touch-act.tb-dash { border-color: var(--gold); color: var(--gold); }
+  .touch-act.tb-use { border-color: var(--accent-teal); color: var(--accent-teal); }
+  .touch-act:active { transform: scale(0.94); }
+
+  /* The re-homed live #skill-bar inside the cluster: a compact wrap of ≥48px
+     tiles (the same buttons/onclick/cooldowns as desktop, just re-laid). */
+  body.touch #touch-cluster #skill-bar {
+    display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: flex-end;
+    gap: 6px; padding: 0; background: none; border: none; box-shadow: none;
+    width: auto; max-width: 100%; --sb-size: 52px;
+  }
+  body.touch #touch-cluster #skill-bar .sb-left,
+  body.touch #touch-cluster #skill-bar .sb-right,
+  body.touch #touch-cluster #skill-bar .sb-auto-wrap {
+    flex: 0 0 auto; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; min-width: 0;
+  }
+  body.touch #touch-cluster .skillbar-btn { width: var(--sb-size); height: var(--sb-size); }
+  body.touch #touch-cluster .sb-cell { display: flex; flex-direction: column; align-items: center; }
+  /* Town isn't needed in the combat cluster on touch (reach it from the menu). */
+  body.touch #touch-cluster #skill-bar .sb-left .skillbar-btn.town { display: none; }
+  body.touch #touch-cluster #skill-bar .sb-left .sb-cell:has(.skillbar-btn.town) { display: none; }
+
+  /* ── Floating joystick rings ── placed in viewport px by showJoyVisual(); shown
+     only while the stick is engaged. Decorative (pointer-events:none). */
+  #joy-base, #joy-knob { display: none; }
+  body.touch.joy-on #joy-base {
+    display: block; position: fixed; z-index: var(--z-touch); pointer-events: none;
+    width: 112px; height: 112px; margin-left: -56px; margin-top: -56px; border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--interactive) 55%, transparent);
+    background: radial-gradient(circle, color-mix(in srgb, var(--interactive) 15%, transparent), transparent 70%);
+  }
+  body.touch.joy-on #joy-knob {
+    display: block; position: fixed; z-index: var(--z-touch); pointer-events: none;
+    width: 46px; height: 46px; margin-left: -23px; margin-top: -23px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, color-mix(in srgb, var(--interactive) 85%, var(--paper)), var(--interactive));
+    border: 2px solid color-mix(in srgb, var(--paper) 40%, transparent);
+    box-shadow: var(--shadow-glow);
+  }
+
+  /* ── Bag/loot drawer as a full-screen sheet ── */
+  body.touch #side-panel { transition: none; }
+  body.touch:not(.bag-open) #side-panel { display: none; }
+  body.touch.bag-open #side-panel {
+    display: flex; position: fixed; inset: 0; width: 100%; transform: none; opacity: 1;
+    pointer-events: auto; z-index: var(--z-modal); border-left: none;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  }
+  /* The desktop spine becomes a top header/close bar on touch. */
+  body.touch.bag-open #panel-toggle {
+    display: flex; align-items: center; gap: 8px; justify-content: space-between; width: 100%;
+    writing-mode: horizontal-tb; transform: none; height: auto; flex: 0 0 auto;
+    padding: 12px 16px; font-size: var(--fs-head-sm); color: var(--gold);
+    border-bottom: 1px solid var(--border);
+  }
+  body.touch.bag-open #panel-toggle::after { content: '✕'; margin-left: auto; font-size: var(--fs-head); }
+  body.touch.bag-open #panel-toggle .log-caret { display: none; }
+  body.touch.bag-open #panel-body { flex: 1; min-height: 0; }
+
+  /* ── Larger tap targets across the menus/shops on touch (48px floor). ── */
+  body.touch .tab-btn, body.touch .settings-tab-btn, body.touch .shop-tab,
+  body.touch .lb-tab, body.touch .lb-mode { min-height: 44px; }
+  body.touch .settings-item, body.touch .town-menu-btn, body.touch .shop-row,
+  body.touch .act-btn, body.touch .la-btn, body.touch .modal-nav-btn,
+  body.touch .kb-row { min-height: 44px; }
+  /* Full-height, scrollable modals so long menus reach on a small screen. */
+  /* Town / shop / mystic modals fill the screen on touch (the 340px cap clips the
+     2-column service grid on a phone); the settings card just grows to full height. */
+  body.touch #town-overlay, body.touch #shop-overlay, body.touch #mystic-overlay { padding: 0; }
+  body.touch #town-modal, body.touch #shop-modal, body.touch #mystic-modal {
+    width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  body.touch #town-content, body.touch #shop-content, body.touch #mystic-content { overflow-x: hidden; }
+  body.touch #settings-card { max-height: 100dvh; }
+
+  /* Tutorial hint chip: dock it just under the top vitals strip on touch (clear of
+     both thumb zones), and hide it while a full-screen sheet is open. */
+  body.touch #tutorial-hint {
+    top: calc(env(safe-area-inset-top, 0px) + 54px); bottom: auto;
+    left: 50%; transform: translateX(-50%); max-width: 88vw;
+  }
+  body.touch.bag-open #tutorial-hint { display: none; }
