@@ -8431,12 +8431,18 @@ resizeCanvas();
 // the drag, not chase it a third of a second behind — and clear the flag once the
 // drag settles.
 let _resizeAnimTimer = null;
-window.addEventListener('resize', () => {
+function onViewportResize() {
   document.body.classList.add('resizing');
   if (_resizeAnimTimer) clearTimeout(_resizeAnimTimer);
   _resizeAnimTimer = setTimeout(() => document.body.classList.remove('resizing'), 200);
   resizeCanvas(); if (inTown) syncTownBarReserve(); draw();
-});
+}
+window.addEventListener('resize', onViewportResize);
+// Foldables (fold/unfold), rotation, and the mobile URL bar showing/hiding change
+// the usable viewport without always firing a plain window 'resize' — refit on
+// those too so the full-screen canvas always matches the visible area.
+window.addEventListener('orientationchange', onViewportResize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
 
 // The loot drawer is a permanent column — always open; tapping the map never closes it.
 

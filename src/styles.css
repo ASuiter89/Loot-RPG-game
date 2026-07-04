@@ -4170,7 +4170,9 @@
      slim top overlay; controls move to the thumb clusters. */
   body.touch #main { position: relative; flex: 1; min-height: 0; }
   body.touch #game-wrap { position: relative; flex: 1; min-height: 0; width: 100%; }
-  body.touch #game-wrap > canvas { width: 100%; height: 100%; }
+  /* ONLY the main map canvas fills the screen — NOT the #minimap canvas, which is
+     also a child of #game-wrap and keeps its own small --minimap-size box. */
+  body.touch #canvas { width: 100%; height: 100%; }
   body.touch #bottom-row,
   body.touch #control-bar,
   body.touch #desktop-hud,
@@ -4178,27 +4180,40 @@
 
   /* ── Top vitals strip ── the existing #header, reused as a translucent overlay
      pinned to the top and safe-area padded. pointer-events:none so a tap on the
-     map's top edge falls through to the canvas (steer / tap-to-move). */
+     map's top edge falls through to the canvas (steer / tap-to-move). Both ends
+     reserve room — left for the minimap, right for the menu/bag buttons — so the
+     vitals wrap INTO the middle band and never slide under either (this is what
+     keeps a narrow foldable's top from becoming a pile-up). --tb-w is the
+     top-button cluster width, --mm-w the minimap box. */
+  body.touch {
+    --tb-w: 108px;   /* two 48px utility buttons + gap + edge */
+    --mm-w: 82px;    /* touch minimap box */
+  }
   body.touch #header {
-    position: absolute; top: 0; left: 0; right: 0; z-index: var(--z-touch);
-    flex-wrap: wrap; gap: 4px 10px; justify-content: flex-start;
-    padding: calc(env(safe-area-inset-top, 0px) + 4px) calc(env(safe-area-inset-right, 0px) + 8px) 5px calc(env(safe-area-inset-left, 0px) + 8px);
-    background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 80%, transparent), transparent);
+    position: absolute; top: 0; left: 0; right: 0; z-index: var(--z-hud);
+    flex-wrap: wrap; gap: 4px 8px; align-items: center; justify-content: flex-start;
+    padding: calc(env(safe-area-inset-top, 0px) + 5px) calc(env(safe-area-inset-right, 0px) + var(--tb-w)) 5px calc(env(safe-area-inset-left, 0px) + var(--mm-w) + 12px);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 82%, transparent), transparent);
     border-bottom: none; box-shadow: none; pointer-events: none;
   }
-  body.touch #stats { gap: 8px; font-size: 1.2rem; }
-  body.touch .bar-track { width: 62px; height: 12px; }
+  body.touch #stats { gap: 5px 10px; font-size: 1.2rem; flex-wrap: wrap; }
+  body.touch .bar-track { width: 56px; height: 12px; }
   body.touch #header .hud-item { font-size: 1.2rem; }
-  /* Trim the least-critical chips on a small screen (all still read in the HERO
-     tab); keep HP/MP/stamina, floor, foes and gold. */
+  /* Trim the least-critical readouts so the strip stays a compact 1–2 rows even on
+     a narrow foldable's cover screen: keep HP/MP, floor, foes and gold. Stamina
+     still shows under the hero while it's draining, so drop it from the strip. */
   body.touch #level-hud, body.touch #power-hud, body.touch #hero-name-hud,
   body.touch #pact-hud, body.touch #food-hud { display: none; }
+  body.touch #stats .stat-bar:has(#stam-text) { display: none; }
 
-  /* Minimap clears the top vitals strip. */
+  /* Minimap: a small top-LEFT corner box (its own reserved column). */
   body.touch #minimap {
-    top: calc(env(safe-area-inset-top, 0px) + 42px) !important;
+    top: calc(env(safe-area-inset-top, 0px) + 6px) !important;
     left: calc(env(safe-area-inset-left, 0px) + 6px) !important;
+    width: var(--mm-w) !important; height: var(--mm-w) !important;
+    z-index: var(--z-touch);
   }
+  body.touch #minimap.collapsed { width: 26px !important; height: 26px !important; }
 
   /* ── Touch HUD overlay ── a full-screen pass-through layer; only its buttons
      catch pointers, so taps on the open map still reach the canvas. */
@@ -4322,10 +4337,11 @@
   body.touch #town-content, body.touch #shop-content, body.touch #mystic-content { overflow-x: hidden; }
   body.touch #settings-card { max-height: 100dvh; }
 
-  /* Tutorial hint chip: dock it just under the top vitals strip on touch (clear of
-     both thumb zones), and hide it while a full-screen sheet is open. */
+  /* Tutorial hint chip: dock it clear of the top vitals strip (which can wrap to
+     2 rows on a narrow foldable) and of both thumb zones, and hide it while a
+     full-screen sheet is open. */
   body.touch #tutorial-hint {
-    top: calc(env(safe-area-inset-top, 0px) + 54px); bottom: auto;
-    left: 50%; transform: translateX(-50%); max-width: 88vw;
+    top: calc(env(safe-area-inset-top, 0px) + 96px); bottom: auto;
+    left: 50%; transform: translateX(-50%); max-width: 82vw; font-size: var(--fs-sub);
   }
   body.touch.bag-open #tutorial-hint { display: none; }

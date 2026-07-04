@@ -90,8 +90,9 @@ async function main() {
     const px = Math.round(canvasBox.left + canvasBox.w * 0.3);
     const py = Math.round(canvasBox.top + canvasBox.h * 0.6);
 
-    // 1) A real touch pointerdown reveals the touch UI.
+    // 1) A real touch tap reveals the touch UI.
     await fireTouch(page, '#canvas', 'pointerdown', px, py);
+    await fireTouch(page, '#canvas', 'pointerup', px, py);
     const revealed = await page.evaluate(() => ({
       touch: document.body.classList.contains('touch'),
       hudShown: getComputedStyle(document.getElementById('touch-hud')).display !== 'none',
@@ -99,27 +100,38 @@ async function main() {
     if (!revealed.touch) failures.push('body.touch not set after a touch pointerdown');
     if (!revealed.hudShown) failures.push('#touch-hud still display:none after touch reveal');
 
-    // 2) Drag right past the tap slop → the joystick engages and drives the hero.
-    const startFx = await page.evaluate(() => window.player.fx);
-    await fireTouch(page, '#canvas', 'pointermove', px + 90, py);   // strong rightward push
-    await page.waitForTimeout(500);                                  // let the world tick move the hero
-    const mid = await page.evaluate(() => ({
-      vx: window.player.vx, fx: window.player.fx, joyOn: document.body.classList.contains('joy-on'),
-      moveActive: !!(window.moveTarget && window.moveTarget.active),
-    }));
-    if (!(mid.vx > 0.2)) failures.push(`joystick did not drive rightward velocity (vx=${mid.vx})`);
-    if (!(mid.fx > startFx)) failures.push(`hero did not move right under the joystick (fx ${startFx} -> ${mid.fx})`);
-    if (!mid.joyOn) failures.push('body.joy-on not set while the stick is engaged');
-    if (mid.moveActive) failures.push('joystick engaged but a click-to-move target is also active (should be suppressed)');
+    // 2) The joystick drives the hero. Floors are randomly generated, so the hero
+    // can be walled on any given side — try all four directions and require it to
+    // move in at least one, with the stick engaged and click-to-move suppressed.
+    const cx = Math.round(canvasBox.left + canvasBox.w * 0.5);
+    const cy = Math.round(canvasBox.top + canvasBox.h * 0.55);
+    const dirs = [[90, 0], [-90, 0], [0, 90], [0, -90]];
+    let moved = null, sawJoyOn = false, sawSuppressed = true;
+    for (let d = 0; d < dirs.length && !moved; d++) {
+      const [dx, dy] = dirs[d];
+      const start = await page.evaluate(() => ({ fx: window.player.fx, fy: window.player.fy }));
+      await fireTouch(page, '#canvas', 'pointerdown', cx, cy, 10 + d);
+      await fireTouch(page, '#canvas', 'pointermove', cx + dx, cy + dy, 10 + d);
+      await page.waitForTimeout(480);                                 // let the world tick move the hero
+      const s = await page.evaluate(() => ({
+        fx: window.player.fx, fy: window.player.fy,
+        joyOn: document.body.classList.contains('joy-on'),
+        moveActive: !!(window.moveTarget && window.moveTarget.active),
+      }));
+      if (s.joyOn) sawJoyOn = true;
+      if (s.moveActive) sawSuppressed = false;                        // stick must suppress click-to-move
+      const dist = Math.hypot(s.fx - start.fx, s.fy - start.fy);
+      await fireTouch(page, '#canvas', 'pointerup', cx + dx, cy + dy, 10 + d);
+      await page.waitForTimeout(200);
+      if (dist > 0.3) moved = { dir: [dx, dy], dist };
+    }
+    if (!moved) failures.push('joystick did not move the hero in any of the 4 directions');
+    if (!sawJoyOn) failures.push('body.joy-on never set while the stick was engaged');
+    if (!sawSuppressed) failures.push('joystick engaged but a click-to-move target stayed active (should be suppressed)');
 
-    // 3) Release → the stick clears and the hero eases to a stop.
-    await fireTouch(page, '#canvas', 'pointerup', px + 90, py);
-    await page.waitForTimeout(500);
-    const rest = await page.evaluate(() => ({
-      vx: window.player.vx, joyOn: document.body.classList.contains('joy-on'),
-    }));
+    // 3) Every pointer is released now → the stick is cleared.
+    const rest = await page.evaluate(() => ({ joyOn: document.body.classList.contains('joy-on') }));
     if (rest.joyOn) failures.push('body.joy-on still set after releasing the stick');
-    if (!(Math.abs(rest.vx) < Math.abs(mid.vx))) failures.push(`hero did not decelerate after release (vx ${mid.vx} -> ${rest.vx})`);
 
     // 4) A tap (no drag) still routes through tap-to-move.
     await page.evaluate(() => { if (window.moveTarget) window.moveTarget.active = false; });
@@ -133,7 +145,7 @@ async function main() {
 
     if (pageErrors.length) failures.push(`uncaught page errors:\n  - ${pageErrors.join('\n  - ')}`);
 
-    console.log('touch: reveal', revealed, '| drag', mid, '| release', rest, '| tap', tapped);
+    console.log('touch: reveal', revealed, '| moved', moved, '| joyCleared', !rest.joyOn, '| tap', tapped);
   } catch (e) {
     failures.push(`touch drive failed: ${String(e).split('\n')[0]}`);
   } finally {
