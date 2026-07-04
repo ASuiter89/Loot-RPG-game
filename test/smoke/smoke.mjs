@@ -55,7 +55,7 @@ const EXPECTED_STATE_KEYS = [
   'mode', 'canMove', 'blockingOverlay', 'inTown', 'floor', 'floorDisplay', 'tier',
   'isBossFloor', 'floorCleared', 'hostilesLeft', 'stairs', 'player', 'effects',
   'sets', 'skills', 'autoSkill', 'enemies', 'chests', 'coins', 'food', 'vaultKey',
-  'carryingKey', 'grave', 'npcs', 'allies', 'hazards', 'shrines', 'teleporters',
+  'keysHeld', 'carryingKey', 'grave', 'npcs', 'allies', 'hazards', 'shrines', 'teleporters',
   'menu', 'legend', 'guide', 'devTuning', 'map',
 ];
 const EXPECTED_GUIDE_TOPICS = [

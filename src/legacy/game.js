@@ -5809,6 +5809,9 @@ let player = { x: 5, y: 5,
   // skill gated by a shared 5-second cooldown (see useHealthPotion/useManaPotion),
   // so you can't spam potions back-to-back. `potionCd` is that cooldown, in seconds.
   potionCd: 0,
+  // Vault keys in hand. Unlike most floor state these persist across floors AND
+  // saves — a key you don't spend opens a locked '+' vault door on any later floor.
+  keys: 0,
   // Chosen character name (null until entered on a new game) and the peak gold
   // and Power ever reached — all feed the global leaderboards.
   name: null, maxGold: 0, maxPower: 0,
@@ -6095,8 +6098,7 @@ let groundFood = [];
 let groundGold = []; // scattered coin piles: { x, y, amount } — grabbed by walking over
 let floorTint = null; // optional atmospheric colour overlay for the current floor
 let teleporters = {}; // "y,x" -> { x, y } partner pad for warp tiles
-let groundKey = null; // { x, y } of the vault key on this floor, if any
-let hasKey = false;   // whether the player is currently carrying a vault key
+let groundKey = null; // { x, y } of the vault key on this floor, if any (the carried count lives on player.keys, which persists across floors & saves)
 let startPos = { x: 5, y: 5 }; // this floor's safe entry tile (where death sends you)
 // How the player arrived on the floor about to be built: 'down' (descended, via
 // the gate, or a fresh load) or 'up' (climbed the stairs up from below). It
@@ -6431,7 +6433,8 @@ window.gameState = function gameState(radius) {
     coins: (groundGold || []).map(g => ({ x: g.x, y: g.y, amount: g.amount })),
     food: (typeof groundFood !== 'undefined' ? groundFood || [] : []).map(f => ({ x: f.x, y: f.y, name: f.name })),
     vaultKey: (typeof groundKey !== 'undefined' && groundKey) ? { x: groundKey.x, y: groundKey.y } : null,
-    carryingKey: (typeof hasKey !== 'undefined') ? !!hasKey : false,       // can open a locked '+' vault door
+    keysHeld: (player.keys | 0),                                            // vault keys in hand — carried across floors & saves
+    carryingKey: (player.keys | 0) > 0,                                    // can open a locked '+' vault door
     grave: (typeof graveMarker !== 'undefined' && graveMarker) ? { x: graveMarker.x, y: graveMarker.y } : null, // reclaim your dropped bag
     npcs: [
       merchant ? { kind: 'merchant', x: merchant.x, y: merchant.y } : null,
@@ -6635,7 +6638,7 @@ window.gameGuide = function gameGuide(topic) {
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom is a full heal, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one plays a short walk-through-portal animation — the portal swallows you, the camera pans across to the partner pad, and you step out there (~0.9s, world frozen, unhittable; gameState().transit reads 'warp'). It also clears any click-to-move route, so you won't auto-walk back toward the pad you clicked. Use it deliberately, not while fleeing.`,
-      `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground; carryingKey true once held) and seal a rich vault chest.`,
+      `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need a vault key (gameState().vaultKey marks one lying on the floor; keysHeld/carryingKey track what you hold) and seal a rich vault chest. Keys are CARRIED across floors — a spare you don't spend opens a locked door on any later floor, so grab a key even with no door in sight.`,
     ],
     enemies: [
       `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), and status (e.g. ["stun"], ["slow"]).`,
@@ -8507,6 +8510,7 @@ const HUD_REHOME = [
   ['skill-bar', 'hud-belt'],
   ['pact-hud',  'hud-buffs'],
   ['food-hud',  'hud-buffs'],
+  ['key-hud',   'hud-buffs'],
 ];
 let _hudHomes = null;
 function syncDesktopHud() {
@@ -9148,8 +9152,7 @@ function generateMap() {
   // ~35% of floors get a subtle colour wash for atmosphere.
   floorTint = Math.random() < 0.35 ? pick(FLOOR_TINTS) : null;
   teleporters = {};
-  groundKey = null;
-  hasKey = false;
+  groundKey = null; // note: player.keys (carried keys) intentionally survives the floor change
   quest = null;
   bossHazards = [];
 
@@ -9527,7 +9530,7 @@ function buildTutorialMap() {
   enemies = []; merchant = null; mystic = null; minions = []; combatBuffs = {};
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null;
   quest = null; teleporters = {}; shrineData = {}; bossHazards = [];
-  hasFountain = false; groundKey = null; hasKey = false;
+  hasFountain = false; groundKey = null; // carried keys (player.keys) persist across floors
   floorMod = FLOOR_MODS[0]; floorTint = null;
   floatingTexts = [];
   statusEffects = (statusEffects || []).filter(s => s.target === 'player');
@@ -10417,7 +10420,7 @@ function buildTown() {
   floorThemeOverride = null; furnitureMap = {}; decorMap = {}; // town is never an indoor-themed floor
   townShopStock = null;        // fresh merchant wares each town visit
   traps = []; projectiles = []; bossHazards = []; // real-time hazards never linger into town
-  hasFountain = false; groundKey = null; hasKey = false;
+  hasFountain = false; groundKey = null; // carried keys (player.keys) persist across floors
   floorMod = FLOOR_MODS[0]; floorTint = 'rgba(120,90,40,0.10)';
   statusEffects = statusEffects.filter(s => s.target === 'player');
 
@@ -16881,7 +16884,7 @@ function playerSolidCell(cx, cy, ignoreFoes) {
 function breakAhead(cx, cy) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
   const t = mapData[cy][cx];
-  if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; bumpMapEpochIfChanged(t, 0); pathGridDirty(); log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
+  if (t === 11 && player.keys > 0) { player.keys--; mapData[cy][cx] = 0; bumpMapEpochIfChanged(t, 0); pathGridDirty(); markHudDirty(); log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
 }
 
 // Land one shove on the cracked wall at (cx,cy): chip it further, and collapse it
@@ -17475,9 +17478,9 @@ function onEnterCell(nx, ny) {
   }
   // Auto-pickup the vault key
   if (groundKey && groundKey.x === nx && groundKey.y === ny) {
-    groundKey = null; hasKey = true;
+    groundKey = null; player.keys = (player.keys | 0) + 1; markHudDirty();
     spawnFloatingText(player.x, player.y, 'KEY', '#ffd24b');
-    log('<span data-spr=ic_key></span> You found a vault key! Seek the locked door.', 'important');
+    log(`<span data-spr=ic_key></span> You found a vault key${player.keys > 1 ? ` (${player.keys} held)` : ''} — it opens any locked vault door, now or on a floor below.`, 'important');
   }
   // Auto-pickup chests — walk onto a tile and every chest on it opens itself.
   if (pickupChestsAt(nx, ny) > 0) { renderPanelSoon(); updateBars(); }
@@ -20614,7 +20617,7 @@ function flushHudDirty() { if (_hudDirty) { _hudDirty = false; updateBars(); } }
 // re-assigning identical innerHTML still tears down and re-parses the subtree,
 // so each write is guarded by comparing the freshly built string first.
 let _statusStripHtml = null;
-let _clearStatusHtml = null, _pactHudKey = null, _foodHudKey = null;
+let _clearStatusHtml = null, _pactHudKey = null, _foodHudKey = null, _keyHudKey = null;
 let _invTabHtml = null, _heroTabHtml = null, _skillsTabHtml = null;
 let _skillBtnIconHtml = null;
 function updateBars() {
@@ -20740,6 +20743,22 @@ function updateBars() {
       if (html + tip !== _foodHudKey) { _foodHudKey = html + tip; foodHud.innerHTML = html; foodHud.dataset.tip = tip; }
     } else {
       foodHud.style.display = 'none';
+    }
+  }
+
+  // Vault keys carried (hidden when none). Keys persist across floors, so this
+  // chip is the player's only running count of the keys they're holding.
+  const keyHud = document.getElementById('key-hud');
+  if (keyHud) {
+    const nk = player.keys | 0;
+    if (nk > 0) {
+      keyHud.style.display = '';
+      const html = (dlIcon('ic_key', 14) || '') + ` <span class="hud-val" id="key-num">${nk}</span>`;
+      const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon('ic_key', 14)} Vault Keys</div><div class='ht-line'>${nk} key${nk === 1 ? '' : 's'} in hand. Each opens one locked vault door (+); carried across floors until spent.</div>`;
+      // Changes only when the count changes — skip the rebuild otherwise.
+      if (html + tip !== _keyHudKey) { _keyHudKey = html + tip; keyHud.innerHTML = html; keyHud.dataset.tip = tip; }
+    } else {
+      keyHud.style.display = 'none';
     }
   }
 
@@ -23411,6 +23430,9 @@ function loadGame() {
     // saves stored them as world-turns); clear the potion cooldown on load so no
     // stale turn-count lingers as a wrong seconds value.
     player.potionCd = 0;
+    // Vault keys now persist across floors & saves; older saves predate the field —
+    // seed 0 (and repair any negative/NaN a bad build could leave).
+    if (typeof player.keys !== 'number' || player.keys < 0) player.keys = 0;
     // Real-time movement adds stamina (sprint/dash) and momentum/cooldown fields.
     // Seed them on older saves — and repair a NaN stamina a prior buggy build may
     // have persisted — or sprint stays dead and dashing goes free/unlimited.

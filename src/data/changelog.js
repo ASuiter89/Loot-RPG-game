@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Vault keys carry between floors", by: "Jeff Louie", notes: [
+    "Vault keys no longer vanish at the stairs — a key you pick up stays in hand across floors and through saves, so a spare opens a locked vault door (+) on any floor below.",
+    "Grab a key even with no door in sight, and stockpile extras. A key count sits in the top bar whenever you're holding one.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Passives surge — power spikes at ranks 3 / 7 / 10", by: "Jeff Louie", notes: [
     "Deepening one passive now pays off in jumps, not just a steady drip: its always-on bonus spikes at ranks 3, 7 and 10 — the same milestone ranks that already power up active skills (up to +30% of the stat total at rank 10).",
     "The skill card flags the surge with a chip and rank pips, previews the bigger jump on rank-up, and the level-up line calls out each milestone as you cross it. Keystones stay single-rank, so they don't surge.",
