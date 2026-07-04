@@ -25450,6 +25450,12 @@ function showTitle() {
   ov.classList.add('open');
 }
 function closeTitle() { const ov = document.getElementById('title-overlay'); if (ov) ov.classList.remove('open'); }
+// Dismiss the boot splash (index.html #boot-overlay) once init has painted the
+// real title underneath — showTitle() has already flipped ENTER → CONTINUE and
+// filled the hero card, so fading the loader reveals the correct state with no
+// new-game flash. Adds .boot-done (fades out, drops pointer-events immediately);
+// idempotent, so the index.html failsafe re-adding it later is harmless.
+function hideBootLoader() { const b = document.getElementById('boot-overlay'); if (b) b.classList.add('boot-done'); }
 function titlePlay() {
   closeTitle();
   audioUnlock();
@@ -25504,6 +25510,9 @@ updateObjectiveChip();   // paint the goal chip for the starting state
 // it; titlePlay() dismisses the title and runs onboarding (name then class) for
 // a brand-new or class-less hero. Returning heroes just resume on CONTINUE.
 showTitle();
+// The real title is now correct (CONTINUE + hero card for a returning hero), so
+// fade out the boot splash that has been masking the cold-load flash until here.
+hideBootLoader();
 
 // Paint the optional cloud-save callout, then — if already signed in — reconcile
 // this device's slots with the account in the background (may reload into a

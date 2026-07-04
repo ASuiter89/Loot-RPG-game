@@ -3369,6 +3369,80 @@
     background: var(--orange-850); color: var(--orange-300); box-shadow: none;
   }
   .title-play.secondary:active { background: var(--orange-850); }
+  /* ── Boot loader ──────────────────────────────────────────────────────────
+     Full-screen splash shown from the first painted frame (see #boot-overlay in
+     index.html) that masks the window while the game module bundle downloads,
+     parses and boots. hideBootLoader() adds .boot-done at the end of init() to
+     fade it away, revealing the finished title (CONTINUE + hero) underneath.
+     Pointer-events drop the instant the fade starts, so nothing below is ever
+     click-blocked mid-transition (the smoke test clicks the title while it fades). */
+  #boot-overlay {
+    position: fixed; inset: 0; z-index: 700;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+    background:
+      radial-gradient(circle at 50% 18%, color-mix(in srgb, var(--orange-750) 14%, transparent), transparent 55%),
+      radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--interactive) 12%, transparent), transparent 60%),
+      linear-gradient(180deg, var(--ink) 0%, var(--ink) 45%, var(--ink) 100%);
+    opacity: 1; transition: opacity .38s ease;
+  }
+  #boot-overlay.boot-done {
+    opacity: 0; pointer-events: none; visibility: hidden;
+    transition: opacity .38s ease, visibility 0s linear .38s;
+  }
+  #boot-glow { position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(60% 45% at 50% 42%, color-mix(in srgb, var(--orange-750) 16%, transparent), transparent 70%);
+    animation: titleGlow 5.5s ease-in-out infinite; }
+  #boot-inner { position: relative; text-align: center; }
+  #boot-logo {
+    /* Same fixed Uncial brand mark as #title-logo (independent of the UI font). */
+    font-family: 'Uncial Antiqua', var(--font-ui); font-weight: bold; letter-spacing: 4px;
+    color: var(--xp); font-size: 3.4rem; line-height: 1.05; margin: 0;
+    text-shadow: 0 2px 0 var(--orange-650), 0 0 18px color-mix(in srgb, var(--orange-750) 55%, transparent);
+  }
+  #boot-logo .boot-sub-word { display: block; color: var(--orange-300); font-size: 2.3rem; letter-spacing: 8px; }
+  #boot-gems { display: flex; justify-content: center; gap: 8px; margin: 26px 0 14px; }
+  #boot-gems .boot-gem {
+    width: calc(13px * var(--ui-scale, 1)); height: calc(13px * var(--ui-scale, 1));
+    border-radius: 2px; transform: rotate(45deg); opacity: .25;
+    animation: bootGem 1.5s ease-in-out infinite;
+  }
+  #boot-gems .boot-gem:nth-child(1) { animation-delay: 0s; }
+  #boot-gems .boot-gem:nth-child(2) { animation-delay: .11s; }
+  #boot-gems .boot-gem:nth-child(3) { animation-delay: .22s; }
+  #boot-gems .boot-gem:nth-child(4) { animation-delay: .33s; }
+  #boot-gems .boot-gem:nth-child(5) { animation-delay: .44s; }
+  #boot-gems .boot-gem:nth-child(6) { animation-delay: .55s; }
+  #boot-gems .boot-gem:nth-child(7) { animation-delay: .66s; }
+  @keyframes bootGem {
+    0%, 100% { opacity: .22; transform: rotate(45deg) scale(.82); }
+    45%      { opacity: 1; transform: rotate(45deg) scale(1.16);
+               box-shadow: 0 0 10px 1px color-mix(in srgb, var(--legendary) 55%, transparent); }
+  }
+  #boot-msg { color: var(--orange-400); font-size: 1.4rem; letter-spacing: 1px; }
+  /* Indeterminate loading bar — a glowing gold segment sweeps the track on a
+     loop while the bundle boots (no real percentage is knowable from the shell). */
+  #boot-bar {
+    position: relative; width: min(300px, 72vw); height: 10px; margin: 18px auto 0;
+    border: 1px solid var(--frame); border-radius: 6px; overflow: hidden;
+    background: color-mix(in srgb, var(--ink) 55%, transparent);
+    box-shadow: inset 0 0 6px color-mix(in srgb, var(--ink) 80%, transparent);
+  }
+  #boot-bar::after {
+    content: ''; position: absolute; top: 0; bottom: 0; left: -42%; width: 42%;
+    border-radius: inherit;
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--gold) 22%, transparent), var(--gold), var(--xp),
+      var(--gold), color-mix(in srgb, var(--gold) 22%, transparent));
+    box-shadow: 0 0 10px color-mix(in srgb, var(--gold-350) 55%, transparent);
+    animation: bootBar 1.4s cubic-bezier(.6, .05, .3, .95) infinite;
+  }
+  @keyframes bootBar { 0% { left: -42%; } 100% { left: 100%; } }
+  @media (prefers-reduced-motion: reduce) {
+    #boot-glow, #boot-gems .boot-gem { animation: none; }
+    #boot-gems .boot-gem { opacity: .7; }
+    /* No sweep — show a calm, fully-lit bar so the loading state still reads. */
+    #boot-bar::after { animation: none; left: 0; width: 100%; opacity: .6; }
+  }
   /* Achievement showcase — a wrapping row of progress badges (earned = gold),
      shown in its own popup opened from the title screen's Achievements button. */
   #achievements-body .ta-head { font-size: 1.3rem; color: var(--orange-400); letter-spacing: 1px; margin-bottom: 9px; text-align: center; }

@@ -12,6 +12,44 @@
 </head>
 <body>
 
+<!-- BOOT LOADER — a full-screen splash painted from the very first frame (static
+     markup, visible by default) that masks the brief window while the game module
+     bundle downloads, parses and boots. Without it the title overlay below paints
+     its new-game state (ENTER, hero card hidden) for ~1–2s on a cold load, until
+     showTitle() at the end of init() corrects it to CONTINUE + the returning hero.
+     hideBootLoader() fades this away once that finished title is ready underneath. -->
+<div id="boot-overlay" role="status" aria-label="Loading Dungeon Loot">
+  <div id="boot-glow" aria-hidden="true"></div>
+  <div id="boot-inner">
+    <h1 id="boot-logo">DUNGEON<span class="boot-sub-word">LOOT</span></h1>
+    <!-- Loot-tier gems marching in a wave — echoes the title screen's rarity pips. -->
+    <div id="boot-gems" aria-hidden="true">
+      <span class="boot-gem" style="background:var(--junk)"></span>
+      <span class="boot-gem" style="background:var(--normal)"></span>
+      <span class="boot-gem" style="background:var(--uncommon)"></span>
+      <span class="boot-gem" style="background:var(--rare)"></span>
+      <span class="boot-gem" style="background:var(--epic)"></span>
+      <span class="boot-gem" style="background:var(--legendary)"></span>
+      <span class="boot-gem" style="background:var(--unique)"></span>
+    </div>
+    <div id="boot-msg">Descending into the dungeon…</div>
+    <!-- Indeterminate loading bar — a glowing segment sweeps the track while the
+         bundle boots (the shell can't know real download progress, so it signals
+         activity rather than faking a percentage). -->
+    <div id="boot-bar" aria-hidden="true"></div>
+  </div>
+</div>
+<script>
+  // Failsafe: if the module bundle throws before init() reaches hideBootLoader(),
+  // never trap the player behind the splash — force-dismiss it after a generous
+  // cap. The normal path hides it far sooner (adds .boot-done at the end of init);
+  // re-adding the class here is idempotent.
+  setTimeout(function () {
+    var b = document.getElementById('boot-overlay');
+    if (b) b.classList.add('boot-done');
+  }, 12000);
+</script>
+
 <!-- HEADER -->
 <div id="header">
   <div id="stats">
