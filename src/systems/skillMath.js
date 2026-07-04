@@ -26,6 +26,30 @@ export function rankScale(rank) {
 }
 
 /**
+ * Passive milestone surge. Pouring points into ONE passive pays off in jumps too:
+ * at the same milestone ranks the actives spike (3, 7, 10) a passive's always-on
+ * bonus surges. Gentler than the active spikes (milestonePower) because passives
+ * are always on and stack across a whole tree. Cumulative bonus fraction applied
+ * on top of the linear per-rank total: 0 below rank 3, up to 0.30 at rank 10+.
+ * Keystones cap at rank 1, so they never reach a milestone.
+ */
+export function passiveMilestonePower(rank) {
+  let b = 0;
+  if (rank >= 3) b += 0.08;
+  if (rank >= 7) b += 0.10;
+  if (rank >= 10) b += 0.12;
+  return b;
+}
+
+/**
+ * Multiplier a passive's summed fx/cfx bonus takes at a given rank — 1 plus its
+ * milestone surge. Ranks 0–2 scale as 1.0 (no surge yet).
+ */
+export function passiveRankScale(rank) {
+  return 1 + passiveMilestonePower(rank || 0);
+}
+
+/**
  * A skill node's own MP cost at a given rank, BEFORE gear Mana Cost Reduction.
  * Cost only climbs with rank. Rank 0 previews the rank-1 cost. Nodes with no
  * `mp` cost 0.

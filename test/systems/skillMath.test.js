@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  milestonePower, rankScale, skillManaCost,
+  milestonePower, rankScale, passiveMilestonePower, passiveRankScale, skillManaCost,
   earnedSkillPoints, earnedAscPoints, ASCEND_LEVEL, ASC_POINT_EVERY,
 } from '../../src/systems/skillMath.js';
 
@@ -32,6 +32,37 @@ describe('rankScale', () => {
     expect(rankScale(3)).toBeCloseTo(1.24 * 1.28, 10);
     // rank 10: (1 + 0.12*9) * (1 + 0.78)
     expect(rankScale(10)).toBeCloseTo(2.08 * 1.78, 10);
+  });
+});
+
+describe('passiveMilestonePower', () => {
+  it('is 0 below rank 3 (no surge yet)', () => {
+    expect(passiveMilestonePower(0)).toBe(0);
+    expect(passiveMilestonePower(2)).toBe(0);
+  });
+  it('adds gentler cumulative spikes at 3, 7 and 10', () => {
+    expect(passiveMilestonePower(3)).toBeCloseTo(0.08, 10);
+    expect(passiveMilestonePower(6)).toBeCloseTo(0.08, 10);
+    expect(passiveMilestonePower(7)).toBeCloseTo(0.18, 10);
+    expect(passiveMilestonePower(9)).toBeCloseTo(0.18, 10);
+    expect(passiveMilestonePower(10)).toBeCloseTo(0.30, 10);
+    expect(passiveMilestonePower(99)).toBeCloseTo(0.30, 10);
+  });
+  it('stays gentler than the active-skill spikes at every milestone', () => {
+    for (const r of [3, 7, 10]) expect(passiveMilestonePower(r)).toBeLessThan(milestonePower(r));
+  });
+});
+
+describe('passiveRankScale', () => {
+  it('is a flat 1.0 through ranks 0–2 (and guards a missing rank)', () => {
+    expect(passiveRankScale(undefined)).toBeCloseTo(1, 10);
+    expect(passiveRankScale(0)).toBeCloseTo(1, 10);
+    expect(passiveRankScale(2)).toBeCloseTo(1, 10);
+  });
+  it('is 1 + the milestone surge from rank 3 up', () => {
+    expect(passiveRankScale(3)).toBeCloseTo(1.08, 10);
+    expect(passiveRankScale(7)).toBeCloseTo(1.18, 10);
+    expect(passiveRankScale(10)).toBeCloseTo(1.30, 10);
   });
 });
 

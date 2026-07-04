@@ -14,7 +14,7 @@
 
 // ── Extracted modules (see docs/CHANGELOG.md) ──
 import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
-import { milestonePower, rankScale, skillManaCost,
+import { milestonePower, rankScale, passiveRankScale, skillManaCost,
   earnedSkillPoints, earnedAscPoints,
   SKILL_POINTS_PER_LEVEL, SKILL_POINTS_AT_START, ASCEND_LEVEL, ASC_POINT_EVERY } from '../systems/skillMath.js';
 import { glideVitalFill } from '../systems/vitalFill.js';
@@ -4991,8 +4991,11 @@ function skillBonus(key) {
     if (n.type !== 'passive') continue;
     const r = skillRank(n.id);
     if (!r) continue;
-    if (n.fx && n.fx[key]) sum += n.fx[key] * r;
-    if (n.cfx && n.cfx[key] && condMet(n.cond)) sum += n.cfx[key] * r;
+    // Milestone SURGE: a passive's bonus spikes at ranks 3/7/10 (mirrors the
+    // active-skill power surges) so going deep on one passive outpays spreading thin.
+    const ms = passiveRankScale(r);
+    if (n.fx && n.fx[key]) sum += n.fx[key] * r * ms;
+    if (n.cfx && n.cfx[key] && condMet(n.cond)) sum += n.cfx[key] * r * ms;
   }
   // Active combat charges (Frenzy/Power/…) feed the SAME formulas: their per-stack
   // bonus × current stacks rides on top of the flat/conditional passives.
@@ -5479,9 +5482,11 @@ function buySkill(id) {
   if (hpGain > 0) gains.push(`+${hpGain} max HP`);
   if (mpGain > 0) gains.push(`+${mpGain} max MP`);
   const gainStr = gains.length ? ` (${gains.join(', ')})` : '';
-  // Milestone rank reached? Shout the power spike + the perk it unlocks.
-  const ms = node.type === 'active' && SKILL_MILESTONES.find(m => m.rank === newRank);
-  const msStr = ms ? ` ${ms.pips} Milestone — power spike + ${ms.perk}!` : '';
+  // Milestone rank reached? Shout the power spike + the perk it unlocks. Passives
+  // surge at the same ranks (3/7/10) — their always-on bonus spikes (keystones cap
+  // at rank 1, so they never hit one).
+  const ms = (node.type === 'active' || (node.type === 'passive' && !node.keystone)) && SKILL_MILESTONES.find(m => m.rank === newRank);
+  const msStr = ms ? (node.type === 'passive' ? ` ${ms.pips} Milestone — bonus surges!` : ` ${ms.pips} Milestone — power spike + ${ms.perk}!`) : '';
   if (ms) screenFlash('#ffd27a');
   log(`<span data-spr=mat_glimmer></span> Learned ${node.name}${(node.max || 1) > 1 ? ` (rank ${newRank}/${node.max})` : ''}${summary ? ` — now ${summary}.` : '.'}${gainStr}${msStr}`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); saveGame();
@@ -6540,6 +6545,7 @@ window.gameGuide = function gameGuide(topic) {
       `Cooldowns are real seconds (spam-floored at 0.5s). Recharge is MULTIPLICATIVE haste, like attack speed: cd = base / (1 + CDR/100), and for SPELL actives times a further (1 + CastSpeed/100). There is NO cap — 60% CDR + 35% Cast Speed divides a spell's cooldown by 1.6×1.35 ≈ 2.16, and stacking more only ever approaches (never reaches) instant. +MCR likewise divides MP cost (base / (1 + MCR/100)); +Attack Speed quickens auto-attacks the same way. +CDR speeds every active, +Cast Speed spells only, and a rank-7 skill gets an extra ×1.2.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. ~50% CDR + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
       `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — a big power surge, then a shorter cooldown, then wider reach — so deepening a key skill outpaces its rising mana cost.`,
+      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. Its detail card shows a Surge chip, milestone pips by the rank, and the bigger jump in the on-rank-up preview. Keystones stay single-rank, so they don't surge.`,
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
@@ -21394,7 +21400,7 @@ function renderSkills(el) {
   if (sn) {
     const rank = skillRank(sn.id);
     const typeTxt = sn.type === 'active' ? `<span data-spr=ic_stun></span> ACTIVE · ${castKind(sn) === 'spell' ? '<span data-spr=ic_orb></span> SPELL' : '<span data-spr=w_sword></span> SKILL'} · ${skillManaCost(sn, rank)}MP · ${sn.cd}s cd · ${castShapeLabel(sn.cast)}` : 'PASSIVE';
-    const pips = sn.type === 'active' ? milestonePips(rank) : '';
+    const pips = (sn.type === 'active' || (sn.type === 'passive' && !sn.keystone)) ? milestonePips(rank) : '';
     const rankTxt = ` <span style="color:var(--gold)">${rank}/${sn.max}${pips ? ' ' + pips : ''}</span>`;
     const reqRows = [];
     // Base-tree nodes gate on hero level; ascendancy (path) nodes never do.
@@ -21712,6 +21718,9 @@ function skillMechList(n) {
       if (parts.length) add('Heal', '#7ad08a', parts.join(' + ') + '.');
     }
   }
+  // Passive milestone surge — the always-on bonus spikes at ranks 3/7/10 for going
+  // deep (keystones cap at rank 1, so they never surge).
+  if (n.type === 'passive' && !n.keystone && (n.fx || n.cfx)) add('Surge', '#e8c267', 'Ranks 3 / 7 / 10 spike this passive’s bonus — a reward for going deep.');
   // Cross-cutting keystone rule that a stat line can't show.
   if (n.kflag === 'bloodpact') add('Keystone', '#e8c267', 'Active skills cost life instead of mana.');
   return rows;
@@ -21729,11 +21738,14 @@ function skillMechHtml(n) {
 function skillRankUpRows(node, rank) {
   const rows = [];
   if (node.type === 'passive' && (node.fx || node.cfx)) {
+    // Fold the milestone surge into the previewed totals so crossing rank 3/7/10
+    // visibly jumps (and the displayed number matches what skillBonus applies).
+    const msCur = passiveRankScale(rank), msNext = passiveRankScale(rank + 1);
     if (node.fx) for (const k of Object.keys(node.fx)) {
       const meta = FX_LABELS[k] || [k, 'frac'];
       const per = node.fx[k];
-      const cur = fmtFxVal(meta[1], per * rank);
-      const next = fmtFxVal(meta[1], per * (rank + 1));
+      const cur = fmtFxVal(meta[1], per * rank * msCur);
+      const next = fmtFxVal(meta[1], per * (rank + 1) * msNext);
       rows.push([meta[0], rank > 0 ? `${cur} → <b>${next}</b>` : `<b>${next}</b>`]);
     }
     // Conditional bonuses read with their trigger so the trade-off is legible.
@@ -21742,9 +21754,18 @@ function skillRankUpRows(node, rank) {
       for (const k of Object.keys(node.cfx)) {
         const meta = FX_LABELS[k] || [k, 'frac'];
         const per = node.cfx[k];
-        const cur = fmtFxVal(meta[1], per * rank);
-        const next = fmtFxVal(meta[1], per * (rank + 1));
+        const cur = fmtFxVal(meta[1], per * rank * msCur);
+        const next = fmtFxVal(meta[1], per * (rank + 1) * msNext);
         rows.push([`${meta[0]} ${cl}`, rank > 0 ? `${cur} → <b>${next}</b>` : `<b>${next}</b>`]);
+      }
+    }
+    // Dangle the next milestone as a goal — passives surge at ranks 3/7/10 too
+    // (keystones cap at rank 1, so they never reach one).
+    if (!node.keystone) {
+      const nm = nextMilestone(rank);
+      if (nm) {
+        const hit = (rank + 1) === nm.rank;
+        rows.push([`${nm.pips} rank ${nm.rank}`, hit ? `<b>power surge!</b>` : 'power surge']);
       }
     }
   } else if (node.type === 'active' && node.cast) {
@@ -21776,9 +21797,10 @@ function skillRankUpRows(node, rank) {
 // Plain-text "new total" summary at a given rank, for the level-up log line.
 function skillTotalSummary(node, rank) {
   if (node.type === 'passive' && (node.fx || node.cfx)) {
+    const ms = passiveRankScale(rank);   // fold in the milestone surge (ranks 3/7/10)
     const parts = [];
-    if (node.fx) for (const k of Object.keys(node.fx)) { const m = FX_LABELS[k] || [k, 'frac']; parts.push(`${m[0]} ${fmtFxVal(m[1], node.fx[k] * rank)}`); }
-    if (node.cfx) { const cl = condLabel(node.cond); for (const k of Object.keys(node.cfx)) { const m = FX_LABELS[k] || [k, 'frac']; parts.push(`${m[0]} ${fmtFxVal(m[1], node.cfx[k] * rank)} ${cl}`); } }
+    if (node.fx) for (const k of Object.keys(node.fx)) { const m = FX_LABELS[k] || [k, 'frac']; parts.push(`${m[0]} ${fmtFxVal(m[1], node.fx[k] * rank * ms)}`); }
+    if (node.cfx) { const cl = condLabel(node.cond); for (const k of Object.keys(node.cfx)) { const m = FX_LABELS[k] || [k, 'frac']; parts.push(`${m[0]} ${fmtFxVal(m[1], node.cfx[k] * rank * ms)} ${cl}`); } }
     return parts.join(', ');
   }
   if (node.type === 'active' && node.cast) {
