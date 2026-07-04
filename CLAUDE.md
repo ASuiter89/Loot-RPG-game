@@ -41,6 +41,19 @@ lives in `src/legacy/game.js` and shrinks as code is extracted.)
   - **Pure input math is unit-tested** (`src/systems/joystickMath.js`); the DOM /
     pointer wiring lives in `src/legacy/game.js` (coverage-excluded), never in a
     new `src/input/` module (which the ratchet would then require ≥90% coverage on).
+  - **Every touch UI element must resize fluidly to the actual screen — assume
+    NO "standard" phone size.** Real devices range from ~280px-wide foldable cover
+    screens through ~840px unfolded foldables and tablets, plus display-cutout/safe
+    areas. So on the `body.touch` layer: lay out with fluid primitives — responsive
+    grids (`repeat(auto-fill, minmax(min(100%, <floor>), 1fr))`, so a lone column
+    can never exceed the viewport and columns are added only when they fit),
+    `min()`/`max()`/`clamp()`, `%`/`dvh`, and `env(safe-area-inset-*)`. **Never a
+    fixed `repeat(N, 1fr)` column count or a fixed-px `max-width` on a touch sheet**
+    — both clip on a narrow screen (a `1fr` track won't shrink below its content's
+    min-content, so fixed-px icons + text overflow) and waste half of a wide one.
+    Any full-screen sheet must keep every control reachable at any size (scrollable,
+    nothing buried by z-index or pushed off-screen). Verify the extremes (a ~280px
+    cover screen and an ~840px foldable), not just one phone width.
   - Touch is verified end-to-end by `test/smoke/touch-controls.mjs` — keep it green.
 - **Pull latest `main` before starting; work on a branch and open a PR — never
   commit straight to `main`.** Make reasonable decisions and implement them; land

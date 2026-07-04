@@ -8725,6 +8725,10 @@ function onViewportResize() {
   document.body.classList.add('resizing');
   if (_resizeAnimTimer) clearTimeout(_resizeAnimTimer);
   _resizeAnimTimer = setTimeout(() => document.body.classList.remove('resizing'), 200);
+  // Folding/unfolding a foldable changes viewport HEIGHT (crossing the rotate-block
+  // threshold) without necessarily flipping the orientation media query, so refresh
+  // the landscape block here too — otherwise an unfold could stay wrongly frozen.
+  try { updateOrientationBlock(); } catch (_) {}
   resizeCanvas(); if (inTown) syncTownBarReserve(); draw();
 }
 window.addEventListener('resize', onViewportResize);
@@ -8907,12 +8911,20 @@ function isTouchMode() { return document.body.classList.contains('touch'); }
 // rotate notice (CSS) AND pause play (this flag feeds rtPaused) so nothing happens
 // behind it. Desktop never sets body.touch, so it's never blocked.
 let touchLandscapeBlock = false;
+// Only a genuine phone-held-sideways is blocked: landscape AND a SHORT viewport,
+// where the banded HUD (header + footer + map) can't fit. A big unfolded foldable
+// or tablet is near-square/wide but plenty tall, so it stays playable in either
+// orientation and never trips the rotate notice — the reported Z-Fold case, where
+// the wide-but-tall inner screen read as "landscape" and wrongly forced a rotate.
+// Keep the max-height threshold in sync with the #rotate-notice media query in
+// styles.css.
+const LANDSCAPE_BLOCK_MQ = '(orientation: landscape) and (max-height: 600px)';
 function updateOrientationBlock() {
   let land = false;
-  try { land = matchMedia('(orientation: landscape)').matches; } catch (_) {}
+  try { land = matchMedia(LANDSCAPE_BLOCK_MQ).matches; } catch (_) {}
   touchLandscapeBlock = isTouchMode() && land;
 }
-try { matchMedia('(orientation: landscape)').addEventListener('change', () => { updateOrientationBlock(); clearHeld(); }); } catch (_) {}
+try { matchMedia(LANDSCAPE_BLOCK_MQ).addEventListener('change', () => { updateOrientationBlock(); clearHeld(); }); } catch (_) {}
 function setTouchMode(on) {
   if (isTouchMode() === on) return;
   document.body.classList.toggle('touch', on);

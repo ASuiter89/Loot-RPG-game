@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Menus flow to any screen; foldables play unfolded", by: "Claude", notes: [
+    "Town and every other menu now reshape to whatever screen you're on — a narrow phone or a folded cover screen drops to a single scrollable column instead of running the buttons off the right edge, and a wide unfolded screen fans the tiles out into more columns. The difficulty and floor pickers and the craftsman's tiles reflow the same way.",
+    "You can now reach Settings and the Bag while you're in Town on a phone — the two buttons stay tappable over the town menu instead of being hidden behind it.",
+    "Unfolding a foldable no longer forces the 'rotate your device' screen: a big wide-but-tall display now keeps playing, and only a phone genuinely held sideways is asked to rotate.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Phones play fullscreen; menus scroll on small screens", by: "Claude", notes: [
     "On a phone the game now runs fullscreen — it fills the whole display with no browser bars. It goes fullscreen the moment you touch the screen, and any tap puts it back if you've left it; step out with your phone's usual back or swipe gesture.",
     "Long menus now scroll on a phone instead of running off the bottom of the screen. The Settings tabs (the Visuals tab especially) scroll top to bottom, and the death, boss-gate and other pop-ups scroll in place when they don't fit a short screen.",
