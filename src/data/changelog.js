@@ -11,6 +11,25 @@ export const CHANGELOG = [
     "Bow and staff shots, ranged summon bolts, and bolt/blast spells now deal their damage the instant the projectile REACHES the target — a foe no longer dies (and vanishes) before the bolt visibly connects.",
     "The release sound still fires as you loose the shot; the hit, its numbers and any crit land as the bolt arrives.",
   ] },
+  { date: "2026-07-03", size: "small", v: "Wandering merchant: fuller stock, hover to compare", by: "Jeff Louie", notes: [
+    "The roaming merchant now lays out at least six gear pieces, so the detour always pays off.",
+    "Hover any ware to pop its full card beside your equipped piece — spot an upgrade before you spend a coin.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Enchanter: Esc backs out one step at a time", by: "Jeff Louie", notes: [
+    "With an item picked in the Enchanter, Esc now returns to the gear screen instead of jumping all the way out to town.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Leaderboard rows show class, subclass & all stats", by: "Jeff Louie", notes: [
+    "Each board row now carries a second line: the hero's specialization — their ascension (subclass) in its signature colour, or their base class — plus a sigil.",
+    "Every row shows floor, level, gold and Power together, not just the ranked stat, so you can compare heroes fully whichever board you're on. Big counts abbreviate (12.3k).",
+  ] },
+  { date: "2026-07-03", size: "medium", v: "AI-play console tools see the whole game", by: "Claude", notes: [
+    "gameState() surfaces what a console-driving agent was blind to: floor quests and their objective tiles, the cursed-floor 'greed' choice, the rainbow conquest gate, your hired Sellsword and active bounty, boss enrage/berserk phases, enemy affixes, your weapon's true reach, and a full survivability read-out (defense, crit, dodge, block, damage reduction, tenacity).",
+    "canMove no longer misreports: every world-pausing overlay (the greed prompt, tier-conquest banner, hardcore death, leaderboard and more) now flips it false with the right mode, so an agent never fires dead movement keys.",
+    "gameGuide() corrects stale rules — per-sub-type weapon reach, the Wisdom shrine's real 50%-HP heal, pack rush, mana-cost-reduced skill costs — and adds how-tos for the Transmuter, floor quests, the greed gate and the conquest scar.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Merchant stocks rarer gear", by: "Jeff Louie", notes: [
+    "The merchant no longer lays out grey or white gear — every ware is uncommon or better, weighted toward the rarer tiers, so his table always beats a raw floor drop.",
+  ] },
   { date: "2026-07-03", size: "large", v: "Full combat VFX overhaul", by: "Claude", notes: [
     "Every skill, spell, weapon swing and monster attack now has its own animation, tinted to its element — fire, ice, lightning, holy, poison, blood, arcane.",
     "Weapon swings draw on the canvas at last: a crescent slash (sword), a wide sweep (axe/scythe), a rapid double-flick (dagger), an overhead smash (mace), a reaching stab (spear).",
@@ -38,6 +57,10 @@ export const CHANGELOG = [
   { date: "2026-07-03", size: "medium", v: "A full rack of new synth instruments", by: "Claude", notes: [
     "Rebuilt the soundtrack's synth engine so styles no longer share the same three sounds. New instruments: deep round sub bass, a detuned drum-&-bass reese, a squelchy acid bass, big super-saw leads and chords, metallic FM bells, plucky bell/marimba tones, and hollow reed leads — each style now picks the ones that fit it.",
     "Fixed the bass: it used to be forced to the same punchy sawtooth in every style (the 'polka' feel). Basslines now use rounder, smoother sub tones and less on-the-beat bounce, so each style's low end has its own character.",
+  ] },
+  { date: "2026-07-03", size: "small", v: "Clearing a floor banks the next as your deepest", by: "Claude", notes: [
+    "Clearing a floor's foes unseals its down-stairs — which now opens the NEXT floor at the Dungeon Gate right away, so it counts as your deepest the moment you clear.",
+    "Port to town after a clear and you can drop straight back onto the floor you opened, instead of re-clearing the one you just finished.",
   ] },
   { date: "2026-07-03", size: "small", v: "Loading splash on startup", by: "Claude", notes: [
     "A brief loading screen now covers the cold-start moment while the game boots. The title no longer flashes its new-game look before recognising your saved hero — you land straight on CONTINUE with your character shown.",

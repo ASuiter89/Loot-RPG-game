@@ -3554,11 +3554,14 @@
   .lb-tab.on { border-color: var(--gold); color: var(--gold); background: var(--orange-850); }
   .lb-status { color: var(--orange-500); font-size: 1.2rem; text-align: center; margin-bottom: 8px; min-height: 12px; line-height: 1.4; }
   .lb-list { display: flex; flex-direction: column; gap: 3px; }
+  /* A board row stacks two lines: the ranked line (rank · portrait · name · value)
+     and a meta line (subclass on the left, the other stats on the right). */
   .lb-row {
-    display: flex; align-items: center; gap: 8px; padding: 7px 9px;
+    display: flex; flex-direction: column; gap: 4px; padding: 7px 9px;
     background: var(--orange-850); border: 1px solid var(--border); border-radius: 6px;
     font-size: 1.4rem;
   }
+  .lb-row-main { display: flex; align-items: center; gap: 8px; }
   .lb-rank { width: 26px; color: var(--orange-500); font-weight: bold; text-align: right; flex: 0 0 auto; }
   /* Top-3 ranks: instead of a medal disc, the whole row gets a soft gold / silver
      / bronze wash plus a matching metal-tinted border and rank number. */
@@ -3574,6 +3577,13 @@
   .lb-class { font-size: 1.6rem; flex: 0 0 auto; width: calc(18px * var(--ui-scale,1)); text-align: center; }
   .lb-name { flex: 1 1 auto; color: var(--gold-200); font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lb-val { color: var(--gold); font-weight: bold; flex: 0 0 auto; white-space: nowrap; }
+  /* Meta line: indented to sit under the name (clearing rank + portrait), subclass
+     on the left, stat chips pushed to the right so both boards' rows line up. */
+  .lb-row-meta { display: flex; align-items: center; gap: 8px; padding-left: calc(42px + 18px * var(--ui-scale,1)); }
+  .lb-sub { flex: 1 1 auto; min-width: 0; font-size: 1.1rem; font-weight: bold; color: var(--orange-300); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lb-asc { display: inline-flex; align-items: center; gap: 3px; }
+  .lb-meta { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; margin-left: auto; }
+  .lb-chip { font-size: 1.1rem; color: var(--orange-500); white-space: nowrap; }
   .lb-foot { margin-top: 12px; }
 
   .town-blurb { font-size: 1.3rem; color: var(--orange-400); margin-bottom: 8px; line-height: 1.4; }
