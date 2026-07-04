@@ -14,6 +14,11 @@ export const CHANGELOG = [
     "The map fills the space between the two bars and stays crisp on high-resolution screens. The game is portrait-only — turned sideways it asks you to rotate back.",
     "Menus, shops and the bag open as full-screen sheets with big tap targets, and merchant cards now open on a tap since there's no mouse hover.",
   ] },
+  { date: "2026-07-04", size: "small", v: "Skill cards show the full rank 3 / 7 / 10 bonus ladder", by: "Claude", notes: [
+    "A skill's detail card now has a \"Rank bonuses\" section listing all three milestones — Empowered (rank 3), Honed (rank 7) and Mastered (rank 10) — and what each grants, always visible at any rank.",
+    "Each milestone lights up green with a ✓ once your rank in that skill is high enough to have earned it, so you can see the whole ladder ahead instead of just the next rung.",
+    "The single \"next milestone\" line moved out of the On-rank-up preview into this dedicated section. Applies to every skill that surges — all actives and all non-keystone passives.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Power now reflects your build", by: "Claude", notes: [
     "Gear Power is fully dynamic: a piece's Power is now what its stats are actually worth to YOUR hero — your attributes, skills, class and other worn gear — not a near-fixed table.",
     "A stat your build can't use adds almost no Power now: Crit Damage on a hero with no crit chance, Spell Power on a pure melee build, or Attack Speed on a pure caster all read close to nothing, exactly as they perform.",

@@ -1431,6 +1431,15 @@
      popover's border; short number ranges still fit on one line. */
   .sk-pop .ru-row .ru-v { color: var(--purple-50); text-align: right; min-width: 0; overflow-wrap: anywhere; }
   .sk-pop .ru-row .ru-v b { color: var(--green-450); font-weight: bold; }
+  /* Rank-bonus ladder: the fixed rank 3 / 7 / 10 milestones, all always shown and
+     lit green (with a ✓) once this skill's rank has earned them. */
+  .sk-pop .ms { margin-top: 5px; padding: 4px 6px; background: var(--panel); border: 1px solid var(--panel-raised); border-radius: 6px; }
+  .sk-pop .ms-h { font-size: 1.1rem; letter-spacing: 0.5px; color: var(--blue-350); text-transform: uppercase; margin-bottom: 2px; }
+  .sk-pop .ms-row { display: flex; justify-content: space-between; gap: 6px; font-size: 1.1rem; line-height: 1.4; }
+  .sk-pop .ms-row .ms-k { flex: 0 0 auto; white-space: nowrap; font-weight: 700; letter-spacing: 0.3px; color: var(--purple-150); }
+  .sk-pop .ms-row .ms-v { text-align: right; min-width: 0; overflow-wrap: anywhere; color: var(--purple-50); }
+  .sk-pop .ms-row .ms-v b { color: inherit; font-weight: 700; }
+  .sk-pop .ms-row.met .ms-k, .sk-pop .ms-row.met .ms-v { color: var(--green-450); }
   .sk-pop .rq { font-size: 1.1rem; margin-top: 3px; line-height: 1.4; }
   .sk-pop .rq.no { color: var(--red-300); }
   .sk-pop .rq.ok { color: var(--green-450); }
