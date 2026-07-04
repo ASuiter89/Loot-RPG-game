@@ -29,6 +29,8 @@ import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
 import { CHANGELOG } from '../data/changelog.js';
+import { MUSIC_SECTIONS } from '../data/musicSections.js';
+import { bassSemi, voiceChord } from '../systems/musicGroove.js';
 import { terrainPacksInUse } from '../data/terrainPacks.js';
 import { renderProcMap } from '../render/procTerrain.js';
 import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
@@ -6552,10 +6554,25 @@ const AUDIO_SFX_KEY = 'dungeonLootSfx';
 const TOWN_AMB_KEY = 'dungeonLootTownAmb';   // town background chatter — OFF by default
 const AUDIO_LEVELS = 5;                              // volume steps above off (0 = muted, 5 = full)
 const SFX_BASE_GAIN = 0.4, MUSIC_BASE_GAIN = 0.28;  // full-volume bus gains
+// The generative soundtrack layers four voices; each gets its own fader (a level
+// 0–5, full by default) so the player can mix the music to taste. Each key routes
+// to a per-voice sub-bus under the music bus (see buildMusicVoiceBuses):
+//   bass = the bassline · harm = chords/pads/arps · lead = the melody · perc = drums
+const AUDIO_MIX_KEYS = { bass: 'dungeonLootMixBass', harm: 'dungeonLootMixHarm', lead: 'dungeonLootMixLead', perc: 'dungeonLootMixPerc' };
+// Player-facing label + icon per voice for the Audio-tab faders.
+const MIX_VOICES = [
+  { key: 'bass', label: 'BASS' },
+  { key: 'harm', label: 'CHORDS' },
+  { key: 'lead', label: 'MELODY' },
+  { key: 'perc', label: 'DRUMS' },
+];
 const audio = {
   ctx: null, master: null, musicGain: null, sfxGain: null,
   muted: false, musicLevel: AUDIO_LEVELS, sfxLevel: AUDIO_LEVELS, started: false,
   townAmbOn: false,   // town background sounds — opt-in, off by default
+  // Per-voice music mix levels (0–5, full by default) and their live sub-buses.
+  mix: { bass: AUDIO_LEVELS, harm: AUDIO_LEVELS, lead: AUDIO_LEVELS, perc: AUDIO_LEVELS },
+  musicVoiceGain: null,
 };
 try { audio.townAmbOn = localStorage.getItem(TOWN_AMB_KEY) === 'on'; } catch (e) {}
 try {
@@ -6571,6 +6588,7 @@ try {
   };
   audio.musicLevel = readLevel(localStorage.getItem(AUDIO_MUSIC_KEY));
   audio.sfxLevel   = readLevel(localStorage.getItem(AUDIO_SFX_KEY));
+  for (const k in AUDIO_MIX_KEYS) audio.mix[k] = readLevel(localStorage.getItem(AUDIO_MIX_KEYS[k]));
 } catch (e) {}
 // Bus gain for the current level (linear fraction of the full-volume gain).
 function sfxBusGain()   { return SFX_BASE_GAIN   * audio.sfxLevel   / AUDIO_LEVELS; }
@@ -6624,8 +6642,38 @@ function audioInit() {
     musicVerb.gain.value = 0.3;
     audio.musicGain.connect(musicVerb);
     musicVerb.connect(audio.reverb);
+
+    // Per-voice sub-buses feed the music bus, so each layer (bass / chords / lead /
+    // drums) has its own fader without disturbing the master music volume or reverb.
+    buildMusicVoiceBuses();
   } catch (e) { audio.ctx = null; }
   return audio.ctx;
+}
+
+// Create the four per-voice gain sub-buses (bass/harm/lead/perc) at their saved mix
+// levels, each feeding the current music bus. Rebuilt whenever the music bus is
+// swapped (see resetMusicBus) so a SKIP still cuts cleanly.
+function buildMusicVoiceBuses() {
+  const ctx = audio.ctx;
+  if (!ctx || !audio.musicGain) return;
+  audio.musicVoiceGain = {};
+  for (const k in AUDIO_MIX_KEYS) {
+    const g = ctx.createGain();
+    g.gain.value = (audio.mix[k] != null ? audio.mix[k] : AUDIO_LEVELS) / AUDIO_LEVELS;
+    g.connect(audio.musicGain);
+    audio.musicVoiceGain[k] = g;
+  }
+}
+// Which per-voice sub-bus a note belongs to. Bass/lead/perc route to their own; the
+// pad role (chords, arps) shares the harmony bus. Falls back to the music bus until
+// the sub-buses exist.
+function musicVoiceBus(role) {
+  const vg = audio.musicVoiceGain;
+  if (!vg) return audio.musicGain;
+  if (role === 'bass') return vg.bass;
+  if (role === 'lead') return vg.lead;
+  if (role === 'perc') return vg.perc;
+  return vg.harm;   // pad → chords / arps
 }
 
 // Build a decaying-noise impulse response for the convolution reverb above.
@@ -6987,188 +7035,10 @@ const A2 = 110;               // reference pitch in Hz
 const mhz = (semi) => A2 * Math.pow(2, semi / 12);
 const mpick = (a) => a[Math.floor(Math.random() * a.length)];
 
-// ── Musical styles ("sections") ──
-// Each style is a complete kit: a scale/mode the melody wanders, its own bank of
-// chord progressions (each in its own key/mode), a rhythmic groove (bass
-// pattern, arpeggio, percussion, swing, octaves) and a timbre set (bass/pad/lead
-// oscillators + filters). The continuous fields (tempo, densities, percussion
-// volumes) crossfade smoothly between styles; the discrete musical structure
-// (scale, progs, groove) pivots cleanly at the midpoint of the fade. Triads are
-// [root, third, fifth] in semitones from A2; scales are absolute semitone
-// offsets spanning ~2 octaves. groove patterns are per-eighth-note across a bar.
-const MUSIC_SECTIONS = [
-  // Brooding A natural-minor dungeon — the classic theme, steady heartbeat kit.
-  { name: 'Cavern',  tempo: 0.26,
-    scale: [0, 2, 3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 24],
-    progs: [
-      [[0,3,7],[8,12,15],[3,7,10],[10,14,17]],   // Am  F   C   G
-      [[0,3,7],[5,8,12],[7,10,14],[0,3,7]],       // Am  Dm  Em  Am
-    ],
-    bass: { type: 'sawtooth', cutoff: 620,  q: 3, detune: 4, vol: 0.30 },
-    pad:  { type: 'sine',     cutoff: 1500, q: 1, detune: 4, vol: 0.13 },
-    lead: { type: 'triangle', cutoff: 3000, q: 1, detune: 5, vol: 0.20 },
-    leadDensity: 0.66, arpDensity: 0.45,
-    kickVol: 1.0, kickMidVol: 0.9, hatVol: 0.05,
-    groove: { swing: 0.0, leadOct: 12, arpOct: 0, arpEvery: 2, leadLong: 0.3, leadRest: 0.12,
-      bassPat: [{d:'r',l:3.6}, null, null, null, {d:'5',l:3.0}, null, null, null],
-      kickPat: ['main', null, null, null, 'mid', null, null, null],
-      hatPat:  [0,1,0,1,0,1,0,1] } },
-
-  // Bright, shimmering D Dorian — busy bell arpeggios, light swung kit.
-  { name: 'Crystal', tempo: 0.235,
-    scale: [5, 7, 8, 10, 12, 14, 15, 17, 19, 20, 22, 24, 26],
-    progs: [
-      [[5,8,12],[10,14,17],[5,8,12],[10,14,17]], // Dm  G   Dm  G   (Dorian IV)
-      [[5,8,12],[7,10,14],[10,14,17],[3,7,10]],   // Dm  Em  G   C
-    ],
-    bass: { type: 'triangle', cutoff: 900,  q: 2, detune: 4, vol: 0.24 },
-    pad:  { type: 'triangle', cutoff: 2600, q: 1, detune: 6, vol: 0.12 },
-    lead: { type: 'sine',     cutoff: 4600, q: 1, detune: 3, vol: 0.17 },
-    leadDensity: 0.5, arpDensity: 0.72,
-    kickVol: 0.5, kickMidVol: 0.3, hatVol: 0.04,
-    groove: { swing: 0.12, leadOct: 24, arpOct: 12, arpEvery: 1, leadLong: 0.45, leadRest: 0.18,
-      bassPat: [{d:'r',l:2.0}, null, {d:'5',l:1.4}, null, {d:'r',l:2.0}, null, {d:'3',l:1.4}, null],
-      kickPat: ['mid', null, null, null, 'mid', null, null, null],
-      hatPat:  [0,0,1,0,0,0,1,0] } },
-
-  // Dark, exotic A harmonic-minor forge — square-wave industrial drive.
-  { name: 'Forge',   tempo: 0.205,
-    scale: [0, 2, 3, 5, 7, 8, 11, 12, 14, 15, 17, 19, 20],
-    progs: [
-      [[0,3,7],[5,8,12],[7,11,14],[0,3,7]],       // Am  Dm  E   Am  (harmonic-minor V)
-      [[0,3,7],[8,12,15],[7,11,14],[0,3,7]],       // Am  F   E   Am
-    ],
-    bass: { type: 'square',   cutoff: 520,  q: 4, detune: 6, vol: 0.22 },
-    pad:  { type: 'sawtooth', cutoff: 1200, q: 2, detune: 4, vol: 0.10 },
-    lead: { type: 'square',   cutoff: 2500, q: 1, detune: 5, vol: 0.15 },
-    leadDensity: 0.8, arpDensity: 0.4,
-    kickVol: 1.1, kickMidVol: 0.85, hatVol: 0.07,
-    groove: { swing: 0.0, leadOct: 0, arpOct: 0, arpEvery: 2, leadLong: 0.18, leadRest: 0.08,
-      bassPat: [{d:'r',l:1.0}, null, null, {d:'r',l:1.0}, {d:'5',l:1.0}, null, {d:'r',l:1.0}, null],
-      kickPat: ['main', null, 'mid', null, 'main', null, 'mid', null],
-      hatPat:  [0,1,0,1,0,1,0,1] } },
-
-  // Airy, dreamy C Lydian — ambient drone, no percussion, very sparse.
-  { name: 'Mist',    tempo: 0.30,
-    scale: [3, 5, 7, 9, 10, 12, 14, 15, 17, 19, 21, 22, 24],
-    progs: [
-      [[3,7,10],[5,9,12],[3,7,10],[10,14,17]],   // C   D   C   G   (Lydian II)
-      [[3,7,10],[10,14,17],[5,9,12],[3,7,10]],     // C   G   D   C
-    ],
-    bass: { type: 'sine',     cutoff: 400,  q: 1, detune: 3, vol: 0.30 },
-    pad:  { type: 'sine',     cutoff: 1100, q: 1, detune: 4, vol: 0.15 },
-    lead: { type: 'triangle', cutoff: 2400, q: 1, detune: 4, vol: 0.17 },
-    leadDensity: 0.35, arpDensity: 0.2,
-    kickVol: 0.0, kickMidVol: 0.0, hatVol: 0.0,
-    groove: { swing: 0.0, leadOct: 24, arpOct: 12, arpEvery: 4, leadLong: 0.6, leadRest: 0.3,
-      bassPat: [{d:'r',l:7.0}, null, null, null, null, null, null, null],
-      kickPat: [null, null, null, null, null, null, null, null],
-      hatPat:  [0,0,0,0,0,0,0,0] } },
-
-  // Loose, bluesy A minor-pentatonic — heavy swing, laid-back groove.
-  { name: 'Hollow',  tempo: 0.25,
-    scale: [0, 3, 5, 7, 10, 12, 15, 17, 19, 22, 24],
-    progs: [
-      [[0,3,7],[3,7,10],[5,8,12],[0,3,7]],         // Am  C   Dm  Am
-      [[0,3,7],[10,14,17],[3,7,10],[5,8,12]],       // Am  G   C   Dm
-    ],
-    bass: { type: 'sawtooth', cutoff: 700,  q: 3, detune: 5, vol: 0.28 },
-    pad:  { type: 'square',   cutoff: 1400, q: 2, detune: 5, vol: 0.10 },
-    lead: { type: 'triangle', cutoff: 2800, q: 1, detune: 6, vol: 0.19 },
-    leadDensity: 0.6, arpDensity: 0.35,
-    kickVol: 0.85, kickMidVol: 0.6, hatVol: 0.05,
-    groove: { swing: 0.3, leadOct: 12, arpOct: 0, arpEvery: 2, leadLong: 0.35, leadRest: 0.16,
-      bassPat: [{d:'r',l:3.0}, null, null, {d:'5',l:1.0}, null, null, {d:'r',l:1.5}, null],
-      kickPat: ['main', null, null, null, 'mid', null, 'mid', null],
-      hatPat:  [0,1,0,1,0,1,0,1] } },
-
-  // Epic, marching A minor — driving saw brass, four-on-the-floor heroism.
-  { name: 'March',   tempo: 0.22,
-    scale: [0, 2, 3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 24],
-    progs: [
-      [[0,3,7],[7,10,14],[8,12,15],[0,3,7]],       // Am  Em  F   Am
-      [[0,3,7],[8,12,15],[10,14,17],[7,10,14]],     // Am  F   G   Em
-    ],
-    bass: { type: 'sawtooth', cutoff: 700,  q: 3, detune: 5, vol: 0.30 },
-    pad:  { type: 'sawtooth', cutoff: 1700, q: 1, detune: 6, vol: 0.12 },
-    lead: { type: 'sawtooth', cutoff: 3200, q: 1, detune: 6, vol: 0.18 },
-    leadDensity: 0.7, arpDensity: 0.4,
-    kickVol: 1.1, kickMidVol: 0.9, hatVol: 0.06,
-    groove: { swing: 0.0, leadOct: 12, arpOct: 0, arpEvery: 2, leadLong: 0.3, leadRest: 0.1,
-      bassPat: [{d:'r',l:1.6}, null, {d:'r',l:1.6}, null, {d:'5',l:1.6}, null, {d:'r',l:1.6}, null],
-      kickPat: ['main', null, 'mid', null, 'main', null, 'mid', null],
-      hatPat:  [0,1,0,1,0,1,0,1] } },
-
-  // Bright, hopeful C major — uplifting bells over a gentle pulse.
-  { name: 'Bloom',   tempo: 0.24,
-    scale: [3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 20, 22, 24],
-    progs: [
-      [[3,7,10],[10,14,17],[12,15,19],[8,12,15]],   // C   G   Am  F
-      [[3,7,10],[8,12,15],[10,14,17],[3,7,10]],      // C   F   G   C
-    ],
-    bass: { type: 'triangle', cutoff: 800,  q: 2, detune: 3, vol: 0.24 },
-    pad:  { type: 'sine',     cutoff: 2400, q: 1, detune: 5, vol: 0.13 },
-    lead: { type: 'sine',     cutoff: 4800, q: 1, detune: 3, vol: 0.17 },
-    leadDensity: 0.55, arpDensity: 0.6,
-    kickVol: 0.6, kickMidVol: 0.45, hatVol: 0.05,
-    groove: { swing: 0.08, leadOct: 24, arpOct: 12, arpEvery: 1, leadLong: 0.45, leadRest: 0.16,
-      bassPat: [{d:'r',l:2.2}, null, null, null, {d:'5',l:2.2}, null, null, null],
-      kickPat: ['mid', null, null, null, 'mid', null, null, null],
-      hatPat:  [0,0,1,0,0,0,1,0] } },
-
-  // Eerie, dissonant whole-tone — a creeping, weightless dread, no drums.
-  { name: 'Veil',    tempo: 0.29,
-    scale: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24],
-    progs: [
-      [[0,4,8],[2,6,10],[0,4,8],[6,10,14]],         // aug shifts
-      [[0,4,8],[6,10,14],[4,8,12],[2,6,10]],
-    ],
-    bass: { type: 'sine',     cutoff: 420,  q: 1, detune: 4, vol: 0.28 },
-    pad:  { type: 'triangle', cutoff: 1300, q: 1, detune: 7, vol: 0.14 },
-    lead: { type: 'sine',     cutoff: 2200, q: 1, detune: 4, vol: 0.15 },
-    leadDensity: 0.4, arpDensity: 0.25,
-    kickVol: 0.0, kickMidVol: 0.0, hatVol: 0.0,
-    groove: { swing: 0.0, leadOct: 24, arpOct: 12, arpEvery: 4, leadLong: 0.6, leadRest: 0.3,
-      bassPat: [{d:'r',l:6.0}, null, null, null, {d:'3',l:4.0}, null, null, null],
-      kickPat: [null, null, null, null, null, null, null, null],
-      hatPat:  [0,0,0,0,0,0,0,0] } },
-
-  // Laid-back lo-fi D Dorian — heavy swing, mellow late-night groove.
-  { name: 'Tide',    tempo: 0.275,
-    scale: [5, 7, 8, 10, 12, 14, 15, 17, 19, 20, 22, 24, 26],
-    progs: [
-      [[5,8,12],[10,14,17],[7,10,14],[5,8,12]],     // Dm  G   Em  Dm
-      [[5,8,12],[3,7,10],[10,14,17],[7,10,14]],      // Dm  C   G   Em
-    ],
-    bass: { type: 'sine',     cutoff: 600,  q: 2, detune: 4, vol: 0.28 },
-    pad:  { type: 'triangle', cutoff: 1600, q: 1, detune: 6, vol: 0.12 },
-    lead: { type: 'triangle', cutoff: 2600, q: 1, detune: 5, vol: 0.18 },
-    leadDensity: 0.5, arpDensity: 0.4,
-    kickVol: 0.7, kickMidVol: 0.5, hatVol: 0.06,
-    groove: { swing: 0.38, leadOct: 12, arpOct: 0, arpEvery: 2, leadLong: 0.4, leadRest: 0.2,
-      bassPat: [{d:'r',l:3.0}, null, null, {d:'5',l:1.2}, null, null, {d:'3',l:1.5}, null],
-      kickPat: ['main', null, null, null, 'mid', null, null, null],
-      hatPat:  [0,1,0,1,0,1,0,1] } },
-
-  // BOSS — only plays during boss fights. Fast, menacing A Phrygian-dominant
-  // with a pounding kick and a driving square lead. Kept LAST so the normal
-  // drift never randomly selects it (see scheduleMusic / startMusic).
-  { name: 'Boss',    tempo: 0.16,
-    scale: [0, 1, 4, 5, 7, 8, 10, 12, 13, 16, 17, 19, 20],
-    progs: [
-      [[0,4,7],[1,5,8],[0,4,7],[7,10,13]],          // A  Bb  A  E(ish) — menacing
-      [[0,4,7],[8,12,15],[1,5,8],[0,4,7]],
-    ],
-    bass: { type: 'square',   cutoff: 560,  q: 5, detune: 7, vol: 0.30 },
-    pad:  { type: 'sawtooth', cutoff: 1400, q: 2, detune: 5, vol: 0.12 },
-    lead: { type: 'square',   cutoff: 2800, q: 1, detune: 6, vol: 0.18 },
-    leadDensity: 0.9, arpDensity: 0.55,
-    kickVol: 1.25, kickMidVol: 1.0, hatVol: 0.09,
-    groove: { swing: 0.0, leadOct: 0, arpOct: 0, arpEvery: 1, leadLong: 0.15, leadRest: 0.06,
-      bassPat: [{d:'r',l:0.9}, {d:'r',l:0.9}, {d:'5',l:0.9}, {d:'r',l:0.9}, {d:'r',l:0.9}, {d:'r',l:0.9}, {d:'3',l:0.9}, {d:'r',l:0.9}],
-      kickPat: ['main', 'mid', 'main', 'mid', 'main', 'mid', 'main', 'mid'],
-      hatPat:  [1,1,1,1,1,1,1,1] } },
-];
+// ── Musical styles ("sections") ── moved to src/data/musicSections.js (pure data).
+// The generative engine below reads MUSIC_SECTIONS; the harmony/groove math lives in
+// src/systems/musicGroove.js (bassSemi / voiceChord). See that data file for the
+// per-style scale/progs/timbre kit and the bassPat/chordPat groove-lane format.
 // The Boss track is the last entry; the normal drift excludes it.
 const BOSS_IDX = MUSIC_SECTIONS.length - 1;
 const NORMAL_SECTIONS = BOSS_IDX; // count of drift-eligible styles
@@ -7247,7 +7117,7 @@ function mVoice(o) {
     lfo.connect(lg); osList.forEach(os => lg.connect(os.detune));
     lfo.start(when + 0.08); lfo.stop(stopAt);
   }
-  f.connect(g); g.connect(audio.musicGain);
+  f.connect(g); g.connect(musicVoiceBus(role));
 }
 
 // Pre-rendered noise bursts for the snare and hat. Filling a fresh random
@@ -7284,7 +7154,7 @@ function musicSnare(when, vol) {
   ng.gain.setValueAtTime(0.0002, when);
   ng.gain.exponentialRampToValueAtTime(vol, when + 0.004);
   ng.gain.exponentialRampToValueAtTime(0.0002, when + 0.13);
-  src.connect(hp); hp.connect(ng); ng.connect(audio.musicGain);
+  src.connect(hp); hp.connect(ng); ng.connect(musicVoiceBus('perc'));
   src.start(when); src.stop(when + 0.14);
   const o = ctx.createOscillator(); o.type = 'triangle';
   o.frequency.setValueAtTime(230, when);
@@ -7293,7 +7163,7 @@ function musicSnare(when, vol) {
   og.gain.setValueAtTime(0.0002, when);
   og.gain.exponentialRampToValueAtTime(vol * 0.5, when + 0.004);
   og.gain.exponentialRampToValueAtTime(0.0002, when + 0.09);
-  o.connect(og); og.connect(audio.musicGain);
+  o.connect(og); og.connect(musicVoiceBus('perc'));
   o.start(when); o.stop(when + 0.1);
 }
 
@@ -7303,8 +7173,9 @@ function musicSnare(when, vol) {
 function musicVoiceSection(role, sec, vmul, o) {
   if (vmul <= 0.01) return;
   const p = MUSIC_SECTIONS[sec][role];
+  const vel = o.vel != null ? o.vel : 1;   // per-note velocity (ghost..accent)
   mVoice({ role, freq: o.freq, dur: o.dur, when: o.when,
-           type: p.type, vol: p.vol * vmul, detune: p.detune,
+           type: p.type, vol: p.vol * vmul * vel, detune: p.detune,
            cutoff: p.cutoff, q: p.q, attack: o.attack });
 }
 function musicVoice(role, blend, o) {
@@ -7326,7 +7197,7 @@ function musicKick(when, vol = 1) {
   g.gain.setValueAtTime(0.0001, when);
   g.gain.exponentialRampToValueAtTime(0.26 * vol, when + 0.005);
   g.gain.exponentialRampToValueAtTime(0.0001, when + 0.18);
-  o.connect(g); g.connect(audio.musicGain);
+  o.connect(g); g.connect(musicVoiceBus('perc'));
   o.start(when); o.stop(when + 0.2);
 }
 // A brushed closed-hat (filtered noise) for the offbeats.
@@ -7337,7 +7208,7 @@ function musicHat(when, vol) {
   const src = ctx.createBufferSource(); src.buffer = _hatBufs[_hatBufIdx++ & 3];
   const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000;
   const g = ctx.createGain(); g.gain.value = vol;
-  src.connect(f); f.connect(g); g.connect(audio.musicGain);
+  src.connect(f); f.connect(g); g.connect(musicVoiceBus('perc'));
   src.start(when); src.stop(when + 0.05);
 }
 // Wander the melody within a given style's scale: land on chord tones for
@@ -7448,7 +7319,9 @@ function scheduleMusic() {
     const S = MUSIC_SECTIONS[musicStructIdx];
     const g = S.groove;
     const chord = musicProg[musicBarCount % musicProg.length];
-    const root = chord[0];
+    // The chord the NEXT bar lands on — the bass walks into it and the comp can
+    // anticipate it, so the progression drives forward across the bar line.
+    const nextChord = musicProg[(musicBarCount + 1) % musicProg.length];
 
     // Resolve the timbre/feel for this step (crossfaded mid-transition).
     const blend = musicBlend(when);
@@ -7468,18 +7341,33 @@ function scheduleMusic() {
       musicProg = mpick(S.progs);
     }
 
-    // Bass: follow the style's per-beat pattern (root/fifth/third, an octave low).
+    // Bass: a MOVING line — the style's per-eighth pattern names a degree
+    // (root/octave/fifth/third, or a chromatic step that walks into the next
+    // chord), with per-note velocity and a probability so it breathes bar to bar.
     const bp = g.bassPat[beat];
-    if (bp) {
-      const semi = (bp.d === '5' ? chord[2] : bp.d === '3' ? chord[1] : root) - 12;
-      musicVoice('bass', blend, { freq: mhz(semi + musicKeyOffset), dur: tempo * bp.l, when: swung, attack: 0.02 });
+    if (bp && Math.random() < (bp.p != null ? bp.p : 1)) {
+      const semi = bassSemi(bp.d, chord, nextChord);
+      musicVoice('bass', blend, { freq: mhz(semi + musicKeyOffset), dur: tempo * bp.l, when: swung, attack: 0.02, vel: bp.v });
     }
 
-    // Pad/arp: cycle the chord tones underneath; busier styles fill more beats.
+    // Chord comp: the harmony now has a RHYTHM — full triads struck on the style's
+    // chordPat, re-voiced each hit (and sometimes anticipating the next chord),
+    // instead of one held chord per bar. This is what gives the progression a beat.
+    const cp = g.chordPat && g.chordPat[beat];
+    if (cp && Math.random() < (cp.p != null ? cp.p : 1)) {
+      const tones = voiceChord(cp.next ? nextChord : chord, cp.voi);
+      for (const t of tones) {
+        musicVoice('pad', blend, { freq: mhz(t + (g.chordOct || 0) + musicKeyOffset), dur: tempo * cp.l, when: swung, attack: 0.03, vel: cp.v });
+      }
+    }
+
+    // Arp sparkle: a single chord tone riding on top. The comp carries the harmony
+    // now, so most styles pull this back to a shimmer (arpVel); bell-forward styles
+    // keep it bright because those arpeggios ARE their identity.
     if (beat % g.arpEvery === 0 || Math.random() < arpDensity) {
       const tone = chord[musicArpIdx % chord.length];
       musicArpIdx++;
-      musicVoice('pad', blend, { freq: mhz(tone + g.arpOct + musicKeyOffset), dur: tempo * 1.6, when: swung, attack: 0.04 });
+      musicVoice('pad', blend, { freq: mhz(tone + g.arpOct + musicKeyOffset), dur: tempo * 1.6, when: swung, attack: 0.04, vel: g.arpVel });
     }
 
     // Lead: an improvised melody that breathes (style-tuned rests + long notes).
@@ -7562,6 +7450,9 @@ function resetMusicBus() {
   g.connect(audio.master);
   if (audio.reverb) { const v = ctx.createGain(); v.gain.value = 0.3; g.connect(v); v.connect(audio.reverb); }
   audio.musicGain = g;
+  // Fresh per-voice sub-buses feed the new music bus; the old ones (with any
+  // ringing notes) are abandoned along with the old bus, so the cut stays clean.
+  buildMusicVoiceBuses();
 }
 // SKIP TRACK: cut the current song off RIGHT AWAY and jump the generative
 // soundtrack to a fresh style. If the music is off we just nudge the player to
@@ -7618,6 +7509,28 @@ function updateSfxButton() {
 function updateSoundButtons() { updateMusicButton(); updateSfxButton(); }
 // Back-compat for any lingering "all sound" caller (e.g. an old title toggle).
 function toggleSound() { cycleMusic(); cycleSfx(); }
+
+// ── Music mix ── each of the four voices (bass / chords / lead / drums) has its
+// own 0–5 fader, applied live to its sub-bus gain and saved per voice. Changing a
+// fader never restarts the music; it just re-levels that layer.
+function setMixLevel(key, lvl) {
+  if (!(key in AUDIO_MIX_KEYS)) return;
+  const v = Math.max(0, Math.min(AUDIO_LEVELS, lvl));
+  audio.mix[key] = v;
+  try { localStorage.setItem(AUDIO_MIX_KEYS[key], String(v)); } catch (e) {}
+  settingsChanged();
+  if (audio.musicVoiceGain && audio.musicVoiceGain[key]) audio.musicVoiceGain[key].gain.value = v / AUDIO_LEVELS;
+  sfx('click');
+  updateMixButton(key);
+}
+// Step this voice up one notch, wrapping full → off (matches the volume faders).
+function cycleMix(key) { setMixLevel(key, (audio.mix[key] + 1) % (AUDIO_LEVELS + 1)); }
+function updateMixButton(key) {
+  const btn = document.getElementById('mix-' + key + '-action');
+  if (btn) btn.classList.toggle('muted', audio.mix[key] <= 0);
+  renderVolMeter(document.getElementById('mix-' + key + '-meter'), audio.mix[key]);
+}
+function updateMixButtons() { for (const k in AUDIO_MIX_KEYS) updateMixButton(k); }
 
 // Flip the sprint control between HOLD and TOGGLE. Switching to HOLD also drops
 // any latched auto-sprint so it can't stay stuck on. Persisted so the choice
@@ -7726,7 +7639,7 @@ function toggleSettingsMenu(e) {
   if (e) e.stopPropagation();
   const menu = document.getElementById('settings-menu');
   if (!menu) return;
-  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderDpadControls(); renderCursorControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); centerSettingsCard(); }
+  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderDpadControls(); renderCursorControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); updateMixButtons(); centerSettingsCard(); }
 }
 function closeSettingsMenu() {
   const menu = document.getElementById('settings-menu');
@@ -25362,6 +25275,7 @@ try {
 // browsers won't let sound start until the player interacts, so the first
 // gesture resumes the context and kicks off the looping music.
 updateSoundButtons();
+updateMixButtons();
 updateSprintButton();
 updateHeroBarsButton();
 updateCrosshairButton();
@@ -26137,6 +26051,11 @@ const __DL_FN_BRIDGE = {
   setSfxLevel,
   cycleMusic,
   cycleSfx,
+  setMixLevel,
+  cycleMix,
+  updateMixButton,
+  updateMixButtons,
+  buildMusicVoiceBuses,
   resetMusicBus,
   skipMusicTrack,
   toggleMusic,
