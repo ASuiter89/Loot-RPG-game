@@ -6704,7 +6704,7 @@ window.gameGuide = function gameGuide(topic) {
     controls: [
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A single tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
-      `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. HOVERING a foe pops its codex card (known stats) under the map. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
+      `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. HOVERING a foe pops its codex card (known stats) under the map. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
@@ -8430,9 +8430,19 @@ let clickMoveId = null;
 function setMoveTargetFromClient(cx, cy) {
   const w = clientToWorld(cx, cy);
   if (!w) return;
+  let wx = Math.max(0.5, Math.min(MAP_W - 0.5, w.wx));
+  let wy = Math.max(0.5, Math.min(MAP_H - 0.5, w.wy));
+  // Clicked a SOLID tile (wall, water, closed/locked door, NPC, furniture, boss
+  // barrier)? Walk up to its nearest walkable EDGE instead of mushing into the face.
+  // Foes aren't solid to the planner — a foe click is handled as a chase in endJoy.
+  const tx = Math.floor(wx), ty = Math.floor(wy);
+  if (pathCellBlocked(tx, ty)) {
+    const edge = nearestWalkableEdge(tx, ty);
+    if (edge) { wx = edge.x + 0.5; wy = edge.y + 0.5; }   // else fully enclosed — leave as-is
+  }
   const fresh = !moveTarget.active;
-  moveTarget.wx = Math.max(0.5, Math.min(MAP_W - 0.5, w.wx));
-  moveTarget.wy = Math.max(0.5, Math.min(MAP_H - 0.5, w.wy));
+  moveTarget.wx = wx;
+  moveTarget.wy = wy;
   moveTarget.active = true;
   moveTarget.foe = null;   // a plain ground point isn't a chase (a foe tap re-sets this)
   if (fresh) { moveTarget._stallT = 0; moveTarget._px = player.fx; moveTarget._py = player.fy; }
@@ -18005,6 +18015,22 @@ function moveLineClear(x0, y0, x1, y1) {
 // Is this cell walkable for planning? Walls, water, doors, furniture, boss
 // barriers and town NPCs block; foes don't (they're transient).
 function pathCellBlocked(x, y) { return playerSolidCell(x, y, true); }
+// The walkable cell adjacent to a SOLID target cell that sits nearest the hero —
+// the "edge" a click on a wall / NPC / object / door walks you up to (see
+// setMoveTargetFromClient). Skips a diagonal whose two orthogonal sides are BOTH
+// solid (a wedged corner the hero can't slip through). Null if fully enclosed.
+function nearestWalkableEdge(tx, ty) {
+  let best = null, bestD = Infinity;
+  for (const [dx, dy] of UNSTICK_DIRS) {
+    const nx = tx + dx, ny = ty + dy;
+    if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H) continue;
+    if (pathCellBlocked(nx, ny)) continue;                                    // must be standable
+    if (dx && dy && pathCellBlocked(tx + dx, ty) && pathCellBlocked(tx, ty + dy)) continue; // wedged corner
+    const ex = nx + 0.5 - player.fx, ey = ny + 0.5 - player.fy, d = ex * ex + ey * ey;
+    if (d < bestD) { bestD = d; best = { x: nx, y: ny }; }
+  }
+  return best;
+}
 // Extra cost for stepping onto a cell, so the route prefers safe, quick ground.
 function pathStepCost(x, y) {
   const t = mapData[y][x];
