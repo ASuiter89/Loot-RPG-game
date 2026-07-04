@@ -10930,7 +10930,7 @@ function captureHeldFloor() {
     dungeonLevel, floorCleared, floorGreed,
     enemies, minions, merchant, mystic, quest,
     groundItems, groundFood, groundGold, graveMarker, nextDiffPortal,
-    bossHazards, traps, projectiles,
+    bossHazards, traps,   // NOTE: in-flight projectiles are deliberately NOT held (see returnToHeldFloor)
     statusEffects,
     px: player.x, py: player.y, lastStandReady: player.lastStandReady,
   };
@@ -10965,7 +10965,8 @@ function returnToHeldFloor() {
   enemies = h.enemies; minions = h.minions; merchant = h.merchant; mystic = h.mystic;
   quest = h.quest; groundItems = h.groundItems; groundFood = h.groundFood;
   groundGold = h.groundGold; graveMarker = h.graveMarker; nextDiffPortal = h.nextDiffPortal;
-  bossHazards = h.bossHazards; traps = h.traps; projectiles = h.projectiles;
+  bossHazards = h.bossHazards; traps = h.traps;
+  projectiles = [];   // fresh-entry parity: do NOT restore in-flight bolts. A generated floor has none, and a frozen bolt on course for the departure tile would strike the instant the materialize grace ends — entryGuard shields the melee path but NOT the projectile hit path, so a held bolt could pierce the "unhittable arrival" window (reachable via the no-channel conquest exit).
   // statusEffects: restore the floor's enemy-target entries (burn/chill/mark —
   // still linked to the restored enemy objects) and KEEP the current player
   // entries, which may have ticked or lapsed while you idled in town. (Skill
