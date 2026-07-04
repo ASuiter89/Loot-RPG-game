@@ -52,3 +52,17 @@ export function formatDamageRange(min, max) {
   const hi = abbreviateNumber(max);
   return lo === hi ? lo : `${lo}–${hi}`;
 }
+
+/**
+ * Abbreviate every run of four or more digits (i.e. 1000+) inside a string,
+ * leaving shorter numbers, symbols, labels and markup untouched. Used for on-screen
+ * floating combat text so a deep-floor hit or a fat gold drop reads "12.3k" instead
+ * of a wall of digits, while pop-ups like "BLOCK", "2×250" or "+50 MP" keep their
+ * prefix/suffix. Non-string input is returned unchanged.
+ * @param {string} text
+ * @returns {string}
+ */
+export function abbreviateNumbersIn(text) {
+  if (typeof text !== 'string') return text;
+  return text.replace(/\d{4,}/g, (run) => abbreviateNumber(Number(run)));
+}
