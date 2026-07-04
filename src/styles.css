@@ -2757,6 +2757,23 @@
   .pact-buy-btn .pact-floors { display: block; font-size: 1.5rem; }
   .pact-buy-btn .pact-cost { display: block; opacity: 0.85; font-size: 1.3rem; margin-top: 2px; }
   .pact-buy-btn .pact-cost.cost-short { color: var(--red-200); opacity: 1; }
+  /* ── SELLSWORD CAMP — .merc-card, a deliberate one-off over .pact-card ──
+     A hire card carries an actual mercenary CHARACTER sprite (not the Mystic's
+     ability icons), so it mirrors the hero card (.hero-card): name + description
+     left-aligned in a column, the walking sprite right-aligned and standing about
+     as tall as those two lines. Scoped to .merc-card so the Mystic pact cards keep
+     their inline icon-beside-name head. */
+  .merc-card .merc-top {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 11px;
+  }
+  .merc-card .merc-info { flex: 1 1 auto; min-width: 0; }
+  .merc-card .merc-info .pact-name { margin-bottom: 4px; }
+  .merc-card .merc-info .pact-desc { margin: 0; }
+  .merc-card .merc-portrait {
+    flex: 0 0 auto; line-height: 0;
+    filter: drop-shadow(0 0 6px var(--accent, var(--accent-teal)));
+  }
 
   /* ── TOWN MODAL ── (craftsman / healer / trainer / enchanter / dungeon gate) */
   #town-overlay {
