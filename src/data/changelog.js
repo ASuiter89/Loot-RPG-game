@@ -15,6 +15,12 @@ export const CHANGELOG = [
     "Enemies and following companions now glide between tiles at a steady pace like the hero — smooth movement in every direction instead of hopping tile to tile.",
     "The Rat King is fully reworked as the first of the new-style fights: it telegraphs every attack with a floor indicator you dodge by moving — a ground-shaking slam, a pounce that locks onto you, a tail-whirl to back clear of, and vermin that erupt where they are marked. It grows fiercer at two-thirds and one-third health. The rest of the roster's bespoke movesets are coming next.",
   ] },
+  { date: "2026-07-04", size: "small", v: "Town: Return to Last Floor + Warp to Dungeon", by: "Claude", notes: [
+    "Town's top row now has two gates. Return to Last Floor drops you straight back onto the exact floor you left through the portal — same enemies, loot and layout, right where you stood — instead of rebuilding it.",
+    "Warp to Dungeon (was Return to Dungeon) opens the difficulty and floor picker.",
+    "Return to Last Floor lights up only after you leave by portal or conquest; a death darkens it, so you take Warp to Dungeon back down.",
+    "The hub tagline moved up under the Town title, centred.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Skill milestone text now states exact numbers", by: "Claude", notes: [
     "The rank 3 / 7 / 10 \"Rank bonuses\" ladder now spells out each milestone: +28% power (Empowered), +20% power & 20% faster recharge (Honed), +30% power plus +1 radius/range/target/hit (Mastered) — no more vague \"a power surge\".",
     "Passive milestones read their exact surge too — +8% / +10% / +12% to the bonus — and the milestone level-up log line now shouts the specific gain.",

@@ -6895,6 +6895,16 @@ window.gameState = function gameState(radius) {
         const locked = !!(s.req && !s.req.ok());
         return { kind: s.kind, name: s.name, locked, need: locked ? s.req.need : null };
       }) : null,
+      // The town's two top gates. Warp to Dungeon (the tier+floor picker) is
+      // always usable; Return to Last Floor restores the EXACT stage you portaled
+      // out of and is available ONLY when a floor is held (you left by portal or
+      // conquest, never after a death). `available` mirrors the button's own
+      // enabled test so an agent driving the game sees the same truth.
+      returnToLastFloor: inTown
+        ? (heldFloor != null
+            ? { available: true, floor: Math.max(1, dungeonReturn || 1), where: floorLabel(Math.max(1, dungeonReturn || 1)) }
+            : { available: false, floor: null, where: null })   // no held stage → no return target (don't report the default warp floor)
+        : null,
       pointsToSpend: { attribute: player.attrPoints || 0, skill: player.skillPoints || 0, ascendancy: player.ascPoints || 0 },
       gold: player.gold,                 // coins in hand (what death loss is taken from)
       vaultGold: (stash && stash.gold) || 0,   // banked in the town Vault — safe from death
@@ -7116,15 +7126,15 @@ window.gameGuide = function gameGuide(topic) {
       `Hardcore mode (one life, permadeath) is also chosen on the name screen and locks in for that hero. Class can be retrained later at the town Trainer, but name, body type and Hardcore are fixed once you begin. While the class screen is open gameState().mode is 'classSelect'; on the name screen it's 'nameSelect'.`,
     ],
     town: [
-      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, knocked back several floors, your bag dropped as a reclaimable grave on the death floor). The Dungeon Gate flags the tier + floor holding that grave (gameState().graveSite.where), so you can dive straight back to it.`,
-      `Town is a menu of services; take the Dungeon Gate to drop back in (choose tier + floor). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and is re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
+      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, knocked back several floors, your bag dropped as a reclaimable grave on the death floor — a death does NOT hold your floor). The Dungeon Gate flags the tier + floor holding that grave (gameState().graveSite.where), so you can dive straight back to it.`,
+      `Town's top row has TWO gates. Warp to Dungeon opens the tier+floor picker (choose where to drop in). Return to Last Floor drops you straight back onto the EXACT floor you left through the Town Portal — same enemies, loot and layout, right where you stood — and lights up ONLY when you left by portal or conquest, never after a death (then it's darkened, so take Warp to Dungeon; gameState().menu.returnToLastFloor.available reports this, .where the floor it returns to). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and is re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
-      `Services unlock as you progress and show in a fixed order (Dungeon Gate on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
+      `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress.`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
@@ -7165,7 +7175,7 @@ window.gameGuide = function gameGuide(topic) {
     quest: 'quests', quests: 'quests', escort: 'quests', rescue: 'quests', fetch: 'quests', tribute: 'quests', forage: 'quests', beacon: 'quests', beacons: 'quests', objective: 'quests', bounty: 'town',
     classs: 'progression', classes: 'progression', clas: 'progression', attribute: 'progression', attributes: 'progression', level: 'progression', leveling: 'progression', skilltree: 'progression', ascension: 'progression', ascend: 'progression', xp: 'progression',
     character: 'character', creation: 'character', create: 'character', sex: 'character', gender: 'character', male: 'character', female: 'character', name: 'character', naming: 'character', newgame: 'character', body: 'character',
-    shop: 'town', merchant: 'town', craft: 'town', crafting: 'town', forge: 'town', ramen: 'town', mystic: 'town', stash: 'town', portal: 'town', transmuter: 'town', transmute: 'town', fuse: 'town', vault: 'town', gambler: 'town', gamble: 'town', sellsword: 'town', merc: 'town', mercenary: 'town', trainer: 'town', healer: 'town', enchanter: 'town', enchant: 'town',
+    shop: 'town', merchant: 'town', craft: 'town', crafting: 'town', forge: 'town', ramen: 'town', mystic: 'town', stash: 'town', portal: 'town', gate: 'town', warp: 'town', lastfloor: 'town', transmuter: 'town', transmute: 'town', fuse: 'town', vault: 'town', gambler: 'town', gamble: 'town', sellsword: 'town', merc: 'town', mercenary: 'town', trainer: 'town', healer: 'town', enchanter: 'town', enchant: 'town',
     control: 'controls', key: 'controls', keys: 'controls', keybind: 'controls', keybinds: 'controls', keybinding: 'controls',
     heal: 'healing', healing: 'healing', recovery: 'healing', regen: 'healing', regeneration: 'healing', potion: 'healing', potions: 'healing', mana: 'healing', mp: 'healing', leech: 'healing', lifesteal: 'healing', overtime: 'healing', pending: 'healing', hp: 'healing', hitpoints: 'healing', sustain: 'healing',
     drive: 'driving', driving: 'driving', api: 'driving', act: 'driving', acting: 'driving', input: 'driving',
@@ -9679,6 +9689,7 @@ function placeFurniture(theme) {
 
 function generateMap() {
   inTown = false;
+  clearHeldFloor();   // a freshly-built floor supersedes any snapshotted stage (Gate re-entry, stairs, conquest) — the sole chokepoint that keeps "Return to Last Floor" honest
   mapEpoch++;         // new layout → rebuild the wall-shadow cache on next draw
   stopTownAmbient();  // leave the town's chatter behind at the dungeon door
   updateObjectiveChip();   // re-surface the bounty chip once back on a dungeon floor
@@ -11042,6 +11053,104 @@ function tickPortalChannel(hpBeforeEnemies) {
   updateBars(); renderSkillBar();
 }
 
+// ── HELD FLOOR (leave-and-return-to-the-same-stage) ──
+// A Town Portal is a round trip: we SNAPSHOT the dungeon floor you leave so
+// "Return to Last Floor" can drop you back onto the EXACT same stage — enemies
+// right where they stood, same loot, same layout — instead of rerolling a fresh
+// floor. buildTown()/warpToTown() REASSIGN every floor global to a fresh empty
+// (`enemies=[]`, `mapData=[]`, …) and never mutate the old objects in place, so
+// grabbing the CURRENT references right before buildTown runs freezes the live
+// floor for free (no deep clone) — restore just repoints the globals back.
+// heldFloor is in-memory only (never saved): a page reload naturally clears it,
+// which just darkens the button until you portal out again. Death does NOT flow
+// through warpToTown (handleDeath calls buildTown directly), so a death never
+// captures a stage — which is exactly why the button is dark after you die.
+let heldFloor = null;
+function captureHeldFloor() {
+  // Snapshot floor globals BY REFERENCE (buildTown swaps in fresh empties next).
+  // statusEffects is grabbed IN FULL here, before buildTown filters it down to
+  // player-only — its enemy entries hold direct refs to the enemy objects we're
+  // also capturing, so the burn/chill/mark links stay intact as long as we
+  // restore the SAME enemy objects (see the merge in returnToHeldFloor). If a
+  // future edit ever deep-clones enemies on capture, re-link statusEffects too.
+  // Player position is copied as PRIMITIVES because `player` is the one
+  // persistent object and buildTown moves it to the town entry tile.
+  heldFloor = {
+    MAP_W, MAP_H,
+    mapData, wallCracks, furnitureMap, decorMap, teleporters, shrineData,
+    floorThemeOverride, floorTint, floorMod, floorRooms, floorMobSpec,
+    hasFountain, groundKey, hasKey, startPos,
+    dungeonLevel, floorCleared, floorGreed,
+    enemies, minions, merchant, mystic, quest,
+    groundItems, groundFood, groundGold, graveMarker, nextDiffPortal,
+    bossHazards, traps,   // NOTE: in-flight projectiles are deliberately NOT held (see returnToHeldFloor)
+    statusEffects,
+    px: player.x, py: player.y, lastStandReady: player.lastStandReady,
+  };
+}
+function clearHeldFloor() { heldFloor = null; }
+// Drop straight back onto the floor you portaled out of, restoring the snapshot
+// captured in captureHeldFloor() rather than regenerating. Bridged to window so
+// the town hub's "Return to Last Floor" button (onclick) can reach it. Single-
+// use: the snapshot is consumed on return, so a later descent can't re-return a
+// stale stage. Deliberately restores minions AND enemy-target statusEffects (a
+// deviation from the usual "wipe transient state on floor entry") — this IS the
+// same stage, held; don't let a future "clean up on floor change" edit wipe it.
+function returnToHeldFloor() {
+  if (!heldFloor) return;              // nothing held (arrived by death, or reloaded)
+  const h = heldFloor;
+  revivedInTown = false;              // leaving town clears the post-death prompt
+  closeShop(); closeMystic(); closeTown();
+  inTown = false;                     // flip mode BEFORE any draw/updateBars/save reads it
+  stopTownAmbient();                  // leave the town's chatter behind
+  // Restore dims FIRST — every cache key and grid is sized on MAP_W/MAP_H, and
+  // getEnemyAt keys on y*MAP_W+x, so restoring tiles under the town's 20×20 would
+  // corrupt both rendering and occupancy.
+  MAP_W = h.MAP_W; MAP_H = h.MAP_H;
+  mapData = h.mapData; wallCracks = h.wallCracks;
+  furnitureMap = h.furnitureMap; decorMap = h.decorMap;
+  teleporters = h.teleporters; shrineData = h.shrineData;
+  floorThemeOverride = h.floorThemeOverride; floorTint = h.floorTint;
+  floorMod = h.floorMod; floorRooms = h.floorRooms; floorMobSpec = h.floorMobSpec;
+  hasFountain = h.hasFountain; groundKey = h.groundKey; hasKey = h.hasKey;
+  startPos = h.startPos; dungeonLevel = h.dungeonLevel; floorCleared = h.floorCleared;
+  floorGreed = h.floorGreed;   // greed buffs foes IN PLACE on the enemy objects we restore, so restore the multiplier too or the doubled loot/gold silently vanishes while the buffed roster stays
+  enemies = h.enemies; minions = h.minions; merchant = h.merchant; mystic = h.mystic;
+  quest = h.quest; groundItems = h.groundItems; groundFood = h.groundFood;
+  groundGold = h.groundGold; graveMarker = h.graveMarker; nextDiffPortal = h.nextDiffPortal;
+  bossHazards = h.bossHazards; traps = h.traps;
+  projectiles = [];   // fresh-entry parity: do NOT restore in-flight bolts. A generated floor has none, and a frozen bolt on course for the departure tile would strike the instant the materialize grace ends — entryGuard shields the melee path but NOT the projectile hit path, so a held bolt could pierce the "unhittable arrival" window (reachable via the no-channel conquest exit).
+  // statusEffects: restore the floor's enemy-target entries (burn/chill/mark —
+  // still linked to the restored enemy objects) and KEEP the current player
+  // entries, which may have ticked or lapsed while you idled in town. (Skill
+  // combatBuffs are real-seconds transient and already dropped on the town trip,
+  // as today — they are not restored.) Reassigning the array auto-busts the
+  // per-foe move-status map (identity check).
+  statusEffects = h.statusEffects.filter(s => s.target !== 'player')
+    .concat(statusEffects.filter(s => s.target === 'player'));
+  // Beam the hero back onto the exact tile they left from — a Town Portal only
+  // opens after 3 clean turns, so that tile is provably safe. setPlayerCell
+  // zeroes momentum, which is what we want after a warp; face down like a fresh
+  // arrival.
+  setPlayerCell(h.px, h.py);
+  player.faceDir = 'down'; player.faceDx = 0; player.faceDy = 1;
+  player.lastStandReady = h.lastStandReady;
+  entryGuard = true;                 // safe-until-first-act grace, like any arrival
+  clearHeld();                       // drop any stale click-route / held input
+  updateObjectiveChip();             // re-surface the dungeon bounty chip town hid
+  // Cache invalidation (hot-path rule): buildTown left floorSerial/mapEpoch at the
+  // TOWN bake, so bump again — AFTER dims + mapData + furniture + decor + enemies
+  // are back — so the terrain/minimap/occluder/path-grid caches all rebuild from
+  // the restored floor, not the town.
+  floorSerial++; bumpMapEpoch(); pathGridDirty(); bumpEnemyPos();
+  resetPortal(); warpFx = null;      // no half-formed portal / in-flight pad warp lingers
+  beginPortalArrival();              // blue pillar beam-in, exactly like the Gate re-entry
+  sfx('stairs');
+  log(`<span data-spr=feat_gate_red></span> You step back through the portal onto ${floorLabel(dungeonLevel)}.`, 'important');
+  clearHeldFloor();                  // single-use — consumed on return
+  updateBars(); renderSkillBar(); draw(); saveGame();
+}
+
 // Whisk the hero to town and open the hub MENU. Dungeon progress is untouched —
 // re-enter through the Dungeon Gate to drop back in on any floor you've reached, so
 // you can backtrack to grind levels and gear. Reached when a channel finishes, and
@@ -11050,12 +11159,13 @@ function warpToTown() {
   resetPortal();
   if (inTown) { openTownHub(); return; }
   closeShop(); closeMystic(); closeTown();
+  captureHeldFloor();   // freeze this floor so "Return to Last Floor" can restore it
   dungeonReturn = dungeonLevel;
   bossHazards = []; bossTelegraphs = [];
   buildTown();
   sfx('stairs');
   log('<span data-spr=feat_gate_red></span> The portal opens and you step through into the safety of town.', 'important');
-  log('Pick a service from the menu. The <span data-spr=feat_gate_red></span> Dungeon Gate takes you back below.');
+  log('Pick a service from the menu. <span data-spr=feat_gate_red></span> Warp to Dungeon takes you back below, or Return to Last Floor drops you right where you left.');
   updateBars();
   openTownHub();
   draw();
@@ -11715,21 +11825,42 @@ function openTownHub() {
      </button>`;
   }).join('');
   const returnFloor = Math.max(1, dungeonReturn || player.maxFloor || 1);
-  const gateTile =
-    `<button class="town-menu-btn tm-gate${revivedInTown ? ' tm-gate-urgent' : ''}" onclick="openTownService('gate')">
+  // Two centred CTAs share the top row. "Return to Last Floor" restores the stage
+  // you portaled out of (heldFloor) — it lights up ONLY when a snapshot exists
+  // (you left by Town Portal or conquest); a death never captures one, so after
+  // dying it's darkened and inert. "Warp to Dungeon" is the tier+floor picker.
+  const canReturn = heldFloor != null;
+  const returnTile =
+    `<button class="town-menu-btn tm-gate${canReturn ? '' : ' tm-disabled'}" type="button" ${canReturn ? 'onclick="returnToHeldFloor()"' : 'disabled aria-disabled="true"'}>
        <span class="tm-icon">${dlIcon('feat_gate_red')}</span>
-       <span class="tm-text"><span class="tm-name">Return to Dungeon</span><span class="tm-desc">${revivedInTown ? 'Head back down to keep questing' : `Back to ${floorLabel(returnFloor)}, or pick a difficulty`}</span></span>
+       <span class="tm-text"><span class="tm-name">Return to Last Floor</span><span class="tm-desc">${canReturn ? `Back to ${floorLabel(returnFloor)}, right where you left` : 'Portal out to hold a floor'}</span></span>
        <span class="gate-wisp gate-wisp-a" aria-hidden="true"></span>
        <span class="gate-wisp gate-wisp-b" aria-hidden="true"></span>
      </button>`;
-  const blurb = revivedInTown
-    ? `<div class="town-blurb town-blurb-revived"><span data-spr=b_deathknight></span> You were slain and revived here in <b>Town</b>. Stock up if you like — then take <b><span data-spr=feat_gate_red></span> Return to Dungeon</b> at the top to head back down and keep questing.</div>`
-    : `<div class="town-blurb">A safe haven away from the dungeon. Take <b>Return to Dungeon</b> at the top when you're ready to delve again, or pick a service first.</div>`;
+  const warpTile =
+    `<button class="town-menu-btn tm-gate${revivedInTown ? ' tm-gate-urgent' : ''}" type="button" onclick="openTownService('gate')">
+       <span class="tm-icon">${dlIcon('feat_gate_red')}</span>
+       <span class="tm-text"><span class="tm-name">Warp to Dungeon</span><span class="tm-desc">${revivedInTown ? 'Head back down to keep questing' : 'Pick a difficulty and floor'}</span></span>
+       <span class="gate-wisp gate-wisp-a" aria-hidden="true"></span>
+       <span class="gate-wisp gate-wisp-b" aria-hidden="true"></span>
+     </button>`;
+  const gateRow = `<div class="tm-gate-row">${returnTile}${warpTile}</div>`;
+  // The hub blurb now lives in the overlay header, centred under the "Town" title
+  // (see #town-hub-blurb) — set it here and reveal it; service panels hide it.
+  const blurbInner = revivedInTown
+    ? `<span data-spr=b_deathknight></span> You were slain and revived here in <b>Town</b>. Stock up if you like — then take <b><span data-spr=feat_gate_red></span> Warp to Dungeon</b> above to head back down and keep questing.`
+    : `A safe haven away from the dungeon. Take <b>Warp to Dungeon</b> to pick a difficulty and floor, or <b>Return to Last Floor</b> to drop straight back onto the floor you left.`;
+  const hubBlurbEl = document.getElementById('town-hub-blurb');
+  if (hubBlurbEl) {
+    hubBlurbEl.className = 'town-blurb town-hub-blurb' + (revivedInTown ? ' town-blurb-revived' : '');
+    hubBlurbEl.innerHTML = blurbInner;
+    hubBlurbEl.hidden = false;
+  }
   const ambFoot =
     `<div class="town-amb-foot">
        <button id="town-amb-btn" class="town-amb-toggle${audio.townAmbOn ? ' on' : ''}" onclick="toggleTownAmbient()">${audio.townAmbOn ? '🔔 Town sounds: On' : '🔕 Town sounds: Off'}</button>
      </div>`;
-  setTownContent(`${blurb}<div class="town-menu">${gateTile}${tiles}</div>${ambFoot}`);
+  setTownContent(`<div class="town-menu">${gateRow}${tiles}</div>${ambFoot}`);
   // Render the bar in its town form (potions locked) and measure the gap the menu
   // reserves for it, now that the town overlay is open.
   renderSkillBar();
@@ -11746,6 +11877,7 @@ function townBack() {
 // Opening any of them marks us as viewing a service so the ← back button appears.
 function openTownModal(name, sprite) {
   townView = 'service';
+  const hb = document.getElementById('town-hub-blurb'); if (hb) hb.hidden = true; // hub-only blurb
   const el = document.getElementById('town-title');
   el.dataset.title = name;                                    // plain text, for identity checks
   el.innerHTML = (sprite ? dlIcon(sprite, 20) + ' ' : '') + name;
@@ -22403,6 +22535,7 @@ castSkillById  = guardAction(castSkillById);
 enterTown      = guardAction(enterTown);
 enterDungeonAt = guardAction(enterDungeonAt);
 openTownService = guardAction(openTownService);
+returnToHeldFloor = guardAction(returnToHeldFloor);  // guard the one-click stage restore against double-fire / halt (wrapped BEFORE the window bridge captures it)
 
 // XP needed to advance FROM a given level. A cubic curve, so the FEEL of
 // levelling changes dramatically as you climb: the first handful of levels fly
@@ -27781,7 +27914,7 @@ cloudBootSync();
 
 if (hadSave) {
   log(`Welcome back, level ${player.level} adventurer.`, 'important');
-  if (inTown) log('You are in town. Pick a service from the menu, or take the <span data-spr=feat_gate_red></span> Dungeon Gate back into the dungeon.');
+  if (inTown) log('You are in town. Pick a service from the menu, or take <span data-spr=feat_gate_red></span> Warp to Dungeon back into the dungeon.');
   else log(`Resuming on dungeon level ${dungeonLevel}. Your gear is intact.`);
 } else {
   log('Welcome to the dungeon. Use WASD or the arrow keys to move.', 'important');
@@ -28969,6 +29102,7 @@ const __DL_FN_BRIDGE = {
   seedTownBg,
   openTownHub,
   townBack,
+  returnToHeldFloor,
   openTownModal,
   closeTown,
   setTownContent,
