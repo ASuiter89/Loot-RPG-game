@@ -14,6 +14,7 @@
 
 // ── Extracted modules (see docs/CHANGELOG.md) ──
 import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
+import { abbrevNums } from '../utils/format.js';
 import { milestonePower, rankScale, passiveRankScale, skillManaCost,
   earnedSkillPoints, earnedAscPoints,
   SKILL_POINTS_PER_LEVEL, SKILL_POINTS_AT_START, ASCEND_LEVEL, ASC_POINT_EVERY } from '../systems/skillMath.js';
@@ -15397,6 +15398,9 @@ function spawnFloatingText(x, y, text, color, size, coin) {
   // bold pop, used for crit / rampage damage numbers). `coin` draws the gold-coin
   // sprite to the left of the text so gold floaters read as "coin + amount", to
   // match the HUD/menus instead of a trailing "g".
+  // Any 4+ digit number (≥1000) reads as short form — 1523 → 1.5k — so huge
+  // hits/heals/gold on deep floors stay a legible pop instead of a wall of digits.
+  text = abbrevNums(text);
   const now = Date.now();
   // Anti-overlap: a kill or multi-hit can fire several floaters at almost the
   // same spot in one frame. Rather than let them pile into an unreadable blob,

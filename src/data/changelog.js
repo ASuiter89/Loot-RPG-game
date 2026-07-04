@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Big damage numbers read in short form", by: "Jeff Louie", notes: [
+    "Floating damage, heal and gold pop-ups of 1000+ now show short form — 1523 reads 1.5k — so huge hits on deep floors stay a legible pop instead of a wall of digits.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Dungeon Gate flags the floor holding your lost bag", by: "Jeff Louie", notes: [
     "The floor where you died glows with a grave marker at the Dungeon Gate, and its difficulty tab gets the same badge, so you know exactly where to dive to reclaim your dropped bag.",
     "A note under the tier picker names the grave's tier and floor whatever tab you're on.",
