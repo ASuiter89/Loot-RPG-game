@@ -1317,6 +1317,45 @@ function itemSpritePx(tw) {
 // loaded so callers fall back to their emoji.
 // Build a DawnLike atlas icon span at an EXACT pixel size (used when the icon
 // should fit a specific surrounding context rather than snap to a whole tile).
+// ── Icon alpha-trim ─────────────────────────────────────────────────────────
+// Atlas tiles carry uneven transparent padding: some sprites' art fills the 16px
+// cell, others sit tiny in the middle. When an icon is resized to fit text or a
+// slot, that padding shrinks the VISIBLE art — and unevenly, tile to tile. These
+// helpers measure each sprite's opaque bounding box once (off an offscreen copy
+// of the sheet) so the renderers can drop the margin and size the real pixels.
+const _iconTrim = {};
+let _trimCtx = null;
+function _iconTrimBox(key) {
+  if (_iconTrim[key]) return _iconTrim[key];
+  if (!spriteReady || typeof document === 'undefined') return null;
+  const i = SPRITE_IDX[key];
+  if (i === undefined) return null;
+  try {
+    if (!_trimCtx) {
+      const cv = document.createElement('canvas');
+      cv.width = spriteSheet.naturalWidth; cv.height = spriteSheet.naturalHeight;
+      _trimCtx = cv.getContext('2d', { willReadFrequently: true });
+      _trimCtx.drawImage(spriteSheet, 0, 0);
+    }
+    const col = i % ATLAS_COLS, row = (i / ATLAS_COLS) | 0;
+    const d = _trimCtx.getImageData(col * ATLAS_TS, row * ATLAS_TS, ATLAS_TS, ATLAS_TS).data;
+    let minx = ATLAS_TS, miny = ATLAS_TS, maxx = -1, maxy = -1;
+    for (let y = 0; y < ATLAS_TS; y++) for (let x = 0; x < ATLAS_TS; x++) {
+      if (d[(y * ATLAS_TS + x) * 4 + 3] > 16) {
+        if (x < minx) minx = x; if (x > maxx) maxx = x;
+        if (y < miny) miny = y; if (y > maxy) maxy = y;
+      }
+    }
+    const box = (maxx < 0)
+      ? { x0: 0, y0: 0, w: ATLAS_TS, h: ATLAS_TS }
+      : { x0: minx, y0: miny, w: maxx - minx + 1, h: maxy - miny + 1 };
+    _iconTrim[key] = box;
+    return box;
+  } catch (e) { return null; }
+}
+// Height of an inline icon relative to the text it sits beside (a multiple of the
+// computed font-size); ~1 keeps the trimmed art about as tall as the line.
+const TEXT_ICON_H = 1.08;
 function dlIconAt(name, px) {
   const sk = skillIconAt(name, px);   // generated skill badge wins over the atlas tile
   if (sk) return sk;
@@ -1331,7 +1370,19 @@ function dlIconAt(name, px) {
   // base stays crisp and this only applies the player's chosen multiplier.
   px = px * (uiScale || 1);
   const aw = spriteSheet.naturalWidth || 256, ah = spriteSheet.naturalHeight || 144;
-  const col = i % ATLAS_COLS, row = (i / ATLAS_COLS) | 0, sc = px / ATLAS_TS;
+  const col = i % ATLAS_COLS, row = (i / ATLAS_COLS) | 0;
+  // Fit the sprite's opaque pixels (its alpha box) inside the px box, centred, so
+  // the art fills the space instead of floating small inside baked-in padding.
+  // Falls back to the whole tile until the atlas has decoded and can be measured.
+  const box = _iconTrimBox(name);
+  if (box) {
+    const scale = px / Math.max(box.w, box.h);
+    const ox = (px - box.w * scale) / 2, oy = (px - box.h * scale) / 2;
+    const bx = ox - (col * ATLAS_TS + box.x0) * scale, by = oy - (row * ATLAS_TS + box.y0) * scale;
+    return `<span class="dl-ic" style="width:${px}px;height:${px}px;` +
+      `background-size:${aw * scale}px ${ah * scale}px;background-position:${bx.toFixed(2)}px ${by.toFixed(2)}px"></span>`;
+  }
+  const sc = px / ATLAS_TS;
   return `<span class="dl-ic" style="width:${px}px;height:${px}px;` +
     `background-size:${aw * sc}px ${ah * sc}px;background-position:-${col * px}px -${row * px}px"></span>`;
 }
@@ -2531,7 +2582,7 @@ function spendCost(cost) {
 function costLabel(cost) {
   const parts = [];
   if (cost.gold) parts.push(`<span data-spr=ic_money></span>${cost.gold}`);
-  for (const k of CRAFT_MAT_KEYS) if (cost[k]) parts.push(`${cost[k]}${dlIcon('mat_' + k, 14)}`);
+  for (const k of CRAFT_MAT_KEYS) if (cost[k]) parts.push(`${cost[k]}<span data-spr=mat_${k}></span>`);
   return parts.join('  ');
 }
 // HTML version of costLabel for on-screen prices: paints any component you can't
@@ -2547,7 +2598,7 @@ function costLabelHi(cost) {
   }
   for (const k of CRAFT_MAT_KEYS) if (cost[k]) {
     const short = cost[k] > (m[k] || 0);
-    const ic = dlIcon('mat_' + k, 14);
+    const ic = `<span data-spr=mat_${k}></span>`;
     parts.push(`<span class="${short ? 'cost-short' : ''}">${cost[k]}${ic}</span>`);
   }
   return parts.join('  ');
@@ -2562,7 +2613,7 @@ function matStripHTML() {
   const m = player.materials || {};
   const chips = CRAFT_MAT_KEYS.map(k => {
     const mat = CRAFT_MATERIALS[k];
-    const ic = dlIcon('mat_' + k, 14); // exact DawnLike material tile (no emoji)
+    const ic = `<span data-spr=mat_${k}></span>`; // exact DawnLike material tile (no emoji)
     // Gear-style hover card instead of a native title box, escaped for the attr.
     const tip = `<div class='ht-name' style='color:${mat.color}'>${ic} ${mat.name}</div><div class='ht-line'>${mat.desc}</div>`.replace(/"/g, '&quot;');
     return `<span class="mat-chip" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()" style="color:${mat.color}">${ic} ${m[k] || 0}</span>`;
@@ -7794,7 +7845,7 @@ function renderAutoLoot() {
   // One row per rarity, rarest-aware order (junk → set → unique), each with its
   // colour dot and a Keep / Scrap / Sell segmented control. Scrapping junk yields
   // almost nothing, but the option is offered for every rarity for consistency.
-  const optIcon = { keep: '', scrap: (dlIcon('mat_scrap', 12) || ''), sell: (dlIcon('ic_money', 12) || '') };
+  const optIcon = { keep: '', scrap: '<span data-spr=mat_scrap></span>', sell: '<span data-spr=ic_money></span>' };
   body.innerHTML = AUTO_LOOT_CATS.map(cat => {
     const cur = cfg[cat] || 'keep';
     const col = autoLootColor(cat);
@@ -9876,8 +9927,8 @@ function renderShopSellHTML() {
   const bulkGold = unlocked.reduce((a, it) => a + Math.max(1, Math.round(it.value * 0.5)), 0);
   const scrapN = unlocked.filter(it => it.slot && TIERS[it.tier]).length;
   const bulk = `<div class="shop-sell-bulk">`
-    + `<button class="loot-bulk-btn" ${unlocked.length ? '' : 'disabled'} onclick="shopBulk('sell')">${dlIcon('ic_money', 13)} Sell all · <span data-spr=ic_money></span>${bulkGold}</button>`
-    + (scrapN ? `<button class="loot-bulk-btn" onclick="shopBulk('scrap')">${dlIcon('mat_scrap', 13)} Scrap all · ${scrapN}</button>` : '')
+    + `<button class="loot-bulk-btn" ${unlocked.length ? '' : 'disabled'} onclick="shopBulk('sell')"><span data-spr=ic_money></span> Sell all · <span data-spr=ic_money></span>${bulkGold}</button>`
+    + (scrapN ? `<button class="loot-bulk-btn" onclick="shopBulk('scrap')"><span data-spr=mat_scrap></span> Scrap all · ${scrapN}</button>` : '')
     + `</div>`;
   const rows = inventory.map((it, i) => {
     const price = Math.max(1, Math.round(it.value * 0.5));
@@ -9885,8 +9936,8 @@ function renderShopSellHTML() {
     const locked = it.locked;
     const sellBtn = locked ? '' : `<button class="shop-sell-btn" onclick="shopSell(${i})"><span data-spr=ic_money></span>${price}</button>`;
     const scrapBtn = (!locked && it.slot && TIERS[it.tier])
-      ? `<button class="shop-scrap-btn" title="Scrap" onclick="shopScrap(${i})">${dlIcon('mat_scrap', 13)}</button>` : '';
-    const lock = locked ? `<span class="shop-price short">${dlIcon('key', 12)}</span>` : '';
+      ? `<button class="shop-scrap-btn" title="Scrap" onclick="shopScrap(${i})"><span data-spr=mat_scrap></span></button>` : '';
+    const lock = locked ? `<span class="shop-price short"><span data-spr=ic_key></span></span>` : '';
     return `<div class="shop-row ${rarityClass(it)} ${locked ? 'locked' : ''}">`
       + `<span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>`
       + `<div class="shop-row-info ${rarityClass(it)}"><div class="shop-row-name">${curseMark(it)}${it.name}</div><div class="shop-row-sub">${sub}</div></div>`
@@ -10403,7 +10454,7 @@ function renderBounty() {
     const cur = (b.kind === 'delve') ? `<br><span style="opacity:.85">You're currently on ${floorLabel(Math.max(1, dungeonLevel || player.maxFloor || 1))}.</span>` : '';
     html += `<div class="town-blurb"><b>Active bounty:</b> ${b.desc.replace('{n}', b.need)}${cur}<br>
       <div class="bar-track" style="margin:6px 0"><div class="bar-fill" style="width:${pct}%;background:${done ? 'var(--uncommon)' : 'var(--gold)'}"></div></div>
-      ${prog} / ${b.need} — reward: <b style="color:var(--gold)"><span data-spr=ic_money></span>${b.gold}</b> + ${b.mat[1]}${dlIcon('mat_' + b.mat[0], 16)} + a piece of gear.</div>`;
+      ${prog} / ${b.need} — reward: <b style="color:var(--gold)"><span data-spr=ic_money></span>${b.gold}</b> + ${b.mat[1]}<span data-spr=mat_${b.mat[0]}></span> + a piece of gear.</div>`;
     html += `<div class="town-menu" style="gap:8px">
       <button class="act-btn" ${done ? '' : 'disabled'} style="width:100%;padding:10px" onclick="claimBounty()">${done ? '✅ Claim reward' : 'In progress…'}</button>
       <button class="slotpick-cancel" style="width:100%" onclick="abandonBounty()">Abandon bounty</button></div>`;
@@ -10417,7 +10468,7 @@ function renderBounty() {
       ${dlIcon('npc_quest', 32)}
       <div class="shop-row-info">
         <div class="shop-row-name">${o.title}</div>
-        <div class="shop-row-stats">${o.desc(o.need)} · <span data-spr=ic_money></span>${o.gold} + ${o.mat[1]}${dlIcon('mat_' + o.mat[0], 16)} + gear</div>
+        <div class="shop-row-stats">${o.desc(o.need)} · <span data-spr=ic_money></span>${o.gold} + ${o.mat[1]}<span data-spr=mat_${o.mat[0]}></span> + gear</div>
       </div>
       <button class="act-btn" onclick="acceptBounty(${i})">ACCEPT</button>
     </div>`;
@@ -13241,7 +13292,41 @@ function _ctxIconPx(parent) {
   const s = (typeof uiScale === 'number' && uiScale) ? uiScale : 1;
   return Math.max(16, Math.round((fs / s) * 1.2));
 }
-// Fill any [data-spr] element with its pixel atlas icon, sized to its context.
+// Computed font-size (px) of an element's context; the rem root already bakes in
+// the UI SIZE multiplier, so this value tracks the player's setting for free.
+function _ctxFontPx(parent) {
+  let fs = 16;
+  if (parent && parent.nodeType === 1) {
+    try { fs = parseFloat(getComputedStyle(parent).fontSize) || 16; } catch (e) {}
+  }
+  return fs;
+}
+// An inline atlas icon sized to the text beside it: its opaque art is trimmed of
+// transparent padding and scaled so its HEIGHT ≈ the font-size, so every icon
+// reads at the same height as the text — and as each other, regardless of how
+// much empty margin its own tile happened to carry.
+function _dlTextSpan(name, parent) {
+  const fs = _ctxFontPx(parent);
+  const sk = skillIconAt(name, Math.round(fs * TEXT_ICON_H / (uiScale || 1)));
+  if (sk) return sk;
+  const i = SPRITE_IDX[name];
+  if (i === undefined || !spriteReady) return '';
+  const targetH = Math.max(13, Math.round(fs * TEXT_ICON_H));
+  const aw = spriteSheet.naturalWidth || 256, ah = spriteSheet.naturalHeight || 144;
+  const col = i % ATLAS_COLS, row = (i / ATLAS_COLS) | 0;
+  const box = _iconTrimBox(name);
+  if (box) {
+    const scale = targetH / box.h;
+    const bx = -(col * ATLAS_TS + box.x0) * scale, by = -(row * ATLAS_TS + box.y0) * scale;
+    return `<span class="dl-ic" style="width:${(box.w * scale).toFixed(2)}px;height:${targetH}px;` +
+      `background-size:${aw * scale}px ${ah * scale}px;background-position:${bx.toFixed(2)}px ${by.toFixed(2)}px"></span>`;
+  }
+  const sc = targetH / ATLAS_TS;
+  return `<span class="dl-ic" style="width:${targetH}px;height:${targetH}px;` +
+    `background-size:${aw * sc}px ${ah * sc}px;background-position:-${col * targetH}px -${row * targetH}px"></span>`;
+}
+// Fill any [data-spr] element with its pixel atlas icon, trimmed and sized to the
+// text around it (see _dlTextSpan).
 function paintDataSpr(root) {
   if (!spriteReady || !root || root.nodeType !== 1) return;
   const list = [];
@@ -13249,7 +13334,7 @@ function paintDataSpr(root) {
   if (root.querySelectorAll) root.querySelectorAll('[data-spr]').forEach(e => list.push(e));
   for (const el of list) {
     if (el.dataset.sprDone) continue;
-    const html = dlIconAt(el.getAttribute('data-spr'), _ctxIconPx(el.parentNode || el));
+    const html = _dlTextSpan(el.getAttribute('data-spr'), el.parentNode || el);
     if (html) { el.innerHTML = html; el.dataset.sprDone = '1'; }
   }
 }
@@ -20631,18 +20716,18 @@ function lootGlossaryHTML() {
 // the `row-btn` class so the outside-tap handler treats them as part of the
 // loot UI and doesn't deselect the row out from under them.
 function bagActionsHTML(item, i) {
-  const lockBtn = `<button class="row-btn la-btn" onclick="toggleLock(${i})">${dlIcon('key', 13)} ${item.locked ? 'Unlock' : 'Lock'}</button>`;
+  const lockBtn = `<button class="row-btn la-btn" onclick="toggleLock(${i})"><span data-spr=ic_key></span> ${item.locked ? 'Unlock' : 'Lock'}</button>`;
   if (item.locked) {
-    return `<div class="loot-actions"><span class="la-note">${dlIcon('key', 12)} Locked</span>${lockBtn}</div>`;
+    return `<div class="loot-actions"><span class="la-note"><span data-spr=ic_key></span> Locked</span>${lockBtn}</div>`;
   }
   const sellPrice = Math.max(1, Math.round(item.value * 0.5));
-  const sellBtn = `<button class="row-btn la-btn" onclick="sellFromBag(${i})">${dlIcon('ic_money', 13)} Sell · <span data-spr=ic_money></span>${sellPrice}</button>`;
+  const sellBtn = `<button class="row-btn la-btn" onclick="sellFromBag(${i})"><span data-spr=ic_money></span> Sell · <span data-spr=ic_money></span>${sellPrice}</button>`;
   // Compact yield hint: lead with the Scrap icon, then just the icons of any
   // rarer mats this piece adds — no number ranges, so it never wraps.
   const extraMats = salvageRanges(item).filter(r => r.key !== 'scrap')
-    .map(({ key }) => dlIcon('mat_' + key, 12)).join('');
+    .map(({ key }) => `<span data-spr=mat_${key}></span>`).join('');
   const scrapBtn = (item.slot && TIERS[item.tier])
-    ? `<button class="row-btn la-btn" onclick="scrapFromBag(${i})">${dlIcon('mat_scrap', 13)} Scrap${extraMats ? ' +' + extraMats : ''}</button>`
+    ? `<button class="row-btn la-btn" onclick="scrapFromBag(${i})"><span data-spr=mat_scrap></span> Scrap${extraMats ? ' +' + extraMats : ''}</button>`
     : '';
   return `<div class="loot-actions">${sellBtn}${scrapBtn}${lockBtn}</div>`;
 }
@@ -20751,7 +20836,7 @@ function renderPanel() {
       }
     };
     rows.sort(lootRowCompare);
-    const mMoney = dlIcon('ic_money', 13), mScrap = dlIcon('mat_scrap', 13);
+    const mMoney = '<span data-spr=ic_money></span>', mScrap = '<span data-spr=mat_scrap></span>';
     const bulkBar = bulkN ? `<div class="loot-bulk-bar">
       <button class="loot-bulk-btn" onclick="bagBulk('sell')">${mMoney} Sell all · <span data-spr=ic_money></span>${bulkGold}</button>
       ${bulkScrapN ? `<button class="loot-bulk-btn" onclick="bagBulk('scrap')">${mScrap} Scrap all · ${bulkScrapN}</button>` : ''}
