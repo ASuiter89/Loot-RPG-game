@@ -9763,8 +9763,10 @@ function statDiffLine(item) {
     ...Object.keys(item.stats || {}), ...Object.keys(cur.stats || {}),
     ...Object.keys(item.attrs || {}), ...Object.keys(cur.attrs || {}),
   ]);
-  // List the GAINS (green) first, then the LOSSES (red) — improvements read
-  // left-to-right and the trade-offs line up together on the right.
+  // List the GAINS (green) first, then the LOSSES (red). Each group rides in
+  // its own span; in the bag list (.item-diff) the loss group breaks onto its
+  // own row so gains and trade-offs never interleave, while inline uses (the
+  // shop SELL tab) keep flowing on one line.
   const pos = [], neg = [];
   for (const k of keys) {
     const d = Math.round(num(item, k) - num(cur, k));
@@ -9774,8 +9776,10 @@ function statDiffLine(item) {
     const chip = `<span class="stat-abbr" ${hoverTip(lootStatName(k))}>${lootStatCode(k)}</span>`;
     (d > 0 ? pos : neg).push(`<span style="color:${c}">${d > 0 ? '+' : ''}${d} ${chip}</span>`);
   }
-  const parts = pos.concat(neg);
-  return parts.length ? parts.join('  ') : '<span style="color:var(--junk)">no stat change</span>';
+  if (!pos.length && !neg.length) return '<span style="color:var(--junk)">no stat change</span>';
+  const gains = pos.length ? `<span class="diff-gains">${pos.join('  ')}</span>` : '';
+  const losses = neg.length ? `<span class="diff-losses">${neg.join('  ')}</span>` : '';
+  return gains + (gains && losses ? '  ' : '') + losses;
 }
 
 function openShop() {
@@ -20537,8 +20541,7 @@ function setLootFilter(slot) {
 }
 
 // The LOOT-tab sort options, in menu order. Each supplies a comparator over
-// {item} rows; a shared pre-pass (class-unwieldable pieces sink to the bottom)
-// runs before whichever key the player picked (see lootRowCompare).
+// {item} rows (see lootRowCompare).
 const LOOT_SORTS = [
   { key: 'rarity', label: 'Rarity' },
   { key: 'power',  label: 'Power'  },
@@ -20620,13 +20623,16 @@ function lootGlossaryHTML() {
     `</div></details>`;
 }
 
-// The sell / scrap action tray that drops under a selected loot row. Locked
-// pieces show an unlock hint instead; non-gear (potions) can be sold but not
-// scrapped. Buttons carry the `row-btn` class so the outside-tap handler treats
-// them as part of the loot UI and doesn't deselect the row out from under them.
+// The sell / scrap / lock action tray that drops under a selected loot row.
+// Locked pieces swap sell/scrap for an unlock hint + Unlock button; non-gear
+// (potions) can be sold but not scrapped. The Lock/Unlock button mirrors the
+// row's small lock toggle so the action is reachable both ways. Buttons carry
+// the `row-btn` class so the outside-tap handler treats them as part of the
+// loot UI and doesn't deselect the row out from under them.
 function bagActionsHTML(item, i) {
+  const lockBtn = `<button class="row-btn la-btn" onclick="toggleLock(${i})">${dlIcon('key', 13)} ${item.locked ? 'Unlock' : 'Lock'}</button>`;
   if (item.locked) {
-    return `<div class="loot-actions"><span class="la-note">${dlIcon('key', 12)} Locked — unlock to sell or scrap</span></div>`;
+    return `<div class="loot-actions"><span class="la-note">${dlIcon('key', 12)} Locked</span>${lockBtn}</div>`;
   }
   const sellPrice = Math.max(1, Math.round(item.value * 0.5));
   const sellBtn = `<button class="row-btn la-btn" onclick="sellFromBag(${i})">${dlIcon('ic_money', 13)} Sell · <span data-spr=ic_money></span>${sellPrice}</button>`;
@@ -20637,7 +20643,7 @@ function bagActionsHTML(item, i) {
   const scrapBtn = (item.slot && TIERS[item.tier])
     ? `<button class="row-btn la-btn" onclick="scrapFromBag(${i})">${dlIcon('mat_scrap', 13)} Scrap${extraMats ? ' +' + extraMats : ''}</button>`
     : '';
-  return `<div class="loot-actions">${sellBtn}${scrapBtn}</div>`;
+  return `<div class="loot-actions">${sellBtn}${scrapBtn}${lockBtn}</div>`;
 }
 
 // A full renderPanel() is a heavy innerHTML rebuild (it sorts/filters the whole
@@ -20708,8 +20714,8 @@ function renderPanel() {
     // Rarity rank for sorting: junk 0 → unique 6 (higher = rarer).
     const TIER_KEYS = Object.keys(TIERS);
     // One pass over the bag: build the visible rows, decorating each with its sort
-    // keys ONCE (power, tier rank, slot rank, "can't wield" flag) so the comparator
-    // below doesn't re-derive them per comparison — and tally the bulk sell/scrap
+    // keys ONCE (power, tier rank, slot rank) so the comparator below doesn't
+    // re-derive them per comparison — and tally the bulk sell/scrap
     // aggregates in the same sweep (locked pieces are always spared).
     const rows = [];
     let bulkN = 0, bulkScrapN = 0, bulkGold = 0;
@@ -20717,7 +20723,6 @@ function renderPanel() {
       if (!lootRowVisible(item)) return;
       rows.push({
         item, i,
-        w: (item.slot && !canEquipItem(item)) ? 1 : 0,
         pow: item.slot ? itemPower(item) : -1,
         tr: TIER_KEYS.indexOf(item.tier),
         so: item.slot in slotOrder ? slotOrder[item.slot] : 99,
@@ -20728,10 +20733,9 @@ function renderPanel() {
         bulkGold += Math.max(1, Math.round(item.value * 0.5));
       }
     });
-    // Sort comparator over the decorated rows. A shared pre-pass always sinks
-    // pieces this class can't wield to the bottom; then the chosen key orders.
+    // Sort comparator over the decorated rows — the chosen key orders everything
+    // alike (pieces this class can't wield mix in rather than sinking).
     const lootRowCompare = (a, b) => {
-      if (a.w !== b.w) return a.w - b.w;
       switch (lootSort) {
         case 'power':
           return b.pow - a.pow || b.tr - a.tr || a.so - b.so;
@@ -20757,14 +20761,17 @@ function renderPanel() {
     const autoBar = `<div class="loot-auto-bar">
       <button class="loot-auto-btn${alSum === 'off' ? '' : ' on'}" onclick="openAutoLoot()" ${hoverTip(`<div class='ht-name'><span data-spr=mat_scrap></span> Auto-Loot</div><div class='ht-line'>Auto-scrap or auto-sell loot of chosen rarities the moment it drops.</div>`)}><span data-spr=mat_scrap></span> Auto-Loot <span class="la-status">${alSum}</span></button>
     </div>`;
+    // Everything above the item rows rides in one sticky wrapper, so the
+    // subtabs / sort / filter / Auto-Loot / bulk / stat-key controls stay
+    // frozen at the top of the drawer while the list scrolls beneath them.
+    const lootHead = `<div class="loot-head">${strip + subtabs + lootCtrls + autoBar + bulkBar + lootGlossaryHTML()}</div>`;
     if (rows.length === 0) {
       const emptyMsg = inventory.length === 0 ? 'No items yet.<br>Explore!'
         : lootStatFilter.length ? 'No items match the stat filter.' : 'Nothing here.';
-      el.innerHTML = strip + subtabs + lootCtrls + autoBar + bulkBar + lootGlossaryHTML() +
-        '<div id="empty-panel">' + emptyMsg + '</div>';
+      el.innerHTML = lootHead + '<div id="empty-panel">' + emptyMsg + '</div>';
       return;
     }
-    el.innerHTML = strip + subtabs + lootCtrls + autoBar + bulkBar + lootGlossaryHTML() + rows.map(({ item, i }) => {
+    el.innerHTML = lootHead + rows.map(({ item, i }) => {
       const equipable = !!item.slot;
       const slotName = item.slot ? SLOTS[item.slot].label : 'potion';
       // Compare this item's power to whatever currently fills its slot, so we can
@@ -20777,7 +20784,7 @@ function renderPanel() {
       const diff = equipable ? `<div class="item-diff">${statDiffLine(item)}</div>` : '';
       const lockBtn = `<button class="row-btn lock-toggle-btn ${item.locked?'on':''}" onclick="toggleLock(${i})" ${hoverTip(item.locked
         ? `<div class='ht-name'><span data-spr=feat_door></span> Locked</div><div class='ht-line'>Safe from selling, scrapping &amp; auto-loot. Tap to unlock.</div>`
-        : `<div class='ht-name'><span data-spr=feat_door></span> Unlocked</div><div class='ht-line'>Tap to lock — keeps it from being sold or scrapped.</div>`)}>${dlIcon('key', 16) || (item.locked ? '<span data-spr=feat_door></span>' : '<span data-spr=feat_door></span>')}</button>`;
+        : `<div class='ht-name'><span data-spr=feat_door></span> Unlocked</div><div class='ht-line'>Tap to lock — keeps it from being sold or scrapped.</div>`)}>${dlIcon('key', 20) || (item.locked ? '<span data-spr=feat_door></span>' : '<span data-spr=feat_door></span>')}</button>`;
       return `
       <div class="loot-item ${rarityClass(item)} ${selectedItem===i?'selected':''} ${isUpgrade?'upgrade':''} ${item.locked?'locked':''}">
         <div class="loot-info" onclick="selectItem(${i}, this)"

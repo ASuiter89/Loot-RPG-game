@@ -1849,6 +1849,20 @@
   #panel-content::-webkit-scrollbar-track { background: var(--bg); }
   #panel-content::-webkit-scrollbar-thumb { background: var(--border); }
 
+  /* Frozen LOOT-tab header — subtabs, sort/filter, Auto-Loot, the bulk bar and
+     the stat key stay pinned at the top while the item list scrolls beneath.
+     Negative margins stretch it across the drawer's padding gutters (re-added
+     inside) so scrolling rows can't peek through at the edges. */
+  .loot-head {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--panel);
+    margin: -6px -6px 0;
+    padding: 6px 6px 0;
+    box-shadow: 0 4px 8px -4px color-mix(in srgb, var(--ink) 70%, transparent);
+  }
+
   /* Loot subtabs: filter the LOOT list down to a single gear slot (all helms,
      all chests, …) so a fat bag stays browsable. Evenly-spaced single row. */
   .loot-subtabs {
@@ -1993,11 +2007,11 @@
   .lock-toggle-btn {
     background: var(--panel);
     color: var(--orange-650);
-    font-size: 1.5rem;
-    width: calc(28px * var(--ui-scale,1));
-    height: calc(28px * var(--ui-scale,1));
+    font-size: 1.8rem;
+    width: calc(34px * var(--ui-scale,1));
+    height: calc(34px * var(--ui-scale,1));
     line-height: 1;
-    border: 1px solid var(--panel-raised);
+    border: 1px solid var(--border);
   }
   .lock-toggle-btn:active { background: var(--panel); }
   .lock-toggle-btn.on {
@@ -2007,7 +2021,7 @@
     box-shadow: 0 0 5px color-mix(in srgb, var(--warn) 40%, transparent);
   }
   /* Dim the DawnLike key when unlocked; full-bright (gold-glow button) when locked. */
-  .lock-toggle-btn .dl-ic { opacity: 0.38; }
+  .lock-toggle-btn .dl-ic { opacity: 0.6; }
   .lock-toggle-btn.on .dl-ic { opacity: 1; }
   /* Subtle gold edge on a locked loot row so it reads at a glance. */
   .loot-item.locked { border-left-color: var(--warn); }
@@ -2176,6 +2190,9 @@
      badge so Power reads with one consistent icon everywhere. */
   .pwr-g { font-size: 0.8em; }
   .item-diff { font-size: 1.2rem; margin-top: 1px; line-height: 1.3; }
+  /* Stat swing split: green gains fill the first row, red losses break onto
+     their own row below (statDiffLine groups them). */
+  .item-diff .diff-losses { display: block; }
 
   /* ── TOOLTIP ── */
   /* SHARED TOOLTIP BEHAVIOUR — read before adding a new hover card.
@@ -3728,6 +3745,8 @@
        it. box-sizing keeps rows from overflowing their own padding. */
     #panel-content { padding: 8px 12px 8px 8px; }
     #panel-content .loot-item, #panel-content .row-btn { box-sizing: border-box; }
+    /* Match the frozen header's gutter-cover to the wider desktop padding. */
+    #panel-content .loot-head { margin: -8px -12px 0 -8px; padding: 8px 12px 0 8px; }
     /* Skill-tree node names: on desktop there's ample room around the web, so let
        full names ("Warstomp", "Unbreakable") wrap/extend instead of truncating to
        "Warsto…". The #id selector wins over the .sk-tree.web / .sk-tnode rules. */

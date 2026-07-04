@@ -3,6 +3,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-03", size: "small", v: "Loot bag: frozen controls & clearer locking", by: "Jeff Louie", notes: [
+    "Bag controls (slot tabs, Sort, Filter, Auto-Loot, Sell/Scrap all, stat key) stay frozen at the top while the list scrolls.",
+    "Stat changes on a row split into two lines — green gains first, red losses below.",
+    "Lock toggle is bigger and easier to spot; a Lock/Unlock button also joins Sell & Scrap on a selected item.",
+    "Gear your class can't wield no longer sinks to the bottom of the bag — it sorts like everything else.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Mix the music — fade each layer to taste", by: "Claude", notes: [
     "Audio settings now has four faders for the soundtrack: BASS, CHORDS, MELODY and DRUMS. Turn any layer up, down, or off, independently of the others.",
     "Each fader steps like the volume controls — tap to raise it a notch, wrapping from full back to off — and remembers where you set it.",
