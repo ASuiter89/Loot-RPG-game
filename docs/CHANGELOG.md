@@ -8,6 +8,33 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — build-aware gear Power
+
+- 📦 The **Power model** moved out of `src/legacy/game.js` into pure, testable
+  modules: `src/systems/gearPower.js` holds the effective combat-score math
+  (`combatScore` = normalized effective offense + survivability, `powerScalar` its
+  concave-compressed form, `offenseScore`/`defenseScore`, `applyDelta`,
+  `marginalPower`); `src/data/gearPower.js` holds every tuning constant. Power is
+  now the marginal combat-score an item's affixes buy for the CURRENT build, so a
+  stat the hero can't use (Crit Damage with no crit, Spell Power on a martial
+  build) adds ~0. The old static `STAT_POWER_WEIGHTS` / `statPowerWeight` /
+  `attrPowerWeight` / `ATTR_POWER_WEIGHT` / `ATTR_DMG_POWER` / `TIER_POWER_BONUS`
+  and their window-bridge entries are gone.
+- The monolith keeps a thin **adapter**: `buildPowerContext` (the live build read
+  into a numeric context, cached per loadout epoch, buffs/food excluded so Power is
+  a stable property), `itemPowerContribution` / `attrPowerAxes` (affixes → context
+  deltas), `itemFlatPower` (build-independent utility/tier nudge), and the
+  rewritten `itemPower` / `playerPower` / `equipUpgradeDelta` /
+  `gearContributionPower` / `gearSetPower`. `playerPower` = `K·powerScalar(build)`
+  + worn flats, and "from gear" is a clean delta so POWER decomposes exactly into
+  gear + level/attribute/skill base.
+- `gameState().player` now reports `power` + `gearPower`, each `brief` gear item
+  carries `pow` + `upgrade`, and `gameGuide("power")` explains the model. Smoke
+  contract gains the `power` topic.
+- 🧪 `test/systems/gearPower.test.js` — the crit-damage-with-no-crit-is-zero case,
+  class/build gating (Spell Power vs. Attack Speed, leech scaling with DPS),
+  monotonicity, calibration range, naked-hero no-crash, and add/remove symmetry.
+
 ## Feature — equipment sets reborn as fixed named artifacts (20 sets)
 
 - 📦 The set **roster** lives in `src/data/itemSets.js` (`ITEM_SETS`) — now 20
