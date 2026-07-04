@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Gold & materials update everywhere the moment you transact", by: "Claude", notes: [
+    "Selling, buying or salvaging at the Merchant now updates your gold and material counts on the spot in every place they show — the town-menu header, the bottom HUD and the LOOT tab — instead of looking unchanged until you switched menus.",
+    "The Merchant now shows your crafting materials at the top, like the town menu does, so salvaging a piece there gives the same instant tally.",
+  ] },
   { date: "2026-07-04", size: "small", v: "The Craftsman opens one step at a time", by: "Claude", notes: [
     "The Forge now opens with nothing selected — only the item-type row shows. Pick a type to open its base picker, then a base to reveal rarity, the preview and the FORGE button.",
     "Weapons still pick a category then a type; the type list only opens once you choose a category, and no base is pre-selected along the way.",

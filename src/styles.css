@@ -3692,8 +3692,8 @@
     font-size: 1.4rem; line-height: 1.2;
   }
   .mat-chip { font-weight: bold; white-space: nowrap; }
-  #town-mats { padding: 4px 12px 8px; border-bottom: 1px solid var(--border); }
-  #town-mats .mat-strip { margin-bottom: 0; }
+  #town-mats, #shop-mats { padding: 4px 12px 8px; border-bottom: 1px solid var(--border); }
+  #town-mats .mat-strip, #shop-mats .mat-strip { margin-bottom: 0; }
   .forge-label {
     color: var(--xp); font-size: 1.3rem; font-weight: bold; letter-spacing: 1px; margin: 9px 0 4px;
   }
@@ -3920,7 +3920,7 @@
        the rest (see the capped-fluid grid-template-columns). */
     #town-modal > #town-header, #town-modal > #town-gold,
     #town-modal > #town-mats, #town-modal > #town-content,
-    #shop-modal > #shop-gold, #shop-modal > #shop-content,
+    #shop-modal > #shop-gold, #shop-modal > #shop-mats, #shop-modal > #shop-content,
     #mystic-modal > #mystic-content {
       width: 100%; max-width: 100%; margin-left: 0; margin-right: 0;
     }

@@ -10345,8 +10345,8 @@ function shopClose() {
 }
 
 function renderShop() {
-  document.getElementById('shop-gold-count').textContent = fmtGold(player.gold);
-  refreshVaultNote('shop-gold-vault');
+  setGoldPill('shop-gold-count', 'shop-gold-vault');
+  setMatStrip('shop-mats'); // materials show at the merchant too, so scrapping here has visible feedback
   const el = document.getElementById('shop-content');
   if (!merchant) { closeShop(); return; }
   const _bt = document.getElementById('shoptab-buy'), _st = document.getElementById('shoptab-sell');
@@ -10485,8 +10485,7 @@ function mysticClose() {
 }
 
 function renderMystic() {
-  document.getElementById('mystic-gold-count').textContent = fmtGold(player.gold);
-  refreshVaultNote('mystic-gold-vault');
+  setGoldPill('mystic-gold-count', 'mystic-gold-vault');
   // Active-pact banner.
   const active = document.getElementById('mystic-active');
   if (pact) {
@@ -11358,11 +11357,41 @@ function closeTown() {
 }
 function setTownContent(html) {
   hideHoverTip(); // any hovered element is replaced; drop a lingering popup
-  document.getElementById('town-gold-count').textContent = fmtGold(player.gold);
-  refreshVaultNote('town-gold-vault');
-  const mt = document.getElementById('town-mats');
-  if (mt) mt.innerHTML = matStripHTML();
+  setGoldPill('town-gold-count', 'town-gold-vault');
+  setMatStrip('town-mats');
   document.getElementById('town-content').innerHTML = html;
+}
+
+// ── SHARED WALLET / MATERIAL READOUTS ───────────────────────────────────────
+// Gold and crafting materials are shown in more than one place at once — the main
+// HUD, plus whichever town / shop / mystic overlay is open. A transaction must
+// refresh EVERY on-screen copy, not only the panel it happened in, or a count
+// reads stale until you change menus (e.g. salvaging at the merchant used to bump
+// your materials with nothing on screen to show it). These helpers are the single
+// writers for each readout and are change-guarded, so they're cheap to call from
+// updateBars() on every HUD refresh: the DOM (and any hovered material chip) is
+// only touched when the value actually changed.
+const _walletMatHtml = {};   // element id -> last material-strip innerHTML we wrote
+function setGoldPill(countId, vaultId) {
+  const el = document.getElementById(countId);
+  if (el) { const g = fmtGold(player.gold); if (el.textContent !== g) el.textContent = g; }
+  if (vaultId) refreshVaultNote(vaultId);
+}
+function setMatStrip(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const html = matStripHTML();
+  if (_walletMatHtml[id] === html) return; // unchanged — leave the painted sprites (and any hover) alone
+  _walletMatHtml[id] = html;
+  el.innerHTML = html;
+}
+function isOverlayOpen(id) { const el = document.getElementById(id); return !!(el && el.classList.contains('open')); }
+// Keep every open overlay's gold + material readout current. Called from
+// updateBars(), which every transaction already funnels through.
+function refreshWallet() {
+  if (isOverlayOpen('shop-overlay'))   { setGoldPill('shop-gold-count', 'shop-gold-vault'); setMatStrip('shop-mats'); }
+  if (isOverlayOpen('mystic-overlay')) { setGoldPill('mystic-gold-count', 'mystic-gold-vault'); }
+  if (isOverlayOpen('town-overlay'))   { setGoldPill('town-gold-count', 'town-gold-vault'); setMatStrip('town-mats'); }
 }
 
 // ══════════════════════════════════════════
@@ -12176,11 +12205,15 @@ function spendGold(amt) {
 }
 // Paint the "+N in vault" hint beside a town gold pill (empty when the vault is),
 // so a shopper can see that purchases can dip into their banked coin.
+const _walletVaultHtml = {}; // element id -> last vault-note innerHTML we wrote
 function refreshVaultNote(id) {
   const el = document.getElementById(id);
   if (!el) return;
   const v = (stash && stash.gold) || 0;
-  el.innerHTML = v > 0 ? ` <span class="gold-vault-note">+ <span data-spr=ic_money></span>${fmtGold(v)} in vault</span>` : '';
+  const html = v > 0 ? ` <span class="gold-vault-note">+ <span data-spr=ic_money></span>${fmtGold(v)} in vault</span>` : '';
+  if (_walletVaultHtml[id] === html) return; // unchanged — don't rewrite (keeps the painted coin sprite)
+  _walletVaultHtml[id] = html;
+  el.innerHTML = html;
 }
 function stashDepositItem(i) {
   const item = inventory[i];
@@ -21916,6 +21949,9 @@ function updateBars() {
   setPending('hp-pending', player.hp, player.maxHp, pendHeal);
   setPending('mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
   document.getElementById('gold-count').textContent = fmtGold(player.gold);
+  // Any open town / shop / mystic overlay mirrors gold + materials — keep those
+  // copies current too, so a transaction never leaves a stale count behind.
+  refreshWallet();
 
   // ── Desktop bottom HUD (web layout only): big flanking HP/MP bars, the
   // segmented XP strip, and the name / power / gold chips mirror the same data. ──
