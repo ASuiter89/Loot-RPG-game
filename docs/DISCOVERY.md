@@ -174,8 +174,7 @@ so extraction can consolidate deliberately later.
   keyframes in CSS.
 
 **Dead / legacy:**
-- `schedulePortalTick`/`portalTick` no-ops; the fixed `#dpad` is permanently
-  hidden yet all its config/render code remains; `runEnemyTurn`'s combat-buff
+- `schedulePortalTick`/`portalTick` no-ops; `runEnemyTurn`'s combat-buff
   aging loop is self-described legacy; `move()` is a compat shim; `ENEMY_BEHAVIOR`
   legacy map superseded by `MONSTERS[type].behavior`; `STAT_NAMES`/`LCK`
   back-compat; `playerCritChance`/`playerDodge` shims.
@@ -195,5 +194,5 @@ scale, and atlas-dimension fallbacks that disagree (`2672` vs `256×144`).
 - The Supabase table shapes and request contracts (existing accounts/leaderboard).
 - The 253 inline handler → 171 global-function bindings.
 - The Diablo-style color-only loot tiers (no text rarity labels).
-- Desktop-first behavior and the single-file deployability (now via a Vite static
-  build).
+- Desktop-only behavior (mouse + keyboard) and the single-file deployability (now
+  via a Vite static build).

@@ -80,7 +80,7 @@ src/
   state/            Central mutable game state + explicit transitions.
   render/           Canvas drawing (sprites, terrain, hero, particles, minimap).
   audio/            WebAudio engine, sfx, music, ambience.
-  input/            Keyboard/pointer/touch handlers + keybind model.
+  input/            Keyboard/pointer handlers + keybind model.
   ui/               DOM panels/overlays/modals (shop, town, settings, bag, …).
   persistence/      The ONLY place Supabase + localStorage are touched
                     (repository pattern, injected fetch — mockable in tests).

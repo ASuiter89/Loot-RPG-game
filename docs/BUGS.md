@@ -13,7 +13,7 @@ be intentional; each needs its own verification before any fix.
 | B4 | Duplicated offense chain: `rollPlayerHit` (~21559) vs `applyOffenseMods` (~22226) | The full damage multiplier chain (power buff, food %, class mult, diff debuff, dmgUp, IDMG, BOSSDMG, zeal, execute, crit, armor/pen) is implemented **twice**. Not a bug today, but any future balance change applied to one and not the other silently diverges auto-attacks from skills. | Medium (drift risk) |
 | B5 | `cloudScheduleSettings` (~28072) wraps `cloudEnabled()`/`authState` in try/catch | Comment admits settings setters fire **during load before cloud bindings are initialized** (a temporal-dead-zone hazard worked around, not fixed). Fragile load-order dependency. | Low |
 | B6 | `PALETTE` snapshot (~5094) + `SET_RARITY_COLOR`/`ICON_EMPTY_COLOR` (~5494/5498) | `PALETTE` is a **one-time** `getComputedStyle` snapshot despite the "single source of truth" comment; and two rarity colors are hardcoded hex that must be manually kept in sync with `--set`/tokens. Any later CSS token change won't propagate to canvas. Drift risk. | Low |
-| B7 | Dead code | `schedulePortalTick`/`portalTick` no-ops (~12588); the fixed `#dpad` is permanently hidden yet all its config/render code remains; `runEnemyTurn`'s combat-buff aging loop is self-described legacy/unused; `move()` compat shim; `ENEMY_BEHAVIOR` legacy map superseded by `MONSTERS[type].behavior`. | High (dead, harmless) |
+| B7 | Dead code | `schedulePortalTick`/`portalTick` no-ops (~12588); `runEnemyTurn`'s combat-buff aging loop is self-described legacy/unused; `move()` compat shim; `ENEMY_BEHAVIOR` legacy map superseded by `MONSTERS[type].behavior`. | High (dead, harmless) |
 
 ## Handling policy
 

@@ -5988,11 +5988,9 @@ const STAM_DELAY    = 0.6;     // seconds after exertion before stamina starts r
 const DASH_COST     = 35;      // stamina per dash
 const DASH_CD       = 0.55;    // seconds between dashes
 const DASH_SPEED    = 13;      // dash launch velocity (tiles/sec)
-// Held movement direction, fed by the keyboard, the swipe nudge, and the analog
-// joystick (joy). Cleared on blur/floor-change so a hero never runs off on its own.
+// Held movement direction, fed by the keyboard. Cleared on blur/floor-change so a
+// hero never runs off on its own.
 const keyHeld   = { up: false, down: false, left: false, right: false };
-const touchHeld = { up: false, down: false, left: false, right: false };
-const joy = { active: false, dx: 0, dy: 0, mag: 0 };   // analog joystick vector (mobile)
 let sprintHeld = false;                                 // Shift held right now (HOLD mode)
 // Sprint can run in two modes. HOLD (default): you sprint only while Shift is
 // down. TOGGLE: tap Shift once to LATCH auto-sprint on (you keep sprinting
@@ -6054,11 +6052,9 @@ let autoAttackTarget = null;
 const moveTarget = { active: false, hold: false, wx: 0, wy: 0, path: null, pathIdx: 0, foe: null,
                      _repathT: 0, _stallT: 0, _px: 0, _py: 0, _pathDX: -1, _pathDY: -1 };
 const MOVE_ARRIVE = 0.18;   // tiles — how close counts as "reached the click point"
-function heldDir(d) { return keyHeld[d] || touchHeld[d]; }
+function heldDir(d) { return keyHeld[d]; }
 function clearHeld() {
   keyHeld.up = keyHeld.down = keyHeld.left = keyHeld.right = false;
-  touchHeld.up = touchHeld.down = touchHeld.left = touchHeld.right = false;
-  joy.active = false; joy.dx = joy.dy = joy.mag = 0;
   sprintHeld = false;
   moveTarget.active = false; moveTarget.hold = false; moveTarget.path = null; moveTarget.foe = null;
 }
@@ -6338,9 +6334,8 @@ window.gameState = function gameState(radius) {
   // Tells a caller WHAT is on screen and whether walking keys do anything right
   // now, so an agent won't fire movement while a menu/overlay is up. Blocking
   // overlays are detected by their `.open` class, in the same priority order
-  // handleEscape() closes them. Note: in the desktop "web layout" the bag is a
-  // permanent sidebar (panelOpen is always true) and does NOT block movement, so
-  // it's only treated as a menu in the compact layout.
+  // handleEscape() closes them. The bag is a permanent sidebar (panelOpen is always
+  // true) and does NOT block movement, so it is never a blocking overlay.
   const ovOpen = id => { const el = document.getElementById(id); return !!(el && el.classList.contains('open')); };
   // Every movement-blocking overlay → the mode it puts the game in. This MUST stay a
   // superset of RT_BLOCKING_OVERLAYS (the world-freeze list rtPaused() uses): any
@@ -6358,9 +6353,7 @@ window.gameState = function gameState(radius) {
   let mode = 'dungeon', blockingOverlay = null;
   for (const [id, name] of MODALS) { if (ovOpen(id)) { mode = name; blockingOverlay = id; break; } }
   if (mode === 'dungeon') {
-    const compactBag = panelOpen && typeof isWebLayout === 'function' && !isWebLayout();
     if (inTown) mode = 'town';
-    else if (compactBag) mode = 'bag';
   }
   // Movement only does something in the live dungeon with no menu/overlay up — and
   // never mid-teleport, when the hero is off the map and can't move, act or be hit.
@@ -6475,7 +6468,7 @@ window.gameState = function gameState(radius) {
   return {
     // What's on screen and whether walking keys work right now. If canMove is
     // false, interact with the menu/overlay instead of pressing movement keys.
-    mode,            // dungeon|town|bag|title|classSelect|nameSelect|dead|shop|mystic|settings|changelog|howto|autoloot|keybinds|slotpick|newrun|slots|account|leaderboard|graveyard|conquest|greed
+    mode,            // dungeon|town|title|classSelect|nameSelect|dead|shop|mystic|settings|changelog|howto|autoloot|keybinds|slotpick|newrun|slots|account|leaderboard|graveyard|conquest|greed
     canMove,         // true only when mode === 'dungeon' and not mid-teleport
     blockingOverlay, // DOM id of the open modal, or null
     // Teleport ANIMATION in flight, else null. 'out' (fading out to town) or 'in'
@@ -6729,7 +6722,7 @@ window.gameGuide = function gameGuide(topic) {
       `Prefer the structured fields over reading the ASCII map: .stairs, .hazards, .effects, .skills, .enemies and .shrines/.teleporters give exact data the glyphs only hint at.`,
     ],
     controls: [
-      `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A single tap barely nudges you.`,
+      `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A quick key-tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
       `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
@@ -6739,7 +6732,7 @@ window.gameGuide = function gameGuide(topic) {
       `Town Portal: ${key('portal')} — channel a portal to town (needs 3 clean turns; any enemy hit — or moving — cancels it). A blue aura charges over the hero for the count; when it opens the hero fades out up a beam of light (~1s, unhittable) before you land in town — gameState().transit reads 'out' then, and 'in' when you materialize back below.`,
       `Swap weapon / gear set: ${key('swapWeapon')} — flip between loadout 1 and 2.`,
       `Bag / inventory: ${key('bag')} — opens the LOOT / GEAR / HERO / SKILLS tabs.`,
-      `Cast hotbar skills: number keys ${key('skill1')}-${key('skill' + SKILL_SLOTS)} fire the ${SKILL_SLOTS} manual slots on the RIGHT of the bar (tap to cast). One extra skill sits in a dedicated auto-cast slot in the MIDDLE and fires itself — see the "autocast" topic.`,
+      `Cast hotbar skills: number keys ${key('skill1')}-${key('skill' + SKILL_SLOTS)} fire the ${SKILL_SLOTS} manual slots on the RIGHT of the bar (or click a slot). One extra skill sits in a dedicated auto-cast slot in the MIDDLE and fires itself — see the "autocast" topic.`,
       `Esc closes the top menu/overlay, or opens Settings. Settings is split into tabs (Play / Visuals / Audio / Progress / About); non-movement keys are remappable under the Play tab → KEYS (◀ Back or Esc there returns to Settings). The keys shown here are your CURRENT bindings.`,
       `The Play tab's TITLE SCREEN button (at the very top) saves your progress and returns you to the title/landing screen without abandoning the run — hit CONTINUE there to drop straight back in. (This is separate from Reset Run on the Progress tab, which wipes the hero.)`,
       `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds MINIMAP (the top-left floor-sketch box size — Small / Medium / Large), UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker plus CURSOR SIZE (a 1x–2x multiplier that enlarges the mouse pointer on top of the UI scale; default 1x).`,
@@ -6747,7 +6740,7 @@ window.gameGuide = function gameGuide(topic) {
     movement: [
       `Walking, sprinting and dashing all move a free-floating body in real time (with momentum), not on a turn grid. Hold a direction; let go to stop.`,
       `The hero faces and animates in the direction it walks — down/up/left/right — cycling a walk animation while moving and resting on a standing frame when still. It's purely cosmetic; gameState().player.faceDir reports the current 4-way facing.`,
-      `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~34/sec). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap to latch auto-sprint). On a joystick, pushing to the edge auto-sprints.`,
+      `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~34/sec). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch auto-sprint).`,
       `DASH (${key('dash')}) is a quick burst (costs 35 Stamina, ~0.55s cooldown). It only repositions fast — there are no i-frames and enemies are solid, so you can't dash THROUGH a foe to escape.`,
       `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec). The Might attribute deepens the pool and speeds its recharge. Check player.dashReady before dashing.`,
       `Being Slowed (a debuff) halves speed; being Stunned roots you entirely (see gameState().effects).`,
@@ -6811,7 +6804,7 @@ window.gameGuide = function gameGuide(topic) {
       `Item power is driven more by item level (ilvl, geared to current depth) than by rarity alone. gameState().menu.inventory gives brief items; read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
-      `From the LOOT tab, tap an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
+      `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
       `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. Off-class weapons can be carried and sold but not equipped.`,
       `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them.`,
@@ -8113,7 +8106,7 @@ function toggleSettingsMenu(e) {
   if (e) e.stopPropagation();
   const menu = document.getElementById('settings-menu');
   if (!menu) return;
-  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderDpadControls(); renderCursorControls(); renderCursorSizeControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); updateMixButtons(); centerSettingsCard(); }
+  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderCursorControls(); renderCursorSizeControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); updateMixButtons(); centerSettingsCard(); }
 }
 function closeSettingsMenu() {
   const menu = document.getElementById('settings-menu');
@@ -8178,7 +8171,7 @@ function changelogCategory(c) {
   const t = (c.v + ' ' + c.notes.join(' ')).toLowerCase();
   const has = (...ks) => ks.some(k => t.indexOf(k) !== -1);
   if (has('music', 'sound', 'sfx', 'audio')) return 'Audio';
-  if (has('cursor', 'd-pad', 'joystick', 'hotkey', 'sprint', 'dash', 'click to move', 'click-to-move', 'movement', 'control pad', 'move pad')) return 'Controls';
+  if (has('cursor', 'hotkey', 'sprint', 'dash', 'click to move', 'click-to-move', 'movement')) return 'Controls';
   if (has('skill', 'spell', 'tree', 'auto-cast', 'ascension', 'cooldown', 'mana cost')) return 'Skills';
   if (has('loot', 'gear', 'item', 'rarity', 'affix', 'enchant', 'forge', 'craft', 'salvage', 'weapon', 'armor', 'armour', 'stash', 'vault', 'drop')) return 'Loot & Gear';
   if (has('boss', 'enemy', 'foe', 'combat', 'damage', 'crit', 'dodge', 'rating', 'accuracy', 'evasion', 'status', 'buff', 'debuff', 'trap', 'lava', 'spike', 'grace', 'invuln', 'skeleton')) return 'Combat';
@@ -8410,49 +8403,25 @@ window.addEventListener('resize', () => {
   resizeCanvas(); if (inTown) syncTownBarReserve(); draw();
 });
 
-// On the web/desktop layout the loot drawer is a permanent column, so it's
-// always open and tapping the map should not close it.
-const WEB_MQ = window.matchMedia('(min-width: 760px) and (hover: hover) and (pointer: fine)');
-function isWebLayout() { return WEB_MQ.matches; }
+// The loot drawer is a permanent column — always open; tapping the map never closes it.
 
 // Latest camera transform from draw(), used to map screen taps back to tiles.
 let lastCam = null;
 
 let panelOpen = false;
 function togglePanel() {
-  // The drawer is pinned open on the web layout — just (re)render it.
-  if (isWebLayout()) { panelOpen = true; renderPanel(); return; }
-  panelOpen = !panelOpen;
-  const panel = document.getElementById('side-panel');
-  const btn = document.querySelector('.bag-btn');
-  panel.classList.toggle('collapsed', !panelOpen);
-  btn.classList.toggle('open', panelOpen);
-  btn.querySelector('#bag-word').textContent = panelOpen ? 'CLOSE' : 'BAG';
-  if (panelOpen) renderPanel();
+  // The loot drawer is a permanent column — just (re)render it.
+  panelOpen = true; renderPanel();
 }
 
-// ── MAP GESTURES / ANALOG JOYSTICK ──
-// On touch, movement is a floating analog joystick: press anywhere on the map and
-// a stick springs up under your thumb — drag to steer (any of 360°), push to the
-// edge to sprint, release to stop. A quick tap (no drag) is USE/grab. The web
-// layout is mouse-and-keyboard, so the map ignores pointers there.
-const JOY_MAX = 56;   // px throw radius (full tilt)
-const JOY_TAP = 12;   // travel under this counts as a tap, not a drag
-let joyId = null, joyOX = 0, joyOY = 0, joyMoved = false;
-let gestureStart = null;   // pointerdown anchor, for tap detection in BOTH layouts
-let gestureFoe = null;     // the foe under the press — so a tap chases/inspects THAT foe even if it scurries before release
-// Floating joystick visuals (DOM, so they're crisp and ignore the choppy camera).
-const joyBase = document.createElement('div');
-const joyKnob = document.createElement('div');
-joyBase.style.cssText = 'position:fixed;width:120px;height:120px;margin-left:-60px;margin-top:-60px;border-radius:50%;border:2px solid rgba(255,255,255,0.22);background:rgba(255,255,255,0.06);pointer-events:none;z-index:60;display:none;';
-joyKnob.style.cssText = 'position:absolute;left:50%;top:50%;width:52px;height:52px;border-radius:50%;background:rgba(232,194,103,0.55);border:2px solid rgba(255,255,255,0.4);transform:translate(-50%,-50%);';
-joyBase.appendChild(joyKnob);
-document.body.appendChild(joyBase);
-
-// ── DESKTOP CLICK-TO-MOVE ──
-// On the web (mouse) layout there's no joystick: left-clicking the map walks the
-// hero to that spot, and holding the button (dragging) keeps the hero chasing the
-// cursor in real time. Steering lives in updatePlayer; here we just set the target.
+// ── MAP CLICK-TO-MOVE ──
+// Left-clicking the map walks the hero to that spot, and holding the button
+// (dragging) keeps the hero chasing the cursor in real time. A quick press with no
+// drag is a tap — used to inspect a foe's codex card. Steering lives in
+// updatePlayer; here we just set the target.
+const TAP_SLOP = 12;   // pointer travel under this counts as a tap, not a drag
+let gestureStart = null;   // pointerdown anchor, for tap detection
+let gestureFoe = null;     // the foe under the press — so a tap inspects THAT foe even if it scurries before release
 let clickMoveId = null;
 function setMoveTargetFromClient(cx, cy) {
   const w = clientToWorld(cx, cy);
@@ -8479,53 +8448,29 @@ function setMoveTargetFromClient(cx, cy) {
   updateMoveTargetPath(false);
 }
 canvas.addEventListener('pointerdown', e => {
-  gestureStart = { x: e.clientX, y: e.clientY };   // anchor for tap-to-inspect (both layouts)
+  gestureStart = { x: e.clientX, y: e.clientY };   // anchor for tap-to-inspect
   gestureFoe = enemyAtClient(e.clientX, e.clientY); // the foe pressed on, latched for the tap
   // Pressing anywhere on the map that isn't the inspected foe dismisses its card
   // right away, so a click-and-hold / drag-to-move closes it too (a plain tap on the
   // SAME foe is left for pointerup, which toggles the card shut).
   if (enemyCardFor && enemyAtClient(e.clientX, e.clientY) !== enemyCardFor) closeEnemyCard();
-  if (isWebLayout()) {                              // desktop: click / hold-to-move, no joystick
-    if (e.button !== 0 || rtPaused()) return;      // left button only; not while a menu/town/death pauses play
-    clickMoveId = e.pointerId;
-    moveTarget.hold = true;                         // track the cursor until the button comes up
-    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
-    setMoveTargetFromClient(e.clientX, e.clientY);
-    return;
-  }
-  if (panelOpen) { togglePanel(); return; }         // an open drawer eats the touch
-  joyId = e.pointerId; joyOX = e.clientX; joyOY = e.clientY; joyMoved = false;
-  joy.active = true; joy.dx = 0; joy.dy = 0; joy.mag = 0;
+  if (e.button !== 0 || rtPaused()) return;      // left button only; not while a menu/town/death pauses play
+  clickMoveId = e.pointerId;
+  moveTarget.hold = true;                         // track the cursor until the button comes up
   try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
-  joyBase.style.left = joyOX + 'px'; joyBase.style.top = joyOY + 'px';
-  joyKnob.style.transform = 'translate(-50%,-50%)';
-  joyBase.style.display = 'block';
+  setMoveTargetFromClient(e.clientX, e.clientY);
 });
 canvas.addEventListener('pointermove', e => {
-  // Desktop: while the button is held, keep the move target glued to the cursor.
+  // While the button is held, keep the move target glued to the cursor.
   if (clickMoveId === e.pointerId) { if (moveTarget.hold) setMoveTargetFromClient(e.clientX, e.clientY); return; }
-  if (joyId !== e.pointerId) {
-    // Desktop hover-to-inspect: pointing at a foe pops its codex card under the map.
-    if (isWebLayout()) updateHoverCard(e.clientX, e.clientY);
-    return;
-  }
-  const dx = e.clientX - joyOX, dy = e.clientY - joyOY;
-  const d = Math.hypot(dx, dy);
-  if (d > JOY_TAP) joyMoved = true;
-  const cl = Math.min(d, JOY_MAX), ang = Math.atan2(dy, dx);
-  joy.dx = Math.cos(ang) * (cl / JOY_MAX);
-  joy.dy = Math.sin(ang) * (cl / JOY_MAX);
-  joy.mag = cl / JOY_MAX;
-  joyKnob.style.transform = `translate(calc(-50% + ${Math.cos(ang) * cl}px), calc(-50% + ${Math.sin(ang) * cl}px))`;
+  // Hover-to-inspect: pointing at a foe pops its codex card under the map.
+  updateHoverCard(e.clientX, e.clientY);
 });
 function endJoy(e, isUp) {
-  const wasJoy = joyId === e.pointerId;
   const wasClickMove = clickMoveId === e.pointerId;
-  // Tap detection works in BOTH layouts (web has no joystick, just the anchor).
-  const moved = wasJoy ? joyMoved
-    : (gestureStart && (Math.abs(e.clientX - gestureStart.x) > JOY_TAP || Math.abs(e.clientY - gestureStart.y) > JOY_TAP));
+  // Tap detection: the press barely moved from its pointerdown anchor.
+  const moved = gestureStart && (Math.abs(e.clientX - gestureStart.x) > TAP_SLOP || Math.abs(e.clientY - gestureStart.y) > TAP_SLOP);
   gestureStart = null;
-  if (wasJoy) { joyId = null; joy.active = false; joy.dx = joy.dy = joy.mag = 0; joyBase.style.display = 'none'; }
   if (wasClickMove) {
     clickMoveId = null;
     moveTarget.hold = false;        // release: stop chasing the cursor (the held part)…
@@ -8538,24 +8483,21 @@ function endJoy(e, isUp) {
   // release), falling back to whatever sits under the release point.
   const foe = (gestureFoe && !gestureFoe.dead) ? gestureFoe : enemyAtClient(e.clientX, e.clientY);
   if (foe) {
-    // Desktop: clicking a foe PATHS you to it — the move target latches onto the live
-    // foe and chases it into weapon reach, then auto-attack takes over. Touch has no
-    // hover, so a tap still opens the codex card. Skip arming a chase while play is
-    // paused (a menu, or a frozen teleport/portal transit that leaves the canvas live
-    // but has no overlay) — matches the pointerdown move guard so a warp never emerges
-    // auto-walking.
-    if (isWebLayout()) { if (!rtPaused()) { moveTarget.foe = foe; moveTarget.active = true; updateMoveTargetPath(true); } return; }
-    toggleEnemyCard(foe);
+    // Clicking a foe PATHS you to it — the move target latches onto the live foe and
+    // chases it into weapon reach, then auto-attack takes over. Skip arming a chase
+    // while play is paused (a menu, or a frozen teleport/portal transit that leaves the
+    // canvas live but has no overlay) — matches the pointerdown move guard so a warp
+    // never emerges auto-walking.
+    if (!rtPaused()) { moveTarget.foe = foe; moveTarget.active = true; updateMoveTargetPath(true); }
     return;
   }
   if (enemyCardFor) { closeEnemyCard(); return; }
-  if (!isWebLayout()) pickup();
 }
 canvas.addEventListener('pointerup', e => endJoy(e, true));
 canvas.addEventListener('pointercancel', e => endJoy(e, false));
 // Mouse left the map → drop any hover codex card (no pointermove fires off-canvas).
 canvas.addEventListener('pointerleave', () => {
-  if (isWebLayout() && clickMoveId === null && enemyCardFor) closeEnemyCard();
+  if (clickMoveId === null && enemyCardFor) closeEnemyCard();
 });
 
 // ── INSPECT: enemy codex card ──
@@ -8668,9 +8610,8 @@ function renderEnemyCard(e) {
   el.innerHTML =
     `<div class="ec-head">${icon}<div><div class="ec-name">${name}</div><div class="ec-sub">${sub}</div></div></div>` +
     `<div class="ec-grid">${rows}</div>${foot}`;
-  // A desktop hover card is a passive read-out (never eats a map click); a touch
-  // card stays tappable so a tap dismisses it.
-  el.style.pointerEvents = isWebLayout() ? 'none' : 'auto';
+  // The hover card is a passive read-out — never eats a map click.
+  el.style.pointerEvents = 'none';
   // Sit it right UNDER the minimap (top-left of the map), aligned to the minimap's
   // left edge, clamped to the viewport. Semi-transparent (see #enemy-card in
   // styles.css) so it never hides the foe you're pointing at. If the minimap is
@@ -8697,134 +8638,30 @@ document.addEventListener('pointerdown', ev => {
   closeEnemyCard();
 }, true);
 
-// Keep the floating movement pad pinned to the bottom-centre of the map. A
-// ResizeObserver re-runs it whenever the canvas changes size (rotation, the
-// skill bar appearing, the address bar collapsing, etc.).
-const touchDpad = document.getElementById('touch-dpad');
-// The fixed d-pad is retired in favour of the floating analog joystick above, so
-// keep it hidden (its settings still exist but no longer drive movement).
-if (touchDpad) touchDpad.style.display = 'none';
-// Movement-pad preferences: corner to dock it in, and its opacity (0 = hidden).
-const DPAD_KEY = 'dpadCfg';
-let dpadCfg = { pos: 'left', opacity: 1, style: 'triangle', color: '#e8c267' };
-// The STYLE picker is just a set of arrow glyphs (CSS rotates the one rightward
-// glyph per direction); the COLOUR picker tints them. No per-option backgrounds
-// or borders — the pad stays a clean set of floating arrows.
-const DPAD_ARROWS = [
-  { key:'triangle',  name:'Triangle',  glyph:'▶' },
-  { key:'solid',     name:'Solid',     glyph:'➤' },
-  { key:'chevron',   name:'Chevron',   glyph:'❯' },
-  { key:'heavy',     name:'Heavy',     glyph:'➜' },
-  { key:'double',    name:'Double',    glyph:'⇒' },
-  { key:'simple',    name:'Simple',    glyph:'➔' },
-  { key:'small',     name:'Small',     glyph:'▸' },
-  { key:'block',     name:'Block',     glyph:'►' },
-  { key:'angle',     name:'Angle',     glyph:'⟩' },
-  { key:'guillemet', name:'Guillemet', glyph:'»' },
-  { key:'barbed',    name:'Barbed',    glyph:'➣' },
-  { key:'long',      name:'Long',      glyph:'⟶' },
-];
-// Arrow tints for the COLOUR picker. dpadCfg.color stores the chosen hex.
-const DPAD_COLORS = [
-  { name:'Gold',    color:'#e8c267' },
-  { name:'White',   color:'#f4f0e6' },
-  { name:'Crimson', color:'#ff5a48' },
-  { name:'Emerald', color:'#5fe39a' },
-  { name:'Azure',   color:'#5bb8ff' },
-  { name:'Violet',  color:'#c98aff' },
-  { name:'Cyan',    color:'#4fe6d8' },
-  { name:'Amber',   color:'#ff9a3a' },
-  { name:'Rose',    color:'#ff7ec0' },
-];
-try { const s = JSON.parse(localStorage.getItem(DPAD_KEY)); if (s) dpadCfg = Object.assign(dpadCfg, s); } catch (e) {}
-
-function saveDpadCfg() { try { localStorage.setItem(DPAD_KEY, JSON.stringify(dpadCfg)); } catch (e) {} }
-
-function positionTouchDpad() {
-  if (!touchDpad) return;
-  const r = canvas.getBoundingClientRect();
-  if (!r.width) return;
-  const halfW = (touchDpad.offsetWidth || 148) / 2;
-  const margin = 14;
-  let cx;
-  if (dpadCfg.pos === 'left')       cx = r.left + margin + halfW;
-  else if (dpadCfg.pos === 'right') cx = r.right - margin - halfW;
-  else                              cx = r.left + r.width / 2;  // centre
-  touchDpad.style.left = cx + 'px';
-  // Height is unchanged — same vertical anchor as before.
-  touchDpad.style.bottom = Math.max(10, window.innerHeight - r.bottom + 12) + 'px';
-}
-
-// Paint the chosen arrow glyph + tint onto the pad as inline CSS variables.
-function applyDpadTheme(key) {
-  if (!touchDpad) return;
-  const a = DPAD_ARROWS.find(x => x.key === key) || DPAD_ARROWS[0];
-  const s = touchDpad.style;
-  s.setProperty('--dp-glyph', "'" + a.glyph + "'");
-  s.setProperty('--dp-arrow', dpadCfg.color || '#e8c267');
-}
-
-// Apply opacity / hidden state and the chosen theme, then re-place the pad.
-function applyDpadSettings() {
-  if (touchDpad) {
-    const hidden = dpadCfg.opacity <= 0;
-    touchDpad.style.opacity = hidden ? '0' : String(dpadCfg.opacity);
-    touchDpad.style.pointerEvents = hidden ? 'none' : 'auto';
-    applyDpadTheme(dpadCfg.style);
-  }
-  positionTouchDpad();
-}
-
-if (window.ResizeObserver) new ResizeObserver(positionTouchDpad).observe(canvas);
-window.addEventListener('resize', positionTouchDpad);
-applyDpadSettings();
-
-// Keep the drawer populated and open whenever we're in (or switch into) the
-// web layout.
+// Keep the loot drawer populated and open.
 function syncWebPanel() {
-  if (isWebLayout()) { panelOpen = true; renderPanel(); }
+  panelOpen = true; renderPanel();
 }
 
-// On the web layout the skill slots and the pact / food buff chips live INSIDE
-// the bottom HUD (#desktop-hud); on mobile they stay in their original spots (the
-// skill bar above the log, the buff chips in the header). We physically re-home
-// the existing elements rather than duplicate them, so all the code that finds
-// them by id (renderSkillBar, updateCooldownDials, drag-and-drop, the pact/food
-// updates) keeps working untouched. Each node's original home is recorded once,
-// the first time this runs, so it can be put back if the window crosses the
-// breakpoint. Real touch devices never match WEB_MQ, so their DOM is unchanged.
+// The skill slots and the pact / food buff chips live INSIDE the bottom HUD
+// (#desktop-hud). We physically re-home the existing elements rather than
+// duplicate them, so all the code that finds them by id (renderSkillBar,
+// updateCooldownDials, drag-and-drop, the pact/food updates) keeps working
+// untouched.
 const HUD_REHOME = [
   ['skill-bar', 'hud-belt'],
   ['pact-hud',  'hud-buffs'],
   ['food-hud',  'hud-buffs'],
 ];
-let _hudHomes = null;
 function syncDesktopHud() {
-  if (!_hudHomes) {
-    _hudHomes = {};
-    for (const [id] of HUD_REHOME) {
-      const el = document.getElementById(id);
-      if (el) _hudHomes[id] = { parent: el.parentNode, next: el.nextSibling };
-    }
-  }
-  const web = isWebLayout();
   for (const [id, dest] of HUD_REHOME) {
     const el = document.getElementById(id);
     if (!el) continue;
-    if (web) {
-      const d = document.getElementById(dest);
-      if (d && el.parentNode !== d) d.appendChild(el);
-    } else {
-      const home = _hudHomes[id];
-      if (home && el.parentNode !== home.parent) {
-        if (home.next && home.next.parentNode === home.parent) home.parent.insertBefore(el, home.next);
-        else home.parent.appendChild(el);
-      }
-    }
+    const d = document.getElementById(dest);
+    if (d && el.parentNode !== d) d.appendChild(el);
   }
 }
 syncDesktopHud();
-WEB_MQ.addEventListener('change', () => { syncDesktopHud(); syncWebPanel(); resizeCanvas(); if (inTown) renderSkillBar(); draw(); });
 
 // ══════════════════════════════════════════
 // MAP GENERATION
@@ -9881,7 +9718,7 @@ function finishTutorial() {
 // nudge as the new player progresses (move → fight → enter the cave). Tapping it
 // opens the full How to Play menu (wired on the element's onclick).
 function tutorialStage(stage) {
-  const moveHow = touchUI() ? 'the d-pad' : 'WASD / arrows';
+  const moveHow = 'WASD / arrows';
   if (stage === 'move') {
     setTutorialHint(`Use <b>${moveHow}</b> to move. Walk into the <b>skeleton</b> to attack it.`);
   } else if (stage === 'cave') {
@@ -10654,8 +10491,8 @@ function startPortalChannel() {
   if (tutorialActive) { log('🏖️ Head north into the cave to begin your descent first.'); sfx('denied'); return; }
   if (portalCharge > 0) { cancelPortalChannel('<span data-spr=feat_gate_red></span> You let the town portal fade.'); return; }
   portalCharge = PORTAL_CHANNEL_SECS;
-  // Drop whatever movement opened the portal (a held key, the joystick, or the
-  // click-to-move that walked us onto the floor-1 up-stair) so the channel starts
+  // Drop whatever movement opened the portal (a held key, or the click-to-move
+  // that walked us onto the floor-1 up-stair) so the channel starts
   // clean and can't cancel itself on the same input — a FRESH move breaks it off
   // (see updatePlayer). Without this, a lingering click-to-move target would either
   // instantly collapse the channel or, worse, root the hero with no way to cancel.
@@ -11232,38 +11069,6 @@ function openTownService(kind) {
   if (kind === 'bounty')  { openBounty();    return; }
 }
 
-// ── SETTINGS — movement-pad position & opacity, shown in the popup ──
-// These controls live in the settings wheel (touch devices only) rather than a
-// town building. setDpad* save + re-apply immediately and re-render the popup
-// so the selected button reflects the new choice.
-function setDpadPos(p) { dpadCfg.pos = p; saveDpadCfg(); applyDpadSettings(); renderDpadControls(); }
-function setDpadOpacity(v) { dpadCfg.opacity = v; saveDpadCfg(); applyDpadSettings(); renderDpadControls(); }
-function setDpadStyle(s) { dpadCfg.style = s; saveDpadCfg(); applyDpadSettings(); renderDpadControls(); }
-function setDpadColor(c) { dpadCfg.color = c; saveDpadCfg(); applyDpadSettings(); renderDpadControls(); }
-function renderDpadControls() {
-  const posRow = document.getElementById('dpad-pos-row');
-  const opRow  = document.getElementById('dpad-op-row');
-  const styRow = document.getElementById('dpad-style-row');
-  const colRow = document.getElementById('dpad-color-row');
-  if (!posRow || !opRow) return;
-  const pos = dpadCfg.pos, op = dpadCfg.opacity, sty = dpadCfg.style, col = dpadCfg.color;
-  const posBtn = (val, label) =>
-    `<button class="dpad-cfg-btn ${pos === val ? 'sel' : ''}" onclick="setDpadPos('${val}')">${label}</button>`;
-  const opBtn = (val, label) =>
-    `<button class="dpad-cfg-btn ${Math.abs(op - val) < 0.001 ? 'sel' : ''}" onclick="setDpadOpacity(${val})">${label}</button>`;
-  posRow.innerHTML = posBtn('left', 'Left') + posBtn('center', 'Centre') + posBtn('right', 'Right');
-  opRow.innerHTML  = opBtn(0.33, 'Low') + opBtn(0.66, 'Med') + opBtn(1, 'High') + opBtn(0, 'Off');
-  if (styRow) {
-    const curKey = DPAD_ARROWS.some(a => a.key === sty) ? sty : DPAD_ARROWS[0].key;
-    styRow.innerHTML = DPAD_ARROWS.map(a =>
-      `<div class="dp-sw ${curKey === a.key ? 'sel' : ''}" title="${a.name}" onclick="setDpadStyle('${a.key}')">`
-      + `<div class="dp-sw-face" style="color:${col}">${a.glyph}</div></div>`).join('');
-  }
-  if (colRow) {
-    colRow.innerHTML = DPAD_COLORS.map(c =>
-      `<div class="dp-color-sw ${col === c.color ? 'sel' : ''}" title="${c.name}" style="background:${c.color}" onclick="setDpadColor('${c.color}')"></div>`).join('');
-  }
-}
 
 // ── TOWN HUB MENU — the town itself is a menu of services ──
 // Each entry opens an existing service panel. Merchant & Mystic pop their own
@@ -12800,7 +12605,7 @@ function renderEnchantItem(item) {
     <div class="shop-row has-actions"><button class="modal-nav-btn" onclick="enchantBack()">‹ Back</button>
       <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${item.name}${craftedMark(item)}</div>
       <div class="shop-row-sub">${SLOTS[item.slot].label} · ilvl ${item.ilvl} · ${statN}/${caps.stat} stats · ${attrN}/${caps.attr} attrs</div>${equipReqBadge(item)}</div></div>
-    <div class="ench-legend">Value rerolls the number · Type swaps the modifier · ${touchUI() ? 'press &amp; hold a button for details' : 'hover a button for details'}</div>
+    <div class="ench-legend">Value rerolls the number · Type swaps the modifier · hover a button for details</div>
     ${lockRows}
     ${empty}${statRows}${attrRows}
     <div class="ench-actbar">${augBtn}${allBtn}</div>
@@ -14658,8 +14463,8 @@ function draw() {
   const offY = Math.round(-camY + _shy);
   const scale = tw / TILE; // for glow blur sizing, relative to base tile
 
-  // Remember the camera so a tap on the canvas can be converted back to a map
-  // tile (tap-to-move / tap-to-USE replaces the old d-pad on touch devices).
+  // Remember the camera so a click on the canvas can be converted back to a map
+  // tile (click-to-move / click-to-USE).
   lastCam = { tw, th, camX, camY };
 
   // Only draw tiles within the visible window (perf + clean edges)
@@ -18011,7 +17816,7 @@ function mpContinuous() {
 let __turnBusy = false;
 let gameHalted = false;
 // Paused while the new-game name prompt is open, so the world can't be acted on
-// (e.g. the floating d-pad tapped) until the player finishes naming their hero.
+// until the player finishes naming their hero.
 let namePaused = false;
 window.haltAll = function () {
   gameHalted = true;
@@ -18319,7 +18124,6 @@ function unstickPlayer(dt) {
   // by how well they line up with the current movement input (if any).
   let hx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let hy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
-  if (joy.active && joy.mag > 0.18) { hx = joy.dx; hy = joy.dy; }
   const dirs = UNSTICK_DIRS.map(([dx, dy]) => { const inv = Math.hypot(dx, dy) || 1; return [dx / inv, dy / inv]; });
   if (hx || hy) { const hm = Math.hypot(hx, hy) || 1; hx /= hm; hy /= hm; dirs.sort((a, b) => (b[0]*hx + b[1]*hy) - (a[0]*hx + a[1]*hy)); }
   const s = Math.max(0.06, PLAYER_SPEED * 1.4 * dt);
@@ -18482,7 +18286,6 @@ function doDash() {
   if ((player.dashCd || 0) > 0 || player.stamina < DASH_COST) return;
   let dx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let dy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
-  if (joy.active && joy.mag > 0.18) { dx = joy.dx; dy = joy.dy; }
   // Click-to-move: with no manual direction, dash toward the target — or, when a
   // route around a wall is planned, toward the next waypoint so we don't dash into it.
   if (dx === 0 && dy === 0 && moveTarget.active) {
@@ -18502,7 +18305,7 @@ function doDash() {
 }
 
 // Integrate one frame of free 8-directional movement with momentum. Sprinting
-// (Shift / joystick edge) raises top speed but burns stamina; a slow status
+// (Shift) raises top speed but burns stamina; a slow status
 // halves it. The hero is rooted while channeling a portal or stunned (the world
 // clock still ticks those down).
 function updatePlayer(dt) {
@@ -18512,12 +18315,12 @@ function updatePlayer(dt) {
   unstickPlayer(dt);   // free the hero if a foe stepped into our body's space
   if (isPlayerStunned()) { player.vx = 0; player.vy = 0; player.dashT = 0; regenStamina(dt); return; }
   // Channeling a town portal roots the hero — but a deliberate step (WASD / arrows /
-  // joystick / a click-to-move on desktop) breaks it off rather than being silently
+  // a click-to-move) breaks it off rather than being silently
   // swallowed, so "walk away" cancels. With no movement input the channel just holds.
   // (startPortalChannel clears the input that opened it, so the very step/click that
   // began the channel can't instantly cancel it — only a FRESH move does.)
   if (portalChanneling()) {
-    const wantsMove = heldDir('right') || heldDir('left') || heldDir('up') || heldDir('down') || (joy.active && joy.mag > 0.18) || moveTarget.active;
+    const wantsMove = heldDir('right') || heldDir('left') || heldDir('up') || heldDir('down') || moveTarget.active;
     if (!wantsMove) { player.vx = 0; player.vy = 0; player.dashT = 0; regenStamina(dt); return; }
     resetPortal();
     log('<span data-spr=feat_gate_red></span> You step away and let the town portal fade.', 'important');
@@ -18529,11 +18332,10 @@ function updatePlayer(dt) {
   // movePlayerBy zeroes the component that hit the wall).
   if (player.dashT > 0) { player.dashT -= dt; const dvx = player.vx, dvy = player.vy; movePlayerBy(dvx * dt, dvy * dt); if (mapWarping()) return; trySmashWalls(dvx, dvy); return; }
 
-  // Input vector — keyboard / d-pad, or the analog joystick when it's active.
+  // Input vector — keyboard (WASD / arrows).
   let ix = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let iy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
-  if (joy.active && joy.mag > 0.18) { ix = joy.dx; iy = joy.dy; }
-  // Click-to-move: with no keyboard/joystick input, steer toward the click target.
+  // Click-to-move: with no keyboard input, steer toward the click target.
   // Any manual input cancels it (you take back the wheel). While the button is held
   // the target tracks the cursor, so the hero keeps walking toward it; a plain click
   // walks to the point and stops on arrival. If a wall sits between us and the point
@@ -18600,10 +18402,9 @@ function updatePlayer(dt) {
   const moving = mag > 0.01;
   if (moving) { ix /= mag; iy /= mag; entryGuard = false; } // first move ends arrival grace
 
-  // Sprint: wanting it + moving + stamina. Held Shift, a latched auto-sprint
-  // toggle, or shoving the joystick to its edge all count. Drains stamina;
-  // otherwise it refills.
-  const wantSprint = moving && player.stamina > 0 && (sprintHeld || sprintLatched || (joy.active && joy.mag > 0.85));
+  // Sprint: wanting it + moving + stamina. Held Shift or a latched auto-sprint
+  // toggle counts. Drains stamina; otherwise it refills.
+  const wantSprint = moving && player.stamina > 0 && (sprintHeld || sprintLatched);
   if (wantSprint) { player.stamina = Math.max(0, player.stamina - SPRINT_DRAIN * dt); player._stamDelay = STAM_DELAY; }
   else regenStamina(dt);
 
@@ -18810,8 +18611,8 @@ function useFountain(nx, ny) {
 // on a fresh cell entry, so landing on the destination pad (set programmatically)
 // can't bounce the hero straight back. The hero is moved to the partner pad NOW
 // (over a frozen world) and beginMapWarp plays the swallow → pan → emerge purely
-// as a visual. clearHeld() drops any held key / joystick AND the click-to-move
-// route, so a warp never leaves you auto-walking back toward the pad you clicked.
+// as a visual. clearHeld() drops any held key AND the click-to-move route, so a
+// warp never leaves you auto-walking back toward the pad you clicked.
 function teleportPad(nx, ny) {
   const dest = teleporters[ny + ',' + nx];
   if (!dest) return;
@@ -19496,9 +19297,9 @@ function tryRangedAttack(dx, dy) {
 function castSkill() {
   if (!playerClass()) { log('Pick a class to gain skills.'); return; }
   const all = activeSkillList();
-  if (!all.length) { log(`No active skill learned yet — spend a skill point in the SKILLS tab (${touchUI() ? 'tap <span data-spr=chest></span> BAG' : 'press B'}).`); return; }
+  if (!all.length) { log(`No active skill learned yet — spend a skill point in the SKILLS tab (press B).`); return; }
   const pri = primarySkill();
-  if (!pri) { log(`No skill in your slots — assign one in the SKILLS tab (${touchUI() ? 'tap <span data-spr=chest></span> BAG' : 'press B'}).`); return; }
+  if (!pri) { log(`No skill in your slots — assign one in the SKILLS tab (press B).`); return; }
   castSkillById(pri.id);
 }
 
@@ -21851,8 +21652,8 @@ function renderStaminaBar() {
     const label = `${Math.round(st)}/${mx}`;
     if (label !== _stamTxt) { _stamTxt = label; txt.textContent = label; }
   }
-  // Mirror onto the desktop bottom-HUD stamina bar (web layout only).
-  if (isWebLayout()) {
+  // Mirror onto the desktop bottom-HUD stamina bar.
+  {
     const dhEnd = hudEl('dh-end-fill');
     if (dhEnd && w !== _dhEndW) { _dhEndW = w; dhEnd.style.width = w; }
   }
@@ -22037,9 +21838,9 @@ function updateBars() {
   // copies current too, so a transaction never leaves a stale count behind.
   refreshWallet();
 
-  // ── Desktop bottom HUD (web layout only): big flanking HP/MP bars, the
-  // segmented XP strip, and the name / power / gold chips mirror the same data. ──
-  if (isWebLayout()) {
+  // ── Desktop bottom HUD: big flanking HP/MP bars, the segmented XP strip, and
+  // the name / power / gold chips mirror the same data. ──
+  {
     const dset = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
     // Desktop HP/MP fill widths are eased in updateVitalFills() too — here just the
     // danger pulse on the HP fill and the numeric readouts.
@@ -22196,7 +21997,7 @@ function updateBars() {
       const cd = skillCd(sk.id);
       const ready = cd <= 0 && player.mp >= sk.mp && !inTown;
       if (label) label.textContent = cd > 0 ? `${Math.ceil(cd)}s` : `${sk.mp}MP`;
-      skillBtn.dataset.tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(sk.icon,16)||''} ${sk.name}</div><div class='ht-line'>${sk.desc}</div><div class='ht-sub'>${sk.mp} MP · ${sk.cd}s cooldown · ${touchUI() ? 'tap to cast' : 'press ' + skillKeyLabel(1)}</div>`;
+      skillBtn.dataset.tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(sk.icon,16)||''} ${sk.name}</div><div class='ht-line'>${sk.desc}</div><div class='ht-sub'>${sk.mp} MP · ${sk.cd}s cooldown · ${'press ' + skillKeyLabel(1)}</div>`;
       skillBtn.classList.toggle('disabled', !ready);
       skillBtn.classList.toggle('ready', ready && player.hp > 0);
     } else {
@@ -22221,7 +22022,7 @@ function updateBars() {
     townBtn.dataset.tip = here
       ? "<div class='ht-name'><span data-spr=town_vault></span> Town</div><div class='ht-line'>You're already in the safe hub. Head back down through the <span data-spr=feat_gate_red></span> Dungeon Gate in the town menu.</div>"
       : ch
-      ? `<div class='ht-name'><span data-spr=feat_gate_red></span> Town Portal</div><div class='ht-line'>Opening… ${Math.ceil(portalCharge)} second${Math.ceil(portalCharge) === 1 ? '' : 's'} left. A foe's hit shatters it — move or tap again to cancel.</div>`
+      ? `<div class='ht-name'><span data-spr=feat_gate_red></span> Town Portal</div><div class='ht-line'>Opening… ${Math.ceil(portalCharge)} second${Math.ceil(portalCharge) === 1 ? '' : 's'} left. A foe's hit shatters it — move to cancel.</div>`
       : "<div class='ht-name'><span data-spr=feat_gate_red></span> Town Portal</div><div class='ht-line'>Open a portal to the safe hub. It channels for a few seconds — you can't act while it does — moving or a foe's hit cancels it.</div>";
   }
 
@@ -22559,7 +22360,7 @@ function renderPanel() {
               : `<button class="row-btn locked-row-btn" ${hoverTip(`<div class='ht-name'><span data-spr=feat_door></span> Can't Equip</div><div class='ht-line'>${equipLockReason(item)}</div>`)} onclick="quickEquip(${i})"><span data-spr=feat_door></span></button>`)
           : ''}
       </div>
-      ${selectedItem === i && HOVER_MQ.matches ? bagActionsHTML(item, i) : ''}`;
+      ${selectedItem === i ? bagActionsHTML(item, i) : ''}`;
     }).join('');
   } else if (currentTab === 'equip') {
     el.innerHTML = renderPaperdoll();
@@ -22656,7 +22457,7 @@ function renderHero(el) {
       <div class="hc-line">${cls.passive}</div>
       <div class="hc-line"><span data-spr=w_sword></span> Damage scales with <b>${ATTRIBUTES[dmgA.primary].label}</b>${dmgA.secondary ? ` & ${ATTRIBUTES[dmgA.secondary].label}` : ''}</div>
       ${(() => { const pri = primarySkill(), sig = classSignature(player.class);
-        return pri ? `<div class="hc-line">${dlIcon(pri.icon,18)||''} <b>${pri.name}</b> — ${pri.desc} <span style="opacity:0.7">(${pri.mp} MP · ${touchUI() ? 'tap to cast' : 'press ' + skillKeyLabel(1)})</span></div>`
+        return pri ? `<div class="hc-line">${dlIcon(pri.icon,18)||''} <b>${pri.name}</b> — ${pri.desc} <span style="opacity:0.7">(${pri.mp} MP · ${'press ' + skillKeyLabel(1)})</span></div>`
           : (sig ? `<div class="hc-line" style="opacity:0.8">Spend a skill point to learn ${dlIcon(sig.icon,16)||''} <b>${sig.name}</b> (SKILLS tab)</div>` : ''); })()}
       ${ascData() ? `<div class="hc-line" style="color:${ascData().color}">${dlIcon(ascData().icon,18)||''} <b>${ascData().name}</b> — ${ascData().blurb}</div>`
         : (cls && (player.level || 1) >= ASCEND_LEVEL ? `<div class="hc-line" style="color:var(--gold)"><span data-spr=mat_glimmer></span> Ready to ascend — visit the Trainer <span data-spr=town_trainer></span></div>` : '')}
@@ -22880,8 +22681,8 @@ function renderSkills(el) {
     const drag = (n.type === 'active' && owned) ? `draggable="true" ondragstart="skillDragStart(event,'${n.id}',-1)" ondragend="skillDragEnd()"` : '';
     // Hover = a SHORT tooltip; the full detail card opens on CLICK (see selectSkill).
     // When a node is learnable on desktop, advertise the quick-learn shortcut too.
-    const learnHint = (avail && !touchUI()) ? ` · shift/ctrl-click to learn` : '';
-    const tipShort = `<div class='ht-name'>${n.name}</div><div class='ht-sub'>${n.type === 'active' ? '<span data-spr=ic_stun></span> Active · ' + n.mp + ' MP · ' + n.cd + 's cd' : '<span data-spr=a_shield></span> Passive'} · ${touchUI() ? 'tap' : 'click'} for details${learnHint}</div>`;
+    const learnHint = avail ? ` · shift/ctrl-click to learn` : '';
+    const tipShort = `<div class='ht-name'>${n.name}</div><div class='ht-sub'>${n.type === 'active' ? '<span data-spr=ic_stun></span> Active · ' + n.mp + ' MP · ' + n.cd + 's cd' : '<span data-spr=a_shield></span> Passive'} · click for details${learnHint}</div>`;
     return `<button class="sk-tnode ${state}${n.keystone ? ' keystone' : ''}${n.type === 'active' ? ' act' : ''}${selectedSkillId === n.id ? ' sel' : ''}" id="sknode-${n.id}" ${drag}
         style="left:${(p[0] * 100).toFixed(2)}%;top:${(p[1] * 100).toFixed(2)}%" onclick="skillNodeClick(event,'${n.id}')" ondblclick="buySkill('${n.id}')"
         data-tip="${tipShort}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
@@ -23402,16 +23203,11 @@ function renderSkillBar() {
   // cancels the drop (the world clock re-renders the bar every tick). Hold the
   // current markup steady until the drag ends — skillDragEnd / the drop re-render.
   if (skillDrag) return;
-  // In town the bar is only worth showing on the desktop/web layout: there the
-  // SKILLS-tab slot tray is hidden, so this parked bar is how you see and rearrange
-  // slots in town. On touch the SKILLS tab still carries that tray, so the bar would
-  // just be a redundant second copy — keep the old behavior and hide it in town.
-  const town = inTown && isWebLayout();
-  if (inTown && !town) { bar.style.display = 'none'; bar.innerHTML = ''; _lastSkillBarHtml = ''; _sbCdEls = _sbCdTextEls = null; document.body.classList.remove('town-bar'); syncTownBarReserve(); return; }
-  // On the web layout the in-town bar parks as a solid tray the town menu leaves
-  // room for (see syncTownBarReserve), with its potions inert. Out in the dungeon
-  // it's the live combat bar, and it always renders even before any active is
-  // learned because the Health/Mana potions are baseline kit.
+  // In town the bar parks as a solid tray the town menu leaves room for (see
+  // syncTownBarReserve), with its potions inert. Out in the dungeon it's the live
+  // combat bar, and it always renders even before any active is learned because the
+  // Health/Mana potions are baseline kit.
+  const town = inTown;
   bar.style.display = 'flex';
   bar.classList.toggle('in-town', town);
   document.body.classList.toggle('town-bar', town);
@@ -23425,8 +23221,8 @@ function renderSkillBar() {
   const hpFull = player.hp >= player.maxHp;
   const mpFull = player.mp >= player.maxMp;
   const urgent = !town && potReady && player.hp < player.maxHp * 0.35;
-  const healHint = town ? 'locked in town' : (touchUI() ? 'tap to drink' : 'press ' + kbLabel('healthPotion'));
-  const manaHint = town ? 'locked in town' : (touchUI() ? 'tap to drink' : 'press ' + kbLabel('manaPotion'));
+  const healHint = town ? 'locked in town' : 'press ' + kbLabel('healthPotion');
+  const manaHint = town ? 'locked in town' : 'press ' + kbLabel('manaPotion');
   const healTip = `<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health Potion</div><div class='ht-line'>${town ? 'Saved for the dungeon — rest in town to heal for free instead.' : 'Mends health <b>over a few seconds</b> — a heavy direct hit spills the rest of the sip.'}</div><div class='ht-sub'>${healHint}${town ? '' : ` · over time · ${effectivePotionCd()}-second cooldown`}</div>`;
   const manaTip = `<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana Potion</div><div class='ht-line'>${town ? 'Saved for the dungeon — rest in town to refill for free instead.' : 'Restores mana <b>over a few seconds</b>.'}</div><div class='ht-sub'>${manaHint}${town ? '' : ` · over time · ${effectivePotionCd()}-second cooldown`}</div>`;
   const cdDial = (key) => `<span class="sb-cd" data-cd="${key}"></span>`;
@@ -23457,16 +23253,16 @@ function renderSkillBar() {
     const key = skillKeyLabel(i + 1);
     const s = id ? byId[id] : null;
     if (!s) {
-      const tip = `<div class='ht-name'>Empty slot ${i + 1}</div><div class='ht-line'>${touchUI() ? 'Tap to assign a learned skill.' : 'Drag a learned skill here, or tap to assign one.'}</div>${key && !touchUI() ? `<div class='ht-sub'>casts with ${key}</div>` : ''}`;
+      const tip = `<div class='ht-name'>Empty slot ${i + 1}</div><div class='ht-line'>Drag a learned skill here, or tap to assign one.</div>${key ? `<div class='ht-sub'>casts with ${key}</div>` : ''}`;
       return cell(kbShort(key), '', `<button class="skillbar-btn slot-empty" ${dropAttrs(i)} ${hoverTip(tip)} onclick="openSlotPicker(${i})">
       <span class="sb-icon big slot-plus">＋</span>
     </button>`);
     }
     const cd = skillCd(s.id);
     const ready = cd <= 0 && player.mp >= s.mp && player.hp > 0;
-    // Desktop names the number key; touch (no keyboard, reached by long-press) says "tap to cast".
-    const castHint = touchUI() ? ' · tap to cast' : (key ? ` · press ${key}` : '');
-    const moveHint = touchUI() ? 'tap the SKILLS tab to re-slot' : 'drag to rearrange · drag a tree skill to swap';
+    // The cast hint names the slot's number key.
+    const castHint = key ? ` · press ${key}` : '';
+    const moveHint = 'drag to rearrange · drag a tree skill to swap';
     const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
     return cell(kbShort(key), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}',${i})" ondragend="skillDragEnd()" ${dropAttrs(i)} ${hoverTip(tip)} onclick="castSkillById('${s.id}')">
@@ -23481,7 +23277,7 @@ function renderSkillBar() {
   const autoS = autoId ? byId[autoId] : null;
   let autoCell;
   if (!autoS) {
-    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast slot</div><div class='ht-line'>${touchUI() ? 'Tap to choose' : 'Drag a learned skill here, or tap to choose'} a skill to cast automatically — it fires the instant it's ready. Best for buffs and summons.</div>`;
+    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast slot</div><div class='ht-line'>Drag a learned skill here, or tap to choose a skill to cast automatically — it fires the instant it's ready. Best for buffs and summons.</div>`;
     autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn slot-empty autoslot" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
       <span class="sb-icon big slot-plus">＋</span>
     </button>`);
@@ -23489,7 +23285,7 @@ function renderSkillBar() {
     const s = autoS;
     const cd = skillCd(s.id);
     const ready = cd <= 0 && player.mp >= s.mp && player.hp > 0;
-    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${touchUI() ? 'tap to change or clear' : 'drag a skill here to change · tap to edit'}</div>`;
+    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>drag a skill here to change · tap to edit</div>`;
     autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}','${AUTO_SLOT}')" ondragend="skillDragEnd()" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
@@ -23500,13 +23296,12 @@ function renderSkillBar() {
   // reading order — 0, 1, 2, 3… — instead of trailing as a stray 0. Always usable —
   // opening it channels a town portal in real time, so while it's charging the
   // button shows the countdown and a cyan pulse.
-  // Hidden on touch — mobile keeps TOWN in the bottom control bar, unchanged.
   // While already in town it still renders, but greyed and inert (the same
   // "locked in town" look as the potions) — a "go to town" button can't do
   // anything once you're there, so it just marks where you are. You leave via
   // the Dungeon Gate in the town menu.
   let townBtn = '';
-  if (!touchUI()) {
+  {
     const here = !!town;                       // already in the hub → greyed & inert
     const ch = !here && portalChanneling();
     const townTip = here
@@ -23632,7 +23427,7 @@ function chooseClass(key) {
   // a name somehow already exists do we finalize here (defensive).
   if (!player.name) { showNameEntry(); return; }
   const sig = classSignature(key);
-  log(`${dlIcon(cls.icon, 16)} You are a ${cls.name}! ${cls.passive}.${sig ? ` Spend your skill point in the SKILLS tab (${touchUI() ? 'tap <span data-spr=chest></span> BAG' : 'press B'}) to learn ${sig.name}.` : ''}`, 'important');
+  log(`${dlIcon(cls.icon, 16)} You are a ${cls.name}! ${cls.passive}.${sig ? ` Spend your skill point in the SKILLS tab (press B) to learn ${sig.name}.` : ''}`, 'important');
   sfx('levelup');
   updateBars(); renderPanel(); renderSkillBar(); draw(); saveGame();
 }
@@ -24099,15 +23894,12 @@ function showTooltipForItem(item, anchor, opts = {}) {
   const compareCard = comparing
     ? `<div class="tt-card tt-card-equipped">${itemCardHTML(equippedHere, { label: 'Equipped' })}</div>`
     : '';
-  // On touch the floating card sits over the bag list, hiding the inline Sell/Scrap
-  // tray — so carry those actions inside the tooltip itself when a bag item is
-  // selected. Desktop keeps its inline tray (the hover card is transient there).
-  const actions = (opts.bagIndex != null && !HOVER_MQ.matches) ? bagActionsHTML(item, opts.bagIndex) : '';
+  // The Sell/Scrap actions live in the inline tray beside the bag row, not in this
+  // hover card (which is transient on desktop).
   ttEl.classList.toggle('comparing', !!comparing);
   ttEl.innerHTML = `
     <div class="tt-compare">${mainCard}${compareCard}</div>
-    ${actions}
-    <div style="color:var(--junk);font-size:1.2rem;margin-top:5px">Tap anywhere to close</div>`;
+    <div style="color:var(--junk);font-size:1.2rem;margin-top:5px">Click anywhere to close</div>`;
   ttEl.style.display = 'block';
   // Measure after it's visible, then anchor it relative to the panel/row.
   positionTooltip(anchor);
@@ -24119,16 +23911,7 @@ function hideTooltip() { ttEl.style.display = 'none'; tooltipShowing = null; }
 // gear hover card. The content lives in the element's data-tip attribute; the
 // wrapper carries the handlers so it fires even when the button is disabled.
 const hoverTipEl = document.getElementById('hovertip');
-// Only real pointers get hover tooltips — on touch, a tap emulates mouseenter
-// and these would pop open at random (e.g. the spell/skill tips on mobile).
-const HOVER_MQ = window.matchMedia('(hover: hover) and (pointer: fine)');
-// Touch UI = no real hover (a coarse pointer / no mouse). Used to phrase input
-// hints for the actual device: desktop keeps "hover" / "press R"; touch, which
-// reaches the same tips by long-press and has no keyboard, says "press & hold" /
-// "tap". Never changes WHAT a hint says, only the input verb.
-function touchUI() { return !HOVER_MQ.matches; }
 function showHoverTip(e, el) {
-  if (!HOVER_MQ.matches) return; // mouse hover only; touch uses long-press (below)
   // A selected skill node already shows its full detail popover, so suppress the
   // short hover card for it — otherwise the rebuild-on-select re-fires mouseenter
   // on the freshly-inserted node under a stationary cursor and stacks the small
@@ -24136,10 +23919,9 @@ function showHoverTip(e, el) {
   if (el && el.id === 'sknode-' + selectedSkillId) return;
   renderHoverTip(el);
 }
-// Render the styled popup for an element and anchor it to that element. Shared by
-// the desktop hover path (showHoverTip) and the mobile long-press / tap path, so
-// both surface exactly the same card. `htmlOverride` lets the touch path promote a
-// native `title` into the same look when there's no richer data-tip.
+// Render the styled popup for an element and anchor it to that element. Fed by the
+// hover path (showHoverTip). `htmlOverride` lets a caller promote a native `title`
+// into the same look when there's no richer data-tip.
 function renderHoverTip(el, htmlOverride) {
   const html = htmlOverride || (el && el.dataset ? el.dataset.tip : '');
   if (!html) return;
@@ -24150,84 +23932,6 @@ function renderHoverTip(el, htmlOverride) {
   placeTooltipBesideAnchor(hoverTipEl, el.getBoundingClientRect());
 }
 function hideHoverTip() { hoverTipEl.style.display = 'none'; }
-
-// ── TOUCH: long-press / tap to reveal hover tooltips on mobile ──
-// On desktop these styled popups (skill descriptions, HUD stat explainers,
-// enchanter costs, action-button hints, d-pad style names) appear on mouse hover.
-// Touch devices get no hover, so the same info is surfaced two ways:
-//   • PRESS-AND-HOLD any element that carries a tip — even an actionable button —
-//     shows its card without firing the button's action.
-//   • A plain TAP on a purely informational element (no click action of its own —
-//     HUD items, stat bars, the gold counter, material chips) toggles its card.
-// Actionable buttons keep their tap = act behaviour; only the hold reveals their
-// tip, so e.g. holding a skill button reads it instead of casting it.
-const LONGPRESS_MS = 350;
-const LONGPRESS_MOVE = 10; // finger travel (px) past which a press becomes a scroll
-let lpTimer = null, lpStartX = 0, lpStartY = 0, lpEl = null, lpFired = false;
-let lpActionable = false, lpSwallowClick = false;
-
-// Nearest ancestor carrying a tip we can surface (a styled data-tip, or a native
-// title we promote into the same card). Elements that run their own tap-driven
-// tooltip (the loot list and gear slots, via the big item card) have no data-tip
-// or title, so they never match here and keep their existing behaviour.
-function tipTarget(node) {
-  return node && node.closest ? node.closest('[data-tip],[title]') : null;
-}
-// Show an element's tip on touch, promoting a bare `title` into the styled card.
-function showTouchTip(el) {
-  let html = el && el.dataset ? el.dataset.tip : '';
-  if (!html && el && el.getAttribute) {
-    const t = el.getAttribute('title');
-    if (t) html = `<div class="ht-name">${t}</div>`;
-  }
-  if (html) renderHoverTip(el, html);
-}
-function clearLongPress() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }
-
-document.addEventListener('touchstart', e => {
-  const el = tipTarget(e.target);
-  // Tapping anything other than the currently-pinned element dismisses its tip.
-  if (hoverTipEl.style.display === 'block' && el !== lpEl) hideHoverTip();
-  clearLongPress();
-  lpFired = false;
-  lpEl = el;
-  if (!el) return;
-  // Actionable if the touch landed on/inside a button, link, or onclick handler —
-  // those keep tap = act, so only the hold reveals their tip.
-  lpActionable = !!e.target.closest('button, a, [onclick]');
-  const t = e.touches[0];
-  lpStartX = t.clientX; lpStartY = t.clientY;
-  lpTimer = setTimeout(() => {
-    lpFired = true;
-    lpSwallowClick = true; // hold = inspect — never let the press also act
-    showTouchTip(el);
-  }, LONGPRESS_MS);
-}, { passive: true });
-
-document.addEventListener('touchmove', e => {
-  if (!lpTimer) return;
-  const t = e.touches[0];
-  if (Math.abs(t.clientX - lpStartX) > LONGPRESS_MOVE ||
-      Math.abs(t.clientY - lpStartY) > LONGPRESS_MOVE) clearLongPress();
-}, { passive: true });
-
-document.addEventListener('touchend', () => {
-  clearLongPress();
-  if (lpEl && !lpFired && !lpActionable) {
-    // A plain tap on a non-actionable element toggles its tip (the press would
-    // otherwise do nothing). Swallow the click so the global dismiss handler
-    // doesn't immediately close what we just opened.
-    if (hoverTipEl.style.display === 'block') hideHoverTip();
-    else { showTouchTip(lpEl); lpSwallowClick = true; }
-  }
-  lpEl = null;
-}, { passive: true });
-
-// Swallow the synthetic click that follows a long-press (or a tap we handled
-// ourselves) so holding a button to read it never also triggers its action.
-document.addEventListener('click', e => {
-  if (lpSwallowClick) { lpSwallowClick = false; e.preventDefault(); e.stopPropagation(); }
-}, true);
 
 // Build the data-tip + handlers for a styled hover popup (the gear-card look),
 // so JS-rendered buttons share the same hover UI as everything else instead of
@@ -24366,20 +24070,6 @@ function logPotion(label) {
 // INPUT
 // ══════════════════════════════════════════
 
-// Touch d-pad: a direction button holds that direction while pressed (real-time
-// movement); the centre button is USE/grab. pointerup/leave/cancel all release so
-// a finger sliding off the button can't leave the hero running.
-document.querySelectorAll('.dpad-btn').forEach(btn => {
-  const dir = btn.dataset.dir;
-  if (dir === 'pickup') { btn.addEventListener('click', () => pickup()); return; }
-  if (!(dir in touchHeld)) return;
-  btn.addEventListener('pointerdown', e => { e.preventDefault(); touchHeld[dir] = true; });
-  const release = () => { touchHeld[dir] = false; };
-  btn.addEventListener('pointerup', release);
-  btn.addEventListener('pointerleave', release);
-  btn.addEventListener('pointercancel', release);
-});
-
 // Esc closes whatever menu/overlay is open (topmost first). Returns true if it
 // closed something.
 function handleEscape() {
@@ -24414,7 +24104,6 @@ function handleEscape() {
     }
     toggleSettingsMenu(); return true;
   }
-  if (panelOpen && !isWebLayout()) { togglePanel(); return true; }
   // Nothing was open — in real-time play, Escape now opens the settings menu,
   // which pauses the game (settings-menu is an RT-blocking overlay). Skip this on
   // the pre-game screens, where an in-game settings popup makes no sense.
@@ -24455,16 +24144,6 @@ function _isTextField(t) { return !!(t && (t.tagName === 'INPUT' || t.tagName ==
 window.addEventListener('contextmenu', e => { if (!_isTextField(e.target)) e.preventDefault(); clearHeld(); });
 document.addEventListener('selectstart', e => { if (!_isTextField(e.target)) e.preventDefault(); });
 document.addEventListener('dragstart', e => { const t = e.target; if (t && (t.tagName === 'IMG' || t.tagName === 'CANVAS')) e.preventDefault(); });
-
-// ── BLOCK PINCH-ZOOM (mobile) ──
-// The viewport meta sets user-scalable=no, but iOS Safari ignores that for
-// pinch-zoom, which lets players accidentally zoom the canvas into a useless
-// crop. Kill the iOS pinch gesture events outright, and stop any 2+ finger
-// touchmove from zooming. Single-finger touches (movement, the joystick, panel
-// scrolling) are untouched, and the game's own touch handlers still fire.
-['gesturestart', 'gesturechange', 'gestureend'].forEach(ev =>
-  document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
-document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
 document.addEventListener('keyup', e => {
   const d = moveKeyName(e.key);
@@ -26218,8 +25897,8 @@ async function stashReconcile() {
 // its own table and its own reconcile — cloudReconcile() never touches it.
 //
 // Form-factor-specific preferences are deliberately LEFT OUT of the synced set so
-// they stay per-device: the UI scale (tuned to each screen) and the touch d-pad
-// layout (desktop doesn't even use it). Everything a player would expect to carry
+// they stay per-device: the UI scale (tuned to each screen). Everything a player
+// would expect to carry
 // across devices — sound, keybinds, font, cursor, sprint mode, … — syncs. To add
 // a new synced preference, just list its localStorage key below.
 //
@@ -26663,8 +26342,7 @@ function showNameEntry() {
   const sexWrap = document.getElementById('sex-pick');
   if (sexWrap) sexWrap.classList.toggle('no-prev', !heroHasWalkArt(player.class));
   refreshSexPreviews();
-  // Pause the world while naming — no moving/acting (e.g. via the floating d-pad)
-  // until the name is submitted.
+  // Pause the world while naming — no moving/acting until the name is submitted.
   namePaused = true;
   if (typeof clearHeldMove === 'function') clearHeldMove();
   ov.classList.add('open');
@@ -26733,7 +26411,7 @@ function submitName() {
   if (!player.class) { saveGame(); showClassPick(); return; }
   const cls = CLASSES[player.class];
   const sig = classSignature(player.class);
-  log(`${dlIcon(cls.icon, 16)} ${player.name} the ${cls.name} begins the descent! ${cls.passive}.${sig ? ` Spend your skill point in the SKILLS tab (${touchUI() ? 'tap <span data-spr=chest></span> BAG' : 'press B'}) to learn ${sig.name}.` : ''}`, 'important');
+  log(`${dlIcon(cls.icon, 16)} ${player.name} the ${cls.name} begins the descent! ${cls.passive}.${sig ? ` Spend your skill point in the SKILLS tab (press B) to learn ${sig.name}.` : ''}`, 'important');
   sfx('levelup');
   updateBars(); renderPanel(); renderSkillBar(); draw(); saveGame();
 }
@@ -27174,7 +26852,7 @@ if (hadSave) {
   if (inTown) log('You are in town. Pick a service from the menu, or take the <span data-spr=feat_gate_red></span> Dungeon Gate back into the dungeon.');
   else log(`Resuming on dungeon level ${dungeonLevel}. Your gear is intact.`);
 } else {
-  log('Welcome to the dungeon. Use the on-screen pad, a swipe, or arrow keys to move.', 'important');
+  log('Welcome to the dungeon. Use WASD or the arrow keys to move.', 'important');
   log('<span data-spr=feat_door></span> Clear a floor of its foes to unseal the ▼ stairs, then descend.', 'important');
   log('⚠️ The deep scales faster than you can — grind lower floors from <span data-spr=town_vault></span> TOWN when you hit a wall.');
 }
@@ -27333,25 +27011,14 @@ updateCrosshairButton();
 updatePathLineButton();
 updateStairsArrowButton();
 updateMonsterArrowsButton();
-['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
+['pointerdown', 'keydown'].forEach(ev =>
   window.addEventListener(ev, audioUnlock, { passive: true }));
 
-// Redraw once layout has settled so the camera fits the real canvas size.
-// On the web layout, also open + populate the permanent loot drawer.
+// Redraw once layout has settled so the camera fits the real canvas size, and
+// open + populate the permanent loot drawer.
 syncWebPanel();
-requestAnimationFrame(() => { resizeCanvas(); positionTouchDpad(); draw(); });
-
-// Teach the controls once per load. Skipped on the keyboard-driven web layout.
-function showMoveHint() {
-  if (isWebLayout() || document.getElementById('move-hint')) return;
-  const hint = document.createElement('div');
-  hint.id = 'move-hint';
-  hint.innerHTML = '🕹️ Drag anywhere to move<br>· push to the edge to sprint · tap to USE ·';
-  document.body.appendChild(hint);
-  setTimeout(() => hint.remove(), 5600);
-}
-requestAnimationFrame(showMoveHint);
-window.addEventListener('load', () => { syncWebPanel(); resizeCanvas(); positionTouchDpad(); draw(); });
+requestAnimationFrame(() => { resizeCanvas(); draw(); });
+window.addEventListener('load', () => { syncWebPanel(); resizeCanvas(); draw(); });
 // Once the emoji/icon fonts have finished loading, repaint so any glyphs that
 // weren't yet resident on the first frame bake into the sprite cache and show.
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => draw());
@@ -27399,7 +27066,6 @@ function rtPaused() {
   for (const o of rtOverlayEls()) {
     if (o.el.classList.contains('open')) return true;
   }
-  if (panelOpen && !isWebLayout()) return true;   // the bag drawer (touch/narrow only)
   return false;
 }
 
@@ -27419,7 +27085,6 @@ function clockPaused() {
     if (inTown && o.townRest) continue;   // resting in town → clock runs
     if (o.el.classList.contains('open')) return true;
   }
-  if (panelOpen && !isWebLayout()) return true;   // the bag drawer (touch/narrow only)
   return false;
 }
 
@@ -28161,7 +27826,6 @@ const __DL_FN_BRIDGE = {
   showGraveyard,
   closeGraveyard,
   resizeCanvas,
-  isWebLayout,
   togglePanel,
   setMoveTargetFromClient,
   endJoy,
@@ -28175,10 +27839,6 @@ const __DL_FN_BRIDGE = {
   toggleEnemyCard,
   closeEnemyCard,
   renderEnemyCard,
-  saveDpadCfg,
-  positionTouchDpad,
-  applyDpadTheme,
-  applyDpadSettings,
   syncWebPanel,
   syncDesktopHud,
   carveCorridor,
@@ -28289,11 +27949,6 @@ const __DL_FN_BRIDGE = {
   acceptGreed,
   declineGreed,
   openTownService,
-  setDpadPos,
-  setDpadOpacity,
-  setDpadStyle,
-  setDpadColor,
-  renderDpadControls,
   _tbR,
   _tbI,
   _tbSky,
@@ -28809,13 +28464,9 @@ const __DL_FN_BRIDGE = {
   itemCardHTML,
   showTooltipForItem,
   hideTooltip,
-  touchUI,
   showHoverTip,
   renderHoverTip,
   hideHoverTip,
-  tipTarget,
-  showTouchTip,
-  clearLongPress,
   hoverTip,
   log,
   refitMapDuringSlide,
@@ -28969,7 +28620,6 @@ const __DL_FN_BRIDGE = {
   openSlotsFromNewRun,
   confirmTitleNewRun,
   titleSound,
-  showMoveHint,
   rtPaused,
   clockPaused,
   targetMode,
@@ -29003,7 +28653,6 @@ __dlLive("DEV_TUNABLES", () => DEV_TUNABLES, undefined);
 __dlLive("DIFFS", () => DIFFS, undefined);
 __dlLive("FLOORS_PER_DIFF", () => FLOORS_PER_DIFF, undefined);
 __dlLive("HEAL_POTION_SVG", () => HEAL_POTION_SVG, undefined);
-__dlLive("HOVER_MQ", () => HOVER_MQ, undefined);
 __dlLive("INGREDIENTS", () => INGREDIENTS, undefined);
 __dlLive("MANA_POTION_SVG", () => MANA_POTION_SVG, undefined);
 __dlLive("RAMEN_INGREDIENT_COUNT", () => RAMEN_INGREDIENT_COUNT, undefined);

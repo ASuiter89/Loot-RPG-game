@@ -81,9 +81,9 @@ create policy "own settings delete" on public.settings
 ```
 
 Like the shared stash, settings are **last-writer-wins** by the blob's own
-timestamp: the most recently changed preferences win across devices. Two
-form-factor-specific settings are deliberately **left per-device** and never
-synced — the UI scale (tuned to each screen) and the touch d-pad layout. If the
+timestamp: the most recently changed preferences win across devices. One
+screen-specific setting is deliberately **left per-device** and never synced —
+the UI scale (tuned to each screen). If the
 `settings` table is missing, settings sync silently no-ops and everything else
 (saves, stash, leaderboard) keeps working.
 
