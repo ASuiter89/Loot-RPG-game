@@ -30,6 +30,7 @@ import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.j
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
+import { forgeSections } from '../systems/forgeFlow.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
@@ -11515,7 +11516,7 @@ function renderCookingHTML() {
 
 // Rarities you can craft, cheapest first (junk & unique are not craftable).
 const CRAFT_TIERS = ['normal', 'uncommon', 'rare', 'epic', 'legendary'];
-let forgeSlot = 'weapon';
+let forgeSlot = null;   // chosen item type (slot); null → nothing picked yet
 let forgeBase = null;   // chosen base name within the slot (drives look + name)
 let forgeCat = null;    // chosen weapon category (Sword, Axe …) for the two-step weapon picker
 let forgeTier = 'normal';
@@ -11607,18 +11608,21 @@ function craftCost(tier, slot = forgeSlot, baseName = forgeBase) {
   return cost;
 }
 
-function openForge() { forgeBase = null; forgeCat = null; openTownModal('Craftsman', 'ic_mallet'); renderCraftsman(); }
+// Open the bench with a clean slate — no item type, base or category picked, so
+// only the item-type picker shows. Rarity resets to its cheapest default; it stays
+// hidden until a base is chosen.
+function openForge() { forgeSlot = null; forgeBase = null; forgeCat = null; forgeTier = 'normal'; openTownModal('Craftsman', 'ic_mallet'); renderCraftsman(); }
 function renderCraftsman() { renderForge(); }
 function forgeSelectSlot(slot) { forgeSlot = slot; forgeBase = null; forgeCat = null; renderForge(); }
 function forgeSelectBase(name) {
   forgeBase = name; renderForge();
 }
 // Weapons use a two-step picker: pick a category (Sword, Axe …) then a sub-type
-// within it. Switching category snaps the base to that category's first sub-type.
+// within it. Picking a category clears the base so nothing is pre-selected — the
+// type list opens for the player to choose from.
 function forgeSelectCat(cat) {
   forgeCat = cat;
-  const subs = weaponCategoryGroups().groups[cat] || [];
-  if (!subs.includes(forgeBase)) forgeBase = subs[0];
+  forgeBase = null;
   renderForge();
 }
 function forgeSelectTier(tier) { forgeTier = tier; renderForge(); }
@@ -11638,39 +11642,41 @@ function weaponCategoryGroups() {
 
 function renderForge() {
   if (!CRAFT_TIERS.includes(forgeTier)) forgeTier = 'normal';
-  if (!SLOT_KEYS.includes(forgeSlot)) forgeSlot = 'weapon';
+  if (forgeSlot != null && !SLOT_KEYS.includes(forgeSlot)) forgeSlot = null;
   const isWeapon = forgeSlot === 'weapon';
+  // The bench reveals one step at a time — item type, then base (weapons: category
+  // → type), then rarity/preview/forge — so it opens with nothing selected.
+  const show = forgeSections({ slot: forgeSlot, cat: forgeCat, base: forgeBase, isWeapon });
 
   const slotBtns = SLOT_KEYS.map(s =>
     `<button class="forge-opt ${s === forgeSlot ? 'on' : ''}" onclick="forgeSelectSlot('${s}')">${slotLabelIcon(s)}</button>`
   ).join('');
 
-  // Weapons get a two-step picker (category → sub-type); every other slot keeps
-  // its single flat list of bases.
+  // Base picker, opened once an item type is chosen. Weapons get a two-step picker
+  // (category → sub-type, the type list only after a category); every other slot
+  // shows a single flat list of bases. Nothing here is auto-selected.
   let baseSection = '';
-  if (isWeapon) {
+  if (show.weaponCats) {
     const { groups, order } = weaponCategoryGroups();
-    if (!forgeCat || !groups[forgeCat]) {
-      forgeCat = (forgeBase && WEAPON_SUBTYPES[forgeBase] && WEAPON_SUBTYPES[forgeBase].cat) || order[0];
-    }
-    const subs = groups[forgeCat] || [];
-    if (!forgeBase || !subs.includes(forgeBase)) forgeBase = subs[0];
     const catBtns = order.map(c =>
       `<button class="forge-opt ${c === forgeCat ? 'on' : ''}" onclick="forgeSelectCat('${c}')">${c}</button>`
     ).join('');
-    const subBtns = subs.map(n => {
-      const hand = ` <span style="opacity:.55;font-size:1.2rem">${weaponHandsOf(n) === 2 ? '2H' : '1H'}</span>`;
-      const reach = ` <span style="opacity:.6;font-size:1.2rem">⟷${weaponRange(n)}</span>`;
-      return `<button class="forge-opt${n === forgeBase ? ' on' : ''}" onclick="forgeSelectBase('${n.replace(/'/g, "\\'")}')">${n}${hand}${reach}</button>`;
-    }).join('');
     baseSection = `
       <div class="forge-label">Weapon</div>
-      <div class="forge-grid forge-cats">${catBtns}</div>
+      <div class="forge-grid forge-cats">${catBtns}</div>`;
+    if (show.weaponTypes) {
+      const subs = groups[forgeCat] || [];
+      const subBtns = subs.map(n => {
+        const hand = ` <span style="opacity:.55;font-size:1.2rem">${weaponHandsOf(n) === 2 ? '2H' : '1H'}</span>`;
+        const reach = ` <span style="opacity:.6;font-size:1.2rem">⟷${weaponRange(n)}</span>`;
+        return `<button class="forge-opt${n === forgeBase ? ' on' : ''}" onclick="forgeSelectBase('${n.replace(/'/g, "\\'")}')">${n}${hand}${reach}</button>`;
+      }).join('');
+      baseSection += `
       <div class="forge-label">Type</div>
       <div class="forge-grid forge-bases">${subBtns}</div>`;
-  } else {
+    }
+  } else if (show.baseList) {
     const names = SLOTS[forgeSlot].names;
-    if (!forgeBase || !names.includes(forgeBase)) forgeBase = names[0];
     const baseBtns = names.map(n =>
       `<button class="forge-opt${n === forgeBase ? ' on' : ''}" onclick="forgeSelectBase('${n.replace(/'/g, "\\'")}')">${n}</button>`
     ).join('');
@@ -11678,57 +11684,57 @@ function renderForge() {
       <div class="forge-label">Base</div>
       <div class="forge-grid forge-bases">${baseBtns}</div>`;
   }
-  const tierBtns = CRAFT_TIERS.map(t => {
-    const caps = TIER_AFFIX_CAPS[t] || { stat: 0, attr: 0 };
-    return `<button class="forge-opt ${t === forgeTier ? 'on' : ''}" style="${t === forgeTier ? '' : `color:${TIERS[t].color}`}" onclick="forgeSelectTier('${t}')">
-       <span style="color:${TIERS[t].color};font-size:1.8rem">●</span>
-       <span style="font-size:1.2rem;color:var(--orange-400)">${caps.stat}+${caps.attr}</span></button>`;
-  }).join('');
 
-  const cost = craftCost(forgeTier);
-  const afford = canAfford(cost);
-  const preview = craftBlankItem(forgeSlot, forgeTier, forgeBase);
-  const caps = TIER_AFFIX_CAPS[forgeTier] || { stat: 0, attr: 0 };
+  // Rarity, base hint, preview and the FORGE button appear only once a base is
+  // chosen — the final step of the flow.
+  let readySection = '';
+  if (show.rarity) {
+    const tierBtns = CRAFT_TIERS.map(t => {
+      const caps = TIER_AFFIX_CAPS[t] || { stat: 0, attr: 0 };
+      return `<button class="forge-opt ${t === forgeTier ? 'on' : ''}" style="${t === forgeTier ? '' : `color:${TIERS[t].color}`}" onclick="forgeSelectTier('${t}')">
+         <span style="color:${TIERS[t].color};font-size:1.8rem">●</span>
+         <span style="font-size:1.2rem;color:var(--orange-400)">${caps.stat}+${caps.attr}</span></button>`;
+    }).join('');
 
-  // For weapons, surface the selected base's reach grid + how it swings, plus a
-  // note that off-class bases are locked. Other slots get a one-line hint that the
-  // base shapes its headline / signature stat.
-  let baseHint = '';
-  if (isWeapon) {
-    const style = WEAPON_SUBTYPES[forgeBase] ? WEAPON_SUBTYPES[forgeBase].style : WEAPON_STYLES[forgeBase];
-    baseHint = `<div style="padding:1px 2px 3px">${weaponRangeGridHTML(forgeBase)}` +
-      (WEAPON_STYLE_DESC[style] ? `<div style="color:var(--orange-500);font-size:1.2rem;margin-top:3px;font-style:italic">${WEAPON_STYLE_DESC[style]}</div>` : '') +
-      `</div>`;
-  } else {
-    // Armour/jewelry: name the base's signature (innate) stat and its defensive
-    // lean, so picking a base has a legible effect beyond the raw DEF in the preview.
-    const bp = baseProfile(forgeBase);
-    if (bp.innate) {
-      const isArmor = forgeSlot === 'head' || forgeSlot === 'chest' || forgeSlot === 'hands' || forgeSlot === 'legs';
-      const d = bp.def || 1;
-      const lean = !isArmor ? 'Signature stat'
-        : d >= 1.10 ? 'Heavy base — more defense, steeper requirement; signature stat'
-        : d <= 0.90 ? 'Light base — less defense, but a signature stat'
-        : 'Balanced base — signature stat';
-      baseHint = `<div style="padding:1px 2px 3px;color:var(--orange-500);font-size:1.2rem;font-style:italic">${lean}: ${STAT_LABELS[bp.innate] || bp.innate}, baked in and protected from rerolls.</div>`;
+    const cost = craftCost(forgeTier);
+    const afford = canAfford(cost);
+    const preview = craftBlankItem(forgeSlot, forgeTier, forgeBase);
+    const caps = TIER_AFFIX_CAPS[forgeTier] || { stat: 0, attr: 0 };
+
+    // For weapons, surface the selected base's reach grid + how it swings. Other
+    // slots get a one-line hint that the base shapes its headline / signature stat.
+    let baseHint = '';
+    if (isWeapon) {
+      const style = WEAPON_SUBTYPES[forgeBase] ? WEAPON_SUBTYPES[forgeBase].style : WEAPON_STYLES[forgeBase];
+      baseHint = `<div style="padding:1px 2px 3px">${weaponRangeGridHTML(forgeBase)}` +
+        (WEAPON_STYLE_DESC[style] ? `<div style="color:var(--orange-500);font-size:1.2rem;margin-top:3px;font-style:italic">${WEAPON_STYLE_DESC[style]}</div>` : '') +
+        `</div>`;
+    } else {
+      // Armour/jewelry: name the base's signature (innate) stat and its defensive
+      // lean, so picking a base has a legible effect beyond the raw DEF in the preview.
+      const bp = baseProfile(forgeBase);
+      if (bp.innate) {
+        const isArmor = forgeSlot === 'head' || forgeSlot === 'chest' || forgeSlot === 'hands' || forgeSlot === 'legs';
+        const d = bp.def || 1;
+        const lean = !isArmor ? 'Signature stat'
+          : d >= 1.10 ? 'Heavy base — more defense, steeper requirement; signature stat'
+          : d <= 0.90 ? 'Light base — less defense, but a signature stat'
+          : 'Balanced base — signature stat';
+        baseHint = `<div style="padding:1px 2px 3px;color:var(--orange-500);font-size:1.2rem;font-style:italic">${lean}: ${STAT_LABELS[bp.innate] || bp.innate}, baked in and protected from rerolls.</div>`;
+      }
     }
-  }
-  // The attribute this base will demand to EQUIP at the forge's depth. You may still
-  // forge gear you can't yet wield — invest the stat and grow into it — so this is an
-  // amber heads-up when unmet, not a hard block.
-  const fStatus = attrReqStatus(preview);
-  // Unmet → the same amber "can't equip yet" badge the shop/enchanter show, so
-  // forging gear beyond your stats reads the same everywhere; met → a quiet green
-  // confirmation you can wield what you're about to pay for.
-  const forgeReqLine = !fStatus ? ''
-    : equipReqBadge(preview)
-      || `<div class="shop-row-sub" style="color:var(--green-450)">Meets equip requirement · ${fStatus.need} ${ATTRIBUTES[fStatus.attr].short} (you have ${fStatus.have})</div>`;
+    // The attribute this base will demand to EQUIP at the forge's depth. You may still
+    // forge gear you can't yet wield — invest the stat and grow into it — so this is an
+    // amber heads-up when unmet, not a hard block.
+    const fStatus = attrReqStatus(preview);
+    // Unmet → the same amber "can't equip yet" badge the shop/enchanter show, so
+    // forging gear beyond your stats reads the same everywhere; met → a quiet green
+    // confirmation you can wield what you're about to pay for.
+    const forgeReqLine = !fStatus ? ''
+      : equipReqBadge(preview)
+        || `<div class="shop-row-sub" style="color:var(--green-450)">Meets equip requirement · ${fStatus.need} ${ATTRIBUTES[fStatus.attr].short} (you have ${fStatus.have})</div>`;
 
-  setTownContent(`
-    <div class="town-blurb">The Craftsman forges a <b>blank</b> piece at your current depth (ilvl ${craftIlvl()}) — its base damage or defense set by the base you pick, with empty modifier slots. Take it to the <span data-spr=ic_wand></span> Enchanter to fill them in. Rarity sets how many modifiers it can hold. Heftier bases drink more materials; finer ones bill more for the delicate&nbsp;labour.</div>
-    <div class="forge-label">Item type</div>
-    <div class="forge-grid forge-slots">${slotBtns}</div>
-    ${baseSection}
+    readySection = `
     ${baseHint}
     <div class="forge-label">Rarity <span style="opacity:.6">(stat + attr slots)</span></div>
     <div class="forge-grid forge-tiers">${tierBtns}</div>
@@ -11745,7 +11751,15 @@ function renderForge() {
         <div class="shop-row-sub">${costLabelHi(cost)}</div>
         <div class="shop-row-sub" style="color:var(--text-muted);font-style:italic">${craftCharacterNote(forgeSlot, forgeBase)}</div></div>
       <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="craftItem()"><span data-spr=ic_mallet></span> FORGE</button>
-    </div>`);
+    </div>`;
+  }
+
+  setTownContent(`
+    <div class="town-blurb">The Craftsman forges a <b>blank</b> piece at your current depth (ilvl ${craftIlvl()}) — its base damage or defense set by the base you pick, with empty modifier slots. Take it to the <span data-spr=ic_wand></span> Enchanter to fill them in. Rarity sets how many modifiers it can hold. Heftier bases drink more materials; finer ones bill more for the delicate&nbsp;labour.</div>
+    <div class="forge-label">Item type</div>
+    <div class="forge-grid forge-slots">${slotBtns}</div>
+    ${baseSection}
+    ${readySection}`);
 }
 
 // Build a blank item: headline stat only (weapon DMG / armor DEF, gloves +ATK),
@@ -11769,6 +11783,7 @@ function craftBlankItem(slot, tier, baseName) {
 }
 
 function craftItem() {
+  if (!forgeSlot || !forgeBase) return;   // nothing to forge until a base is picked
   const cost = craftCost(forgeTier);
   if (!canAfford(cost)) return;
   const item = craftBlankItem(forgeSlot, forgeTier, forgeBase);
