@@ -8,6 +8,27 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — fractional damage rolls + spell damage ranges + per-hit tooltips
+
+- 📦 Pure **damage-roll math** extracted to `src/systems/damageRoll.js`:
+  `rollDecimals`/`quantizeRoll` (≈3-significant-figure precision — 2 decimals below
+  10, 1 below 100, whole numbers at 100+), `rollDamage` (a continuous, injected-rng
+  roll over a range) and `spreadRange` (a spell's symmetric low–high from its center
+  and a spread fraction). Injected rng keeps it deterministic and unit-tested.
+- 📦 Per-spell **damage spreads** live in `src/data/spellSpread.js`
+  (`SPELL_SPREAD` map + `DEFAULT_SPELL_SPREAD` + `spellSpreadFor`) — how wide each
+  spell rolls, authored for variety (tight bolts, wild storms).
+- The monolith now imports both: `getWeaponDamage` and `skillSpellDamage` roll
+  fractional values (so a small range doesn't collapse into a few integers once
+  buffs scale it); `rollPlayerHit` defers its rounding to the end so that roll
+  survives the multiplier chain; spells roll `spreadRange(center, spread)`.
+- `skillDamagePreview` reworked to return a **per-hit** Damage range (+ a separate
+  `strikes` count and an absolute-`base` range), fixing the tooltip that multiplied
+  the range by hit count. Descriptions weave in the base range and drop the
+  redundant synergy sentence; rank-up previews the new range; `gameState().skills`
+  and the `gameGuide('damage')` topic updated to match.
+- 🧪 `test/systems/damageRoll.test.js` and `test/data/spellSpread.test.js`.
+
 ## Feature — Sellsword multi-floor hire + pricing overhaul
 
 - 📦 Mercenary **content + pricing** moved out of `src/legacy/game.js`:
