@@ -88,27 +88,29 @@ describe('attrDamageFor', () => {
 });
 
 describe('shieldMax', () => {
-  it('scales off Spirit and the class multiplier (mage > templar > rogue > warrior)', () => {
-    const spirit = 60, hp = 100000; // huge HP so the cap never bites
-    const m = shieldMax(spirit, 'mage', hp);
-    const t = shieldMax(spirit, 'templar', hp);
-    const r = shieldMax(spirit, 'rogue', hp);
-    const w = shieldMax(spirit, 'warrior', hp);
+  it('scales linearly off Spirit and the class multiplier (mage > templar > rogue > warrior)', () => {
+    const spirit = 400;
+    const m = shieldMax(spirit, 'mage');
+    const t = shieldMax(spirit, 'templar');
+    const r = shieldMax(spirit, 'rogue');
+    const w = shieldMax(spirit, 'warrior');
     expect(m).toBeGreaterThan(t);
     expect(t).toBeGreaterThan(r);
     expect(r).toBeGreaterThan(w);
     expect(m).toBeCloseTo(spirit * SHIELD.perSpirit * SHIELD.classMult.mage, 6);
+    expect(w).toBeCloseTo(spirit * SHIELD.perSpirit * SHIELD.classMult.warrior, 6);
   });
-  it('is capped at maxFracOfHp of max HP', () => {
-    // Enormous Spirit, tiny HP → clamps to 60% of HP.
-    expect(shieldMax(100000, 'mage', 200)).toBeCloseTo(200 * SHIELD.maxFracOfHp, 6);
+  it('is linear in Spirit, independent of HP and UNCAPPED — can exceed any HP pool', () => {
+    expect(shieldMax(200, 'mage')).toBeCloseTo(2 * shieldMax(100, 'mage'), 6);
+    // A Spirit-stacked build's Veil dwarfs a modest HP pool — there is no HP ceiling.
+    expect(shieldMax(5000, 'mage')).toBeGreaterThan(3000);
   });
-  it('is never negative and handles zero Spirit', () => {
-    expect(shieldMax(0, 'mage', 500)).toBe(0);
-    expect(shieldMax(-10, 'mage', 500)).toBe(0);
+  it('is 0 at zero Spirit and never negative', () => {
+    expect(shieldMax(0, 'mage')).toBe(0);
+    expect(shieldMax(-10, 'mage')).toBe(0);
   });
   it('uses the classless default multiplier for unknown classes', () => {
-    expect(shieldMax(50, 'druid', 100000)).toBeCloseTo(50 * SHIELD.perSpirit * SHIELD.classMultDefault, 6);
+    expect(shieldMax(50, 'druid')).toBeCloseTo(50 * SHIELD.perSpirit * SHIELD.classMultDefault, 6);
   });
 });
 
