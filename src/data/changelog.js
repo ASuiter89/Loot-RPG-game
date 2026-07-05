@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Spirit Veil rolls on caster gear", by: "Claude", notes: [
+    "Gear can now roll a flat +Spirit Veil bonus — the shield twin of flat +Max HP — that adds straight onto your maximum Spirit Veil shield.",
+    "It's gated to Spirit gear by SPECIFIC base, not by slot: only Spirit-identity bases roll it — Crown & Circlet, Robe, Leggings, Loop, Necklace, and Tome & Focus off-hands. Weapons and gloves never do.",
+    "The roll counts toward a piece's Power as extra effective health, so a Spirit-Veil piece reads as the survivability upgrade it is.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Arcing crits obey line of sight", by: "Claude", notes: [
     "The Arcing power's crit fork now jumps from the struck foe by line of sight, like chain lightning — a ranged or spell crit no longer arcs through a wall to a foe the impact can't see.",
   ] },
