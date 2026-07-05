@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "See-through silhouettes render right behind overlapping trees", by: "Claude", notes: [
+    "Standing (or watching a foe stand) behind two trees whose leaves overlap no longer paints a square patch where the farther tree jumps in front of the nearer one. The trees now keep their proper front-to-back order and the tinted silhouette reads cleanly through both.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Gear stats overhaul — no more caps, rarity that matters, stronger curses", by: "Claude", notes: [
     "Every gear stat now grows with BOTH item level and rarity — no hard caps anywhere. Attack speed, leech, cleave, cooldown and the rest keep climbing on deeper and rarer gear instead of freezing at a ceiling, so a legendary genuinely rolls bigger than a common.",
     "Stats that have a natural limit — crit rate, cooldown, mana cost, dodge, block, damage reduction, tenacity, double strike — now ease off with diminishing returns as they climb, approaching but never reaching 100% (or 0). More is always better, each point a little less than the last, and nothing is ever fully maxed.",
