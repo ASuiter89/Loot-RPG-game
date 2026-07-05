@@ -75,6 +75,70 @@ export function delCloudHasAll(local, cloud) {
   return sanitizeDelMeta(local).cids.every(c => cloudSet.has(c));
 }
 
+// ── Account-wide meta ledger (hardcore death ledger + earned feat sets) ──────
+// The hardcore-meta row (HC_CLOUD_SLOT in the shell) carries THREE union-merged
+// sets that only ever GROW: `cids` (hardcore-dead character ids), `ach` (feats
+// earned in Hardcore), and `nach` (feats earned in normal/Kitten play). All three
+// are account-wide and synced identically — monotonic, so a stale device can never
+// shrink them. The feat sets live HERE, not in a per-slot save, precisely so
+// achievements are ACCOUNT-WIDE: earned on any hero or slot, they light up on every
+// hero and slot and survive that hero's death or a Reset Run. The set algebra is
+// pure and unit-tested here; the shell owns the storage + cloud plumbing.
+
+/** A blank meta ledger: no deaths, no feats, never written. */
+export function freshHcMeta() { return { cids: [], ach: [], nach: [], ts: 0 }; }
+
+/** Coerce an arbitrary parsed blob into a clean { cids, ach, nach, ts } ledger. */
+export function sanitizeHcMeta(d) {
+  const out = freshHcMeta();
+  if (d && typeof d === 'object') {
+    const strs = a => (Array.isArray(a) ? a.filter(x => typeof x === 'string') : []);
+    out.cids = strs(d.cids);
+    out.ach = strs(d.ach);
+    out.nach = strs(d.nach);
+    out.ts = Math.max(0, Math.floor(d.ts) || 0);
+  }
+  return out;
+}
+
+/**
+ * Union a cloud meta ledger into the local one — monotonic across all three sets
+ * (entries only ever added, never removed). Returns { meta, grew, learnedDeath }:
+ *   meta         — the merged, de-duplicated ledger (a NEW object; inputs untouched).
+ *   grew         — any of cids/ach/nach gained a new entry (caller persists on true).
+ *   learnedDeath — a DEATH cid arrived that this device didn't already hold, so a
+ *                  hero still "live" on this device may need locking out.
+ * Never shrinks, so a device holding a stale/smaller ledger can't erase a death or
+ * feat recorded elsewhere. When nothing new arrives the timestamp is the max of the
+ * two, so a reconcile is idempotent.
+ */
+export function mergeHcMeta(local, cloud, now) {
+  const base = sanitizeHcMeta(local);
+  const incoming = sanitizeHcMeta(cloud);
+  const baseCids = new Set(base.cids), baseAch = new Set(base.ach), baseNach = new Set(base.nach);
+  const cidSet = new Set(baseCids), achSet = new Set(baseAch), nachSet = new Set(baseNach);
+  incoming.cids.forEach(x => cidSet.add(x));
+  incoming.ach.forEach(x => achSet.add(x));
+  incoming.nach.forEach(x => nachSet.add(x));
+  const grew = cidSet.size !== baseCids.size || achSet.size !== baseAch.size || nachSet.size !== baseNach.size;
+  return {
+    meta: {
+      cids: Array.from(cidSet), ach: Array.from(achSet), nach: Array.from(nachSet),
+      ts: grew ? now : Math.max(base.ts, incoming.ts),
+    },
+    grew,
+    learnedDeath: cidSet.size > baseCids.size,
+  };
+}
+
+/** True when the cloud ledger already holds every cid/feat we do (skip a pointless write). */
+export function hcMetaCloudHasAll(local, cloud) {
+  const base = sanitizeHcMeta(local);
+  const c = sanitizeHcMeta(cloud);
+  const cc = new Set(c.cids), ca = new Set(c.ach), cn = new Set(c.nach);
+  return base.cids.every(x => cc.has(x)) && base.ach.every(x => ca.has(x)) && base.nach.every(x => cn.has(x));
+}
+
 // ── The reconcile planner ────────────────────────────────────────────────────
 
 /**

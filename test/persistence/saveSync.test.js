@@ -6,6 +6,10 @@ import {
   addTombstone,
   mergeDelMeta,
   delCloudHasAll,
+  freshHcMeta,
+  sanitizeHcMeta,
+  mergeHcMeta,
+  hcMetaCloudHasAll,
   planReconcile,
 } from '../../src/persistence/saveSync.js';
 
@@ -131,6 +135,93 @@ describe('delCloudHasAll', () => {
   });
   it('is false when the local ledger has a cid the cloud lacks', () => {
     expect(delCloudHasAll({ cids: ['a', 'c'] }, { cids: ['a', 'b'] })).toBe(false);
+  });
+});
+
+// ══════════════════════ account-wide meta ledger (feats) ═════════════════════
+
+describe('freshHcMeta', () => {
+  it('is a blank ledger with all three sets present', () => {
+    expect(freshHcMeta()).toEqual({ cids: [], ach: [], nach: [], ts: 0 });
+  });
+});
+
+describe('sanitizeHcMeta', () => {
+  it('coerces junk into a clean ledger and keeps only string ids', () => {
+    expect(sanitizeHcMeta(null)).toEqual({ cids: [], ach: [], nach: [], ts: 0 });
+    expect(sanitizeHcMeta({ cids: ['a', 5, null], ach: ['x'], nach: ['n', {}], ts: 9.7 }))
+      .toEqual({ cids: ['a'], ach: ['x'], nach: ['n'], ts: 9 });
+  });
+  it('defaults nach to [] for a legacy blob that predates normal-mode feats', () => {
+    // A row written before account-wide Kitten feats existed carries only cids/ach.
+    expect(sanitizeHcMeta({ cids: ['a'], ach: ['x'], ts: 3 }))
+      .toEqual({ cids: ['a'], ach: ['x'], nach: [], ts: 3 });
+  });
+});
+
+describe('mergeHcMeta', () => {
+  it('unions all three sets and stamps a fresh ts on growth', () => {
+    const { meta, grew, learnedDeath } = mergeHcMeta(
+      { cids: ['d1'], ach: ['a1'], nach: ['n1'], ts: 1 },
+      { cids: ['d1', 'd2'], ach: ['a2'], nach: ['n1', 'n2'], ts: 2 },
+      100,
+    );
+    expect(grew).toBe(true);
+    expect(learnedDeath).toBe(true); // a new death cid (d2) arrived
+    expect(meta.cids.sort()).toEqual(['d1', 'd2']);
+    expect(meta.ach.sort()).toEqual(['a1', 'a2']);
+    expect(meta.nach.sort()).toEqual(['n1', 'n2']);
+    expect(meta.ts).toBe(100);
+  });
+  it('reports growth from a NEW normal feat without flagging a death', () => {
+    // The core account-wide-achievements case: another slot earned a Kitten feat.
+    const { meta, grew, learnedDeath } = mergeHcMeta(
+      { cids: [], ach: [], nach: ['n1'], ts: 5 },
+      { cids: [], ach: [], nach: ['n1', 'n2'], ts: 6 },
+      200,
+    );
+    expect(grew).toBe(true);
+    expect(learnedDeath).toBe(false);
+    expect(meta.nach.sort()).toEqual(['n1', 'n2']);
+  });
+  it('never shrinks — a stale cloud copy cannot erase a local feat', () => {
+    const { meta, grew } = mergeHcMeta(
+      { cids: [], ach: ['a1', 'a2'], nach: ['n1', 'n2'], ts: 5 },
+      { cids: [], ach: ['a1'], nach: ['n1'], ts: 1 },
+      100,
+    );
+    expect(grew).toBe(false);
+    expect(meta.ach.sort()).toEqual(['a1', 'a2']);
+    expect(meta.nach.sort()).toEqual(['n1', 'n2']);
+    expect(meta.ts).toBe(5); // max of the two when nothing new arrived
+  });
+  it('is idempotent and handles a missing cloud row', () => {
+    const local = { cids: ['d1'], ach: ['a1'], nach: ['n1'], ts: 3 };
+    const { meta, grew, learnedDeath } = mergeHcMeta(local, null, 100);
+    expect(grew).toBe(false);
+    expect(learnedDeath).toBe(false);
+    expect(meta).toEqual({ cids: ['d1'], ach: ['a1'], nach: ['n1'], ts: 3 });
+  });
+  it('does not mutate its inputs', () => {
+    const local = { cids: [], ach: [], nach: ['n1'], ts: 1 };
+    mergeHcMeta(local, { nach: ['n2'] }, 100);
+    expect(local.nach).toEqual(['n1']);
+  });
+});
+
+describe('hcMetaCloudHasAll', () => {
+  it('is true only when the cloud holds every local cid, ach AND nach', () => {
+    expect(hcMetaCloudHasAll(
+      { cids: ['d1'], ach: ['a1'], nach: ['n1'] },
+      { cids: ['d1', 'd2'], ach: ['a1'], nach: ['n1', 'n2'] },
+    )).toBe(true);
+    expect(hcMetaCloudHasAll(freshHcMeta(), null)).toBe(true); // nothing to push
+  });
+  it('is false when the cloud is missing a normal feat we hold (forces a push)', () => {
+    expect(hcMetaCloudHasAll(
+      { cids: [], ach: [], nach: ['n1', 'n2'] },
+      { cids: [], ach: [], nach: ['n1'] },
+    )).toBe(false);
   });
 });
 
