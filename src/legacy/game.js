@@ -50,6 +50,7 @@ import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '..
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
+import { emptyMealSlots, sanitizeMealSlots, assignMealToSlot, takeFromMealSlot, returnSlotToPantry, filledSlotCount, mealSignature } from '../systems/meals.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
 import { forgeSections } from '../systems/forgeFlow.js';
 import { CURSE_TIER_MULT, curseTierMult, statCurseSwing, cursedStatCeiling } from '../systems/curseRoll.js';
@@ -6034,6 +6035,12 @@ function pfx(field, dflt) { return (pact && pact.fx[field] != null) ? pact.fx[fi
 // STATE
 // ══════════════════════════════════════════
 
+// How many meal slots the HUD carries — a meal is a stack of one cooked bowl,
+// assigned at the Ramen House so it can be eaten from the belt mid-run without
+// recooking (see systems/meals.js + eatMealSlot). Declared before `player` so the
+// initial mealSlots array can size itself.
+const MEAL_SLOT_COUNT = 3;
+
 let player = { x: 5, y: 5,
   // Real-time movement: fx/fy are the hero's smooth CENTRE position in tile units
   // (the grid cell is x = floor(fx), y = floor(fy)). vx/vy is the current velocity
@@ -6138,7 +6145,7 @@ let player = { x: 5, y: 5,
   // Cooking — ramen toppings dropped by foes (ingredients), cooked bowls waiting
   // to be eaten (pantry), the secret recipes found so far, and the single active
   // food buff (set when a bowl is eaten, counts down per floor in tickBuffs).
-  ingredients: {}, pantry: [], discoveredRecipes: [], foodBuff: null };
+  ingredients: {}, pantry: [], discoveredRecipes: [], foodBuff: null, mealSlots: emptyMealSlots(MEAL_SLOT_COUNT) };
 
 // ══════════════════════════════════════════
 // REAL-TIME CORE (movement, world clock, tuning)
@@ -6962,6 +6969,9 @@ window.gameState = function gameState(radius) {
         progress: Math.min(bountyProgress(player.bounty), player.bounty.need), need: player.bounty.need,
         done: bountyDone(player.bounty), reward: { gold: player.bounty.gold, ilvl: player.bounty.ilvl },
       } : null,   // accepted Bounty Board contract + live progress
+      // Meal slots — HUD stacks assigned at the Ramen House, eaten from the belt in the
+      // dungeon (see systems/meals.js). Each is { name, floors, fx, qty } or null.
+      mealSlots: (player.mealSlots || []).map(s => s ? { name: s.bowl.name, floors: s.bowl.floors, fx: s.bowl.fx, qty: s.qty } : null),
       activeGearSet: (activeGearSet || 0) + 1,  // 1 or 2 — which loadout is worn
       equipped: Object.fromEntries(Object.entries(equipped || {}).map(([slot, it]) => [slot, brief(it)])),
       inventory: (inventory || []).map((it, i) => Object.assign({ i }, brief(it))),
@@ -7178,7 +7188,7 @@ window.gameGuide = function gameGuide(topic) {
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon.`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
-      `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
+      `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House (SLOT moves the bowl's whole stack) to eat it straight from the bottom-HUD belt mid-run without returning to cook; eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
@@ -8739,7 +8749,11 @@ function onViewportResize() {
   // threshold) without necessarily flipping the orientation media query, so refresh
   // the landscape block here too — otherwise an unfold could stay wrongly frozen.
   try { updateOrientationBlock(); } catch (_) {}
-  resizeCanvas(); if (inTown) syncTownBarReserve(); draw();
+  resizeCanvas(); if (inTown) syncTownBarReserve();
+  // The belt width just changed, so the bounty module may have crossed its
+  // container-query threshold — re-evaluate the map-corner chip's fallback visibility.
+  try { updateObjectiveChip(); } catch (_) {}
+  draw();
 }
 window.addEventListener('resize', onViewportResize);
 // Foldables (fold/unfold), rotation, and the mobile URL bar showing/hiding change
@@ -11815,7 +11829,15 @@ function updateObjectiveChip() {
   const b = p && p.bounty;
   const titleOv = document.getElementById('title-overlay');
   const titleOpen = !!(titleOv && titleOv.classList.contains('open'));
-  if (!b || inTown || titleOpen) {
+  // The desktop belt hosts the bounty when it has room (see beltBountyHtml). While
+  // that module is on-screen, suppress this map-corner chip so there's a single
+  // readout; when the belt is too tight the module hides (container query) and the
+  // chip falls back here. offsetParent is null when the module is display:none or the
+  // whole desktop HUD is hidden (touch/mobile), so the chip keeps showing there.
+  const beltBounty = document.querySelector('#hud-belt .sb-mod-bounty');
+  const beltShowsBounty = !!(beltBounty && beltBounty.offsetParent !== null);
+  if (beltBounty) syncBeltBounty();   // keep the relocated readout current on every kill
+  if (!b || inTown || titleOpen || beltShowsBounty) {
     if (_objChipLast !== 'off') { chip.style.display = 'none'; _objChipLast = 'off'; }
     return;
   }
@@ -12185,18 +12207,56 @@ function cookPotNow() {
   updateBars(); saveGame(); refreshCooking();
 }
 
-// Eat a bowl from the pantry: it becomes your one active food buff for its floors.
-function eatBowl(idx) {
-  const bowl = (player.pantry || [])[idx];
-  if (!bowl) return;
-  player.pantry.splice(idx, 1);
+// Apply a bowl as the one active food buff (shared by eating from the pantry and from
+// a HUD meal slot). Mutates player; does NOT touch the pantry/slots — the caller owns
+// where the bowl came from.
+function applyBowlBuff(bowl) {
   player.foodBuff = { name: bowl.name, fx: bowl.fx, floors: bowl.floors };
   recomputeMaxStats();
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   log(`${bowlIcon(14)} You slurp down ${bowl.name} — ${fxDesc(bowl.fx)} for ${bowl.floors} floors!`, 'important');
   screenFlash('#66dd66'); sfx('potion');
+}
+
+// Eat a bowl from the pantry: it becomes your one active food buff for its floors.
+function eatBowl(idx) {
+  const bowl = (player.pantry || [])[idx];
+  if (!bowl) return;
+  player.pantry.splice(idx, 1);
+  applyBowlBuff(bowl);
   updateBars(); saveGame(); refreshCooking();
+}
+
+// Assign a pantry bowl's WHOLE stack to a meal slot (Ramen House only) so it can be
+// eaten from the belt in the dungeon without returning to cook. Merges into a matching
+// slot, else the first empty one; no-op if every slot is full.
+function assignMeal(pantryIndex) {
+  const r = assignMealToSlot(player.pantry, player.mealSlots, pantryIndex, MEAL_SLOT_COUNT);
+  if (!r.assigned) { log(`${bowlIcon(14)} No free meal slot — clear one first.`); sfx('error'); return; }
+  const name = (player.pantry[pantryIndex] || {}).name || 'meal';
+  player.pantry = r.pantry; player.mealSlots = r.mealSlots;
+  sfx('click');
+  updateBars(); renderSkillBar(); saveGame(); refreshCooking();
+  log(`${bowlIcon(14)} Slotted ${r.assigned}× ${name} — eat it from the belt anytime.`);
+}
+
+// Un-assign a meal slot back to the pantry (Ramen House only).
+function unassignMeal(slotIndex) {
+  const r = returnSlotToPantry(player.pantry, player.mealSlots, slotIndex, MEAL_SLOT_COUNT);
+  player.pantry = r.pantry; player.mealSlots = r.mealSlots;
+  sfx('click');
+  updateBars(); renderSkillBar(); saveGame(); refreshCooking();
+}
+
+// Eat one bowl straight from a HUD meal slot (works anywhere — this is the whole point
+// of slotting). Decrements the stack; the slot clears on its last bowl.
+function eatMealSlot(slotIndex) {
+  const r = takeFromMealSlot(player.mealSlots, slotIndex, MEAL_SLOT_COUNT);
+  if (!r.bowl) return;
+  player.mealSlots = r.mealSlots;
+  applyBowlBuff(r.bowl);
+  updateBars(); renderSkillBar(); saveGame(); refreshCooking();
 }
 
 function renderCookingHTML() {
@@ -12250,18 +12310,38 @@ function renderCookingHTML() {
     html += `<div class="cook-actions">${cookBtn}<button class="cook-btn ghost" onclick="potClear()">Clear</button></div>`;
   }
 
-  // Pantry — cooked bowls waiting to be eaten.
+  // Pantry — cooked bowls waiting to be eaten or slotted. Each row can be eaten now
+  // (EAT) or SLOTted: SLOT sends the bowl's WHOLE matching stack to a meal slot so it
+  // can be eaten from the belt mid-run. SLOT is disabled only when the slots are full
+  // and none already holds this meal.
   html += `<div class="cook-sec">Pantry</div>`;
   const pantry = player.pantry || [];
   if (!pantry.length) {
     html += `<div class="cook-empty">No bowls cooked. Make one above.</div>`;
   } else {
-    html += pantry.map((b, i) =>
-      `<div class="food-row eatable" onclick="eatBowl(${i})" title="Eat ${b.name}"><span class="food-emoji">${bowlIcon(20)}</span>
+    const slots = player.mealSlots || [];
+    const slotsFull = filledSlotCount(slots) >= MEAL_SLOT_COUNT;
+    html += pantry.map((b, i) => {
+      const canSlot = !slotsFull || slots.some(s => s && mealSignature(s.bowl) === mealSignature(b));
+      return `<div class="food-row has-actions"><span class="food-emoji">${bowlIcon(20)}</span>
         <div class="food-info"><div class="food-name">${b.name}</div><div class="food-fx">${fxDesc(b.fx) || 'no effect'} · ${b.floors} floors</div></div>
-        <span class="row-btn eat-btn">EAT</span></div>`
-    ).join('');
+        <div class="food-row-btns">
+          <button class="row-btn eat-btn" onclick="eatBowl(${i})">EAT</button>
+          <button class="row-btn slot-btn" onclick="assignMeal(${i})"${canSlot ? '' : ' disabled'} title="Send this bowl's whole stack to a meal slot">SLOT</button>
+        </div></div>`;
+    }).join('');
   }
+
+  // Meal Slots — assigned here at the Ramen House only; each holds a whole stack of one
+  // meal so it can be eaten from the belt in the dungeon without recooking or returning.
+  html += `<div class="cook-sec">Meal Slots (${filledSlotCount(player.mealSlots)}/${MEAL_SLOT_COUNT})</div>`;
+  html += `<div class="cook-empty cook-hint">Slot a cooked bowl above to carry its whole stack into the dungeon — eat it straight from the belt, no need to return here.</div>`;
+  html += (player.mealSlots || []).map((s, i) => s
+    ? `<div class="food-row has-actions meal-slot-row"><span class="food-emoji">${bowlIcon(20)}</span>
+        <div class="food-info"><div class="food-name">${s.bowl.name} <span class="meal-qty">×${s.qty}</span></div><div class="food-fx">${fxDesc(s.bowl.fx) || 'no effect'} · ${s.bowl.floors} floors each</div></div>
+        <button class="row-btn clear-btn" onclick="unassignMeal(${i})" title="Return this stack to the pantry">CLEAR</button></div>`
+    : `<div class="food-row meal-slot-empty"><span class="food-emoji">${bowlIcon(20)}</span><div class="food-info"><div class="food-fx">Empty slot</div></div></div>`
+  ).join('');
 
   // Secret recipe book — discovered recipes shown in full; the rest collapsed into
   // a single teaser so the list stays short however many recipes exist.
@@ -25043,6 +25123,63 @@ let _lastSkillBarHtml = null;
 // .sb-cd-text countdown placeholders. Nulled whenever bar.innerHTML changes so
 // they re-resolve against the fresh nodes.
 let _sbCdEls = null, _sbCdTextEls = null;
+
+// ── Optional belt modules (desktop bottom-HUD only) ──────────────────────────
+// These fill the empty space between the potions, the AUTO slot and the skill slots
+// when the belt is wide enough. Each is built into the skill-bar markup but hidden by
+// default; container queries on .dh-belt reveal them by available width (loadout held
+// longest, then meals, then bounty — see styles.css). They never show on touch (the
+// bar there isn't inside .dh-belt, so no container establishes the query).
+
+// Loadout swap (Set 1 / Set 2) — reuses the GEAR-tab widget verbatim.
+function beltLoadoutHtml() {
+  return `<div class="sb-mod sb-mod-loadout">${gearSetBarHTML()}</div>`;
+}
+// Meal quick-slots — filled meal slots as tap-to-eat tiles (assigned at the Ramen
+// House). Empty markup when nothing is slotted, so the module collapses away.
+function beltMealsHtml() {
+  const tiles = (player.mealSlots || []).map((s, i) => s
+    ? `<button class="skillbar-btn sb-meal" onclick="eatMealSlot(${i})" ${hoverTip(`<div class='ht-name'>${bowlIcon(14)} ${escapeHtml(s.bowl.name)}</div><div class='ht-line'>${escapeHtml(fxDesc(s.bowl.fx) || 'no effect')} · ${s.bowl.floors} floors</div><div class='ht-sub'>tap to eat · ${s.qty} left</div>`)}>
+        <span class="sb-icon">${bowlIcon(24)}</span><span class="sb-meal-qty">${s.qty}</span></button>`
+    : '').join('');
+  return tiles ? `<div class="sb-mod sb-mod-meals">${tiles}</div>` : '';
+}
+// Bounty tracker — the active contract's objective + a live progress bar, relocated off
+// the map corner. The objective LABEL is stable per contract (safe in the cached
+// markup); the progress count + bar width are volatile, so they ride dedicated spans
+// that syncBeltBounty() rewrites by textContent/width without busting the bar cache.
+function beltBountyHtml() {
+  const b = player.bounty;
+  if (!b) return '';
+  const ic = dlIcon('npc_quest', 16) || '';
+  const label = escapeHtml(b.desc.replace('{n}', b.need));
+  return `<div class="sb-mod sb-mod-bounty" onclick="objectiveChipClick()" ${hoverTip(`<div class='ht-name'>${ic} Bounty</div><div class='ht-line'>${label}</div>`)}>
+    <span class="sb-bounty-ic">${ic}</span>
+    <span class="sb-bounty-body"><span class="sb-bounty-label">${label}</span><span class="bar-track sb-bounty-track"><span class="bar-fill sb-bounty-fill"></span></span></span>
+    <span class="sb-bounty-prog"></span></div>`;
+}
+// Refresh the volatile bits of the belt bounty module — the progress count and bar
+// width — memoized so unchanged repaints skip the DOM writes (runs per skill-bar sync,
+// i.e. ~2.5×/s and on kills, never per frame).
+let _beltBountyEl = null, _beltBountyKey = null;
+function syncBeltBounty() {
+  if (_beltBountyEl === null) _beltBountyEl = document.querySelector('#hud-belt .sb-mod-bounty') || false;
+  const el = _beltBountyEl;
+  if (!el) return;
+  const b = player.bounty;
+  if (!b) return;
+  const prog = Math.min(bountyProgress(b), b.need);
+  const done = bountyDone(b);
+  const key = prog + '/' + b.need + (done ? 'D' : '');
+  if (key === _beltBountyKey) return;
+  _beltBountyKey = key;
+  const progEl = el.querySelector('.sb-bounty-prog');
+  if (progEl) progEl.textContent = done ? '✓' : `${prog}/${b.need}`;
+  const fill = el.querySelector('.sb-bounty-fill');
+  if (fill) fill.style.width = (b.need > 0 ? Math.round(100 * prog / b.need) : 0) + '%';
+  el.classList.toggle('done', done);
+}
+
 function renderSkillBar() {
   const bar = hudEl('skill-bar');
   if (!bar) return;
@@ -25167,20 +25304,27 @@ function renderSkillBar() {
       <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg></span>
     </button>`)
     : '';
-  // Three sections: Town/Health/Mana left, the auto-cast slot centred, the four
-  // manual slots right (see the .sb-left / .sb-auto-wrap / .sb-right flex CSS).
+  // Sections, left→right: Town/Health/Mana potions, a growable fill (bounty + meal
+  // modules), the centred auto-cast slot, a growable fill (loadout module), the four
+  // manual slots. The two .sb-fill boxes grow (desktop belt only) to occupy the empty
+  // space and centre their optional modules in it; the modules themselves are hidden
+  // until the belt is wide enough (container queries). See the .sb-* flex CSS.
   const html = `<div class="sb-left">${sprintCell}${townBtn}${healBtn}${manaBtn}</div>`
+    + `<div class="sb-fill sb-fill-left">${beltBountyHtml()}${beltMealsHtml()}</div>`
     + `<div class="sb-auto-wrap">${autoCell}</div>`
+    + `<div class="sb-fill sb-fill-right">${beltLoadoutHtml()}</div>`
     + `<div class="sb-right">${skillsHtml}</div>`;
   if (html !== _lastSkillBarHtml) {   // identical markup — skip the DOM teardown + reflow
     _lastSkillBarHtml = html;
     bar.innerHTML = html;
     _sbCdEls = _sbCdTextEls = null;   // the dials/placeholders were just rebuilt
+    _beltBountyEl = null;             // the belt bounty module (if any) was just rebuilt
     syncTownBarReserve();
   }
-  // Runs on EVERY call (rebuilt or not) so the countdown text stays as live as
-  // the old baked-in markup was.
+  // Runs on EVERY call (rebuilt or not) so the countdown text and the belt bounty
+  // progress stay as live as the old baked-in markup was.
   syncSkillBarCountdowns(bar, town);
+  syncBeltBounty();
 }
 // Fill the .sb-cd-text placeholders with the live countdown text — the potions'
 // shared "Ns" recharge (hidden by CSS while the dial shows, but kept identical to
@@ -26083,6 +26227,9 @@ function setLogCollapsed(collapsed, persist = true) {
   // backing buffer re-fit to the animating width so the map stays crisp, not
   // stretched, for the whole slide.
   refitMapDuringSlide();
+  // The belt width slid, so the bounty module may have crossed its container-query
+  // threshold — re-check the map chip's fallback once the fold settles.
+  setTimeout(() => { try { updateObjectiveChip(); } catch (e) {} }, 360);
 }
 function toggleLog() {
   const row = document.getElementById('bottom-row');
@@ -26111,6 +26258,8 @@ function setPanelCollapsed(collapsed, persist = true) {
   // re-fit the canvas backing buffer to the animating cell width each frame so the
   // map reveals MORE floor smoothly instead of stretching a stale buffer.
   refitMapDuringSlide();
+  // Belt width slid — re-check the bounty chip's fallback once the fold settles.
+  setTimeout(() => { try { updateObjectiveChip(); } catch (e) {} }, 360);
 }
 function togglePanelCollapse() {
   // On touch the drawer is a full-screen sheet, so the spine/close button just
@@ -26709,6 +26858,9 @@ function loadGame() {
     if (!Array.isArray(player.pantry)) player.pantry = [];
     if (!Array.isArray(player.discoveredRecipes)) player.discoveredRecipes = [];
     if (player.foodBuff && (typeof player.foodBuff !== 'object' || !player.foodBuff.fx || !(player.foodBuff.floors > 0))) player.foodBuff = null;
+    // Meal slots (HUD stacks assigned at the Ramen House) — seed/repair for saves that
+    // predate them, and coerce any malformed entries to a valid fixed-length array.
+    player.mealSlots = sanitizeMealSlots(player.mealSlots, MEAL_SLOT_COUNT);
     // Migrate saves that predate hero attributes.
     if (!player.attributes) player.attributes = baseAttributes();
     if (player.attrPoints == null) player.attrPoints = 0;
@@ -30626,6 +30778,9 @@ const __DL_FN_BRIDGE = {
   potClear,
   cookPotNow,
   eatBowl,
+  assignMeal,
+  unassignMeal,
+  eatMealSlot,
   renderCookingHTML,
   craftIlvl,
   craftBaseFactors,
