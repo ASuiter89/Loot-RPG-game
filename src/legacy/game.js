@@ -205,15 +205,32 @@ function isCasterGear(item) {
   if (item.slot === 'offhand') return item.off === 'caster'; // Tome / Focus
   return false;
 }
+// Spirit Veil (VEIL) is a flat +max-shield roll (the shield analog of flat +HP), but
+// unlike HP it is gated per SPECIFIC ITEM TYPE, not per slot: only a Spirit-identity
+// base (the one whose equip gate reads Spirit — Crown/Circlet, Robe, Leggings, Loop,
+// Necklace, Tome/Focus) may roll it, and only in the defensive/sustain slots that
+// carry flat HP (never a weapon or gloves, where a shield roll would be off-theme).
+const VEIL_SLOTS = new Set(['head', 'chest', 'legs', 'ring', 'amulet', 'offhand']);
+// True when this exact base may roll Spirit Veil: a HP-bearing defensive slot AND a
+// Spirit-identity base (itemAttrReq resolves the base's identity attribute).
+function rollsSpiritVeil(item) {
+  if (!item || !VEIL_SLOTS.has(item.slot)) return false;
+  const req = itemAttrReq(item);
+  return !!req && req.attr === 'spirit';
+}
 // The stat-affix pool an ITEM can actually hold — its slot pool with the power/speed
-// families it isn't allowed hard-filtered out. Routing every affix consumer through
-// this keeps the melee-only-Skill-Power / caster-only-Spell-Power gate consistent
+// families it isn't allowed hard-filtered out, plus Spirit Veil for Spirit bases.
+// Routing every affix consumer through this keeps the melee-only-Skill-Power /
+// caster-only-Spell-Power gate — and the per-base Spirit Veil gate — consistent
 // across drops, the Enchanter (reroll & transmute), the tooltip preview and curses.
 function itemStatPool(item) {
-  const pool = (SLOT_AFFIX_POOLS[item.slot]?.stats) || [];
-  if (item.slot !== 'weapon' && item.slot !== 'offhand') return pool;
-  const drop = isCasterGear(item) ? MARTIAL_POWER_STATS : CASTER_POWER_STATS;
-  return pool.filter(s => !drop.includes(s));
+  let pool = (SLOT_AFFIX_POOLS[item.slot]?.stats) || [];
+  if (item.slot === 'weapon' || item.slot === 'offhand') {
+    const drop = isCasterGear(item) ? MARTIAL_POWER_STATS : CASTER_POWER_STATS;
+    pool = pool.filter(s => !drop.includes(s));
+  }
+  if (rollsSpiritVeil(item)) pool = [...pool, 'VEIL'];
+  return pool;
 }
 
 // ── ITEM BASE PROFILES ──
@@ -2891,6 +2908,7 @@ const STAT_NAMES = ['ATK','DEF','SPD','LCK','HP','MP','CRIT','CRITDMG','REGEN'];
 // "Fortune" so it never reads as the new Luck *attribute*; it no longer rolls on
 // new gear and survives only on older items.
 const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', HP:'Max HP',
+  VEIL:'Spirit Veil',
   MP:'Max MP', CRIT:'Crit Rating', CRITDMG:'Crit Dmg %', REGEN:'Regen', DMG:'Damage', ACC:'Accuracy',
   // ── new stats ── leech & on-kill sustain, defensive layers, offensive %s,
   // utility/economy %s, and caster %s. Percent stats carry a "%" in their label
@@ -2912,7 +2930,7 @@ const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', H
   TENAC:'Tenacity %' };
 // Short codes for the compact one-line item summary (the tooltip/enchanter use the
 // full STAT_LABELS above). Anything missing falls back to its raw key.
-const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', MP:'MP', CRIT:'CRIT', ACC:'ACC',
+const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', VEIL:'VEIL', MP:'MP', CRIT:'CRIT', ACC:'ACC',
   CRITDMG:'CDMG', REGEN:'REG', LEECH:'LCH', MPLEECH:'MLC', HPKILL:'HoK', MPKILL:'MoK',
   THORNS:'THN', DR:'DR', BLOCK:'BLK', DODGE:'DGE', IDMG:'IDMG', DBLSTRIKE:'2X', CLEAVE:'CLV',
   BOSSDMG:'vsB', EXEC:'EXE', PEN:'PEN', MAGICPEN:'MPN', GOLDFIND:'GF', XPGAIN:'XP', MAGICFIND:'MF', MATFIND:'MTF',
@@ -2934,6 +2952,7 @@ const STAT_DESC = {
   SPD: 'How quickly you move and act.',
   LCK: 'Fortune — better crit chance and richer loot.',
   HP: 'Your maximum health.',
+  VEIL: 'Flat bonus to your maximum Spirit Veil — the blue shield that soaks damage before your health.',
   MP: 'Your maximum mana for casting skills.',
   CRIT: 'Chance to land critical hits (contested vs the foe\'s level).',
   CRITDMG: 'Bonus damage your critical hits deal.',
@@ -3346,9 +3365,10 @@ function buildPowerContext() {
     accRating: playerAccuracyRating(),
     // Defense aggregates.
     maxHp,
-    // Spirit Veil shield as extra effective HP — Spirit-scaled and class-multiplied, so
-    // +Spirit is valued for the shield it buys (derived, not class-hardcoded).
-    maxShield: shieldMax(totalAttr('spirit'), player.class),
+    // Spirit Veil shield as extra effective HP — Spirit-scaled and class-multiplied, plus
+    // flat +Spirit Veil from gear, so both the shield +Spirit buys and a rolled +Veil are
+    // valued (derived, not class-hardcoded).
+    maxShield: shieldMax(totalAttr('spirit'), player.class) + totalStat('VEIL'),
     def: totalStat('DEF') + totalAttr('might') * attrCoef('def'),   // Defense now from Might
     dodgeRating: totalAttr('agility') * attrCoef('evasion') + totalStat('SPD') + totalStat('DODGE')
       + ratePct(skillBonus('dodge')) + classInnateEvasionRating(),
@@ -3407,6 +3427,7 @@ function itemPowerContribution(item, ctx, mult = 1) {
     } else if (typeof v !== 'number') { /* non-numeric (e.g. a legendary tag) — skip */ }
     else if (k === 'CRITDMG') add('critMult', v / 100);
     else if (k === 'HP') add('maxHp', v * ctx.hpScale);
+    else if (k === 'VEIL') add('maxShield', v);   // flat +Spirit Veil → shield axis (1:1)
     else if (POWER_STAT_AXIS[k]) add(POWER_STAT_AXIS[k], v);
   }
   const attrs = item.attrs || {};
@@ -3743,9 +3764,10 @@ function recomputeMaxStats() {
   if ((player.shield || 0) > player.maxShield) player.shield = player.maxShield;
 }
 // Max Spirit Veil shield: scales LINEARLY off total Spirit and the (steep) class
-// multiplier, separate from HP and uncapped. See src/systems/attributeScaling.js.
+// multiplier, separate from HP and uncapped, PLUS any flat +Spirit Veil rolled on
+// Spirit gear (totalStat('VEIL')). See src/systems/attributeScaling.js.
 function baseMaxShield() {
-  return Math.round(shieldMax(totalAttr('spirit'), player.class));
+  return Math.round(shieldMax(totalAttr('spirit'), player.class)) + totalStat('VEIL');
 }
 
 // HP/MP regeneration as a REAL per-second rate. Single source of truth so the
@@ -7039,9 +7061,10 @@ window.gameGuide = function gameGuide(topic) {
     ],
     veil: [
       `SPIRIT VEIL is a persistent blue SHIELD that sits ON TOP of your HP: every hit, damage-over-time and hazard is soaked by the Spirit Veil FIRST, and only the overflow bites your health (a blow that empties it spills the remainder into HP). gameState().player reports shield / maxShield / shieldRecharging; the HP bar shows it as a shimmering blue mask over the bar, with its own number beside HP.`,
-      `It is fuelled entirely by SPIRIT: more Spirit → a bigger pool and a slightly faster recharge, class-scaled Mage > Templar > Rogue > Warrior — so it's a real second health bar for casters and near-trivial for a Warrior who never invests Spirit. It scales SEPARATELY from HP and is UNCAPPED: per point it grows slower than Vitality feeds HP, but stack Spirit and skip Vitality and your Veil can exceed your health outright.`,
+      `Its pool is fuelled by SPIRIT: more Spirit → a bigger pool and a slightly faster recharge, class-scaled Mage > Templar > Rogue > Warrior — so it's a real second health bar for casters and near-trivial for a Warrior who never invests Spirit. It scales SEPARATELY from HP and is UNCAPPED: per point it grows slower than Vitality feeds HP, but stack Spirit and skip Vitality and your Veil can exceed your health outright.`,
+      `GEAR can add to it too: a "Spirit Veil" affix (a flat +max shield, the shield twin of flat +HP) rolls only on SPIRIT-identity bases — Crown/Circlet, Robe, Leggings, Loop, Necklace, Tome/Focus — so caster gear stacks a bigger buffer on top of the Spirit-scaled pool.`,
       `RECHARGE is automatic and the ONLY way to refill it — no potion, skill, heal or leech ever touches the Spirit Veil. After ~${shieldRechargeDelay()}s without taking ANY damage it refills toward full over a few seconds (Spirit speeds the RATE, not the delay). Taking any damage — even a poison tick or a step into lava — resets that timer, so you top it up by DISENGAGING for a moment, not by out-healing.`,
-      `Because it soaks before HP and comes back free between fights, Spirit is now a defensive investment as much as an offensive one — and +Spirit gear is valued for the shield it grants (see the "power" topic).`,
+      `Because it soaks before HP and comes back free between fights, Spirit is now a defensive investment as much as an offensive one — and both +Spirit and +Spirit Veil gear are valued for the shield they grant (see the "power" topic).`,
     ],
     skills: [
       `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready.`,
@@ -14408,7 +14431,9 @@ function affixStatValue(stat, lvl, mult) {
 // because their COMBAT conversion is an asymptotic rating→% curve (rated(), CDR/MCR
 // reduction, etc.) that eases off and can never reach 100% / 0 — see ratings.js.
 const AFFIX_CURVES = {
-  ATK:{flat:1}, DEF:{flat:1}, SPD:{flat:1}, HP:{flat:6}, MP:{flat:3.4}, REGEN:{flat:0.2},
+  // VEIL (flat +max Spirit Veil) rolls a touch under HP — the Veil is the lighter,
+  // "slower overall" defensive layer and only appears on dedicated Spirit gear.
+  ATK:{flat:1}, DEF:{flat:1}, SPD:{flat:1}, HP:{flat:6}, VEIL:{flat:4}, MP:{flat:3.4}, REGEN:{flat:0.2},
   THORNS:{flat:0.7}, HPKILL:{flat:0.7}, MPKILL:{flat:0.35},
   // Chance/avoidance stats are flat RATINGS (scale with item level, no cap): they feed
   // the rating-vs-level curves in combat instead of being a flat %.
@@ -23916,7 +23941,7 @@ function lootGlossaryHTML() {
   // Keyed by internal stat key so it can never drift from STAT_SHORT/STAT_LABELS.
   const STAT_GROUPS = [
     ['Offense', ['ATK','ACC','CRIT','CRITDMG','IDMG','PEN','MAGICPEN','DBLSTRIKE','CLEAVE','EXEC','BOSSDMG','ATKSPD','BLEED','STUNPWR']],
-    ['Defense', ['DEF','HP','DR','BLOCK','DODGE','TENAC','THORNS']],
+    ['Defense', ['DEF','HP','VEIL','DR','BLOCK','DODGE','TENAC','THORNS']],
     ['Sustain', ['REGEN','LEECH','MPLEECH','HPKILL','MPKILL']],
     ['Caster',  ['MP','SPELLPWR','SKILLPWR','CASTSPD','CDR','MCR']],
     ['Utility / Find', ['SPD','LCK','GOLDFIND','XPGAIN','MAGICFIND','MATFIND']],
