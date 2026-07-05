@@ -2944,7 +2944,7 @@ const ATTR_BASE = 10;
 // Points granted per level. Higher than the old 3 (paired with smaller per-point
 // effects) so the power-per-level slope matches the old curve while giving more
 // to spread across the five attributes.
-let ATTR_POINTS_PER_LEVEL = 5;   // (let, not const: the Dev tuning tab can retune it live)
+const ATTR_POINTS_PER_LEVEL = 5;   // attribute points granted per hero level
 
 // How one point in an attribute converts into each derived stat. Tuned so that
 // dumping a level's worth of points (5) into one attribute grants roughly what
@@ -2991,17 +2991,15 @@ const AGI_MOVE_SCALE = 90;    // Agility-above-base that buys half the move cap
 const AGI_ATKSPD_CAP   = 60;  // max +60% attack speed from Agility (asymptotic)
 const AGI_ATKSPD_SCALE = 100; // Agility-above-base that buys half the atk-spd cap
 // Damage scaling off the class's primary / secondary attribute (per point).
-let ATTR_DMG_PRIMARY   = 2.4;    // (let, not const: retunable from the Dev tuning tab)
+const ATTR_DMG_PRIMARY   = 2.4;    // damage per point of the class's primary attribute
 const ATTR_DMG_SECONDARY = 0.8;
 
-// ── DEV TUNING KNOBS (live difficulty sliders — Settings ▸ Dev) ────────────
-// A small bank of live-mutable numbers the Dev settings tab drives. The balance
-// formulas below read these instead of bare literals, so dragging a slider
-// rebalances the game on the fly (no reload, no code edit). Every default here
-// equals the shipping value, so an untouched DEV changes nothing. The
-// DEV_TUNABLES registry (further down) wires each of these — plus a few live
-// object/const rates — to a slider with a range, a reset, and persistence.
-const DEV = {
+// ── CORE DIFFICULTY-SCALING CONSTANTS ──────────────────────────────────────
+// The bank of tuning numbers the enemy/boss/hero balance formulas below read
+// instead of bare literals, so the scaling curve lives in one named place. The
+// pure multipliers (enemyHpMult, enemyDmgMult, …) sit at 1× and are kept as
+// named knobs for readability; change a value here to retune the whole game.
+const BALANCE = {
   enemyHpMult: 1,        // global × on every foe's max HP (regular, elite, boss)
   enemyDmgMult: 1,       // global × on every foe's damage
   enemyCountMult: 1,     // × on the regular foe count per floor (still capped at 40)
@@ -3021,181 +3019,6 @@ const DEV = {
   hpPerLevel: 8,         // flat max HP granted per hero level (before Vitality/gear)
 };
 
-// The Dev tab's slider registry: one entry per knob. `get`/`set` read & write the
-// live value wherever it lives (a DEV field, a live object rate like
-// ATTR_FX.hpPerVit, or a reassignable `let` like ATTR_DMG_PRIMARY), so the panel
-// stays a thin layer over the real balance numbers. `after` says what to refresh
-// once a value changes: 'hero' recomputes the hero's derived stats immediately,
-// 'spawn' only bites on newly spawned foes (use the Respawn-floor button to
-// preview), 'none' just affects future events. `def` is the shipping value a
-// reset restores. `unit:'x'` renders the value as a multiplier (e.g. 1.30×).
-const DEV_TUNABLES = [
-  // ── Enemy scaling ──
-  { id:'enemyHpMult',      group:'Enemy scaling', label:'All enemy HP',            unit:'x', min:0.25, max:3,   step:0.05,  def:1,    after:'spawn', get:()=>DEV.enemyHpMult,      set:v=>DEV.enemyHpMult=v },
-  { id:'enemyDmgMult',     group:'Enemy scaling', label:'All enemy damage',        unit:'x', min:0.25, max:3,   step:0.05,  def:1,    after:'spawn', get:()=>DEV.enemyDmgMult,     set:v=>DEV.enemyDmgMult=v },
-  { id:'enemyCountMult',   group:'Enemy scaling', label:'Enemies per floor',       unit:'x', min:0.25, max:3,   step:0.05,  def:1,    after:'spawn', get:()=>DEV.enemyCountMult,   set:v=>DEV.enemyCountMult=v, note:'capped at 40/floor' },
-  { id:'depthExp',         group:'Enemy scaling', label:'Depth threat exponent',   unit:'',  min:1,    max:2,   step:0.02,  def:1.26, after:'spawn', get:()=>DEV.depthExp,         set:v=>DEV.depthExp=v,       note:'sharper = deep floors pull ahead faster' },
-  { id:'depthDiv',         group:'Enemy scaling', label:'Depth threat divisor',    unit:'',  min:3,    max:20,  step:0.5,   def:8.5,  after:'spawn', get:()=>DEV.depthDiv,         set:v=>DEV.depthDiv=v,       note:'larger = gentler overall climb' },
-  { id:'enemyHpPerFloor',  group:'Enemy scaling', label:'Enemy HP per floor',      unit:'',  min:3,    max:30,  step:0.5,   def:11,   after:'spawn', get:()=>DEV.enemyHpPerFloor,  set:v=>DEV.enemyHpPerFloor=v },
-  { id:'enemyDmgPerFloor', group:'Enemy scaling', label:'Enemy damage per floor',  unit:'',  min:0.5,  max:6,   step:0.1,   def:1.9,  after:'spawn', get:()=>DEV.enemyDmgPerFloor, set:v=>DEV.enemyDmgPerFloor=v },
-  { id:'enemyAccPerFloor', group:'Enemy scaling', label:'Enemy accuracy per floor',unit:'',  min:3,    max:20,  step:0.5,   def:10,   after:'spawn', get:()=>DEV.enemyAccPerFloor, set:v=>DEV.enemyAccPerFloor=v, note:'harder to dodge deeper' },
-  // ── Bosses & elites ──
-  { id:'bossHpMult',       group:'Bosses & elites', label:'Boss HP',      unit:'x', min:0.5, max:6, step:0.1,  def:2.2,  after:'spawn', get:()=>DEV.bossHpMult,   set:v=>DEV.bossHpMult=v },
-  { id:'bossDmgMult',      group:'Bosses & elites', label:'Boss damage',  unit:'x', min:0.5, max:4, step:0.05, def:1.25, after:'spawn', get:()=>DEV.bossDmgMult,  set:v=>DEV.bossDmgMult=v },
-  { id:'eliteHpMult',      group:'Bosses & elites', label:'Elite HP',     unit:'x', min:0.5, max:6, step:0.1,  def:2.2,  after:'spawn', get:()=>DEV.eliteHpMult,  set:v=>DEV.eliteHpMult=v },
-  { id:'eliteDmgMult',     group:'Bosses & elites', label:'Elite damage', unit:'x', min:0.5, max:4, step:0.05, def:1.4,  after:'spawn', get:()=>DEV.eliteDmgMult, set:v=>DEV.eliteDmgMult=v },
-  // ── Run modifiers ──
-  { id:'antiGrindPerGap',  group:'Run modifiers', label:'Anti-grind per level over floor', unit:'',  min:0,   max:0.2,  step:0.005, def:0.06, after:'spawn', get:()=>DEV.antiGrindPerGap, set:v=>DEV.antiGrindPerGap=v, note:'foes toughen when you out-level the floor' },
-  { id:'conquestScar',     group:'Run modifiers', label:'Conquest scar per tier',           unit:'',  min:0.8, max:1,    step:0.005, def:0.94, after:'hero',  get:()=>DEV.conquestScar,    set:v=>DEV.conquestScar=v,    note:'lower = harsher permanent scar' },
-  { id:'endlessRate',      group:'Run modifiers', label:'Endless ramp rate',                unit:'',  min:0,   max:0.02, step:0.001, def:0.006,after:'spawn', get:()=>DEV.endlessRate,     set:v=>DEV.endlessRate=v,     note:'extra threat per Endless floor (76+)' },
-  { id:'hazardDmgMult',    group:'Run modifiers', label:'Hazard damage',                    unit:'x', min:0,   max:3,    step:0.05,  def:1,    after:'spawn', get:()=>DEV.hazardDmgMult,   set:v=>DEV.hazardDmgMult=v },
-  // ── Hero power ──
-  { id:'hpPerVit',           group:'Hero power', label:'HP per Vitality',            unit:'', min:3,   max:30, step:0.5, def:11, after:'hero', get:()=>ATTR_FX.hpPerVit,       set:v=>ATTR_FX.hpPerVit=v },
-  { id:'atkPrimary',         group:'Hero power', label:'Attack per primary attribute',unit:'', min:0.6, max:6,  step:0.1, def:2.4,after:'hero', get:()=>ATTR_DMG_PRIMARY,       set:v=>ATTR_DMG_PRIMARY=v },
-  { id:'hpPerLevel',         group:'Hero power', label:'Max HP per level',           unit:'', min:2,   max:24, step:0.5, def:8,  after:'hero', get:()=>DEV.hpPerLevel,         set:v=>DEV.hpPerLevel=v },
-  { id:'attrPointsPerLevel', group:'Hero power', label:'Attribute points per level', unit:'', min:1,   max:15, step:1,   def:5,  after:'none', get:()=>ATTR_POINTS_PER_LEVEL,  set:v=>ATTR_POINTS_PER_LEVEL=v, note:'applies to future level-ups' },
-];
-const DEV_TUNE_BY_ID = Object.fromEntries(DEV_TUNABLES.map(t => [t.id, t]));
-const DEV_TUNE_KEY = 'dungeonLoot_devTune_v1';
-
-// Clamp a raw slider value into a knob's range and snap to its step.
-function devClamp(t, v) {
-  v = Math.max(t.min, Math.min(t.max, +v));
-  const snapped = Math.round((v - t.min) / t.step) * t.step + t.min;
-  return Math.round(snapped * 1e6) / 1e6;   // kill float dust so 1.9 doesn't read 1.9000000002
-}
-// Is this knob currently away from its shipping default?
-function devModified(t) { return Math.abs(t.get() - t.def) > 1e-9; }
-// Human-readable value (multipliers show a ×; whole numbers drop the decimals).
-function devFmt(t, v) {
-  v = (v == null ? t.get() : v);
-  const s = (Math.abs(v - Math.round(v)) < 1e-9) ? String(Math.round(v)) : String(Math.round(v * 1000) / 1000);
-  return t.unit === 'x' ? s + '×' : s;
-}
-// Persist only the knobs that differ from default (keeps the blob small & forward-compatible).
-function saveDevTune() {
-  try {
-    const o = {};
-    for (const t of DEV_TUNABLES) if (devModified(t)) o[t.id] = t.get();
-    if (Object.keys(o).length) localStorage.setItem(DEV_TUNE_KEY, JSON.stringify(o));
-    else localStorage.removeItem(DEV_TUNE_KEY);
-  } catch (e) {}
-}
-// Restore saved overrides on boot. Safe before the hero exists — it only writes
-// the live values; the first recomputeMaxStats() then reads them.
-function loadDevTune() {
-  let o = null;
-  try { o = JSON.parse(localStorage.getItem(DEV_TUNE_KEY) || 'null'); } catch (e) {}
-  if (!o) return;
-  let touchedHero = false;
-  for (const t of DEV_TUNABLES) {
-    if (typeof o[t.id] === 'number' && isFinite(o[t.id])) {
-      t.set(devClamp(t, o[t.id]));
-      if (t.after === 'hero') touchedHero = true;
-    }
-  }
-  if (touchedHero && typeof recomputeMaxStats === 'function' && typeof player === 'object' && player) {
-    try {
-      recomputeMaxStats();
-      player.hp = Math.min(player.hp, player.maxHp);
-      player.mp = Math.min(player.mp, player.maxMp);
-      if (typeof updateBars === 'function') updateBars();
-    } catch (e) {}
-  }
-}
-// Apply the side-effect a knob asks for once its value changes.
-function devAfter(kind) {
-  if (kind === 'hero') {
-    if (typeof recomputeMaxStats === 'function' && player) {
-      recomputeMaxStats();
-      player.hp = Math.min(player.hp, player.maxHp);
-      player.mp = Math.min(player.mp, player.maxMp);
-      if (typeof updateBars === 'function') updateBars();
-      if (typeof renderPanel === 'function') renderPanel();
-    }
-  }
-}
-// A slider moved: clamp, write the live value, refresh, persist, update the readout.
-function onDevSlider(id, raw) {
-  const t = DEV_TUNE_BY_ID[id]; if (!t) return;
-  const v = devClamp(t, raw);
-  t.set(v);
-  devAfter(t.after);
-  saveDevTune();
-  syncDevRow(id);
-}
-// Restore one knob to its shipping default.
-function resetDevTunable(id) {
-  const t = DEV_TUNE_BY_ID[id]; if (!t) return;
-  t.set(t.def);
-  devAfter(t.after);
-  saveDevTune();
-  const el = document.querySelector(`#dev-tune-body input[data-id="${id}"]`);
-  if (el) el.value = t.def;
-  syncDevRow(id);
-  if (typeof sfx === 'function') sfx('click');
-}
-// Restore every knob to defaults.
-function resetAllDevTune() {
-  let hero = false;
-  for (const t of DEV_TUNABLES) { t.set(t.def); if (t.after === 'hero') hero = true; }
-  if (hero) devAfter('hero');
-  saveDevTune();
-  renderDevTune();
-  if (typeof sfx === 'function') sfx('click');
-}
-// Re-roll the current dungeon floor so spawn-side knob changes preview instantly.
-function devRespawnFloor() {
-  if (typeof inTown !== 'undefined' && inTown) { if (typeof log === 'function') log('Respawn floor: enter the dungeon first.'); return; }
-  if (typeof generateMap === 'function') {
-    generateMap();
-    if (typeof updateBars === 'function') updateBars();
-    if (typeof log === 'function') log('🛠️ Dev: floor re-rolled with the current tuning.', 'important');
-    if (typeof sfx === 'function') sfx('stairs');
-  }
-}
-// Refresh one row's value readout + modified styling without rebuilding the pane.
-function syncDevRow(id) {
-  const t = DEV_TUNE_BY_ID[id]; if (!t) return;
-  const row = document.querySelector(`#dev-tune-body .dev-row[data-row="${id}"]`);
-  if (!row) return;
-  const val = row.querySelector('.dev-val');
-  if (val) val.textContent = devFmt(t);
-  row.classList.toggle('modified', devModified(t));
-}
-// Build the whole Dev pane from the registry, grouped.
-function renderDevTune() {
-  const body = document.getElementById('dev-tune-body');
-  if (!body) return;
-  const anyMod = DEV_TUNABLES.some(devModified);
-  let html = `<div class="dev-intro">Live balance tuning — drag to rebalance the game on the spot. `
-    + `<b>Hero</b> knobs apply instantly; <b>enemy &amp; floor</b> knobs bite on newly&nbsp;spawned foes, so hit `
-    + `<b>Respawn floor</b> to preview. Changes save automatically.</div>`
-    + `<div class="dev-actions">`
-    + `<button class="dev-act-btn" onclick="devRespawnFloor()">🌀 Respawn floor</button>`
-    + `<button class="dev-act-btn ${anyMod ? '' : 'is-off'}" onclick="resetAllDevTune()">↺ Reset all</button>`
-    + `</div>`;
-  let curGroup = null;
-  for (const t of DEV_TUNABLES) {
-    if (t.group !== curGroup) {
-      if (curGroup !== null) html += `</div>`;
-      curGroup = t.group;
-      html += `<div class="dev-group-h">${curGroup}</div><div class="dev-group">`;
-    }
-    const noteHtml = t.note ? `<span class="dev-note">${t.note}</span>` : '';
-    html += `<div class="dev-row ${devModified(t) ? 'modified' : ''}" data-row="${t.id}">`
-      + `<div class="dev-row-top">`
-      + `<span class="dev-label">${t.label}${noteHtml}</span>`
-      + `<span class="dev-val">${devFmt(t)}</span>`
-      + `<button class="dev-reset" title="Reset to default (${devFmt(t, t.def)})" onclick="resetDevTunable('${t.id}')">↺</button>`
-      + `</div>`
-      + `<input class="dev-slider" type="range" data-id="${t.id}" min="${t.min}" max="${t.max}" step="${t.step}" value="${t.get()}" `
-      + `oninput="onDevSlider('${t.id}', this.value)">`
-      + `</div>`;
-  }
-  if (curGroup !== null) html += `</div>`;
-  body.innerHTML = html;
-}
 // A fresh attribute block — every attribute starts at ATTR_BASE. Used for new
 // heroes, respecs (reset to base), and migrating older saves.
 function baseAttributes() {
@@ -3234,7 +3057,7 @@ function depthThreat(level) {
   const d = Math.max(0, (level || 1) - 1);
   // Endless mode ramps a touch steeper than the raw depth continuation; a no-op
   // (×1) for the three finite difficulties (see endlessBite below).
-  return (1 + Math.pow(d, DEV.depthExp) / DEV.depthDiv) * endlessBite();
+  return (1 + Math.pow(d, BALANCE.depthExp) / BALANCE.depthDiv) * endlessBite();
 }
 
 // ── DUNGEON DIFFICULTY TIERS ──────────────────────────────────────────────
@@ -3288,7 +3111,7 @@ function floorTag(dl) {
 // up the deeper you push. A no-op (×1) for the three finite difficulties.
 function endlessBite() {
   if (dungeonLevel <= FINITE_DEPTH) return 1;
-  return 1 + Math.min(0.6, (dungeonLevel - FINITE_DEPTH) * DEV.endlessRate);
+  return 1 + Math.min(0.6, (dungeonLevel - FINITE_DEPTH) * BALANCE.endlessRate);
 }
 
 // ── DUNGEON MAP SIZE ──────────────────────────────────────────────────────
@@ -3325,7 +3148,7 @@ function frontierDiff() { return Math.min(4, diffClearedCount() + 1); }
 // hero's max HP and the damage they deal, so deeper tiers keep biting even as
 // gear climbs. Multiplicative, ~6% per tier conquered (so Endless heroes fight
 // at ~83% of their raw power).
-function diffDebuffMult() { return Math.pow(DEV.conquestScar, diffClearedCount()); }
+function diffDebuffMult() { return Math.pow(BALANCE.conquestScar, diffClearedCount()); }
 
 // Record reaching the current `dungeonLevel`: deepens both the all-time max (for
 // display, gambling/crafting item level, leaderboards) and the currently-unlocked
@@ -3436,7 +3259,7 @@ function buildPowerContext() {
   // already buff-free (accuracy, block, DR, attack speed, class multipliers) it is
   // reused directly.
   const hpMult = (player.class === 'templar' ? 1.20 : 1) * (1 + skillBonus('maxHpPct')) * diffDebuffMult();
-  const hpRaw = L * DEV.hpPerLevel + totalAttr('vitality') * ATTR_FX.hpPerVit + totalStat('HP');
+  const hpRaw = L * BALANCE.hpPerLevel + totalAttr('vitality') * ATTR_FX.hpPerVit + totalStat('HP');
   const ctx = {
     refLevel: L,
     // Fixed multipliers / class reliance (never moved by a single affix).
@@ -3678,7 +3501,7 @@ function equipUpgradeDelta(item) {
 // across level ups, attribute spends, and loading an older save. Vitality drives
 // HP and Spirit drives MP (each via ATTR_FX), and gear HP/MP add on top.
 function baseMaxHp() {
-  let hp = player.level*DEV.hpPerLevel + totalAttr('vitality') * ATTR_FX.hpPerVit + totalStat('HP');
+  let hp = player.level*BALANCE.hpPerLevel + totalAttr('vitality') * ATTR_FX.hpPerVit + totalStat('HP');
   if (player.class === 'templar') hp = hp * 1.20; // Templar: hardier body
   hp = hp * (1 + skillBonus('maxHpPct') + foodFx('maxHpPct')); // skills + a hearty bowl of ramen
   hp = hp * diffDebuffMult();   // permanent scar from each difficulty conquered
@@ -3739,7 +3562,7 @@ function enemyAccuracyRating(e) {
   let m = (e && e.accMult) || 1;
   if (e && e.isBoss) m *= 1.35;        // guardians are hard to dodge
   else if (e && e.isElite) m *= 1.15;  // elites a touch harder
-  return Math.round((32 + oppLevel(e) * DEV.enemyAccPerFloor) * m);
+  return Math.round((32 + oppLevel(e) * BALANCE.enemyAccPerFloor) * m);
 }
 function enemyEvasionRating(e)  { return Math.round((6 + oppLevel(e) * 3) * ((e && e.evaMult) || 1)); }
 // Generic depth resistance the player's crit/block/DR chances are rated against —
@@ -7007,13 +6830,6 @@ window.gameState = function gameState(radius) {
     legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
-    // Any Dev-tab difficulty overrides currently in effect (empty when every knob
-    // is at its shipping default). Lets a driving agent notice the balance was
-    // retuned live via Settings ▸ Dev — see gameGuide("dev").
-    devTuning: (typeof DEV_TUNABLES !== 'undefined')
-      ? DEV_TUNABLES.filter(t => Math.abs(t.get() - t.def) > 1e-9)
-          .map(t => ({ id: t.id, label: t.label, value: t.get(), default: t.def }))
-      : [],
     map: rows.join('\n'),
   };
 };
@@ -7217,12 +7033,6 @@ window.gameGuide = function gameGuide(topic) {
       `Lock keepers before bulk-selling and set Auto-Loot to scrap/sell junk rarities so the bag stays clean.`,
       `Bank gold and gear in the Stash before a risky push — death costs a fraction of carried gold and drops your whole bag as a grave.`,
     ],
-    dev: [
-      `Settings ▸ Dev is a developer tuning panel: 20 live sliders over the core difficulty-scaling knobs, for dialing in balance without editing code. Untouched, every knob sits at the shipping default and the game plays exactly as normal.`,
-      `Groups: Enemy scaling (global enemy HP×/damage×/count×, depth-threat exponent & divisor, enemy HP/damage/accuracy per floor), Bosses & elites (HP/damage multipliers), Run modifiers (anti-grind per level-gap, conquest scar per tier, endless ramp rate, hazard damage×), and Hero power (HP per Vitality, attack per primary attribute, max HP per level, attribute points per level).`,
-      `Hero-power knobs apply instantly (HP/derived stats recompute); enemy & floor knobs bite only on newly spawned foes, so use the panel's "Respawn floor" button to re-roll the current floor and preview. Each slider has a ↺ reset; "Reset all" restores every default. Values persist across reloads (localStorage key dungeonLoot_devTune_v1).`,
-      `gameState().devTuning lists any knob currently away from its default ({id,label,value,default}); an empty array means shipping balance. Check it if difficulty feels off — the balance may have been retuned here.`,
-    ],
     power: [
       `Power is a single number rating how strong a hero — or a single gear piece — is. It is BUILD-AWARE: not a fixed table, but the marginal gain in an effective COMBAT SCORE (a blend of your effective offense/DPS and survivability/EHP, built from the real combat formulas) that the piece's stats give THIS hero's current build.`,
       `So a stat that does nothing for your build is worth ~0 Power to you: a Crit Damage roll on a hero with no crit chance barely moves your damage, so it barely adds Power; Spell Power on a pure martial build, or Attack Speed on a pure caster, are near-dead weight and priced as such. The SAME item can be worth very different Power to two different heroes — that is the point. Chances are measured against your own LEVEL (a stable reference), and transient shrine/food buffs are excluded, so Power reflects your durable build, not the moment.`,
@@ -7249,7 +7059,6 @@ window.gameGuide = function gameGuide(topic) {
     heal: 'healing', healing: 'healing', recovery: 'healing', regen: 'healing', regeneration: 'healing', potion: 'healing', potions: 'healing', mana: 'healing', mp: 'healing', leech: 'healing', lifesteal: 'healing', overtime: 'healing', pending: 'healing', hp: 'healing', hitpoints: 'healing', sustain: 'healing',
     drive: 'driving', driving: 'driving', api: 'driving', act: 'driving', acting: 'driving', input: 'driving',
     tip: 'tips', strategy: 'tips', help: 'overview', start: 'overview', intro: 'overview', goal: 'overview',
-    dev: 'dev', tuning: 'dev', tune: 'dev', slider: 'dev', sliders: 'dev', difficulty: 'dev', balance: 'dev', devtools: 'dev', debug: 'dev',
   };
   const sel = G[t] || G[alias[t]];
   return sel || { error: `Unknown topic "${topic}".`, topics: Object.keys(G) };
@@ -8493,7 +8302,6 @@ function showSettingsTab(name) {
     b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('#settings-card .settings-pane').forEach(p =>
     p.classList.toggle('active', p.dataset.pane === name));
-  if (name === 'dev') renderDevTune();   // (re)build the tuning sliders from live values
   const card = document.getElementById('settings-card');
   if (card) card.scrollTop = 0;
   // On touch the outer scrim is the scroll container (the card no longer nests its
@@ -9538,7 +9346,7 @@ function placeTraps(reach) {
     // open-room lane, so a wall-sparse floor still gets traps rather than none.
     const hallway = walled >= Math.min(lane, 3);
     if (!hallway && tries < 450) continue;
-    traps.push({ kind: 'arrow', x: c.x, y: c.y, dx: d[0], dy: d[1], cd: Math.random() * 2, interval: rnd(18, 28) / 10, dmg: Math.round((10 + dungeonLevel * 4.5) * DEV.hazardDmgMult) });
+    traps.push({ kind: 'arrow', x: c.x, y: c.y, dx: d[0], dy: d[1], cd: Math.random() * 2, interval: rnd(18, 28) / 10, dmg: Math.round((10 + dungeonLevel * 4.5) * BALANCE.hazardDmgMult) });
     arrows--;
   }
   // Fire vents — a small cluster that flares in and out of life. Kept to a minority
@@ -9548,7 +9356,7 @@ function placeTraps(reach) {
     for (let i = 0; i < n; i++) {
       const c = randomFloorTile(reach);
       if (!c || (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) < 6) continue;
-      traps.push({ kind: 'fire', x: c.x, y: c.y, t: Math.random() * 3, period: rnd(26, 38) / 10, onFrac: 0.4, dmgCd: 0, dmg: Math.round((6 + dungeonLevel * 1.8) * DEV.hazardDmgMult) });
+      traps.push({ kind: 'fire', x: c.x, y: c.y, t: Math.random() * 3, period: rnd(26, 38) / 10, onFrac: 0.4, dmgCd: 0, dmg: Math.round((6 + dungeonLevel * 1.8) * BALANCE.hazardDmgMult) });
     }
   }
 }
@@ -13837,7 +13645,7 @@ function spawnEnemies() {
   // unnavigable mob. Boss floors keep their own tuned, depth-based roster.
   let count = isBossFloor
     ? 1                                               // just the guardian — a boss floor is a 1v1 arena; any adds come from the boss's own telegraphed summons
-    : Math.min(Math.round(Math.min(3 + Math.floor(dungeonLevel * 0.7), 10) * mapAreaRatio() * DEV.enemyCountMult), 40);
+    : Math.min(Math.round(Math.min(3 + Math.floor(dungeonLevel * 0.7), 10) * mapAreaRatio() * BALANCE.enemyCountMult), 40);
   // Some floor modifiers crowd the level with extra foes.
   if (!isBossFloor && floorMod.enemyMult) count = Math.round(count * floorMod.enemyMult);
   if (!isBossFloor && pfx('enemy', 1) !== 1) count = Math.max(1, Math.round(count * pfx('enemy', 1)));
@@ -13870,7 +13678,7 @@ function spawnEnemies() {
   // any single floor, which is what keeps the dungeon endless rather than a dead
   // end (deep floors just demand a lot more grinding to get over).
   const lvlGap = Math.max(0, player.level - dungeonLevel);
-  const threatScale = Math.min(2, 1 + lvlGap * DEV.antiGrindPerGap);
+  const threatScale = Math.min(2, 1 + lvlGap * BALANCE.antiGrindPerGap);
 
   // Early-game bite: a gentle nudge so the first floors aren't a total faceroll,
   // but small enough that a fresh, gearless hero won't get bursted down. Strongest
@@ -13896,8 +13704,8 @@ function spawnEnemies() {
   // and the no-empty-rooms pass (populateEmptyRooms).
   const mobLevel = dungeonLevel;
   const threat = depthThreat(mobLevel);   // compounds with depth — deep is deadly
-  const baseHp = Math.max(1, Math.round((14 + mobLevel * DEV.enemyHpPerFloor) * threat * (floorMod.hpMult || 1) * pfx('hp', 1) * threatScale * reliefEase * DEV.enemyHpMult));
-  const baseDmg = Math.max(1, Math.round((3.5 + mobLevel * DEV.enemyDmgPerFloor + bandIdx) * threat * (floorMod.dmgMult || 1) * pfx('dmg', 1) * threatScale * earlyBite * reliefEase * DEV.enemyDmgMult));
+  const baseHp = Math.max(1, Math.round((14 + mobLevel * BALANCE.enemyHpPerFloor) * threat * (floorMod.hpMult || 1) * pfx('hp', 1) * threatScale * reliefEase * BALANCE.enemyHpMult));
+  const baseDmg = Math.max(1, Math.round((3.5 + mobLevel * BALANCE.enemyDmgPerFloor + bandIdx) * threat * (floorMod.dmgMult || 1) * pfx('dmg', 1) * threatScale * earlyBite * reliefEase * BALANCE.enemyDmgMult));
   floorMobSpec = { types: floorTypes, hp: baseHp, dmg: baseDmg, level: mobLevel };
 
   for (let i = 0; i < count; i++) {
@@ -13955,8 +13763,8 @@ function spawnEnemies() {
         // pace as your power climbs). Its level also sets the loot it drops.
         const bossLevel = dungeonLevel + 2;
         const bossThreat = depthThreat(bossLevel) * threatScale;
-        const bossHp = Math.round((50 + bossLevel * 23) * bossThreat * DEV.bossHpMult * DEV.enemyHpMult * bossHpMult());   // depth-scaled overhaul pools: mild on Normal, tough on Hardened, full ~5x on Brutal+Endless
-        const bossDmg = Math.round((9 + bossLevel * 2.1) * bossThreat * DEV.bossDmgMult * DEV.enemyDmgMult);  // and they hit somewhat harder
+        const bossHp = Math.round((50 + bossLevel * 23) * bossThreat * BALANCE.bossHpMult * BALANCE.enemyHpMult * bossHpMult());   // depth-scaled overhaul pools: mild on Normal, tough on Hardened, full ~5x on Brutal+Endless
+        const bossDmg = Math.round((9 + bossLevel * 2.1) * bossThreat * BALANCE.bossDmgMult * BALANCE.enemyDmgMult);  // and they hit somewhat harder
         enemies.push({
           x: ex, y: ey,
           hp: bossHp, maxHp: bossHp,
@@ -13979,14 +13787,14 @@ function spawnEnemies() {
           const eName = pick(ELITE_NAMES);
           const eType = pick(floorTypes);
           const eBeh = BEHAVIORS[behaviorFor(eType)] || BEHAVIORS.chaser;   // elites inherit their archetype's HP/damage profile on top of the elite bonus
-          const eHp = Math.round(baseHp * DEV.eliteHpMult * (eBeh.hpMult || 1));   // baseHp already carries DEV.enemyHpMult
+          const eHp = Math.round(baseHp * BALANCE.eliteHpMult * (eBeh.hpMult || 1));   // baseHp already carries BALANCE.enemyHpMult
           enemies.push({
             x: ex, y: ey,
             hp: eHp, maxHp: eHp,
             type: eType,
             name: eName,
             level: mobLevel + 1,   // elites are a notch above the floor — richer loot
-            dmg: Math.round(baseDmg * DEV.eliteDmgMult * (eBeh.dmgMult || 1)),   // baseDmg already carries DEV.enemyDmgMult
+            dmg: Math.round(baseDmg * BALANCE.eliteDmgMult * (eBeh.dmgMult || 1)),   // baseDmg already carries BALANCE.enemyDmgMult
             dead: false, isElite: true,
             behavior: behaviorFor(eType),
             mColor: (typeof MONSTERS === 'object' && MONSTERS[eType] && MONSTERS[eType].color) || null,
@@ -28808,7 +28616,9 @@ backfillAccountAchievements();
 loadDelMeta();  // deletion tombstones, so a hero deleted on another device stays deleted here
 loadDaily();   // daily-goal streak (persists in localStorage, independent of saves)
 const hadSave = loadGame();
-loadDevTune();   // restore any saved Dev-tab difficulty overrides (Settings ▸ Dev)
+// The Dev tuning tab was removed; wipe any saved slider overrides so every hero
+// reverts to the shipping balance defaults on load.
+try { localStorage.removeItem('dungeonLoot_devTune_v1'); } catch (e) {}
 // Load the account-wide shared stash (and, on first run, migrate any older
 // per-character stashes into the pool). It lives outside the save slots, so it
 // loads even when the active slot is empty.
@@ -29585,18 +29395,6 @@ const __DL_FN_BRIDGE = {
   craftedMark,
   statMeaningTip,
   attrLabelIcon,
-  devClamp,
-  devModified,
-  devFmt,
-  saveDevTune,
-  loadDevTune,
-  devAfter,
-  onDevSlider,
-  resetDevTunable,
-  resetAllDevTune,
-  devRespawnFloor,
-  syncDevRow,
-  renderDevTune,
   baseAttributes,
   spentAttrPoints,
   depthThreat,
@@ -30716,7 +30514,6 @@ __dlLive("ACHIEVEMENTS", () => ACHIEVEMENTS, undefined);
 __dlLive("ACH_CATS", () => ACH_CATS, undefined);
 __dlLive("AUTO_LOOT_LABELS", () => AUTO_LOOT_LABELS, undefined);
 __dlLive("AUTO_SLOT", () => AUTO_SLOT, undefined);
-__dlLive("DEV_TUNABLES", () => DEV_TUNABLES, undefined);
 __dlLive("DIFFS", () => DIFFS, undefined);
 __dlLive("FLOORS_PER_DIFF", () => FLOORS_PER_DIFF, undefined);
 __dlLive("HEAL_POTION_SVG", () => HEAL_POTION_SVG, undefined);

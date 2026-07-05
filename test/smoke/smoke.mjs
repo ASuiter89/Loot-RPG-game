@@ -56,12 +56,12 @@ const EXPECTED_STATE_KEYS = [
   'isBossFloor', 'floorCleared', 'hostilesLeft', 'stairs', 'player', 'effects',
   'sets', 'skills', 'autoSkill', 'enemies', 'chests', 'coins', 'food', 'vaultKey',
   'carryingKey', 'grave', 'graveSite', 'npcs', 'allies', 'hazards', 'shrines', 'teleporters',
-  'quest', 'conquestGate', 'greed', 'menu', 'legend', 'guide', 'devTuning', 'map',
+  'quest', 'conquestGate', 'greed', 'menu', 'legend', 'guide', 'map',
 ];
 const EXPECTED_GUIDE_TOPICS = [
   'overview', 'driving', 'controls', 'movement', 'combat', 'healing', 'skills',
   'damage', 'autocast', 'loot', 'autoloot', 'hazards', 'enemies', 'quests', 'progression',
-  'character', 'town', 'tips', 'dev', 'power',
+  'character', 'town', 'tips', 'power',
 ];
 
 function findExecutable() {

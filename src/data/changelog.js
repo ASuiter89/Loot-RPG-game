@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Removed the Dev tuning tab", by: "Claude", notes: [
+    "Retired the Settings ▸ Dev difficulty-slider panel — the game now ships on its tuned defaults, no on-the-fly balance knobs.",
+    "Any saved slider overrides are cleared on load, so every hero reverts to the standard balance.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Hero snapshot now shows the full Stats panel and every learned skill", by: "Claude", notes: [
     "A leaderboard hero's snapshot now includes the whole Stats panel from the Hero tab — attack, defense, HP/MP and regen, the ratings and the % they yield, crit, tenacity, conqueror's scars, and every bonus from their gear.",
     "The skills list now shows ALL learned skills — passives included, each with its rank — grouped into Actives and Passives, with hot-barred picks marked.",
