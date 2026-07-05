@@ -3733,11 +3733,11 @@
     color: var(--xp); font-size: 1.4rem; font-weight: bold; letter-spacing: 1px;
     margin: 12px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border);
   }
-  /* Fully dynamic floor picker: pack as many number tiles as fit, wrapping to a
-     new row instead of clipping the 5th column on a narrow / foldable cover screen
-     (deep Endless floors carry 3-digit numbers + grave/door icons that overflow a
-     fixed 5-up track). Floor scales with UI SIZE so bigger digits keep their tile. */
-  .gate-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(50px * var(--ui-scale,1))), 1fr)); gap: 8px; }
+  /* Desktop: fixed 5-up track — big, comfortable number tiles under mouse.
+     The touch layer (body.touch .gate-grid, in the TOUCH UI section below) swaps in
+     a fluid auto-fit grid so a narrow / foldable cover screen wraps instead of
+     clipping the deep-floor 3-digit numbers + grave/door icons. */
+  .gate-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
   .gate-floor {
     display: flex; align-items: center; justify-content: center;
     min-height: 64px; padding: 14px 0; border: 2px solid var(--border);
@@ -3766,10 +3766,10 @@
   }
   .gate-grave-note { color: var(--gold); }
   /* Difficulty tier picker at the top of the Dungeon Gate. */
-  /* Fully dynamic difficulty picker: 4-up when there's room, reflowing to 2×2 / 1-up
-     on a narrow screen instead of clipping "Hardened"/"Endless" off the right edge.
-     Floor scales with UI SIZE so a longer label at a larger font keeps its tile. */
-  .gate-diffs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(80px * var(--ui-scale,1))), 1fr)); gap: 6px; margin-bottom: 8px; }
+  /* Desktop: fixed 4-up row, one tile per difficulty. The touch layer
+     (body.touch .gate-diffs, in the TOUCH UI section below) reflows it fluidly so
+     "Hardened"/"Endless" don't clip off a narrow / foldable cover screen. */
+  .gate-diffs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
   .gate-diff {
     padding: 9px 0; border: 1px solid var(--border); border-radius: 5px;
     background: var(--orange-850); color: var(--gold-200); font-family: var(--font-ui);
@@ -4600,6 +4600,19 @@
   }
   body.touch .shop-row.has-actions > .row-actions .ench-tipwrap { display: flex; }
   body.touch .shop-row.has-actions > .row-actions .act-btn { flex: 1; width: 100%; }
+  /* Dungeon Gate pickers reflow fluidly on touch (desktop keeps its fixed 5-up /
+     4-up tracks). Pack as many tiles as fit, wrapping to a new row instead of
+     clipping the 5th floor column / a long difficulty label on a narrow or foldable
+     cover screen; scales with UI SIZE so bigger digits keep their tile, and the
+     min(100%,…) guard lets a lone column shrink below the floor on the narrowest
+     screens. Verify the extremes (~280px cover, ~840px unfolded). Only the column
+     track changes — display:grid and gap are inherited from the base rule above. */
+  body.touch .gate-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(50px * var(--ui-scale,1))), 1fr));
+  }
+  body.touch .gate-diffs {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(80px * var(--ui-scale,1))), 1fr));
+  }
   /* Full-height, scrollable modals so long menus reach on a small screen. */
   /* Town / shop / mystic modals fill the screen on touch (the 340px cap clips the
      2-column service grid on a phone); the settings card just grows to full height. */
