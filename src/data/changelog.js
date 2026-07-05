@@ -11,6 +11,10 @@ export const CHANGELOG = [
     "An off-hand in your bag no longer lights up as an upgrade while a two-handed weapon fills your hands — there's no free slot to equip it into, so it's not a swap you can make.",
     "A two-handed weapon now only flags as an upgrade when it beats your equipped weapon AND off-hand combined, since equipping it drops the off-hand too.",
   ] },
+  { date: "2026-07-05", size: "small", v: "Foes hiding behind the same tree all stay visible", by: "Claude", notes: [
+    "Fixed the see-through silhouette that keeps a hero or foe trackable while they stand behind a tree: when two or more of them tucked behind the SAME tree, the tree redrew over the ones already outlined and blinked their silhouettes out.",
+    "Now the tree is redrawn over everyone first and every silhouette is stamped on top, so all of them read through the trunk at once.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Grave-loot zombies show their real art", by: "Claude", notes: [
     "Disturbing a buried-treasure grave raises the dead — those risen foes now render as proper zombies instead of blank boxes marked with a \"?\".",
     "The slip left up to three placeholder squares standing until you cut them down.",
