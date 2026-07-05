@@ -26651,6 +26651,36 @@ function checkAchievements() {
   try { sfx('levelup'); } catch (e) {}
 }
 
+// One-time boot migration for account-wide achievements. The per-slot tally shipped
+// FIRST, so a returning player's already-earned feats live only inside each save slot
+// — the account-wide `nach` set starts empty, and would otherwise refill only as each
+// hero is REPLAYED, leaving un-replayed slots showing a stale, lower count (the exact
+// per-slot divergence this feature fixes). So on boot we scan every local save and
+// seed `nach` with the union of every feat provable from every slot, unifying the
+// account tally retroactively. Runs before loadGame(), so the gear feats (which read
+// the live `equipped`/`inventory`) are evaluated against each slot's OWN saved loadout
+// via a scoped swap that is always restored. Idempotent (nAchGrant only ever adds), so
+// it also heals a save imported or cloud-restored later, and grants SILENTLY — these
+// feats were earned long ago, so no combat-log announcement. Cloud sync is a no-op
+// this early (not signed in yet); the boot reconcile pushes the seeded set up.
+function backfillAccountAchievements() {
+  const savedE = equipped, savedI = inventory; // gear feats read these module globals
+  try {
+    for (const i of allLocalSlotIndices()) {
+      let d;
+      try { d = JSON.parse(localStorage.getItem(slotKey(i))); } catch (e) { continue; }
+      if (!saveStarted(d)) continue;
+      // Point the gear-feat globals at THIS slot's saved loadout for its test pass.
+      equipped = (d.equipped && typeof d.equipped === 'object') ? d.equipped : {};
+      inventory = Array.isArray(d.inventory) ? d.inventory : [];
+      for (const a of ACHIEVEMENTS) {
+        if (!nAchHas(a.id)) { try { if (a.test(d.player)) nAchGrant(a.id); } catch (e) {} }
+      }
+    }
+  } catch (e) {}
+  equipped = savedE; inventory = savedI; // restore whatever the caller had (defaults pre-loadGame)
+}
+
 // Lay a dead hardcore save to rest without loading it: ensure a headstone, then
 // scrub the playable slot (local + cloud) so there's nothing left to continue.
 // `d` is a parsed save object; bury it as if it were the active hero.
@@ -28643,9 +28673,11 @@ function renderTitleAchievements() {
   }
   if (btn) {
     // The button carries a progress count so it shows at a glance without opening the
-    // popup: the hardcore tally for a hardcore hero, otherwise the account-wide Kitten
-    // tally (which stands even at the title screen with no active hero).
-    btn.innerHTML = p.hardcore
+    // popup: the hardcore tally for a hardcore hero (or an account whose only progress
+    // is hardcore — e.g. a fallen hero at the title screen), otherwise the account-wide
+    // Kitten tally (which stands even at the title screen with no active hero).
+    const showHc = p.hardcore || (normal.earned === 0 && hc.earned > 0);
+    btn.innerHTML = showHc
       ? `<span data-spr=q_relic></span> Achievements <b style="color:var(--red-350)">${hc.earned}</b> / ${total}`
       : `<span data-spr=q_relic></span> Achievements <b style="color:var(--gold)">${normal.earned}</b> / ${total}`;
     btn.style.display = '';
@@ -28769,6 +28801,10 @@ function titleSound() { toggleSound(); refreshTitleToggles(); }
 // Load the hardcore death ledger + earned feats BEFORE the save, so loadGame() can
 // recognise (and refuse to load) a hero who has already permanently died.
 loadHcMeta();
+// Seed the account-wide (Kitten) feat set from every existing save on this device, so
+// achievements earned before this feature — or on a slot not yet replayed — are
+// unified into one account tally instead of appearing to differ between slots.
+backfillAccountAchievements();
 loadDelMeta();  // deletion tombstones, so a hero deleted on another device stays deleted here
 loadDaily();   // daily-goal streak (persists in localStorage, independent of saves)
 const hadSave = loadGame();
@@ -30551,6 +30587,7 @@ const __DL_FN_BRIDGE = {
   hcIcon,
   checkHardcoreAchievements,
   checkAchievements,
+  backfillAccountAchievements,
   hcBuryDeadSave,
   wipeSave,
   playTimeBeat,
