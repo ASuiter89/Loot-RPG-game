@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Cleaner desktop HUD layout", by: "Claude", notes: [
+    "Gold moves off the bottom HUD into its own pill on the LOOT tab, just left of the crafting materials.",
+    "Power drops from the bottom HUD — it already reads on the HERO tab.",
+    "HP and MP bars grow thicker to fill the gap down to the skill row, and the experience bar doubles in height.",
+    "Hero name lifts to a centred banner across the top of the map.",
+    "Endurance is now a full-height bar between HP and MP with its stamina value overlaid, draining inward from both edges toward the middle.",
+  ] },
   { date: "2026-07-05", size: "large", v: "Class attribute overhaul + the Bulwark shield", by: "Claude", notes: [
     "Each class now deals weapon & skill damage off a SINGLE attribute — Warrior off Might, Rogue off Agility, Mage off Spirit, Templar off Vitality. The old secondary damage attribute (and the small off-class Might bonus) are gone; spells still scale off Spirit for everyone.",
     "Attributes re-homed: Might now raises Defense; Vitality raises max HP, HP regen AND Stamina; Spirit raises max MP, MP regen, spell power AND healing. Agility (evasion, accuracy, move/attack speed) and Luck (crit, loot quality) keep their roles.",
