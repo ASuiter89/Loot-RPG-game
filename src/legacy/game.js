@@ -52,6 +52,7 @@ import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
 import { emptyMealSlots, sanitizeMealSlots, assignMealToSlot, takeFromMealSlot, returnSlotToPantry, filledSlotCount, mealSignature } from '../systems/meals.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
+import { bountyProgress as _bountyProgress, bountyDone as _bountyDone, bountyNewlyComplete } from '../systems/bounty.js';
 import { forgeSections } from '../systems/forgeFlow.js';
 import { CURSE_TIER_MULT, curseTierMult, statCurseSwing, cursedStatCeiling } from '../systems/curseRoll.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
@@ -7217,7 +7218,7 @@ window.gameGuide = function gameGuide(topic) {
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
-      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress.`,
+      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress (including menu.bounty.done once it's ready to claim).`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
     tips: [
@@ -11893,17 +11894,45 @@ function transmute(tier, ids) {
 // player.bounty = { kind, need, snap, gold, mat, ilvl, desc }. Progress is read
 // live from the hero's running totals, so no per-tick tracking is needed.
 function bountyKills() { return Object.values(bestiaryDex.kills).reduce((a, b) => a + (+b || 0), 0); }
-function bountyProgress(b) {
-  if (!b) return 0;
-  if (b.kind === 'slay')  return Math.max(0, bountyKills() - b.snap);
-  if (b.kind === 'delve')  return Math.max(0, (player.maxFloor || 1));
-  if (b.kind === 'clear')  return Math.max(0, Object.keys(player.clearedFloors || {}).length - b.snap);
-  if (b.kind === 'boss')  return Math.max(0, (player.bossKills || 0) - b.snap);
-  if (b.kind === 'elite')  return Math.max(0, (player.eliteKills || 0) - b.snap);
-  if (b.kind === 'gold')  return Math.max(0, (player.goldEarned || 0) - b.snap);
-  return 0;
+// Snapshot the hero's live running totals the pure bounty math (systems/bounty.js)
+// reads from. Kept tiny — it's rebuilt per progress check, which only fires on
+// gameplay events (kills, floor clears, gold gains), never per frame.
+function bountyTotals() {
+  return {
+    kills: bountyKills(),
+    maxFloor: player.maxFloor || 1,
+    clearedFloors: Object.keys(player.clearedFloors || {}).length,
+    bossKills: player.bossKills || 0,
+    eliteKills: player.eliteKills || 0,
+    goldEarned: player.goldEarned || 0,
+  };
 }
-function bountyDone(b) { return b && bountyProgress(b) >= b.need; }
+function bountyProgress(b) { return _bountyProgress(b, bountyTotals()); }
+function bountyDone(b) { return _bountyDone(b, bountyTotals()); }
+// Fire a one-shot "bounty complete" cue the instant live progress first reaches
+// the contract's goal. Progress is read live from running totals, so there is no
+// natural completion moment otherwise — this pops a centre-screen banner, a chime
+// and a green flash (plus a log line) telling the player to head back to town and
+// claim. The latch lives on player.bounty so it fires once, not on every later kill.
+function checkBountyComplete() {
+  const b = (typeof player === 'object' && player) ? player.bounty : null;
+  if (!b) return;
+  // Latch on the not-done → done edge first, so the cue is consumed exactly once…
+  if (!bountyNewlyComplete(b, bountyTotals())) return;
+  // …but only celebrate during live dungeon play. A bounty is only ever completed
+  // out in the dungeon, so an in-town / title-screen edge means a prior session
+  // finished it and we're merely resuming — popping a "return to town" banner over
+  // the title (or while already in town) would be a stray. Either way the belt and
+  // objective tracker still show the green "ready to claim" state.
+  const titleOv = document.getElementById('title-overlay');
+  const titleOpen = !!(titleOv && titleOv.classList.contains('open'));
+  if (inTown || titleOpen) return;
+  if (typeof showLootBanner === 'function') {
+    showLootBanner('Bounty complete!', 'RETURN TO TOWN TO CLAIM', 'var(--uncommon)',
+      () => { sfx('milestone'); screenFlash('var(--uncommon)'); });
+  }
+  log('<span data-spr=scroll></span> <b style="color:var(--uncommon)">Bounty complete!</b> Return to town to claim your reward.', 'important');
+}
 
 // The board draws from a big pool of contract templates and shows a rotating
 // selection of 10. The shown set is seeded on a slowly-advancing time window so
@@ -11980,7 +12009,7 @@ function acceptBounty(i) {
   player.bounty = { kind: o.kind, need: o.need, snap: o.snap, gold: o.gold, mat: o.mat, ilvl: o.ilvl, desc: o.desc(o.need) };
   sfx('click');
   log(`<span data-spr=scroll></span> Bounty accepted: ${o.desc(o.need)}.`, 'important');
-  renderBounty(); updateObjectiveChip(); saveGame();
+  renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame();
 }
 function claimBounty() {
   const b = player.bounty; if (!b || !bountyDone(b)) return;
@@ -11996,9 +12025,11 @@ function claimBounty() {
   if (isTopTierItem(item)) lootReveal(item);
   else { sfx('levelup'); screenFlash('#ffd24b'); }
   log(`<span data-spr=scroll></span> Bounty complete! +<span data-spr=ic_money></span>${b.gold}, materials, and ${logItem(item)}.`, 'loot');
-  updateBars(); renderPanel(); renderBounty(); updateObjectiveChip(); saveGame();
+  // renderSkillBar() clears the belt's now-stale bounty module at once — otherwise
+  // its green "ready to claim" pulse would linger until the next world-tick rebuild.
+  updateBars(); renderPanel(); renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame();
 }
-function abandonBounty() { player.bounty = null; sfx('click'); log('<span data-spr=scroll></span> You abandon the bounty.'); renderBounty(); updateObjectiveChip(); saveGame(); }
+function abandonBounty() { player.bounty = null; sfx('click'); log('<span data-spr=scroll></span> You abandon the bounty.'); renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame(); }
 
 // ── OBJECTIVE CHIP / DAILY STREAK / COMBO + GREED RESETS ─────────────────────
 // The objective chip (a compact "what am I working toward" banner near the top),
@@ -12033,6 +12064,7 @@ function loadDaily() {
 // the last-written state is remembered and unchanged repaints skip the DOM writes.
 let _objChipLast = null;
 function updateObjectiveChip() {
+  checkBountyComplete();   // one-shot "bounty complete" cue on the not-done → done edge
   const chip = document.getElementById('objective-chip');
   if (!chip) return;
   const p = (typeof player === 'object' && player) || null;
@@ -25688,7 +25720,11 @@ function renderSkillBar() {
     _lastSkillBarHtml = html;
     bar.innerHTML = html;
     _sbCdEls = _sbCdTextEls = null;   // the dials/placeholders were just rebuilt
-    _beltBountyEl = null;             // the belt bounty module (if any) was just rebuilt
+    // Drop BOTH belt-bounty caches: the fresh module starts with an empty (0-width)
+    // fill and blank count, so the memo key must reset too — otherwise syncBeltBounty
+    // sees an unchanged key and skips painting, stranding a completed bounty's bar
+    // empty after any rebuild (e.g. walking into town).
+    _beltBountyEl = null; _beltBountyKey = null;
     syncTownBarReserve();
   }
   // Runs on EVERY call (rebuilt or not) so the countdown text and the belt bounty
