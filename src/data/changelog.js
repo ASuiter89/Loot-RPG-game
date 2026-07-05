@@ -11,6 +11,11 @@ export const CHANGELOG = [
     "Disturbing a buried-treasure grave raises the dead — those risen foes now render as proper zombies instead of blank boxes marked with a \"?\".",
     "The slip left up to three placeholder squares standing until you cut them down.",
   ] },
+  { date: "2026-07-05", size: "small", v: "Objects and NPCs never wall off a path", by: "Claude", notes: [
+    "Fixed floors where a tree, a piece of decor or a wandering merchant/mystic could sit on the only route through and seal off part of the level.",
+    "Solid decor now knows the shop NPCs are immovable, and NPCs won't stand on a lone pinch point, so neither can plug the last gap of a corridor.",
+    "Every floor gets a final walkability sweep after it's built: anything left blocking the way is cleared or shoved aside, so you can always reach the whole floor.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Quaff potions in town", by: "Claude", notes: [
     "The Health and Mana potions (Q/E) now work in town, not just the dungeon — top up instantly before a dive instead of waiting out the free rest.",
     "They share the same cooldown they do in the dungeon, so town sips can't be spammed.",
