@@ -35,3 +35,66 @@ export function bestiaryRevealRatio(kills, isBoss, full) {
   if (isBoss) return kills >= 1 ? 1 : 0;
   return Math.min(kills, full) / full;
 }
+
+// ── Account-wide ledger shape + merge algebra ───────────────────────────────
+// The codex's kill tally + specimen lore are ACCOUNT-WIDE — shared across every
+// hero and save slot, so slaying a species on one hero fills in its card for all of
+// them. These pure helpers own the ledger's shape and its merge rules; the shell
+// (legacy) does the localStorage I/O, so there is one tested source of truth.
+
+// A fresh, empty ledger: a cumulative lifetime kill count per species key, the
+// DEEPEST specimen's numbers per key, and a last-write time (for future syncing).
+export function emptyDex() { return { kills: {}, lore: {}, ts: 0 }; }
+
+// Coerce arbitrary parsed JSON into a valid ledger: drop non-positive/NaN kills and
+// malformed lore so a corrupt or hand-edited file can never poison a read.
+export function sanitizeDex(raw) {
+  const dex = emptyDex();
+  if (!raw || typeof raw !== 'object') return dex;
+  if (raw.kills && typeof raw.kills === 'object') {
+    for (const k in raw.kills) { const n = Math.floor(+raw.kills[k]); if (n > 0) dex.kills[k] = n; }
+  }
+  if (raw.lore && typeof raw.lore === 'object') {
+    for (const k in raw.lore) { const L = sanitizeLore(raw.lore[k]); if (L) dex.lore[k] = L; }
+  }
+  dex.ts = (typeof raw.ts === 'number' && raw.ts > 0) ? raw.ts : 0;
+  return dex;
+}
+
+// Normalize one specimen record to finite numbers (or null if unusable).
+function sanitizeLore(L) {
+  if (!L || typeof L !== 'object') return null;
+  const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
+  return { level: num(L.level), hp: num(L.hp), dmg: num(L.dmg), armor: num(L.armor), mres: num(L.mres) };
+}
+
+// The deeper of two specimens — higher level wins, ties keep the incumbent — so the
+// codex always shows the strongest form of a species you have faced.
+export function deeperSpecimen(prev, next) {
+  const n = sanitizeLore(next);
+  if (!n) return prev || null;
+  if (!prev) return n;
+  return (n.level || 0) >= (prev.level || 0) ? n : prev;
+}
+
+// Fold a legacy PER-HERO bestiary (a kills map + a lore map, from before the ledger
+// went account-wide) INTO a ledger in place: SUM the kills into the cumulative
+// lifetime total, keep the deeper lore. Mutates and returns `dex`.
+export function foldLegacyBestiary(dex, kills, lore) {
+  if (kills && typeof kills === 'object') {
+    for (const k in kills) { const n = Math.floor(+kills[k]); if (n > 0) dex.kills[k] = (dex.kills[k] || 0) + n; }
+  }
+  if (lore && typeof lore === 'object') {
+    for (const k in lore) { const L = sanitizeLore(lore[k]); if (L) dex.lore[k] = deeperSpecimen(dex.lore[k], L); }
+  }
+  return dex;
+}
+
+// Record ONE kill of a species into a ledger in place: +1 to its lifetime count and
+// update its deeper-specimen lore. Mutates and returns `dex`.
+export function recordKill(dex, key, specimen) {
+  dex.kills[key] = (dex.kills[key] || 0) + 1;
+  const L = deeperSpecimen(dex.lore[key], specimen);
+  if (L) dex.lore[key] = L;
+  return dex;
+}

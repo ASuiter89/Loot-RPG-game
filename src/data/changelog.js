@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Account-wide bestiary, no more codex freeze", by: "Claude", notes: [
+    "The Bestiary is now account-wide: kills carry across every hero and save slot, so slaying a species on one hero fills in its card for all of them. Your codex survives death, a Reset Run, and switching slots — like the shared town stash.",
+    "Existing per-hero kill counts fold into the shared codex automatically, so nothing already recorded is lost.",
+    "Opening the Bestiary no longer freezes the game for a couple of seconds — foe portraits are now pre-baked, so the whole roster paints instantly.",
+  ] },
   { date: "2026-07-05", size: "small", v: "HP, MP & Spirit Veil fill at a steady pace", by: "Claude", notes: [
     "The bars used to charge smoothly, then rush the last sliver in a little jump as they topped off. Now the whole fill — including the final bit — climbs at one consistent rate, on HP, MP and the Spirit Veil alike.",
   ] },
