@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Enchanter reroll buttons stack under the text on phones", by: "Claude", notes: [
+    "On a phone the Enchanter's per-property rows now read top to bottom — the stat and its roll range sit on top, with the Value and Type reroll buttons laid across the bottom. The buttons and their prices used to crowd in beside the text on a narrow screen and overlap it, making them hard to read and tap; now each row stands clear at any width.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Bag opens over town menus on phones", by: "Claude", notes: [
     "On a phone, opening the Bag from Town now covers the menu you opened it over — it used to slip behind the merchant (and the mystic), hiding your loot behind their wares.",
   ] },

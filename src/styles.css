@@ -4489,6 +4489,23 @@
   body.touch .settings-item, body.touch .town-menu-btn, body.touch .shop-row,
   body.touch .act-btn, body.touch .la-btn, body.touch .modal-nav-btn,
   body.touch .kb-row { min-height: 44px; }
+  /* Enchanter reroll rows (the only .has-actions rows carrying a .row-actions
+     multi-button cluster): on touch, stack the property text on top and lay the
+     Value / Type buttons across the bottom, full-width — the wide cost labels
+     (gold + up to four material icons) can't fit beside the text on a narrow
+     screen, where the horizontal flex layout crushes the text to a sliver and
+     the buttons overrun and overlap it. Fluid: two buttons side-by-side where
+     they fit, one-per-row when they don't (auto-fit collapses to fill width). */
+  body.touch .shop-row.has-actions:has(> .row-actions) {
+    flex-direction: column; align-items: stretch; gap: var(--space-2);
+  }
+  body.touch .shop-row.has-actions > .row-actions {
+    flex: none; width: 100%; display: grid; align-items: stretch;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(150px * var(--ui-scale,1))), 1fr));
+    gap: var(--space-2);
+  }
+  body.touch .shop-row.has-actions > .row-actions .ench-tipwrap { display: flex; }
+  body.touch .shop-row.has-actions > .row-actions .act-btn { flex: 1; width: 100%; }
   /* Full-height, scrollable modals so long menus reach on a small screen. */
   /* Town / shop / mystic modals fill the screen on touch (the 340px cap clips the
      2-column service grid on a phone); the settings card just grows to full height. */
