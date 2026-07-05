@@ -25,6 +25,10 @@ export const CHANGELOG = [
     "Your existing heroes' materials are pooled together automatically on first load — nothing is lost, and it merges cleanly across devices when you're signed in.",
     "Standard and Hardcore now keep SEPARATE vaults AND separate materials — nothing crosses between the two ladders. Your Standard vault and stockpile keep everything they had; a Hardcore hero starts its own fresh, walled-off pools.",
   ] },
+  { date: "2026-07-04", size: "small", v: "Achievements are account-wide — no more per-slot drift", by: "Claude", notes: [
+    "Earned achievements now belong to your account, not a single save slot. Your existing feats across every save are merged into one tally the first time you load this update, and any feat unlocked afterward on any hero or slot stays unlocked everywhere — surviving death, a Reset Run, or switching saves, so two slots can never show different totals again. Signed-in players sync the full set across devices.",
+    "Unlocking a feat in normal play now announces it in the combat log, the way Hardcore feats already did.",
+  ] },
   { date: "2026-07-04", size: "small", v: "See-through silhouettes render right behind overlapping trees", by: "Claude", notes: [
     "Standing (or watching a foe stand) behind two trees whose leaves overlap no longer paints a square patch where the farther tree jumps in front of the nearer one. The trees now keep their proper front-to-back order and the tinted silhouette reads cleanly through both.",
   ] },

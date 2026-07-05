@@ -60,7 +60,7 @@ import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKIL
 import { BOSS_ATLAS_URL } from '../assets/bossAtlas.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 import { planReconcile, freshDelMeta, sanitizeDelMeta, isTombstoned, addTombstone,
-  mergeDelMeta, delCloudHasAll } from '../persistence/saveSync.js';
+  mergeDelMeta, delCloudHasAll, sanitizeHcMeta, mergeHcMeta, hcMetaCloudHasAll } from '../persistence/saveSync.js';
 import { freshStash, sanitizeStash, mergeStash, depositGold, withdrawGold, depositMaterial, withdrawMaterial, materialsValue, foldHeroMaterials } from '../persistence/stashSync.js';
 import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
 import { mercCost } from '../systems/mercPricing.js';
@@ -26177,9 +26177,12 @@ function saveGame() {
   } catch (e) {
     // localStorage unavailable (e.g. inside artifact preview) — fail silently
   }
-  // Grant any hardcore achievements the hero now qualifies for (persisted outside
-  // the save so they outlive a permadeath). Cheap once everything's earned.
+  // Grant any achievements the hero now qualifies for, persisted OUTSIDE the save so
+  // they're account-wide (survive a permadeath, a Reset Run, or a slot switch) and
+  // never diverge between slots. Hardcore heroes also fill the hardcore feat set.
+  // Cheap once everything's earned.
   if (player.hardcore) checkHardcoreAchievements();
+  checkAchievements();
   // Push this character's best stats to the global leaderboard (debounced).
   lbScheduleSubmit();
   // Mirror this slot to the cloud account, if the player is signed in (debounced).
@@ -26499,26 +26502,26 @@ function recordFallenHero() {
 //     the death propagates and the hero is locked everywhere. (A device that
 //     never syncs at all can't be reached without a server gating every write;
 //     cross-device hardcore therefore relies on the cloud account.)
-// The same record also stores earned hardcore achievements, which must outlive
-// the hero that earned them (the save is destroyed on death).
+// The same record also stores earned achievements — hardcore feats in `ach` and
+// normal/Kitten feats in `nach`. Both must OUTLIVE the hero that earned them: a
+// hardcore save is destroyed on death, and normal achievements are ACCOUNT-WIDE, so
+// a feat earned on any hero/slot shows on every hero/slot (fixing the old bug where
+// each slot derived its own count live and they diverged). See sanitizeHcMeta/
+// mergeHcMeta in persistence/saveSync.js for the pure, tested set algebra.
 const HC_DEAD_KEY = 'dungeonLoot_hcMeta_v1';
-let hcMeta = { cids: [], ach: [], ts: 0 };
-// Set mirror of hcMeta.ach for O(1) membership tests — checkHardcoreAchievements
-// probes every achievement id on each save, so the array indexOf scan adds up.
-// Kept in sync at every point hcMeta.ach changes (load, grant, cloud merge).
+let hcMeta = { cids: [], ach: [], nach: [], ts: 0 };
+// Set mirrors of hcMeta.ach / hcMeta.nach for O(1) membership tests — the achievement
+// checks probe every id on each save, so the array indexOf scans add up. Kept in
+// sync at every point the feat sets change (load, grant, cloud merge).
 let _hcAchSet = new Set();
+let _nAchSet = new Set();
 function loadHcMeta() {
   try {
     const j = JSON.parse(localStorage.getItem(HC_DEAD_KEY));
-    if (j && typeof j === 'object') {
-      hcMeta = {
-        cids: Array.isArray(j.cids) ? j.cids.filter(x => typeof x === 'string') : [],
-        ach: Array.isArray(j.ach) ? j.ach.filter(x => typeof x === 'string') : [],
-        ts: Math.max(0, Math.floor(j.ts) || 0),
-      };
-    }
+    if (j && typeof j === 'object') hcMeta = sanitizeHcMeta(j);
   } catch (e) {}
   _hcAchSet = new Set(hcMeta.ach);
+  _nAchSet = new Set(hcMeta.nach);
 }
 function writeHcMeta() { try { localStorage.setItem(HC_DEAD_KEY, JSON.stringify(hcMeta)); } catch (e) {} }
 function hcIsDead(cid) { return !!cid && hcMeta.cids.indexOf(cid) !== -1; }
@@ -26540,6 +26543,20 @@ function hcGrantAch(id) {
   if (!id || _hcAchSet.has(id)) return false;
   hcMeta.ach.push(id);
   _hcAchSet.add(id);
+  hcMeta.ts = Date.now();
+  writeHcMeta();
+  cloudScheduleHcMeta();
+  return true;
+}
+// The normal/Kitten-mode twin of hcHasAch/hcGrantAch. Feats earned in ordinary play
+// accumulate account-wide in hcMeta.nach (persisted + cloud-synced the same way), so
+// the Kitten tab is a superset across every hero and slot instead of the active
+// hero's live count.
+function nAchHas(id) { return _nAchSet.has(id); }
+function nAchGrant(id) {
+  if (!id || _nAchSet.has(id)) return false;
+  hcMeta.nach.push(id);
+  _nAchSet.add(id);
   hcMeta.ts = Date.now();
   writeHcMeta();
   cloudScheduleHcMeta();
@@ -26608,6 +26625,60 @@ function checkHardcoreAchievements() {
     }
   } catch (e) {}
   try { sfx('levelup'); } catch (e) {}
+}
+
+// ── Account-wide achievements ── The Kitten-mode twin of the hardcore check above.
+// Grants into hcMeta.nach any feat the ACTIVE hero (of ANY mode) now qualifies for,
+// so the Kitten tab is the account's full "have I ever done this" set — persisted and
+// cloud-synced, surviving death, a Reset Run, or switching save slots. Called from
+// saveGame() for every started hero. A hardcore hero populates BOTH sets, but its
+// crimson feat line comes from checkHardcoreAchievements(); we don't double-announce.
+function checkAchievements() {
+  if (typeof player !== 'object' || !player) return;
+  const earned = [];
+  for (const a of ACHIEVEMENTS) {
+    if (!nAchHas(a.id) && a.test(player) && nAchGrant(a.id)) earned.push(a);
+  }
+  if (!earned.length || player.hardcore) return;
+  const trophy = (typeof dlIcon === 'function' && dlIcon('q_relic', 15)) || '';
+  try {
+    if (earned.length <= 3) {
+      for (const a of earned) log(`${trophy} <b style="color:var(--gold)">Achievement</b> — <b>${a.name}</b>: ${a.desc}`, 'important');
+    } else {
+      log(`${trophy} <b style="color:var(--gold)">Achievements</b> — earned <b>${earned.length}</b> feats: ${earned.map(a => a.name).join(', ')}.`, 'important');
+    }
+  } catch (e) {}
+  try { sfx('levelup'); } catch (e) {}
+}
+
+// One-time boot migration for account-wide achievements. The per-slot tally shipped
+// FIRST, so a returning player's already-earned feats live only inside each save slot
+// — the account-wide `nach` set starts empty, and would otherwise refill only as each
+// hero is REPLAYED, leaving un-replayed slots showing a stale, lower count (the exact
+// per-slot divergence this feature fixes). So on boot we scan every local save and
+// seed `nach` with the union of every feat provable from every slot, unifying the
+// account tally retroactively. Runs before loadGame(), so the gear feats (which read
+// the live `equipped`/`inventory`) are evaluated against each slot's OWN saved loadout
+// via a scoped swap that is always restored. Idempotent (nAchGrant only ever adds), so
+// it also heals a save imported or cloud-restored later, and grants SILENTLY — these
+// feats were earned long ago, so no combat-log announcement. Cloud sync is a no-op
+// this early (not signed in yet); the boot reconcile pushes the seeded set up.
+function backfillAccountAchievements() {
+  const savedE = equipped, savedI = inventory; // gear feats read these module globals
+  try {
+    for (const i of allLocalSlotIndices()) {
+      let d;
+      try { d = JSON.parse(localStorage.getItem(slotKey(i))); } catch (e) { continue; }
+      if (!saveStarted(d)) continue;
+      // Point the gear-feat globals at THIS slot's saved loadout for its test pass.
+      equipped = (d.equipped && typeof d.equipped === 'object') ? d.equipped : {};
+      inventory = Array.isArray(d.inventory) ? d.inventory : [];
+      for (const a of ACHIEVEMENTS) {
+        if (!nAchHas(a.id)) { try { if (a.test(d.player)) nAchGrant(a.id); } catch (e) {} }
+      }
+    }
+  } catch (e) {}
+  equipped = savedE; inventory = savedI; // restore whatever the caller had (defaults pre-loadGame)
 }
 
 // Lay a dead hardcore save to rest without loading it: ensure a headstone, then
@@ -27572,13 +27643,14 @@ function cloudFlush() {
 }
 
 // ── Hardcore-meta cloud sync ────────────────────────────────────────────────
-// The hardcore death ledger + earned-achievement set mirror to their own
-// dedicated row (HC_CLOUD_SLOT), like the shared stash. Unlike per-slot saves
-// (last-writer-wins) this row is UNION-merged on reconcile: deaths and feats only
-// ever accumulate, so a death recorded on any device can never be undone by an
-// older copy on another. cloudReconcile() ignores it (no .player → not a started
-// save), so hcReconcile() handles it on its own.
-const HC_CLOUD_SLOT = -2; // sentinel cloud "slot" for hardcore meta — never a real character
+// The account-wide meta ledger — hardcore death ledger (cids) plus BOTH earned-feat
+// sets (ach = hardcore, nach = normal) — mirrors to its own dedicated row
+// (HC_CLOUD_SLOT), like the shared stash. Unlike per-slot saves (last-writer-wins)
+// this row is UNION-merged on reconcile: deaths and feats only ever accumulate, so a
+// death or achievement recorded on any device can never be undone by an older copy on
+// another. cloudReconcile() ignores it (no .player → not a started save), so
+// hcReconcile() handles it on its own.
+const HC_CLOUD_SLOT = -2; // sentinel cloud "slot" for the account meta — never a real character
 let cloudHcTimer = null;
 function cloudScheduleHcMeta() {
   if (!cloudEnabled() || !authState.user) return;
@@ -27586,19 +27658,17 @@ function cloudScheduleHcMeta() {
   cloudHcTimer = setTimeout(() => { cloudHcTimer = null; cloudPushHcMeta(); }, 3500);
 }
 // Union a cloud hcMeta blob into the local one (monotonic — entries only added,
-// never removed). Persists locally if it grew. Returns true if a death id arrived
-// that this device didn't already hold.
+// never removed, across cids/ach/nach). Persists locally if it grew. Returns true if
+// a death id arrived that this device didn't already hold.
 function hcMergeIn(cloud) {
-  if (!cloud || typeof cloud !== 'object') return false;
-  const cloudCids = Array.isArray(cloud.cids) ? cloud.cids.filter(x => typeof x === 'string') : [];
-  const cloudAch = Array.isArray(cloud.ach) ? cloud.ach.filter(x => typeof x === 'string') : [];
-  const cidSet = new Set(hcMeta.cids), achSet = new Set(hcMeta.ach);
-  const knownDeaths = cidSet.size;
-  cloudCids.forEach(c => cidSet.add(c));
-  cloudAch.forEach(a => achSet.add(a));
-  const grew = cidSet.size !== hcMeta.cids.length || achSet.size !== hcMeta.ach.length;
-  if (grew) { hcMeta.cids = Array.from(cidSet); hcMeta.ach = Array.from(achSet); _hcAchSet = achSet; hcMeta.ts = Date.now(); writeHcMeta(); }
-  return cidSet.size > knownDeaths;
+  const r = mergeHcMeta(hcMeta, cloud, Date.now());
+  if (r.grew) {
+    hcMeta.cids = r.meta.cids; hcMeta.ach = r.meta.ach; hcMeta.nach = r.meta.nach; hcMeta.ts = r.meta.ts;
+    _hcAchSet = new Set(hcMeta.ach);
+    _nAchSet = new Set(hcMeta.nach);
+    writeHcMeta();
+  }
+  return r.learnedDeath;
 }
 // Read the account's hardcore-meta row. Returns the data object, null (no row), or
 // undefined (couldn't read — caller MUST NOT then blind-write, or it could shrink
@@ -27624,11 +27694,11 @@ async function cloudWriteHcMeta() {
     return res.ok;
   } catch (e) { return false; }
 }
-// Did the cloud row hold every id/feat we do? (used to skip pointless writes).
+// Did the cloud row hold every id/feat we do (across cids/ach/nach)? Used to skip
+// pointless writes.
 function hcCloudHasAll(cloud) {
   if (!cloud) return false;
-  const cc = Array.isArray(cloud.cids) ? cloud.cids : [], ca = Array.isArray(cloud.ach) ? cloud.ach : [];
-  return hcMeta.cids.every(c => cc.indexOf(c) !== -1) && hcMeta.ach.every(a => ca.indexOf(a) !== -1);
+  return hcMetaCloudHasAll(hcMeta, cloud);
 }
 // Union-FIRST push: read the cloud row, merge it into ours, then write the union
 // back. The read-before-write is the whole point — a blind upsert (the only write
@@ -27643,7 +27713,7 @@ async function cloudPushHcMeta() {
   try { cloud = await cloudFetchHcMeta(); } catch (e) { return false; }
   if (cloud === undefined) return false;
   hcMergeIn(cloud);
-  const haveLocal = hcMeta.cids.length || hcMeta.ach.length;
+  const haveLocal = hcMeta.cids.length || hcMeta.ach.length || hcMeta.nach.length;
   if (haveLocal && !hcCloudHasAll(cloud)) return await cloudWriteHcMeta();
   return true;
 }
@@ -27657,8 +27727,8 @@ async function hcReconcile() {
   if (cloud === undefined) return false;
   const learnedDeath = hcMergeIn(cloud);
   // Push our union up if we hold anything the cloud is missing. Nothing local and
-  // no cloud row → leave it be (don't litter empty rows for non-hardcore players).
-  const haveLocal = hcMeta.cids.length || hcMeta.ach.length;
+  // no cloud row → leave it be (don't litter empty rows for players with no feats).
+  const haveLocal = hcMeta.cids.length || hcMeta.ach.length || hcMeta.nach.length;
   if (haveLocal && !hcCloudHasAll(cloud)) await cloudWriteHcMeta();
   return learnedDeath;
 }
@@ -28573,13 +28643,15 @@ function renderTitleAchievements() {
   const body = document.getElementById('achievements-body');
   const p = (typeof player === 'object' && player) || {};
   const total = ACHIEVEMENTS.length;
-  // Kitten (non-hardcore) feats derive live from the active hero's save state.
-  const normal = achModeHtml(a => a.test(p), false);
+  // Kitten (normal) feats persist account-wide in hcMeta.nach — earned on any hero or
+  // slot, so the tally never diverges between saves — plus whatever the live active
+  // hero currently qualifies for (shown instantly, before the next save grants it).
+  const normal = achModeHtml(a => nAchHas(a.id) || !!a.test(p), false);
   // Hardcore feats persist account-wide (hcMeta.ach) and survive death; the live
   // hardcore hero also lights up anything it currently qualifies for.
   const hc = achModeHtml(a => hcHasAch(a.id) || (p.hardcore && !!a.test(p)), true);
   const anyHc = hc.earned > 0 || !!p.hardcore;
-  if (!p.class && !anyHc) {  // truly fresh save — nothing earned in either mode
+  if (!p.class && !anyHc && normal.earned === 0) {  // truly fresh account — nothing earned anywhere
     if (btn) btn.style.display = 'none';
     if (body) body.innerHTML = '';
     return;
@@ -28600,11 +28672,14 @@ function renderTitleAchievements() {
     selectAchTab(_achTab);
   }
   if (btn) {
-    // The button carries the active hero's own mode count so progress shows at a
-    // glance without opening the popup.
-    btn.innerHTML = p.hardcore
+    // The button carries a progress count so it shows at a glance without opening the
+    // popup: the hardcore tally for a hardcore hero (or an account whose only progress
+    // is hardcore — e.g. a fallen hero at the title screen), otherwise the account-wide
+    // Kitten tally (which stands even at the title screen with no active hero).
+    const showHc = p.hardcore || (normal.earned === 0 && hc.earned > 0);
+    btn.innerHTML = showHc
       ? `<span data-spr=q_relic></span> Achievements <b style="color:var(--red-350)">${hc.earned}</b> / ${total}`
-      : (p.class ? `<span data-spr=q_relic></span> Achievements <b style="color:var(--gold)">${normal.earned}</b> / ${total}` : '<span data-spr=q_relic></span> Achievements');
+      : `<span data-spr=q_relic></span> Achievements <b style="color:var(--gold)">${normal.earned}</b> / ${total}`;
     btn.style.display = '';
   }
 }
@@ -28726,6 +28801,10 @@ function titleSound() { toggleSound(); refreshTitleToggles(); }
 // Load the hardcore death ledger + earned feats BEFORE the save, so loadGame() can
 // recognise (and refuse to load) a hero who has already permanently died.
 loadHcMeta();
+// Seed the account-wide (Kitten) feat set from every existing save on this device, so
+// achievements earned before this feature — or on a slot not yet replayed — are
+// unified into one account tally instead of appearing to differ between slots.
+backfillAccountAchievements();
 loadDelMeta();  // deletion tombstones, so a hero deleted on another device stays deleted here
 loadDaily();   // daily-goal streak (persists in localStorage, independent of saves)
 const hadSave = loadGame();
@@ -30503,8 +30582,12 @@ const __DL_FN_BRIDGE = {
   hcMarkDead,
   hcHasAch,
   hcGrantAch,
+  nAchHas,
+  nAchGrant,
   hcIcon,
   checkHardcoreAchievements,
+  checkAchievements,
+  backfillAccountAchievements,
   hcBuryDeadSave,
   wipeSave,
   playTimeBeat,
