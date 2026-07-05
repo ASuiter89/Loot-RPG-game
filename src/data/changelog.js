@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Shorter Spirit Veil tooltip", by: "Claude", notes: [
+    "Trimmed the Spirit Veil blurb on the HP bar's hover tooltip to a couple of tight sentences, matching the HP line above it.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Cleaner empty bounty tile", by: "Claude", notes: [
     "The belt's bounty tile drops the little figure icon when idle — the \"No bounty yet\" prompt now stands on its own.",
   ] },
