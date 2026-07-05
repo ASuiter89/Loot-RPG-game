@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "medium", v: "Ramen House pantry overhaul", by: "Claude", notes: [
+    "Pantry rows are bigger and clearer: readable EAT button and a larger ramen-bowl icon sized to the row (its transparent padding no longer shrinks the art).",
+    "Identical bowls now stack into a single row with an ×N count instead of one line per bowl.",
+    "New TRASH button (tap twice to confirm) dumps a whole stack you'll never eat.",
+    "Cook a batch at once — Cook ×3 / ×5 / ×10 (up to what your toppings afford) — instead of tapping Cook over and over.",
+    "Assign a bowl to a meal slot by dragging it onto a slot or the HUD belt (desktop); on touch the SLOT button stays and the row's buttons stack vertically.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Bestiary opens on top of the menu; long names fit", by: "Claude", notes: [
     "Opening the Bestiary (or Achievements) from the pause menu now shows it on top of the menu instead of hidden behind it — no need to close settings first.",
     "Long single-word foe names like Constrictor and Bloodhound now wrap inside their card instead of spilling past its right edge.",
