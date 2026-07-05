@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "medium", v: "Click a leaderboard hero to inspect their build", by: "Claude", notes: [
+    "Every row on the leaderboard is now clickable — tap a hero to open a snapshot of their build: worn gear (hover any piece for its full stats), attributes, and the skills they've learned with ranks.",
+    "The board list itself is unchanged and just as quick; a hero's full loadout is fetched only when you open them.",
+  ] },
   { date: "2026-07-04", size: "medium", v: "Crafting materials are shared across your heroes; Hardcore gets its own vault", by: "Claude", notes: [
     "Scrap, Glimmer, Core and Chaos Orbs are now a shared wallet across all your heroes — no depositing needed. Materials one hero finds are ready to spend on any other, so a new hero can craft and enchant from day one off your pooled stockpile.",
     "Your existing heroes' materials are pooled together automatically on first load — nothing is lost, and it merges cleanly across devices when you're signed in.",

@@ -6620,7 +6620,7 @@ window.gameState = function gameState(radius) {
     ['settings-menu', 'settings'], ['version-overlay', 'changelog'],
     ['howto-overlay', 'howto'], ['autoloot-overlay', 'autoloot'], ['keybind-overlay', 'keybinds'],
     ['slotpick-overlay', 'slotpick'], ['newrun-overlay', 'newrun'], ['slots-overlay', 'slots'],
-    ['account-overlay', 'account'], ['lb-overlay', 'leaderboard'], ['graveyard-overlay', 'graveyard'],
+    ['account-overlay', 'account'], ['lb-hero-overlay', 'heroSnapshot'], ['lb-overlay', 'leaderboard'], ['graveyard-overlay', 'graveyard'],
     ['conquest-overlay', 'conquest'], ['greed-overlay', 'greed'], ['boss-gate-overlay', 'bossgate'],
     ['shop-overlay', 'shop'], ['mystic-overlay', 'mystic'], ['town-overlay', 'town'],
   ];
@@ -6743,7 +6743,7 @@ window.gameState = function gameState(radius) {
   return {
     // What's on screen and whether walking keys work right now. If canMove is
     // false, interact with the menu/overlay instead of pressing movement keys.
-    mode,            // dungeon|town|title|classSelect|nameSelect|dead|shop|mystic|settings|changelog|howto|autoloot|keybinds|slotpick|newrun|slots|account|leaderboard|graveyard|conquest|greed
+    mode,            // dungeon|town|title|classSelect|nameSelect|dead|shop|mystic|settings|changelog|howto|autoloot|keybinds|slotpick|newrun|slots|account|leaderboard|heroSnapshot|graveyard|conquest|greed
     canMove,         // true only when mode === 'dungeon' and not mid-teleport
     blockingOverlay, // DOM id of the open modal, or null
     // Teleport ANIMATION in flight, else null. 'out' (fading out to town) or 'in'
@@ -25327,8 +25327,10 @@ function itemCardHTML(item, opts = {}) {
   const label = opts.label ? `<div class="tt-cardlabel">${opts.label}</div>` : '';
   // The attribute gate to equip this weapon / off-hand — green when met, red when
   // short — so a player reads at a glance why a piece is locked and what to raise.
+  // Skipped for another hero's snapshot (opts.hideReq): the "you have" comparison is
+  // against the live viewer, not the hero shown, so it would read wrong there.
   let reqLine = '';
-  const rq = attrReqStatus(item);
+  const rq = opts.hideReq ? null : attrReqStatus(item);
   if (rq) {
     const col = rq.ok ? '#7ad08a' : '#e0556b';
     reqLine = `<div style="color:${col};font-size:1.2rem;font-weight:bold;margin:2px 0">${rq.ok ? '✓' : '⚠'} Requires ${rq.need} ${ATTRIBUTES[rq.attr].short} <span style="opacity:.75">(you have ${rq.have})</span></div>`;
@@ -25639,6 +25641,8 @@ function logPotion(label) {
 function handleEscape() {
   const close = (id, fn) => { const el = document.getElementById(id); if (el && el.classList.contains('open')) { fn(); return true; } return false; };
   if (close('slotpick-overlay', closeSlotPicker)) return true;
+  // A hero snapshot sits ON TOP of the leaderboard, so close it first.
+  if (close('lb-hero-overlay', closeLbHero)) return true;
   // Leaderboards can sit on top of the name screen, so close them first; the
   // name screen's Esc then mirrors its ◀ Back button (back to the class pick).
   if (close('lb-overlay', closeLeaderboard)) return true;
@@ -26909,6 +26913,8 @@ let lbTab = 'floor';
 let lbMode = 'std';       // which ladder is shown: 'std' (non-hardcore) or 'hc' (hardcore only)
 let lbLastSig = '';       // last-submitted stat signature — skips no-op writes
 let lbSubmitTimer = null; // pending debounced submit, if any
+let lbRows = [];          // the currently-rendered board rows (so a click can open a hero's snapshot)
+let _lbHeroReq = 0;       // guards against a slow loadout fetch resolving after the panel changed
 
 function lbEnabled() { return !!(LB_SUPABASE_URL && LB_SUPABASE_KEY); }
 function lbHeaders(extra) {
@@ -26927,6 +26933,40 @@ function escapeHtml(s) {
 // taken as-is (just coerced to whole numbers for the integer columns) — every
 // submitted score is treated as real.
 function lbInt(v, lo) { v = Math.floor(Number(v)); return Number.isFinite(v) && v > lo ? v : lo; }
+// Trim one equipped item to just what the hero-snapshot card renders — dropping the
+// bulky / transient fields (float positions, deposit tags, cached sprites) so the
+// stored blob stays small.
+function lbTrimItem(it) {
+  if (!it || typeof it !== 'object') return null;
+  const o = {};
+  for (const k of ['name', 'slot', 'tier', 'ilvl', 'stats', 'attrs', 'base', 'crafted', 'fixed', 'set', 'cursed', 'power', 'value', 'flavor']) {
+    if (it[k] !== undefined) o[k] = it[k];
+  }
+  return o;
+}
+// A compact, self-contained snapshot of THIS hero — attributes, worn gear (of the
+// active set) and learned skills — stored on the leaderboard row so any player can
+// inspect the build behind a score. Skills are stored as id→rank only; renderLbHero
+// resolves the names/icons against the hero's OWN class + ascension trees (identical
+// static data in every build), so the blob stays lean. See buildLoadoutUrl.
+function lbLoadoutFromPlayer() {
+  const gear = {};
+  for (const slot of SLOT_KEYS) { const t = lbTrimItem((equipped || {})[slot]); if (t) gear[slot] = t; }
+  const skills = {};
+  if (player.skills) for (const id in player.skills) { const r = player.skills[id] | 0; if (r > 0) skills[id] = r; }
+  return {
+    v: 1,
+    sex: (player.sex === 'female') ? 'female' : 'male',
+    maxHp: Math.round(player.maxHp || 0), maxMp: Math.round(player.maxMp || 0),
+    playMs: Math.max(0, Math.floor(player.playMs || 0)),
+    attributes: player.attributes ? Object.assign({}, player.attributes) : {},
+    gearPower: (typeof gearContributionPower === 'function') ? Math.round(gearContributionPower() || 0) : null,
+    gear,
+    skills,
+    skillSlots: Array.isArray(player.skillSlots) ? player.skillSlots.slice(0, 12) : [],
+    autoSkill: player.autoSkill || null,
+  };
+}
 function lbEntryFromPlayer() {
   return {
     name: String(player.name || 'Adventurer').slice(0, 16),
@@ -26937,6 +26977,7 @@ function lbEntryFromPlayer() {
     gold: lbInt(player.maxGold || player.gold || 0, 0),
     power: lbInt(player.maxPower || playerPower() || 1, 1),
     hardcore: !!player.hardcore,
+    loadout: lbLoadoutFromPlayer(),   // full build snapshot, shown when the row is clicked
   };
 }
 
@@ -26979,6 +27020,7 @@ function lbSubmitLocal(entry) {
         gold: Math.max(all[i].gold || 0, entry.gold),
         power: Math.max(all[i].power || 1, entry.power),
         hardcore: !!entry.hardcore,
+        loadout: entry.loadout || all[i].loadout || null, // freshest build snapshot
       };
     } else {
       all.push(entry);
@@ -27090,6 +27132,7 @@ async function renderLeaderboard() {
     list.innerHTML = '<div class="lb-row"><span class="lb-name">No heroes yet — be the first!</span></div>';
     return;
   }
+  lbRows = rows; // remember the rendered rows so a click can open that hero's snapshot
   list.innerHTML = rows.map((r, i) => {
     const cls = heroFaceIcon(r.player_class, r.sex || 'male', 20) || dlIcon(r.player_class && CLASSES[r.player_class] ? CLASSES[r.player_class].icon : 'npc_mage', 20);
     // Top three shade the whole row gold / silver / bronze (no medal disc);
@@ -27102,12 +27145,14 @@ async function renderLeaderboard() {
     const meta = ['floor', 'level', 'gold', 'power']
       .filter(k => k !== lbTab)
       .map(k => lbStatChip(k, r)).join('');
-    return `<div class="lb-row${top}${me}">
+    // Each row opens a snapshot of that hero (attributes, gear, skills) on click.
+    return `<div class="lb-row lb-row-btn${top}${me}" role="button" tabindex="0" onclick="openLbHero(${i})" title="View ${escapeHtml(r.name)}'s gear, attributes &amp; skills">
       <div class="lb-row-main">
         <span class="lb-rank">${i + 1}</span>
         <span class="lb-class">${cls}</span>
         <span class="lb-name">${escapeHtml(r.name)}</span>
         <span class="lb-val">${sort.fmt(r[sort.col] || 0)}</span>
+        <span class="lb-row-chevron" aria-hidden="true">›</span>
       </div>
       <div class="lb-row-meta">
         <span class="lb-sub">${lbSubclassLabel(r)}</span>
@@ -27115,6 +27160,143 @@ async function renderLeaderboard() {
       </div>
     </div>`;
   }).join('');
+}
+
+// ── Hero snapshot (click a leaderboard row) ─────────────────────────────────
+// Opens a read-only card of another player's hero: their worn gear, attributes and
+// learned skills, resolved from the compact `loadout` blob stored on the row. Local
+// rows carry it inline; global rows fetch it on demand (one small request per click).
+function openLbHero(i) {
+  const r = lbRows[i];
+  if (!r) return;
+  const ov = document.getElementById('lb-hero-overlay');
+  if (!ov) return;
+  const body = document.getElementById('lb-hero-body');
+  ov.classList.add('open');
+  ov.classList.toggle('hc', !!r.hardcore);
+  // Header first (always available from the row); body shows the build once loaded.
+  const head = document.getElementById('lb-hero-head');
+  if (head) head.innerHTML = lbHeroHeadHTML(r);
+  const req = ++_lbHeroReq;
+  if (r.loadout) { if (body) body.innerHTML = lbHeroBuildHTML(r, r.loadout); return; }
+  if (body) body.innerHTML = '<div class="lb-hero-empty">Loading build…</div>';
+  // No backend → nothing more to fetch; the row simply had no snapshot stored.
+  if (!lbEnabled()) { if (body) body.innerHTML = '<div class="lb-hero-empty">No build snapshot for this hero yet.</div>'; return; }
+  _lbRepo.fetchHeroLoadout(r.name, r.hardcore).then(loadout => {
+    if (req !== _lbHeroReq) return; // a newer open (or a close) superseded this fetch
+    r.loadout = loadout || null;    // cache on the row so re-opening is instant
+    if (!body) return;
+    body.innerHTML = loadout ? lbHeroBuildHTML(r, loadout)
+      : '<div class="lb-hero-empty">No build snapshot for this hero yet — they last played before snapshots, or on an older version.</div>';
+  });
+}
+function closeLbHero() {
+  _lbHeroReq++; // invalidate any in-flight fetch so it can't paint into a closed panel
+  const ov = document.getElementById('lb-hero-overlay');
+  if (ov) ov.classList.remove('open');
+}
+
+// The snapshot header: face, name, class/ascension, hardcore brand, and the four
+// board stats — everything the row already carries, so it shows before the build loads.
+function lbHeroHeadHTML(r) {
+  const sex = (r.loadout && r.loadout.sex) || 'male';
+  const face = heroFaceIcon(r.player_class, sex, 56) || dlIcon(r.player_class && CLASSES[r.player_class] ? CLASSES[r.player_class].icon : 'npc_mage', 56);
+  const hcTag = r.hardcore ? `<span class="lb-hero-hc">${hcIcon(13)} Hardcore</span>` : '';
+  const stat = (label, val) => `<div class="lb-hero-stat"><span class="lhs-k">${label}</span><span class="lhs-v">${val}</span></div>`;
+  return `
+    <div class="lb-hero-face">${face}</div>
+    <div class="lb-hero-id">
+      <div class="lb-hero-name">${escapeHtml(r.name)}${hcTag}</div>
+      <div class="lb-hero-sub">${lbSubclassLabel(r)}</div>
+      <div class="lb-hero-stats">
+        ${stat(`${dlIcon('ic_down', 13) || ''} Depth`, lbFloorLabel(r.max_floor || 1))}
+        ${stat(`${dlIcon('ui_level', 13) || ''} Level`, r.level || 1)}
+        ${stat(`${PWR_GLYPH} Power`, fmtGold(r.power || 1))}
+        ${stat(`<span data-spr=ic_money></span> Gold`, fmtGold(r.gold || 0))}
+      </div>
+    </div>`;
+}
+
+// Resolve a skill id against a SPECIFIC class + ascension (not the live player), so a
+// snapshot renders another hero's skills from their own trees. Static data identical
+// in every build, so id → node is deterministic given the hero's class/path.
+function lbSkillNode(classKey, ascKey, id) {
+  const t = SKILL_TREES[classKey] || null;
+  if (t) { for (const n of (t.passive || [])) if (n.id === id) return n; for (const n of (t.active || [])) if (n.id === id) return n; }
+  const a = ASCENSIONS[ascKey] || null;
+  if (a && a.tree) for (const n of a.tree) if (n.id === id) return n;
+  return null;
+}
+
+// The body: attributes, worn gear and learned skills read from the loadout blob.
+function lbHeroBuildHTML(r, lo) {
+  lo = lo || {};
+  const attrs = lo.attributes || {};
+  // Attributes — every key in canonical order, icon + name + value.
+  const attrRow = ATTR_KEYS.map(k => {
+    const a = ATTRIBUTES[k] || {};
+    return `<div class="lb-attr"><span class="lb-attr-ic">${dlIcon(a.sprite, 18) || ''}</span><span class="lb-attr-name">${a.label || k}</span><span class="lb-attr-val">${attrs[k] || 0}</span></div>`;
+  }).join('');
+  // Gear — one tile per slot; empty slots read as such so the paperdoll is complete.
+  const gear = lo.gear || {};
+  const gearRow = SLOT_KEYS.map(slot => {
+    const it = gear[slot];
+    const label = (SLOTS[slot] || {}).label || slot;
+    if (!it) return `<div class="lb-gear lb-gear-empty"><span class="lb-gear-ic">${dlIcon((SLOTS[slot] || {}).sprite, 26) || ''}</span><div class="lb-gear-info"><div class="lb-gear-slot">${label}</div><div class="lb-gear-name lb-gear-none">— empty —</div></div></div>`;
+    const col = tierColor(it);
+    const tip = lbItemTip(it);
+    return `<div class="lb-gear" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+      <span class="lb-gear-ic">${iconMarkup(itemIcon(it), col)}</span>
+      <div class="lb-gear-info">
+        <div class="lb-gear-slot">${label}</div>
+        <div class="lb-gear-name" style="color:${col}">${curseMark(it)}${escapeHtml(it.name || '')}${it.crafted ? ' ' + (dlIcon('ic_mallet', 12) || '') : ''}</div>
+        <div class="lb-gear-power">${PWR_GLYPH} ${itemPower(it)}${it.ilvl ? ` · <span style="color:var(--blue-250)">ilvl ${it.ilvl}</span>` : ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+  // Skills — the hotbar (in slot order) first, then any other learned nodes, each
+  // as an icon chip with its rank. Resolved against the hero's own class/path trees.
+  const skills = lo.skills || {};
+  const seen = {};
+  const chip = (id, slotLabel) => {
+    const node = lbSkillNode(r.player_class, r.ascension, id);
+    if (!node) return '';
+    seen[id] = true;
+    const rank = skills[id] || 1;
+    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(node.icon, 16) || ''} ${escapeHtml(node.name || id)}</div><div class='ht-line'>${node.desc || ''}</div><div class='ht-sub'>${node.type === 'active' ? `Active${node.mp ? ' · ' + node.mp + ' MP' : ''}${node.cd ? ' · ' + node.cd + 's cd' : ''}` : 'Passive'} · rank ${rank}</div>`.replace(/"/g, '&quot;');
+    return `<div class="lb-skill${slotLabel ? ' lb-skill-slotted' : ''}" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+      <span class="lb-skill-ic">${dlIcon(node.icon, 26) || ''}</span>
+      <span class="lb-skill-rank">${rank}</span>
+      ${slotLabel ? `<span class="lb-skill-key">${slotLabel}</span>` : ''}
+    </div>`;
+  };
+  const barChips = [];
+  (lo.skillSlots || []).forEach((id, idx) => { if (id) { const c = chip(id, String(idx + 1)); if (c) barChips.push(c); } });
+  if (lo.autoSkill) { const c = chip(lo.autoSkill, '⟳'); if (c) barChips.push(c); }
+  const otherChips = Object.keys(skills).filter(id => !seen[id]).map(id => chip(id, '')).filter(Boolean);
+  const skillHTML = (barChips.length || otherChips.length)
+    ? `${barChips.join('')}${otherChips.join('')}`
+    : '<div class="lb-hero-none">No skills learned yet.</div>';
+  const gp = (lo.gearPower != null) ? `<span class="lb-hero-gp">${PWR_GLYPH} ${fmtGold(lo.gearPower)} from gear</span>` : '';
+  return `
+    <div class="lb-hero-sec">
+      <div class="lb-hero-sectitle">Attributes</div>
+      <div class="lb-attrs">${attrRow}</div>
+    </div>
+    <div class="lb-hero-sec">
+      <div class="lb-hero-sectitle">Gear ${gp}</div>
+      <div class="lb-gears">${gearRow}</div>
+    </div>
+    <div class="lb-hero-sec">
+      <div class="lb-hero-sectitle">Skills</div>
+      <div class="lb-skills">${skillHTML}</div>
+    </div>`;
+}
+
+// The gear hover card for a snapshot piece — the SAME item detail card the rest of
+// the game uses, minus the live-viewer "you have N attr" requirement line.
+function lbItemTip(it) {
+  return `<div class="tt-card">${itemCardHTML(it, { hideReq: true })}</div>`.replace(/"/g, '&quot;');
 }
 
 // ══════════════════════════════════════════
@@ -28676,7 +28858,7 @@ const RT_BLOCKING_OVERLAYS = ['title-overlay','name-overlay','class-overlay','hc
   'autoloot-overlay','newrun-overlay','keybind-overlay',
   // Reachable mid-dungeon (e.g. from the menu or on a tier conquest) — these
   // close the settings menu, so they must pause the world on their own.
-  'conquest-overlay','slots-overlay','account-overlay','lb-overlay','graveyard-overlay','slotpick-overlay',
+  'conquest-overlay','slots-overlay','account-overlay','lb-overlay','lb-hero-overlay','graveyard-overlay','slotpick-overlay',
   'greed-overlay',    // the risk/reward cursed-floor choice pauses the world while open
   'boss-gate-overlay'];   // the "are you ready?" boss-floor threshold prompt pauses the world too
 // The blocking overlays are all static shell divs (only their 'open' class
@@ -30257,6 +30439,8 @@ const __DL_FN_BRIDGE = {
   setLbTab,
   setLbMode,
   renderLeaderboard,
+  openLbHero,
+  closeLbHero,
   cloudEnabled,
   persistSession,
   clearSession,
@@ -30375,7 +30559,9 @@ __dlLive("inventory", () => inventory, (v) => { inventory = v; });
 __dlLive("keybindCapture", () => keybindCapture, (v) => { keybindCapture = v; });
 __dlLive("lastCam", () => lastCam, undefined);   // read-only handle — lets tests map a screen point to a map tile (see clientToTile)
 __dlLive("lbMode", () => lbMode, (v) => { lbMode = v; });
+__dlLive("lbRows", () => lbRows, (v) => { lbRows = v; });   // the rendered board rows a click opens (also lets tests drive openLbHero)
 __dlLive("lbTab", () => lbTab, (v) => { lbTab = v; });
+__dlLive("stashHc", () => stashHc, (v) => { stashHc = v; });   // Hardcore ladder pool (Standard is `stash` when active)
 __dlLive("merchant", () => merchant, (v) => { merchant = v; });
 __dlLive("moveTarget", () => moveTarget, undefined);   // read-only handle (a const object) — lets tests inspect the click-to-move route
 __dlLive("newGameArmed", () => newGameArmed, (v) => { newGameArmed = v; });

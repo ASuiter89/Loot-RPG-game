@@ -801,6 +801,20 @@
   </div>
 </div>
 
+<!-- Hero snapshot — click a leaderboard row to inspect that hero's gear,
+     attributes and skills. Opens over the board; ✕ or a backdrop tap returns. -->
+<div id="lb-hero-overlay" onclick="if(event.target===this)closeLbHero()">
+  <div id="lb-hero-modal">
+    <div class="modal-head">
+      <span class="modal-head__flank"></span>
+      <span class="ov-title modal-head__title"><span data-spr="ui_trophy"></span> Hero Snapshot</span>
+      <span class="modal-head__flank right"><button class="modal-nav-btn" onclick="closeLbHero()">✕</button></span>
+    </div>
+    <div class="lb-hero-head" id="lb-hero-head"></div>
+    <div class="lb-hero-body" id="lb-hero-body"></div>
+  </div>
+</div>
+
 <!-- Save slots — keep several characters side by side; load one, start a fresh
      hero in an empty slot, or wipe a slot. The slot you're playing is marked. -->
 <div id="slots-overlay" onclick="if(event.target===this)closeSlots()">

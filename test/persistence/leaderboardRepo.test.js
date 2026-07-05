@@ -3,6 +3,7 @@ import {
   restHeaders,
   buildSubmitRequest,
   buildFetchUrl,
+  buildLoadoutUrl,
   buildRangeHeaders,
   createLeaderboardRepo,
 } from '../../src/persistence/leaderboardRepo.js';
@@ -43,12 +44,21 @@ describe('buildFetchUrl', () => {
     expect(buildFetchUrl(CONFIG, 'power', true)).toContain('hardcore=eq.true');
     expect(buildFetchUrl(CONFIG, 'power', true)).toContain('order=power.desc');
   });
-  it('selects the ascension (subclass) column by default', () => {
-    expect(buildFetchUrl(CONFIG, 'level', false)).toContain('select=name,player_class');
+  it('selects the optional ascension column by default, but NOT the heavy loadout', () => {
     expect(buildFetchUrl(CONFIG, 'level', false)).toContain(',ascension&');
+    expect(buildFetchUrl(CONFIG, 'level', false)).not.toContain('loadout');
   });
   it('accepts a custom column list (the pre-migration fallback set)', () => {
     expect(buildFetchUrl(CONFIG, 'level', false, 'name,level')).toContain('select=name,level&');
+  });
+});
+
+describe('buildLoadoutUrl', () => {
+  it('fetches one hero row\'s loadout keyed by name + ladder, URL-encoding the name', () => {
+    expect(buildLoadoutUrl(CONFIG, 'Sir Bob', true)).toBe(
+      'https://proj.supabase.co/rest/v1/leaderboard?select=loadout&name=eq.Sir%20Bob&hardcore=eq.true&limit=1',
+    );
+    expect(buildLoadoutUrl(CONFIG, 'A&B', false)).toContain('name=eq.A%26B');
   });
 });
 
@@ -73,6 +83,27 @@ describe('createLeaderboardRepo (mocked fetch — never hits the backend)', () =
     expect(opts.method).toBe('POST');
     expect(opts.keepalive).toBe(true);
     expect(JSON.parse(opts.body)).toEqual(entry);
+  });
+
+  it('submit() retries without loadout when the table lacks that column (400)', async () => {
+    // First upsert (with loadout) 400s on a pre-migration table; the repo retries a
+    // trimmed row so the score still records globally.
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 400 })
+      .mockResolvedValueOnce({ ok: true });
+    const repo = createLeaderboardRepo({ fetchImpl, ...CONFIG });
+    await Promise.resolve(repo.submit({ name: 'Hero', hardcore: false, loadout: { attrs: {} } }));
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toHaveProperty('loadout'); // full first
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).not.toHaveProperty('loadout'); // trimmed retry
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body).name).toBe('Hero');
+  });
+
+  it('submit() does NOT retry a 400 when there is no loadout to drop', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({ ok: false, status: 400 });
+    const repo = createLeaderboardRepo({ fetchImpl, ...CONFIG });
+    await Promise.resolve(repo.submit({ name: 'Hero', hardcore: false }));
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it('submit() never throws even if fetch rejects or throws', async () => {
@@ -124,6 +155,25 @@ describe('createLeaderboardRepo (mocked fetch — never hits the backend)', () =
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(fetchImpl.mock.calls[0][0]).toContain(',ascension&');    // full select first
     expect(fetchImpl.mock.calls[1][0]).not.toContain('ascension');  // retry drops it
+  });
+
+  it('fetchHeroLoadout() returns the row\'s loadout, or null when absent', async () => {
+    const loadout = { attributes: { might: 30 }, gear: {} };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([{ loadout }]) })
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) });      // no such row
+    const repo = createLeaderboardRepo({ fetchImpl, ...CONFIG });
+    expect(await repo.fetchHeroLoadout('Hero', true)).toEqual(loadout);
+    expect(fetchImpl.mock.calls[0][0]).toContain('name=eq.Hero');
+    expect(fetchImpl.mock.calls[0][0]).toContain('hardcore=eq.true');
+    expect(await repo.fetchHeroLoadout('Ghost', false)).toBeNull();
+  });
+
+  it('fetchHeroLoadout() returns null (never throws) on a 400 or an outage', async () => {
+    const four00 = createLeaderboardRepo({ fetchImpl: () => Promise.resolve({ ok: false, status: 400 }), ...CONFIG });
+    expect(await four00.fetchHeroLoadout('Hero', false)).toBeNull();
+    const down = createLeaderboardRepo({ fetchImpl: () => Promise.reject(new Error('net')), ...CONFIG });
+    expect(await down.fetchHeroLoadout('Hero', false)).toBeNull();
   });
 
   it('fetchBoard() arms and clears an abort timeout', async () => {

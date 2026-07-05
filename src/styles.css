@@ -3618,6 +3618,100 @@
   .lb-chip { font-size: 1.1rem; color: var(--orange-500); white-space: nowrap; }
   .lb-foot { margin-top: 12px; }
 
+  /* ── Hero snapshot (click a leaderboard row) ─────────────────────────────── */
+  /* Each board row is a button that opens the hero's gear/attributes/skills. */
+  .lb-row-btn { cursor: pointer; transition: border-color .12s ease, background .12s ease; }
+  .lb-row-btn:hover, .lb-row-btn:focus-visible { border-color: var(--gold); outline: none; }
+  .lb-row-chevron { flex: 0 0 auto; color: var(--orange-500); font-weight: bold; font-size: 1.6rem; opacity: .55; }
+  .lb-row-btn:hover .lb-row-chevron, .lb-row-btn:focus-visible .lb-row-chevron { opacity: 1; color: var(--gold); }
+
+  /* The snapshot sits above the leaderboard it opened from. */
+  #lb-hero-overlay {
+    position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 88%, transparent);
+    display: none; align-items: center; justify-content: center; z-index: 420; padding: 16px;
+  }
+  #lb-hero-overlay.open { display: flex; }
+  #lb-hero-modal {
+    background: var(--ink); border: 2px solid var(--orange-550); border-radius: 10px;
+    width: 100%; max-width: 480px; max-height: 88vh; max-height: 88dvh; overflow-y: auto;
+    -webkit-overflow-scrolling: touch; padding: 16px;
+    box-shadow: 0 0 30px color-mix(in srgb, var(--gold) 30%, transparent);
+  }
+  #lb-hero-overlay.hc #lb-hero-modal {
+    border-color: var(--red-350);
+    box-shadow: 0 0 30px color-mix(in srgb, var(--red-350) 30%, transparent);
+  }
+  @media (min-width: 760px) and (hover: hover) and (pointer: fine) { #lb-hero-modal { max-width: 620px; } }
+
+  .lb-hero-head { display: flex; gap: 12px; align-items: center; margin: 6px 0 12px; }
+  .lb-hero-face {
+    flex: 0 0 auto; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center;
+    background: var(--orange-850); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .lb-hero-id { flex: 1 1 auto; min-width: 0; }
+  .lb-hero-name { font-size: 1.6rem; font-weight: bold; color: var(--gold-200); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .lb-hero-hc {
+    font-size: 1.1rem; color: var(--red-250); display: inline-flex; align-items: center; gap: 3px;
+    border: 1px solid color-mix(in srgb, var(--red-350) 50%, transparent); border-radius: 5px; padding: 1px 5px;
+  }
+  .lb-hero-sub { font-size: 1.2rem; font-weight: bold; color: var(--orange-300); margin-top: 2px; }
+  .lb-hero-stats { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 6px; }
+  .lb-hero-stat { display: flex; align-items: center; gap: 4px; font-size: 1.2rem; }
+  .lhs-k { color: var(--orange-500); display: inline-flex; align-items: center; gap: 3px; }
+  .lhs-v { color: var(--gold); font-weight: bold; }
+
+  .lb-hero-sec { margin-top: 12px; }
+  .lb-hero-sectitle {
+    font-size: 1.3rem; font-weight: bold; color: var(--gold-350); text-transform: uppercase; letter-spacing: 1px;
+    border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 8px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .lb-hero-gp { font-size: 1.1rem; font-weight: normal; color: var(--gold); letter-spacing: 0; text-transform: none; }
+  .lb-hero-empty, .lb-hero-none { font-size: 1.2rem; color: var(--text-muted); padding: 8px 2px; }
+
+  /* Attributes — a fluid grid that collapses to one column on a narrow sheet. */
+  .lb-attrs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 6px; }
+  .lb-attr {
+    display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+    background: var(--orange-850); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .lb-attr-ic { flex: 0 0 auto; display: flex; }
+  .lb-attr-name { flex: 1 1 auto; font-size: 1.2rem; color: var(--orange-300); }
+  .lb-attr-val { flex: 0 0 auto; font-size: 1.3rem; font-weight: bold; color: var(--gold); }
+
+  /* Gear — a fluid paperdoll grid; each tile hovers its full item card. */
+  .lb-gears { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 6px; }
+  .lb-gear {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px; cursor: help;
+    background: var(--orange-850); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .lb-gear-empty { opacity: .55; cursor: default; }
+  .lb-gear-ic { flex: 0 0 auto; display: flex; }
+  .lb-gear-info { flex: 1 1 auto; min-width: 0; }
+  .lb-gear-slot { font-size: 1.1rem; color: var(--orange-500); text-transform: uppercase; letter-spacing: .5px; }
+  .lb-gear-name { font-size: 1.3rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lb-gear-none { color: var(--text-muted); font-weight: normal; }
+  .lb-gear-power { font-size: 1.1rem; color: var(--gold-350); }
+
+  /* Skills — icon chips that wrap; slotted ones ride a gold border, each shows rank. */
+  .lb-skills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .lb-skill {
+    position: relative; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; cursor: help;
+    background: var(--orange-850); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .lb-skill-slotted { border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
+  .lb-skill-ic { display: flex; }
+  .lb-skill-rank {
+    position: absolute; right: -3px; bottom: -3px; min-width: 15px; height: 15px; padding: 0 3px;
+    display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold;
+    color: var(--ink); background: var(--gold-350); border-radius: 8px;
+  }
+  .lb-skill-key {
+    position: absolute; left: -3px; top: -4px; min-width: 14px; height: 14px; padding: 0 2px;
+    display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold;
+    color: var(--gold-200); background: var(--ink); border: 1px solid var(--border); border-radius: 6px;
+  }
+
   .town-blurb { font-size: 1.3rem; color: var(--orange-400); margin-bottom: 8px; line-height: 1.4; }
   /* The post-death prompt: louder than the usual hub blurb so the player knows what to do. */
   .town-blurb-revived { font-size: 1.4rem; color: var(--normal); background: color-mix(in srgb, var(--red-800) 18%, transparent);
