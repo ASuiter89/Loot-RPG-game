@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "large", v: "Gear stats overhaul — no more caps, rarity that matters, stronger curses", by: "Claude", notes: [
+    "Every gear stat now grows with BOTH item level and rarity — no hard caps anywhere. Attack speed, leech, cleave, cooldown and the rest keep climbing on deeper and rarer gear instead of freezing at a ceiling, so a legendary genuinely rolls bigger than a common.",
+    "Stats that have a natural limit — crit rate, cooldown, mana cost, dodge, block, damage reduction, tenacity, double strike — now ease off with diminishing returns as they climb, approaching but never reaching 100% (or 0). More is always better, each point a little less than the last, and nothing is ever fully maxed.",
+    "Tenacity and Double Strike lost their old walls and join that curve — tenacity can no longer hit a flat 80% cap, and double strike no longer wastes anything past a guaranteed hit.",
+    "Cursed items are much stronger and scale with rarity: a curse swings a stat by ~2.2× a normal roll on an uncommon up to ~5× on a legendary, with an equally strong drawback on another stat. Cursed items still can't be reforged at the Enchanter — the boost and its price are permanent.",
+    "Old saves are repaired on load — any stat left over-inflated by the earlier curse bug is pulled back in-band automatically.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Enchanter reroll buttons stack under the text on phones", by: "Claude", notes: [
     "On a phone the Enchanter's per-property rows now read top to bottom — the stat and its roll range sit on top, with the Value and Type reroll buttons laid across the bottom. The buttons and their prices used to crowd in beside the text on a narrow screen and overlap it, making them hard to read and tap; now each row stands clear at any width.",
   ] },
