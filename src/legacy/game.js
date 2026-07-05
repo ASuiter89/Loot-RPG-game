@@ -2239,6 +2239,12 @@ function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
     occ.push({ id: o.id, d, dw, dh, l: Math.round(cxc - dw / 2), t: Math.round(cyb - dh), footY: cyb });
   }
   if (!occ.length) return;
+  // Paint occluders back→front (ascending footY), same painter order as the main
+  // decor pass. The re-occlude below redraws each tree clipped to the actor's box,
+  // so if two trees both cover one actor, a nearer tree must be redrawn LAST or the
+  // farther tree lands in front of it inside that box — a square-of-wrong-depth
+  // patch around the hero/foe. Sorting keeps the silhouette reading through both.
+  occ.sort((p, q) => p.footY - q.footY);
   const actors = [];
   {
     const px = offX + (player.fx - 0.5) * tw, py = offY + (player.fy - 0.5) * th;
