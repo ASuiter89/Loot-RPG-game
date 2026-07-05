@@ -50,6 +50,7 @@ create table if not exists public.leaderboard (
   gold         int  not null default 0,
   power        int  not null default 1,
   hardcore     boolean not null default false,
+  loadout      jsonb,
   updated_at   timestamptz not null default now(),
   primary key (name, hardcore)
 );
@@ -61,6 +62,13 @@ alter table public.leaderboard add column if not exists power int not null defau
 -- add the column. Until it exists the board still loads — the client selects it
 -- optionally and falls back to the base columns — so this is safe to run anytime.
 alter table public.leaderboard add column if not exists ascension text;
+
+-- If you created the table before clicking a row showed the hero's build, add the
+-- `loadout` column. It stores a small JSON snapshot of each hero (attributes, worn
+-- gear, learned skills), fetched only when a row is opened. Safe to run anytime:
+-- until it exists, submissions automatically drop the snapshot (so scores still
+-- record) and the hero-detail panel simply reports "no snapshot".
+alter table public.leaderboard add column if not exists loadout jsonb;
 
 alter table public.leaderboard enable row level security;
 
@@ -88,6 +96,32 @@ alter table public.leaderboard add primary key (name, hardcore);
 
 The existing read / insert / update policies already cover the new column, so
 there is nothing else to change.
+
+### Already have a leaderboard table? (Hero-snapshot migration)
+
+Clicking a board row opens a snapshot of that hero's **attributes, worn gear and
+learned skills**. It's stored in a `loadout` JSON column. If your table predates
+it, add the column once:
+
+```sql
+alter table public.leaderboard add column if not exists loadout jsonb;
+```
+
+This is safe to run anytime and needs no policy change (the existing read / insert
+/ update policies already cover it). Until the column exists everything still
+works: score submissions automatically retry without the snapshot, and opening a
+hero just says there's no snapshot yet. The board list itself never fetches
+`loadout` — it's pulled one row at a time only when a hero is clicked, so a large
+board stays fast.
+
+## Shared vault & crafting materials (no leaderboard change)
+
+The account-wide **Vault** and the shared **crafting-material** wallet — including
+the split that gives **Standard and Hardcore separate** vaults and materials — ride
+entirely on the existing **`saves`** table (see [CLOUD_SAVES.md](CLOUD_SAVES.md)):
+each ladder's pool is just another row keyed by a reserved negative `slot`. There
+is **no leaderboard or schema change** to make for those features — signing in is
+all that's needed to sync them across devices.
 
 ## Rotating the key
 

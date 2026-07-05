@@ -59,7 +59,7 @@ import { BOSS_ATLAS_URL } from '../assets/bossAtlas.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 import { planReconcile, freshDelMeta, sanitizeDelMeta, isTombstoned, addTombstone,
   mergeDelMeta, delCloudHasAll } from '../persistence/saveSync.js';
-import { freshStash, sanitizeStash, mergeStash, depositGold, withdrawGold } from '../persistence/stashSync.js';
+import { freshStash, sanitizeStash, mergeStash, depositGold, withdrawGold, depositMaterial, withdrawMaterial, materialsValue, foldHeroMaterials } from '../persistence/stashSync.js';
 import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
 import { mercCost } from '../systems/mercPricing.js';
 import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTints.js';
@@ -2735,13 +2735,14 @@ const CRAFT_MAT_KEYS = Object.keys(CRAFT_MATERIALS);
 // model for checking, spending, and labelling mixed gold+material prices.
 function canAfford(cost) {
   if ((cost.gold || 0) > spendableGold()) return false;
-  const m = player.materials || {};
+  const m = heroMaterials();
   return CRAFT_MAT_KEYS.every(k => (cost[k] || 0) <= (m[k] || 0));
 }
 function spendCost(cost) {
   if (cost.gold) spendGold(cost.gold);
-  if (!player.materials) player.materials = freshMaterials();
-  for (const k of CRAFT_MAT_KEYS) if (cost[k]) player.materials[k] = Math.max(0, (player.materials[k] || 0) - cost[k]);
+  let spentMat = false;
+  for (const k of CRAFT_MAT_KEYS) if (cost[k]) { withdrawMaterial(stash, k, stashDeviceId(), cost[k]); spentMat = true; }
+  if (spentMat) saveStash(); // materials live in the shared stash — persist the spend
 }
 function costLabel(cost) {
   const parts = [];
@@ -2754,7 +2755,7 @@ function costLabel(cost) {
 // gold+material price shows exactly what you're short on. Material icons use the
 // DawnLike atlas tile via dlIcon, never a raw emoji, to match the rest of the UI.
 function costLabelHi(cost) {
-  const m = player.materials || {};
+  const m = heroMaterials();
   const parts = [];
   if (cost.gold) {
     const short = (cost.gold || 0) > spendableGold();
@@ -2768,13 +2769,17 @@ function costLabelHi(cost) {
   return parts.join('  ');
 }
 function freshMaterials() { return { scrap: 0, glimmer: 0, core: 0, chaos: 0 }; }
+// The active ladder's shared material wallet (a plain { key: amount } snapshot).
+// Materials are pooled across every hero, so this reads the account-wide stash —
+// there is no per-hero material store any more.
+function heroMaterials() { return (stash && stash.materials) || {}; }
 function gainMaterial(k, n) {
-  if (!player.materials) player.materials = freshMaterials();
-  player.materials[k] = (player.materials[k] || 0) + n;
+  depositMaterial(stash, k, stashDeviceId(), n); // shared pool — every hero gains into the same wallet
+  saveStashSoon();                               // persist (debounced; gains can arrive in bursts on a kill/salvage)
 }
 // Compact inline display of all four material counts, used in the bag and town.
 function matStripHTML() {
-  const m = player.materials || {};
+  const m = heroMaterials();
   const chips = CRAFT_MAT_KEYS.map(k => {
     const mat = CRAFT_MATERIALS[k];
     const ic = `<span data-spr=mat_${k}></span>`; // exact DawnLike material tile (no emoji)
@@ -6162,9 +6167,9 @@ let player = { x: 5, y: 5,
   // wardrobe of every look the player has ever found.
   cosmetics: { head: null, chest: null, weapon: null },
   wardrobe: { head: [], chest: [], weapon: [] },
-  // Crafting materials — a second currency dropped by foes, spent at the
-  // Craftsman (Scrap/Core) and Enchanter (Glimmer), with Chaos Orbs for the top end.
-  materials: { scrap: 0, glimmer: 0, core: 0, chaos: 0 },
+  // Crafting materials are NOT stored on the hero — they're an account-wide shared
+  // wallet in the stash (Standard and Hardcore keep separate wallets), so every
+  // hero draws on the same pool. See heroMaterials() / gainMaterial() / spendCost().
   // Auto-loot rules: per-rarity disposition for freshly-dropped gear ('keep' |
   // 'scrap' | 'sell'). Everything defaults to 'keep' so the feature is off until
   // the player opts in from the settings menu.
@@ -6340,15 +6345,24 @@ function enemyMoveStatus(e) {
 }
 function isEnemySlowed(e) { const f = enemyMoveStatus(e); return !!(f && f.slow); }
 let inventory = [];
-// The town STASH — a safe vault, completely separate from your character, and
-// SHARED across every save slot: gold and gear banked by one hero can be
-// withdrawn by any other hero on this device (and, when signed in, on any device
-// on the account). It lives in its own localStorage key (STASH_KEY) rather than
-// inside each character's save, is never lost on death (though town shops may
-// draw on it to cover a purchase — see spendGold), and is only reachable from
-// the Vault in town. `ts` is the last-write time, used to
-// merge copies conflict-free when syncing (see the shared-stash CRDT below).
-let stash = freshStash();
+// The town STASH — a safe vault (gold + gear) AND the account-wide crafting-material
+// wallet, completely separate from any one character and SHARED across save slots:
+// gold/gear banked by one hero can be withdrawn by any other, and crafting materials
+// are pooled so every hero draws on the same wallet (no depositing needed — they're
+// just shared). It lives in its own localStorage key rather than inside each save,
+// is never lost on death (though town shops may draw on its gold — see spendGold),
+// and the Vault is reachable in town. `ts` is the last-write time, used to merge
+// copies conflict-free when syncing (see the shared-stash CRDT below).
+//
+// The Standard and Hardcore ladders keep SEPARATE pools — a hardcore hero's vault
+// and materials never mix with a standard hero's. We hold one stash per ladder and
+// point `stash` at the ACTIVE hero's ladder (set in loadStash from player.hardcore);
+// because slot switches reload the page, that pointer is fixed for a whole session,
+// so every existing reader of `stash` transparently uses the right ladder's pool.
+let stashStd = freshStash();
+let stashHc = freshStash();
+let stash = stashStd;
+function stashFor(hc) { return hc ? stashHc : stashStd; }
 // ── GEAR SETS ── You keep TWO independent equipment loadouts and toggle between
 // them (Set 1 / Set 2). `equipped` always points at the ACTIVE set, so every
 // read/write of equipped[slot] elsewhere keeps working untouched — only the
@@ -6612,7 +6626,7 @@ window.gameState = function gameState(radius) {
     ['settings-menu', 'settings'], ['version-overlay', 'changelog'],
     ['howto-overlay', 'howto'], ['autoloot-overlay', 'autoloot'], ['keybind-overlay', 'keybinds'],
     ['slotpick-overlay', 'slotpick'], ['newrun-overlay', 'newrun'], ['slots-overlay', 'slots'],
-    ['account-overlay', 'account'], ['lb-overlay', 'leaderboard'], ['graveyard-overlay', 'graveyard'],
+    ['account-overlay', 'account'], ['lb-hero-overlay', 'heroSnapshot'], ['lb-overlay', 'leaderboard'], ['graveyard-overlay', 'graveyard'],
     ['conquest-overlay', 'conquest'], ['greed-overlay', 'greed'], ['boss-gate-overlay', 'bossgate'],
     ['shop-overlay', 'shop'], ['mystic-overlay', 'mystic'], ['town-overlay', 'town'],
   ];
@@ -6735,7 +6749,7 @@ window.gameState = function gameState(radius) {
   return {
     // What's on screen and whether walking keys work right now. If canMove is
     // false, interact with the menu/overlay instead of pressing movement keys.
-    mode,            // dungeon|town|title|classSelect|nameSelect|dead|shop|mystic|settings|changelog|howto|autoloot|keybinds|slotpick|newrun|slots|account|leaderboard|graveyard|conquest|greed
+    mode,            // dungeon|town|title|classSelect|nameSelect|dead|shop|mystic|settings|changelog|howto|autoloot|keybinds|slotpick|newrun|slots|account|leaderboard|heroSnapshot|graveyard|conquest|greed
     canMove,         // true only when mode === 'dungeon' and not mid-teleport
     blockingOverlay, // DOM id of the open modal, or null
     // Teleport ANIMATION in flight, else null. 'out' (fading out to town) or 'in'
@@ -6950,7 +6964,7 @@ window.gameState = function gameState(radius) {
       gold: player.gold,                 // coins in hand (what death loss is taken from)
       vaultGold: (stash && stash.gold) || 0,   // banked in the town Vault — safe from death
       spendableGold: spendableGold(),    // carried + vault: what a town shop can actually charge (shortfall auto-drawn from the vault)
-      materials: player.materials ? Object.assign({}, player.materials) : null,   // scrap/glimmer/core/chaos (commonest→rarest) for crafting
+      materials: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, heroMaterials()[k] || 0])),   // scrap/glimmer/core/chaos (commonest→rarest); ACCOUNT-SHARED across heroes (per ladder)
       materialsUnlocked: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, materialUnlocked(k)])),  // which mats the CURRENT tier can drop from kills (salvage ignores this)
       autoLoot: player.autoLoot ? Object.assign({}, player.autoLoot) : null,       // per-rarity keep/scrap/sell
       foodBuff: player.foodBuff ? { name: player.foodBuff.name, floors: player.foodBuff.floors } : null,
@@ -7178,7 +7192,7 @@ window.gameGuide = function gameGuide(topic) {
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
-      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
+      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress.`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
@@ -12765,7 +12779,7 @@ function renderStash() {
     ? inventory.map((it, i) => stashItemRow(it, `stashDepositItem(${i})`, 'STORE', 'shop-sell-btn')).join('')
     : '<div class="shop-empty">Your bag is empty.</div>';
   setTownContent(`
-    <div class="town-blurb">The Vault Keeper guards your fortune. Gold and gear stored here are safe from death — never lost when you fall in the dungeon. Town shops will draw on vault gold when your carried coin runs short, so your savings stay useful.</div>
+    <div class="town-blurb">The Vault Keeper guards your fortune. Gold and gear stored here are safe from death — never lost when you fall in the dungeon — and shared across all your heroes. Town shops will draw on vault gold when your carried coin runs short, so your savings stay useful. ${player.hardcore ? 'Hardcore heroes keep their own separate vault &amp; crafting materials.' : 'Crafting materials are pooled across your heroes too, no depositing needed.'}</div>
     <div class="shop-row">
       <span class="loot-icon"><span data-spr=ic_coffer></span></span>
       <div class="shop-row-info">
@@ -25319,8 +25333,10 @@ function itemCardHTML(item, opts = {}) {
   const label = opts.label ? `<div class="tt-cardlabel">${opts.label}</div>` : '';
   // The attribute gate to equip this weapon / off-hand — green when met, red when
   // short — so a player reads at a glance why a piece is locked and what to raise.
+  // Skipped for another hero's snapshot (opts.hideReq): the "you have" comparison is
+  // against the live viewer, not the hero shown, so it would read wrong there.
   let reqLine = '';
-  const rq = attrReqStatus(item);
+  const rq = opts.hideReq ? null : attrReqStatus(item);
   if (rq) {
     const col = rq.ok ? '#7ad08a' : '#e0556b';
     reqLine = `<div style="color:${col};font-size:1.2rem;font-weight:bold;margin:2px 0">${rq.ok ? '✓' : '⚠'} Requires ${rq.need} ${ATTRIBUTES[rq.attr].short} <span style="opacity:.75">(you have ${rq.have})</span></div>`;
@@ -25631,6 +25647,8 @@ function logPotion(label) {
 function handleEscape() {
   const close = (id, fn) => { const el = document.getElementById(id); if (el && el.classList.contains('open')) { fn(); return true; } return false; };
   if (close('slotpick-overlay', closeSlotPicker)) return true;
+  // A hero snapshot sits ON TOP of the leaderboard, so close it first.
+  if (close('lb-hero-overlay', closeLbHero)) return true;
   // Leaderboards can sit on top of the name screen, so close them first; the
   // name screen's Esc then mirrors its ◀ Back button (back to the class pick).
   if (close('lb-overlay', closeLeaderboard)) return true;
@@ -25944,23 +25962,30 @@ function saveOrder(a, b) {
   return ((a && a.ts) || 0) - ((b && b.ts) || 0);
 }
 
-// ── Shared stash (account-wide vault) ───────────────────────────────────────
+// ── Shared stash (account-wide vault + material wallet) ─────────────────────
 // The stash is shared across EVERY save slot rather than living inside each
 // character's save: deposit gold or gear with one hero and any other hero can
-// withdraw it. It's persisted under its own localStorage key, and — for signed-
-// in players — mirrored to a dedicated cloud row (STASH_CLOUD_SLOT) so the pool
-// follows the account across devices.
+// withdraw it, and crafting materials are a single pooled wallet every hero spends
+// from (never deposited by hand — just shared). It's persisted under its own
+// localStorage key, and — for signed-in players — mirrored to a dedicated cloud row
+// so the pool follows the account across devices.
+//
+// STANDARD and HARDCORE keep SEPARATE stashes (separate vaults AND separate material
+// wallets): each ladder has its own localStorage key + cloud row. `stash` points at
+// the active ladder (set in loadStash), so readers below are ladder-agnostic.
 //
 // Cross-device sync is CONFLICT-FREE, not last-writer-wins: the stash is a small
-// CRDT (see persistence/stashSync.js). Gold is a per-device deposit/withdrawal
-// PN-counter; items are an OR-set keyed by a per-deposit tag (`_st`) with
-// withdrawal tombstones. Any two copies merge with NO loss, so a deposit made on
-// one device while another is offline is never dropped, and a withdrawn item never
-// resurrects. `stash.gold` and `stash.items` are the materialised current values
-// that the rest of the game reads; the deposit/withdraw helpers keep them in step
-// with the underlying counters/tags.
-const STASH_KEY = 'dungeonLoot_stash_v1';
-const STASH_CLOUD_SLOT = -1; // sentinel "slot" for the shared stash's cloud row — never a real character
+// CRDT (see persistence/stashSync.js). Gold and each material are per-device
+// deposit/withdrawal PN-counters; items are an OR-set keyed by a per-deposit tag
+// (`_st`) with withdrawal tombstones. Any two copies merge with NO loss, so a
+// deposit made on one device while another is offline is never dropped, and a
+// withdrawn item never resurrects. `stash.gold`, `stash.items` and `stash.materials`
+// are the materialised current values the rest of the game reads; the deposit/
+// withdraw helpers keep them in step with the underlying counters/tags.
+const STASH_KEY = 'dungeonLoot_stash_v1';       // STANDARD ladder (inherits the pre-split shared vault)
+const STASH_HC_KEY = 'dungeonLoot_stash_hc_v1';  // HARDCORE ladder (starts empty at the split)
+const STASH_CLOUD_SLOT = -1; // sentinel "slot" for the Standard stash's cloud row — never a real character
+const STASH_HC_CLOUD_SLOT = -4; // ...and the Hardcore stash's cloud row (-2/-3 are the HC-meta & deletion ledgers)
 // A stable per-DEVICE id for the gold PN-counter (each device counts its own
 // deposits/withdrawals; the merge sums across devices). Minted once, then persisted.
 const STASH_DEVICE_KEY = 'dungeonLoot_deviceId_v1';
@@ -25979,14 +26004,24 @@ function stashDeviceId() {
 function newStashTag() { return 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 // Re-stamp icons and ensure an attrs block on every stashed item — the same
 // healing the bag/equipped gear gets in loadGame().
-function healStashItems() {
-  stash.items.forEach(it => { if (it.slot) it.icon = itemIcon(it); if (!it.attrs) it.attrs = {}; if (it.name) it.name = stripLegacyCurseMark(it.name); repairCurseOverflow(it); });
+function healStashItems(s = stash) {
+  s.items.forEach(it => { if (it.slot) it.icon = itemIcon(it); if (!it.attrs) it.attrs = {}; if (it.name) it.name = stripLegacyCurseMark(it.name); repairCurseOverflow(it); });
 }
-// Write the shared stash to its own key (no cloud push — callers decide that).
-function writeStashLocal() { try { localStorage.setItem(STASH_KEY, JSON.stringify(stash)); } catch (e) {} }
+// Which localStorage key / cloud row a given ladder's stash persists under.
+function stashLocalKey(s) { return s === stashHc ? STASH_HC_KEY : STASH_KEY; }
+function stashCloudSlot(s) { return s === stashHc ? STASH_HC_CLOUD_SLOT : STASH_CLOUD_SLOT; }
+// Write a ladder's stash to its own key (no cloud push — callers decide that).
+function writeStashLocal(s = stash) { try { localStorage.setItem(stashLocalKey(s), JSON.stringify(s)); } catch (e) {} }
 // Persist after a player-driven change: stamp the write time, save locally, and
-// mirror to the account (debounced) when signed in.
-function saveStash() { stash.ts = Date.now(); writeStashLocal(); cloudScheduleStash(); }
+// mirror to the account (debounced) when signed in. Always the ACTIVE ladder.
+function saveStash() { stash.ts = Date.now(); writeStashLocal(stash); cloudScheduleStash(); }
+// Coalesce bursts of stash writes (e.g. several materials gained on one kill or a
+// salvage-all) into a single deferred save, like saveGameSoon does for characters.
+let _saveStashSoonTimer = null;
+function saveStashSoon(delay = 500) {
+  if (_saveStashSoonTimer) return;
+  _saveStashSoonTimer = setTimeout(() => { _saveStashSoonTimer = null; saveStash(); }, delay);
+}
 // One-time migration for saves made before the stash was shared: fold every
 // slot's old embedded stash into a single v1 pool (sum gold, gather items). The
 // caller sanitises this into the CRDT form, so no banked gold or gear is lost.
@@ -26007,18 +26042,60 @@ function migrateLegacyStashes() {
   }
   return merged;
 }
-// Load the shared stash into the global `stash`, upgrading a v1 blob to the CRDT
-// form via sanitizeStash. The first run after the shared-stash upgrade has no
-// STASH_KEY yet, so we migrate the old per-character stashes into it.
-function loadStash() {
-  let raw; try { raw = localStorage.getItem(STASH_KEY); } catch (e) {}
-  if (raw) {
-    try { stash = sanitizeStash(JSON.parse(raw)); } catch (e) { stash = freshStash(); }
-  } else {
-    stash = sanitizeStash(migrateLegacyStashes());
+// Read one ladder's stash blob from localStorage, sanitised to the CRDT form.
+// Returns null when the key is absent (so the caller can migrate/seed it).
+function readLocalStash(key) {
+  let raw; try { raw = localStorage.getItem(key); } catch (e) { return null; }
+  if (!raw) return null;
+  try { return sanitizeStash(JSON.parse(raw)); } catch (e) { return freshStash(); }
+}
+
+// Once-per-device flag: after materials became an account-wide shared wallet, fold
+// every hero's OLD per-hero `player.materials` into the ladder pools a single time.
+const MAT_MIGRATED_KEY = 'dungeonLoot_matMigrated_v1';
+// A stable per-hero counter id for the material fold. Uses the hero's cid, falling
+// back to the slot index for pre-id saves — the SAME key everywhere the fold runs,
+// so the MAX-merge inside stashSync stays idempotent (never double-counts a hero).
+function heroMatKey(p, slot) { return 'H' + ((p && p.cid) || ('slot' + slot)); }
+// Sweep every local save slot and fold its hero's legacy per-hero materials into the
+// matching ladder's shared wallet — different heroes SUM, the same hero MAX-merges.
+// Returns true if the sweep had ALREADY run on a prior boot (so the caller knows to
+// separately fold a cloud-arrived active hero), false if it swept just now.
+function migrateHeroMaterials() {
+  let done; try { done = localStorage.getItem(MAT_MIGRATED_KEY); } catch (e) {}
+  if (done) return true;
+  for (const i of allLocalSlotIndices()) {
+    let raw; try { raw = localStorage.getItem(slotKey(i)); } catch (e) { continue; }
+    if (!raw) continue;
+    try {
+      const d = JSON.parse(raw);
+      const p = d && d.player;
+      if (!p || !p.materials || typeof p.materials !== 'object') continue;
+      foldHeroMaterials(stashFor(!!p.hardcore), heroMatKey(p, i), p.materials);
+    } catch (e) {}
   }
-  writeStashLocal(); // persist the (possibly migrated) CRDT form so it's stable on disk
-  healStashItems();
+  try { localStorage.setItem(MAT_MIGRATED_KEY, '1'); } catch (e) {}
+  return false;
+}
+
+// Load BOTH ladders' stashes, run the one-time material migration, then point the
+// live `stash` at the ACTIVE hero's ladder. Standard inherits the pre-split shared
+// vault (STASH_KEY); the first run after the split has no Hardcore key yet, so its
+// stash starts empty. A first-ever shared-stash boot (no STASH_KEY) still migrates
+// the old per-character embedded stashes into Standard.
+function loadStash() {
+  stashStd = readLocalStash(STASH_KEY) || sanitizeStash(migrateLegacyStashes());
+  stashHc = readLocalStash(STASH_HC_KEY) || freshStash();
+  const alreadySwept = migrateHeroMaterials(); // fold legacy per-hero wallets (once per device)
+  // If the sweep already ran on a prior boot, the ACTIVE hero may be one that synced
+  // down from the cloud since — fold its legacy wallet too (same per-hero key, so an
+  // already-swept hero re-folds idempotently and a new one is captured).
+  if (alreadySwept && player && player.materials && typeof player.materials === 'object') {
+    foldHeroMaterials(stashFor(!!player.hardcore), heroMatKey(player, activeSlot), player.materials);
+  }
+  stash = stashFor(!!(player && player.hardcore)); // active ladder for this session
+  writeStashLocal(stashStd); writeStashLocal(stashHc); // persist the (possibly migrated) forms
+  healStashItems(stashStd); healStashItems(stashHc);
 }
 
 // Bookkeeping from the last successful local save: when it happened (lets the
@@ -26110,10 +26187,10 @@ function loadGame() {
     if (typeof player.vy !== 'number') player.vy = 0;
     // Per-character set of actives hidden from the skill bar (added later).
     if (!player.hiddenSkills || typeof player.hiddenSkills !== 'object') player.hiddenSkills = {};
-    // Migrate saves that predate crafting materials: seed an empty wallet and
-    // ensure every material key exists on partial saves.
-    if (!player.materials || typeof player.materials !== 'object') player.materials = freshMaterials();
-    for (const k of CRAFT_MAT_KEYS) if (player.materials[k] == null) player.materials[k] = 0;
+    // Crafting materials moved OFF the hero into the account-wide shared wallet
+    // (see loadStash → migrateHeroMaterials). Any legacy `player.materials` on an
+    // older save is left untouched here and folded into the shared pool once, on
+    // load, by that migration — so no wallet is lost and nothing double-counts.
     // Migrate saves that predate auto-loot: seed the per-rarity rule map (all
     // 'keep', i.e. the feature off) and repair any invalid/missing entries.
     autoLootConfig();
@@ -26842,6 +26919,8 @@ let lbTab = 'floor';
 let lbMode = 'std';       // which ladder is shown: 'std' (non-hardcore) or 'hc' (hardcore only)
 let lbLastSig = '';       // last-submitted stat signature — skips no-op writes
 let lbSubmitTimer = null; // pending debounced submit, if any
+let lbRows = [];          // the currently-rendered board rows (so a click can open a hero's snapshot)
+let _lbHeroReq = 0;       // guards against a slow loadout fetch resolving after the panel changed
 
 function lbEnabled() { return !!(LB_SUPABASE_URL && LB_SUPABASE_KEY); }
 function lbHeaders(extra) {
@@ -26860,6 +26939,40 @@ function escapeHtml(s) {
 // taken as-is (just coerced to whole numbers for the integer columns) — every
 // submitted score is treated as real.
 function lbInt(v, lo) { v = Math.floor(Number(v)); return Number.isFinite(v) && v > lo ? v : lo; }
+// Trim one equipped item to just what the hero-snapshot card renders — dropping the
+// bulky / transient fields (float positions, deposit tags, cached sprites) so the
+// stored blob stays small.
+function lbTrimItem(it) {
+  if (!it || typeof it !== 'object') return null;
+  const o = {};
+  for (const k of ['name', 'slot', 'tier', 'ilvl', 'stats', 'attrs', 'base', 'crafted', 'fixed', 'set', 'cursed', 'power', 'value', 'flavor']) {
+    if (it[k] !== undefined) o[k] = it[k];
+  }
+  return o;
+}
+// A compact, self-contained snapshot of THIS hero — attributes, worn gear (of the
+// active set) and learned skills — stored on the leaderboard row so any player can
+// inspect the build behind a score. Skills are stored as id→rank only; renderLbHero
+// resolves the names/icons against the hero's OWN class + ascension trees (identical
+// static data in every build), so the blob stays lean. See buildLoadoutUrl.
+function lbLoadoutFromPlayer() {
+  const gear = {};
+  for (const slot of SLOT_KEYS) { const t = lbTrimItem((equipped || {})[slot]); if (t) gear[slot] = t; }
+  const skills = {};
+  if (player.skills) for (const id in player.skills) { const r = player.skills[id] | 0; if (r > 0) skills[id] = r; }
+  return {
+    v: 1,
+    sex: (player.sex === 'female') ? 'female' : 'male',
+    maxHp: Math.round(player.maxHp || 0), maxMp: Math.round(player.maxMp || 0),
+    playMs: Math.max(0, Math.floor(player.playMs || 0)),
+    attributes: player.attributes ? Object.assign({}, player.attributes) : {},
+    gearPower: (typeof gearContributionPower === 'function') ? Math.round(gearContributionPower() || 0) : null,
+    gear,
+    skills,
+    skillSlots: Array.isArray(player.skillSlots) ? player.skillSlots.slice(0, 12) : [],
+    autoSkill: player.autoSkill || null,
+  };
+}
 function lbEntryFromPlayer() {
   return {
     name: String(player.name || 'Adventurer').slice(0, 16),
@@ -26870,6 +26983,7 @@ function lbEntryFromPlayer() {
     gold: lbInt(player.maxGold || player.gold || 0, 0),
     power: lbInt(player.maxPower || playerPower() || 1, 1),
     hardcore: !!player.hardcore,
+    loadout: lbLoadoutFromPlayer(),   // full build snapshot, shown when the row is clicked
   };
 }
 
@@ -26912,6 +27026,7 @@ function lbSubmitLocal(entry) {
         gold: Math.max(all[i].gold || 0, entry.gold),
         power: Math.max(all[i].power || 1, entry.power),
         hardcore: !!entry.hardcore,
+        loadout: entry.loadout || all[i].loadout || null, // freshest build snapshot
       };
     } else {
       all.push(entry);
@@ -27023,6 +27138,7 @@ async function renderLeaderboard() {
     list.innerHTML = '<div class="lb-row"><span class="lb-name">No heroes yet — be the first!</span></div>';
     return;
   }
+  lbRows = rows; // remember the rendered rows so a click can open that hero's snapshot
   list.innerHTML = rows.map((r, i) => {
     const cls = heroFaceIcon(r.player_class, r.sex || 'male', 20) || dlIcon(r.player_class && CLASSES[r.player_class] ? CLASSES[r.player_class].icon : 'npc_mage', 20);
     // Top three shade the whole row gold / silver / bronze (no medal disc);
@@ -27035,12 +27151,14 @@ async function renderLeaderboard() {
     const meta = ['floor', 'level', 'gold', 'power']
       .filter(k => k !== lbTab)
       .map(k => lbStatChip(k, r)).join('');
-    return `<div class="lb-row${top}${me}">
+    // Each row opens a snapshot of that hero (attributes, gear, skills) on click.
+    return `<div class="lb-row lb-row-btn${top}${me}" role="button" tabindex="0" onclick="openLbHero(${i})" title="View ${escapeHtml(r.name)}'s gear, attributes &amp; skills">
       <div class="lb-row-main">
         <span class="lb-rank">${i + 1}</span>
         <span class="lb-class">${cls}</span>
         <span class="lb-name">${escapeHtml(r.name)}</span>
         <span class="lb-val">${sort.fmt(r[sort.col] || 0)}</span>
+        <span class="lb-row-chevron" aria-hidden="true">›</span>
       </div>
       <div class="lb-row-meta">
         <span class="lb-sub">${lbSubclassLabel(r)}</span>
@@ -27048,6 +27166,143 @@ async function renderLeaderboard() {
       </div>
     </div>`;
   }).join('');
+}
+
+// ── Hero snapshot (click a leaderboard row) ─────────────────────────────────
+// Opens a read-only card of another player's hero: their worn gear, attributes and
+// learned skills, resolved from the compact `loadout` blob stored on the row. Local
+// rows carry it inline; global rows fetch it on demand (one small request per click).
+function openLbHero(i) {
+  const r = lbRows[i];
+  if (!r) return;
+  const ov = document.getElementById('lb-hero-overlay');
+  if (!ov) return;
+  const body = document.getElementById('lb-hero-body');
+  ov.classList.add('open');
+  ov.classList.toggle('hc', !!r.hardcore);
+  // Header first (always available from the row); body shows the build once loaded.
+  const head = document.getElementById('lb-hero-head');
+  if (head) head.innerHTML = lbHeroHeadHTML(r);
+  const req = ++_lbHeroReq;
+  if (r.loadout) { if (body) body.innerHTML = lbHeroBuildHTML(r, r.loadout); return; }
+  if (body) body.innerHTML = '<div class="lb-hero-empty">Loading build…</div>';
+  // No backend → nothing more to fetch; the row simply had no snapshot stored.
+  if (!lbEnabled()) { if (body) body.innerHTML = '<div class="lb-hero-empty">No build snapshot for this hero yet.</div>'; return; }
+  _lbRepo.fetchHeroLoadout(r.name, r.hardcore).then(loadout => {
+    if (req !== _lbHeroReq) return; // a newer open (or a close) superseded this fetch
+    r.loadout = loadout || null;    // cache on the row so re-opening is instant
+    if (!body) return;
+    body.innerHTML = loadout ? lbHeroBuildHTML(r, loadout)
+      : '<div class="lb-hero-empty">No build snapshot for this hero yet — they last played before snapshots, or on an older version.</div>';
+  });
+}
+function closeLbHero() {
+  _lbHeroReq++; // invalidate any in-flight fetch so it can't paint into a closed panel
+  const ov = document.getElementById('lb-hero-overlay');
+  if (ov) ov.classList.remove('open');
+}
+
+// The snapshot header: face, name, class/ascension, hardcore brand, and the four
+// board stats — everything the row already carries, so it shows before the build loads.
+function lbHeroHeadHTML(r) {
+  const sex = (r.loadout && r.loadout.sex) || 'male';
+  const face = heroFaceIcon(r.player_class, sex, 56) || dlIcon(r.player_class && CLASSES[r.player_class] ? CLASSES[r.player_class].icon : 'npc_mage', 56);
+  const hcTag = r.hardcore ? `<span class="lb-hero-hc">${hcIcon(13)} Hardcore</span>` : '';
+  const stat = (label, val) => `<div class="lb-hero-stat"><span class="lhs-k">${label}</span><span class="lhs-v">${val}</span></div>`;
+  return `
+    <div class="lb-hero-face">${face}</div>
+    <div class="lb-hero-id">
+      <div class="lb-hero-name">${escapeHtml(r.name)}${hcTag}</div>
+      <div class="lb-hero-sub">${lbSubclassLabel(r)}</div>
+      <div class="lb-hero-stats">
+        ${stat(`${dlIcon('ic_down', 13) || ''} Depth`, lbFloorLabel(r.max_floor || 1))}
+        ${stat(`${dlIcon('ui_level', 13) || ''} Level`, r.level || 1)}
+        ${stat(`${PWR_GLYPH} Power`, fmtGold(r.power || 1))}
+        ${stat(`<span data-spr=ic_money></span> Gold`, fmtGold(r.gold || 0))}
+      </div>
+    </div>`;
+}
+
+// Resolve a skill id against a SPECIFIC class + ascension (not the live player), so a
+// snapshot renders another hero's skills from their own trees. Static data identical
+// in every build, so id → node is deterministic given the hero's class/path.
+function lbSkillNode(classKey, ascKey, id) {
+  const t = SKILL_TREES[classKey] || null;
+  if (t) { for (const n of (t.passive || [])) if (n.id === id) return n; for (const n of (t.active || [])) if (n.id === id) return n; }
+  const a = ASCENSIONS[ascKey] || null;
+  if (a && a.tree) for (const n of a.tree) if (n.id === id) return n;
+  return null;
+}
+
+// The body: attributes, worn gear and learned skills read from the loadout blob.
+function lbHeroBuildHTML(r, lo) {
+  lo = lo || {};
+  const attrs = lo.attributes || {};
+  // Attributes — every key in canonical order, icon + name + value.
+  const attrRow = ATTR_KEYS.map(k => {
+    const a = ATTRIBUTES[k] || {};
+    return `<div class="lb-attr"><span class="lb-attr-ic">${dlIcon(a.sprite, 18) || ''}</span><span class="lb-attr-name">${a.label || k}</span><span class="lb-attr-val">${attrs[k] || 0}</span></div>`;
+  }).join('');
+  // Gear — one tile per slot; empty slots read as such so the paperdoll is complete.
+  const gear = lo.gear || {};
+  const gearRow = SLOT_KEYS.map(slot => {
+    const it = gear[slot];
+    const label = (SLOTS[slot] || {}).label || slot;
+    if (!it) return `<div class="lb-gear lb-gear-empty"><span class="lb-gear-ic">${dlIcon((SLOTS[slot] || {}).sprite, 26) || ''}</span><div class="lb-gear-info"><div class="lb-gear-slot">${label}</div><div class="lb-gear-name lb-gear-none">— empty —</div></div></div>`;
+    const col = tierColor(it);
+    const tip = lbItemTip(it);
+    return `<div class="lb-gear" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+      <span class="lb-gear-ic">${iconMarkup(itemIcon(it), col)}</span>
+      <div class="lb-gear-info">
+        <div class="lb-gear-slot">${label}</div>
+        <div class="lb-gear-name" style="color:${col}">${curseMark(it)}${escapeHtml(it.name || '')}${it.crafted ? ' ' + (dlIcon('ic_mallet', 12) || '') : ''}</div>
+        <div class="lb-gear-power">${PWR_GLYPH} ${itemPower(it)}${it.ilvl ? ` · <span style="color:var(--blue-250)">ilvl ${it.ilvl}</span>` : ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+  // Skills — the hotbar (in slot order) first, then any other learned nodes, each
+  // as an icon chip with its rank. Resolved against the hero's own class/path trees.
+  const skills = lo.skills || {};
+  const seen = {};
+  const chip = (id, slotLabel) => {
+    const node = lbSkillNode(r.player_class, r.ascension, id);
+    if (!node) return '';
+    seen[id] = true;
+    const rank = skills[id] || 1;
+    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(node.icon, 16) || ''} ${escapeHtml(node.name || id)}</div><div class='ht-line'>${node.desc || ''}</div><div class='ht-sub'>${node.type === 'active' ? `Active${node.mp ? ' · ' + node.mp + ' MP' : ''}${node.cd ? ' · ' + node.cd + 's cd' : ''}` : 'Passive'} · rank ${rank}</div>`.replace(/"/g, '&quot;');
+    return `<div class="lb-skill${slotLabel ? ' lb-skill-slotted' : ''}" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+      <span class="lb-skill-ic">${dlIcon(node.icon, 26) || ''}</span>
+      <span class="lb-skill-rank">${rank}</span>
+      ${slotLabel ? `<span class="lb-skill-key">${slotLabel}</span>` : ''}
+    </div>`;
+  };
+  const barChips = [];
+  (lo.skillSlots || []).forEach((id, idx) => { if (id) { const c = chip(id, String(idx + 1)); if (c) barChips.push(c); } });
+  if (lo.autoSkill) { const c = chip(lo.autoSkill, '⟳'); if (c) barChips.push(c); }
+  const otherChips = Object.keys(skills).filter(id => !seen[id]).map(id => chip(id, '')).filter(Boolean);
+  const skillHTML = (barChips.length || otherChips.length)
+    ? `${barChips.join('')}${otherChips.join('')}`
+    : '<div class="lb-hero-none">No skills learned yet.</div>';
+  const gp = (lo.gearPower != null) ? `<span class="lb-hero-gp">${PWR_GLYPH} ${fmtGold(lo.gearPower)} from gear</span>` : '';
+  return `
+    <div class="lb-hero-sec">
+      <div class="lb-hero-sectitle">Attributes</div>
+      <div class="lb-attrs">${attrRow}</div>
+    </div>
+    <div class="lb-hero-sec">
+      <div class="lb-hero-sectitle">Gear ${gp}</div>
+      <div class="lb-gears">${gearRow}</div>
+    </div>
+    <div class="lb-hero-sec">
+      <div class="lb-hero-sectitle">Skills</div>
+      <div class="lb-skills">${skillHTML}</div>
+    </div>`;
+}
+
+// The gear hover card for a snapshot piece — the SAME item detail card the rest of
+// the game uses, minus the live-viewer "you have N attr" requirement line.
+function lbItemTip(it) {
+  return `<div class="tt-card">${itemCardHTML(it, { hideReq: true })}</div>`.replace(/"/g, '&quot;');
 }
 
 // ══════════════════════════════════════════
@@ -27389,63 +27644,69 @@ async function delReconcile() {
 }
 
 // ── Shared-stash cloud sync ─────────────────────────────────────────────────
-// The shared stash mirrors to one dedicated row per account (STASH_CLOUD_SLOT),
-// separate from the per-character slot rows. cloudReconcile() ignores it (it isn't
-// a started character save), so it has its own sync. Unlike the per-slot saves this
-// is NOT last-writer-wins: the stash is a CRDT (persistence/stashSync.js), so every
-// push is UNION-FIRST — read the cloud copy, merge it with ours (losing nothing on
-// either side), then write the merged result back both locally and up. A blind
-// overwrite could otherwise regress the cloud by clobbering a concurrent deposit
-// from another device we hadn't merged yet.
+// Each ladder's stash mirrors to its own dedicated row per account (Standard →
+// STASH_CLOUD_SLOT, Hardcore → STASH_HC_CLOUD_SLOT), separate from the per-character
+// slot rows. cloudReconcile() ignores them (they aren't started character saves), so
+// they have their own sync. Unlike the per-slot saves this is NOT last-writer-wins:
+// the stash is a CRDT (persistence/stashSync.js), so every push is UNION-FIRST — read
+// the cloud copy, merge it with ours (losing nothing on either side), then write the
+// merged result back both locally and up. A blind overwrite could otherwise regress
+// the cloud by clobbering a concurrent deposit from another device we hadn't merged.
+// Only the ACTIVE ladder changes during a session, so the debounced push targets it;
+// boot reconcile syncs BOTH so the inactive ladder is fresh when you switch heroes.
 let cloudStashTimer = null;
 function cloudScheduleStash() {
   if (!cloudEnabled() || !authState.user) return;
   if (cloudStashTimer) return;
-  cloudStashTimer = setTimeout(() => { cloudStashTimer = null; cloudPushStash(); }, 3500);
+  cloudStashTimer = setTimeout(() => { cloudStashTimer = null; cloudPushStash(stash); }, 3500);
 }
-// Replace the live stash with a merged copy IN PLACE (same object identity, so no
-// reader holds a stale reference), re-heal item icons, persist, and refresh the
-// Vault if it's open.
-function adoptStash(merged) {
-  stash.v = merged.v; stash.gl = merged.gl; stash.rm = merged.rm;
-  stash.items = merged.items; stash.gold = merged.gold; stash.ts = merged.ts;
-  healStashItems();
-  writeStashLocal();
+// Replace a ladder's live stash with a merged copy IN PLACE (same object identity, so
+// no reader holds a stale reference), re-heal item icons, persist, and — if it's the
+// active ladder — refresh the Vault when it's open.
+function adoptStash(s, merged) {
+  s.v = merged.v; s.gl = merged.gl; s.ml = merged.ml; s.rm = merged.rm;
+  s.items = merged.items; s.gold = merged.gold; s.materials = merged.materials; s.ts = merged.ts;
+  healStashItems(s);
+  writeStashLocal(s);
+  if (s !== stash) return; // an inactive ladder isn't on screen
   const ov = document.getElementById('town-overlay');
   const title = document.getElementById('town-title');
   if (ov && ov.classList.contains('open') && title && title.dataset.title === 'Vault') renderStash();
 }
-// Union-first push: read the account's stash row, merge it with ours, adopt the
-// merged result locally, then upsert it back. Best-effort — any failure (including a
-// build whose DB rejects the sentinel slot) simply leaves the fully-working local
-// stash untouched.
-async function cloudPushStash() {
+// Union-first push of ONE ladder's stash: read the account's row for that ladder,
+// merge it with ours, adopt the merged result locally, then upsert it back. Best-
+// effort — any failure (including a build whose DB rejects the sentinel slot) simply
+// leaves the fully-working local stash untouched.
+async function cloudPushStash(s = stash) {
   if (!cloudEnabled() || !authState.user) return false;
   if (!await ensureToken()) return false;
+  const slot = stashCloudSlot(s);
   let cloud;
   try {
-    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?select=data&user_id=eq.' + authState.user.id + '&slot=eq.' + STASH_CLOUD_SLOT, { headers: cloudRestHeaders() });
+    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?select=data&user_id=eq.' + authState.user.id + '&slot=eq.' + slot, { headers: cloudRestHeaders() });
     if (!res.ok) return false;
     const rows = await res.json();
     cloud = (rows && rows[0]) ? rows[0].data : null;
   } catch (e) { return false; }
-  if (cloud) adoptStash(mergeStash(stash, cloud)); // merge in the account's copy before writing
+  if (cloud) adoptStash(s, mergeStash(s, cloud)); // merge in the account's copy before writing
   try {
     const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?on_conflict=user_id,slot', {
       method: 'POST',
       headers: cloudRestHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
       body: JSON.stringify({
-        user_id: authState.user.id, slot: STASH_CLOUD_SLOT, data: stash,
-        updated_at: new Date(stash.ts || Date.now()).toISOString(),
+        user_id: authState.user.id, slot: slot, data: s,
+        updated_at: new Date(s.ts || Date.now()).toISOString(),
       }),
     });
     return res.ok;
   } catch (e) { return false; }
 }
 // Boot/sync reconcile: the union-first push already reads-merges-writes, so merging
-// the account's stash into ours on boot is exactly the same operation.
+// the account's stash into ours on boot is exactly the same operation — done for BOTH
+// ladders so each pool is current no matter which hero you play next.
 async function stashReconcile() {
-  await cloudPushStash();
+  await cloudPushStash(stashStd);
+  await cloudPushStash(stashHc);
 }
 
 // ── Settings cloud sync ─────────────────────────────────────────────────────
@@ -28021,7 +28282,9 @@ const _aMaxSkill = p => { const v = Object.values(p.skills || {}); return v.leng
 const _aRecipes = p => (p.discoveredRecipes || []).length;
 const _aCleared = p => Object.keys(p.clearedFloors || {}).length;
 const _aLooks = p => { const w = p.wardrobe || {}; return (w.head || []).length + (w.chest || []).length + (w.weapon || []).length; };
-const _aMat = (p, k) => (p.materials || {})[k] || 0;
+// Crafting materials are an account-wide shared wallet now, so a "hold N" feat
+// reads the active ladder's pooled stash, not the (defunct) per-hero store.
+const _aMat = (p, k) => ((stash && stash.materials) || {})[k] || 0;
 const _aWorn = () => (typeof equipped === 'object' && equipped) ? Object.values(equipped).filter(Boolean).length : 0;
 const _aWornTier = t => (typeof equipped === 'object' && equipped) ? Object.values(equipped).some(it => it && it.tier === t) : false;
 const _aBag = () => (typeof inventory !== 'undefined' && inventory) ? inventory.length : 0;
@@ -28601,7 +28864,7 @@ const RT_BLOCKING_OVERLAYS = ['title-overlay','name-overlay','class-overlay','hc
   'autoloot-overlay','newrun-overlay','keybind-overlay',
   // Reachable mid-dungeon (e.g. from the menu or on a tier conquest) — these
   // close the settings menu, so they must pause the world on their own.
-  'conquest-overlay','slots-overlay','account-overlay','lb-overlay','graveyard-overlay','slotpick-overlay',
+  'conquest-overlay','slots-overlay','account-overlay','lb-overlay','lb-hero-overlay','graveyard-overlay','slotpick-overlay',
   'greed-overlay',    // the risk/reward cursed-floor choice pauses the world while open
   'boss-gate-overlay'];   // the "are you ready?" boss-floor threshold prompt pauses the world too
 // The blocking overlays are all static shell divs (only their 'open' class
@@ -30182,6 +30445,8 @@ const __DL_FN_BRIDGE = {
   setLbTab,
   setLbMode,
   renderLeaderboard,
+  openLbHero,
+  closeLbHero,
   cloudEnabled,
   persistSession,
   clearSession,
@@ -30300,7 +30565,9 @@ __dlLive("inventory", () => inventory, (v) => { inventory = v; });
 __dlLive("keybindCapture", () => keybindCapture, (v) => { keybindCapture = v; });
 __dlLive("lastCam", () => lastCam, undefined);   // read-only handle — lets tests map a screen point to a map tile (see clientToTile)
 __dlLive("lbMode", () => lbMode, (v) => { lbMode = v; });
+__dlLive("lbRows", () => lbRows, (v) => { lbRows = v; });   // the rendered board rows a click opens (also lets tests drive openLbHero)
 __dlLive("lbTab", () => lbTab, (v) => { lbTab = v; });
+__dlLive("stashHc", () => stashHc, (v) => { stashHc = v; });   // Hardcore ladder pool (Standard is `stash` when active)
 __dlLive("merchant", () => merchant, (v) => { merchant = v; });
 __dlLive("moveTarget", () => moveTarget, undefined);   // read-only handle (a const object) — lets tests inspect the click-to-move route
 __dlLive("newGameArmed", () => newGameArmed, (v) => { newGameArmed = v; });

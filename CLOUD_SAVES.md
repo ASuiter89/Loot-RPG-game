@@ -144,17 +144,25 @@ used by the leaderboard cover cloud saves too.
   pulls your existing account saves down instead of letting the empty title-screen
   slot overwrite them.
 - **Shared stash merges conflict-free.** The account-wide **stash** (the shared
-  Vault) is a small CRDT, so — like per-character saves — it never loses data to a
-  sync, even under concurrent **offline** edits on two devices. Gold is a per-device
-  deposit/withdrawal counter (the merge sums both devices' deposits and subtracts
+  Vault **and** the shared crafting-material wallet) is a small CRDT, so — like
+  per-character saves — it never loses data to a sync, even under concurrent
+  **offline** edits on two devices. Gold and each crafting material are per-device
+  deposit/withdrawal counters (the merge sums both devices' deposits and subtracts
   both withdrawals), and items are tracked by a per-deposit tag with withdrawal
   tombstones (the merge unions everything deposited and drops anything withdrawn).
-  So depositing on your phone while your PC is offline, then syncing, keeps **both**
-  contributions; a withdrawn item never reappears, and a re-deposited one survives.
+  So gaining materials on your phone while your PC is offline, then syncing, keeps
+  **both** gains; a withdrawn item never reappears, and a re-deposited one survives.
   Every push is union-first (read the account copy, merge, write back), so a stale
   device can't clobber a newer one. (Existing pre-CRDT stashes upgrade in place: the
   old balance is preserved and merges by max across devices, so it's never
   double-counted.)
+- **Materials are shared per-ladder; Standard and Hardcore keep separate pools.**
+  Crafting materials live in the stash rather than on any one hero, so every hero
+  draws on the same wallet with no depositing. **Standard** and **Hardcore** each get
+  their own stash (their own Vault and their own materials) — nothing crosses between
+  the two ladders. Each ladder's stash is its own row in the `saves` table under a
+  reserved negative `slot`, so no schema change is needed; a first-time load pools
+  each hero's old per-hero materials into the matching ladder once, losing nothing.
 - **Privacy.** Only the player's own save JSON is stored, and RLS prevents anyone
   else's key from reading it. Passwords are handled entirely by Supabase Auth —
   the game never stores them.
