@@ -24,6 +24,7 @@ import { offscreenArrows, tileOnScreen } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
 import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.js';
 import { footprintSealsPath } from '../systems/decorPlacement.js';
+import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
@@ -2359,9 +2360,12 @@ function placeOutdoorDecor(theme) {
       // A vault door (11) reads as a wall to isFloorPassable, but it's openable, so
       // its locked interior is still "reachable" — count it passable here so decor
       // can't wall off the sole approach to a vault and strand the key/loot inside.
+      // A tile a shop NPC stands on counts as SOLID (tileBlockedByObject) too — the
+      // merchant/mystic are immovable, so a piece that only leaves a lane open by
+      // squeezing past one would still seal the path in play.
       const walk = (wx, wy) => wx >= 0 && wy >= 0 && wx < MAP_W && wy < MAP_H
         && (isFloorPassable(mapData[wy][wx]) || mapData[wy][wx] === 11)
-        && furnitureMap[wy + ',' + wx] === undefined;
+        && !tileBlockedByObject(wx, wy);
       if (footprintSealsPath(foot, MAP_W, MAP_H, walk)) continue;
       decorMap[y + ',' + x] = id;
       for (const [fx, fy] of foot) furnitureMap[fy + ',' + fx] = 1;
@@ -9323,15 +9327,29 @@ function ensureHostilesReachable() {
   }
 }
 
+// A STATIONARY, build-time solid that blocks a tile for good: solid decor/
+// furniture, or one of the two shop NPCs. The player and enemies move (and foes
+// are relocated by ensureHostilesReachable), so they're excluded — only these
+// three can permanently wall off a path once the floor is built.
+function tileBlockedByObject(x, y) {
+  return furnitureMap[y + ',' + x] !== undefined
+      || (merchant && merchant.x === x && merchant.y === y)
+      || (mystic && mystic.x === x && mystic.y === y);
+}
+
 // Would parking an immovable blocker (a shop NPC) on this tile wall the player
 // out of part of the floor? True only when the tile is the lone pinch point
-// linking two open stretches — dead-ends and open rooms return false.
+// linking two open stretches — dead-ends and open rooms return false. A tile
+// already holding a stationary object (furniture, the other shop NPC) counts as
+// solid here, so the check is holistic: an NPC never plugs the last gap left open
+// only by squeezing past furniture or its neighbour.
 function isChokePoint(x, y) {
+  const open = (nx, ny) => isWalkThrough(mapData[ny][nx]) && !tileBlockedByObject(nx, ny);
   const opens = [];
   for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
     const nx = x + dx, ny = y + dy;
     if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H) continue;
-    if (isWalkThrough(mapData[ny][nx])) opens.push([nx, ny]);
+    if (open(nx, ny)) opens.push([nx, ny]);
   }
   if (opens.length < 2) return false;                // dead-end / corner: safe
   // Flood from one open neighbour treating (x,y) as solid; if another open
@@ -9341,16 +9359,101 @@ function isChokePoint(x, y) {
   let guard = 0;
   while (stack.length && guard++ < MAP_W * MAP_H * 4) {
     const [cx, cy] = stack.pop();
-    if (!isWalkThrough(mapData[cy][cx])) continue;
+    if (!open(cx, cy)) continue;
     for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
       const nx = cx + dx, ny = cy + dy;
       if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H) continue;
       const k = ny + ',' + nx;
-      if (seen.has(k) || !isEnterable(mapData[ny][nx])) continue;
+      if (seen.has(k) || !isEnterable(mapData[ny][nx]) || tileBlockedByObject(nx, ny)) continue;
       seen.add(k); stack.push([nx, ny]);
     }
   }
   return opens.some(([ox, oy]) => !seen.has(oy + ',' + ox));
+}
+
+// Strip the solid decor object covering (x, y) — its decorMap anchor AND every
+// furnitureMap tile of its footprint — so the whole piece (not a stray half) is
+// gone and the tile is walkable again. Used only by the connectivity safety net.
+function removeDecorObjectAt(x, y) {
+  for (const k in decorMap) {
+    const id = decorMap[k];
+    if (!DECOR_SOLID[id]) continue;                    // walkable clutter never blocks
+    const c = k.indexOf(','); const ay = +k.slice(0, c), ax = +k.slice(c + 1);
+    const foot = decorFootprint(id, ax, ay);
+    if (foot.some(([fx, fy]) => fx === x && fy === y)) {
+      delete decorMap[k];
+      for (const [fx, fy] of foot) delete furnitureMap[fy + ',' + fx];
+      bumpMapEpoch(); pathGridDirty();
+      return;
+    }
+  }
+  // Fallback: a lone furniture tile with no decor anchor (not produced today).
+  if (furnitureMap[y + ',' + x] !== undefined) { delete furnitureMap[y + ',' + x]; bumpMapEpoch(); pathGridDirty(); }
+}
+
+// Shove a shop NPC that sealed a path onto a safe, reachable, non-chokepoint floor
+// tile. Falls back to any open reachable tile; as an absolute last resort (no room
+// anywhere) drops the NPC rather than leave the floor soft-locked.
+function relocateBlockingNpc(npc) {
+  const ox = npc.x, oy = npc.y;
+  npc.x = -1; npc.y = -1;                              // hide it so it's not "solid" while we search
+  const reach = footReach(MAP_W, MAP_H, player.x, player.y,
+    (x, y) => isEnterable(mapData[y][x]) && !tileBlockedByObject(x, y),
+    (x, y) => isWalkThrough(mapData[y][x]) && !tileBlockedByObject(x, y));
+  let spot = null;
+  for (const key of reach) {
+    const c = key.indexOf(','); const y = +key.slice(0, c), x = +key.slice(c + 1);
+    if (mapData[y][x] !== 0) continue;                 // plain floor only
+    if (x === player.x && y === player.y) continue;
+    if (getEnemyAt(x, y) || tileBlockedByObject(x, y) || isChokePoint(x, y)) continue;
+    spot = { x, y }; break;
+  }
+  if (spot) { npc.x = spot.x; npc.y = spot.y; return; }
+  npc.x = ox; npc.y = oy;                              // restore before dropping (keeps state tidy)
+  if (merchant === npc) merchant = null;
+  else if (mystic === npc) mystic = null;
+}
+
+// Reopen a tile a stationary object sealed: strip the decor piece on it, or move a
+// blocking shop NPC aside. Returns true if it actually freed the tile.
+function clearBlockingObjectAt(x, y) {
+  if (furnitureMap[y + ',' + x] !== undefined) { removeDecorObjectAt(x, y); return true; }
+  if (merchant && merchant.x === x && merchant.y === y) { relocateBlockingNpc(merchant); return true; }
+  if (mystic && mystic.x === x && mystic.y === y) { relocateBlockingNpc(mystic); return true; }
+  return false;
+}
+
+// ── OBJECTS NEVER BLOCK A PATH (final guarantee) ──
+// Run after EVERY stationary solid is placed (solid decor/furniture + the two shop
+// NPCs). Terrain foot-connectivity is already guaranteed (ensureFootConnected), so
+// any stretch the bare floor can reach but an object walls off can always be
+// reopened by clearing that object — never by carving rock. The per-placement
+// guards (footprintSealsPath / isChokePoint, both object-aware) prevent nearly
+// every such seal; this is the belt-and-suspenders that makes a blocked floor
+// impossible and self-heals any case a local check missed.
+function clearObjectBlockedPaths() {
+  const enter = (x, y) => isEnterable(mapData[y][x]);
+  const through = (x, y) => isWalkThrough(mapData[y][x]);
+  const objectSolid = (x, y) => tileBlockedByObject(x, y);
+  for (let pass = 0; pass < 400; pass++) {
+    // The first EMPTY floor tile the bare terrain reaches but an object walled off
+    // (the tile an object sits on is skipped — that's where the object is, not a
+    // strand). objReach is reachability WITH the objects solid.
+    const { stranded, objReach } = firstStrandedTile(MAP_W, MAP_H, player.x, player.y, enter, through, objectSolid);
+    if (!stranded) break;                              // fully walkable with objects — done
+    // Route the stranded tile back to open ground over terrain (objects allowed on
+    // the route), then clear whatever objects sit on that lane to reopen it. The
+    // target must be a WALK-THROUGH object-reachable tile, never a terminal one
+    // (stairs/teleporter): you can reach a terminal tile but not walk on past it, so
+    // routing to it would give an object-free lane that clears nothing. Forcing a
+    // walk-through target makes the lane cross the sealing object so we can clear it.
+    const path = pathToRegion(MAP_W, MAP_H, stranded[0], stranded[1],
+      through, (x, y) => through(x, y) && objReach.has(y + ',' + x));
+    if (!path) break;                                  // terrain-connected → always exists; never spin
+    let cleared = false;
+    for (const [x, y] of path) { if (clearBlockingObjectAt(x, y)) cleared = true; }
+    if (!cleared) break;                               // nothing removable on the lane — bail, don't loop
+  }
 }
 
 // Pick a random plain-floor tile, optionally limited to a reachable set.
@@ -9958,9 +10061,9 @@ function generateMap() {
   // pass-throughs). Free-standing NPCs and quest targets must land here, never
   // in a pocket whose only link runs through a warp/stair — otherwise they're
   // visible but unreachable.
-  const footReach = reachableOnFoot(player.x, player.y);
-  spawnMerchant(footReach);
-  spawnMystic(footReach);
+  const footReachSet = reachableOnFoot(player.x, player.y);
+  spawnMerchant(footReachSet);
+  spawnMystic(footReachSet);
   // Vault is built last so its chest survives spawnGroundLoot resetting the list.
   if (Math.random() < 0.2) tryBuildVault(reach);
 
@@ -10016,7 +10119,7 @@ function generateMap() {
   // A mini-quest may take over the floor (after enemies/loot are placed). Use
   // the foot-reachable set so quest NPCs, markers and pickups are walkable to,
   // not stranded behind a teleporter or the exit stairs.
-  maybeSpawnQuest(footReach);
+  maybeSpawnQuest(footReachSet);
 
   // Now that every interactable (NPCs, shrines, fountains, the grave) is down,
   // make sure none sits in a trap path — clear the spikes around them and disarm
@@ -10038,6 +10141,11 @@ function generateMap() {
   // With every foe (including any quest horde) now placed, make sure none is
   // stranded behind the sealed exit — otherwise the floor could never clear.
   ensureHostilesReachable();
+
+  // Final guarantee: no stationary object (solid decor/furniture or a shop NPC)
+  // is left walling off a stretch of floor. Clears/relocates any that slipped
+  // past the per-placement guards, so the floor is always fully walkable.
+  clearObjectBlockedPaths();
 
   // ── CLEAR CONDITION ── seal the stairs until the floor's hostiles are down.
   // (A handful of floors can spawn with no blockers — those open immediately.)
@@ -29120,17 +29228,91 @@ try {
     // __AUDIT__ (temporary): flood the REAL map from the player and report floor
     // tiles a decor piece walled off (full-map, no ASCII windowing artefacts).
     window.__connCheck = function () {
-      const pass = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && (isFloorPassable(mapData[y][x]) || mapData[y][x] === 11) && furnitureMap[y + ',' + x] === undefined;
+      // Flood treating every stationary OBJECT (solid decor/furniture + the two
+      // shop NPCs) as a wall, then report any plain-floor tile it can't reach — a
+      // stretch an object walled off. Breakable/openable TERRAIN is reachable in
+      // play, so a cracked wall (10) and a vault door (11) count as passable here
+      // (a floor pocket behind one is intended terrain, not an object block).
+      // bad:0 means no object blocks a path.
+      const pass = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && (isFloorPassable(mapData[y][x]) || mapData[y][x] === 10 || mapData[y][x] === 11) && !tileBlockedByObject(x, y);
       const seen = new Set([player.y + ',' + player.x]); const st = [[player.x, player.y]];
       while (st.length) { const [x, y] = st.pop(); for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) { const nx = x+dx, ny = y+dy, k = ny+','+nx; if (seen.has(k) || !pass(nx, ny)) continue; seen.add(k); st.push([nx, ny]); } }
       let bad = 0; const detail = [];
       for (let y = 1; y < MAP_H-1; y++) for (let x = 1; x < MAP_W-1; x++) {
-        if (mapData[y][x] === 0 && furnitureMap[y+','+x] === undefined && !seen.has(y+','+x)) {
+        if (mapData[y][x] === 0 && !tileBlockedByObject(x, y) && !seen.has(y+','+x)) {
           bad++;
-          if (detail.length < 4) { const nb = [[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy]) => furnitureMap[(y+dy)+','+(x+dx)] !== undefined ? 'D' : mapData[y+dy][x+dx]).join(','); detail.push({ x, y, nb }); }
+          if (detail.length < 4) { const nb = [[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy]) => tileBlockedByObject(x+dx, y+dy) ? 'D' : mapData[y+dy][x+dx]).join(','); detail.push({ x, y, nb }); }
         }
       }
-      return { bad, detail };
+      // solids: how many tiles a stationary object makes solid (furniture + NPCs),
+      // so a caller can tell the audit actually had objects to reason about.
+      const npcs = (merchant ? 1 : 0) + (mystic ? 1 : 0);
+      const solids = Object.keys(furnitureMap).length + npcs;
+      return { bad, detail, solids, furniture: Object.keys(furnitureMap).length, npcs };
+    };
+    // __PATH_BLOCK_TEST__ (preview only): build a deterministic two-room floor
+    // joined by a single 1-wide corridor, seal the corridor with a stationary
+    // object, and prove the map-build guarantee (clearObjectBlockedPaths) reopens
+    // it. Exercises both repair paths — stripping a solid decor piece and shoving a
+    // shop NPC aside. Returns before/after counts so a smoke test can assert the heal.
+    window.__pathBlockTest = function () {
+      const out = { cases: [] };
+      const solidBase = DECOR_INDEX.findIndex((d) => d.block === 'base'); // 1-tile solid decor
+      const build = () => {
+        MAP_W = 7; MAP_H = 5;
+        mapData = [];
+        for (let y = 0; y < MAP_H; y++) { mapData[y] = []; for (let x = 0; x < MAP_W; x++) mapData[y][x] = 1; }
+        for (let x = 1; x <= 5; x++) { mapData[1][x] = 0; mapData[3][x] = 0; } // two rooms
+        mapData[2][3] = 0;                                                     // sole join: corridor (3,2)
+        furnitureMap = {}; decorMap = {}; teleporters = {}; merchant = null; mystic = null;
+        floorSerial++; bumpMapEpoch(); pathGridDirty();
+        player.x = 1; player.y = 1;
+      };
+      // Case 1 — solid decor plugging the corridor.
+      try {
+        build();
+        decorMap['2,3'] = solidBase; furnitureMap['2,3'] = 1;
+        const before = window.__connCheck().bad;
+        clearObjectBlockedPaths();
+        const after = window.__connCheck().bad;
+        out.cases.push({ kind: 'decor', before, after, freed: furnitureMap['2,3'] === undefined, anchorGone: decorMap['2,3'] === undefined });
+      } catch (e) { out.cases.push({ kind: 'decor', err: String(e) }); }
+      // Case 2 — a shop NPC (mystic) standing on the corridor.
+      try {
+        build();
+        mystic = { x: 3, y: 2 };
+        const before = window.__connCheck().bad;
+        clearObjectBlockedPaths();
+        const after = window.__connCheck().bad;
+        out.cases.push({ kind: 'npc', before, after, moved: !mystic || mystic.x !== 3 || mystic.y !== 2 });
+      } catch (e) { out.cases.push({ kind: 'npc', err: String(e) }); }
+      // Case 3 — two regions joined by a TERMINAL stair (top) and an object (bottom).
+      // Once the object seals the bottom branch, the right region is reachable only
+      // by walking PAST the stairs — impossible on foot. __connCheck can't see this
+      // (it treats stairs as passable), so verify with the game's own foot-reach:
+      // the right region must go from unreachable → reachable, by clearing the object.
+      try {
+        MAP_W = 7; MAP_H = 5;
+        mapData = [];
+        for (let y = 0; y < MAP_H; y++) { mapData[y] = []; for (let x = 0; x < MAP_W; x++) mapData[y][x] = 1; }
+        mapData[1][1] = 0; mapData[1][2] = 0; mapData[1][3] = 2; mapData[1][4] = 0; mapData[1][5] = 0; // stair(2) at (3,1)
+        mapData[2][1] = 0; mapData[2][5] = 0;
+        mapData[3][1] = 0; mapData[3][2] = 0; mapData[3][3] = 0; mapData[3][4] = 0; mapData[3][5] = 0; // bottom branch
+        furnitureMap = {}; decorMap = {}; teleporters = {}; merchant = null; mystic = null;
+        floorSerial++; bumpMapEpoch(); pathGridDirty();
+        player.x = 1; player.y = 1;
+        decorMap['3,3'] = solidBase; furnitureMap['3,3'] = 1;                     // object on the bottom branch
+        // Object-AWARE foot reachability (objects solid, stairs terminal) — the real
+        // in-play walkability. reachableOnFoot ignores objects, so it can't see this.
+        const objFoot = () => footReach(MAP_W, MAP_H, player.x, player.y,
+          (x, y) => isEnterable(mapData[y][x]) && !tileBlockedByObject(x, y),
+          (x, y) => isWalkThrough(mapData[y][x]) && !tileBlockedByObject(x, y));
+        const rightBefore = objFoot().has('3,4');                                 // right region tile (4,3)
+        clearObjectBlockedPaths();
+        const rightAfter = objFoot().has('3,4');
+        out.cases.push({ kind: 'terminal', rightBefore, rightAfter, freed: furnitureMap['3,3'] === undefined });
+      } catch (e) { out.cases.push({ kind: 'terminal', err: String(e) }); }
+      return out;
     };
   }
 } catch (e) {}
@@ -30040,6 +30222,11 @@ const __DL_FN_BRIDGE = {
   ensureFootConnected,
   ensureHostilesReachable,
   isChokePoint,
+  tileBlockedByObject,
+  clearObjectBlockedPaths,
+  removeDecorObjectAt,
+  relocateBlockingNpc,
+  clearBlockingObjectAt,
   randomFloorTile,
   placeTraps,
   arrowLaneHits,
