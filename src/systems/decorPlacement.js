@@ -50,3 +50,22 @@ export function footprintSealsPath(footprint, W, H, isWalkable) {
   }
   return exits.some(([x, y]) => !seen.has(x + ',' + y));
 }
+
+// Would a solid multi-tile piece land in genuine OPEN ROOM space?
+//
+// footprintSealsPath only rejects a placement that DISCONNECTS the floor. A wide
+// piece can still plug a corridor or a doorway that a detour keeps connected — a
+// bed dropped across a hall you then can't walk down. Built interiors are laid out
+// as separate room rectangles joined by corridors, so the clean rule is: the whole
+// footprint must sit strictly INSIDE one room, inset one tile from that room's
+// edge. Inset by one keeps the piece off the room's perimeter — where doorways
+// open onto corridors — so it can never bridge a passage, while still allowing it
+// snug in a corner (a corner tile's neighbours are all interior/edge floor).
+//
+//   footprint  array of [x, y] tiles the piece would occupy
+//   rooms      array of { x, y, w, h } room rectangles (floorRooms)
+export function footprintInsideRoom(footprint, rooms) {
+  if (!footprint.length || !rooms || !rooms.length) return false;
+  return rooms.some((r) => footprint.every(
+    ([x, y]) => x > r.x && x < r.x + r.w - 1 && y > r.y && y < r.y + r.h - 1));
+}
