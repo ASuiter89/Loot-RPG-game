@@ -25170,7 +25170,7 @@ function beltBountyHtml() {
   const label = b ? escapeHtml(b.desc.replace('{n}', b.need).replace(/ (?:from|of) foes\b/, '').replace(/ elite foes\b/, ' elites')) : '';
   const inner = b
     ? `<span class="sb-bounty-ic">${ic}</span><div class="sb-bounty-info"><span class="sb-bounty-label">${label}</span><div class="sb-bounty-meter"><span class="bar-track sb-bounty-track"><span class="bar-fill sb-bounty-fill"></span></span><span class="sb-bounty-prog"></span></div></div>`
-    : `<div class="sb-mod-overlay">${ic}&nbsp;No bounty yet</div>`;
+    : `<div class="sb-mod-overlay">No bounty yet</div>`;
   const tip = b
     ? hoverTip(`<div class='ht-name'>${ic} Bounty</div><div class='ht-line'>${escapeHtml(b.desc.replace('{n}', b.need))}</div>`)
     : hoverTip(`<div class='ht-name'>${ic} Bounty</div><div class='ht-line'>No active bounty — accept one at the town Bounty Board.</div>`);
