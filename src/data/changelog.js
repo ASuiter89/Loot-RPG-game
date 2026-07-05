@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Boss Point nudges on the GEAR tab and gear-set buttons", by: "Claude", notes: [
+    "The GEAR tab now glows with a count when the loadout you're WEARING has Boss Points left to spend — the same nudge the HERO and SKILLS tabs already use for unspent points.",
+    "Each gear-set button (Set 1 / Set 2) shows its own count too, so points waiting on the set you're NOT wearing are visible without switching to it. Your worn set lights up both the tab and its button.",
+  ] },
   { date: "2026-07-04", size: "medium", v: "Boss Points — spend one per new boss floor to permanently level your gear slots", by: "Claude", notes: [
     "Every boss floor you clear for the FIRST time now grants a Boss Point (farming a floor you've already cleared grants none). Spend it on the GEAR tab to level a gear slot.",
     "Each slot level permanently boosts EVERYTHING the gear worn in that slot does — its stats, its attributes and its weapon damage — by 5%, with no cap, for as long as that piece is equipped.",
