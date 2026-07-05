@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Bag opens over town menus on phones", by: "Claude", notes: [
+    "On a phone, opening the Bag from Town now covers the menu you opened it over — it used to slip behind the merchant (and the mystic), hiding your loot behind their wares.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Touch: tap worn gear to enchant it", by: "Claude", notes: [
     "On a phone you can now tap a worn piece of gear at the Enchanter to pick it. A tap on an equipped slot used to flash its stat card instead of selecting it, so equipped gear was impossible to work on — now the tap selects it and its properties open on the piece's own screen.",
   ] },

@@ -4461,9 +4461,15 @@
   /* ── Bag/loot drawer as a full-screen sheet ── */
   body.touch #side-panel { transition: none; }
   body.touch:not(.bag-open) #side-panel { display: none; }
+  /* The Bag can be opened from town — its topbar button floats above an open
+     town/shop/mystic sheet (see #touch-hud below) — so the Bag sheet must OUTRANK
+     those service sheets, not merely tie them. They sit at --z-modal and come
+     LATER in the DOM than #side-panel, so an equal z-index let the merchant (and
+     mystic) paint over the Bag. Lift the sheet above --z-modal (and above the
+     raised #touch-hud at --z-modal + 5) so it always covers whatever it opened over. */
   body.touch.bag-open #side-panel {
     display: flex; position: fixed; inset: 0; width: 100%; transform: none; opacity: 1;
-    pointer-events: auto; z-index: var(--z-modal); border-left: none;
+    pointer-events: auto; z-index: calc(var(--z-modal) + 10); border-left: none;
     padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   }
   /* The desktop spine becomes a top header/close bar on touch. */
