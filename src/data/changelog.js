@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Grave-loot zombies show their real art", by: "Claude", notes: [
+    "Disturbing a buried-treasure grave raises the dead — those risen foes now render as proper zombies instead of blank boxes marked with a \"?\".",
+    "The slip left up to three placeholder squares standing until you cut them down.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Objects and NPCs never wall off a path", by: "Claude", notes: [
     "Fixed floors where a tree, a piece of decor or a wandering merchant/mystic could sit on the only route through and seal off part of the level.",
     "Solid decor now knows the shop NPCs are immovable, and NPCs won't stand on a lone pinch point, so neither can plug the last gap of a corridor.",

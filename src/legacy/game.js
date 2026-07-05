@@ -10591,7 +10591,7 @@ function handleQuestStep(nx, ny) {
           const ax = nx + dx, ay = ny + dy;
           if (ax < 1 || ay < 1 || ax >= MAP_W-1 || ay >= MAP_H-1) continue;
           if (mapData[ay][ax] !== 0 || getEnemyAt(ax, ay)) continue;
-          const foe = makeQuestFoe(ax, ay); foe.type = '<span data-spr=e_zombie></span>'; enemies.push(foe); placed++;
+          const foe = makeQuestFoe(ax, ay); foe.type = 'zombie'; enemies.push(foe); placed++;
         }
         screenFlash('#cc0000');
         completeQuest('You loot the grave — but the dead claw their way up around you!');

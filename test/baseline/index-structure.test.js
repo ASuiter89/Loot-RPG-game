@@ -103,6 +103,19 @@ describe('embedded configuration & console API (now in src/legacy/game.js)', () 
   });
 });
 
+describe('enemy sprite-key integrity', () => {
+  // An enemy's `type` is a sprite-lookup key (MONSTER_SPRITE_IDX / MONSTERS). A
+  // copy-paste slip once set a risen grave-loot foe's `type` to an HTML log
+  // snippet ('<span data-spr=e_zombie></span>') instead of 'zombie', so it
+  // matched no sprite table and rendered as a permanent "?" placeholder box
+  // (three of them, spawned when disturbing a grave). No enemy type is ever
+  // legitimately markup — guard the whole shape from coming back.
+  it('never assigns an enemy type to an HTML/markup string', () => {
+    const bad = game.match(/(?:\.type\s*=|\btype:)\s*['"]\s*</g) || [];
+    expect(bad, `enemy type assigned a markup string:\n${bad.join('\n')}`).toEqual([]);
+  });
+});
+
 describe('index.html module wiring', () => {
   it('loads the game as an ES module entry via a RELATIVE path', () => {
     // Relative paths keep the app working at any mount point — the domain root
