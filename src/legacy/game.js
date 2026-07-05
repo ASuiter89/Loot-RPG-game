@@ -49,6 +49,8 @@ import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
 import { fuseCount, transmuteCost as calcTransmuteCost, fusableByTier,
   resolveTransmute } from '../systems/transmute.js';
+import { upgradeOptions as ilvlUpgradeOptions, upgradeCost as calcIlvlUpgradeCost,
+  headlineFactor, scaleHeadline, projectAffix } from '../systems/ilvlUpgrade.js';
 import { CHANGELOG } from '../data/changelog.js';
 import { MUSIC_SECTIONS } from '../data/musicSections.js';
 import { bassSemi, voiceChord, voiceSpread } from '../systems/musicGroove.js';
@@ -7014,7 +7016,7 @@ window.gameGuide = function gameGuide(topic) {
       `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Death does not re-lock any floors: instead Warp to Dungeon only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Dungeon Gate flags the tier holding that grave (with the exact floor beside the tier's grave badge; gameState().graveSite.where), so you can dive straight back to it.`,
       `Town's top row has TWO gates. Warp to Dungeon opens the tier + floor picker, but you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. Return to Last Floor drops you straight back onto the EXACT floor you left through the Town Portal — same enemies, loot and layout, right where you stood — and lights up ONLY when you left by portal or conquest, never after a death (then it's darkened, so take Warp to Dungeon; gameState().menu.returnToLastFloor.available reports this, .where the floor it returns to). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
-      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
+      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
@@ -13039,6 +13041,120 @@ function replaceObjKey(obj, oldKey, newKey, newVal) {
   return out;
 }
 
+// ── EMPOWER (raise item level) ──
+// Raise a piece's item level toward the deepest level that could currently DROP
+// for you, scaling every stat, modifier and equip requirement up as if it had
+// dropped that deep. Paid in gold + Scrap (+ a Core on rare+ gear), the whole
+// bill scaling with rarity and item level (see systems/ilvlUpgrade.js). Offered on
+// ANY gear piece — including fixed uniques/sets and cursed items — because
+// empowering only scales the values a deeper drop would already carry; it never
+// changes WHICH modifiers a piece holds, so it doesn't reforge a locked piece.
+
+// The cap: the highest item level that could naturally drop for you right now — a
+// fresh drop on your deepest floor is craftIlvl()+1. You can never push a piece
+// past what the dungeon itself would hand you.
+function maxUpgradeIlvl() { return craftIlvl() + 1; }
+
+function empowerCost(item, toIlvl) {
+  return calcIlvlUpgradeCost({ rank: enchRank(item), fromIlvl: item.ilvl || 1, toIlvl });
+}
+
+// Which generation curve scales a headline stat (a weapon DMG endpoint, armour
+// DEF, hands/off-hand ATK, shield BLOCK). Innate signatures (SPELLPWR, jewelry
+// natives, …) are NOT special-cased — they scale as affixes below.
+function headlineRoleOf(key) {
+  return (key === 'DMG' || key === 'DEF' || key === 'ATK' || key === 'BLOCK') ? key : null;
+}
+
+// Rescale every value on `item` from item level `from` to `to`, in place.
+// Headline stats track their generation curve exactly (the rarity/base/slot
+// constants cancel in the ratio); rolled stats, native signatures, modifiers and
+// attributes keep their relative roll quality; a curse's boost and drawback scale
+// together. Requirements aren't stored — attrReqValue() re-derives them from the
+// new ilvl — so a deeper piece simply demands more attributes, like a real drop.
+function rescaleItemToIlvl(item, from, to) {
+  const mult = tierMult(item.tier);
+  const head = new Set(headlineStats(item));
+  for (const k of Object.keys(item.stats)) {
+    const v = item.stats[k];
+    if (typeof v === 'string') {
+      // Weapon DMG "lo-hi": scale both endpoints by the DMG curve ratio.
+      const m = /^(\d+)\s*-\s*(\d+)$/.exec(v);
+      if (m) {
+        const f = headlineFactor('DMG', from), t = headlineFactor('DMG', to);
+        const lo = scaleHeadline(+m[1], f, t);
+        let hi = scaleHeadline(+m[2], f, t);
+        if (hi <= lo) hi = lo + 1;
+        item.stats[k] = `${lo}-${hi}`;
+      }
+      continue;
+    }
+    // Positive headline stats track their generation curve. A NEGATIVE headline
+    // value only ever comes from a curse landing its drawback on a headline (a
+    // shield's BLOCK is the one reachable case — the offhand affix pool contains
+    // BLOCK), and that penalty was sized on the AFFIX curve — so route it through
+    // projectAffix, which grows the penalty instead of flooring it back to +1.
+    const role = (head.has(k) && v >= 0) ? headlineRoleOf(k) : null;
+    if (role) {
+      item.stats[k] = scaleHeadline(v, headlineFactor(role, from), headlineFactor(role, to));
+    } else {
+      const rf = affixStatRange(k, from, mult), rt = affixStatRange(k, to, mult);
+      item.stats[k] = projectAffix(v, rf.max, rt.max, rt.min);
+    }
+  }
+  if (item.attrs) {
+    const af = affixAttrRange(from, mult), at = affixAttrRange(to, mult);
+    for (const k of Object.keys(item.attrs)) item.attrs[k] = projectAffix(item.attrs[k], af.max, at.max, at.min);
+  }
+  // Gold worth rides item level like a fresh drop: generateItem() sets
+  // value = baseValue * (1 + lvl*0.12), so rescale by the same 0.12 curve.
+  if (item.value) item.value = Math.round(item.value * (1 + to * 0.12) / (1 + from * 0.12));
+  item.ilvl = to;
+  // A cursed stat's clamp ceiling rises with ilvl; keep saved data in-band.
+  if (item.cursed) repairCurseOverflow(item);
+}
+
+// Spend gold + materials to empower `id` to item level `toIlvl` (clamped to the
+// drop cap). Callable from the Enchanter buttons and the console (AI play).
+function upgradeItemIlvl(id, toIlvl) {
+  const g = findGear(id); if (!g) return;
+  const item = g.item;
+  if (!item.slot) return;                                  // only real gear carries an item level
+  const from = Math.max(1, item.ilvl || 1);
+  const to = Math.min(maxUpgradeIlvl(), Math.floor(toIlvl) || 0);
+  if (to <= from) return;                                   // already at/over your depth — nothing to do
+  const cost = empowerCost(item, to);
+  if (!canAfford(cost)) { sfx('denied'); return; }
+  spendCost(cost);
+  rescaleItemToIlvl(item, from, to);
+  log(`<span data-spr=ic_wand></span> The enchanter empowers your ${item.name} to <b>ilvl ${to}</b>.`, 'loot');
+  afterEnchant(item);
+}
+
+// The "Empower" controls for the Enchanter detail panel — buttons for +1 / +10 /
+// up-to-max-depth, each priced and afford-gated, with a note when a piece is
+// already at the deepest level your progress can reach. Shared by the normal and
+// the fixed/cursed (read-only) item panels.
+function enchantEmpowerBar(item) {
+  if (!item.slot) return '';
+  const from = Math.max(1, item.ilvl || 1);
+  const cap = maxUpgradeIlvl();
+  const head = `<div class="ench-group"><span data-spr=ui_power></span> Empower · ilvl ${from}</div>`;
+  const opts = ilvlUpgradeOptions(from, cap);
+  if (!opts.length) {
+    return `${head}<div class="hc-line" style="opacity:0.6">Already at the deepest item level your progress can reach (ilvl ${cap}). Delve deeper to empower it&nbsp;further.</div>`;
+  }
+  const hasAttrs = item.attrs && Object.keys(item.attrs).length > 0;
+  const esc = s => s.replace(/"/g, '&quot;');
+  const btns = opts.map(o => {
+    const cost = empowerCost(item, o.to);
+    const label = o.atCap ? `Max · ilvl ${o.to}` : `+${o.step} · ilvl ${o.to}`;
+    const tip = esc(`<div class="ht-name">Empower to ilvl ${o.to}</div><div class="ht-line">Raises every stat, modifier${hasAttrs ? ', attribute' : ''} and equip requirement to what this piece would carry if it dropped at ilvl ${o.to}.</div><div class="ht-sub">+${o.step} item level${o.step === 1 ? '' : 's'}.</div>`);
+    return `<span class="ench-tipwrap" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><button class="ench-act" ${canAfford(cost) ? '' : 'disabled'} onclick="upgradeItemIlvl(${item.id},${o.to})">${label} ${costLabelHi(cost)}</button></span>`;
+  }).join('');
+  return `${head}<div class="hc-line" style="opacity:0.7">Raise the piece's item level toward your depth — every stat and modifier scales up as if it dropped that deep (its equip requirement rises to match). Capped at what could naturally drop for you (ilvl ${cap}).</div><div class="ench-actbar">${btns}</div>`;
+}
+
 function renderEnchanter() {
   // Detail view for a chosen item, else the pick list.
   if (enchantSel != null && findGear(enchantSel)) { renderEnchantItem(findGear(enchantSel).item); return; }
@@ -13073,7 +13189,7 @@ function renderEnchanter() {
     ? `<div class="ench-group"><span data-spr=w_sword></span> Equipped</div>${renderEnchantDoll()}`
     : '';
   const lootHTML = lootRows ? `<div class="ench-group"><span data-spr=chest></span> Loot</div>${lootRows}` : '';
-  setTownContent(`<div class="town-blurb">The enchanter tinkers with your gear for gold and materials — <span data-spr=mat_glimmer></span> <b>Glimmer</b> plus <span data-spr=mat_scrap></span> <b>Scrap</b>, and a <span data-spr=mat_core></span> <b>Core</b> on rare&nbsp;gear and up. Pricier the rarer the piece. <b>Augment</b> adds a missing property (and costs more for each property already on the piece, so the last slot is dear), <b>Reroll all</b> gambles every bonus property at once, and each property can be rerolled on its own — its <b>value</b> (same modifier, new number) or its <b>modifier</b> (swapped for another). Rarity sets how many properties a piece can hold. Blank pieces from the <span data-spr=ic_mallet></span> Craftsman start here.</div>${equippedHTML}${lootHTML}`);
+  setTownContent(`<div class="town-blurb">The enchanter tinkers with your gear for gold and materials — <span data-spr=mat_glimmer></span> <b>Glimmer</b> plus <span data-spr=mat_scrap></span> <b>Scrap</b>, and a <span data-spr=mat_core></span> <b>Core</b> on rare&nbsp;gear and up. Pricier the rarer the piece. <b>Augment</b> adds a missing property (and costs more for each property already on the piece, so the last slot is dear), <b>Reroll all</b> gambles every bonus property at once, and each property can be rerolled on its own — its <b>value</b> (same modifier, new number) or its <b>modifier</b> (swapped for another). <b>Empower</b> raises a piece's item level toward your depth, scaling every stat up as if it dropped that deep (capped at what could naturally drop for you). Rarity sets how many properties a piece can hold. Blank pieces from the <span data-spr=ic_mallet></span> Craftsman start here.</div>${equippedHTML}${lootHTML}`);
 }
 
 // Picking or backing out re-renders the whole panel, detaching the doll slot the
@@ -13183,6 +13299,7 @@ function renderEnchantItem(item) {
     ${empty}${statRows}${attrRows}
     <div class="ench-actbar">${augBtn}${allBtn}</div>
     ${blockMsg ? `<div class="hc-line" style="opacity:0.6;margin-top:4px">${blockMsg}</div>` : ''}
+    ${enchantEmpowerBar(item)}
     ${poolPanel}`);
 }
 
@@ -13228,7 +13345,8 @@ function renderFixedEnchantItem(item) {
     <div class="ench-legend">${legend}</div>
     ${powLine}
     ${statRows}${attrRows}
-    <div class="hc-line" style="opacity:0.6;margin-top:4px">${footer}</div>`);
+    <div class="hc-line" style="opacity:0.6;margin-top:4px">${footer}</div>
+    ${enchantEmpowerBar(item)}`);
 }
 
 // ── DUNGEON GATE — choose a difficulty, then a floor, to re-enter ──
@@ -29915,6 +30033,11 @@ const __DL_FN_BRIDGE = {
   enchantRerollValue,
   enchantRerollType,
   replaceObjKey,
+  upgradeItemIlvl,
+  maxUpgradeIlvl,
+  empowerCost,
+  rescaleItemToIlvl,
+  enchantEmpowerBar,
   renderEnchanter,
   enchantPick,
   enchantBack,
