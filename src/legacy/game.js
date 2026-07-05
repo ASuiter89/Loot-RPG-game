@@ -23,7 +23,7 @@ import { telegraphPhase, telegraphFill, telegraphDanger, stepTelegraph,
 import { offscreenArrows, tileOnScreen } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
 import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.js';
-import { footprintSealsPath } from '../systems/decorPlacement.js';
+import { footprintSealsPath, footprintInsideRoom } from '../systems/decorPlacement.js';
 import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
@@ -2430,6 +2430,15 @@ function placeOutdoorDecor(theme) {
       // leave gaps you can walk through. Trees only need their trunk tile.
       const foot = decorFootprint(id, x, y);
       if (!foot.every(([fx, fy]) => free(fx, fy))) continue;
+      // A MULTI-TILE piece (bed/table/sofa) must sit wholly inside one room, never
+      // bridging a doorway or corridor. The anchor's >=3-open-neighbours test only
+      // vets the placement tile, so a wide piece's FAR half could jut into a hall —
+      // plugging a passage you then can't walk down, which a detour keeps connected
+      // (so footprintSealsPath, a disconnection test, never catches it). Interiors
+      // are laid out as rooms joined by corridors, so confining the whole footprint
+      // to a room's interior guarantees it lands in open room space. Single-tile
+      // clutter (chest/barrel/brazier) can't plug a lane, so it skips this.
+      if (indoor && foot.length > 1 && !footprintInsideRoom(foot, floorRooms)) continue;
       // …and the piece must not wall off a path. The anchor's >=3-open-neighbours
       // test only vets one tile: a wide table can plug a (2-wide) corridor with its
       // far half, and — since it counts a furnished floor tile as "open" — a lone
@@ -30022,6 +30031,35 @@ try {
         out.cases.push({ kind: 'terminal', rightBefore, rightAfter, freed: furnitureMap['3,3'] === undefined });
       } catch (e) { out.cases.push({ kind: 'terminal', err: String(e) }); }
       return out;
+    };
+    // __DECOR_PLUG_CHECK__ (preview only): a SOLID multi-tile piece (bed/table/
+    // sofa) must sit wholly inside a room, never bridging a doorway or corridor —
+    // otherwise it plugs a hall you can't walk down (and a detour keeps the floor
+    // connected, so __connCheck can't see it). Reports pieces whose footprint is
+    // NOT inside any room, plus (independently of the room test) pieces whose
+    // footprint straddles a true 1-wide through-corridor tile, so a smoke test can
+    // assert both are zero. outside:0 && corridor:0 means no piece plugs a path.
+    window.__decorPlugCheck = function () {
+      const isFloor = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && mapData[y][x] === 0;
+      // A genuine 1-wide straight passage tile: open on two OPPOSITE sides, walled
+      // on the other two (a corner is open on ADJACENT sides — not a through-tile).
+      const throughTile = (x, y) => {
+        const N = isFloor(x, y-1), S = isFloor(x, y+1), E = isFloor(x+1, y), W = isFloor(x-1, y);
+        return (N && S && !E && !W) || (E && W && !N && !S);
+      };
+      let outside = 0, corridor = 0; const detail = [];
+      for (const k in decorMap) {
+        const id = decorMap[k]; if (!DECOR_SOLID[id]) continue;
+        const c = k.indexOf(','); const ay = +k.slice(0, c), ax = +k.slice(c+1);
+        const foot = decorFootprint(id, ax, ay);
+        if (foot.length <= 1) continue;                       // single-tile clutter can't plug
+        const inRoom = footprintInsideRoom(foot, floorRooms);
+        const onCorridor = foot.some(([fx, fy]) => throughTile(fx, fy));
+        if (!inRoom) outside++;
+        if (onCorridor) corridor++;
+        if ((!inRoom || onCorridor) && detail.length < 4) detail.push({ ax, ay, id, footLen: foot.length, inRoom, onCorridor });
+      }
+      return { outside, corridor, detail, decor: Object.keys(decorMap).length, solid: Object.keys(furnitureMap).length };
     };
   }
 } catch (e) {}

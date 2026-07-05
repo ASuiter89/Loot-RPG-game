@@ -54,7 +54,8 @@ async function main() {
     await page.waitForFunction(() => typeof window.__connCheck === 'function'
       && typeof window.__pathBlockTest === 'function'
       && typeof window.__previewFloor === 'function'
-      && typeof window.__previewIndoor === 'function', { timeout: 20000 });
+      && typeof window.__previewIndoor === 'function'
+      && typeof window.__decorPlugCheck === 'function', { timeout: 20000 });
     await page.waitForTimeout(700);   // let the preview bootstrap settle onto a real floor
 
     // 1) Deterministic heal proof — a sealed corridor must be reopened, and the
@@ -80,8 +81,9 @@ async function main() {
     // 2) Real-floor sweep — natural mix (varied depths) + forced furniture-dense
     //    interiors. Every floor must be fully walkable with objects in place.
     sweep = await page.evaluate(() => {
-      const res = { floors: 0, worstBad: 0, badFloors: [], solidSeen: 0, npcSeen: 0, floorsWithSolids: 0, indoorSeen: 0 };
-      const check = (label) => {
+      const res = { floors: 0, worstBad: 0, badFloors: [], solidSeen: 0, npcSeen: 0, floorsWithSolids: 0, indoorSeen: 0,
+        indoorChecked: 0, plugOutside: 0, plugCorridor: 0, plugFloors: [] };
+      const check = (label, indoor) => {
         res.floors++;
         const cc = window.__connCheck();
         if (cc.bad > res.worstBad) res.worstBad = cc.bad;
@@ -89,13 +91,24 @@ async function main() {
         res.solidSeen += cc.furniture;
         res.npcSeen += cc.npcs;
         if (cc.solids > 0) res.floorsWithSolids++;
+        // Interiors only: a wide solid piece (bed/table) must sit inside a room and
+        // never straddle a through-corridor tile — the "bed in the hallway" bug.
+        // (Outdoor caves aren't room-gated, so only assert this on built interiors.)
+        if (indoor) {
+          res.indoorChecked++;
+          const pc = window.__decorPlugCheck();
+          res.plugOutside += pc.outside;
+          res.plugCorridor += pc.corridor;
+          if ((pc.outside > 0 || pc.corridor > 0) && res.plugFloors.length < 6) res.plugFloors.push({ label, ...pc });
+        }
       };
       // A) natural theme mix across many depths (~28% indoor at random)
       for (let lvl = 1; lvl <= 80; lvl++) {
         const info = window.__previewFloor(lvl);
         if (info && info.err) { res.badFloors.push({ label: 'floor' + lvl, err: info.err }); continue; }
-        if (info && info.indoor) res.indoorSeen++;
-        check('floor' + lvl);
+        const indoor = !!(info && info.indoor);
+        if (indoor) res.indoorSeen++;
+        check('floor' + lvl, indoor);
       }
       // B) forced built interiors, cycling every theme
       for (let idx = 0; idx < 8; idx++) {
@@ -103,7 +116,7 @@ async function main() {
           const info = window.__previewIndoor(idx);
           if (info && info.err) { res.badFloors.push({ label: 'indoor' + idx + '.' + rep, err: info.err }); continue; }
           res.indoorSeen++;
-          check('indoor' + idx + '.' + rep);
+          check('indoor' + idx + '.' + rep, true);
         }
       }
       return res;
@@ -134,6 +147,10 @@ async function main() {
     if (churn.merchantMoved > 0) failures.push(`repair relocated a merchant on a clean floor (${churn.merchantMoved} floors) — false-positive strand`);
 
     if (sweep.worstBad !== 0) failures.push(`some floors had object-blocked paths (worstBad=${sweep.worstBad}) — ${JSON.stringify(sweep.badFloors)}`);
+    // A wide solid piece plugging a corridor/doorway (a bed in the hallway) — no
+    // tile is stranded so __connCheck stays clean, so this is asserted separately.
+    if (sweep.plugOutside !== 0 || sweep.plugCorridor !== 0) failures.push(`interior furniture plugged a passage (outsideRoom=${sweep.plugOutside}, throughCorridor=${sweep.plugCorridor}) — ${JSON.stringify(sweep.plugFloors)}`);
+    if (sweep.indoorChecked < 50) failures.push(`corridor-plug check not meaningful: only ${sweep.indoorChecked} interiors inspected`);
     // Meaningfulness: the sweep must actually have placed solid objects to reason
     // about — hundreds of solid decor tiles (trees/cacti) plus some shop NPCs.
     if (sweep.solidSeen < 50) failures.push(`test not meaningful: too few solid decor tiles across the sweep (solidSeen=${sweep.solidSeen})`);
@@ -155,6 +172,7 @@ async function main() {
     process.exit(1);
   }
   console.log('\npath-connectivity: PASS — no object ever blocks a path across',
-    sweep.floors, 'floors (' + sweep.solidSeen, 'solid pieces,', sweep.indoorSeen, 'interiors)');
+    sweep.floors, 'floors (' + sweep.solidSeen, 'solid pieces,', sweep.indoorSeen, 'interiors);',
+    'no furniture plugged a corridor across', sweep.indoorChecked, 'inspected interiors');
 }
 main().catch((e) => { console.error(e); process.exit(1); });
