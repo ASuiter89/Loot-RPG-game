@@ -34,11 +34,13 @@ import { SKILL_MILESTONES } from '../data/skillMilestones.js';
 import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/gearPower.js';
 import { GEAR_POWER } from '../data/gearPower.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
+import { KILL_LOOT, killLootParams } from '../systems/bossLoot.js';
 import { resistFraction, penFraction, mitigate, physicalShare } from '../systems/defense.js';
 import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
+import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
 import { forgeSections } from '../systems/forgeFlow.js';
 import { CURSE_TIER_MULT, curseTierMult, statCurseSwing, cursedStatCeiling } from '../systems/curseRoll.js';
@@ -3327,8 +3329,8 @@ function diffDebuffMult() { return Math.pow(DEV.conquestScar, diffClearedCount()
 
 // Record reaching the current `dungeonLevel`: deepens both the all-time max (for
 // display, gambling/crafting item level, leaderboards) and the currently-unlocked
-// Gate frontier (the floors you can re-enter). A death can later shove gateFloor
-// back; fighting forward raises it again here, re-opening the locked floors.
+// Gate frontier (the floors you can re-enter). Both only ever climb — a death no
+// longer claws either back.
 function recordDepth() {
   markDepthReached(dungeonLevel);
   // Depth MILESTONES (the every-5-floors cache) pay out on physically SETTING FOOT
@@ -6114,10 +6116,10 @@ let player = { x: 5, y: 5,
   // cache + fanfare) fire off this on arrival, so the "floor N reached" banner
   // never triggers while you're still standing on floor N-1.
   milestoneFloor: 1,
-  // Deepest floor currently *re-enterable* at the Gate. Normally tracks maxFloor,
-  // but a death in your frontier tier shoves it back to your return floor: the
-  // deeper floors you'd reached re-lock (, unclickable) until you fight back
-  // down to them. Each fresh death can push it back further, locking more.
+  // Deepest floor currently *re-enterable* at the Gate. Tracks maxFloor — a death
+  // no longer shoves it back (floors never re-lock now; instead the Gate only warps
+  // you in on five-floor checkpoints, so a death sends you to the checkpoint at or
+  // below where you fell). Kept as the re-enterable ceiling the Gate clamps to.
   gateFloor: 1,
   // Finite difficulty tiers conquered (0–3). Drives Dungeon-Gate unlocks and the
   // permanent per-tier stat debuff.
@@ -6152,6 +6154,12 @@ let player = { x: 5, y: 5,
   // slain. Drives the tap-to-inspect codex card — stats stay ??? until you've
   // killed enough to learn them (fully revealed at 10; bosses are exempt).
   bestiary: {},
+  // First-kill jackpot ledger: absolute boss-floor depth (dungeonLevel) → 1 once this
+  // hero has cleared it. The FIRST clear of each boss floor spills ~3x the loot at
+  // better quality (see onEnemyDefeated / systems/bossLoot.js); re-clears revert to
+  // the normal boss payout. Keyed by FLOOR, not species, so Endless — where bosses
+  // recur — keeps paying a windfall for each new depth. Per-character.
+  bossFirstKills: {},
   // Skill tree — 1 skill point earned per level (separate from attribute points),
   // spent on the class's passive/active/path nodes. `skills` maps node id → rank;
   // `skillCds` holds each active skill's independent cooldown. `skillSlots` is the
@@ -6856,6 +6864,7 @@ window.gameState = function gameState(radius) {
       warded: (e.shieldT || 0) > 0,            // boss ward up → your damage is HALVED
       enraged: !!e.enraged,                    // boss permanently hits +50% (triggers below 40% HP)
       berserk: (e.berserkT || 0) > 0,          // boss temporary damage spike — wait it out like a ward
+      firstKill: !!(e.isBoss && !bossFirstKilled()), // this boss FLOOR's jackpot is unclaimed → its kill drops ~3x loot
       affix: e.affix || null,                  // elite-style modifier on ~22% of ordinary foes (see gameGuide "enemies")
       // Typed defence: % of a blow this foe shrugs off, per school. Physical armor
       // blunts your weapon attacks & martial SKILLS (pierced by Armor Pen); magic
@@ -7128,6 +7137,7 @@ window.gameGuide = function gameGuide(topic) {
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
       `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. Off-class weapons can be carried and sold but not equipped.`,
+      `Bosses spill the MOST loot of any foe, and the FIRST time you clear a given boss FLOOR its guardian pays a jackpot — ~3x the drops at noticeably better quality (a one-time windfall per boss floor). In Endless, where boss species recur, this tracks by floor, so every new or deeper boss floor keeps paying; farming a floor you've already cleared drops at the normal boss rate. gameState().enemies[i].firstKill flags a boss whose floor windfall is still unclaimed. See gameGuide("enemies") for the boss rules.`,
       `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them.`,
       `Crafting materials (Scrap → Glimmer → Core → Chaos, common→rare) come mainly two ways. Foes DROP them, gated by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four). SALVAGING gear sheds them by the item's rarity regardless of difficulty — so a lucky high-rarity find is your main early route to a material your tier can't yet drop. Bounty rewards and Treasure Goblins are bonus exceptions that ignore the gate — they can hand you a rarer material early. Materials are deliberately scarce; see gameGuide("autoloot") for the salvage bands.`,
     ],
@@ -7154,7 +7164,7 @@ window.gameGuide = function gameGuide(topic) {
       `CURSED FLOOR (the "greed" gate): rarely, on descending to a non-boss floor from depth 3+, a WORLD-PAUSING prompt offers to brave the floor for DOUBLED loot & gold at the cost of tougher non-boss foes (more HP and damage). Movement freezes until you choose — gameState().greed.pending is true, mode is 'greed' and blockingOverlay is 'greed-overlay'; call acceptGreed() to take it (gameState().greed.active then reads true, mult 2) or declineGreed() to skip.`,
     ],
     enemies: [
-      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), affix (an elite-style modifier), armor / magicResist (typed defence — see below), and status (e.g. ["stun"], ["slow"]).`,
+      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), firstKill (a boss floor you haven't cleared yet — its kill drops a jackpot; see below), affix (an elite-style modifier), armor / magicResist (typed defence — see below), and status (e.g. ["stun"], ["slow"]).`,
       `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
       `Behaviors (gameState().enemies[i].behavior): chaser (steady, 1 tile/turn), swift (2 tiles/turn), pack (1 tile/turn, but rushes to 2 when you drop below 50% HP — wolves/tigers), erratic (darts unpredictably), brute (slow — acts every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand). A foe with the ice CHILL status is likewise dragged to that half-cadence, but chill is a STATUS (it shows in enemies[i].status), not a behavior.`,
       `Each archetype also has its OWN toughness & punch, not just movement: brutes are tanky and hit hard but swing slowly; swift vermin and erratic flyers are frail and jab for less; casters are squishy but strike from range; lurkers ambush for a heavier blow; packs are individually weak but swarm. So two foes on the same floor can differ a lot — read the behavior, not just the sprite.`,
@@ -7163,7 +7173,7 @@ window.gameGuide = function gameGuide(topic) {
       `Ranged foes fire DODGEABLE bolts, not guaranteed hits — a bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
       `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly.`,
       `Treasure Goblins (isGoblin) flee, never attack, and do NOT block the exit — chase fast for jackpot loot (they vanish ~15 ticks after first hit) or ignore them.`,
-      `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
+      `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. FIRST-KILL JACKPOT: the first time you CLEAR a given boss floor (enemies[i].firstKill true until then), its guardian spills ~3x the loot at noticeably better quality — a one-time windfall per boss floor. Because boss species RECUR across floors in Endless, this tracks by FLOOR: each new or deeper boss floor you conquer pays its own windfall, while farming a floor you've already cleared drops at the normal boss rate (minus farm fatigue on a quick re-kill). So descending to a fresh boss floor is always the richer prize. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
       `Summoned allies (gameState().allies) act before foes and soak hits, but expire after ttl turns and have capped damage — resummon and don't expect them to solo a boss.`,
       `On a fresh floor you get a brief moment of arrival immunity — use it to reposition out of a bad spawn before engaging.`,
     ],
@@ -7185,8 +7195,8 @@ window.gameGuide = function gameGuide(topic) {
       `Hardcore mode (one life, permadeath) is also chosen on the name screen and locks in for that hero. Class can be retrained later at the town Trainer, but name, body type and Hardcore are fixed once you begin. While the class screen is open gameState().mode is 'classSelect'; on the name screen it's 'nameSelect'.`,
     ],
     town: [
-      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, knocked back several floors, your bag dropped as a reclaimable grave on the death floor — a death does NOT hold your floor). The Dungeon Gate flags the tier + floor holding that grave (gameState().graveSite.where), so you can dive straight back to it.`,
-      `Town's top row has TWO gates. Warp to Dungeon opens the tier+floor picker (choose where to drop in). Return to Last Floor drops you straight back onto the EXACT floor you left through the Town Portal — same enemies, loot and layout, right where you stood — and lights up ONLY when you left by portal or conquest, never after a death (then it's darkened, so take Warp to Dungeon; gameState().menu.returnToLastFloor.available reports this, .where the floor it returns to). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and is re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
+      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Death does not re-lock any floors: instead Warp to Dungeon only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Dungeon Gate flags the tier holding that grave (with the exact floor beside the tier's grave badge; gameState().graveSite.where), so you can dive straight back to it.`,
+      `Town's top row has TWO gates. Warp to Dungeon opens the tier + floor picker, but you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. Return to Last Floor drops you straight back onto the EXACT floor you left through the Town Portal — same enemies, loot and layout, right where you stood — and lights up ONLY when you left by portal or conquest, never after a death (then it's darkened, so take Warp to Dungeon; gameState().menu.returnToLastFloor.available reports this, .where the floor it returns to). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
@@ -13422,9 +13432,9 @@ function openGate() { gateDiff = 0; openTownModal('Dungeon Gate', 'feat_gate_red
 // Deepest DISPLAYED floor for a tier — every floor the hero has ever reached.
 // These are all shown at the Gate so a death never hides your hard-won progress.
 function tierFloorCap(d) { return tierCapFrom(d, player.maxFloor || 1); }
-// Deepest *re-enterable* floor for a tier. Usually the same as tierFloorCap, but a
-// death in your frontier tier shoves `gateFloor` back, so the floors between this
-// cap and tierFloorCap show locked () until you fight your way back down to them.
+// Deepest *re-enterable* floor for a tier — the ceiling on where the Gate lets you
+// warp in (rounded down to a checkpoint by renderGate). A death no longer re-locks
+// floors, so `gateFloor` now simply tracks `maxFloor` and this equals tierFloorCap.
 function tierUnlockedCap(d) { return tierCapFrom(d, player.gateFloor || 1); }
 function tierCapFrom(d, deepest) {
   const dc = diffClearedCount();
@@ -13444,49 +13454,48 @@ function renderGate() {
   // lost bag. `graveSite.floor` is a continuous depth; its tier gets a grave badge.
   const graveDl = (graveSite && (graveSite.items.length || graveSite.gold)) ? graveSite.floor : 0;
   const graveTier = graveDl ? diffOf(graveDl) : 0;
-  // Tier picker — one chip per difficulty, still-locked ones greyed out. A grave
-  // badge marks the tier holding your lost bag.
+  // Tier picker — one chip per difficulty, still-locked ones greyed out. The tier
+  // holding your lost bag carries a grave badge, and the badge names the exact
+  // floor the grave sits on (the floor tiles no longer repeat it).
   let tabs = '';
   for (let d = 1; d <= 4; d++) {
     const meta = DIFFS[d - 1];
     const unlocked = d <= front;
     const cls = `gate-diff${d === gateDiff ? ' sel' : ''}${unlocked ? '' : ' locked'}${d === graveTier ? ' has-grave' : ''}`;
     const style = (d === gateDiff && unlocked) ? ` style="border-color:${meta.color};color:${meta.color}"` : '';
-    const badge = d === graveTier ? ' <span data-spr=feat_grave></span>' : (unlocked ? '' : ' <span data-spr=feat_door></span>');
+    const badge = d === graveTier ? ` <span data-spr=feat_grave></span>&nbsp;${displayFloor(graveDl)}` : (unlocked ? '' : ' <span data-spr=feat_door></span>');
     tabs += `<button class="${cls}"${style} ${unlocked ? `onclick="selectGateDiff(${d})"` : 'disabled'}>${meta.name}${badge}</button>`;
   }
-  // Floor picker for the selected tier. Every floor you've reached is shown (so a
-  // death never erases your progress), but floors past the currently-unlocked cap
-  // are locked () and unclickable until you fight back down to them. Endless can
-  // run very deep, so only the most recent stretch is listed (no thousand-button
-  // grids).
-  const cap = tierFloorCap(gateDiff);              // deepest reached → shown
-  const open = tierUnlockedCap(gateDiff);          // deepest re-enterable → clickable
+  // Floor picker for the selected tier. Warping in is gated to every fifth floor
+  // (1, 6, 11, 16, 21, …), so only those checkpoint tiles are shown — up to the
+  // deepest floor you've reached. A death never erases progress, so no floor is
+  // ever re-locked; you simply warp to the checkpoint at or below your depth and
+  // walk the last few floors down (that's "Return to Last Floor"'s job when you
+  // want the exact stage back). Endless can run very deep, so only the most recent
+  // stretch of checkpoints is listed (no thousand-button grids).
+  const cap = tierFloorCap(gateDiff);              // deepest reached → ceiling
   const startF = (gateDiff === 4 && cap > 40) ? cap - 39 : 1;
+  const stops = warpCheckpoints(cap, startF);      // 1, 6, 11 … warp-in floors in view
+  const topStop = stops.length ? stops[stops.length - 1] : 1;
+  // Highlight the checkpoint you'd resume from — the one at or below where you last
+  // were in THIS tier — as a light "you are here" marker.
+  const returnDl = Math.max(1, dungeonReturn || 1);
+  const returnStop = diffOf(returnDl) === gateDiff ? warpFloorFor(displayFloor(returnDl)) : 0;
   let buttons = '';
-  for (let f = startF; f <= cap; f++) {
-    const dl = (gateDiff - 1) * FLOORS_PER_DIFF + f;
-    const deepest = f === cap;
-    const hasGrave = dl === graveDl;
-    const graveIcon = hasGrave ? ' <span data-spr=feat_grave></span>' : '';
-    if (f > open) {
-      const title = hasGrave ? 'Your lost bag lies here — fight back down to reclaim it' : 'Locked — fight back down to re-open';
-      buttons += `<button class="gate-floor locked${hasGrave ? ' has-grave' : ''}" disabled title="${title}">${f} <span data-spr=feat_door></span>${graveIcon}</button>`;
-    } else {
-      const title = hasGrave ? ' title="Your lost bag lies here — dive in and walk onto the grave to reclaim it"' : '';
-      buttons += `<button class="gate-floor ${dl === dungeonReturn ? 'current' : ''}${hasGrave ? ' has-grave' : ''}"${title} onclick="enterDungeonAt(${gateDiff},${f})">${f}${deepest ? ' ▾' : ''}${graveIcon}</button>`;
-    }
+  for (const f of stops) {
+    const current = f === returnStop ? ' current' : '';
+    const frontier = f === topStop ? ' ▾' : '';
+    buttons += `<button class="gate-floor${current}" onclick="enterDungeonAt(${gateDiff},${f})">${f}${frontier}</button>`;
   }
   const meta = DIFFS[gateDiff - 1];
   const conquered = diffClearedCount() >= gateDiff;
-  const lockNote = open < cap ? ` Locked past floor ${open} — fight back down to re-open.` : '';
   let blurb;
   if (gateDiff === 4) {
-    blurb = `Endless: the dungeon never ends. Floors climb from 1 forever, bosses are random, and the threat keeps ramping. Death here bites hardest.${lockNote}`;
+    blurb = `Endless: the dungeon never ends. Floors climb from 1 forever, bosses are random, and the threat keeps ramping. Death here bites hardest. Warp in every fifth floor and walk the rest.`;
   } else {
     const flavour = gateDiff === 1 ? 'as it was meant to be played' : 'the same 25 floors, far tougher and bloodier';
-    const tail = conquered ? 'Conquered — drop in on any floor to grind.' : `Deepest reached: floor ${cap} of 25.${lockNote}`;
-    blurb = `${meta.name}: ${flavour}. ${tail}`;
+    const tail = conquered ? 'Conquered — warp to any checkpoint to grind.' : `Deepest reached: floor ${cap} of 25.`;
+    blurb = `${meta.name}: ${flavour}. ${tail} Warp in every fifth floor and walk the rest.`;
   }
   // Persistent grave note — visible whatever tier is picked, so you always know
   // where your lost bag is waiting.
@@ -13506,8 +13515,9 @@ function enterDungeonAt(diff, floor, opts) {
   if (floor == null) { const dl = Math.max(1, Math.round(diff) || 1); diff = diffOf(dl); floor = displayFloor(dl); }
   const front = frontierDiff();
   diff = Math.max(1, Math.min(front, Math.round(diff) || 1));
-  // Clamp to the *unlocked* cap, not just the reached cap — a death can re-lock
-  // deep floors, and you can't re-enter past where you've fought back down to.
+  // Clamp to the deepest re-enterable floor for the tier (you can't warp past where
+  // you've actually reached). The Gate only offers checkpoint floors, but this
+  // guards the window bridge / conquest portal that reach enterDungeonAt directly.
   floor = Math.max(1, Math.min(tierUnlockedCap(diff) || 1, Math.round(floor) || 1));
   // Warping from town onto an unbeaten boss floor is the same point of no return as
   // taking the stairs into one — confirm first, before we leave town, so declining
@@ -19836,6 +19846,16 @@ function arcTo(from, dmg) {
 // gold and loot rather than an infinite fountain. Fatigue is per boss floor and
 // RECOVERS over real time (one step per ~5 min), and never drops rewards to zero,
 // so a break resets it and a fresh/deeper boss is always full value.
+// The persistent key for a boss FLOOR's first-kill jackpot. Keyed by absolute depth
+// (dungeonLevel already encodes difficulty tier + floor, and it's the SAME key the
+// farm-fatigue table uses), so re-killing a floor's boss never re-pays, but a NEW or
+// DEEPER boss floor always does. Keying by floor rather than species is what keeps
+// Endless — where boss species RECUR across floors — rewarding each fresh depth:
+// every boss floor you conquer is its own first clear.
+function bossFloorKey(dl) { return String(dl == null ? dungeonLevel : dl); }
+// Has this hero already claimed the current boss floor's first-kill jackpot?
+function bossFirstKilled() { return !!(player.bossFirstKills && player.bossFirstKills[bossFloorKey()]); }
+
 const BOSS_FARM_CURVE = [1, 0.6, 0.4, 0.28, 0.2, 0.15]; // by prior kills; floors at 15%
 const BOSS_FARM_RECOVER_MS = 5 * 60 * 1000;             // one fatigue step recovers per 5 min
 function bossFarmMult(e) {
@@ -19866,7 +19886,17 @@ function onEnemyDefeated(e) {
   const label = enemyLabel(e);
   // Diminishing returns for repeatedly farming the same boss floor (1 for everything else).
   const farm = bossFarmMult(e);
-  if (e.isBoss && farm < 1) log(`⚠️ ${label} has been slain here recently — its spoils are thinner (${Math.round(farm * 100)}%). Rest or move on to reset.`, 'important');
+  // First-kill jackpot: is this the hero's FIRST clear of THIS boss floor? Keyed by
+  // floor (see bossFloorKey), so in Endless — where boss species recur — each new or
+  // deeper boss floor pays its own windfall, while farming a floor you've already
+  // cleared does not. Capture it BEFORE recording, so the loot roll below pays exactly
+  // once. A floor's first boss kill is by definition its first, so farm fatigue is
+  // still full (farm === 1) and XP/gold/loot all pay in full — no "thinner spoils".
+  if (e.isBoss && !player.bossFirstKills) player.bossFirstKills = {};
+  const bfk = e.isBoss ? bossFloorKey() : null;
+  const firstBossKill = !!e.isBoss && !player.bossFirstKills[bfk];
+  if (firstBossKill) player.bossFirstKills[bfk] = 1;
+  if (e.isBoss && farm < 1 && !firstBossKill) log(`⚠️ ${label} has been slain here recently — its spoils are thinner (${Math.round(farm * 100)}%). Rest or move on to reset.`, 'important');
   const xpMult = e.isBoss ? 5 : (e.isElite ? 2 : 1);
   const goldMult = e.isBoss ? 3 : (e.isElite ? 2 : 1);
   const xp = Math.round(12 * dungeonLevel * xpMult * farm * pfx('xp', 1) * (1 + (totalStat('XPGAIN') + skillBonus('xpGain')) / 100 + foodFx('xpPct')));
@@ -19909,26 +19939,30 @@ function onEnemyDefeated(e) {
   // the per-pick NoDrop (the single-player echo of D2's "players X" trick), so
   // juicing loot raises how MUCH drops without ever flooding you with legendaries.
   {
-    const picksBase = e.isBoss ? 5 : (e.isElite ? 3 : 1);
-    const noDropBase = e.isBoss ? 0.20 : (e.isElite ? 0.45 : 0.85);
-    const qbonus = e.isBoss ? 3 : (e.isElite ? 2 : 1);   // per-item quality nudge
+    // Per-tier pick shape, with the first-kill jackpot folded in (systems/bossLoot.js):
+    // a boss's FIRST kill makes ~3x the picks at a higher quality with a slashed
+    // empty-pick chance; a farmed re-kill uses the plain boss numbers.
+    const lootP = killLootParams({ isBoss: e.isBoss, isElite: e.isElite, firstKill: firstBossKill }, KILL_LOOT);
+    const qbonus = lootP.quality;                          // per-item quality nudge
     const dlvl = e.level || dungeonLevel;
-    // Farm fatigue thins a re-killed boss's loot too (fewer picks), but always
-    // leaves at least one — you can keep farming, just for less.
-    const picks = Math.max(1, Math.round((picksBase + (buffs.fortune ? 1 : 0)) * farm));
-    const noDrop = Math.pow(noDropBase, 1 + Math.max(0, lootMult - 1) / 2);
+    // Farm fatigue thins a re-killed boss's loot (fewer picks), but always leaves at
+    // least one. A first kill is a one-time windfall and ignores fatigue entirely.
+    const effFarm = lootP.firstKill ? 1 : farm;
+    const picks = Math.max(1, Math.round((lootP.picks + (buffs.fortune ? 1 : 0)) * effFarm));
+    const noDrop = Math.pow(lootP.noDrop, 1 + Math.max(0, lootMult - 1) / 2);
+    if (lootP.firstKill) { log(`<span data-spr=mat_glimmer></span> First kill! ${label} spills a windfall of loot.`, 'important'); screenFlash('#ffd24b'); addShake(6); }
     let dropped = 0;
     for (let p = 0; p < picks; p++) {
       if (Math.random() >= noDrop) {                       // this pick yields an item
         const it = generateItem(qbonus, dlvl);
-        if (acquireLoot(it) === 'keep') log(`${e.isBoss ? '<span data-spr=chest></span>' : '<span data-spr=chest></span>'} ${logItem(it)}`, 'loot');
+        if (acquireLoot(it) === 'keep') log(`<span data-spr=chest></span> ${logItem(it)}`, 'loot');
         dropped++;
       }
     }
     // Elites and bosses never leave you empty-handed (D2's guaranteed pick).
     if (dropped === 0 && (e.isBoss || e.isElite)) {
       const it = generateItem(qbonus, dlvl);
-      if (acquireLoot(it) === 'keep') log(`${e.isBoss ? '<span data-spr=chest></span>' : '<span data-spr=chest></span>'} ${logItem(it)}`, 'loot');
+      if (acquireLoot(it) === 'keep') log(`<span data-spr=chest></span> ${logItem(it)}`, 'loot');
       dropped++;
     }
     if (dropped > 0) sfx('loot');
@@ -22588,7 +22622,6 @@ function handleDeath() {
   const dTier = currentDifficulty();
   const GOLD_FRAC = [0.5, 0.65, 0.8, 1.0][dTier - 1];
   const XP_FRAC   = [0.25, 0.4, 0.6, 0.9][dTier - 1];
-  const KNOCK     = [1, 2, 3, 5][dTier - 1];
   const lostGold = Math.floor(player.gold * GOLD_FRAC);
   player.gold -= lostGold;
   const lostXp = Math.min(player.xp, Math.round(xpForLevel(player.level) * XP_FRAC));
@@ -22607,23 +22640,14 @@ function handleDeath() {
   player.skillCds = {}; combatBuffs = {}; minions = []; bossHazards = []; bossTelegraphs = []; clearCharges(); // revived fresh — skills ready again
   sfx('death');
   screenFlash('#cc0000');
-  // Knocked back deeper the harder the tier — but never out of the difficulty you
-  // fell in (Endless floors you at its own floor 1 rather than spilling you back
-  // into an easier dungeon).
+  // A death no longer re-locks the floors you'd reached — your depth progress is
+  // untouched. Instead, the Gate only ever WARPS you in on a five-floor checkpoint
+  // (1, 6, 11, …), so you resume at the checkpoint at or below where you fell and
+  // walk the last few floors down naturally. That checkpoint (never below the tier
+  // you fell in, since checkpoints align to each tier's floor 1) is your effective
+  // return floor and the anchor for comeback relief.
   const fellOn = dungeonLevel;
-  const tierBase = (dTier - 1) * FLOORS_PER_DIFF + 1;
-  dungeonReturn = Math.max(tierBase, dungeonLevel - KNOCK);
-  // Re-lock the floors you got knocked back past: a death in your frontier tier
-  // shoves the Gate's re-enterable floor back to your return floor, so the deeper
-  // floors you'd reached relock (shown but) until you fight back down to them.
-  // Each fresh death can push it back further, locking more. Dying while grinding
-  // an already-conquered tier doesn't claw back your frontier progress.
-  let relocked = false;
-  if (dTier === frontierDiff()) {
-    const prevOpen = player.gateFloor || dungeonReturn;
-    player.gateFloor = Math.min(prevOpen, dungeonReturn);
-    relocked = player.gateFloor < prevOpen;
-  }
+  dungeonReturn = warpFloorFor(dungeonLevel);
   // Comeback relief: the next few floors of your recovery run go a little easier
   // (see spawnEnemies) so a death doesn't trap you in an unwinnable spiral.
   player.reliefFloor = dungeonReturn;
@@ -22634,7 +22658,7 @@ function handleDeath() {
   // Revived in town but WEAKENED — only half health and mana, not a full heal.
   player.hp = Math.max(1, Math.round(player.maxHp * 0.5));
   player.mp = Math.round(player.maxMp * 0.5);
-  showDeathScreen(lostGold, lostXp, dungeonReturn, lostBag, (graveSite ? fellOn : 0), relocked);
+  showDeathScreen(lostGold, lostXp, lostBag, (graveSite ? fellOn : 0));
   dmgTaken = [];
   log(`<span data-spr=b_deathknight></span> ${player.name || HERO} was SLAIN on ${floorLabel(fellOn)}! Lost <span data-spr=ic_money></span>${lostGold}${lostXp ? ` and ${lostXp} XP` : ''}${lostBag ? `, and dropped your bag (${lostBag}) — reclaim it on ${floorLabel(fellOn)}` : ''} — revived weakened in town. The dungeon eases up while you find your feet.`, 'important');
   recomputeMaxStats();
@@ -22644,14 +22668,15 @@ function handleDeath() {
   draw();
 }
 
-// A hard, unmistakable death screen that spells out every penalty.
-function showDeathScreen(lostGold, lostXp, returnFloor, lostBag, graveFloor, relocked) {
+// A hard, unmistakable death screen that spells out every penalty. Death costs
+// gold/XP and drops your bag as a grave, but NOT floor progress — so there is no
+// "knocked back / floors re-lock" line; you just warp back in from a checkpoint.
+function showDeathScreen(lostGold, lostXp, lostBag, graveFloor) {
   const el = document.getElementById('death-penalties');
   if (el) {
     const lines = [
       `<span data-spr=ic_money></span> Lost <span data-spr=ic_money></span>${lostGold}${lostXp ? ` & ${lostXp} XP` : ''} — gear kept`,
       (lostBag && graveFloor) ? `<span data-spr=feat_grave></span> Bag (${lostBag} item${lostBag === 1 ? '' : 's'}) dropped on ${floorLabel(graveFloor)} — go reclaim it` : null,
-      `<span data-spr=ic_down></span> Re-enter at ${floorLabel(returnFloor)}${relocked ? ' · deeper floors relock' : ''}`,
     ].filter(Boolean);
     el.innerHTML = lines.map(t => `<div class="death-pen">${t}</div>`).join('');
   }
@@ -26307,12 +26332,11 @@ function loadGame() {
     // the deepest reached so existing heroes don't re-collect milestones already
     // earned (and, harmlessly, so a mid-run reload doesn't re-award the current one).
     if (player.milestoneFloor == null) player.milestoneFloor = player.maxFloor || 1;
-    // Migrate saves that predate the re-enterable-floor tracker (the Gate lock).
-    // Seed it to the deepest reached so existing heroes keep full access — the
-    // lock only starts biting on their next death.
+    // Migrate saves that predate the re-enterable-floor tracker. Seed it to the
+    // deepest reached; deaths no longer shove it back, so it now simply tracks
+    // maxFloor. Any old save that was mid-re-lock is healed straight back to full.
     if (player.gateFloor == null) player.gateFloor = player.maxFloor || 1;
-    // Defensive: never let the unlocked frontier claim to be deeper than reached.
-    player.gateFloor = Math.min(player.gateFloor, player.maxFloor || player.gateFloor);
+    player.gateFloor = player.maxFloor || player.gateFloor || 1;
     // Difficulty tiers: derive conquered-count from how deep an old (pre-tier,
     // uncapped) save had reached — passing floor 25 meant beating that tier's
     // boss, so floors 26+ → Normal cleared, 51+ → Hardened cleared, etc.
@@ -26328,6 +26352,16 @@ function loadGame() {
     if (player.playMs == null) player.playMs = 0;
     // Migrate saves that predate cleared-floor tracking.
     if (!player.clearedFloors || typeof player.clearedFloors !== 'object') player.clearedFloors = {};
+    // First-kill jackpot ledger, keyed by absolute boss-floor depth (see bossFloorKey).
+    // Seed it for OLD saves from the boss floors this hero has ALREADY cleared
+    // (clearedFloors — the SAME key space), so a conquered floor doesn't re-pay its
+    // one-time windfall; only new or deeper boss floors do. Fresh saves already start
+    // with an empty ledger, so this only migrates pre-feature saves.
+    if (!player.bossFirstKills || typeof player.bossFirstKills !== 'object') {
+      player.bossFirstKills = {};
+      const cf = player.clearedFloors || {};
+      for (const k in cf) { if (cf[k] && Number(k) % 5 === 0) player.bossFirstKills[k] = 1; }
+    }
     inTown = !!data.inTown;
     dungeonReturn = data.dungeonReturn || data.dungeonLevel || 1;
     // Restore an unclaimed death-grave, tolerating saves that predate it.
@@ -30215,6 +30249,8 @@ const __DL_FN_BRIDGE = {
   dealDamage,
   arcTo,
   bossFarmMult,
+  bossFloorKey,
+  bossFirstKilled,
   onEnemyDefeated,
   attackEnemy,
   tryRangedAttack,

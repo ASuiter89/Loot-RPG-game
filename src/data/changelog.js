@@ -11,6 +11,11 @@ export const CHANGELOG = [
     "A leaderboard hero's snapshot now includes the whole Stats panel from the Hero tab — attack, defense, HP/MP and regen, the ratings and the % they yield, crit, tenacity, conqueror's scars, and every bonus from their gear.",
     "The skills list now shows ALL learned skills — passives included, each with its rank — grouped into Actives and Passives, with hot-barred picks marked.",
   ] },
+  { date: "2026-07-04", size: "medium", v: "Boss first-kill jackpot — the first time you clear a boss floor, it spills a windfall", by: "Claude", notes: [
+    "The FIRST time you clear a given boss floor, its guardian now drops a jackpot — about 3x the loot at noticeably better quality. A one-time windfall for each boss floor.",
+    "Endless keeps paying: because bosses recur there, the windfall tracks by FLOOR, so every new or deeper boss floor you conquer pays its own. Farming a floor you've already cleared still drops well at the normal boss rate (and re-killing it soon after still thins the spoils), so pushing deeper is always the richer prize.",
+    "Existing heroes keep credit for boss floors they've already cleared — those don't pay the windfall again; only new or deeper ones do.",
+  ] },
   { date: "2026-07-04", size: "medium", v: "Click a leaderboard hero to inspect their build", by: "Claude", notes: [
     "Every row on the leaderboard is now clickable — tap a hero to open a snapshot of their build: worn gear (hover any piece for its full stats), attributes, and the skills they've learned with ranks.",
     "The board list itself is unchanged and just as quick; a hero's full loadout is fetched only when you open them.",
@@ -22,6 +27,14 @@ export const CHANGELOG = [
   ] },
   { date: "2026-07-04", size: "small", v: "See-through silhouettes render right behind overlapping trees", by: "Claude", notes: [
     "Standing (or watching a foe stand) behind two trees whose leaves overlap no longer paints a square patch where the farther tree jumps in front of the nearer one. The trees now keep their proper front-to-back order and the tinted silhouette reads cleanly through both.",
+  ] },
+  { date: "2026-07-04", size: "medium", v: "Warp in at checkpoints; death no longer re-locks floors", by: "Claude", notes: [
+    "Warp to Dungeon now drops you in only on checkpoint floors — every fifth floor starting at 1 (1, 6, 11, 16, 21, and the same cadence onward in Endless), up to the deepest floor you've reached. Pick the checkpoint at or below where you're headed and walk down the rest. Return to Last Floor is unchanged: it still puts you back on the exact floor you portaled out of.",
+    "Dying no longer re-locks the deeper floors you'd reached — your depth progress stays put. Instead, because you can only warp in at checkpoints, a death sends you to the nearest checkpoint below where you fell, so you climb the last few floors again naturally.",
+    "The Dungeon Gate's grave marker now sits only on the difficulty tab, with the exact floor shown right beside it; the floor tiles no longer carry their own tombstone. The death screen no longer mentions floors re-locking.",
+  ] },
+  { date: "2026-07-04", size: "small", v: "Dungeon Gate tiles are big again on desktop", by: "Claude", notes: [
+    "The floor and difficulty tiles on the Dungeon Gate are back to their full desktop size. A recent phone-layout change had shrunk them into a long strip of tiny numbers on a wide screen; desktop now shows the roomy 5-across floor grid again, and phones keep the fluid layout that reflows to fit any screen.",
   ] },
   { date: "2026-07-04", size: "large", v: "Gear stats overhaul — no more caps, rarity that matters, stronger curses", by: "Claude", notes: [
     "Every gear stat now grows with BOTH item level and rarity — no hard caps anywhere. Attack speed, leech, cleave, cooldown and the rest keep climbing on deeper and rarer gear instead of freezing at a ceiling, so a legendary genuinely rolls bigger than a common.",
