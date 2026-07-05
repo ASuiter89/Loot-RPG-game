@@ -970,15 +970,16 @@
   .conquest-btn-alt:active { background: var(--orange-850); }
 
   /* ── VERSION HISTORY POPUP ── */
-  #version-overlay, #howto-overlay, #achievements-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 60%, transparent); z-index: 400; display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 16px; }
-  #version-overlay.open, #howto-overlay.open, #achievements-overlay.open { display: flex; }
-  #version-card, #howto-card, #achievements-card { margin: auto; background: linear-gradient(180deg, var(--panel), var(--panel)); border: 2px solid var(--frame); border-radius: 10px; max-width: 360px; width: 100%; max-height: 80vh; max-height: 80dvh; overflow-y: auto; padding: 14px; box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 60%, transparent); }
+  #version-overlay, #howto-overlay, #achievements-overlay, #bestiary-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 60%, transparent); z-index: 400; display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 16px; }
+  #version-overlay.open, #howto-overlay.open, #achievements-overlay.open, #bestiary-overlay.open { display: flex; }
+  #version-card, #howto-card, #achievements-card, #bestiary-card { margin: auto; background: linear-gradient(180deg, var(--panel), var(--panel)); border: 2px solid var(--frame); border-radius: 10px; max-width: 360px; width: 100%; max-height: 80vh; max-height: 80dvh; overflow-y: auto; padding: 14px; box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 60%, transparent); }
   /* Desktop has room — widen the Version History box so it's easier to skim, and
      the Achievements grid so its badges fill several across instead of a skinny
      column. */
   @media (min-width: 760px) and (hover: hover) and (pointer: fine) {
     #version-card { max-width: min(760px, 88vw); }
     #achievements-card { max-width: min(920px, 90vw); }
+    #bestiary-card { max-width: min(960px, 92vw); }
     #howto-card { max-width: min(760px, 88vw); }
   }
   .cl-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
@@ -2305,6 +2306,38 @@
     font-size: 1.1rem; color: var(--orange-500); display: flex; align-items: center; gap: 5px; }
   #enemy-card .ec-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--blue-800); overflow: hidden; }
   #enemy-card .ec-bar > i { display: block; height: 100%; background: linear-gradient(90deg,var(--orange-550),var(--gold)); }
+
+  /* ── Bestiary codex ── a browsable card per foe. The card grid keeps a fixed
+     tile width and adds columns only as the screen widens (auto-fill with a
+     min(100%, floor) guard, so a lone column can never overflow a ~280px screen). */
+  #bestiary-body .bst-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-5); }
+  #bestiary-body .bst-tally { color: var(--text); font-size: var(--fs-body); }
+  #bestiary-body .bst-tally b { color: var(--gold); }
+  #bestiary-body .bst-filters { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+  #bestiary-body .bst-filter { padding: var(--space-2) var(--space-4); background: var(--tint-black); border: 1px solid var(--frame); border-radius: var(--radius-pill); color: var(--meta); font-size: var(--fs-sub); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  #bestiary-body .bst-filter:hover { border-color: var(--interactive); color: var(--paper); }
+  #bestiary-body .bst-filter.active { background: var(--panel-raised); border-color: var(--gold); color: var(--gold); }
+  #bestiary-body .bst-grid-wrap { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr)); gap: var(--space-4); }
+  #bestiary-body .bst-empty { grid-column: 1 / -1; color: var(--meta); text-align: center; padding: var(--space-7) var(--space-4); font-size: var(--fs-body); }
+  #bestiary-body .bst-card { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel-raised); padding: var(--space-4); font-size: var(--fs-sub); }
+  #bestiary-body .bst-card.boss { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); }
+  #bestiary-body .bst-card.locked { opacity: 0.85; }
+  #bestiary-body .bst-head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+  #bestiary-body .bst-ic { width: 34px; height: 34px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+  #bestiary-body .bst-blank { display: inline-block; width: 26px; height: 26px; border-radius: var(--radius-xs); border: 1px solid var(--tint-black); }
+  #bestiary-body .bst-card.locked .bst-ic { filter: brightness(0) contrast(0.2); opacity: 0.5; }
+  #bestiary-body .bst-name { font-weight: bold; font-size: var(--fs-body); color: var(--gold-350); line-height: 1.15; }
+  #bestiary-body .bst-card.locked .bst-name { color: var(--junk); letter-spacing: 2px; }
+  #bestiary-body .bst-sub { font-size: var(--fs-fine); color: var(--orange-500); letter-spacing: 0.5px; }
+  #bestiary-body .bst-card.boss .bst-sub { color: var(--danger); }
+  #bestiary-body .bst-grid { display: grid; grid-template-columns: auto 1fr; gap: 1px var(--space-4); }
+  #bestiary-body .bst-k { color: var(--meta); }
+  #bestiary-body .bst-v { color: var(--purple-50); text-align: right; font-variant-numeric: tabular-nums; }
+  #bestiary-body .bst-v.hidden { color: var(--junk); letter-spacing: 1px; }
+  #bestiary-body .bst-foot { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--panel); font-size: var(--fs-fine); color: var(--orange-500); display: flex; align-items: center; gap: var(--space-3); }
+  #bestiary-body .bst-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--blue-800); overflow: hidden; }
+  #bestiary-body .bst-bar > i { display: block; height: 100%; background: linear-gradient(90deg,var(--orange-550),var(--gold)); }
+  #bestiary-body .bst-blurb { margin-top: var(--space-3); font-size: var(--fs-fine); color: var(--meta); font-style: italic; line-height: 1.3; }
   /* Wraps a (possibly disabled) reroll button so the hover popup still fires —
      disabled buttons swallow mouse events on their own. */
   .ench-tipwrap { display: inline-flex; flex-shrink: 0; }
@@ -2380,15 +2413,23 @@
   .paperdoll-anat {
     position: relative; width: 100%;
     max-width: calc(640px * var(--ui-scale,1));
-    margin: 0 auto; aspect-ratio: 3 / 4; overflow: hidden;
+    /* min-height keeps the frame tall enough on a very narrow drawer that the
+       percentage-spaced rows never collapse into each other: below ~230px wide the
+       aspect-ratio height would shrink under the tiles' min-width, so this floor
+       takes over and the rows stay separated (the sprite just crops wider). */
+    margin: 0 auto; aspect-ratio: 5 / 6; min-height: calc(280px * var(--ui-scale,1)); overflow: hidden;
   }
-  /* Big centred sprite — scaled past the frame so the character (not its
-     transparent tile padding) fills it; the frame's overflow:hidden clips the
-     empty margins. */
+  /* Big centred sprite — scaled PAST the frame so the visible character (not the
+     transparent padding baked into the square idle tile) fills it top-to-bottom;
+     the frame's overflow:hidden clips the empty margins. The hero only occupies
+     ~60% of the square's height; height:125% centred at 50% makes the visible
+     character span ~13%–88% of the frame — sitting just a touch taller than the
+     centred slot cluster it backs, so the sprite frames the gear rather than
+     dwarfing them, with no transparent dead band top or bottom. */
   .pda-body {
-    position: absolute; left: 50%; top: 49%;
+    position: absolute; left: 50%; top: 48%;
     transform: translate(-50%, -50%);
-    height: 95%; width: auto;
+    height: 125%; width: auto;
     z-index: 0; pointer-events: none;
     opacity: 0.38;
     filter: drop-shadow(0 3px 8px rgba(0,0,0,0.4));
@@ -2399,10 +2440,13 @@
      (the frame fills the drawer) and never leave the panel looking empty. */
   .pda-wrap {
     position: absolute; transform: translate(-50%, -50%); z-index: 2;
-    width: 15.5%; min-width: calc(52px * var(--ui-scale,1));
+    width: 15.5%; min-width: calc(48px * var(--ui-scale,1));
   }
   .paperdoll-anat .pd-slot { max-width: none; background: color-mix(in srgb, var(--ink) 78%, transparent); }
-  .paperdoll-anat .pd-cap { font-size: 1.1rem; margin-top: 2px; text-align: center; text-shadow: 0 1px 3px var(--ink); }
+  /* No name caption under an anatomical tile — the label used to wrap to 3-4 lines
+     and collide with the tiles below/beside it. The piece's name (and full stats)
+     live in its tap/hover tooltip instead; the rarity-framed icon carries the rest. */
+  .paperdoll-anat .pd-cap { display: none; }
   .pd-unequip {
     position: absolute; top: -7px; right: -7px;
     width: 19px; height: 19px; padding: 0;
@@ -3838,6 +3882,45 @@
     color: var(--xp); font-size: 1.4rem; font-weight: bold; letter-spacing: 1px;
     margin: 12px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border);
   }
+
+  /* ── Vault tabs + unique/set Collection ── */
+  .stash-tabs { display: flex; gap: var(--space-3); margin-bottom: var(--space-5); }
+  .stash-tab { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); background: var(--tint-black); border: 1px solid var(--frame); border-radius: var(--radius-sm); color: var(--meta); font-family: var(--font-ui); font-size: var(--fs-body); font-weight: bold; letter-spacing: 0.5px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .stash-tab:hover { border-color: var(--interactive); color: var(--paper); }
+  .stash-tab.active { background: var(--panel-raised); border-color: var(--gold); color: var(--gold); }
+  .coll-head { display: flex; align-items: center; justify-content: space-between; margin: var(--space-3) 0; }
+  .coll-prog { color: var(--text); font-size: var(--fs-body); }
+  .coll-prog b { color: var(--gold); }
+  .coll-filters { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-5); }
+  .coll-filters select { flex: 1 1 40%; min-width: 0; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--purple-50); font-family: var(--font-ui); font-size: var(--fs-body); padding: 5px 6px; cursor: pointer; }
+  /* Fixed-size tiles; columns are added only as the screen widens. The
+     min(100%, floor) guard keeps a lone column from overflowing a ~280px screen,
+     and a filled tile is the exact same size as an empty one. */
+  .coll-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 56px), 1fr)); gap: var(--space-3); }
+  .coll-tile { position: relative; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: var(--tint-black); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .coll-tile.filled:hover { border-color: var(--gold); }
+  .coll-tile.locked { cursor: help; }
+  /* Un-acquired slots read as a darkened silhouette; storing a piece lights it. */
+  .coll-tile.locked .coll-ic { filter: grayscale(1) brightness(0.4); opacity: 0.55; }
+  .coll-ic { display: inline-flex; align-items: center; justify-content: center; pointer-events: none; }
+  .coll-count { position: absolute; right: 1px; bottom: 1px; padding: 0 3px; border-radius: var(--radius-xs); background: color-mix(in srgb, var(--ink) 72%, transparent); color: var(--gold); font-size: var(--fs-fine); font-weight: bold; line-height: 1.3; pointer-events: none; }
+  .coll-setdot { position: absolute; left: 2px; top: 2px; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; }
+  .coll-empty { grid-column: 1 / -1; color: var(--meta); text-align: center; padding: var(--space-7) var(--space-4); font-size: var(--fs-body); }
+  .coll-back { margin-bottom: var(--space-4); }
+  .coll-detail-head { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-4); }
+  .coll-detail-name { font-weight: bold; font-size: var(--fs-head-sm); }
+  .coll-detail-sub { color: var(--meta); font-size: var(--fs-sub); }
+  /* Empty-tile preview card (rollable properties, no values) — rendered in the shared hovertip. */
+  .coll-tip-name { font-weight: bold; font-size: var(--fs-body); }
+  .coll-tip-sub { color: var(--meta); font-size: var(--fs-sub); margin-bottom: 2px; }
+  .coll-tip-tag { font-size: var(--fs-sub); font-weight: bold; margin: 2px 0; }
+  .coll-tip-pow { font-size: var(--fs-sub); margin: 2px 0; }
+  .coll-tip-hdr { color: var(--meta); font-size: var(--fs-fine); margin: var(--space-3) 0 var(--space-1); }
+  .coll-tip-stats { display: flex; flex-direction: column; gap: 1px; }
+  .coll-tip-stat { font-size: var(--fs-sub); color: var(--purple-50); }
+  .coll-tip-stat.native { color: var(--gold-350); }
+  .coll-tip-native { color: var(--meta); font-size: var(--fs-fine); font-style: italic; }
+  .coll-tip-note { color: var(--warn); font-size: var(--fs-fine); margin-top: var(--space-3); }
   /* Desktop: fixed 5-up track — big, comfortable number tiles under mouse.
      The touch layer (body.touch .gate-grid, in the TOUCH UI section below) swaps in
      a fluid auto-fit grid so a narrow / foldable cover screen wraps instead of

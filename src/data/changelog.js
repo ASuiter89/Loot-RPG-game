@@ -10,6 +10,29 @@ export const CHANGELOG = [
   { date: "2026-07-05", size: "small", v: "HP, MP & Spirit Veil fill at a steady pace", by: "Claude", notes: [
     "The bars used to charge smoothly, then rush the last sliver in a little jump as they topped off. Now the whole fill — including the final bit — climbs at one consistent rate, on HP, MP and the Spirit Veil alike.",
   ] },
+  { date: "2026-07-05", size: "small", v: "Cleaner GEAR equipment layout", by: "Claude", notes: [
+    "The equipment doll on the GEAR tab drops the name label under each slot — long names used to wrap and spill over the tiles below them. Every piece's name and full stats still show in its tap/hover tooltip.",
+    "Slots are evenly stacked at one consistent spacing, and the whole layout is centred between the loadout bar above and the hint text below.",
+    "The hero behind the slots is centred over them and sized to stand just slightly taller, with no empty band left under the feet.",
+  ] },
+  { date: "2026-07-05", size: "large", v: "Bestiary codex & a unique/set Collection vault tab", by: "Claude", notes: [
+    "New Bestiary — a browsable codex of every foe, opened from the pause menu. Each card fills in as you slay more of a species; a boss card stays a sealed silhouette until your first kill, then opens fully.",
+    "A foe's stats reveal one field at a time over ten kills (a boss is all-or-nothing on the first kill), mirroring the dungeon hover card. Filter by creatures, bosses, or discovered, and track completion.",
+    "Bosses now also stay sealed on the dungeon hover card until you've slain them once, instead of reading fully on sight.",
+    "The Vault gains a Collection tab: one slot for every unique and set piece in the game, laid out as a grid of tiles that adds columns as the screen widens.",
+    "An empty slot shows a darkened silhouette — hover it to preview the fixed properties the piece can roll (values omitted, since they scale with drop depth). Store a matching piece and the slot lights up with your best-rolled copy.",
+    "Storing a unique or set piece now files it in the Collection instead of ordinary storage. A slot can hold several copies — it shows your strongest with a count badge, and you can withdraw any of them.",
+    "Filter the Collection by gear slot, unique vs set, a specific set, or acquired/missing. Like the rest of the Vault it's shared across your heroes, with separate Standard and Hardcore collections.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Shorter Spirit Veil tooltip", by: "Claude", notes: [
+    "Trimmed the Spirit Veil blurb on the HP bar's hover tooltip to a couple of tight sentences, matching the HP line above it.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Cleaner empty bounty tile", by: "Claude", notes: [
+    "The belt's bounty tile drops the little figure icon when idle — the \"No bounty yet\" prompt now stands on its own.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "ACTIVE skill tab now sits first", by: "Claude", notes: [
+    "On the SKILLS panel the tab order is now ACTIVE, then PASSIVE, then your class path — matching the tree you land on when you open Skills.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Belt module polish", by: "Claude", notes: [
     "The belt's bounty / meals / gear modules now match the skill buttons — a label pill above a tile the same height — and the meal slots read like the skill slots (filled bowls plus dashed empties).",
     "The AUTO slot stays dead-centre; the modules fill the gaps beside it only when there's room, and each is sized to fit its contents (long objectives, big gear power) without clipping.",
