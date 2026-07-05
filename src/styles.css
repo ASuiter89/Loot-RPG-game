@@ -1632,13 +1632,16 @@
      bars-row height and lines up exactly with HP & MP. Any active pact/food buff
      chips float over its top edge (absolute) rather than stealing bar height —
      the pact/food indicators are re-homed here and never truly :empty. */
-  .dh-mid { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: center; padding: 0 4px; min-height: 0; position: relative; }
+  /* The middle grows like the flanking vitals (flex:1) instead of hugging its
+     content, so the endurance bar is roughly twice as wide as before and the HP/MP
+     bars give up a little width to it. */
+  .dh-mid { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; padding: 0 4px; min-height: 0; position: relative; }
   .dh-buffs { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 1.5rem; font-weight: bold; pointer-events: none; }
   .dh-buffs > * { pointer-events: auto; }
   .dh-buffs:empty { display: none; }
   /* Endurance bar: same look/size as the flanking HP/MP tracks. */
   .dh-end {
-    position: relative; flex: 1 1 auto; width: 100%; min-width: 140px; min-height: 34px; border-radius: 7px;
+    position: relative; flex: 1 1 auto; width: 100%; min-width: 120px; min-height: 34px; border-radius: 7px;
     background: var(--bg); border: 1px solid var(--ink); overflow: hidden;
     box-shadow: inset 0 2px 5px color-mix(in srgb, var(--ink) 75%, transparent);
   }
@@ -1666,9 +1669,76 @@
      bars row above (flex:1) now soaks up the HUD's spare height, so the thick
      HP/MP/END bars reach down close to the pills. The XP bar stays pinned to the
      very bottom of the HUD. */
-  .dh-belt { display: flex; align-items: center; justify-content: stretch; flex: 0 0 auto; min-height: 0; padding: calc(12px * var(--ui-scale,1)) 8px; overflow-x: auto; overflow-y: hidden; }
+  .dh-belt { display: flex; align-items: center; justify-content: stretch; flex: 0 0 auto; min-height: 0; padding: calc(12px * var(--ui-scale,1)) 8px; overflow-x: auto; overflow-y: hidden; container: belt / inline-size; }
   .dh-belt > #skill-bar { flex: 1 1 auto; width: 100%; }
   .dh-belt::-webkit-scrollbar { height: 0; }
+
+  /* ── Optional belt modules — fill the empty desktop-belt space ───────────────
+     Between the potions (far left), the AUTO slot (centre) and the skill slots (far
+     right) sit two growable .sb-fill boxes that centre optional modules in the void:
+     the bounty tracker + meal quick-slots on the left, the loadout swap on the right.
+     Each module stays hidden until the belt is wide enough — container queries on
+     .dh-belt reveal them by available width (loadout held longest as the belt narrows,
+     then meals, then bounty; see the @container rules below). All desktop-only: on
+     touch #skill-bar lives in #touch-cluster, not .dh-belt, so no belt container
+     exists, the queries never match, and the empty fills collapse to nothing. */
+  .sb-fill { flex: 0 0 auto; display: flex; align-items: center; }
+  .sb-mod { display: none; align-items: center; min-width: 0; }
+  /* Desktop belt only: potions/skills hug their edges; the fills grow to take the void
+     and centre the module. (The base .sb-left/.sb-right flex:1 1 0 stays for the touch
+     cluster, which spreads the groups instead.) */
+  .dh-belt #skill-bar .sb-left, .dh-belt #skill-bar .sb-right { flex: 0 0 auto; flex-wrap: nowrap; }
+  /* flex:1 0 auto — each fill is at least as wide as its module content (never
+     shrinks below it, so nothing clips) and grows equally into the leftover width,
+     centring its module. The container-query thresholds below only reveal a module
+     once the belt is wide enough to hold it, so this never actually overflows. */
+  .dh-belt #skill-bar .sb-fill { flex: 1 0 auto; min-width: 0; justify-content: center; gap: calc(6px * var(--ui-scale,1)); overflow: hidden; }
+
+  /* Loadout swap — the two Set buttons, compacted to the belt but visually the same
+     GEAR-tab widget (reused component). */
+  .sb-mod-loadout .gearset-bar { padding: 0; gap: calc(5px * var(--ui-scale,1)); }
+  .sb-mod-loadout .gearset-btn { flex: 0 0 auto; min-width: calc(60px * var(--ui-scale,1)); padding: calc(4px * var(--ui-scale,1)) calc(9px * var(--ui-scale,1)); border-radius: 7px; }
+
+  /* Meal quick-slots — layered on .skillbar-btn so they match the skill tiles exactly,
+     re-tinted food-green with a stack-count badge. Tap eats one (eatMealSlot). */
+  .sb-mod-meals { gap: calc(5px * var(--ui-scale,1)); }
+  .sb-meal { border-color: var(--green-600); background: var(--green-800); color: var(--green-50); }
+  .sb-meal:hover { border-color: var(--green-650); filter: brightness(1.12); }
+  .sb-meal:active { background: var(--green-650); }
+  .sb-meal-qty {
+    position: absolute; right: 1px; bottom: 0; z-index: 4; padding: 0 4px; border-radius: 6px;
+    background: color-mix(in srgb, var(--ink) 78%, transparent); color: var(--paper);
+    font-family: var(--font-ui); font-weight: bold; font-size: 1.1rem; line-height: 1.5; text-shadow: 0 1px 1px var(--ink);
+  }
+
+  /* Bounty tracker — a compact pill: icon + objective label over a live progress bar,
+     with the count trailing. Built from HUD tokens so it reads like the rest of the HUD;
+     the .bar-track/.bar-fill progress reuses the shared bar component. */
+  .sb-mod-bounty {
+    max-width: 100%; gap: 7px; padding: calc(4px * var(--ui-scale,1)) 10px; border-radius: 8px;
+    background: color-mix(in srgb, var(--panel) 85%, transparent); border: 1px solid var(--border); cursor: pointer; overflow: hidden;
+  }
+  .sb-mod-bounty:hover { border-color: var(--interactive); }
+  .sb-mod-bounty .sb-bounty-ic { flex: 0 0 auto; display: flex; align-items: center; }
+  .sb-mod-bounty .sb-bounty-body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .sb-mod-bounty .sb-bounty-label {
+    font-size: 1.2rem; font-weight: bold; color: var(--text); letter-spacing: 0.3px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(170px * var(--ui-scale,1));
+  }
+  .sb-mod-bounty .sb-bounty-track { width: 100%; height: 6px; }
+  .sb-mod-bounty .sb-bounty-fill { background: linear-gradient(90deg, var(--xp), var(--gold)); }
+  .sb-mod-bounty.done .sb-bounty-fill { background: var(--uncommon); }
+  .sb-mod-bounty .sb-bounty-prog { flex: 0 0 auto; font-family: var(--font-ui); font-weight: bold; font-size: 1.3rem; color: var(--gold); white-space: nowrap; }
+
+  /* Reveal thresholds — the container is .dh-belt; rem tracks --ui-scale (desktop root
+     font is 15px×ui-scale), so a bigger UI raises the bar in step with the wider tiles.
+     Values are CUMULATIVE and measured from the real part widths (base tiles ~40rem,
+     +loadout, +meals at up to 3 stacks, +bounty) plus breathing room, so a module only
+     appears once the belt can actually hold everything already shown plus it. Loadout
+     appears first (held longest as the belt narrows), then meals, then bounty. */
+  @container belt (min-width: 54rem) { .sb-mod-loadout { display: flex; } }
+  @container belt (min-width: 67rem) { .sb-mod-meals { display: flex; } }
+  @container belt (min-width: 83rem) { .sb-mod-bounty { display: flex; } }
   /* Segmented experience bar along the very bottom — double-height for readability. */
   #dh-xp { position: relative; height: 28px; background: linear-gradient(180deg, var(--bg), var(--bg)); border-top: 1px solid var(--frame); overflow: hidden; cursor: default; }
   #dh-xp-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: linear-gradient(180deg, var(--xp), var(--gold)); box-shadow: 0 0 8px var(--gold); transition: width 0.3s ease; }
@@ -4389,6 +4459,17 @@
   .food-row.eatable:hover { border-color: var(--uncommon); background: var(--green-800); }
   .food-row.eatable:hover .eat-btn { background: var(--green-550); }
   .food-row.eatable:active { background: var(--green-800); }
+  /* Ramen-House meal-slot controls: EAT + SLOT on each pantry row, and the assigned
+     slot rows (with their stack count + CLEAR). */
+  .food-row-btns { display: flex; gap: 5px; flex: 0 0 auto; }
+  .slot-btn { background: var(--panel-raised); border-color: var(--gold); color: var(--gold); }
+  .slot-btn:active { background: var(--orange-850); }
+  .slot-btn:disabled { opacity: 0.45; cursor: default; border-color: var(--border); color: var(--btn-off); }
+  .clear-btn { background: var(--panel-raised); border-color: var(--border); color: var(--text); }
+  .meal-slot-row { border-color: var(--gold); }
+  .meal-qty { color: var(--gold); font-size: 1.2rem; }
+  .meal-slot-empty { opacity: 0.55; }
+  .cook-empty.cook-hint { font-style: normal; }
 
   /* ═══════════════════════════════════════════════════════════════════════════
      TOUCH UI — additive mobile layer, keyed ENTIRELY off body.touch (set by

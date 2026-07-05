@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "large", v: "Belt fills its empty space: loadout, meals & bounty", by: "Claude", notes: [
+    "The wide-screen skill belt now fills its empty gaps with three modules that appear only when there's room and tuck away when it's tight.",
+    "Loadout toggle: swap Set 1 / Set 2 straight from the belt.",
+    "Meal slots: assign a cooked bowl at the Ramen House (SLOT sends its whole stack) and eat it right from the belt mid-run — no more trips back to cook.",
+    "Bounty tracker: your active contract's objective and live progress, moved off the map corner into the belt (it falls back to the corner when the belt is too narrow).",
+    "Stamina bar widened to about double; the HP and MP bars give up a little width to it.",
+  ] },
   { date: "2026-07-05", size: "medium", v: "Big numbers now read at a glance", by: "Claude", notes: [
     "Any number in the thousands or higher now shows in short form everywhere — 14,523 reads \"14k\", 2,400,000 reads \"2.4M\". Applies to damage, gold, HP/MP, Power, item stats, tooltips, shop and forge prices, the leaderboard and the combat log.",
     "Values under a thousand still show in full. Short forms round DOWN, so a readout never claims more than you actually have.",
