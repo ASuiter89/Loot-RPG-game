@@ -1790,8 +1790,13 @@
      the buttons and their icons noticeably bigger for easier tapping. (Desktop has
      its own larger sizing in the wide-layout media query above.) */
   @media (pointer: coarse) {
-    #skill-bar { gap: 6px; }
-    #skill-bar { --sb-size: calc(50px * var(--ui-scale,1)); }
+    /* Pull the whole bar in from the screen edges so the outermost tiles aren't
+       flush against the frame (easy to fat-finger past), and honour a notched
+       phone's side insets in landscape. */
+    #skill-bar { gap: 6px; padding-left: calc(14px + env(safe-area-inset-left)); padding-right: calc(14px + env(safe-area-inset-right)); }
+    /* Bigger tap targets — the touch tiles are the only way to fire spells/potions,
+       and the smaller size sometimes missed the tap. */
+    #skill-bar { --sb-size: calc(56px * var(--ui-scale,1)); }
     /* skill slots share --sb-size; no per-variant min-width */
     /* Icons fill the tile (base .sb-icon fill rules); only the empty-slot ＋ glyph
        reads off font-size, bumped up for the larger touch tiles. */

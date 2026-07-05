@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Bigger, easier-to-tap combat bar on touch", by: "Jeff Louie", notes: [
+    "Potion and skill tiles are larger on phones and tablets, so taps register more reliably.",
+    "The bar pulls in from the screen edges — the outermost tiles no longer sit flush against the frame.",
+  ] },
   { date: "2026-07-03", size: "small", v: "Leaderboard rows show class, subclass & all stats", by: "Jeff Louie", notes: [
     "Each board row now carries a second line: the hero's specialization — their ascension (subclass) in its signature colour, or their base class — plus a sigil.",
     "Every row shows floor, level, gold and Power together, not just the ranked stat, so you can compare heroes fully whichever board you're on. Big counts abbreviate (12.3k).",
