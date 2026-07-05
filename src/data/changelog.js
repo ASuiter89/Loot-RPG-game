@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Furniture never blocks a hallway", by: "Claude", notes: [
+    "Wide solid furniture — beds, tables, sofas — now only settles inside a room, never across a doorway or corridor, so a piece can no longer drop into a hall and block the way through.",
+    "Earlier fixes stopped furniture from fully sealing a floor, but a wide piece could still plug a corridor that had a long way around; now it never sits in the passage at all.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Cleaner GEAR equipment layout", by: "Claude", notes: [
     "The equipment doll on the GEAR tab drops the name label under each slot — long names used to wrap and spill over the tiles below them. Every piece's name and full stats still show in its tap/hover tooltip.",
     "Slots are evenly stacked at one consistent spacing, and the whole layout is centred between the loadout bar above and the hint text below.",
