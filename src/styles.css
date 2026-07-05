@@ -169,7 +169,7 @@
     --xp: #ffe9a0;
     --hp: #ff3b4e;
     --mp: #3a8bff;
-    --shield: #7fb2ff;             /* Bulwark energy shield — a lighter steel-blue than MP */
+    --shield: #5c9bff;             /* Bulwark energy shield — a clear steel-blue, bluer than the MP fill */
     /* Interactive / buttons */
     --interactive: #8a6fff; /* accent: hover borders, focus glow */
     --btn-text: #b9a3ff;       /* text-style action buttons */
@@ -344,8 +344,8 @@
      uncovers red HP, then gray. The mask shimmers with a slow light sweep. */
   .bar-shield-under { position: absolute; top: 0; left: 0; height: 100%; z-index: 1; border-radius: 3px; background: color-mix(in srgb, var(--junk) 65%, transparent); transition: width 0.2s; }
   .bar-shield { position: absolute; top: 0; left: 0; height: 100%; z-index: 3; border-radius: 3px; pointer-events: none; box-sizing: border-box;
-    border: 1px solid color-mix(in srgb, var(--shield) 55%, transparent);
-    background: linear-gradient(100deg, color-mix(in srgb, var(--shield) 34%, transparent) 0%, color-mix(in srgb, var(--paper) 42%, transparent) 46%, color-mix(in srgb, var(--shield) 34%, transparent) 92%);
+    border: 1px solid color-mix(in srgb, var(--shield) 68%, transparent);
+    background: linear-gradient(100deg, color-mix(in srgb, var(--shield) 52%, transparent) 0%, color-mix(in srgb, var(--paper) 34%, transparent) 46%, color-mix(in srgb, var(--shield) 52%, transparent) 92%);
     background-size: 220% 100%; animation: bulwark-shimmer 2.6s linear infinite; transition: width 0.2s; }
   @keyframes bulwark-shimmer { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
   @media (prefers-reduced-motion: reduce) { .bar-shield, .dh-vital-shield { animation: none; } }
@@ -1606,8 +1606,8 @@
      top, both sized to shield/maxShield of the full track. */
   .dh-vital-shield-under { position: absolute; top: 0; bottom: 0; left: 0; z-index: 1; border-radius: 6px; background: color-mix(in srgb, var(--junk) 65%, transparent); transition: width 0.22s ease; }
   .dh-vital-shield { position: absolute; top: 0; bottom: 0; left: 0; z-index: 3; border-radius: 6px; pointer-events: none; box-sizing: border-box;
-    border: 1px solid color-mix(in srgb, var(--shield) 50%, transparent);
-    background: linear-gradient(100deg, color-mix(in srgb, var(--shield) 32%, transparent) 0%, color-mix(in srgb, var(--paper) 44%, transparent) 46%, color-mix(in srgb, var(--shield) 32%, transparent) 92%);
+    border: 1px solid color-mix(in srgb, var(--shield) 62%, transparent);
+    background: linear-gradient(100deg, color-mix(in srgb, var(--shield) 50%, transparent) 0%, color-mix(in srgb, var(--paper) 36%, transparent) 46%, color-mix(in srgb, var(--shield) 50%, transparent) 92%);
     background-size: 220% 100%; animation: bulwark-shimmer 2.6s linear infinite; transition: width 0.22s ease; }
   .dh-vital-val {
     position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; justify-content: center; gap: 0.4em;

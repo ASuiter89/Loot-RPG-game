@@ -19798,7 +19798,7 @@ function absorbWithShield(dmg) {
 
 // Blue floating number colour for Bulwark (the persistent Spirit shield) absorbs.
 // Mirrors the --shield design token; the HUD overlay uses the same hue.
-const BULWARK_COLOR = '#7fb2ff';
+const BULWARK_COLOR = '#5c9bff';
 
 // The persistent Spirit-fuelled Bulwark shield (player.shield) soaks whatever the
 // transient buff-shield didn't. Returns the damage left to hit HP. Any damage that
