@@ -7065,7 +7065,7 @@ window.gameGuide = function gameGuide(topic) {
     town: [
       `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Death does not re-lock any floors: instead Warp to Dungeon only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Dungeon Gate flags the tier holding that grave (with the exact floor beside the tier's grave badge; gameState().graveSite.where), so you can dive straight back to it.`,
       `Town's top row has TWO gates. Warp to Dungeon opens the tier + floor picker, but you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. Return to Last Floor drops you straight back onto the EXACT floor you left through the Town Portal — same enemies, loot and layout, right where you stood — and lights up ONLY when you left by portal or conquest, never after a death (then it's darkened, so take Warp to Dungeon; gameState().menu.returnToLastFloor.available reports this, .where the floor it returns to). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
-      `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free.`,
+      `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon.`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive.`,
@@ -11843,8 +11843,8 @@ function openTownHub() {
        <button id="town-amb-btn" class="town-amb-toggle${audio.townAmbOn ? ' on' : ''}" onclick="toggleTownAmbient()">${audio.townAmbOn ? '🔔 Town sounds: On' : '🔕 Town sounds: Off'}</button>
      </div>`;
   setTownContent(`<div class="town-menu">${gateRow}${tiles}</div>${ambFoot}`);
-  // Render the bar in its town form (potions locked) and measure the gap the menu
-  // reserves for it, now that the town overlay is open.
+  // Render the bar in its town form (potions live, skills parked) and measure the
+  // gap the menu reserves for it, now that the town overlay is open.
   renderSkillBar();
 }
 // Return from a service panel to the hub menu (also used by the backdrop tap and
@@ -23495,7 +23495,6 @@ const POTION_CD = 6;            // shared cooldown — 6 real seconds between si
 function healPotionAmount() { return Math.max(1, Math.round(player.maxHp * potionHealPct())); }
 function potionReady() { return (player.potionCd || 0) <= 0; }
 function useHealthPotion() {
-  if (inTown) return;               // potions are locked in town (see renderSkillBar) — no free heals
   if (portalChanneling() || portalTransiting() || mapWarping()) return;   // channeling / mid-teleport
   if (!potionReady()) { log(`⏳ Potions recharge — ${Math.ceil(player.potionCd)}s left.`); return; }
   if (player.hp >= player.maxHp) { log('Already at full health.'); return; }
@@ -23510,7 +23509,6 @@ function useHealthPotion() {
 const MANA_PERCENT = 0.40;     // a sip restores 40% of max MP, paid out OVER TIME
 function manaPotionAmount() { return Math.max(10, Math.round(player.maxMp * potionManaPct())); }
 function useManaPotion() {
-  if (inTown) return;               // potions are locked in town (see renderSkillBar) — no free refills
   if (portalChanneling() || portalTransiting() || mapWarping()) return;   // channeling / mid-teleport
   if (!potionReady()) { log(`⏳ Potions recharge — ${Math.ceil(player.potionCd)}s left.`); return; }
   if (player.mp >= player.maxMp) { log('Already at full mana.'); return; }
@@ -23520,14 +23518,15 @@ function useManaPotion() {
   spendPotionTurn();
 }
 
-// A potion plays out like an active skill: outside town a sip starts the shared
-// cooldown, which then burns down in real seconds (see tickCooldowns). In town
-// there are no foes, so the cooldown is skipped entirely.
+// A potion plays out like an active skill: a sip starts the shared cooldown,
+// which then burns down in real seconds (see tickCooldowns). This holds in town
+// too — potions are quaffable at the hub, and time flows there, so the same sip
+// + shared cooldown applies whether you're topping up before a dive or fighting.
 function spendPotionTurn() {
   updateBars();
   // Real-time: quaffing just starts the shared cooldown (it burns down in real
-  // seconds — see tickCooldowns). In town there are no foes, so it's skipped.
-  if (!inTown) player.potionCd = effectivePotionCd();
+  // seconds — see tickCooldowns), the same in town as in the dungeon.
+  player.potionCd = effectivePotionCd();
   updateBars();
   renderSkillBar();
   saveGame();
@@ -24713,27 +24712,26 @@ function renderSkillBar() {
   // current markup steady until the drag ends — skillDragEnd / the drop re-render.
   if (skillDrag) return;
   // In town the bar parks as a solid tray the town menu leaves room for (see
-  // syncTownBarReserve), with its potions inert. Out in the dungeon it's the live
-  // combat bar, and it always renders even before any active is learned because the
-  // Health/Mana potions are baseline kit.
+  // syncTownBarReserve). Out in the dungeon it's the live combat bar, and it always
+  // renders even before any active is learned because the Health/Mana potions are
+  // baseline kit.
   const town = inTown;
   bar.style.display = 'flex';
   bar.classList.toggle('in-town', town);
   document.body.classList.toggle('town-bar', town);
   // Potion skills pinned to the far left of the bar: Health (Q) then Mana (E).
   // They're unlimited but share a 5-second cooldown, so the info slot shows the
-  // remaining seconds when recharging (blank when ready). In town they're locked —
-  // rendered greyed and click-dead — so a potion can't be spent where there's
-  // nothing to fight and resting already restores you for free.
+  // remaining seconds when recharging (blank when ready). They stay live in town —
+  // quaff to top up instantly before a dive instead of waiting out the free rest.
   const pcd = player.potionCd || 0;
   const potReady = pcd <= 0;
   const hpFull = player.hp >= player.maxHp;
   const mpFull = player.mp >= player.maxMp;
-  const urgent = !town && potReady && player.hp < player.maxHp * 0.35;
-  const healHint = town ? 'locked in town' : 'press ' + kbLabel('healthPotion');
-  const manaHint = town ? 'locked in town' : 'press ' + kbLabel('manaPotion');
-  const healTip = `<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health Potion</div><div class='ht-line'>${town ? 'Saved for the dungeon — rest in town to heal for free instead.' : 'Mends health <b>over a few seconds</b> — a heavy direct hit spills the rest of the sip.'}</div><div class='ht-sub'>${healHint}${town ? '' : ` · over time · ${effectivePotionCd()}-second cooldown`}</div>`;
-  const manaTip = `<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana Potion</div><div class='ht-line'>${town ? 'Saved for the dungeon — rest in town to refill for free instead.' : 'Restores mana <b>over a few seconds</b>.'}</div><div class='ht-sub'>${manaHint}${town ? '' : ` · over time · ${effectivePotionCd()}-second cooldown`}</div>`;
+  const urgent = potReady && player.hp < player.maxHp * 0.35;
+  const healHint = 'press ' + kbLabel('healthPotion');
+  const manaHint = 'press ' + kbLabel('manaPotion');
+  const healTip = `<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health Potion</div><div class='ht-line'>Mends health <b>over a few seconds</b> — a heavy direct hit spills the rest of the sip.</div><div class='ht-sub'>${healHint} · over time · ${effectivePotionCd()}-second cooldown</div>`;
+  const manaTip = `<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana Potion</div><div class='ht-line'>Restores mana <b>over a few seconds</b>.</div><div class='ht-sub'>${manaHint} · over time · ${effectivePotionCd()}-second cooldown</div>`;
   const cdDial = (key) => `<span class="sb-cd" data-cd="${key}"></span>`;
   // Each tile rides in a cell with its hotkey pill stacked above the button. `label`
   // is the hotkey (or "AUTO" for the auto-cast slot); `tone` tints the pill to match
@@ -24744,10 +24742,10 @@ function renderSkillBar() {
   // the _lastSkillBarHtml cache, forcing a full bar rebuild each tick. The
   // .sb-cd-text placeholders stay empty in the cached string and are filled via
   // textContent in syncSkillBarCountdowns() on every render call instead.
-  const healBtn = cell(kbShort(kbLabel('healthPotion')), 'hp', `<button class="skillbar-btn potion ${town ? 'town-locked' : (potReady && !hpFull ? 'ready' : 'empty')} ${urgent ? 'urgent' : ''} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} ${town ? '' : 'onclick="useHealthPotion()"'}>
+  const healBtn = cell(kbShort(kbLabel('healthPotion')), 'hp', `<button class="skillbar-btn potion ${potReady && !hpFull ? 'ready' : 'empty'} ${urgent ? 'urgent' : ''} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} onclick="useHealthPotion()">
       <span class="sb-icon">${HEAL_POTION_SVG}</span><span class="sb-info sb-cd-text" data-cdt="pot" id="heal-label"></span>${cdDial('pot')}
     </button>`);
-  const manaBtn = cell(kbShort(kbLabel('manaPotion')), 'mp', `<button class="skillbar-btn potion mana ${town ? 'town-locked' : (potReady && !mpFull ? 'ready' : 'empty')} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} ${town ? '' : 'onclick="useManaPotion()"'}>
+  const manaBtn = cell(kbShort(kbLabel('manaPotion')), 'mp', `<button class="skillbar-btn potion mana ${potReady && !mpFull ? 'ready' : 'empty'} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} onclick="useManaPotion()">
       <span class="sb-icon">${MANA_POTION_SVG}</span><span class="sb-info sb-cd-text" data-cdt="pot"></span>${cdDial('pot')}
     </button>`);
   // The four manual slots are rendered filled or empty (keys 1–4, all styled alike).
