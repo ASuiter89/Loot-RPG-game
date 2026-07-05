@@ -851,67 +851,6 @@
   .settings-pane { display: none; flex-direction: column; gap: 6px; }
   .settings-pane.active { display: flex; }
 
-  /* ── DEV TAB ── live difficulty-tuning sliders (Settings ▸ Dev). Built by
-     renderDevTune() from the DEV_TUNABLES registry. Token-driven like the rest
-     of the design system; sliders are the game's only range inputs, styled here. */
-  .dev-intro {
-    font-size: 1.2rem; line-height: 1.45; color: var(--text-muted);
-    background: var(--panel-raised); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 8px 10px;
-  }
-  .dev-intro b { color: var(--text); }
-  .dev-actions { display: flex; gap: 6px; margin: 2px 0 2px; }
-  .dev-act-btn {
-    flex: 1 1 0; font-family: var(--font-ui); font-size: 1.3rem; font-weight: bold;
-    color: var(--btn-text); background: var(--interactive); border: 1px solid var(--frame);
-    border-radius: var(--radius-sm); padding: 7px 8px; cursor: pointer;
-    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
-  }
-  .dev-act-btn:active { filter: brightness(0.92); }
-  .dev-act-btn.is-off { opacity: 0.5; }
-  .dev-group-h {
-    font-size: 1.2rem; font-weight: bold; letter-spacing: 0.6px; text-transform: uppercase;
-    color: var(--gold); margin: 10px 0 2px; padding-bottom: 3px;
-    border-bottom: 1px solid var(--border);
-  }
-  .dev-group { display: flex; flex-direction: column; gap: 5px; }
-  .dev-row {
-    background: var(--panel-raised); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 7px 10px 8px;
-  }
-  .dev-row.modified { border-color: color-mix(in srgb, var(--gold) 55%, var(--border)); }
-  .dev-row-top { display: flex; align-items: baseline; gap: 8px; }
-  .dev-label { flex: 1 1 auto; font-size: 1.3rem; color: var(--text); display: flex; flex-direction: column; gap: 1px; }
-  .dev-note { font-size: 1.1rem; color: var(--text-muted); font-weight: normal; }
-  .dev-val {
-    flex: 0 0 auto; font-size: 1.2rem; color: var(--text-muted); font-variant-numeric: tabular-nums;
-    min-width: 42px; text-align: right;
-  }
-  .dev-row.modified .dev-val { color: var(--gold); font-weight: bold; }
-  .dev-reset {
-    flex: 0 0 auto; font-size: 1.3rem; line-height: 1; color: var(--text-muted);
-    background: transparent; border: none; cursor: pointer; padding: 0 2px;
-    -webkit-tap-highlight-color: transparent; opacity: 0.5;
-  }
-  .dev-row.modified .dev-reset { color: var(--gold); opacity: 1; }
-  .dev-slider {
-    -webkit-appearance: none; appearance: none; width: 100%; height: 6px;
-    border-radius: var(--radius-pill); background: var(--border); outline: none;
-    margin: 8px 0 1px; cursor: pointer;
-  }
-  .dev-slider::-webkit-slider-thumb {
-    -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%;
-    background: var(--interactive); border: 2px solid var(--frame); cursor: pointer;
-    box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 50%, transparent);
-  }
-  .dev-slider::-moz-range-thumb {
-    width: 18px; height: 18px; border-radius: 50%;
-    background: var(--interactive); border: 2px solid var(--frame); cursor: pointer;
-  }
-  .dev-row.modified .dev-slider::-webkit-slider-thumb { background: var(--gold); }
-  .dev-row.modified .dev-slider::-moz-range-thumb { background: var(--gold); }
-  .dev-slider:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive) 60%, transparent); }
-
   /* ── KEYBINDINGS OVERLAY ── */
   #keybind-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 72%, transparent); z-index: 600; display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 18px; }
   #keybind-overlay.open { display: flex; }
