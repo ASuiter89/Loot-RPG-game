@@ -30,6 +30,7 @@ import { isCritical } from '../systems/crit.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
 import { rollDamage, spreadRange } from '../systems/damageRoll.js';
+import { castTargetsInSight, splashTargetsFrom, nextChainLink } from '../systems/aoeTargeting.js';
 import { spellSpreadFor } from '../data/spellSpread.js';
 import { SKILL_MILESTONES } from '../data/skillMilestones.js';
 import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/gearPower.js';
@@ -7054,7 +7055,9 @@ window.gameGuide = function gameGuide(topic) {
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
-      `RANGED casts need LINE OF SIGHT: a bolt, blast, beam (line), nova or chain only strikes foes you can see — a SOLID obstruction (wall, door, boss barrier, furniture) between you and a foe blocks it, but open ground and water don't; the cast fails with "No foe in sight" if nothing visible is in range. Melee/cleave (adjacent-only) and the rare floor-wide "strike random foes" ultimate ignore walls.`,
+      `RANGED casts need LINE OF SIGHT: a bolt, beam (line), nova or chain only strikes foes YOU can see — a SOLID obstruction (wall, door, boss barrier, furniture) between you and a foe blocks it, but open ground and water don't; the cast fails with "No foe in sight" if nothing visible is in range. Melee/cleave (adjacent-only) and the rare floor-wide "strike random foes" ultimate ignore walls.`,
+      `A BLAST (Meteor, Fireball, Blizzard, Firestorm, Condemn, Plague Bomb, Death Rain, …) is judged from its POINT OF IMPACT, not from you: the projectile lands on the nearest foe you can see, then its radius damage spreads to every foe THE IMPACT can see — so a meteor dropped onto a pack tucked behind a wall still burns the whole pack, even foes you couldn't hit directly. A mark DETONATION (Immolation, Death Blossom, Final Judgment popping a vuln/Condemned foe) bursts the same way — from the marked foe outward. Novas still radiate from YOU.`,
+      `A CHAIN (Chain Spark, Thunderstorm, Apocalypse) arcs FOE-TO-FOE: the first bolt needs a clear line from you, but each jump after that is judged from the LAST struck foe, so the arc can bend around a corner you can't see past to reach a foe the previous target can. It never leaps through a solid wall between two foes.`,
     ],
     damage: [
       `Damage comes from THREE distinct sources, each with its own scaling lane — build into one and you don't accidentally buff the others:`,
@@ -20633,6 +20636,20 @@ function nearestFoeInRange(range) {
   }
   return best;
 }
+// The nearest living foe within Manhattan `range` the hero can SEE — the impact point
+// for a BLAST/AoE projectile. Unlike nearestFoeInRange it skips foes hidden behind a
+// wall, so the projectile lands on a foe you can actually hit; its splash then spreads
+// from THAT impact (LOS judged from the impact, not the hero — see castTargetsInSight
+// in systems/aoeTargeting.js), catching foes the hero can't personally see.
+function nearestVisibleFoeInRange(range) {
+  let best = null, bestD = Infinity;
+  for (const o of enemies) {
+    if (o.dead) continue;
+    const d = Math.abs(o.x - player.x) + Math.abs(o.y - player.y);
+    if (d <= range && d < bestD && hasLineOfSight(player.x, player.y, o.x, o.y)) { best = o; bestD = d; }
+  }
+  return best;
+}
 // A safe, unoccupied tile adjacent to enemy e for the hero to blink onto.
 // Skips lava (7) and spikes (8) so a teleport never strands the hero on a
 // hazard; returns null if every adjacent tile is wall/occupied/hazardous, in
@@ -20902,18 +20919,15 @@ function foesInLine(dir, range) {
     return perp <= 1;
   });
 }
-// Greedy chain: nearest unhit foe within 3 tiles of the last, up to n links.
-// Each link is a linear min-distance pass (strict `<` keeps enemy-array order on
-// ties, matching the stable filter+sort it replaces).
+// Greedy chain: the nearest unhit foe within 3 tiles of the last that the LAST foe
+// can SEE, up to n links. The arc jumps foe→foe, so each hop's line of sight is
+// judged from the previous link (not the hero) — a chain can bend around a corner
+// the hero can't see past, striking from the point of the last impact. Link picking
+// is delegated to the pure nextChainLink (systems/aoeTargeting.js).
 function chainTargets(first, n, range) {
   const hit = [first]; let last = first;
   for (let k = 1; k < n; k++) {
-    let nxt = null, nxtD = Infinity;
-    for (const o of enemies) {
-      if (o.dead || hit.includes(o)) continue;
-      const d = Math.abs(o.x - last.x) + Math.abs(o.y - last.y);
-      if (d <= 3 && d < nxtD) { nxt = o; nxtD = d; }
-    }
+    const nxt = nextChainLink(last, enemies.filter(o => !o.dead && !hit.includes(o)), 3, hasLineOfSight);
     if (!nxt) break;
     hit.push(nxt); last = nxt;
   }
@@ -20986,8 +21000,12 @@ function resolveCast(node, rank) {
       targets = [f]; center = f; break;
     }
     case 'blast': {
-      const f = nearestFoeInRange(c.range || 6);
-      if (!f) { castMsg(`No foe within range.`); return false; }
+      // A blast is a projectile that lands ON a foe and bursts in a radius. Target the
+      // nearest foe the hero can SEE (the projectile has to reach it); the explosion
+      // then spreads from THAT impact — the LOS filter below judges the splash from the
+      // impact point, not the hero, so foes tucked behind a wall beside the blast burn.
+      const f = nearestVisibleFoeInRange(c.range || 6);
+      if (!f) { castMsg(`No foe in sight.`); return false; }
       center = f; targets = enemiesNear(c.radius || 1, f.x, f.y); break;
     }
     case 'line': {
@@ -20998,8 +21016,10 @@ function resolveCast(node, rank) {
       break;
     }
     case 'chain': {
-      const first = nearestFoeInRange(c.range || 6);
-      if (!first) { castMsg(`No foe within range.`); return false; }
+      // The first arc flies from the hero, so it needs a foe the hero can SEE; every
+      // subsequent link then jumps from the previous foe (LOS gated inside chainTargets).
+      const first = nearestVisibleFoeInRange(c.range || 6);
+      if (!first) { castMsg(`No foe in sight.`); return false; }
       targets = chainTargets(first, c.chain || 3, c.range || 6); break;
     }
     case 'teleport': {
@@ -21019,13 +21039,18 @@ function resolveCast(node, rank) {
     }
   }
 
-  // ── LINE OF SIGHT ── a ranged cast can't reach a foe through a wall. Melee and
-  // cleave only strike adjacent tiles (always in view), and `random` is a floor-wide
-  // strike that ignores walls by design; every other shape must have a clear line
-  // from the hero to each struck foe, so a bolt/blast/beam/nova/chain never fires
-  // through solid rock. If nothing visible survives the filter, the cast fails.
-  if (targets.length && c.shape !== 'melee' && c.shape !== 'cleave' && c.shape !== 'random') {
-    targets = targets.filter(e => e && e.x != null && hasLineOfSight(player.x, player.y, e.x, e.y));
+  // ── LINE OF SIGHT ── a ranged cast can't reach a foe through a wall, but WHERE the
+  // line is drawn FROM depends on the shape. A bolt/beam/nova radiates from the hero,
+  // so each struck foe needs a clear line from the hero. A BLAST is a projectile that
+  // detonates ON a foe, so its explosion spreads from the POINT OF IMPACT — foes the
+  // hero can't personally see but that stand beside the blast still burn (a meteor
+  // landing among a pack behind a wall catches the whole pack). castTargetsInSight
+  // encodes that per-shape origin (systems/aoeTargeting.js). CHAIN is already LOS-gated
+  // link-to-link as it is built (each arc jumps from the previous foe), and melee/
+  // cleave (adjacent) and `random` (floor-wide) ignore walls by design — all four are
+  // skipped here. If nothing survives the filter, the cast fails.
+  if (targets.length && c.shape !== 'melee' && c.shape !== 'cleave' && c.shape !== 'random' && c.shape !== 'chain') {
+    targets = castTargetsInSight(c.shape, targets, center, player, hasLineOfSight);
     // A nova that also heals/buffs still fires its self-effect with no foe visible
     // (mirrors the "no foes near" allowance above); every other ranged cast fails.
     if (!targets.length && !(c.shape === 'nova' && (c.heal || c.buff))) { castMsg(`No foe in sight.`); return false; }
@@ -21107,13 +21132,16 @@ function resolveCast(node, rank) {
   // ── HARMONIZE: detonate marks ── a detonating cast explodes any MARKED (vuln)
   // foe it hits, bursting nearby enemies and consuming the mark. Set the mark up
   // with one skill (status:{effect:'vuln'}), pop it with another for a chain combo.
+  // The burst is itself an AoE around the POINT OF IMPACT (the marked foe), so its
+  // splash is judged by LOS from that foe — it can't blast through a wall.
   if (c.detonate && targets.length) {
     let boomed = false;
     const physBurst = detonateIsPhysical(c);   // a spell cast's burst is spell damage — no leech
     for (const e of targets.slice()) {
       if (e.dead || !statusEffects.some(s => s.target === e && s.effect === 'vuln')) continue;
       const burst = c.spell ? skillSpellDamage(e, c, c.detonate, rank, spSpread) : skillPhysDamage(e, c.detonate, rank);
-      for (const o of enemiesNear(c.detRadius || 1, e.x, e.y)) { if (!o.dead) { total += burst; if (physBurst) physTotal += burst; dealDamage(o, burst, true); spawnFloatingText(o.x, o.y, `💥${burst}`, '#ff8a3a'); } }
+      const caught = splashTargetsFrom(e.x, e.y, enemiesNear(c.detRadius || 1, e.x, e.y), hasLineOfSight);
+      for (const o of caught) { if (!o.dead) { total += burst; if (physBurst) physTotal += burst; dealDamage(o, burst, true); spawnFloatingText(o.x, o.y, `💥${burst}`, '#ff8a3a'); } }
       statusEffects = statusEffects.filter(s => !(s.target === e && s.effect === 'vuln')); // consume the mark
       spawnParticles(e.x, e.y, '#ff8a3a', 14, 0.13); boomed = true;
     }
