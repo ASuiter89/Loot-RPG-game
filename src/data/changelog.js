@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Attribute values no longer clip under the + button", by: "Claude", notes: [
+    "On the HERO tab, an attribute's value and its green gear bonus now right-align flush to the + button and stack instead of overflowing under it, so a big number like 125 (+47) reads in full. The description text gives up a sliver of width to make room.",
+  ] },
   { date: "2026-07-05", size: "large", v: "Belt fills its empty space: loadout, meals & bounty", by: "Claude", notes: [
     "The wide-screen skill belt now fills its empty gaps with three modules that appear only when there's room and tuck away when it's tight.",
     "Loadout toggle: swap Set 1 / Set 2 straight from the belt.",

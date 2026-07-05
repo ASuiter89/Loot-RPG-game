@@ -1281,7 +1281,10 @@
   .attr-info { flex: 1; min-width: 0; }
   .attr-name { font-size: 1.3rem; font-weight: bold; color: var(--normal); }
   .attr-desc { font-size: 1.2rem; color: var(--junk); line-height: 1.3; }
-  .attr-val { font-size: 1.6rem; font-weight: bold; color: var(--gold-350); width: 24px; text-align: center; flex-shrink: 0; }
+  /* Right-align the value flush to the + button (min-width floors the single-digit
+     case); the value grows LEFTWARD and stacks its gear bonus, so it never spills
+     under the button. .attr-info (flex:1) shrinks to absorb the extra width. */
+  .attr-val { display: flex; flex-direction: column; align-items: flex-end; font-size: 1.6rem; font-weight: bold; color: var(--gold-350); min-width: 24px; text-align: right; flex-shrink: 0; }
   /* margin-left buffers the + button off the value; .attr-info (flex:1) shrinks to absorb it. */
   .attr-plus { flex-shrink: 0; margin-left: var(--space-5); width: 30px; height: 30px; border: none; border-radius: 5px; background: var(--success); color: var(--paper); font-size: 2rem; font-weight: bold; cursor: pointer; line-height: 1; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .attr-plus:active { background: var(--uncommon); }
