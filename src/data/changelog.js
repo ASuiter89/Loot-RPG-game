@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "medium", v: "Big numbers now read at a glance", by: "Claude", notes: [
+    "Any number in the thousands or higher now shows in short form everywhere — 14,523 reads \"14k\", 2,400,000 reads \"2.4M\". Applies to damage, gold, HP/MP, Power, item stats, tooltips, shop and forge prices, the leaderboard and the combat log.",
+    "Values under a thousand still show in full. Short forms round DOWN, so a readout never claims more than you actually have.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Spirit Veil rolls on caster gear", by: "Claude", notes: [
     "Gear can now roll a flat +Spirit Veil bonus — the shield twin of flat +Max HP — that adds straight onto your maximum Spirit Veil shield.",
     "It's gated to Spirit gear by SPECIFIC base, not by slot: only Spirit-identity bases roll it — Crown & Circlet, Robe, Leggings, Loop, Necklace, and Tome & Focus off-hands. Weapons and gloves never do.",

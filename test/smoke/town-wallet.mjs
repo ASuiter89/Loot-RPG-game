@@ -139,11 +139,12 @@ async function main() {
       } else {
         baseBtn.click(); // -> forgeSelectBase(...) via the inline handler bridge
         window.forgeSelectTier('normal');
-        // Guarantee the craft is affordable (scrap yields are random). Gold is kept
-        // under 1000 so fmtGold shows exact digits — a ~70-gold craft would otherwise
-        // round to the same "Nk" abbreviation and read as unchanged.
+        // Guarantee the craft is affordable (scrap yields are random). Gold AND
+        // materials are kept under 1000 so the abbreviator shows exact digits — a
+        // small craft cost would otherwise round to the same "Nk" and read as
+        // unchanged. Materials start near zero at this point, so +500 stays under 1000.
         window.player.gold = 999;
-        for (const k of Object.keys(window.freshMaterials())) window.gainMaterial(k, 999);
+        for (const k of Object.keys(window.freshMaterials())) window.gainMaterial(k, 500);
         window.updateBars(); // paint the pre-craft gold/material totals
         before = snap();
         window.craftItem();

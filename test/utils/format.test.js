@@ -18,6 +18,15 @@ describe('abbreviateNumber', () => {
     expect(abbreviateNumber(125000)).toBe('125k');
   });
 
+  it('truncates rather than rounding up (14 523 → 14k, not 15k)', () => {
+    expect(abbreviateNumber(14523)).toBe('14k');
+    expect(abbreviateNumber(1999)).toBe('1.9k');   // not 2k
+    expect(abbreviateNumber(9999)).toBe('9.9k');   // not 10k
+    expect(abbreviateNumber(1750)).toBe('1.7k');   // not 1.8k
+    expect(abbreviateNumber(1_999_999)).toBe('1.9M');
+    expect(abbreviateNumber(999_999)).toBe('999k'); // stays in k, never rounds to 1M
+  });
+
   it('abbreviates millions, billions and trillions', () => {
     expect(abbreviateNumber(1_000_000)).toBe('1M');
     expect(abbreviateNumber(1_500_000)).toBe('1.5M');
@@ -115,6 +124,22 @@ describe('abbreviateNumbersIn', () => {
   it('does not disturb sprite-span markup (no 4-digit runs in keys)', () => {
     expect(abbreviateNumbersIn('<span data-spr=ic_orb></span>13400'))
       .toBe('<span data-spr=ic_orb></span>13k');
+  });
+  it('abbreviates comma-grouped numbers (the exact thing we want gone)', () => {
+    expect(abbreviateNumbersIn('14,523')).toBe('14k');
+    expect(abbreviateNumbersIn('You found 14,523 gold')).toBe('You found 14k gold');
+    expect(abbreviateNumbersIn('1,234,567 damage')).toBe('1.2M damage');
+    expect(abbreviateNumbersIn('999 gold')).toBe('999 gold'); // no comma group, under 1k
+  });
+  it('folds a decimal tail into the abbreviation instead of stranding it', () => {
+    expect(abbreviateNumbersIn('12345.67')).toBe('12k');
+    expect(abbreviateNumbersIn('DPS 8400.5')).toBe('DPS 8.4k');
+  });
+  it('never rewrites digits inside an HTML tag (attributes, styles)', () => {
+    expect(abbreviateNumbersIn('<div data-x="12345">67890</div>'))
+      .toBe('<div data-x="12345">67k</div>');
+    expect(abbreviateNumbersIn('<b style="left:1200px">15000</b>'))
+      .toBe('<b style="left:1200px">15k</b>');
   });
   it('returns non-string input unchanged', () => {
     expect(abbreviateNumbersIn(undefined)).toBe(undefined);

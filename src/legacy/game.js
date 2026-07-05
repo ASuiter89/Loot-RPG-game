@@ -2836,8 +2836,8 @@ function spendCost(cost) {
 }
 function costLabel(cost) {
   const parts = [];
-  if (cost.gold) parts.push(`<span data-spr=ic_money></span>${cost.gold}`);
-  for (const k of CRAFT_MAT_KEYS) if (cost[k]) parts.push(`${cost[k]}<span data-spr=mat_${k}></span>`);
+  if (cost.gold) parts.push(`<span data-spr=ic_money></span>${fmtGold(cost.gold)}`);
+  for (const k of CRAFT_MAT_KEYS) if (cost[k]) parts.push(`${abbreviateNumber(cost[k])}<span data-spr=mat_${k}></span>`);
   return parts.join('  ');
 }
 // HTML version of costLabel for on-screen prices: paints any component you can't
@@ -2849,12 +2849,12 @@ function costLabelHi(cost) {
   const parts = [];
   if (cost.gold) {
     const short = (cost.gold || 0) > spendableGold();
-    parts.push(`<span class="${short ? 'cost-short' : ''}"><span data-spr=ic_money></span>${cost.gold}</span>`);
+    parts.push(`<span class="${short ? 'cost-short' : ''}"><span data-spr=ic_money></span>${fmtGold(cost.gold)}</span>`);
   }
   for (const k of CRAFT_MAT_KEYS) if (cost[k]) {
     const short = cost[k] > (m[k] || 0);
     const ic = `<span data-spr=mat_${k}></span>`;
-    parts.push(`<span class="${short ? 'cost-short' : ''}">${cost[k]}${ic}</span>`);
+    parts.push(`<span class="${short ? 'cost-short' : ''}">${abbreviateNumber(cost[k])}${ic}</span>`);
   }
   return parts.join('  ');
 }
@@ -2875,7 +2875,7 @@ function matStripHTML() {
     const ic = `<span data-spr=mat_${k}></span>`; // exact DawnLike material tile (no emoji)
     // Gear-style hover card instead of a native title box, escaped for the attr.
     const tip = `<div class='ht-name' style='color:${mat.color}'>${ic} ${mat.name}</div><div class='ht-line'>${mat.desc}</div>`.replace(/"/g, '&quot;');
-    return `<span class="mat-chip" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()" style="color:${mat.color}">${ic} ${m[k] || 0}</span>`;
+    return `<span class="mat-chip" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()" style="color:${mat.color}">${ic} ${abbreviateNumber(m[k] || 0)}</span>`;
   }).join('');
   return `<div class="mat-strip">${chips}</div>`;
 }
@@ -3898,15 +3898,15 @@ const FOOD_FX_LABELS = {
   dmgPct:   v => `+${Math.round(v * 100)}% Damage`,
   maxHpPct: v => `+${Math.round(v * 100)}% Max HP`,
   maxMpPct: v => `+${Math.round(v * 100)}% Max MP`,
-  defFlat:  v => `+${Math.round(v)} Defense`,
+  defFlat:  v => `+${abbreviateNumber(v)} Defense`,
   critPct:  v => `+${Math.round(v * 100)}% Crit`,
   dodgePct: v => `+${Math.round(v * 100)}% Dodge`,
-  regen:    v => `+${Math.round(v)} HP Regen`,
+  regen:    v => `+${abbreviateNumber(v)} HP Regen`,
   goldPct:  v => `+${Math.round(v * 100)}% Gold Find`,
   magicPct: v => `+${Math.round(v * 100)}% Magic Find`,
   // special secret-recipe effects
   lifesteal:v => `${Math.round(v * 100)}% Lifesteal`,
-  thorns:   v => `Reflect ${Math.round(v)} dmg`,
+  thorns:   v => `Reflect ${abbreviateNumber(v)} dmg`,
   xpPct:    v => `+${Math.round(v * 100)}% XP`,
   dropPct:  v => `+${Math.round(v * 100)}% Extra Loot`,
   revive:   v => `Cheat death (once)`,
@@ -9114,8 +9114,8 @@ function renderEnemyCard(e) {
   const mresPct = Math.round(enemyMagicResPct(e) * 100);
   const fields = [
     ['lvl',   'Level',  e.level || '—'],
-    ['hp',    'Health', e.maxHp],
-    ['dmg',   'Damage', e.dmg],
+    ['hp',    'Health', abbreviateNumber(e.maxHp)],
+    ['dmg',   'Damage', abbreviateNumber(e.dmg)],
     ['armor', 'Armor',  `${armorPct}%`],
     ['mres',  'Magic res', `${mresPct}%`],
     ['style', 'Style',  styleLbl],
@@ -10819,9 +10819,11 @@ function itemStatLine(item, opts) {
   const chip = (code, full) => `<span class="stat-abbr" ${hoverTip(full)}>${code}</span>`;
   const parts = Object.entries(item.stats).map(([k, v]) => {
     const short = STAT_SHORT[k] || k, full = STAT_LABELS[k] || k;
-    if (typeof v === 'string') return `${v} ${chip(short, full)}`; // DMG range
+    if (typeof v === 'string') return `${abbreviateNumbersIn(v)} ${chip(short, full)}`; // DMG range (each end abbreviated)
     const unit = PCT_STATS.has(k) ? '%' : '';
-    return `${v < 0 ? '' : '+'}${v}${unit} ${chip(short, full)}`;
+    // abbreviateNumbersIn only compacts a 4+ digit integer part, so a small % or a
+    // fractional stat is left exact while a big flat bonus (+1500) reads "+1.5k".
+    return `${v < 0 ? '' : '+'}${abbreviateNumbersIn(String(v))}${unit} ${chip(short, full)}`;
   });
   if (item.attrs) for (const [k, v] of Object.entries(item.attrs)) {
     const a = ATTRIBUTES[k] || {};
@@ -10830,7 +10832,7 @@ function itemStatLine(item, opts) {
   const body = parts.join(' · ');
   const powHtml = itemPowerFront(item);   // glowing special power — leads the line
   const setTag = itemSetTag(item);        // set membership — trails the line
-  const lead = (item.slot && !(opts && opts.noPower)) ? `${PWR_GLYPH}${itemPower(item)}` : '';
+  const lead = (item.slot && !(opts && opts.noPower)) ? `${PWR_GLYPH}${abbreviateNumber(itemPower(item))}` : '';
   return [lead, powHtml, body].filter(Boolean).join(' · ') + setTag;
 }
 
@@ -10870,7 +10872,7 @@ function statDiffLine(item) {
     const c = d > 0 ? '#5ee08a' : '#e0556b';
     // The code is a hoverable chip so pointing at it reveals the full stat name.
     const chip = `<span class="stat-abbr" ${hoverTip(lootStatName(k))}>${lootStatCode(k)}</span>`;
-    (d > 0 ? pos : neg).push(`<span style="color:${c}">${d > 0 ? '+' : ''}${d} ${chip}</span>`);
+    (d > 0 ? pos : neg).push(`<span style="color:${c}">${d > 0 ? '+' : ''}${abbreviateNumbersIn(String(d))} ${chip}</span>`);
   }
   if (!pos.length && !neg.length) return '<span style="color:var(--junk)">no stat change</span>';
   const gains = pos.length ? `<span class="diff-gains">${pos.join('  ')}</span>` : '';
@@ -10918,7 +10920,7 @@ function renderShop() {
   // Pay-to-restock button — re-rolls the wares for gold (the stock otherwise
   // stays put when you close and reopen).
   const rcost = refreshShopCost();
-  const refreshBtn = `<button class="shop-refresh-btn" ${spendableGold() >= rcost ? '' : 'disabled'} onclick="refreshShop()">🔄 Restock — <span data-spr=ic_money></span>${rcost}</button>`;
+  const refreshBtn = `<button class="shop-refresh-btn" ${spendableGold() >= rcost ? '' : 'disabled'} onclick="refreshShop()">🔄 Restock — <span data-spr=ic_money></span>${fmtGold(rcost)}</button>`;
   if (merchant.stock.length === 0) {
     el.innerHTML = '<div class="shop-empty">Sold out! Pay to restock for fresh wares.</div>' + refreshBtn;
     return;
@@ -10938,7 +10940,7 @@ function renderShop() {
       const equippedHere = equipped[s.item.slot];
       const delta = equipUpgradeDelta(s.item);
       isUpgrade = delta > 0;
-      sub += ` <span class="item-power">${PWR_GLYPH}${ip}</span>`;
+      sub += ` <span class="item-power">${PWR_GLYPH}${abbreviateNumber(ip)}</span>`;
       if (equippedHere) sub += `  ${statDiffLine(s.item)}`;
     }
     const sicon = itemIcon(s.item);
@@ -10956,7 +10958,7 @@ function renderShop() {
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
         ${reqBadge}
       </div>
-      <button class="act-btn ${afford?'':'short'}" ${afford?'':'disabled'} onclick="buyItem(${i})"><span data-spr=ic_money></span>${price}</button>
+      <button class="act-btn ${afford?'':'short'}" ${afford?'':'disabled'} onclick="buyItem(${i})"><span data-spr=ic_money></span>${fmtGold(price)}</button>
     </div>`;
   }).join('') + '</div>' + refreshBtn;
 }
@@ -10979,14 +10981,14 @@ function renderShopSellHTML() {
   const bulkGold = unlocked.reduce((a, it) => a + Math.max(1, Math.round(it.value * 0.5)), 0);
   const scrapN = unlocked.filter(it => it.slot && TIERS[it.tier]).length;
   const bulk = `<div class="shop-sell-bulk">`
-    + `<button class="loot-bulk-btn" ${unlocked.length ? '' : 'disabled'} onclick="shopBulk('sell')"><span data-spr=ic_money></span> Sell all · <span data-spr=ic_money></span>${bulkGold}</button>`
+    + `<button class="loot-bulk-btn" ${unlocked.length ? '' : 'disabled'} onclick="shopBulk('sell')"><span data-spr=ic_money></span> Sell all · <span data-spr=ic_money></span>${fmtGold(bulkGold)}</button>`
     + (scrapN ? `<button class="loot-bulk-btn" onclick="shopBulk('scrap')"><span data-spr=mat_scrap></span> Scrap all · ${scrapN}</button>` : '')
     + `</div>`;
   const rows = inventory.map((it, i) => {
     const price = Math.max(1, Math.round(it.value * 0.5));
     const sub = it.slot ? SLOTS[it.slot].label : 'item';
     const locked = it.locked;
-    const sellBtn = locked ? '' : `<button class="shop-sell-btn" onclick="shopSell(${i})"><span data-spr=ic_money></span>${price}</button>`;
+    const sellBtn = locked ? '' : `<button class="shop-sell-btn" onclick="shopSell(${i})"><span data-spr=ic_money></span>${fmtGold(price)}</button>`;
     const scrapBtn = (!locked && it.slot && TIERS[it.tier])
       ? `<button class="shop-scrap-btn" title="Scrap" onclick="shopScrap(${i})"><span data-spr=mat_scrap></span></button>` : '';
     const lock = locked ? `<span class="shop-price short"><span data-spr=ic_key></span></span>` : '';
@@ -11068,7 +11070,7 @@ function renderMystic() {
       const label = DUR_LABEL[dur.floors] || (dur.floors + ' floors');
       return `<button class="pact-buy-btn" ${afford ? '' : 'disabled'} onclick="buyPact(${i}, ${dur.floors})">
         <span class="pact-floors">${label}</span>
-        <span class="pact-cost${afford ? '' : ' cost-short'}"><span data-spr=ic_money></span>${price.toLocaleString()}</span>
+        <span class="pact-cost${afford ? '' : ' cost-short'}"><span data-spr=ic_money></span>${fmtGold(price)}</span>
       </button>`;
     }).join('');
     return `<div class="pact-card" style="--accent:${accent};--accentSoft:${softOf(accent)}">
@@ -11501,7 +11503,7 @@ function renderMercCamp() {
       const label = dur.floors === 1 ? '1 floor' : `${dur.floors} floors`;
       return `<button class="pact-buy-btn" ${afford ? '' : 'disabled'} onclick="hireMerc('${t.id}', ${dur.floors})">
         <span class="pact-floors">${label}</span>
-        <span class="pact-cost${afford ? '' : ' cost-short'}"><span data-spr=ic_money></span>${cost.toLocaleString()}</span>
+        <span class="pact-cost${afford ? '' : ' cost-short'}"><span data-spr=ic_money></span>${fmtGold(cost)}</span>
       </button>`;
     }).join('');
     return `<div class="pact-card merc-card" style="--accent:${accent};--accentSoft:${hexA(accent, 0.14)}">
@@ -11526,7 +11528,7 @@ function hireMerc(id, floors) {
   spendGold(cost);
   player.merc = { kind: t.id, floors: dur.floors, mult: t.mult };
   sfx('buy');
-  log(`<span data-spr=a_shield></span> You hire a ${t.name} for <span data-spr=ic_money></span>${cost.toLocaleString()} — they'll join you for ${dur.floors} floor${dur.floors === 1 ? '' : 's'}.`, 'important');
+  log(`<span data-spr=a_shield></span> You hire a ${t.name} for <span data-spr=ic_money></span>${fmtGold(cost)} — they'll join you for ${dur.floors} floor${dur.floors === 1 ? '' : 's'}.`, 'important');
   updateBars(); renderMercCamp(); saveGame();
 }
 
@@ -11573,7 +11575,7 @@ function renderTransmuter() {
     html += `<div class="shop-row has-actions">
       <div class="shop-row-info">
         <div class="shop-row-name">${need}× <span style="color:${c}">${tier}</span> → 1× ${transmuteResultLabel(next)}</div>
-        <div class="shop-row-stats">${list.length} unlocked ${tier} ${list.length === 1 ? 'piece' : 'pieces'} · <span data-spr=ic_money></span>${cost} to fuse</div>
+        <div class="shop-row-stats">${list.length} unlocked ${tier} ${list.length === 1 ? 'piece' : 'pieces'} · <span data-spr=ic_money></span>${fmtGold(cost)} to fuse</div>
       </div>
       <button class="act-btn" onclick="transmuteSelectTier('${tier}')">CHOOSE</button>
     </div>`;
@@ -11601,7 +11603,7 @@ function renderTransmutePick(indices) {
       <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
       <div class="shop-row-info ${rarityClass(it)}">
         <div class="shop-row-name">${it.name}${craftedMark(it)}</div>
-        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${itemPower(it)}</span></div>
+        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${abbreviateNumber(itemPower(it))}</span></div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
       </div>
     </div>`;
@@ -11612,7 +11614,7 @@ function renderTransmutePick(indices) {
   const bar = `<div class="transmute-bar">
       <button class="modal-nav-btn" onclick="transmuteBack()">‹ Back</button>
       <span class="transmute-count ${ready ? 'ready' : ''}">${picked} / ${need} chosen</span>
-      <button class="act-btn ${ready && spendableGold() < cost ? 'short' : ''}" ${canFuse ? '' : 'disabled'} onclick="transmuteFuse()"><span data-spr=ic_money></span>${cost} · Fuse</button>
+      <button class="act-btn ${ready && spendableGold() < cost ? 'short' : ''}" ${canFuse ? '' : 'disabled'} onclick="transmuteFuse()"><span data-spr=ic_money></span>${fmtGold(cost)} · Fuse</button>
     </div>`;
   setTownContent(`${blurb}<div class="shop-grid">${rows}</div>${bar}`);
 }
@@ -11701,8 +11703,8 @@ function bountyPool() {
     { kind: 'boss',  title: 'Champion Hunter',   need: 4,                 snap: BK, desc: n => `Slay ${n} bosses`,         gold: R(2.4), mat: ['core', 3],     ilvl: depth + 4 },
     { kind: 'elite', title: 'Elite Contract',    need: 5,                 snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(1.5), mat: ['glimmer', 2],  ilvl: depth + 2 },
     { kind: 'elite', title: 'Bane of Champions', need: 10,                snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(2.3), mat: ['glimmer', 3],  ilvl: depth + 3 },
-    { kind: 'gold',  title: 'Treasure Hunter',   need: 400 + depth * 90,  snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${n} from foes`,  gold: R(1.2), mat: ['scrap', 10],   ilvl: depth + 1 },
-    { kind: 'gold',  title: "Dragon's Hoard",    need: 1200 + depth * 220,snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${n} from foes`,  gold: R(1.9), mat: ['core', 2],     ilvl: depth + 3 },
+    { kind: 'gold',  title: 'Treasure Hunter',   need: 400 + depth * 90,  snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  gold: R(1.2), mat: ['scrap', 10],   ilvl: depth + 1 },
+    { kind: 'gold',  title: "Dragon's Hoard",    need: 1200 + depth * 220,snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  gold: R(1.9), mat: ['core', 2],     ilvl: depth + 3 },
   ];
 }
 function rollBounties() {
@@ -11723,9 +11725,9 @@ function renderBounty() {
     const pct = Math.round(100 * prog / b.need);
     // For a "reach" bounty, spell out where the hero is standing right now.
     const cur = (b.kind === 'delve') ? `<br><span style="opacity:.85">You're currently on ${floorLabel(Math.max(1, dungeonLevel || player.maxFloor || 1))}.</span>` : '';
-    html += `<div class="town-blurb"><b>Active bounty:</b> ${b.desc.replace('{n}', b.need)}${cur}<br>
+    html += `<div class="town-blurb"><b>Active bounty:</b> ${b.desc.replace('{n}', abbreviateNumber(b.need))}${cur}<br>
       <div class="bar-track" style="margin:6px 0"><div class="bar-fill" style="width:${pct}%;background:${done ? 'var(--uncommon)' : 'var(--gold)'}"></div></div>
-      ${prog} / ${b.need} — reward: <b style="color:var(--gold)"><span data-spr=ic_money></span>${b.gold}</b> + ${b.mat[1]}<span data-spr=mat_${b.mat[0]}></span> + a piece of gear.</div>`;
+      ${abbreviateNumber(prog)} / ${abbreviateNumber(b.need)} — reward: <b style="color:var(--gold)"><span data-spr=ic_money></span>${fmtGold(b.gold)}</b> + ${b.mat[1]}<span data-spr=mat_${b.mat[0]}></span> + a piece of gear.</div>`;
     html += `<div class="town-menu" style="gap:8px">
       <button class="act-btn" ${done ? '' : 'disabled'} style="width:100%;padding:10px" onclick="claimBounty()">${done ? '✅ Claim reward' : 'In progress…'}</button>
       <button class="slotpick-cancel" style="width:100%" onclick="abandonBounty()">Abandon bounty</button></div>`;
@@ -11738,7 +11740,7 @@ function renderBounty() {
     return `<div class="shop-row has-actions no-icon">
       <div class="shop-row-info">
         <div class="shop-row-name">${o.title}</div>
-        <div class="shop-row-stats">${o.desc(o.need)} · <span data-spr=ic_money></span>${o.gold} + ${o.mat[1]}<span data-spr=mat_${o.mat[0]}></span> + gear</div>
+        <div class="shop-row-stats">${o.desc(o.need)} · <span data-spr=ic_money></span>${fmtGold(o.gold)} + ${o.mat[1]}<span data-spr=mat_${o.mat[0]}></span> + gear</div>
       </div>
       <button class="act-btn" onclick="acceptBounty(${i})">ACCEPT</button>
     </div>`;
@@ -12220,7 +12222,7 @@ function renderCookingHTML() {
           <span class="ing-name">${INGREDIENTS[k].name}</span>
           <span class="ing-fx">${fxDesc(INGREDIENTS[k].fx)}</span>
         </span>
-        <span class="ing-have">×${avail}</span>
+        <span class="ing-have">×${abbreviateNumber(avail)}</span>
       </button>`;
     }).join('') + `</div>`;
   }
@@ -12511,7 +12513,7 @@ function renderForge() {
     // confirmation you can wield what you're about to pay for.
     const forgeReqLine = !fStatus ? ''
       : equipReqBadge(preview)
-        || `<div class="shop-row-sub" style="color:var(--green-450)">Meets equip requirement · ${fStatus.need} ${ATTRIBUTES[fStatus.attr].short} (you have ${fStatus.have})</div>`;
+        || `<div class="shop-row-sub" style="color:var(--green-450)">Meets equip requirement · ${abbreviateNumber(fStatus.need)} ${ATTRIBUTES[fStatus.attr].short} (you have ${abbreviateNumber(fStatus.have)})</div>`;
 
     readySection = `
     ${baseHint}
@@ -12770,9 +12772,9 @@ function renderHealer() {
       <span class="loot-icon"><span data-spr=ic_heart></span></span>
       <div class="shop-row-info"><div class="shop-row-name">Full Rest &amp; Cure</div>
         <div class="shop-row-sub">Restore all HP/MP and clear poison &amp; curses</div></div>
-      <button class="act-btn ${afford ? '' : 'short'}" ${(full || !afford) ? 'disabled' : ''} onclick="restHeal()">${full ? 'Rested' : '<span data-spr=ic_money></span>' + cost}</button>
+      <button class="act-btn ${afford ? '' : 'short'}" ${(full || !afford) ? 'disabled' : ''} onclick="restHeal()">${full ? 'Rested' : '<span data-spr=ic_money></span>' + fmtGold(cost)}</button>
     </div>
-    ${(!full && !afford) ? `<div class="town-blurb" style="color:var(--hp)">You can't cover the <span data-spr=ic_money></span>${cost} fee — earn more gold first.</div>` : ''}
+    ${(!full && !afford) ? `<div class="town-blurb" style="color:var(--hp)">You can't cover the <span data-spr=ic_money></span>${fmtGold(cost)} fee — earn more gold first.</div>` : ''}
     ${potionUpgradeHTML()}`);
 }
 function restHeal() {
@@ -12817,13 +12819,13 @@ function potionUpgradeHTML() {
       <span class="loot-icon"><span data-spr=ic_heart></span></span>
       <div class="shop-row-info"><div class="shop-row-name">Potion Potency · Lv ${pLvl}/${POTION_POWER_MAX}</div>
         <div class="shop-row-sub">${pMax ? `Each sip restores ${pctNow}% of max HP/MP.` : `Restores ${pctNow}% → <b style="color:var(--gold)">${pctNext}%</b> of max HP/MP per sip.`}</div></div>
-      ${pMax ? `<button class="act-btn is-active" disabled>MAX</button>` : `<button class="act-btn ${pAfford ? '' : 'short'}" ${pAfford ? '' : 'disabled'} onclick="upgradePotion('power')"><span data-spr=ic_money></span>${pCost}</button>`}
+      ${pMax ? `<button class="act-btn is-active" disabled>MAX</button>` : `<button class="act-btn ${pAfford ? '' : 'short'}" ${pAfford ? '' : 'disabled'} onclick="upgradePotion('power')"><span data-spr=ic_money></span>${fmtGold(pCost)}</button>`}
     </div>
     <div class="shop-row has-actions ${(cMax || cAfford) ? '' : 'cant-afford'}">
       <span class="loot-icon"><span data-spr=ui_mp></span></span>
       <div class="shop-row-info"><div class="shop-row-name">Potion Recharge · Lv ${cLvl}/${POTION_CD_MAX}</div>
         <div class="shop-row-sub">${cMax ? `Potions recharge in ${cdNow}s.` : `Recharge ${cdNow}s → <b style="color:var(--gold)">${cdNext}s</b> between sips.`}</div></div>
-      ${cMax ? `<button class="act-btn is-active" disabled>MAX</button>` : `<button class="act-btn ${cAfford ? '' : 'short'}" ${cAfford ? '' : 'disabled'} onclick="upgradePotion('cd')"><span data-spr=ic_money></span>${cCost}</button>`}
+      ${cMax ? `<button class="act-btn is-active" disabled>MAX</button>` : `<button class="act-btn ${cAfford ? '' : 'short'}" ${cAfford ? '' : 'disabled'} onclick="upgradePotion('cd')"><span data-spr=ic_money></span>${fmtGold(cCost)}</button>`}
     </div>`;
 }
 function upgradePotion(kind) {
@@ -12873,8 +12875,8 @@ function renderStash() {
     <div class="shop-row">
       <span class="loot-icon"><span data-spr=ic_coffer></span></span>
       <div class="shop-row-info">
-        <div class="shop-row-name">Stashed gold: <span style="color:var(--gold)"><span data-spr=ic_money></span>${g}</span></div>
-        <div class="shop-row-sub">Carried: <span data-spr=ic_money></span>${player.gold}</div>
+        <div class="shop-row-name">Stashed gold: <span style="color:var(--gold)"><span data-spr=ic_money></span>${fmtGold(g)}</span></div>
+        <div class="shop-row-sub">Carried: <span data-spr=ic_money></span>${fmtGold(player.gold)}</div>
       </div>
     </div>
     <div class="stash-gold-bar">
@@ -12986,7 +12988,7 @@ function renderTrainer() {
   const spent = spentAttrPoints();
   const cost = respecCost();
   const rows = ATTR_KEYS.map(k => `<div class="shop-row">
-      <div class="shop-row-info"><div class="shop-row-name">${attrLabelIcon(k)}: ${a[k] || 0}</div>
+      <div class="shop-row-info"><div class="shop-row-name">${attrLabelIcon(k)}: ${abbreviateNumber(a[k] || 0)}</div>
       <div class="shop-row-sub">${ATTRIBUTES[k].desc}</div></div></div>`).join('');
   setTownContent(`
     <div class="town-blurb">The trainer can unlearn your attributes, returning all ${spent} spent point${spent === 1 ? '' : 's'} to spend anew (you have ${player.attrPoints || 0} unspent).</div>
@@ -12995,17 +12997,17 @@ function renderTrainer() {
       <span class="loot-icon"></span>
       <div class="shop-row-info"><div class="shop-row-name">Respec Attributes</div>
         <div class="shop-row-sub">Refund every point spent above the base ${ATTR_BASE}</div></div>
-      <button class="act-btn ${spendableGold() >= cost ? '' : 'short'}" ${(spendableGold() >= cost && spent > 0) ? '' : 'disabled'} onclick="respecAttrs()"><span data-spr=ic_money></span>${cost}</button>
+      <button class="act-btn ${spendableGold() >= cost ? '' : 'short'}" ${(spendableGold() >= cost && spent > 0) ? '' : 'disabled'} onclick="respecAttrs()"><span data-spr=ic_money></span>${fmtGold(cost)}</button>
     </div>
     <div class="shop-row has-actions ${spendableGold() >= skillRespecCost() ? '' : 'cant-afford'}">
       <span class="loot-icon"><span data-spr=mat_glimmer></span></span>
       <div class="shop-row-info"><div class="shop-row-name">Forget Skills</div>
         <div class="shop-row-sub">Refund all ${spentAllSkillPoints()} spent point${spentAllSkillPoints() === 1 ? '' : 's'} (skill &amp; ascendancy) to spend anew</div></div>
-      <button class="act-btn ${spendableGold() >= skillRespecCost() ? '' : 'short'}" ${(spendableGold() >= skillRespecCost() && spentAllSkillPoints() > 0) ? '' : 'disabled'} onclick="respecSkills()"><span data-spr=ic_money></span>${skillRespecCost()}</button>
+      <button class="act-btn ${spendableGold() >= skillRespecCost() ? '' : 'short'}" ${(spendableGold() >= skillRespecCost() && spentAllSkillPoints() > 0) ? '' : 'disabled'} onclick="respecSkills()"><span data-spr=ic_money></span>${fmtGold(skillRespecCost())}</button>
     </div>
     ${trainerSlotRespecRow()}
     ${trainerAscensionBlock()}
-    <div class="town-blurb" style="margin-top:10px">Retrain into a different class for <span data-spr=ic_money></span>${classChangeCost()}. Your attributes are kept; if your new class can't wield your weapon, it goes back in your bag.</div>
+    <div class="town-blurb" style="margin-top:10px">Retrain into a different class for <span data-spr=ic_money></span>${fmtGold(classChangeCost())}. Your attributes are kept; if your new class can't wield your weapon, it goes back in your bag.</div>
     ${CLASS_KEYS.map(k => {
       const c = CLASSES[k];
       const cur = player.class === k;
@@ -13014,7 +13016,7 @@ function renderTrainer() {
       const cantAfford = !cur && spendableGold() < ccost;
       const btn = cur
         ? `<button class="act-btn is-active" disabled>★ active</button>`
-        : `<button class="act-btn ${cantAfford ? 'short' : ''}" ${cantAfford ? 'disabled' : ''} onclick="changeClass('${k}')"><span data-spr=ic_money></span>${ccost}</button>`;
+        : `<button class="act-btn ${cantAfford ? 'short' : ''}" ${cantAfford ? 'disabled' : ''} onclick="changeClass('${k}')"><span data-spr=ic_money></span>${fmtGold(ccost)}</button>`;
       return `<div class="shop-row has-actions ${cantAfford ? 'cant-afford' : ''}">
         <span class="loot-icon">${dlIcon(c.icon, 26)}</span>
         <div class="shop-row-info"><div class="shop-row-name" style="color:${c.color}">${c.name}${cur ? ' (current)' : ''}</div>
@@ -13035,7 +13037,7 @@ function trainerSlotRespecRow() {
       <span class="loot-icon"><span data-spr=q_relic></span></span>
       <div class="shop-row-info"><div class="shop-row-name">Reset Gear-Slot Investments</div>
         <div class="shop-row-sub">Free all ${invested} Boss Point${invested === 1 ? '' : 's'} (both sets) to reassign — every slot returns to Lv&nbsp;0</div></div>
-      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="respecSlots()"><span data-spr=ic_money></span>${cost}</button>
+      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="respecSlots()"><span data-spr=ic_money></span>${fmtGold(cost)}</button>
     </div>`;
 }
 // The FIRST ascension is free — it is earned by reaching the level gate, never
@@ -13064,7 +13066,7 @@ function trainerAscensionBlock() {
     let btn;
     if (cur) btn = `<button class="act-btn is-active" disabled>★ active</button>`;
     else if (!ready) btn = `<button class="act-btn" disabled><span data-spr=feat_door></span></button>`;
-    else btn = `<button class="act-btn ${goldShort ? 'short' : ''}" ${can ? '' : 'disabled'} onclick="ascend('${k}')">${cost ? '<span data-spr=ic_money></span>' + cost : 'Free'}</button>`;
+    else btn = `<button class="act-btn ${goldShort ? 'short' : ''}" ${can ? '' : 'disabled'} onclick="ascend('${k}')">${cost ? '<span data-spr=ic_money></span>' + fmtGold(cost) : 'Free'}</button>`;
     return `<div class="shop-row has-actions ${goldShort ? 'cant-afford' : ''}">
       <span class="loot-icon">${dlIcon(a.icon, 24) || ''}</span>
       <div class="shop-row-info"><div class="shop-row-name" style="color:${a.color}">${a.name}${cur ? ' (current)' : ''}</div>
@@ -13180,11 +13182,11 @@ function rerollValueCost(item) { return calcRerollValueCost(enchItemArgs(item));
 // level & rarity, so the UI can show the value band a reroll would land in.
 function statRangeLabel(item, stat) {
   const r = affixStatRange(stat, item.ilvl, tierMult(item.tier));
-  return r.min === r.max ? `${r.min}` : `${r.min}–${r.max}`;
+  return formatDamageRange(r.min, r.max);
 }
 function attrRangeLabel(item) {
   const r = affixAttrRange(item.ilvl, tierMult(item.tier));
-  return r.min === r.max ? `${r.min}` : `${r.min}–${r.max}`;
+  return formatDamageRange(r.min, r.max);
 }
 // Other property TYPES this slot could roll into (the pool minus what's present,
 // minus the property itself) — what a TYPE reroll might swap a property for.
@@ -13463,7 +13465,7 @@ function renderEnchanter() {
       <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
       <div class="shop-row-info ${rarityClass(it)}">
         <div class="shop-row-name">${it.name}${craftedMark(it)}</div>
-        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${itemPower(it)}</span></div>
+        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${abbreviateNumber(itemPower(it))}</span></div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
         ${reqBadge}
       </div>
@@ -13506,7 +13508,7 @@ function renderEnchantItem(item) {
   // says WHY (headline vs the permanent curse).
   const lockRows = locked.filter(k => k in item.stats).map(k => {
     const v = item.stats[k];
-    const valStr = (typeof v === 'string') ? v : (v < 0 ? '' : '+') + v;
+    const valStr = (typeof v === 'string') ? abbreviateNumbersIn(v) : (v < 0 ? '' : '+') + abbreviateNumbersIn(String(v));
     const curse = item.cursed && !head.includes(k);
     const style = curse ? 'opacity:0.85;color:var(--danger)' : 'opacity:0.6';
     const tag = curse ? '(cursed)' : '(headline)';
@@ -13525,12 +13527,12 @@ function renderEnchantItem(item) {
     const esc = s => s.replace(/"/g, '&quot;');
     const valTip = esc(fixed
       ? `<div class="ht-name">Reroll Value</div><div class="ht-line">${labelTag} has a fixed value (${rangeStr}) at this item level — nothing to reroll.</div>`
-      : `<div class="ht-name">Reroll Value</div><div class="ht-line">Keeps ${labelTag}, rolls a new number.</div><div class="ht-sub">Lands ${rangeStr} at ilvl ${item.ilvl} (now ${curVal < 0 ? '' : '+'}${curVal}).</div>`);
+      : `<div class="ht-name">Reroll Value</div><div class="ht-line">Keeps ${labelTag}, rolls a new number.</div><div class="ht-sub">Lands ${rangeStr} at ilvl ${item.ilvl} (now ${curVal < 0 ? '' : '+'}${abbreviateNumbersIn(String(curVal))}).</div>`);
     const typeTip = esc(swaps.length
       ? `<div class="ht-name">Reroll Modifier</div><div class="ht-line">Swaps ${labelTag} for a random other modifier this slot can hold:</div><div class="ht-sub">${swaps.join(', ')}</div>`
       : `<div class="ht-name">Reroll Modifier</div><div class="ht-line">No other modifier is available — every type this slot can roll is already present.</div>`);
     return `<div class="shop-row has-actions"><div class="shop-row-info">
-        <div class="shop-row-name" style="${color}">${curVal < 0 ? '' : '+'}${curVal} <span class="stat-abbr" ${hoverTip(statMeaningTip(kind, key))}>${label}</span></div>
+        <div class="shop-row-name" style="${color}">${curVal < 0 ? '' : '+'}${abbreviateNumbersIn(String(curVal))} <span class="stat-abbr" ${hoverTip(statMeaningTip(kind, key))}>${label}</span></div>
         <div class="shop-row-sub">rolls ${rangeStr} at ilvl ${item.ilvl}</div></div>
       <div class="row-actions">
       <span class="ench-tipwrap" data-tip="${valTip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><button class="act-btn sm" ${canVal?'':'disabled'} onclick="enchantRerollValue(${item.id},'${kind}','${key}')">Value ${costLabelHi(valCost)}</button></span>
@@ -13601,7 +13603,7 @@ function renderFixedEnchantItem(item) {
   const line = (k, valStr, tag, danger) =>
     `<div class="hc-line" style="opacity:0.85${danger ? ';color:var(--danger)' : ''}"><span data-spr=feat_door></span> ${valStr} <span class="stat-abbr" ${hoverTip(statMeaningTip('stat', k))}>${STAT_LABELS[k] || k}</span> <span style="font-size:1.2rem">${tag}</span></div>`;
   const statRows = Object.entries(item.stats).map(([k, v]) => {
-    const valStr = (typeof v === 'string') ? v : (v < 0 ? '' : '+') + v;
+    const valStr = (typeof v === 'string') ? abbreviateNumbersIn(v) : (v < 0 ? '' : '+') + abbreviateNumbersIn(String(v));
     let tag, danger = false;
     if (head.includes(k)) tag = cursed ? '(headline)' : '(native)';
     else if (cursed) { danger = penaltyStats.includes(k); tag = danger ? '(cursed)' : '(locked)'; }
@@ -13609,7 +13611,7 @@ function renderFixedEnchantItem(item) {
     return line(k, valStr, tag, danger);
   }).join('');
   const attrRows = Object.entries(item.attrs || {}).map(([k, v]) =>
-    `<div class="hc-line" style="opacity:0.85;color:var(--gold)"><span data-spr=feat_door></span> +${v} <span class="stat-abbr" ${hoverTip(statMeaningTip('attr', k))}>${(ATTRIBUTES[k] || {}).label || k}</span> <span style="font-size:1.2rem">${cursed ? '(locked)' : '(fixed)'}</span></div>`).join('');
+    `<div class="hc-line" style="opacity:0.85;color:var(--gold)"><span data-spr=feat_door></span> +${abbreviateNumber(v)} <span class="stat-abbr" ${hoverTip(statMeaningTip('attr', k))}>${(ATTRIBUTES[k] || {}).label || k}</span> <span style="font-size:1.2rem">${cursed ? '(locked)' : '(fixed)'}</span></div>`).join('');
   const powHtml = itemPowerFront(item);
   const powLine = powHtml ? `<div class="hc-line" style="opacity:0.9">${powHtml}</div>` : '';
   // Set pieces are fixed artifacts too — label them as a set piece (with the set
@@ -13837,7 +13839,7 @@ function renderGambler() {
     const it = gambleLast.item;
     const above = (it.ilvl > d) ? ' <span style="color:var(--gold-350)">(above your depth!)</span>' : '';
     const reqBadge = equipReqBadge(it);
-    resultRow = `<div class="town-blurb" style="margin-top:10px">Your last wager (<span data-spr=ic_money></span>${gambleLast.cost}) turned up:</div>
+    resultRow = `<div class="town-blurb" style="margin-top:10px">Your last wager (<span data-spr=ic_money></span>${fmtGold(gambleLast.cost)}) turned up:</div>
       <div class="shop-row ${reqBadge?'cant-equip':''}">
         <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
         <div class="shop-row-info ${rarityClass(it)}">
@@ -13855,7 +13857,7 @@ function renderGambler() {
       <span class="loot-icon">🎲</span>
       <div class="shop-row-info"><div class="shop-row-name">${rollLabel}</div>
         <div class="shop-row-sub">${rollSub}</div></div>
-      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="gambleRoll()"><span data-spr=ic_money></span>${cost}</button>
+      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="gambleRoll()"><span data-spr=ic_money></span>${fmtGold(cost)}</button>
     </div>
     ${resultRow}`);
 }
@@ -22871,9 +22873,9 @@ function deathSummaryLines() {
   const totals = {};
   for (const d of dmgTaken) { const k = totals[d.label] || (totals[d.label] = { amount: 0, hits: 0 }); k.amount += d.amount; k.hits++; }
   const ranked = Object.keys(totals).map(l => ({ label: l, amount: totals[l].amount, hits: totals[l].hits })).sort((a, b) => b.amount - a.amount);
-  const lines = ['<span data-spr=ic_cursed></span> Killed by <b>' + killer.label + '</b> &mdash; ' + killer.amount + ' dmg'];
+  const lines = ['<span data-spr=ic_cursed></span> Killed by <b>' + killer.label + '</b> &mdash; ' + abbreviateNumber(killer.amount) + ' dmg'];
   const top = ranked.slice(0, 4);
-  for (const r of top) lines.push(r.label + ': ' + r.amount + ' over ' + r.hits + ' hit' + (r.hits === 1 ? '' : 's'));
+  for (const r of top) lines.push(r.label + ': ' + abbreviateNumber(r.amount) + ' over ' + r.hits + ' hit' + (r.hits === 1 ? '' : 's'));
   if (ranked.length > top.length) lines.push('&hellip;and ' + (ranked.length - top.length) + ' more');
   return lines;
 }
@@ -22975,7 +22977,7 @@ function showDeathScreen(lostGold, lostXp, lostBag, graveFloor) {
   const el = document.getElementById('death-penalties');
   if (el) {
     const lines = [
-      `<span data-spr=ic_money></span> Lost <span data-spr=ic_money></span>${lostGold}${lostXp ? ` & ${lostXp} XP` : ''} — gear kept`,
+      `<span data-spr=ic_money></span> Lost <span data-spr=ic_money></span>${fmtGold(lostGold)}${lostXp ? ` & ${abbreviateNumber(lostXp)} XP` : ''} — gear kept`,
       (lostBag && graveFloor) ? `<span data-spr=feat_grave></span> Bag (${lostBag} item${lostBag === 1 ? '' : 's'}) dropped on ${floorLabel(graveFloor)} — go reclaim it` : null,
     ].filter(Boolean);
     el.innerHTML = lines.map(t => `<div class="death-pen">${t}</div>`).join('');
@@ -23375,7 +23377,7 @@ function renderStaminaBar() {
   if (w !== _stamW) { _stamW = w; bar.style.width = w; }
   const txt = hudEl('stam-text');
   if (txt) {
-    const label = `${Math.round(st)}/${mx}`;
+    const label = `${abbreviateNumber(st)}/${abbreviateNumber(mx)}`;
     if (label !== _stamTxt) { _stamTxt = label; txt.textContent = label; }
   }
   // Mirror onto the desktop bottom-HUD endurance bar — a centred fill that shrinks
@@ -23509,7 +23511,7 @@ function buffChipHTML(id, remaining, unit, mag) {
   if (mag != null) {
     // shield/regen/thorns carry a flat magnitude; the rest are a percentage.
     const flat = (id === 'shield' || id === 'regen' || id === 'thorns');
-    magLine = `<div class='ht-line'>${flat ? '+' + Math.round(mag) : '+' + Math.round(mag * 100) + '%'}</div>`;
+    magLine = `<div class='ht-line'>${flat ? '+' + abbreviateNumber(mag) : '+' + Math.round(mag * 100) + '%'}</div>`;
   }
   const left = `${remaining} ${unit}${remaining === 1 ? '' : 's'} left.`;
   const color = m.kind === 'debuff' ? '#ff9a9a' : '#9fe6a0';
@@ -23583,16 +23585,16 @@ function updateBars() {
   const hpBar = document.getElementById('hp-bar');
   // The HP/MP fill widths are eased every frame in updateVitalFills() so over-time
   // recovery climbs smoothly; here we only refresh the readouts and danger pulse.
-  document.getElementById('hp-text').textContent = `${player.hp}/${player.maxHp}`;
+  document.getElementById('hp-text').textContent = `${abbreviateNumber(player.hp)}/${abbreviateNumber(player.maxHp)}`;
   // Spirit Veil readout: its own number next to HP so both pools are legible (blue).
   const shieldNow = (player.maxShield > 0 && player.shield >= 1) ? Math.round(player.shield) : 0;
   const shTxt = document.getElementById('hp-shield-text');
-  if (shTxt) shTxt.textContent = shieldNow ? `+${shieldNow}` : '';
+  if (shTxt) shTxt.textContent = shieldNow ? `+${abbreviateNumber(shieldNow)}` : '';
   // Pulse the HP bar red when health drops to a dangerous level (≤25%, but not dead).
   const hpLow = player.hp > 0 && player.hp / player.maxHp <= 0.25;
   hpBar.classList.toggle('hp-low', hpLow);
   if (hpBar.parentElement) hpBar.parentElement.classList.toggle('hp-low-track', hpLow);
-  document.getElementById('mp-text').textContent = `${player.mp}/${player.maxMp}`;
+  document.getElementById('mp-text').textContent = `${abbreviateNumber(player.mp)}/${abbreviateNumber(player.maxMp)}`;
   // Computed once, then reused by both the mobile header and the desktop
   // bottom-HUD mirror below (each used to be computed twice per call, and
   // playerPower() walks all gear + skills every time).
@@ -23616,8 +23618,8 @@ function updateBars() {
     const dhHp = document.getElementById('dh-hp-fill');
     if (dhHp) dhHp.classList.toggle('hp-low', hpLow);
     const dhHpVal = document.getElementById('dh-hp-val');
-    if (dhHpVal) dhHpVal.innerHTML = `${player.hp}/${player.maxHp}` + (shieldNow ? ` <span class="dh-shield-val">+${shieldNow}</span>` : '');
-    dset('dh-mp-val', `${player.mp}/${player.maxMp}`);
+    if (dhHpVal) dhHpVal.innerHTML = `${abbreviateNumber(player.hp)}/${abbreviateNumber(player.maxHp)}` + (shieldNow ? ` <span class="dh-shield-val">+${abbreviateNumber(shieldNow)}</span>` : '');
+    dset('dh-mp-val', `${abbreviateNumber(player.mp)}/${abbreviateNumber(player.maxMp)}`);
     setPending('dh-hp-pending', player.hp, player.maxHp, pendHeal);
     setPending('dh-mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
     const dhXp = document.getElementById('dh-xp-fill');
@@ -23663,7 +23665,7 @@ function updateBars() {
     const doorHtml = dlIcon('feat_door', 14);
     if (doorHtml !== _clearStatusHtml) { _clearStatusHtml = doorHtml; clearEl.innerHTML = doorHtml; }
   }
-  setText('power-num', power);
+  setText('power-num', abbreviateNumber(power));
 
   // Desktop map-corner readout mirrors the floor + foe count (mobile keeps
   // these in the header). No lock icon: the foes pill simply hides once the
@@ -23982,7 +23984,7 @@ function bagActionsHTML(item, i) {
     return `<div class="loot-actions"><span class="la-note"><span data-spr=ic_key></span> Locked</span>${lockBtn}</div>`;
   }
   const sellPrice = Math.max(1, Math.round(item.value * 0.5));
-  const sellBtn = `<button class="row-btn la-btn" onclick="sellFromBag(${i})"><span data-spr=ic_money></span> Sell · <span data-spr=ic_money></span>${sellPrice}</button>`;
+  const sellBtn = `<button class="row-btn la-btn" onclick="sellFromBag(${i})"><span data-spr=ic_money></span> Sell · <span data-spr=ic_money></span>${fmtGold(sellPrice)}</button>`;
   // Compact yield hint: lead with the Scrap icon, then just the icons of any
   // rarer mats this piece adds — no number ranges, so it never wraps.
   const extraMats = salvageRanges(item).filter(r => r.key !== 'scrap')
@@ -24104,7 +24106,7 @@ function renderPanel() {
     rows.sort(lootRowCompare);
     const mMoney = '<span data-spr=ic_money></span>', mScrap = '<span data-spr=mat_scrap></span>';
     const bulkBar = bulkN ? `<div class="loot-bulk-bar">
-      <button class="loot-bulk-btn" onclick="bagBulk('sell')">${mMoney} Sell all · <span data-spr=ic_money></span>${bulkGold}</button>
+      <button class="loot-bulk-btn" onclick="bagBulk('sell')">${mMoney} Sell all · <span data-spr=ic_money></span>${fmtGold(bulkGold)}</button>
       ${bulkScrapN ? `<button class="loot-bulk-btn" onclick="bagBulk('scrap')">${mScrap} Scrap all · ${bulkScrapN}</button>` : ''}
     </div>` : '';
     // Auto-Loot entry point — lives here on the LOOT tab (not in settings) since it
@@ -24132,7 +24134,7 @@ function renderPanel() {
       const equippedHere = equipable ? equipped[item.slot] : null;
       const delta = equipable ? equipUpgradeDelta(item) : 0;
       const isUpgrade = equipable && delta > 0;
-      const pwr = equipable ? `<span class="item-power">${PWR_GLYPH}${ip}</span>` : '';
+      const pwr = equipable ? `<span class="item-power">${PWR_GLYPH}${abbreviateNumber(ip)}</span>` : '';
       const diff = equipable ? `<div class="item-diff">${statDiffLine(item)}</div>` : '';
       const lockBtn = `<button class="row-btn lock-toggle-btn ${item.locked?'on':''}" onclick="toggleLock(${i})" ${hoverTip(item.locked
         ? `<div class='ht-name'><span data-spr=feat_door></span> Locked</div><div class='ht-line'>Safe from selling, scrapping &amp; auto-loot. Tap to unlock.</div>`
@@ -24187,18 +24189,18 @@ const HERO_EXT_STATS = [
 function heroStatData() {
   const uiFoe = { level: curDepth() };
   const v = (label, val) => ({ label, val: String(val) });
-  const rtg = (label, r, c) => v(label, `${Math.round(r)} <span style="opacity:0.6">→ ${Math.round(c * 100)}%</span>`);
+  const rtg = (label, r, c) => v(label, `${abbreviateNumber(r)} <span style="opacity:0.6">→ ${Math.round(c * 100)}%</span>`);
   const main = [];
-  main.push(v('Attack power', Math.round(totalStat('ATK') + attrDamage())));
+  main.push(v('Attack power', abbreviateNumber(totalStat('ATK') + attrDamage())));
   main.push(v('Attack speed', '+' + Math.round(playerAttackSpeedPct()) + '% <span style="opacity:0.6">→ ' + (1 / playerAttackInterval()).toFixed(2) + '/s</span>'));
   main.push(v('Move speed', '+' + Math.round(((1 + totalStat('MOVESPD') / 100) * agiMoveMult() - 1) * 100) + '%'));
-  if (totalStat('CDR') > 0) main.push(v('Cooldown reduction', `${Math.round(totalStat('CDR'))} <span style="opacity:0.6">→ ${Math.round(cooldownReductionFrac() * 100)}%</span>`));
-  if (totalStat('DBLSTRIKE') > 0) main.push(v('Double strike', `${Math.round(totalStat('DBLSTRIKE'))} <span style="opacity:0.6">→ ${Math.round(rated(totalStat('DBLSTRIKE'), DBLSTRIKE_SCALE) * 100)}%</span>`));
-  main.push(v('Max Stamina', Math.round(player.maxStamina || baseMaxStamina())));
+  if (totalStat('CDR') > 0) main.push(v('Cooldown reduction', `${abbreviateNumber(totalStat('CDR'))} <span style="opacity:0.6">→ ${Math.round(cooldownReductionFrac() * 100)}%</span>`));
+  if (totalStat('DBLSTRIKE') > 0) main.push(v('Double strike', `${abbreviateNumber(totalStat('DBLSTRIKE'))} <span style="opacity:0.6">→ ${Math.round(rated(totalStat('DBLSTRIKE'), DBLSTRIKE_SCALE) * 100)}%</span>`));
+  main.push(v('Max Stamina', abbreviateNumber(player.maxStamina || baseMaxStamina())));
   main.push(v('Stamina regen', '+' + (Math.round(staminaRegenPerSec() * 10) / 10) + '/s'));
-  main.push(v('Defense', Math.round(playerDefense())));
-  main.push(v('Max HP', player.maxHp));
-  main.push(v('Max MP', player.maxMp));
+  main.push(v('Defense', abbreviateNumber(playerDefense())));
+  main.push(v('Max HP', abbreviateNumber(player.maxHp)));
+  main.push(v('Max MP', abbreviateNumber(player.maxMp)));
   main.push(v('HP regen', '+' + (Math.round(hpRegenPerSec() * 100) / 100) + '/s'));
   main.push(v('MP regen', '+' + (Math.round(mpRegenPerSec() * 100) / 100) + '/s'));
   main.push(rtg('Accuracy', playerAccuracyRating(), hitChanceVs(uiFoe)));
@@ -24210,7 +24212,7 @@ function heroStatData() {
   if (playerTenacity() > 0) main.push(v('Tenacity', '−' + Math.round(playerTenacity() * 100) + '% stun/slow'));
   const gear = HERO_EXT_STATS.map(([k, sp, name]) => {
     const t = totalStat(k);
-    return t ? v(name, '+' + t + (PCT_STATS.has(k) ? '%' : '')) : null;
+    return t ? v(name, '+' + abbreviateNumbersIn(String(t)) + (PCT_STATS.has(k) ? '%' : '')) : null;
   }).filter(Boolean);
   return {
     note: `Dodge · hit · crit · block are <b>ratings</b>, shown as the % they yield vs your current floor (${floorLabel(curDepth())}). Deeper floors need more rating for the same %.`,
@@ -24234,13 +24236,13 @@ function renderHero(el) {
     const own = player.attributes?.[key] || 0;
     const gear = totalAttr(key) - own;
     const tag = key === dmgAttr ? ' <span style="color:var(--gold-350)">★dmg</span>' : '';
-    const gearStr = gear ? ` <span style="color:var(--green-400)">+${gear}</span>` : '';
+    const gearStr = gear ? ` <span style="color:var(--green-400)">+${abbreviateNumber(gear)}</span>` : '';
     return `<div class="attr-row">
       <div class="attr-info">
         <div class="attr-name">${at.label}${tag}</div>
         <div class="attr-desc">${at.desc}</div>
       </div>
-      <span class="attr-val">${own}${gearStr}</span>
+      <span class="attr-val">${abbreviateNumber(own)}${gearStr}</span>
       <button class="attr-plus" ${pts > 0 ? '' : 'disabled'} onclick="spendAttr('${key}', event)">+</button>
     </div>`;
   }).join('');
@@ -24277,9 +24279,9 @@ function renderHero(el) {
     <div class="hero-nameplate">${escapeHtml(player.name || 'Adventurer')}</div>
     <div class="hero-power">
       <div class="hp-label">${PWR_GLYPH} POWER</div>
-      <div class="hp-value">${playerPower()}</div>
+      <div class="hp-value">${abbreviateNumber(playerPower())}</div>
     </div>
-    <div class="hero-sub">Level ${player.level} · ${gearPower} from gear</div>
+    <div class="hero-sub">Level ${player.level} · ${abbreviateNumber(gearPower)} from gear</div>
     ${classBlock}
     <div class="hero-points">${pts > 0 ? `${pts} point${pts>1?'s':''} to spend!` : 'No points to spend — level up for more.'}</div>
     ${rows}
@@ -24560,7 +24562,7 @@ function renderSkills(el) {
       const rBlock = refundBlockedBy(sn);
       const rCost = skillRefundCost();
       if (rBlock) refundBtn = `<button class="pop-refund" disabled>↩️ Refund locked — ${rBlock} needs it</button>`;
-      else { const aff = canAfford(rCost); refundBtn = `<button class="pop-refund${aff ? '' : ' short'}" ${aff ? '' : 'disabled'} onclick="refundSkill('${sn.id}')">↩️ Refund 1 pt — <span data-spr=ic_money></span>${rCost.gold}</button>`; }
+      else { const aff = canAfford(rCost); refundBtn = `<button class="pop-refund${aff ? '' : ' short'}" ${aff ? '' : 'disabled'} onclick="refundSkill('${sn.id}')">↩️ Refund 1 pt — <span data-spr=ic_money></span>${fmtGold(rCost.gold)}</button>`; }
     }
     // Owned actives can be slotted onto / pulled off the hotkey bar straight from
     // the popover (the quick path alongside dragging the node onto a tray slot).
@@ -24837,7 +24839,7 @@ function skillMechList(n, rank) {
     if (Array.isArray(c.buff)) for (const b of c.buff) add('Buff', '#6fb7d9', `${buffAmt(b)} ${BUFF_LABEL[b.id] || b.id} (${secsTxt(b.dur)}).`);
     if (c.heal) {
       const parts = [];
-      if (c.heal.flat) parts.push(`${c.heal.flat} HP`);
+      if (c.heal.flat) parts.push(`${abbreviateNumber(c.heal.flat)} HP`);
       if (c.heal.perLevel) parts.push(`${c.heal.perLevel}/level`);
       if (c.heal.pctDmg) parts.push(`${Math.round(c.heal.pctDmg * 100)}% of damage`);
       if (parts.length) add('Heal', '#7ad08a', parts.join(' + ') + '.');
@@ -25376,7 +25378,7 @@ function renderDollSlot(slot, mode) {
   const pwrBadge = !item ? ''
     : inactive
       ? `<span class="item-power pd-pwr" style="background:var(--magenta-800);color:var(--red-350)">⚠</span>`
-      : `<span class="item-power pd-pwr">${PWR_GLYPH}${itemPower(item)}</span>`;
+      : `<span class="item-power pd-pwr">${PWR_GLYPH}${abbreviateNumber(itemPower(item))}</span>`;
   const capHTML = !item
     ? `<div class="pd-cap">${cap}</div>`
     : inactive
@@ -25467,7 +25469,7 @@ function gearSetBarHTML() {
   return `<div class="gearset-bar">${[0, 1].map(i => {
     const set = gearSets[i];
     const n = gearSetCount(set);
-    const meta = n ? `${n} worn · ${PWR_GLYPH}${gearSetPower(set, i)}` : 'empty';
+    const meta = n ? `${n} worn · ${PWR_GLYPH}${abbreviateNumber(gearSetPower(set, i))}` : 'empty';
     // Nudge THIS set's button when it has Boss Points to spend — so an off set's
     // unspent points are visible without switching to it (the GEAR tab header nudges
     // only for the worn set; see updateBars).
@@ -25781,7 +25783,7 @@ function itemCardHTML(item, opts = {}) {
   const statRows = Object.entries(item.stats).map(([k,v]) => {
     // DMG is a range string like "8-12"; others are flat numbers (negative on a curse).
     const negative = (typeof v === 'number') && v < 0;
-    const val = (typeof v === 'string') ? v : (v < 0 ? '' : '+') + v;
+    const val = (typeof v === 'string') ? abbreviateNumbersIn(v) : (v < 0 ? '' : '+') + abbreviateNumber(v);
     // Native (headline/innate) stats come from the base and can't be rerolled, so
     // mark them apart from rollable affixes. A curse penalty (negative) is tagged too.
     const isNative = head.includes(k);
@@ -25845,13 +25847,13 @@ function itemCardHTML(item, opts = {}) {
     ${label}
     <div class="tt-name" style="color:${tierColor(item)}">${curseMark(item)}${item.name}</div>
     <div class="tt-tier" style="color:${tierColor(item)}">${item.slot ? `<span data-spr=${SLOTS[item.slot].sprite}></span> ${SLOTS[item.slot].label}` : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</div>
-    ${item.slot ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${power}</div>` : ''}
+    ${item.slot ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${abbreviateNumber(power)}</div>` : ''}
     ${powerLine}
     ${uniqueLine}
     ${reqLine}
     ${stats}
     ${weaponLine}
-    <div style="color:var(--warn);font-size:1.2rem;margin-top:3px">Value: <span data-spr=ic_money></span>${item.value}</div>
+    <div style="color:var(--warn);font-size:1.2rem;margin-top:3px">Value: <span data-spr=ic_money></span>${fmtGold(item.value)}</div>
     <div class="tt-flavor">${item.flavor}</div>`;
 }
 
@@ -26033,6 +26035,10 @@ const LOG_MAX_LINES = 200;
 let _logEl = null;   // #log is static in the markup — resolve once, lazily
 function log(msg, cls='') {
   const el = _logEl || (_logEl = document.getElementById('log'));
+  // Every combat-log line goes through one abbreviator so damage, gold, heals and
+  // quantities read "14k" not "14,523" no matter which call site built the string.
+  // It skips HTML tags, so the sprite-span / colour markup in these lines is safe.
+  msg = abbreviateNumbersIn(msg);
   el.insertAdjacentHTML('beforeend', `<div class="log-line ${cls}">${msg}</div>`);
   while (el.childElementCount > LOG_MAX_LINES) el.removeChild(el.firstElementChild);
   el.scrollTop = el.scrollHeight;
@@ -27251,17 +27257,11 @@ if (typeof window !== 'undefined') {
 
 // Format a millisecond span as a compact human play-time string: "3h 12m",
 // "12m", or "45s" for brand-new heroes. Always returns at least "0s".
-// Compact gold display: exact under 1000, short form (1.2k, 12k, 3.4m) above so
-// big totals don't overflow the HUD / shop panels.
+// Compact gold display: exact under 1000, short form (1.2k, 12k, 3.4M) above so
+// big totals don't overflow the HUD / shop panels. Delegates to the shared
+// abbreviator so gold reads identically to every other number in the game.
 function fmtGold(n) {
-  n = Math.floor(n || 0);
-  if (n < 1000) return String(n);
-  for (const [div, suf] of [[1e9, 'b'], [1e6, 'm'], [1e3, 'k']]) {
-    if (n >= div) {
-      const v = n / div;
-      return (v < 10 ? v.toFixed(1).replace(/\.0$/, '') : String(Math.round(v))) + suf;
-    }
-  }
+  return abbreviateNumber(Math.floor(n || 0));
 }
 function formatPlayTime(ms) {
   let s = Math.floor((ms || 0) / 1000);
@@ -27375,7 +27375,7 @@ function renderSlots() {
         <span class="slot-class">${icon}</span>
         <span class="slot-name">${who}</span>${hcMark}
       </div>
-      <div class="slot-stats">Lv ${s.level} · ${where} · <span data-spr=ic_money></span>${s.gold} · <span class="slot-time">⏱️ ${formatPlayTime(s.playMs)}</span>${time ? ` · <span class="slot-time">saved ${time}</span>` : ''}</div>
+      <div class="slot-stats">Lv ${s.level} · ${where} · <span data-spr=ic_money></span>${fmtGold(s.gold)} · <span class="slot-time">⏱️ ${formatPlayTime(s.playMs)}</span>${time ? ` · <span class="slot-time">saved ${time}</span>` : ''}</div>
       <div class="slot-actions">${playBtn}${delBtn}</div>
     </div>`;
   }
@@ -27502,8 +27502,8 @@ function lbFloorLabel(v) {
 const LB_SORTS = {
   floor: { col: 'max_floor', fmt: lbFloorLabel },
   level: { col: 'level',     fmt: v => 'Lv ' + v },
-  gold:  { col: 'gold',      fmt: v => '<span data-spr=ic_money></span>' + v },
-  power: { col: 'power',     fmt: v => PWR_GLYPH + v },
+  gold:  { col: 'gold',      fmt: v => '<span data-spr=ic_money></span>' + fmtGold(v) },
+  power: { col: 'power',     fmt: v => PWR_GLYPH + abbreviateNumber(v) },
 };
 let lbTab = 'floor';
 let lbMode = 'std';       // which ladder is shown: 'std' (non-hardcore) or 'hc' (hardcore only)
@@ -27843,7 +27843,7 @@ function lbHeroBuildHTML(r, lo) {
   // Attributes — every key in canonical order, icon + name + value.
   const attrRow = ATTR_KEYS.map(k => {
     const a = ATTRIBUTES[k] || {};
-    return `<div class="lb-attr"><span class="lb-attr-ic">${dlIcon(a.sprite, 18) || ''}</span><span class="lb-attr-name">${a.label || k}</span><span class="lb-attr-val">${attrs[k] || 0}</span></div>`;
+    return `<div class="lb-attr"><span class="lb-attr-ic">${dlIcon(a.sprite, 18) || ''}</span><span class="lb-attr-name">${a.label || k}</span><span class="lb-attr-val">${abbreviateNumber(attrs[k] || 0)}</span></div>`;
   }).join('');
   // Gear — one tile per slot; empty slots read as such so the paperdoll is complete.
   const gear = lo.gear || {};
@@ -27865,7 +27865,7 @@ function lbHeroBuildHTML(r, lo) {
       <div class="lb-gear-info">
         <div class="lb-gear-slot">${label}${slotLvBadge(slot)}</div>
         <div class="lb-gear-name" style="color:${col}">${curseMark(it)}${escapeHtml(it.name || '')}${it.crafted ? ' ' + (dlIcon('ic_mallet', 12) || '') : ''}</div>
-        <div class="lb-gear-power">${PWR_GLYPH} ${itemPower(it)}${it.ilvl ? ` · <span style="color:var(--blue-250)">ilvl ${it.ilvl}</span>` : ''}</div>
+        <div class="lb-gear-power">${PWR_GLYPH} ${abbreviateNumber(itemPower(it))}${it.ilvl ? ` · <span style="color:var(--blue-250)">ilvl ${abbreviateNumber(it.ilvl)}</span>` : ''}</div>
       </div>
     </div>`;
   }).join('');
@@ -29194,7 +29194,7 @@ function heroCardHtml() {
   return `<div class="th-info">`
     + `<div class="th-name" style="color:${cls.color || 'var(--xp)'}">${nm}</div>`
     + `<div class="th-sub">Level ${lvl} ${cls.name || 'Hero'}</div>`
-    + `<div class="th-stats"><span>Deepest <b>${floorTag(deepest)}</b></span><span><span data-spr=ic_money></span><b>${gold}</b></span></div>`
+    + `<div class="th-stats"><span>Deepest <b>${floorTag(deepest)}</b></span><span><span data-spr=ic_money></span><b>${fmtGold(gold)}</b></span></div>`
     + hcTag
     + `</div>`
     + (heroPic ? `<div class="th-portrait">${heroPic}</div>` : '');
