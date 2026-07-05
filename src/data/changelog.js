@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Arcing crits obey line of sight", by: "Claude", notes: [
+    "The Arcing power's crit fork now jumps from the struck foe by line of sight, like chain lightning — a ranged or spell crit no longer arcs through a wall to a foe the impact can't see.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Area spells blast from the point of impact", by: "Claude", notes: [
     "Meteor, Fireball, Blizzard, Firestorm, Condemn, Plague Bomb, Death Rain and every other impact-and-burst spell now spread their radius damage from where they LAND, not from you. A blast dropped onto a pack tucked behind a wall now catches the whole pack — foes you couldn't have hit directly still take the splash.",
     "These spells also aim at the nearest foe you can actually SEE, so one closer foe hidden behind a wall no longer makes the cast fizzle with a clear target in view.",
