@@ -1827,8 +1827,7 @@ function lpcCrackOverlay(px, py, tw, th, sev, seed) {
 // Fix: paint the fracture onto a scratch tile, then punch it back out wherever
 // the floor autotiles over THIS cell (the floor tile's own alpha is the
 // floor-visible mask), and blit what survives — the crack, locked to the
-// non-transparent wall. (Built interiors lay square wall tiles that fill the
-// cell, so there is no bleed to mask and the plain overlay is already correct.)
+// non-transparent wall.
 let _crackMaskCv = null;
 // PREVIEW ONLY — draw the raw full-tile fracture (pre-mask) so a capture/smoke
 // script can A/B the spill fix. Off on the play path; set by __previewCrackWall.
@@ -1836,7 +1835,13 @@ let previewNoCrackMask = false;
 function lpcCrackOverlayMasked(px, py, tw, th, sev, seed, x, y) {
   if (previewNoCrackMask) { lpcCrackOverlay(px, py, tw, th, sev, seed); return; }
   const C = currentTheme();
-  const B = C.indoor ? null : (LPC_BIOME[C.name] || { floor: 'Grass', wall: 'Rock_Gray', water: 'Water' });
+  // Mirror paintLPCTerrain's terrain choice so the mask matches what was painted:
+  // a built interior (once intReady) lays full-tile wall tiles — no floor bleed to
+  // mask — but everything else (outdoor, and indoor before that sheet loads)
+  // autotiles the floor over a solid wall base and must be masked with the SAME
+  // floor role the terrain used.
+  if (C.indoor && intReady) { lpcCrackOverlay(px, py, tw, th, sev, seed); return; }
+  const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor: 'Grass', wall: 'Rock_Gray', water: 'Water' });
   if (!B || !B.floor || !LPC_TABLE.table[B.floor]) { lpcCrackOverlay(px, py, tw, th, sev, seed); return; }
   const W = Math.max(1, Math.round(tw)), H = Math.max(1, Math.round(th));
   const cv = _crackMaskCv || (_crackMaskCv = document.createElement('canvas'));
@@ -1851,8 +1856,7 @@ function lpcCrackOverlayMasked(px, py, tw, th, sev, seed, x, y) {
     const isFloor = (X, Y) => inb(X, Y) && mapData[Y][X] !== 1 && mapData[Y][X] !== 10;
     mg.globalCompositeOperation = 'destination-out';        // erase crack under the floor's alpha
     lpcLayer(B.floor, isFloor, -x * tw, -y * tw, tw, x, y, x + 1, y + 1);
-    mg.globalCompositeOperation = 'source-over';
-  } finally { ctx = realCtx; }
+  } finally { mg.globalCompositeOperation = 'source-over'; ctx = realCtx; }  // reset even on throw — mg is a cached, reused context
   realCtx.drawImage(cv, Math.round(px), Math.round(py));
 }
 function lpcDetail(C, ox, oy, tw, x0, y0, x1, y1) {
