@@ -35,6 +35,10 @@ import { SKILL_MILESTONES } from '../data/skillMilestones.js';
 import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/gearPower.js';
 import { equipSwapDelta } from '../systems/gearCompare.js';
 import { GEAR_POWER } from '../data/gearPower.js';
+import { channelCoef, classDamageAttr, attrDamageFor, shieldMax, shieldRechargePerSec,
+  shieldRechargeDelay, shieldPerSpiritPoint, healAmount as calcHealAmount,
+  ATTR_DMG_PER_POINT } from '../systems/attributeScaling.js';
+import { LUCK_FX } from '../data/attributeScaling.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { KILL_LOOT, killLootParams } from '../systems/bossLoot.js';
 import { BOSS_SLOTS } from '../data/bossSlots.js';
@@ -2947,18 +2951,19 @@ const HERO = 'The hero';
 
 // Hero attributes — the only thing you spend points on. Every class now starts
 // with the SAME spread (ATTR_BASE in each) and differs only in how its points
-// convert into power: each attribute feeds a family of derived stats (see
-// derivedStat), and damage in particular scales off each class's primary/
-// secondary attribute (see CLASSES[*].dmgAttrs). You earn a generous handful of
-// points per level, and each point is correspondingly small, so the per-level
-// power gain — and thus the difficulty curve — stays close to the old design.
+// convert into power: each attribute feeds a family of derived stats via the
+// CLASS-SCALED coefficients in src/data/attributeScaling.js (read through attrCoef
+// below), and weapon/skill damage scales off each class's SINGLE damage attribute
+// (classDamageAttr × ATTR_DMG_PER_POINT). You earn a generous handful of points per
+// level, and each point is correspondingly small, so the per-level power gain — and
+// thus the difficulty curve — stays close to the old design.
 // `label` is the plain attribute name; `sprite` is its pixel tile (referenced
 // directly). Use attrLabelIcon(key) to prefix the icon where the label needs art.
 const ATTRIBUTES = {
-  might:    { label: 'Might',    sprite: 'ui_power',    short: 'MIG', desc: 'raises Attack power (most for Warrior & Rogue), max Stamina & Stamina recharge' },
-  vitality: { label: 'Vitality', sprite: 'ic_heart',    short: 'VIT', desc: 'raises max HP, Defense & HP regen' },
-  agility:  { label: 'Agility',  sprite: 'ui_agility',  short: 'AGI', desc: 'raises Evasion, Accuracy, move & attack speed' },
-  spirit:   { label: 'Spirit',   sprite: 'ui_spirit',   short: 'SPR', desc: 'raises max MP, MP regen & spell power' },
+  might:    { label: 'Might',    sprite: 'ui_power',    short: 'MIG', desc: 'raises Defense; the Warrior&rsquo;s weapon-damage attribute' },
+  vitality: { label: 'Vitality', sprite: 'ic_heart',    short: 'VIT', desc: 'raises max HP, HP regen & Stamina; the Templar&rsquo;s weapon-damage attribute' },
+  agility:  { label: 'Agility',  sprite: 'ui_agility',  short: 'AGI', desc: 'raises Evasion, Accuracy, move & attack speed; the Rogue&rsquo;s weapon-damage attribute' },
+  spirit:   { label: 'Spirit',   sprite: 'ui_spirit',   short: 'SPR', desc: 'raises max MP, MP regen, spell power, healing & the Bulwark shield; the Mage&rsquo;s weapon-damage attribute' },
   luck:     { label: 'Luck',     sprite: 'mat_glimmer', short: 'LUK', desc: 'raises Crit chance & loot quality' },
 };
 // Icon + name for an attribute, for labels that should show their art.
@@ -2972,53 +2977,19 @@ const ATTR_BASE = 10;
 // to spread across the five attributes.
 const ATTR_POINTS_PER_LEVEL = 5;   // attribute points granted per hero level
 
-// How one point in an attribute converts into each derived stat. Tuned so that
-// dumping a level's worth of points (5) into one attribute grants roughly what
-// the old design's 3 points did, keeping the difficulty curve intact. Damage is
-// NOT here — it scales per class via CLASSES[*].dmgAttrs and ATTR_DMG_*.
-const ATTR_FX = {
-  atkPerMight:   0.6,    // Might → flat Attack power for EVERY class (see attrDamage)
-  hpPerVit:      11,     // Vitality → max HP
-  defPerVit:     0.5,    // Vitality → Defense
-  hpRegenPerVit: 0.06,   // Vitality → HP regen per world beat (a slow trickle — HP is finite)
-  mpPerSpr:      4,      // Spirit → max MP (trimmed: mana is a rationed resource now)
-  mpRegenPerSpr: 0.025,   // Spirit → MP regen per world beat (a slow trickle — mana runs dry)
-  spellPerSpr:   3,      // Spirit → spell skill power (Firebolt/Mend)
-  // Agility/Luck feed integer RATINGS contested against enemy level (see the
-  // rating-vs-level block below). Agility drives BOTH evasion and accuracy; Luck
-  // drives crit. No caps — the rating/(rating+opposition) curve makes runaway
-  // values mechanically unreachable rather than clamped. The evasion/crit rates
-  // are tuned high enough that a build which commits its attribute points to
-  // Agility or Luck stays meaningfully ahead of the depth-scaling opposition —
-  // so dodge and crit are viable build foundations, not just gear sprinkles.
-  evaPerAgi:     1.15,   // Agility → evasion rating (dodge)
-  accPerAgi:     2.0,    // Agility → accuracy rating (hit chance)
-  critPerLuck:   0.85,   // Luck → crit rating
-  // Might isn't only Attack power: a mighty body has more stamina and recovers
-  // it faster, so Might also DEEPENS the Stamina pool and SPEEDS its recharge.
-  // Both are measured from Might ABOVE the starting base (see mightAboveBase) so a
-  // fresh hero sits at the tuned MAX_STAMINA / STAM_REGEN baseline and every point
-  // of Might — spent or carried on gear — visibly buys more sprint and faster
-  // refills. Drain is left alone, so the gain is "sprint longer, recover sooner".
-  enduPerMight:      1.6,   // Might → +max Stamina (per point above base)
-  enduRegenPerMight: 0.22,  // Might → +Stamina recharge /sec (per point above base)
-};
-// Agility also quickens the body: it speeds up both your movement and your
-// auto-attack swing rhythm — so a finesse build doesn't just dodge and hit, it
-// also kites faster and swings faster. Unlike the ratings above (which can climb
-// freely because depth opposes them), raw move/attack speed has no depth foil,
-// so each uses a SOFT-CAP curve — cap · a / (a + scale) — that always rewards
-// more Agility yet asymptotes toward a ceiling, keeping the hero controllable
-// rather than letting speed run away. The bonus is measured from Agility ABOVE
-// the starting base, so a fresh hero sits at the game's tuned baseline speed and
-// every point you invest (or pick up on gear) is what makes you faster.
-const AGI_MOVE_CAP   = 0.35;  // max +35% move speed from Agility (asymptotic)
-const AGI_MOVE_SCALE = 90;    // Agility-above-base that buys half the move cap
-const AGI_ATKSPD_CAP   = 60;  // max +60% attack speed from Agility (asymptotic)
-const AGI_ATKSPD_SCALE = 100; // Agility-above-base that buys half the atk-spd cap
-// Damage scaling off the class's primary / secondary attribute (per point).
-const ATTR_DMG_PRIMARY   = 2.4;    // damage per point of the class's primary attribute
-const ATTR_DMG_SECONDARY = 0.8;
+// Per-point attribute→stat conversion is now CLASS-SCALED and data-driven — see
+// src/data/attributeScaling.js (the tunable tables) and the pure channelCoef() /
+// attrCoef() adapter above. Damage scales off each class's single damage attribute
+// (classDamageAttr × ATTR_DMG_PER_POINT). What remains here as bare constants: the
+// Agility soft-cap KNEES (the caps themselves are class-scaled via attrCoef), and
+// the class-flat Luck→crit coefficient lives in LUCK_FX in the data module.
+//
+// Agility quickens the body — movement and auto-attack rhythm — on a SOFT-CAP curve
+// (cap · a/(a+scale)) measured from Agility ABOVE the starting base, so a fresh hero
+// sits at the tuned baseline and every invested point makes you faster. The caps are
+// class-scaled (attrCoef('moveCap')/attrCoef('atkSpdCap')); these SCALES set the knee.
+const AGI_MOVE_SCALE   = 90;    // Agility-above-base that buys half the move cap
+const AGI_ATKSPD_SCALE = 100;   // Agility-above-base that buys half the atk-spd cap
 
 // ── CORE DIFFICULTY-SCALING CONSTANTS ──────────────────────────────────────
 // The bank of tuning numbers the enemy/boss/hero balance formulas below read
@@ -3296,15 +3267,20 @@ function buildPowerContext() {
   // read from the buff-inclusive derived functions. Where a derived function is
   // already buff-free (accuracy, block, DR, attack speed, class multipliers) it is
   // reused directly.
-  const hpMult = (player.class === 'templar' ? 1.20 : 1) * (1 + skillBonus('maxHpPct')) * diffDebuffMult();
-  const hpRaw = L * BALANCE.hpPerLevel + totalAttr('vitality') * ATTR_FX.hpPerVit + totalStat('HP');
+  const hpMult = classHpMult() * (1 + skillBonus('maxHpPct')) * diffDebuffMult();
+  const hpRaw = L * BALANCE.hpPerLevel + totalAttr('vitality') * attrCoef('hp') + totalStat('HP');
+  const maxHp = Math.max(1, hpRaw * hpMult);
+  // Weapon-vs-spell lane weights DERIVED from the hero's real learned kit — no class.
+  const lanes = learnedLaneWeights();
   const ctx = {
     refLevel: L,
-    // Fixed multipliers / class reliance (never moved by a single affix).
+    // Fixed multipliers (never moved by a single affix). offMult / dmgTakenMult read
+    // the hero's REAL class combat multipliers — the model has no bespoke class
+    // heuristic; class influence flows in only through the real stats below.
     offMult: classDmgDealtMult() * diffDebuffMult(),
     dmgTakenMult: classDmgTakenMult(),
-    skillReliance: CLASS_SKILL_RELIANCE[player.class] ?? 1,
-    spellReliance: CLASS_SPELL_RELIANCE[player.class] ?? 1,
+    skillReliance: lanes.skill,
+    spellReliance: lanes.spell,
     // Effective max-HP gained per raw point of HP / Vitality (the class + skill +
     // difficulty multipliers), so a +HP roll's survivability is valued as it lands.
     hpScale: hpMult,
@@ -3312,12 +3288,12 @@ function buildPowerContext() {
     weaponAvg: (wLo + wHi) / 2,
     atkFlat: L * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat'),
     idmgPct: totalStat('IDMG'),
-    critRating: totalAttr('luck') * ATTR_FX.critPerLuck + totalStat('CRIT') + totalStat('LCK')
-      + ratePct(skillBonus('crit')) + (player.class === 'rogue' ? 12 + L * 1.2 : 0),
+    critRating: totalAttr('luck') * LUCK_FX.critPerLuck + totalStat('CRIT') + totalStat('LCK')
+      + ratePct(skillBonus('crit')) + classInnateCritRating(),
     critMult: critDamageMult(),
     skillPwrPct: skillBonus('skillpwr') * 100 + totalStat('SKILLPWR'),
-    spellPwrPct: ((player.class === 'mage' ? 0.15 : 0) + skillBonus('spell')) * 100 + totalStat('SPELLPWR'),
-    spellCore: GEAR_POWER.spellFlat + L * GEAR_POWER.spellPerLvl + totalAttr('spirit') * ATTR_FX.spellPerSpr,
+    spellPwrPct: (classSpellBonusFrac() + skillBonus('spell')) * 100 + totalStat('SPELLPWR'),
+    spellCore: GEAR_POWER.spellFlat + L * GEAR_POWER.spellPerLvl + totalAttr('spirit') * attrCoef('spellPower'),
     atkSpdPct: playerAttackSpeedPct(),
     castSpdPct: totalStat('CASTSPD'),
     cdrRating: totalStat('CDR'),
@@ -3328,14 +3304,17 @@ function buildPowerContext() {
     bleedPct: totalStat('BLEED'), stunPct: totalStat('STUNPWR'),
     accRating: playerAccuracyRating(),
     // Defense aggregates.
-    maxHp: Math.max(1, hpRaw * hpMult),
-    def: totalStat('DEF') + totalAttr('vitality') * ATTR_FX.defPerVit,
-    dodgeRating: totalAttr('agility') * ATTR_FX.evaPerAgi + totalStat('SPD') + totalStat('DODGE')
-      + ratePct(skillBonus('dodge')) + (player.class === 'rogue' ? 14 + L * 1.2 : 0),
+    maxHp,
+    // Bulwark shield as extra effective HP — Spirit-scaled and class-multiplied, so
+    // +Spirit is valued for the shield it buys (derived, not class-hardcoded).
+    maxShield: shieldMax(totalAttr('spirit'), player.class, maxHp),
+    def: totalStat('DEF') + totalAttr('might') * attrCoef('def'),   // Defense now from Might
+    dodgeRating: totalAttr('agility') * attrCoef('evasion') + totalStat('SPD') + totalStat('DODGE')
+      + ratePct(skillBonus('dodge')) + classInnateEvasionRating(),
     blockRating: playerBlockRating(),
     drRating: playerDRRating(),
-    regen: (totalStat('REGEN') + totalAttr('vitality') * ATTR_FX.hpRegenPerVit
-      + (player.class === 'templar' ? 2 : 0) + skillBonus('hpRegen')) * TICKS_PER_SEC,
+    regen: (totalStat('REGEN') + totalAttr('vitality') * attrCoef('hpRegen')
+      + classInnateRegen() + skillBonus('hpRegen')) * TICKS_PER_SEC,
     thornsPct: totalStat('THORNS'),
     tenacPct: Math.round(playerTenacity() * 100), // effective CC reduction, eased
     leechPct: totalStat('LEECH'),
@@ -3346,26 +3325,26 @@ function buildPowerContext() {
 }
 
 // Combat-axis delta an attribute affix (+v of `key`) adds, folding the class's
-// damage scaling (attrDamage) and each attribute's derived-stat package (ATTR_FX)
-// — so +Luck is worth Power only to a build that crits, +Spirit only where it
-// feeds spells, etc.
+// single damage attribute and each attribute's (class-scaled) derived-stat package
+// — so +Luck is worth Power only to a build that crits, +Spirit only where it feeds
+// spells + Bulwark, +Might only where it hardens defence (and damage, for the class
+// that scales off it). Mirrors the live derived-stat functions exactly.
 function attrPowerAxes(key, v, ctx, add) {
-  const { primary, secondary } = classDmgAttrs();
-  const dmgCoef = key === primary ? ATTR_DMG_PRIMARY
-    : key === secondary ? ATTR_DMG_SECONDARY
-    : key === 'might' ? ATTR_FX.atkPerMight : 0;   // universal Might dab when off-class
-  if (dmgCoef) add('atkFlat', v * dmgCoef);
-  if (key === 'vitality') {
-    add('maxHp', v * ATTR_FX.hpPerVit * ctx.hpScale);
-    add('def', v * ATTR_FX.defPerVit);
-    add('regen', v * ATTR_FX.hpRegenPerVit * TICKS_PER_SEC);
+  // Damage: ONLY the class's single damage attribute adds attack power.
+  if (key === classDamageAttr(player.class)) add('atkFlat', v * ATTR_DMG_PER_POINT);
+  if (key === 'might') {
+    add('def', v * attrCoef('def'));                              // Might → Defense (all classes)
+  } else if (key === 'vitality') {
+    add('maxHp', v * attrCoef('hp') * ctx.hpScale);              // Vitality → HP (+ regen, Stamina n/a to combat)
+    add('regen', v * attrCoef('hpRegen') * TICKS_PER_SEC);
   } else if (key === 'agility') {
-    add('dodgeRating', v * ATTR_FX.evaPerAgi);
-    add('accRating', v * ATTR_FX.accPerAgi);
+    add('dodgeRating', v * attrCoef('evasion'));
+    add('accRating', v * attrCoef('accuracy'));
   } else if (key === 'spirit') {
-    add('spellCore', v * ATTR_FX.spellPerSpr);
+    add('spellCore', v * attrCoef('spellPower'));               // Spirit → spell power…
+    add('maxShield', v * shieldPerSpiritPoint(player.class));   // …and the Bulwark shield
   } else if (key === 'luck') {
-    add('critRating', v * ATTR_FX.critPerLuck);
+    add('critRating', v * LUCK_FX.critPerLuck);
   }
 }
 
@@ -3466,18 +3445,11 @@ function classDmgAttrs() {
   const cls = playerClass();
   return (cls && cls.dmgAttrs) || { primary: 'might', secondary: null };
 }
-// Bonus attack damage contributed by the class's damage attributes — plus a
-// small universal Might bonus so no class ever has a fully dead attribute.
+// Bonus attack damage from the class's single damage attribute (Warrior=Might,
+// Rogue=Agility, Mage=Spirit, Templar=Vitality). The old primary+secondary split
+// and the universal off-class Might dab are gone — one attribute, one coefficient.
 function attrDamage() {
-  const { primary, secondary } = classDmgAttrs();
-  let d = totalAttr(primary) * ATTR_DMG_PRIMARY;
-  if (secondary) d += totalAttr(secondary) * ATTR_DMG_SECONDARY;
-  // Might always lends a little raw Attack power to EVERY class. Classes that
-  // already scale damage off Might (Warrior primary / Rogue secondary) get far
-  // more from it above, so this only matters when Might is otherwise off-class
-  // (Mage, Templar) — there it's a weak-but-real contribution instead of zero.
-  if (primary !== 'might' && secondary !== 'might') d += totalAttr('might') * ATTR_FX.atkPerMight;
-  return d;
+  return attrDamageFor(totalAttr(classDamageAttr(player.class)), player.class);
 }
 // Crit damage multiplier — equipment-only beyond the base, so gear (CRITDMG)
 // drives how hard your crits land. Crit damage can swing freely up or down, but
@@ -3556,37 +3528,45 @@ function equipUpgradeDelta(item) {
   return Math.round(d);
 }
 
+// Per-class attribute→stat coefficient for the CURRENT hero: the single adapter
+// every derived-stat function reads instead of a bare ATTR_FX constant, so each
+// attribute pays out differently per class (see src/data/attributeScaling.js and
+// the pure channelCoef in src/systems/attributeScaling.js).
+function attrCoef(channel) { return channelCoef(channel, player.class); }
+
 // Max HP/MP are derived from level + attributes so the formula stays consistent
 // across level ups, attribute spends, and loading an older save. Vitality drives
-// HP and Spirit drives MP (each via ATTR_FX), and gear HP/MP add on top.
+// HP and Spirit drives MP (each via the per-class attrCoef), and gear HP/MP add
+// on top.
 function baseMaxHp() {
-  let hp = player.level*BALANCE.hpPerLevel + totalAttr('vitality') * ATTR_FX.hpPerVit + totalStat('HP');
-  if (player.class === 'templar') hp = hp * 1.20; // Templar: hardier body
+  let hp = player.level*BALANCE.hpPerLevel + totalAttr('vitality') * attrCoef('hp') + totalStat('HP');
+  hp = hp * classHpMult(); // Templar: hardier body (+20%)
   hp = hp * (1 + skillBonus('maxHpPct') + foodFx('maxHpPct')); // skills + a hearty bowl of ramen
   hp = hp * diffDebuffMult();   // permanent scar from each difficulty conquered
   return Math.max(1, Math.round(hp));
 }
 function baseMaxMp() {
-  let mp = player.level*2.5 + totalAttr('spirit') * ATTR_FX.mpPerSpr + totalStat('MP');
+  let mp = player.level*2.5 + totalAttr('spirit') * attrCoef('mp') + totalStat('MP');
   if (player.class === 'mage') mp = mp * 1.20; // Mage: deeper mana pool
   mp = mp * (1 + skillBonus('maxMpPct') + foodFx('maxMpPct')); // skills + ramen
   return Math.max(0, Math.round(mp));
 }
-// Max Stamina: the flat MAX_STAMINA baseline plus a Might bonus, so a mighty
-// hero carries a deeper sprint/dash reserve. Measured from Might above base so a
-// fresh hero stays at the tuned 100.
+// Max Stamina: the flat MAX_STAMINA baseline plus a Vitality bonus, so a hardy
+// hero carries a deeper sprint/dash reserve. Measured from Vitality above base so
+// a fresh hero stays at the tuned 100. (Class-scaled: Warriors sprint longest.)
 function baseMaxStamina() {
-  return Math.round(MAX_STAMINA + mightAboveBase() * ATTR_FX.enduPerMight);
+  return Math.round(MAX_STAMINA + vitalityAboveBase() * attrCoef('staminaMax'));
 }
 // How fast Stamina refills (per second) once you stop exerting: the STAM_REGEN
-// baseline plus a Might bonus, so Might shortens the downtime between sprints.
+// baseline plus a Vitality bonus, so Vitality shortens the downtime between sprints.
 function staminaRegenPerSec() {
-  return STAM_REGEN + mightAboveBase() * ATTR_FX.enduRegenPerMight;
+  return STAM_REGEN + vitalityAboveBase() * attrCoef('staminaRegen');
 }
 
-// Total Defense: gear DEF plus a contribution from Vitality.
+// Total Defense: gear DEF plus a contribution from Might (class-scaled — Warriors
+// armour up hardest). Might moved here from Vitality in the attribute overhaul.
 function playerDefense() {
-  return totalStat('DEF') + totalAttr('vitality') * ATTR_FX.defPerVit + foodFx('defFlat');
+  return totalStat('DEF') + totalAttr('might') * attrCoef('def') + foodFx('defFlat');
 }
 
 // ── RATING-VS-LEVEL CHANCE SYSTEM ──
@@ -3637,43 +3617,43 @@ const ACC_BASE = 80, ACC_PER_LEVEL = 12;
 // Agility drives BOTH Evasion and Accuracy; gear SPD/DODGE (legacy) read as flat
 // evasion rating, the new ACC stat as accuracy. Rogues get an evasion/crit edge.
 function playerEvasionRating() {
-  let r = totalAttr('agility') * ATTR_FX.evaPerAgi
+  let r = totalAttr('agility') * attrCoef('evasion')
     + totalStat('SPD') + totalStat('DODGE')
     + ratePct(skillBonus('dodge')) + ratePct(buffMag('dodgeUp')) + ratePct(foodFx('dodgePct'));
   // Rogue's innate evasion scales with level so "harder to pin down" stays true
   // at depth (a flat bonus would wash out as opposition climbs each floor).
-  if (player.class === 'rogue') r += 14 + player.level * 1.2;
+  r += classInnateEvasionRating();
   return Math.max(0, r);
 }
 function playerAccuracyRating() {
   return Math.max(0, ACC_BASE + player.level * ACC_PER_LEVEL
-    + totalAttr('agility') * ATTR_FX.accPerAgi + totalStat('ACC') + ratePct(skillBonus('acc')));
+    + totalAttr('agility') * attrCoef('accuracy') + totalStat('ACC') + ratePct(skillBonus('acc')));
 }
 // Agility you've built beyond the starting base — the input to the speed curves
 // so a fresh hero (base Agility) sits at the tuned baseline and only investment
 // or gear makes you faster. Never negative.
 function agilityAboveBase() { return Math.max(0, totalAttr('agility') - ATTR_BASE); }
-// Might beyond the starting base — feeds the Stamina pool/recharge bonuses so a
-// fresh hero keeps the tuned baseline and only invested/geared Might raises them.
-function mightAboveBase() { return Math.max(0, totalAttr('might') - ATTR_BASE); }
+// Vitality beyond the starting base — feeds the Stamina pool/recharge bonuses so a
+// fresh hero keeps the tuned baseline and only invested/geared Vitality raises them.
+function vitalityAboveBase() { return Math.max(0, totalAttr('vitality') - ATTR_BASE); }
 // Move-speed multiplier (≥1) from Agility: a soft-capping curve that always
-// rewards more Agility yet never lets you blur past the AGI_MOVE_CAP ceiling.
+// rewards more Agility yet never lets you blur past the (class-scaled) move cap.
 function agiMoveMult() {
   const a = agilityAboveBase();
-  return 1 + AGI_MOVE_CAP * a / (a + AGI_MOVE_SCALE);
+  return 1 + attrCoef('moveCap') * a / (a + AGI_MOVE_SCALE);
 }
 // Attack-speed % from Agility (added alongside gear ATKSPD in the same /100
 // denominator), soft-capped the same way so swings quicken but never go berserk.
 function agiAtkSpeedPct() {
   const a = agilityAboveBase();
-  return AGI_ATKSPD_CAP * a / (a + AGI_ATKSPD_SCALE);
+  return attrCoef('atkSpdCap') * a / (a + AGI_ATKSPD_SCALE);
 }
 function playerCritRating() {
-  let r = totalAttr('luck') * ATTR_FX.critPerLuck + totalStat('CRIT') + totalStat('LCK')
+  let r = totalAttr('luck') * LUCK_FX.critPerLuck + totalStat('CRIT') + totalStat('LCK')
     + ratePct(skillBonus('crit')) + ratePct(buffMag('critUp')) + ratePct(foodFx('critPct'));
   // Rogue's innate crit scales with level so "keener crits" keeps pace with the
   // rising crit opposition of deeper floors instead of fading to nothing.
-  if (player.class === 'rogue') r += 12 + player.level * 1.2;
+  r += classInnateCritRating();
   return Math.max(0, r);
 }
 function playerBlockRating() { return Math.max(0, totalStat('BLOCK') + ratePct(skillBonus('block'))); }
@@ -3715,9 +3695,18 @@ function recomputeMaxStats() {
   const stal = itemPowerCount('stalwart'); if (stal) player.maxHp = Math.round(player.maxHp * (1 + 0.08 * stal));
   const att  = itemPowerCount('attuned');  if (att)  player.maxMp = Math.round(player.maxMp * (1 + 0.08 * att));
   player.maxStamina = baseMaxStamina();
+  // Bulwark caps off the finalised max HP (its ceiling is a fraction of max HP),
+  // so compute it AFTER Stalwart has deepened the HP pool above.
+  player.maxShield = baseMaxShield();
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   if (player.stamina > player.maxStamina) player.stamina = player.maxStamina;
+  if ((player.shield || 0) > player.maxShield) player.shield = player.maxShield;
+}
+// Max Bulwark shield: scales off total Spirit and the (steep) class multiplier,
+// capped at a fraction of max HP. See src/systems/attributeScaling.js.
+function baseMaxShield() {
+  return Math.round(shieldMax(totalAttr('spirit'), player.class, player.maxHp));
 }
 
 // HP/MP regeneration as a REAL per-second rate. Single source of truth so the
@@ -3728,8 +3717,8 @@ function hpRegenPerSec() {
   // scaling by TICKS_PER_SEC expresses them as the smooth per-second rate the
   // player actually heals at. applyRegen banks the fractional amount so the HP
   // readout stays a clean integer rather than cliff-ing at low Vitality.
-  let r = totalStat('REGEN') + totalAttr('vitality') * ATTR_FX.hpRegenPerVit;
-  if (player.class === 'templar') r += 2; // Templar mends faster between fights
+  let r = totalStat('REGEN') + totalAttr('vitality') * attrCoef('hpRegen');
+  r += classInnateRegen(); // Templar mends faster between fights (+2/beat)
   r += skillBonus('hpRegen'); // Recovery / Divine Vigor passives
   r += buffMag('regen'); // Redeemer / Bastion regen buffs
   r += foodFx('regen'); // a warm bowl of ramen mends you between fights
@@ -3739,7 +3728,7 @@ function mpRegenPerSec() {
   // A slow trickle on purpose: mana should run dry in sustained fights so mana
   // pots stay worth quaffing. Scaled to a real per-second rate; applyRegen banks
   // the fractional per-beat share so sub-1 regen works while MP stays an integer.
-  return (0.15 + totalAttr('spirit') * ATTR_FX.mpRegenPerSpr + skillBonus('mpRegen')) * TICKS_PER_SEC;
+  return (0.15 + totalAttr('spirit') * attrCoef('mpRegen') + skillBonus('mpRegen')) * TICKS_PER_SEC;
 }
 
 // Every food drop shows the shared `food` pixel tile (referenced directly).
@@ -4634,17 +4623,24 @@ function equipReqBadge(item) {
 // dealt multiplier only applies to physical hits (see applyOffenseMods).
 const CLASS_DMG_DEALT = { warrior: 1.10, rogue: 1.12, mage: 1.00, templar: 1.00 };
 const CLASS_DMG_TAKEN = { warrior: 0.90, rogue: 0.95, mage: 0.90, templar: 0.85 };
-// How much each class leans on spell damage. Blends the spell lane into the Power
-// combat score (buildPowerContext / systems/gearPower.js) and gates the caster
-// levers: a Mage lives on spells, a Templar casts holy smites alongside melee, and
-// a Warrior/Rogue barely cast — so Spell Power / Cast Speed are near-dead weight on
-// them and shouldn't pad their Power as if it were a caster's.
-const CLASS_SPELL_RELIANCE = { warrior: 0.25, rogue: 0.25, mage: 1.0, templar: 0.7 };
-// The martial mirror of CLASS_SPELL_RELIANCE: how much each class leans on WEAPON
-// active skills. Blends the martial lane into the Power combat score and gates the
-// martial levers (Skill Power / Attack Speed). Melee classes live on skills; the
-// Mage barely swings, so those are near-dead weight on it — the inverse of above.
-const CLASS_SKILL_RELIANCE = { warrior: 1.0, rogue: 1.0, mage: 0.35, templar: 0.85 };
+// The gear Power model no longer GUESSES weapon-vs-spell reliance from the class.
+// It DERIVES the two lane weights from the hero's ACTUAL learned actives, so Power
+// values only the levers the hero really uses: auto-attacks keep the weapon lane
+// always live, and the spell lane counts only what they've learned (spell / hybrid
+// / heal actives). A hero with no spell skills → spellReliance 0 → +Spell Power
+// scores ~0, with no class check anywhere.
+function learnedLaneWeights() {
+  let spell = 0;
+  for (const s of activeSkillList()) {
+    const c = s.node && s.node.cast;
+    if (!c) continue;
+    if (c.spell) spell += c.spell;      // offensive / hybrid spell coefficient
+    if (c.heal) spell += 0.6;           // heals ride the Spirit / Spell-Power lane
+  }
+  // Weapon lane is always fully live (you always auto-attack); the spell lane grows
+  // with learned casting, capped so a dedicated caster tops out near ~1.0.
+  return { skill: 1, spell: Math.min(1.2, spell * 0.5) };
+}
 function classDmgDealtMult() {
   const base = CLASS_DMG_DEALT[player.class] || 1;
   return base * (1 + skillBonus('dmgDealt'));
@@ -4655,6 +4651,13 @@ function classDmgTakenMult() {
   // fully-stacked defence build can never reach zero (no free invulnerability).
   return Math.max(0.1, base * (1 - skillBonus('dmgTaken')));
 }
+// Class PASSIVES as buff-free helpers, so live combat AND the gear Power model read
+// one source — keeping the Power model itself free of inline `player.class` checks.
+function classHpMult()             { return player.class === 'templar' ? 1.20 : 1; }                  // Templar: +20% max HP
+function classInnateRegen()        { return player.class === 'templar' ? 2 : 0; }                     // Templar: +2 HP regen/beat
+function classSpellBonusFrac()     { return player.class === 'mage' ? 0.15 : 0; }                     // Mage: +15% spell power
+function classInnateCritRating()   { return player.class === 'rogue' ? 12 + player.level * 1.2 : 0; } // Rogue: level-scaled crit
+function classInnateEvasionRating(){ return player.class === 'rogue' ? 14 + player.level * 1.2 : 0; } // Rogue: level-scaled dodge
 
 // ── SKILL TREES (v4) ──
 // Each class has a separate PASSIVE tree and ACTIVE tree, 30 nodes each, laid out
@@ -5357,8 +5360,7 @@ function applyCastMods(node, cast) {
 // multiplier (classDmgDealtMult) only touches physical hits, so without this a
 // caster Mage would have no class damage bonus at all.
 function spellPowerMult() {
-  const cls = player.class === 'mage' ? 0.15 : 0;
-  return 1 + cls + skillBonus('spell') + buffMag('spellUp') + totalStat('SPELLPWR') / 100;
+  return 1 + classSpellBonusFrac() + skillBonus('spell') + buffMag('spellUp') + totalStat('SPELLPWR') / 100;
 }
 // Skill-damage multiplier — the MARTIAL twin of spellPowerMult(), applied only to
 // weapon-based active skills (see skillPhysDamage). Gear Skill Power lets you build
@@ -5979,6 +5981,9 @@ let player = { x: 5, y: 5,
   // auto-attack cooldown. stamina fuels sprinting/dashing. See the game loop.
   fx: 5.5, fy: 5.5, vx: 0, vy: 0, faceDx: 1, faceDy: 0, atkCd: 0, dashCd: 0,
   stamina: 100, maxStamina: 100,
+  // Bulwark: the persistent Spirit-fuelled shield that soaks damage before HP and
+  // recharges after a damage-free window. _noDmgSecs is the calm-timer accumulator.
+  shield: 0, maxShield: 0, _noDmgSecs: 0,
   facing: 'left', hp: 100, maxHp: 100, mp: 52, maxMp: 52, gold: 0, level: 1, xp: 0,
   // Potions are no longer hoarded consumables — they're an always-available
   // skill gated by a shared 5-second cooldown (see useHealthPotion/useManaPotion),
@@ -6681,6 +6686,12 @@ window.gameState = function gameState(radius) {
       pendingMana: player.pendingMana || 0,
       inCombat: (player._combatSecs || 0) > 0,
       stamina: Math.round(player.stamina || 0), maxStamina: Math.round(player.maxStamina || 0), // Stamina for sprint/dash
+      // Bulwark: the persistent Spirit shield (blue over-HP buffer) that soaks damage
+      // before health and recharges after a damage-free window. shieldRecharging is
+      // true while it's actively refilling. Nothing but the passive recharge refills it.
+      shield: Math.round(player.shield || 0), maxShield: Math.round(player.maxShield || 0),
+      shieldRecharging: (player.maxShield > 0 && (player.shield || 0) < player.maxShield
+        && (player._noDmgSecs || 0) >= shieldRechargeDelay()),
       dashReady: (player.dashCd || 0) <= 0 && (player.stamina || 0) >= (typeof DASH_COST !== 'undefined' ? DASH_COST : 35),
       // Town-portal channel in progress: real seconds left before it opens (0 = idle).
       // The hero is rooted while it counts down; a foe's hit or a step cancels it.
@@ -6964,7 +6975,7 @@ window.gameGuide = function gameGuide(topic) {
       `The hero faces and animates in the direction it walks — down/up/left/right — cycling a walk animation while moving and resting on a standing frame when still. It's purely cosmetic; gameState().player.faceDir reports the current 4-way facing.`,
       `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~34/sec). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch auto-sprint).`,
       `DASH (${key('dash')}) is a quick burst (costs 35 Stamina, ~0.55s cooldown). It only repositions fast — there are no i-frames and enemies are solid, so you can't dash THROUGH a foe to escape.`,
-      `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec). The Might attribute deepens the pool and speeds its recharge. Check player.dashReady before dashing.`,
+      `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec). The Vitality attribute deepens the pool and speeds its recharge. Check player.dashReady before dashing.`,
       `Being Slowed (a debuff) halves speed; being Stunned roots you entirely (see gameState().effects).`,
       `Foes are solid, so a single one body-blocks you — slide along it and step around. But a MOB can't pin you forever: when bodies plug your heading AND the lanes you'd slide into to go around them, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall, and a lone foe with any real gap beside it stays solid).`,
     ],
@@ -6975,17 +6986,23 @@ window.gameGuide = function gameGuide(topic) {
       `There is NO per-hit damage cap — a big swing, skill or crit lands its full number, so burst and crits are fully rewarded. A foe's actual HP is the only limiter: bosses carry deep HP pools (and hit harder), so they're a genuine, tanky fight rather than a one-shot.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear), and EVERY damage source can crit — auto-attacks, martial skills and spells all roll critical hits, land the big crit number, and fire your on-crit passives (combo/zeal charges, primed crits, mana refunds). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
-      `Defense / block / damage-reduction come from gear, the Vitality attribute, and your class passive. Healing is now OVER TIME (a pending pool that fills the bar on a slope, shown as a translucent zone) — sip ${key('healthPotion')} EARLY rather than at zero; see the "healing" topic.`,
+      `Defense / block / damage-reduction come from gear, the Might attribute, and your class passive. On TOP of HP sits the Bulwark — a Spirit-fuelled blue shield that soaks damage before your health and recharges after a few unhit seconds (see the "bulwark" topic). Healing is OVER TIME (a pending pool that fills the bar on a slope, shown as a translucent zone) — sip ${key('healthPotion')} EARLY rather than at zero; see the "healing" topic.`,
       `Swap loadouts with ${key('swapWeapon')} to switch between, say, a ranged kite set and a melee finisher.`,
     ],
     healing: [
       `RECOVERY IS OVER TIME, not instant. Most healing no longer snaps HP up — it fills a PENDING pool that pays into HP at a capped rate (~12%/s of max HP per source), so the bar climbs on a visible slope. gameState().player.pendingHeal is the HP still owed; the HP/MP bars show it as a translucent zone ahead of the solid fill.`,
       `OVER-TIME sources STACK (a potion sip pays out on top of any pending leech): the Health Potion, all life leech / lifesteal (paid from your physical attacks and weapon skills — spells don't leech, and a HYBRID strike leeches only from its physical half, not its magic half), Scythe Reap, Vampiric, Life-on-Kill, and incidental on-kill / on-cast "sliver" heals.`,
-      `INSTANT sources land immediately, as before: deliberate active HEAL skills you cast (e.g. Divine Storm, Final Judgment, Blood Drinker) and EMERGENCY low-HP triggers (a passive that heals when you drop below 25% HP). A skill's detail card tags which kind it grants (heal — instant / leech — over time).`,
+      `INSTANT sources land immediately, as before: deliberate active HEAL skills you cast (e.g. Divine Storm, Final Judgment, Blood Drinker) and EMERGENCY low-HP triggers (a passive that heals when you drop below 25% HP). A skill's detail card tags which kind it grants (heal — instant / leech — over time). A cast heal's SIZE now scales off SPIRIT and Spell Power (class-scaled: Mage > Templar > Rogue > Warrior) with no flat cap — so a high-Spirit healer mends far more per cast (still capped only by the HP you're actually missing).`,
       `The Health Potion mends 35% of max HP over a few seconds (Potency raises the amount; shared 6s cooldown, down to 2s via Recharge). It is INTERRUPTIBLE: one DIRECT hit above 18% of max HP spills half the remaining sip ("SIP SPILLED"). Damage-over-time (lava/poison/burn) never interrupts it, and earned leech is never interrupted — only the potion sip is fragile.`,
       `Because you can no longer burst back to full, don't wait until you're low: sip EARLY, keep moving, and let the pending pool refill the slope while you avoid the next hit.`,
       `MANA is a RATIONED resource now: a smaller pool (less MP per Spirit, lower base), higher skill costs, and slower regen — and MP regen is HALVED while you're "in combat" (a few seconds after dealing or taking damage — gameState().player.inCombat), so sustained casting genuinely drains you.`,
       `The Mana Potion restores 40% of max MP OVER TIME (gameState().player.pendingMana shows MP still incoming) and shares the health potion's cooldown — so quaffing mana means forgoing a heal, a real triage choice. Mana Shield converts damage to MP more efficiently the more you invest in it. Carry mana potions if you lean on spells.`,
+    ],
+    bulwark: [
+      `BULWARK is a persistent blue SHIELD that sits ON TOP of your HP: every hit, damage-over-time and hazard is soaked by the Bulwark FIRST, and only the overflow bites your health (a blow that empties it spills the remainder into HP). gameState().player reports shield / maxShield / shieldRecharging; the HP bar shows it as a shimmering blue mask over the bar, with its own number beside HP.`,
+      `It is fuelled entirely by SPIRIT: more Spirit → a bigger pool and a slightly faster recharge, class-scaled Mage > Templar > Rogue > Warrior — so it's a real second health bar for casters and near-trivial for a Warrior who never invests Spirit. It can never exceed a fraction of your max HP.`,
+      `RECHARGE is automatic and the ONLY way to refill it — no potion, skill, heal or leech ever touches the Bulwark. After ~${shieldRechargeDelay()}s without taking ANY damage it refills toward full over a few seconds (Spirit speeds the RATE, not the delay). Taking any damage — even a poison tick or a step into lava — resets that timer, so you top it up by DISENGAGING for a moment, not by out-healing.`,
+      `Because it soaks before HP and comes back free between fights, Spirit is now a defensive investment as much as an offensive one — and +Spirit gear is valued for the shield it grants (see the "power" topic).`,
     ],
     skills: [
       `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready.`,
@@ -7003,7 +7020,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     damage: [
       `Damage comes from THREE distinct sources, each with its own scaling lane — build into one and you don't accidentally buff the others:`,
-      `AUTO-ATTACK: your automatic weapon swing. Scales with weapon Damage + Attack (ATK) + your class's damage attributes (e.g. Might). Dedicated amp: Increased Dmg % (IDMG). Speed lever: Attack Speed % (ATKSPD) — faster swings. Can MISS (accuracy vs the foe's evasion).`,
+      `AUTO-ATTACK: your automatic weapon swing. Scales with weapon Damage + Attack (ATK) + your class's SINGLE damage attribute (Warrior→Might, Rogue→Agility, Mage→Spirit, Templar→Vitality) — pumping that one attribute is your attribute-side damage. Dedicated amp: Increased Dmg % (IDMG). Speed lever: Attack Speed % (ATKSPD) — faster swings. Can MISS (accuracy vs the foe's evasion).`,
       `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
       `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
       `HYBRID (a weapon strike that also channels magic — the Templar's holy strikes, the Rogue's shadow/toxic strikes): lands a physical part AND a magic part in one cast. The physical part scales like a SKILL (weapon + Skill Power, leeches, meets armor); the magic part scales like a SPELL (Spirit + Spell Power, no leech, meets magic resist). Only the physical half leeches. Recharged by CDR + Cast Speed. Its tooltip shows the exact split ("40 physical + 30 magic"), so build BOTH power stats to max it — or lean one and accept the other half stays modest.`,
@@ -7079,8 +7096,8 @@ window.gameGuide = function gameGuide(topic) {
       `Quests never seal the stairs and are safe to skip, but the reward scales with depth — grab the cheap ones on your way to the exit.`,
     ],
     progression: [
-      `Four classes: Warrior (Might/Vitality, tanky melee), Rogue (Agility/Might, crit & dodge), Mage (Spirit/Luck, spells & big MP), Templar (Vitality/Spirit, durable hybrid). Class gates which weapons you can equip.`,
-      `Five attributes (gameState().player.attributes): Might (+Attack, +Stamina), Vitality (+max HP, +Defense, +HP regen), Agility (+evasion, +accuracy, +move/attack speed), Spirit (+max MP, +MP regen, +spell power), Luck (+crit). Pump your class's two damage attributes for the most damage.`,
+      `Four classes, each with ONE damage attribute: Warrior (Might, tanky melee), Rogue (Agility, crit & dodge), Mage (Spirit, spells & big MP), Templar (Vitality, durable hybrid). Class gates which weapons you can equip.`,
+      `Five attributes (gameState().player.attributes), with re-homed roles: Might (+Defense; the Warrior's damage), Vitality (+max HP, +HP regen, +Stamina; the Templar's damage), Agility (+evasion, +accuracy, +move/attack speed; the Rogue's damage), Spirit (+max MP, +MP regen, +spell power, +healing, +Bulwark shield; the Mage's damage), Luck (+crit, +loot quality). How much each point gives is CLASS-SCALED — e.g. Vitality gives the Templar the most HP, Spirit gives the Mage the most spell power. Pump your class's single damage attribute for damage; every attribute also pays a defensive/utility role.`,
       `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend). Spend attributes on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
       `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives. From level 20 you also earn a SEPARATE ascendancy point every 5 levels (20, 25, 30…; gameState().menu.pointsToSpend.ascendancy), spent only on the ascendancy path tree. Normal skill points can't buy path skills and ascendancy points can't buy passive/active skills. Path skills carry NO level requirement — they're gated only by the earlier skills in the path tree.`,
       `Respec attributes/skills or change class at the Trainer for gold that scales with your level (points refund). Switching to your class's other ascension afterwards costs a lot of gold (also scales with level and depth; path points refund) — the first ascension stays free, but re-ascending is a deliberate, costly choice, as is retraining class. After a respec, check that worn gear still meets its attribute requirement (under-req pieces turn red and are ignored).`,
@@ -7139,6 +7156,7 @@ window.gameGuide = function gameGuide(topic) {
     shop: 'town', merchant: 'town', craft: 'town', crafting: 'town', forge: 'town', ramen: 'town', mystic: 'town', stash: 'town', portal: 'town', gate: 'town', warp: 'town', lastfloor: 'town', transmuter: 'town', transmute: 'town', fuse: 'town', vault: 'town', gambler: 'town', gamble: 'town', sellsword: 'town', merc: 'town', mercenary: 'town', trainer: 'town', healer: 'town', enchanter: 'town', enchant: 'town',
     control: 'controls', key: 'controls', keys: 'controls', keybind: 'controls', keybinds: 'controls', keybinding: 'controls',
     heal: 'healing', healing: 'healing', recovery: 'healing', regen: 'healing', regeneration: 'healing', potion: 'healing', potions: 'healing', mana: 'healing', mp: 'healing', leech: 'healing', lifesteal: 'healing', overtime: 'healing', pending: 'healing', hp: 'healing', hitpoints: 'healing', sustain: 'healing',
+    bulwark: 'bulwark', shield: 'bulwark', shields: 'bulwark', ward: 'bulwark', energyshield: 'bulwark', overshield: 'bulwark', spiritshield: 'bulwark', defense: 'bulwark', defence: 'bulwark',
     drive: 'driving', driving: 'driving', api: 'driving', act: 'driving', acting: 'driving', input: 'driving',
     tip: 'tips', strategy: 'tips', help: 'overview', start: 'overview', intro: 'overview', goal: 'overview',
   };
@@ -9639,10 +9657,11 @@ function updateProjectiles(dt) {
         landEnemyRangedHit(p.e, p.dmg, p.color);
       } else {
         const dmg = applyIncomingMods(absorbWithMana(mitigateDamage(p.dmg, dungeonLevel)), {});
-        player.hp = Math.max(0, player.hp - dmg);
-        notePlayerDamage(dmg, p.label || 'arrow trap');
-        sfx('hurt'); spawnFloatingText(player.x, player.y, `${dmg}`, p.color);
-        spawnParticles(player.x, player.y, p.color, 6, 0.08); addShake(3);
+        const hpLost = takePlayerDamage(dmg, p.label || 'arrow trap');
+        sfx('hurt');
+        if (hpLost > 0) { spawnFloatingText(player.x, player.y, `${hpLost}`, p.color);
+          spawnParticles(player.x, player.y, p.color, 6, 0.08); }
+        addShake(3);
         updateBars();
         if (player.hp === 0) handleDeath();
       }
@@ -9676,10 +9695,9 @@ function updateTraps(dt) {
         tr.dmgCd -= dt;
         if (tr.dmgCd <= 0) {
           const dmg = Math.max(1, mitigateDamage(tr.dmg, dungeonLevel));
-          player.hp = Math.max(1, player.hp - dmg);   // vents singe but never kill outright (like lava)
-          notePlayerDamage(dmg, 'fire vent', true);
-          spawnFloatingText(player.x, player.y, `${dmg}`, '#ff7733');
-          spawnParticles(player.x, player.y, '#ff7733', 5, 0.09);
+          const hpLost = takePlayerDamage(dmg, 'fire vent', { lethal: false, isDoT: true }); // Bulwark soaks first; vents never kill
+          if (hpLost > 0) { spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff7733');
+            spawnParticles(player.x, player.y, '#ff7733', 5, 0.09); }
           tr.dmgCd = 0.5; updateBars();
         }
       } else if (!tr.on) tr.dmgCd = 0;
@@ -17892,19 +17910,15 @@ function tickStatusEffects() {
     if (s.target === 'player') {
       if (pulse && s.effect === 'poison') {
         const dmg = 2 + dungeonLevel;
-        player.hp = Math.max(1, player.hp - dmg);
-        notePlayerDamage(dmg, 'poison', true);
-        spawnFloatingText(player.x, player.y, `${dmg}`, '#44dd44');
+        const hpLost = takePlayerDamage(dmg, 'poison', { lethal: false, isDoT: true });
+        if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#44dd44');
         log(`<span data-spr=potion_g></span> Poison deals ${dmg} damage!`);
-        markHudDirty();
       }
       if (pulse && s.effect === 'burn') {
         const dmg = 4 + Math.round(dungeonLevel * 1.5);
-        player.hp = Math.max(1, player.hp - dmg);
-        notePlayerDamage(dmg, 'burning', true);
-        spawnFloatingText(player.x, player.y, `${dmg}`, '#ff8a3a');
+        const hpLost = takePlayerDamage(dmg, 'burning', { lethal: false, isDoT: true });
+        if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff8a3a');
         log(`<span data-spr=ic_fire></span> Burning deals ${dmg} damage!`);
-        markHudDirty();
       }
       if (pulse && s.effect === 'stun') {
         log('<span data-spr=ic_stun></span> You are stunned and cannot move!');
@@ -18549,9 +18563,9 @@ const FLOOR_EVENTS = [
   () => { buffs.power = Math.max(buffs.power, 1); log('<span data-spr=w_dagger></span> You hone your blade on a left-behind whetstone. +50% damage next floor.', 'loot'); },
   () => { const heal = Math.floor(player.maxHp*0.15); const mana = Math.floor(player.maxMp*0.15); player.hp = Math.min(player.maxHp, player.hp+heal); player.mp = Math.min(player.maxMp, player.mp+mana); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=potion_g></span> You find a half-full flask and drain it — +${heal} HP, +${mana} MP.`, 'loot'); },
   // ── Small hazards ──
-  () => { const dmg = Math.min(player.hp-1, rnd(5,12) + dungeonLevel); if (dmg>0){ player.hp -= dmg; spawnFloatingText(player.x, player.y, `${dmg}`, '#ff3344'); } log(`🪤 A hidden trap snaps shut — you take ${dmg} damage!`, 'important'); screenFlash('#cc0000'); },
-  () => { if (Math.random()<0.5){ const h=Math.floor(player.maxHp*0.12); player.hp=Math.min(player.maxHp,player.hp+h); spawnFloatingText(player.x,player.y,`+${h}`,'#44dd44'); log(`<span data-spr=potion_g></span> You sip from a strange puddle — surprisingly refreshing. +${h} HP.`,'loot'); } else { const d=Math.min(player.hp-1, rnd(3,8)); if(d>0){player.hp-=d; spawnFloatingText(player.x,player.y,`${d}`,'#ff3344');} log(`<span data-spr=potion_g></span> You sip from a strange puddle — bad idea. -${d} HP.`); } },
-  () => { const d = Math.min(player.hp-1, rnd(2,6)); if (d>0){ player.hp -= d; spawnFloatingText(player.x,player.y,`${d}`,'#ff3344'); } log(`🕸️ You blunder into a thick web and scratch free. -${d} HP.`); },
+  () => { const dmg = rnd(5,12) + dungeonLevel; const hpLost = takePlayerDamage(dmg, 'hidden trap', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344'); log(`🪤 A hidden trap snaps shut — you take ${dmg} damage!`, 'important'); screenFlash('#cc0000'); },
+  () => { if (Math.random()<0.5){ const h=Math.floor(player.maxHp*0.12); player.hp=Math.min(player.maxHp,player.hp+h); spawnFloatingText(player.x,player.y,`+${h}`,'#44dd44'); log(`<span data-spr=potion_g></span> You sip from a strange puddle — surprisingly refreshing. +${h} HP.`,'loot'); } else { const d=rnd(3,8); const hpLost=takePlayerDamage(d, 'strange puddle', { lethal: false }); if(hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`<span data-spr=potion_g></span> You sip from a strange puddle — bad idea. -${d} HP.`); } },
+  () => { const d = rnd(2,6); const hpLost = takePlayerDamage(d, 'web', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`🕸️ You blunder into a thick web and scratch free. -${d} HP.`); },
   // ── Pure flavour, no effect ──
   () => log('<span data-spr=b_deathknight></span> A long-dead adventurer slumps against the wall. You leave them be.'),
   () => log('<span data-spr=scroll></span> Scrawled on the stone: "TURN BACK." You press on anyway.'),
@@ -18650,6 +18664,17 @@ function applyRegen() {
       player.mp = Math.min(player.maxMp, player.mp + whole);
       updateBars();
     }
+  }
+  // Bulwark (persistent Spirit shield) recharges only after a damage-free window:
+  // any damage resets _noDmgSecs (takePlayerDamage), and once the calm passes the
+  // delay it refills toward maxShield at the Spirit/class recharge rate (a fraction
+  // of max per second). Nothing else restores it — no potions, skills or heals.
+  player._noDmgSecs = (player._noDmgSecs || 0) + WORLD_TICK_SECONDS;
+  if (player.hp > 0 && player.maxShield > 0 && player.shield < player.maxShield
+      && player._noDmgSecs >= shieldRechargeDelay()) {
+    const rate = shieldRechargePerSec(totalAttr('spirit'), player.class); // fraction of max /sec
+    player.shield = Math.min(player.maxShield, player.shield + player.maxShield * rate * WORLD_TICK_SECONDS);
+    markHudDirty();
   }
 }
 
@@ -19492,17 +19517,15 @@ function onEnterCell(nx, ny) {
   // as a turn-based step into them used to.
   if (tile === 7) {
     const burn = Math.round(4 + dungeonLevel * 1.5 + player.maxHp * 0.05);
-    player.hp = Math.max(1, player.hp - burn);
-    notePlayerDamage(burn, 'lava', true);
-    spawnFloatingText(player.x, player.y, `${burn}`, '#ff7733');
+    const hpLost = takePlayerDamage(burn, 'lava', { lethal: false, isDoT: true });
+    if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff7733');
     log(`<span data-spr=ic_fire></span> The lava scorches you for ${burn}!`, 'important');
     updateBars();
   }
   if (tile === 8) {
     const stab = Math.round(3 + dungeonLevel + player.maxHp * 0.03);
-    player.hp = Math.max(1, player.hp - stab);
-    notePlayerDamage(stab, 'spikes');
-    spawnFloatingText(player.x, player.y, `${stab}`, '#ff3344');
+    const hpLost = takePlayerDamage(stab, 'spikes', { lethal: false });
+    if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
     log(`🩸 Spikes stab you for ${stab}!`);
     updateBars();
   }
@@ -19753,12 +19776,16 @@ function applyIncomingMods(dmg, e) {
   // Flat damage reduction = DR rating vs depth (asymptotes below 100%, never caps).
   const dr = drFractionVs(lvl);
   if (dr > 0) dmg = Math.max(1, Math.round(dmg * (1 - dr)));
-  dmg = absorbWithShield(dmg);
   return dmg;
+  // NB: shield absorption (transient buff-shield, then the persistent Bulwark) is
+  // no longer done here — it now lives in takePlayerDamage() so EVERY damage source
+  // (hits, DoTs, hazards) is soaked once and in the same order.
 }
 
-// Holy Shield / Mana Barrier / Bastion: a transient shield (combatBuffs.shield,
+// Holy Shield / Mana Barrier / Bastion: a transient buff shield (combatBuffs.shield,
 // mag = remaining HP it can soak) absorbs incoming damage before it reaches HP.
+// Soaked first (before the persistent Bulwark) so a temporary, expiring shield is
+// spent before the always-there pool. Called from takePlayerDamage().
 function absorbWithShield(dmg) {
   const b = combatBuffs.shield;
   if (!b || b.secs <= 0 || b.mag <= 0 || dmg <= 0) return dmg;
@@ -19767,6 +19794,42 @@ function absorbWithShield(dmg) {
   spawnFloatingText(player.x, player.y - 0.3, `BLOCK ${soak}`, '#cfe0ff');
   if (b.mag <= 0) delete combatBuffs.shield;
   return Math.max(0, dmg - soak);
+}
+
+// Blue floating number colour for Bulwark (the persistent Spirit shield) absorbs.
+// Mirrors the --shield design token; the HUD overlay uses the same hue.
+const BULWARK_COLOR = '#7fb2ff';
+
+// The persistent Spirit-fuelled Bulwark shield (player.shield) soaks whatever the
+// transient buff-shield didn't. Returns the damage left to hit HP. Any damage that
+// reaches here already reset the recharge timer in takePlayerDamage().
+function absorbWithBulwark(dmg) {
+  if (!(player.shield > 0) || dmg <= 0) return dmg;
+  const soak = Math.min(player.shield, dmg);
+  player.shield -= soak;
+  if (soak >= 1) spawnFloatingText(player.x, player.y - 0.3, `${Math.round(soak)}`, BULWARK_COLOR);
+  return Math.max(0, dmg - soak);
+}
+
+// The single choke every REAL damage source routes through (enemy hits, DoTs,
+// hazards — NOT self-inflicted HP costs like Blood Pact). It: restarts the Bulwark
+// recharge delay; soaks the transient buff-shield, then the Bulwark, then HP;
+// floors HP at 0 (lethal) or 1 (never-kill hazards); records the source for the
+// death screen; and returns the HP actually lost (0 if fully shielded) so callers
+// can show a red number / blood only for real health loss. Death is still fired by
+// each lethal caller's existing `if (player.hp === 0) handleDeath()`.
+function takePlayerDamage(dmg, label, { lethal = true, isDoT = false } = {}) {
+  dmg = Math.max(0, Math.round(dmg || 0));
+  if (dmg <= 0) return 0;
+  player._noDmgSecs = 0;                 // any damage restarts the calm-before-recharge
+  let rem = absorbWithShield(dmg);       // transient buff shield first
+  rem = absorbWithBulwark(rem);          // then the persistent Bulwark
+  const floor = lethal ? 0 : 1;
+  const before = player.hp;
+  player.hp = Math.max(floor, player.hp - rem);
+  if (label) notePlayerDamage(dmg, label, isDoT);
+  markHudDirty();
+  return before - player.hp;
 }
 
 // Thorns (gear): reflect a flat amount back at a melee attacker after it hits you.
@@ -20542,7 +20605,7 @@ function adjacentOpenTile(e) {
 // Spell base damage shared by the Mage/Templar nuke actives (scales with Spirit
 // and any Spell Power passives).
 function spellBase(flat, perLevel) {
-  return (flat + player.level * perLevel + totalAttr('spirit') * ATTR_FX.spellPerSpr) * spellPowerMult();
+  return (flat + player.level * perLevel + totalAttr('spirit') * attrCoef('spellPower')) * spellPowerMult();
 }
 
 // ── DATA-DRIVEN ACTIVE SKILLS ──
@@ -21027,13 +21090,17 @@ function resolveCast(node, rank) {
   if (physCast && physTotal > 0) lifestealHeal(physTotal);
   if (c.heal) {
     let heal = 0;
-    if (c.heal.flat) heal += (c.heal.flat + player.level * (c.heal.perLevel || 0)) * rs;
-    if (c.heal.pctDmg) heal += total * c.heal.pctDmg;
-    // Cap a single cast's healing to a fraction of max HP (like the lifesteal/leech
-    // caps above), so a big smite/nova can't refill you from near-death on every hit
-    // and HP stays a finite resource.
-    const healCap = Math.max(1, Math.round(player.maxHp * 0.20));
-    heal = Math.min(player.maxHp - player.hp, healCap, Math.round(heal));
+    // Flat healing now scales off Spirit (class-scaled — mage > templar > rogue >
+    // warrior) and Spell Power, the same channel that powers offensive spells, and
+    // the old flat 20%-of-max-HP cap is GONE (Spirit is the sustain investment).
+    // A cast still can't heal past the HP you're actually missing. See healAmount()
+    // and the 'heal' channel in src/data/attributeScaling.js.
+    if (c.heal.flat) {
+      heal += calcHealAmount(c.heal.flat, c.heal.perLevel || 0, player.level,
+        totalAttr('spirit'), player.class, rs, spellPowerMult());
+    }
+    if (c.heal.pctDmg) heal += total * c.heal.pctDmg;   // hybrid "heal for X% of damage dealt"
+    heal = Math.min(player.maxHp - player.hp, Math.round(heal));
     if (heal > 0) { player.hp += heal; spawnFloatingText(player.x, player.y, `+${heal}`, '#7fffaa'); }
   }
   if (c.buff) {
@@ -21605,11 +21672,10 @@ function enemyAttackPlayer(e) {
   if (beh.hitMult) raw = Math.round(raw * beh.hitMult);
   if (buffs.guard) raw = Math.round(raw * 0.6);
   const dmg = applyIncomingMods(absorbWithMana(mitigateDamage(raw, e.level)), e);
-  player.hp = Math.max(0, player.hp - dmg);
-  notePlayerDamage(dmg, enemyLabel(e));
+  const hpLost = takePlayerDamage(dmg, enemyLabel(e));   // soaks Bulwark → HP, floors at 0
   sfx('hurt');
-  spawnFloatingText(player.x, player.y, `${dmg}`, '#ff3344');
-  if (dmg > 0) { spawnParticles(player.x, player.y, '#d22a3a', 6, 0.07); addShake(4); playEnemyMeleeVfx(e, beh); }
+  if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
+  if (dmg > 0) { if (hpLost > 0) spawnParticles(player.x, player.y, '#d22a3a', 6, 0.07); addShake(4); playEnemyMeleeVfx(e, beh); }
   log(`💢 ${enemyLabel(e)} -${dmg}`);
   if (player.hp > 0 && player.hp <= player.maxHp * 0.25) fireSkillTrigger('lowhp', { enemy: e });
   if (player.hp <= player.maxHp * 0.25) screenFlash('#cc0000');
@@ -21667,11 +21733,11 @@ function landEnemyRangedHit(e, raw, color) {
   }
   if (buffs.guard) raw = Math.round(raw * 0.6);
   const dmg = applyIncomingMods(absorbWithMana(mitigateDamage(raw, e.level)), e);
-  player.hp = Math.max(0, player.hp - dmg);
-  notePlayerDamage(dmg, enemyLabel(e) + ' (ranged)');
+  const hpLost = takePlayerDamage(dmg, enemyLabel(e) + ' (ranged)');   // soaks Bulwark → HP
   sfx(e.isBoss ? 'boss' : 'hurt');
-  spawnFloatingText(player.x, player.y, `${dmg}`, color || '#c77dff');
-  spawnParticles(player.x, player.y, color || '#c77dff', 6, 0.08); addShake(3);
+  if (hpLost > 0) { spawnFloatingText(player.x, player.y, `${hpLost}`, color || '#c77dff');
+    spawnParticles(player.x, player.y, color || '#c77dff', 6, 0.08); }
+  addShake(3);
   log(`<span data-spr=w_bow></span> ${enemyLabel(e)} -${dmg}`);
   // Even a non-critical hit from off-screen gets a soft flash so a ranged
   // attacker chipping you from across the room never goes unsignalled.
@@ -21747,12 +21813,10 @@ function tickBossHazards() {
   if (fire && fire.dmg > 0 && Date.now() - (player._fireBurnAt || 0) >= 1000 * DOT_INTERVAL) {
     player._fireBurnAt = Date.now();
     const burn = Math.max(1, mitigateDamage(fire.dmg, dungeonLevel));
-    player.hp = Math.max(1, player.hp - burn);
-    notePlayerDamage(burn, 'wall of flame', true);
-    spawnFloatingText(player.x, player.y, `${burn}`, '#ff7733');
-    spawnParticles(player.x, player.y, '#ff7733', 5, 0.08);
+    const hpLost = takePlayerDamage(burn, 'wall of flame', { lethal: false, isDoT: true });
+    if (hpLost > 0) { spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff7733');
+      spawnParticles(player.x, player.y, '#ff7733', 5, 0.08); }
     log(`<span data-spr=ic_fire></span> You stand in the flames for ${burn}!`);
-    markHudDirty();
   }
   bossHazards = bossHazards.filter(h => { h.secs -= WORLD_TICK_SECONDS; return h.secs > 0; });
 }
@@ -21788,13 +21852,11 @@ function bossBlockFits(e, nx, ny) {
 // death and the low-HP flash. Returns the damage dealt. Shared by the specials.
 function bossHitPlayer(raw, e, color) {
   const dmg = Math.max(1, mitigateDamage(raw, e.level));
-  player.hp = Math.max(0, player.hp - dmg);
-  notePlayerDamage(dmg, enemyLabel(e) + ' (special)');
-  spawnFloatingText(player.x, player.y, `${dmg}`, color || '#ff3344');
-  markHudDirty();
+  const hpLost = takePlayerDamage(dmg, enemyLabel(e) + ' (special)');   // soaks Bulwark → HP
+  if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, color || '#ff3344');
   if (player.hp <= player.maxHp * 0.25) screenFlash('#cc0000');
   if (player.hp === 0) handleDeath();
-  return dmg;
+  return dmg;   // the raw blow (pre-shield) — callers use it for lifesteal etc.
 }
 
 // Returns true if the boss spent its whole action on a special (so it skips moving).
@@ -21868,13 +21930,11 @@ function telegraphHitPlayer(src, raw, label) {
   if (entryGuard) return;                              // arrival grace
   if (typeof buffs !== 'undefined' && buffs && buffs.guard) raw = Math.round(raw * 0.6);
   const dmg = applyIncomingMods(absorbWithMana(mitigateDamage(raw, src ? src.level : dungeonLevel)), src);
-  player.hp = Math.max(0, player.hp - dmg);
-  notePlayerDamage(dmg, label || 'the guardian');
+  const hpLost = takePlayerDamage(dmg, label || 'the guardian');   // soaks Bulwark → HP
   sfx('hurt');
-  spawnFloatingText(player.x, player.y, `${dmg}`, '#ff3344');
-  if (dmg > 0) { spawnParticles(player.x, player.y, '#d22a3a', 7, 0.08); addShake(5); }
+  if (hpLost > 0) { spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
+    spawnParticles(player.x, player.y, '#d22a3a', 7, 0.08); addShake(5); }
   if (player.hp > 0 && player.hp <= player.maxHp * 0.25) { screenFlash('#cc0000'); fireSkillTrigger('lowhp', { enemy: src }); }
-  markHudDirty();
   if (player.hp === 0) handleDeath();
 }
 // Queue a telegraph, stamping defaults + capping the live count so a frantic phase
@@ -22749,6 +22809,7 @@ function handleDeath() {
     recomputeMaxStats();
     player.hp = Math.max(1, Math.round(player.maxHp * 0.5));
     player.mp = Math.max(player.mp, Math.round(player.maxMp * 0.35));
+    player.shield = player.maxShield; player._noDmgSecs = 0;   // rise with a full Bulwark
     sfx('levelup'); screenFlash('#ffd24b');
     spawnFloatingText(player.x, player.y, 'REVIVED!', '#ffd24b');
     log(`${bowlIcon(14)} ${fb.name} blazes to life — you cheat death and rise from the ashes!`, 'important');
@@ -22804,6 +22865,7 @@ function handleDeath() {
   dmgTaken = [];
   log(`<span data-spr=b_deathknight></span> ${player.name || HERO} was SLAIN on ${floorLabel(fellOn)}! Lost <span data-spr=ic_money></span>${lostGold}${lostXp ? ` and ${lostXp} XP` : ''}${lostBag ? `, and dropped your bag (${lostBag}) — reclaim it on ${floorLabel(fellOn)}` : ''} — revived weakened in town. The dungeon eases up while you find your feet.`, 'important');
   recomputeMaxStats();
+  player.shield = player.maxShield; player._noDmgSecs = 0;   // revive in town with a full Bulwark
   updateBars();
   renderPanel();
   saveGame();
@@ -23036,9 +23098,8 @@ function openChest(chest) {
     if (!placed) {
       // No room to spawn — it just bites you on the spot instead.
       const bite = mitigateDamage(dmg, mLevel);
-      player.hp = Math.max(1, player.hp - bite);
-      notePlayerDamage(bite, 'Mimic <span data-spr=chest></span>');
-      spawnFloatingText(player.x, player.y, `${bite}`, '#ff3344');
+      const hpLost = takePlayerDamage(bite, 'Mimic <span data-spr=chest></span>', { lethal: false });
+      if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
     }
     sfx('trap');
     log('<span data-spr=chest></span> It\'s a MIMIC! The chest lunges at you!', 'important');
@@ -23071,9 +23132,8 @@ function openChest(chest) {
     sfx('trap');
     if (Math.random() < 0.5) {
       const dmg = 4 + dungeonLevel * 2;
-      player.hp = Math.max(1, player.hp - dmg);
-      notePlayerDamage(dmg, 'trapped chest');
-      spawnFloatingText(player.x, player.y, `${dmg}`, '#ff3344');
+      const hpLost = takePlayerDamage(dmg, 'trapped chest', { lethal: false });
+      if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
       log(`💥 It was a trapped chest! It explodes for ${dmg} damage!`, 'important');
     } else {
       applyStatusEffect('player', 'poison', 3, null);
@@ -23181,10 +23241,20 @@ function spendAttr(key, ev) {
   player.attributes[key] = (player.attributes[key] || 0) + amount;
   player.attrPoints -= amount;
   bumpLoadout();   // attributes feed the cached gear resolve (equip gates)
-  // Raising Vitality/Spirit/Might immediately grants the extra HP/MP/Stamina it unlocks.
-  if (key === 'vitality') { const before = player.maxHp; recomputeMaxStats(); player.hp += (player.maxHp - before); }
-  else if (key === 'spirit') { const before = player.maxMp; recomputeMaxStats(); player.mp += (player.maxMp - before); }
-  else if (key === 'might') { const before = player.maxStamina || MAX_STAMINA; recomputeMaxStats(); player.stamina = Math.min(player.maxStamina, (player.stamina || 0) + (player.maxStamina - before)); }
+  // Raising an attribute immediately grants the extra pool it unlocks so the buy
+  // feels responsive. Re-homed in the attribute overhaul: Vitality now tops up HP
+  // AND Stamina; Spirit tops up MP AND the Bulwark shield; Might raises Defense
+  // (no pool to fill).
+  const beforeHp = player.maxHp, beforeMp = player.maxMp;
+  const beforeStam = player.maxStamina || MAX_STAMINA, beforeShield = player.maxShield || 0;
+  recomputeMaxStats();
+  if (key === 'vitality') {
+    player.hp += (player.maxHp - beforeHp);
+    player.stamina = Math.min(player.maxStamina, (player.stamina || 0) + (player.maxStamina - beforeStam));
+  } else if (key === 'spirit') {
+    player.mp += (player.maxMp - beforeMp);
+    player.shield = Math.min(player.maxShield, (player.shield || 0) + (player.maxShield - beforeShield));
+  }
   log(`${ATTRIBUTES[key].label} raised to ${player.attributes[key]}.`, 'loot');
   updateBars();
   renderPanel();
@@ -23235,6 +23305,7 @@ function renderStaminaBar() {
 // integers. (glideVitalFill lives in systems/vitalFill.js so it can be unit-tested.)
 let _hpFillVis = null, _mpFillVis = null;   // eased visual HP/MP (null → snap on first frame)
 let _hpFillW = null, _mpFillW = null;       // last written fill widths (skip unchanged writes)
+let _hpShieldW = null;                       // last written Bulwark mask width (skip unchanged)
 const VITAL_EASE_TAU = 0.14;   // seconds — ease time constant for a rate-less instant sub-burst
 const VITAL_SNAP_FRAC = 0.30;  // a gain bigger than this share of max is a burst, not a trickle → snap
 // Live HP recovery rate (points/sec): passive regen while below max, plus each pending
@@ -23278,6 +23349,18 @@ function updateVitalFills(dt) {
     const a = hudEl('mp-bar'), b = hudEl('dh-mp-fill');
     if (a) a.style.width = mpW;
     if (b) b.style.width = mpW;
+  }
+  // Bulwark mask: its width is shield/maxShield of the FULL bar (independent of HP).
+  // The SAME width drives the translucent blue mask (over HP) and the gray missing-HP
+  // band (behind HP), so a receding shield uncovers red HP, then gray. Both layouts
+  // share the width string, so one changed-check covers all four elements.
+  const shieldPct = (player.maxShield > 0) ? clampPct(player.shield || 0, player.maxShield) : 0;
+  const shieldW = shieldPct + '%';
+  if (shieldW !== _hpShieldW) {
+    _hpShieldW = shieldW;
+    for (const id of ['hp-shield', 'hp-shield-under', 'dh-hp-shield', 'dh-hp-shield-under']) {
+      const e = hudEl(id); if (e) e.style.width = shieldW;
+    }
   }
 }
 // ── Active buffs & debuffs HUD strip ────────────────────────────────────────
@@ -23393,6 +23476,10 @@ function updateBars() {
   // The HP/MP fill widths are eased every frame in updateVitalFills() so over-time
   // recovery climbs smoothly; here we only refresh the readouts and danger pulse.
   document.getElementById('hp-text').textContent = `${player.hp}/${player.maxHp}`;
+  // Bulwark readout: its own number next to HP so both pools are legible (blue).
+  const shieldNow = (player.maxShield > 0 && player.shield >= 1) ? Math.round(player.shield) : 0;
+  const shTxt = document.getElementById('hp-shield-text');
+  if (shTxt) shTxt.textContent = shieldNow ? `+${shieldNow}` : '';
   // Pulse the HP bar red when health drops to a dangerous level (≤25%, but not dead).
   const hpLow = player.hp > 0 && player.hp / player.maxHp <= 0.25;
   hpBar.classList.toggle('hp-low', hpLow);
@@ -23420,7 +23507,8 @@ function updateBars() {
     // danger pulse on the HP fill and the numeric readouts.
     const dhHp = document.getElementById('dh-hp-fill');
     if (dhHp) dhHp.classList.toggle('hp-low', hpLow);
-    dset('dh-hp-val', `${player.hp}/${player.maxHp}`);
+    const dhHpVal = document.getElementById('dh-hp-val');
+    if (dhHpVal) dhHpVal.innerHTML = `${player.hp}/${player.maxHp}` + (shieldNow ? ` <span class="dh-shield-val">+${shieldNow}</span>` : '');
     dset('dh-mp-val', `${player.mp}/${player.maxMp}`);
     setPending('dh-hp-pending', player.hp, player.maxHp, pendHeal);
     setPending('dh-mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
@@ -24021,15 +24109,14 @@ function renderHero(el) {
   // Count only ACTIVE gear so this "from gear" subtotal reconciles with the headline
   // POWER (playerPower also skips red/ignored pieces).
   const gearPower = gearContributionPower();
-  const dmgA = classDmgAttrs();
-  // Each attribute row shows base+spent plus any gear bonus, tags the class's
-  // damage attributes, and offers a + to raise it.
+  const dmgAttr = classDamageAttr(player.class);
+  // Each attribute row shows base+spent plus any gear bonus, tags the class's single
+  // damage attribute, and offers a + to raise it.
   const rows = ATTR_KEYS.map(key => {
     const at = ATTRIBUTES[key];
     const own = player.attributes?.[key] || 0;
     const gear = totalAttr(key) - own;
-    const tag = key === dmgA.primary ? ' <span style="color:var(--gold-350)">★dmg</span>'
-              : key === dmgA.secondary ? ' <span style="color:var(--warn)">☆dmg</span>' : '';
+    const tag = key === dmgAttr ? ' <span style="color:var(--gold-350)">★dmg</span>' : '';
     const gearStr = gear ? ` <span style="color:var(--green-400)">+${gear}</span>` : '';
     return `<div class="attr-row">
       <div class="attr-info">
@@ -25068,6 +25155,7 @@ function chooseClass(key) {
   recomputeMaxStats();
   player.hp = player.maxHp;
   player.mp = player.maxMp;
+  player.shield = player.maxShield;   // a fresh hero starts with a full Bulwark
   const ov = document.getElementById('class-overlay');
   if (ov) ov.classList.remove('open');
   // New flow: class is chosen FIRST. A brand-new hero then goes to the name + body
@@ -25101,6 +25189,7 @@ function changeClass(key) {
   recomputeMaxStats();
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
+  player.shield = player.maxShield;   // retrain refreshes the Bulwark for the new class
   sfx('shrine');
   log(`${dlIcon(cls.icon, 16)} You retrain as a ${cls.name}!${refunded ? ` ${refunded} skill point${refunded === 1 ? '' : 's'} refunded — respend them in the SKILLS tab.` : ''}`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); renderTrainer(); draw(); saveGame();
@@ -26697,6 +26786,10 @@ function loadGame() {
     recomputeMaxStats();
     if (player.hp == null || player.hp > player.maxHp) player.hp = player.maxHp;
     if (player.mp == null || player.mp > player.maxMp) player.mp = player.maxMp;
+    // Bulwark: older saves predate the shield — start them at full, and clamp any
+    // stale value down to the freshly computed max.
+    if (player.shield == null || isNaN(player.shield) || player.shield > player.maxShield) player.shield = player.maxShield;
+    player._noDmgSecs = player._noDmgSecs || 0;
     // Always spawn at the safe start tile on a freshly generated floor. Sync the
     // smooth float position too (the saved player object may carry a stale fx/fy).
     setPlayerCell(5, 5);
@@ -29980,7 +30073,7 @@ const __DL_FN_BRIDGE = {
   playerEvasionRating,
   playerAccuracyRating,
   agilityAboveBase,
-  mightAboveBase,
+  vitalityAboveBase,
   agiMoveMult,
   agiAtkSpeedPct,
   playerCritRating,

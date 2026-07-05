@@ -56,8 +56,8 @@
     <div id="hero-name-hud" class="hero-name-hud" style="display:none"></div>
     <div class="stat-bar" data-tip="<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health (HP)</div><div class='ht-line'>Your life. When it hits 0 you die. Restore it with potions, resting in town, and levelling up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
       <span style="color:var(--hp);font-size:1.3rem;font-weight:bold;text-shadow:0 0 5px var(--hp)">HP</span>
-      <div class="bar-track"><div class="bar-pending hp-pending" id="hp-pending"></div><div class="bar-fill hp-fill" id="hp-bar" style="width:100%"></div></div>
-      <span id="hp-text" style="font-size:1.2rem">100</span>
+      <div class="bar-track"><div class="bar-shield-under" id="hp-shield-under" style="width:0"></div><div class="bar-pending hp-pending" id="hp-pending"></div><div class="bar-fill hp-fill" id="hp-bar" style="width:100%"></div><div class="bar-shield" id="hp-shield" style="width:0"></div></div>
+      <span id="hp-text" style="font-size:1.2rem">100</span><span id="hp-shield-text" class="shield-text"></span>
     </div>
     <div class="stat-bar" data-tip="<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana (MP)</div><div class='ht-line'>Spent to cast class skills and spells. Regenerates slowly over time and partly recovers when you level up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
       <span style="color:var(--mp);font-size:1.3rem;font-weight:bold;text-shadow:0 0 5px var(--mp)">MP</span>
@@ -120,7 +120,7 @@
       <div class="dh-top">
         <div class="dh-vital dh-hp" data-tip="<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health (HP)</div><div class='ht-line'>Your life. When it hits 0 you die. Restore it with potions, resting in town, and levelling up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <span class="dh-vital-tag">HP</span>
-          <div class="dh-vital-track"><div class="dh-vital-pending hp" id="dh-hp-pending"></div><div class="dh-vital-fill hp" id="dh-hp-fill"></div><span class="dh-vital-val" id="dh-hp-val">100/100</span></div>
+          <div class="dh-vital-track"><div class="dh-vital-shield-under" id="dh-hp-shield-under" style="width:0"></div><div class="dh-vital-pending hp" id="dh-hp-pending"></div><div class="dh-vital-fill hp" id="dh-hp-fill"></div><div class="dh-vital-shield" id="dh-hp-shield" style="width:0"></div><span class="dh-vital-val" id="dh-hp-val">100/100</span></div>
         </div>
         <div class="dh-mid">
           <div class="dh-info">
