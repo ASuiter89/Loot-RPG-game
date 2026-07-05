@@ -213,11 +213,68 @@ async function main() {
       if (multiCast) failures.push('multi-touch: the long-press fired the action despite raising the tip');
     }
 
+    // 7) Enchanter (touch): tapping a WORN gear piece must PICK it for enchanting.
+    //    This uses a REAL touchscreen tap (not a synthetic PointerEvent) because the
+    //    bug is in the browser's mouse-compat events: a plain tap synthesizes
+    //    mouseenter on the slot, and the slot's hover handler used to pop the stat
+    //    card OVER the tap point before the click resolved — the compat mousedown
+    //    then landed on the tooltip, not the slot, so NO click was generated and the
+    //    piece could never be selected. Guard that worn gear stays tappable here.
+    let enchPicked = null;
+    await page.evaluate(() => {
+      window.equipped.weapon = window.generateItem(3, 5, 'rare', 'weapon');
+      if (typeof window.bumpLoadout === 'function') window.bumpLoadout();
+      window.openTownService('enchanter');
+    });
+    await page.waitForTimeout(150);
+    const enchSlot = await page.evaluate(() => {
+      const s = document.querySelector('#town-content .pd-slot.filled');
+      if (!s) return null;
+      s.scrollIntoView({ block: 'center' });
+      const r = s.getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+    });
+    if (!enchSlot) failures.push('enchanter: no worn gear slot rendered to tap');
+    else {
+      await page.touchscreen.tap(enchSlot.x, enchSlot.y);   // a REAL tap (fires the full touch→mouse-compat→click chain)
+      await page.waitForTimeout(150);
+      // Picking a piece swaps the list for its detail view (a ‹ Back button + the
+      // Augment / Reroll actions), so its presence proves the tap selected the piece.
+      enchPicked = await page.evaluate(() =>
+        [...document.querySelectorAll('#town-content button')].some((b) => /‹\s*Back/.test(b.textContent)) ||
+        document.querySelectorAll('#town-content .ench-act').length > 0);
+      if (!enchPicked) failures.push('enchanter: tapping a worn gear slot did not open its enchant detail (the tap-click was stolen by the hover tooltip)');
+    }
+
+    // 8) Bag-over-town-menus stacking: opening the Bag on touch must render ABOVE
+    //    the town / shop / mystic service sheets, not behind them. The Bag sheet and
+    //    those overlays used to tie at --z-modal, and the overlays come LATER in the
+    //    DOM, so the merchant painted over the Bag. elementFromPoint is the faithful
+    //    check — it reflects the real paint / hit-test order, DOM tie-breaks included.
+    const bagStack = {};
+    for (const ovId of ['town-overlay', 'shop-overlay', 'mystic-overlay']) {
+      const r = await page.evaluate((id) => {
+        const ov = document.getElementById(id);
+        ov.classList.add('open');                                   // force the service sheet open
+        if (!document.body.classList.contains('bag-open')) window.toggleBag();  // open the Bag over it
+        const cx = Math.round(window.innerWidth / 2), cy = Math.round(window.innerHeight / 2);
+        const hit = document.elementFromPoint(cx, cy);
+        const onBag = !!(hit && hit.closest('#side-panel'));
+        const onOverlay = !!(hit && hit.closest('#' + id));
+        if (document.body.classList.contains('bag-open')) window.toggleBag();   // restore clean state
+        ov.classList.remove('open');
+        return { onBag, onOverlay, hit: hit ? (hit.id || hit.className || hit.tagName) : null };
+      }, ovId);
+      bagStack[ovId] = r.onBag ? 'above' : (r.onOverlay ? 'BEHIND' : `hit:${r.hit}`);
+      if (!r.onBag) failures.push(`Bag opened over #${ovId} but renders behind it (elementFromPoint hit ${r.hit || 'nothing'}) — the Bag must sit above town menus`);
+    }
+
     if (pageErrors.length) failures.push(`uncaught page errors:\n  - ${pageErrors.join('\n  - ')}`);
 
     console.log('touch: reveal', revealed, '| moved', moved, '| joyCleared', !rest.joyOn, '| tap', tapped,
+      '| enchPicked', enchPicked,
       '| tapCast', tapCast, 'tapTip', tapTip, '| holdTip', holdTip, 'holdCast', holdCast,
-      '| multiTip', multiTip, 'multiCast', multiCast);
+      '| multiTip', multiTip, 'multiCast', multiCast, '| bagStack', bagStack);
   } catch (e) {
     failures.push(`touch drive failed: ${String(e).split('\n')[0]}`);
   } finally {

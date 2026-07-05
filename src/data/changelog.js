@@ -14,6 +14,15 @@ export const CHANGELOG = [
     "Cursed items are much stronger and scale with rarity: a curse swings a stat by ~2.2× a normal roll on an uncommon up to ~5× on a legendary, with an equally strong drawback on another stat. Cursed items still can't be reforged at the Enchanter — the boost and its price are permanent.",
     "Old saves are repaired on load — any stat left over-inflated by the earlier curse bug is pulled back in-band automatically.",
   ] },
+  { date: "2026-07-04", size: "small", v: "Enchanter reroll buttons stack under the text on phones", by: "Claude", notes: [
+    "On a phone the Enchanter's per-property rows now read top to bottom — the stat and its roll range sit on top, with the Value and Type reroll buttons laid across the bottom. The buttons and their prices used to crowd in beside the text on a narrow screen and overlap it, making them hard to read and tap; now each row stands clear at any width.",
+  ] },
+  { date: "2026-07-04", size: "small", v: "Bag opens over town menus on phones", by: "Claude", notes: [
+    "On a phone, opening the Bag from Town now covers the menu you opened it over — it used to slip behind the merchant (and the mystic), hiding your loot behind their wares.",
+  ] },
+  { date: "2026-07-04", size: "small", v: "Touch: tap worn gear to enchant it", by: "Claude", notes: [
+    "On a phone you can now tap a worn piece of gear at the Enchanter to pick it. A tap on an equipped slot used to flash its stat card instead of selecting it, so equipped gear was impossible to work on — now the tap selects it and its properties open on the piece's own screen.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Menus flow to any screen; foldables play unfolded", by: "Claude", notes: [
     "Town and every other menu now reshape to whatever screen you're on — a narrow phone or a folded cover screen drops to a single scrollable column instead of running the buttons off the right edge, and a wide unfolded screen fans the tiles out into more columns. The difficulty and floor pickers and the craftsman's tiles reflow the same way.",
     "You can now reach Settings and the Bag while you're in Town on a phone — the two buttons stay tappable over the town menu instead of being hidden behind it.",

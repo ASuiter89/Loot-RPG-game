@@ -25161,6 +25161,14 @@ function tapSlot(slot, el) {
 // Desktop hover for gear slots (mirrors the loot list). Doesn't set
 // tooltipShowing so it stays a transient preview that clears on mouseleave.
 function hoverSlot(e, slot) {
+  // Touch has no hover: a tap synthesizes mouseenter, which would pop this preview
+  // card OVER the tap point BEFORE the click resolves — the compat mousedown then
+  // lands on the tooltip, not the slot, so no click is generated and the slot's
+  // action never fires (at the Enchanter this made worn gear impossible to pick).
+  // On touch the tap fires the slot action directly (tapSlot / enchantPick); the
+  // stat card is reached by tapping (which sets tooltipShowing) instead. Mirrors
+  // the same touch bail in showHoverTip.
+  if (isTouchMode()) return;
   if (tooltipShowing) return; // don't fight a tapped-open tooltip
   const item = equipped[slot];
   if (item) showTooltipForItem(item, e.currentTarget);
