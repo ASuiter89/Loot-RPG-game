@@ -25832,15 +25832,21 @@ function renderPaperdoll() {
   // side, gloves & ring by the hands, greaves down at the legs.
   const body = heroFaceIcon(player.class, player.sex, 232) || dlIcon('hero', 232);
   const bodyHTML = body ? `<div class="pda-body">${body}</div>` : '';
+  // Middle column (head → amulet → chest → legs) is evenly stacked at a uniform
+  // ~19% step, and the whole cluster is vertically CENTRED in the frame (its
+  // midpoint at 50%) so it reads centred between the gear-set bar above and the
+  // hint text below, with matching breathing room top and bottom. The side columns
+  // interleave between the middle rows (a raised hand by the chest, the gloves &
+  // ring lower), each pair at the same ~19% step.
   const POS = {
-    head:    [50, 13],
-    amulet:  [50, 33],
-    chest:   [50, 50],
-    legs:    [50, 78],
-    weapon:  [12, 47],
-    offhand: [88, 47],
-    hands:   [12, 65],
-    ring:    [88, 65],
+    head:    [50, 21.5],
+    amulet:  [50, 40.5],
+    chest:   [50, 59.5],
+    legs:    [50, 78.5],
+    weapon:  [12, 50],
+    offhand: [88, 50],
+    hands:   [12, 69],
+    ring:    [88, 69],
   };
   const slots = Object.keys(POS).map(slot => {
     const [x, y] = POS[slot];

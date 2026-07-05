@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Cleaner GEAR equipment layout", by: "Claude", notes: [
+    "The equipment doll on the GEAR tab drops the name label under each slot — long names used to wrap and spill over the tiles below them. Every piece's name and full stats still show in its tap/hover tooltip.",
+    "Slots are evenly stacked at one consistent spacing, and the whole layout is centred between the loadout bar above and the hint text below.",
+    "The hero behind the slots is centred over them and sized to stand just slightly taller, with no empty band left under the feet.",
+  ] },
   { date: "2026-07-05", size: "large", v: "Bestiary codex & a unique/set Collection vault tab", by: "Claude", notes: [
     "New Bestiary — a browsable codex of every foe, opened from the pause menu. Each card fills in as you slay more of a species; a boss card stays a sealed silhouette until your first kill, then opens fully.",
     "A foe's stats reveal one field at a time over ten kills (a boss is all-or-nothing on the first kill), mirroring the dungeon hover card. Filter by creatures, bosses, or discovered, and track completion.",
