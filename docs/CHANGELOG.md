@@ -8,6 +8,24 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Fix — AoE spells blast from the point of impact
+
+- 📦 New pure module `src/systems/aoeTargeting.js` holds the per-shape line-of-sight
+  targeting brain: `castTargetsInSight` (a BLAST spreads its splash from the impact
+  point — LOS judged from the detonation, not the hero — while bolt/nova/line
+  radiate from the hero), `splashTargetsFrom` (foes an impact tile can see, reused
+  by mark **detonation** bursts), `nextChainLink` (a chain arc jumps foe→foe, each
+  hop's LOS judged from the previous link), and `isImpactAoeShape`. All pure over an
+  injected LOS predicate.
+- The monolith's `resolveCast` now delegates to it: blast/chain target the nearest
+  foe the hero can SEE (new `nearestVisibleFoeInRange` adapter), a blast's radius
+  damage and detonation bursts spread from the impact via LOS from that point, and
+  `chainTargets` gates each link with `nextChainLink`. Fixes area spells (Meteor,
+  Fireball, Blizzard, …) only hitting foes the HERO could see rather than the whole
+  pack around the impact. `gameGuide("skills")` updated.
+- 🧪 `test/systems/aoeTargeting.test.js` — the meteor-behind-a-wall fix, impact-LOS
+  splash, projectile-can't-reach fizzle, chain-bends-around-a-corner, and guards.
+
 ## Feature — build-aware gear Power
 
 - 📦 The **Power model** moved out of `src/legacy/game.js` into pure, testable

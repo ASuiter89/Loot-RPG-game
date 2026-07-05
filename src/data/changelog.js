@@ -11,13 +11,35 @@ export const CHANGELOG = [
     "Any number in the thousands or higher now shows in short form everywhere — 14,523 reads \"14k\", 2,400,000 reads \"2.4M\". Applies to damage, gold, HP/MP, Power, item stats, tooltips, shop and forge prices, the leaderboard and the combat log.",
     "Values under a thousand still show in full. Short forms round DOWN, so a readout never claims more than you actually have.",
   ] },
-  { date: "2026-07-05", size: "large", v: "Class attribute overhaul + the Bulwark shield", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Spirit Veil rolls on caster gear", by: "Claude", notes: [
+    "Gear can now roll a flat +Spirit Veil bonus — the shield twin of flat +Max HP — that adds straight onto your maximum Spirit Veil shield.",
+    "It's gated to Spirit gear by SPECIFIC base, not by slot: only Spirit-identity bases roll it — Crown & Circlet, Robe, Leggings, Loop, Necklace, and Tome & Focus off-hands. Weapons and gloves never do.",
+    "The roll counts toward a piece's Power as extra effective health, so a Spirit-Veil piece reads as the survivability upgrade it is.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Arcing crits obey line of sight", by: "Claude", notes: [
+    "The Arcing power's crit fork now jumps from the struck foe by line of sight, like chain lightning — a ranged or spell crit no longer arcs through a wall to a foe the impact can't see.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Area spells blast from the point of impact", by: "Claude", notes: [
+    "Meteor, Fireball, Blizzard, Firestorm, Condemn, Plague Bomb, Death Rain and every other impact-and-burst spell now spread their radius damage from where they LAND, not from you. A blast dropped onto a pack tucked behind a wall now catches the whole pack — foes you couldn't have hit directly still take the splash.",
+    "These spells also aim at the nearest foe you can actually SEE, so one closer foe hidden behind a wall no longer makes the cast fizzle with a clear target in view.",
+    "Mark detonations (Immolation, Death Blossom, Final Judgment popping a marked foe) burst outward from the marked foe the same way, and no longer blast through solid walls.",
+    "Chain spells (Chain Spark, Thunderstorm, Apocalypse) now arc foe-to-foe from each struck target, so a chain can bend around a corner to reach a foe the last target can see — instead of dropping every link you personally can't see.",
+    "Novas still radiate from you, and a blast's projectile still needs a clear line to the foe it lands on.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Cleaner desktop HUD layout", by: "Claude", notes: [
+    "Gold moves off the bottom HUD into its own pill on the LOOT tab, just left of the crafting materials.",
+    "Power drops from the bottom HUD — it already reads on the HERO tab.",
+    "HP and MP bars grow thicker to fill the gap down to the skill row, and the experience bar doubles in height.",
+    "Hero name lifts to a centred banner across the top of the map.",
+    "Endurance is now a full-height bar between HP and MP with its stamina value overlaid, draining inward from both edges toward the middle.",
+  ] },
+  { date: "2026-07-05", size: "large", v: "Class attribute overhaul + the Spirit Veil shield", by: "Claude", notes: [
     "Each class now deals weapon & skill damage off a SINGLE attribute — Warrior off Might, Rogue off Agility, Mage off Spirit, Templar off Vitality. The old secondary damage attribute (and the small off-class Might bonus) are gone; spells still scale off Spirit for everyone.",
     "Attributes re-homed: Might now raises Defense; Vitality raises max HP, HP regen AND Stamina; Spirit raises max MP, MP regen, spell power AND healing. Agility (evasion, accuracy, move/attack speed) and Luck (crit, loot quality) keep their roles.",
     "How much each point of an attribute gives is now CLASS-SCALED — the Templar gets the most HP per Vitality, the Mage the most spell power per Spirit, the Warrior the most Defense per Might, the Rogue the most evasion per Agility, and so on.",
-    "NEW — the Bulwark: a Spirit-fuelled blue shield layered over your HP that soaks every hit, damage-over-time and hazard BEFORE your health, and recharges on its own after a few damage-free seconds. No potion, skill or heal refills it — only the passive recharge. It's a real second health bar for casters (Mage > Templar > Rogue > Warrior) and near-trivial without Spirit, and shows as a shimmering blue mask on the HP bar with its own number.",
+    "NEW — the Spirit Veil: a Spirit-fuelled blue shield layered over your HP that soaks every hit, damage-over-time and hazard BEFORE your health, and recharges on its own after a few damage-free seconds. No potion, skill or heal refills it — only the passive recharge. It's a real second health bar for casters (Mage > Templar > Rogue > Warrior) and near-trivial without Spirit, and shows as a shimmering blue mask on the HP bar with its own number.",
     "Cast heals now scale off Spirit and Spell Power (class-scaled) and lost their flat 20%-of-max-HP cap, so a high-Spirit healer mends far more per cast (still only up to the health you're missing).",
-    "Item Power is no longer weighted by class guesswork — it's derived purely from how a piece changes THIS hero's real damage and survivability (and now counts the Bulwark). So Spell Power reads ~0 Power for a hero with no spell skills whatever their class, and +Spirit is valued for the shield it grants.",
+    "Item Power is no longer weighted by class guesswork — it's derived purely from how a piece changes THIS hero's real damage and survivability (and now counts the Spirit Veil). So Spell Power reads ~0 Power for a hero with no spell skills whatever their class, and +Spirit is valued for the shield it grants.",
   ] },
   { date: "2026-07-05", size: "small", v: "Honest upgrade arrows around two-handed weapons", by: "Claude", notes: [
     "An off-hand in your bag no longer lights up as an upgrade while a two-handed weapon fills your hands — there's no free slot to equip it into, so it's not a swap you can make.",
