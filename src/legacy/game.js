@@ -19894,6 +19894,7 @@ function onEnemyDefeated(e) {
   const firstBossKill = !!e.isBoss && !player.bossFirstKills[bfk];
   if (firstBossKill) {
     player.bossFirstKills[bfk] = 1;
+    markBossPointsDirty();   // a new point is available — refresh the GEAR-tab nudge
     // A NEW boss floor cleared grants a BOSS POINT (points are derived from this
     // ledger — earned = distinct boss floors cleared). Spend it on the GEAR tab to
     // level a gear slot; both gear sets draw from the same pool independently.
@@ -23229,8 +23230,22 @@ function flushHudDirty() { if (_hudDirty) { _hudDirty = false; updateBars(); } }
 // so each write is guarded by comparing the freshly built string first.
 let _statusStripHtml = null;
 let _clearStatusHtml = null, _pactHudKey = null, _foodHudKey = null;
-let _invTabHtml = null, _heroTabHtml = null, _skillsTabHtml = null;
+let _invTabHtml = null, _heroTabHtml = null, _skillsTabHtml = null, _gearTabHtml = null;
 let _skillBtnIconHtml = null;
+// Boss Points the WORN set has left to spend — cached so the per-frame GEAR-tab
+// nudge (in updateBars) never re-scans the bossFirstKills ledger. Invalidated by the
+// loadout epoch (which bumps on every spend / respec / set swap) and by an explicit
+// dirty flag on EARN (a first boss-floor clear doesn't touch gear, so it doesn't bump
+// the epoch). See activeBossPointsAvail / onEnemyDefeated / markBossPointsDirty.
+let _bossNudgeEpoch = -1, _bossNudgeDirty = true, _bossNudgeVal = 0;
+function markBossPointsDirty() { _bossNudgeDirty = true; }
+function activeBossPointsAvail() {
+  if (_bossNudgeDirty || _bossNudgeEpoch !== loadoutEpoch) {
+    _bossNudgeDirty = false; _bossNudgeEpoch = loadoutEpoch;
+    _bossNudgeVal = pointsAvailable(player.bossFirstKills, ensureSlotLevels()[activeGearSet]);
+  }
+  return _bossNudgeVal;
+}
 function updateBars() {
   renderStaminaBar();
   // Over-time recovery overlay helper: the pending element spans 0 → (current% +
@@ -23387,6 +23402,17 @@ function updateBars() {
     const html = sPts > 0 ? `SKILLS<span class="tab-count">${sPts}</span>` : 'SKILLS';
     if (html !== _skillsTabHtml) { _skillsTabHtml = html; skillsTab.innerHTML = html; }
     skillsTab.classList.toggle('has-points', sPts > 0);
+  }
+  // Nudge the GEAR tab when the WORN set has Boss Points to spend on its gear slots.
+  // Only the equipped set counts here — an OFF set's unspent points surface solely on
+  // that set's button in the set bar (see gearSetBarHTML), so this stays quiet until
+  // the loadout you're actually wearing has something to spend.
+  const gearTab = document.getElementById('tab-equip');
+  if (gearTab) {
+    const gPts = activeBossPointsAvail();
+    const html = gPts > 0 ? `GEAR<span class="tab-count">${gPts}</span>` : 'GEAR';
+    if (html !== _gearTabHtml) { _gearTabHtml = html; gearTab.innerHTML = html; }
+    gearTab.classList.toggle('has-points', gPts > 0);
   }
   // The tab glow only shows once the bag is open, so also surface a pulsing badge
   // on the always-visible BAG button (combining attribute + skill points).
@@ -25105,8 +25131,13 @@ function gearSetBarHTML() {
     const set = gearSets[i];
     const n = gearSetCount(set);
     const meta = n ? `${n} worn · ${PWR_GLYPH}${gearSetPower(set, i)}` : 'empty';
-    return `<button class="gearset-btn${i === activeGearSet ? ' active' : ''}" onclick="toggleGearSet(${i})">
-      <span class="gs-name">Set ${i + 1}</span><span class="gs-meta">${meta}</span>
+    // Nudge THIS set's button when it has Boss Points to spend — so an off set's
+    // unspent points are visible without switching to it (the GEAR tab header nudges
+    // only for the worn set; see updateBars).
+    const avail = pointsAvailable(player.bossFirstKills, ensureSlotLevels()[i]);
+    const nudge = avail > 0 ? `<span class="gs-nudge" title="${avail} Boss Point${avail === 1 ? '' : 's'} to spend on this set">${avail}</span>` : '';
+    return `<button class="gearset-btn${i === activeGearSet ? ' active' : ''}${avail > 0 ? ' has-points' : ''}" onclick="toggleGearSet(${i})">
+      <span class="gs-name">Set ${i + 1}${nudge}</span><span class="gs-meta">${meta}</span>
     </button>`;
   }).join('')}</div>`;
 }
