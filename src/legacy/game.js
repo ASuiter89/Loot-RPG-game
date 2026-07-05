@@ -35,6 +35,8 @@ import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/
 import { GEAR_POWER } from '../data/gearPower.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { KILL_LOOT, killLootParams } from '../systems/bossLoot.js';
+import { BOSS_SLOTS } from '../data/bossSlots.js';
+import { slotMultiplier, pointsEarned, pointsSpent, pointsAvailable, totalLevelsInvested, respecCost as bossSlotRespecCost, sanitizeSlotLevels } from '../systems/bossSlots.js';
 import { resistFraction, penFraction, mitigate, physicalShare } from '../systems/defense.js';
 import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
@@ -124,6 +126,10 @@ const SLOTS = {
 // Icon + name for a slot, for the few places a slot label should show its art.
 function slotLabelIcon(slot) { const s = SLOTS[slot]; return s ? `${dlIcon(s.sprite, 16)} ${s.label}` : ''; }
 const SLOT_KEYS = Object.keys(SLOTS);
+
+// A fresh per-set boss-slot-level record: every gear slot at level 0. Boss points
+// raise these (see systems/bossSlots.js); the two gear sets keep their own record.
+function emptySlotLevels() { const o = {}; for (const k of SLOT_KEYS) o[k] = 0; return o; }
 
 // Roll weights for which slot a dropped item belongs to.
 const SLOT_WEIGHTS = { weapon:22, chest:15, head:13, hands:13, legs:13, ring:12, amulet:12, offhand:11 };
@@ -3209,6 +3215,18 @@ function materialUnlocked(k) { return activeDifficulty() >= (MATERIAL_MIN_DIFF[k
 // only how often they're recomputed.
 let loadoutEpoch = 0;
 function bumpLoadout() { loadoutEpoch++; }
+// Boss-point SLOT MULTIPLIER: everything the gear worn in `slot` contributes is
+// scaled by ×(1 + 5%·level) for that slot's level in the given gear set (the ACTIVE
+// set by default). A pure read — no mutation — so it's safe in the hot stat loops;
+// an un-invested slot returns 1, keeping those loops byte-identical to before. Any
+// change to a slot's level (raiseSlotLevel / respecSlots / set swap) bumps the
+// loadout epoch, so the memoized totalStat/totalAttr sums recompute.
+function slotMult(slot, setIdx) {
+  const idx = (setIdx === 0 || setIdx === 1) ? setIdx : activeGearSet;
+  const sl = player.slotLevels;
+  const lv = (sl && sl[idx] && sl[idx][slot]) || 0;
+  return lv ? slotMultiplier(lv) : 1;
+}
 let _loBucket = null;
 function loadoutCache() {
   if (!_loBucket || _loBucket.epoch !== loadoutEpoch || _loBucket.player !== player ||
@@ -3336,9 +3354,12 @@ function attrPowerAxes(key, v, ctx, add) {
 // An item's affixes expressed as a combat-context delta (the axes its stats/attrs
 // move). Weapon DMG is stored relative to bare fists so vacating the weapon slot
 // (below) leaves the fists baseline rather than zero damage.
-function itemPowerContribution(item, ctx) {
+function itemPowerContribution(item, ctx, mult = 1) {
   const d = {};
-  const add = (axis, val) => { d[axis] = (d[axis] || 0) + val; };
+  // `mult` is the item's boss-point slot multiplier (×(1+5%·level)); it scales every
+  // axis the piece moves, so the Power preview/decomposition tracks the same boost
+  // the live stats get. Default 1 leaves the delta byte-identical for un-invested slots.
+  const add = (axis, val) => { d[axis] = (d[axis] || 0) + (mult === 1 ? val : val * mult); };
   const stats = item.stats || {};
   for (const k in stats) {
     const v = stats[k];
@@ -3358,14 +3379,14 @@ function itemPowerContribution(item, ctx) {
 // Flat, build-independent Power an item carries: a small nudge per point of a
 // non-combat stat (find / XP / gold / mana) so a pure-utility piece never reads a
 // literal 0, plus the rarity-tier bonus.
-function itemFlatPower(item) {
+function itemFlatPower(item, mult = 1) {
   let f = GEAR_POWER.tierBonus[item.tier] || 0;
   const stats = item.stats || {};
   for (const k in stats) {
     const w = GEAR_POWER.utilityFlat[k];
     if (w && typeof stats[k] === 'number') f += stats[k] * w;
   }
-  return f;
+  return mult === 1 ? f : f * mult;   // boss-point slot multiplier scales flat utility Power too
 }
 
 // Raw (unrounded, un-clamped) Power an item is worth to the CURRENT build: the
@@ -3374,13 +3395,16 @@ function itemFlatPower(item) {
 // in a slot is valued against the build without it — plus its flat utility Power.
 function itemPowerRaw(item) {
   const ctx = buildPowerContext();
-  const contrib = itemPowerContribution(item, ctx);
+  // The piece would sit in its own slot of the ACTIVE set, so its Power reflects that
+  // slot's boss-point investment (what you'd actually get if you equipped it there).
+  const m = slotMult(item.slot);
+  const contrib = itemPowerContribution(item, ctx, m);
   let base = ctx;
   const occ = item.slot ? equipped[item.slot] : null;
   if (occ && activeSlots()[item.slot]) {
-    base = applyDelta(ctx, occ === item ? contrib : itemPowerContribution(occ, ctx), -1);
+    base = applyDelta(ctx, occ === item ? contrib : itemPowerContribution(occ, ctx, m), -1);
   }
-  return marginalPower(base, contrib) + itemFlatPower(item);
+  return marginalPower(base, contrib) + itemFlatPower(item, m);
 }
 
 // Cached per item object over (loadout epoch, class): the value is pure over the
@@ -3410,7 +3434,10 @@ function totalAttr(key) {
   for (const slot of SLOT_KEYS) {
     if (!active[slot]) continue;          // red/ignored pieces lend nothing
     const it = equipped[slot];
-    if (it && it.attrs && typeof it.attrs[key] === 'number') sum += it.attrs[key];
+    if (it && it.attrs && typeof it.attrs[key] === 'number') {
+      const m = slotMult(slot);           // boss-point slot investment scales the piece's grant
+      sum += m === 1 ? it.attrs[key] : it.attrs[key] * m;
+    }
   }
   return sum;
 }
@@ -3452,7 +3479,7 @@ function playerPower() {
   const ctx = buildPowerContext();
   let p = GEAR_POWER.K * powerScalar(ctx);
   const active = activeSlots();
-  for (const slot of SLOT_KEYS) if (active[slot] && equipped[slot]) p += itemFlatPower(equipped[slot]);
+  for (const slot of SLOT_KEYS) if (active[slot] && equipped[slot]) p += itemFlatPower(equipped[slot], slotMult(slot));
   return Math.round(p);
 }
 
@@ -3467,8 +3494,9 @@ function strippedPowerContext() {
   for (const slot of SLOT_KEYS) {
     const it = active[slot] && equipped[slot];
     if (!it) continue;
-    bare = applyDelta(bare, itemPowerContribution(it, ctx), -1);
-    flat += itemFlatPower(it);
+    const m = slotMult(slot);           // strip the SCALED contribution so the baseline stays exact
+    bare = applyDelta(bare, itemPowerContribution(it, ctx, m), -1);
+    flat += itemFlatPower(it, m);
   }
   return { ctx, bare, flat };
 }
@@ -5985,6 +6013,11 @@ let player = { x: 5, y: 5,
   // the normal boss payout. Keyed by FLOOR, not species, so Endless — where bosses
   // recur — keeps paying a windfall for each new depth. Per-character.
   bossFirstKills: {},
+  // Boss-point gear-slot levels, one record per gear set: slot → level. A boss point
+  // (earned per NEW boss floor cleared — see bossFirstKills) raises a slot, and each
+  // level boosts everything the gear worn there contributes by 5% while equipped. The
+  // two sets invest independently from the same earned pool. See systems/bossSlots.js.
+  slotLevels: [emptySlotLevels(), emptySlotLevels()],
   // Skill tree — 1 skill point earned per level (separate from attribute points),
   // spent on the class's passive/active/path nodes. `skills` maps node id → rank;
   // `skillCds` holds each active skill's independent cooldown. `skillSlots` is the
@@ -6795,6 +6828,22 @@ window.gameState = function gameState(radius) {
             : { available: false, floor: null, where: null })   // no held stage → no return target (don't report the default warp floor)
         : null,
       pointsToSpend: { attribute: player.attrPoints || 0, skill: player.skillPoints || 0, ascendancy: player.ascPoints || 0 },
+      // Boss Points: earned = distinct boss floors first-cleared; each spent to level a
+      // gear slot (+bonusPct% to that slot's gear, per level). The two gear sets invest
+      // independently from the same earned pool — available[i] & levels[i] are per set
+      // (index 0 = Set 1). Spend on the GEAR tab (raiseSlotLevel); reset at the Trainer.
+      bossSlots: {
+        earned: pointsEarned(player.bossFirstKills),
+        bonusPct: Math.round(BOSS_SLOTS.perLevel * 100),
+        available: [
+          pointsAvailable(player.bossFirstKills, (player.slotLevels && player.slotLevels[0]) || {}),
+          pointsAvailable(player.bossFirstKills, (player.slotLevels && player.slotLevels[1]) || {}),
+        ],
+        levels: [
+          (player.slotLevels && player.slotLevels[0]) ? Object.assign({}, player.slotLevels[0]) : {},
+          (player.slotLevels && player.slotLevels[1]) ? Object.assign({}, player.slotLevels[1]) : {},
+        ],
+      },
       gold: player.gold,                 // coins in hand (what death loss is taken from)
       vaultGold: (stash && stash.gold) || 0,   // banked in the town Vault — safe from death
       spendableGold: spendableGold(),    // carried + vault: what a town shop can actually charge (shortfall auto-drawn from the vault)
@@ -7006,6 +7055,7 @@ window.gameGuide = function gameGuide(topic) {
       `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend). Spend attributes on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
       `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives. From level 20 you also earn a SEPARATE ascendancy point every 5 levels (20, 25, 30…; gameState().menu.pointsToSpend.ascendancy), spent only on the ascendancy path tree. Normal skill points can't buy path skills and ascendancy points can't buy passive/active skills. Path skills carry NO level requirement — they're gated only by the earlier skills in the path tree.`,
       `Respec attributes/skills or change class at the Trainer for gold that scales with your level (points refund). Switching to your class's other ascension afterwards costs a lot of gold (also scales with level and depth; path points refund) — the first ascension stays free, but re-ascending is a deliberate, costly choice, as is retraining class. After a respec, check that worn gear still meets its attribute requirement (under-req pieces turn red and are ignored).`,
+      `BOSS POINTS are a separate progression track that rewards new depth: every boss floor you clear for the FIRST time grants ONE point (farming a floor you've already cleared grants none — it's the same first-clear ledger as the boss loot jackpot). Spend a point on the GEAR tab to raise a gear SLOT: each level permanently boosts EVERYTHING the gear worn in that slot contributes — its stats, attributes and weapon damage — by ${Math.round(BOSS_SLOTS.perLevel * 100)}%, linear and uncapped, while that piece is equipped (so it also lifts your Power and leaderboard rank). Your TWO gear sets invest INDEPENDENTLY from the same earned pool — a point spent in Set 1 doesn't deplete Set 2 — so both loadouts can be fully optimised. Reset every slot (to reassign across the sets) at the town Trainer for a steep, scaling gold fee. gameState().menu.bossSlots reports points earned, per-set points available, and each slot's level; a hero's slot levels also show beside their gear on the leaderboard.`,
     ],
     character: [
       `Create a hero in TWO steps from the title's ENTER THE DUNGEON button: first PICK A CLASS (Warrior/Rogue/Mage/Templar), then on the next screen ENTER A NAME and choose a body type — Female or Male. Both screens have a ◀ Back button (Esc does the same): the class pick backs out to the title, the name screen back to the class pick — a typed name and toggles are kept.`,
@@ -7055,6 +7105,7 @@ window.gameGuide = function gameGuide(topic) {
     enemy: 'enemies', boss: 'enemies', bosses: 'enemies', ai: 'enemies', minion: 'enemies', minions: 'enemies', ally: 'enemies', allies: 'enemies', affix: 'enemies', enrage: 'enemies', berserk: 'enemies', conquest: 'enemies', scar: 'enemies', rainbow: 'enemies',
     quest: 'quests', quests: 'quests', escort: 'quests', rescue: 'quests', fetch: 'quests', tribute: 'quests', forage: 'quests', beacon: 'quests', beacons: 'quests', objective: 'quests', bounty: 'town',
     classs: 'progression', classes: 'progression', clas: 'progression', attribute: 'progression', attributes: 'progression', level: 'progression', leveling: 'progression', skilltree: 'progression', ascension: 'progression', ascend: 'progression', xp: 'progression',
+    bosspoint: 'progression', bosspoints: 'progression', bossslot: 'progression', bossslots: 'progression', slotlevel: 'progression', slotlevels: 'progression', gearslot: 'progression', gearslots: 'progression',
     character: 'character', creation: 'character', create: 'character', sex: 'character', gender: 'character', male: 'character', female: 'character', name: 'character', naming: 'character', newgame: 'character', body: 'character',
     shop: 'town', merchant: 'town', craft: 'town', crafting: 'town', forge: 'town', ramen: 'town', mystic: 'town', stash: 'town', portal: 'town', gate: 'town', warp: 'town', lastfloor: 'town', transmuter: 'town', transmute: 'town', fuse: 'town', vault: 'town', gambler: 'town', gamble: 'town', sellsword: 'town', merc: 'town', mercenary: 'town', trainer: 'town', healer: 'town', enchanter: 'town', enchant: 'town',
     control: 'controls', key: 'controls', keys: 'controls', keybind: 'controls', keybinds: 'controls', keybinding: 'controls',
@@ -12733,6 +12784,7 @@ function renderTrainer() {
         <div class="shop-row-sub">Refund all ${spentAllSkillPoints()} spent point${spentAllSkillPoints() === 1 ? '' : 's'} (skill &amp; ascendancy) to spend anew</div></div>
       <button class="act-btn ${spendableGold() >= skillRespecCost() ? '' : 'short'}" ${(spendableGold() >= skillRespecCost() && spentAllSkillPoints() > 0) ? '' : 'disabled'} onclick="respecSkills()"><span data-spr=ic_money></span>${skillRespecCost()}</button>
     </div>
+    ${trainerSlotRespecRow()}
     ${trainerAscensionBlock()}
     <div class="town-blurb" style="margin-top:10px">Retrain into a different class for <span data-spr=ic_money></span>${classChangeCost()}. Your attributes are kept; if your new class can't wield your weapon, it goes back in your bag.</div>
     ${CLASS_KEYS.map(k => {
@@ -12751,6 +12803,21 @@ function renderTrainer() {
         ${btn}
       </div>`;
     }).join('')}`);
+}
+// The Trainer's "reset every gear-slot investment" row — appears only once the hero
+// has spent Boss Points. Steep, level-scaling gold cost (see BOSS_SLOTS); frees ALL
+// points (both sets) so they can be reassigned across the two loadouts.
+function trainerSlotRespecRow() {
+  const invested = totalLevelsInvested(ensureSlotLevels());
+  if (invested <= 0) return '';
+  const cost = bossSlotRespecCost(player.slotLevels);
+  const afford = spendableGold() >= cost;
+  return `<div class="shop-row has-actions ${afford ? '' : 'cant-afford'}">
+      <span class="loot-icon"><span data-spr=q_relic></span></span>
+      <div class="shop-row-info"><div class="shop-row-name">Reset Gear-Slot Investments</div>
+        <div class="shop-row-sub">Free all ${invested} Boss Point${invested === 1 ? '' : 's'} (both sets) to reassign — every slot returns to Lv&nbsp;0</div></div>
+      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="respecSlots()"><span data-spr=ic_money></span>${cost}</button>
+    </div>`;
 }
 // The FIRST ascension is free — it is earned by reaching the level gate, never
 // bought. Switching to your class's other specialization afterwards costs a lot
@@ -19486,7 +19553,9 @@ function unstuck() {
 function getWeaponDamage() {
   const w = activeWeapon();   // a red/ignored weapon gives no damage — bare fists
   if (w && w.stats.DMG) {
-    const [lo, hi] = w.stats.DMG.split('-').map(Number);
+    let [lo, hi] = w.stats.DMG.split('-').map(Number);
+    const m = slotMult('weapon');         // boss-point weapon-slot investment scales the hit
+    if (m !== 1) { lo *= m; hi *= m; }
     // Fractional roll (see systems/damageRoll.js): a continuous value kept to ~3 sig
     // figs, so a tight weapon range still yields organic damage once buffs scale it —
     // not just two or three discrete numbers. The final hit is rounded by the caller.
@@ -19512,7 +19581,9 @@ function totalStat(name) {
     if (!active[slot]) continue;          // red/ignored pieces lend nothing
     const it = equipped[slot];
     if (it && typeof it.stats[name] === 'number') {
-      sum += (slot === 'offhand' && tgPenalty !== 1) ? Math.round(it.stats[name] * tgPenalty) : it.stats[name];
+      let v = (slot === 'offhand' && tgPenalty !== 1) ? Math.round(it.stats[name] * tgPenalty) : it.stats[name];
+      const m = slotMult(slot);           // boss-point slot investment scales the piece's stats
+      sum += m === 1 ? v : v * m;
     }
   }
   return memo[name] = sum + setStatBonus(name) + itemPowerStatBonus(name);   // set thresholds + special-power stat bonuses
@@ -19821,7 +19892,15 @@ function onEnemyDefeated(e) {
   if (e.isBoss && !player.bossFirstKills) player.bossFirstKills = {};
   const bfk = e.isBoss ? bossFloorKey() : null;
   const firstBossKill = !!e.isBoss && !player.bossFirstKills[bfk];
-  if (firstBossKill) player.bossFirstKills[bfk] = 1;
+  if (firstBossKill) {
+    player.bossFirstKills[bfk] = 1;
+    // A NEW boss floor cleared grants a BOSS POINT (points are derived from this
+    // ledger — earned = distinct boss floors cleared). Spend it on the GEAR tab to
+    // level a gear slot; both gear sets draw from the same pool independently.
+    const avail = pointsAvailable(player.bossFirstKills, (player.slotLevels && player.slotLevels[activeGearSet]) || {});
+    sfx('levelup');
+    log(`<span data-spr=q_relic></span> First clear of this boss floor — <b>+1 Boss Point</b>! Spend it on the GEAR tab to level a gear slot (+${Math.round(BOSS_SLOTS.perLevel * 100)}% to its gear). ${avail} to spend.`, 'important');
+  }
   if (e.isBoss && farm < 1 && !firstBossKill) log(`⚠️ ${label} has been slain here recently — its spoils are thinner (${Math.round(farm * 100)}%). Rest or move on to reset.`, 'important');
   const xpMult = e.isBoss ? 5 : (e.isElite ? 2 : 1);
   const goldMult = e.isBoss ? 3 : (e.isElite ? 2 : 1);
@@ -20406,8 +20485,11 @@ function skillSpellDamage(e, cast, mult, rank, spread) {
 function weaponDmgRange() {
   const w = activeWeapon();
   if (w && w.stats && w.stats.DMG) {
-    const [lo, hi] = String(w.stats.DMG).split('-').map(Number);
-    if (Number.isFinite(lo) && Number.isFinite(hi)) return [lo, hi];
+    let [lo, hi] = String(w.stats.DMG).split('-').map(Number);
+    if (Number.isFinite(lo) && Number.isFinite(hi)) {
+      const m = slotMult('weapon');       // boss-point weapon-slot investment scales weapon skills too
+      return m === 1 ? [lo, hi] : [lo * m, hi * m];
+    }
   }
   return [1, 3]; // bare fists
 }
@@ -24975,7 +25057,8 @@ function renderPaperdoll() {
   return `<div class="gear-equip">${gearSetBarHTML()}` +
     `<div class="pda-stage"><div class="paperdoll-anat">${bodyHTML}${slots}</div></div>` +
     `<div class="pd-hint">Tap a slot for details · ✕ to unequip · EQUIP loot from the LOOT tab</div>` +
-    `<div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div></div>`;
+    `<div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div>` +
+    bossSlotPanelHTML() + `</div>`;
 }
 // The Enchanter's Equipped section reuses the same paper-doll body, but each worn
 // piece is tapped to pick it for enchanting (no gear-set bar, no ✕ unequip).
@@ -24998,7 +25081,10 @@ function renderEnchantDoll() {
 // combat-score delta, not a sum of per-piece pills). Pieces this hero can't wear are
 // skipped, the way they'd sit inactive if equipped, so the two loadouts compare
 // fairly and the active set's figure lines up with the hero-sheet "from gear".
-function gearSetPower(set) {
+function gearSetPower(set, idx) {
+  // Score THIS set's own boss-point investment (idx defaults to the active set), so
+  // the Set 1 / Set 2 bar reflects each loadout's slot levels, not just the worn one.
+  const sidx = (idx === 0 || idx === 1) ? idx : activeGearSet;
   const { bare } = strippedPowerContext();
   const ctx = buildPowerContext();
   let withSet = bare, flat = 0;
@@ -25006,8 +25092,9 @@ function gearSetPower(set) {
     const it = set[slot];
     if (!it || !it.stats) continue;
     if (typeof canEquipItem === 'function' && !canEquipItem(it)) continue;
-    withSet = applyDelta(withSet, itemPowerContribution(it, ctx), 1);
-    flat += itemFlatPower(it);
+    const m = slotMult(slot, sidx);
+    withSet = applyDelta(withSet, itemPowerContribution(it, ctx, m), 1);
+    flat += itemFlatPower(it, m);
   }
   return Math.round(GEAR_POWER.K * (powerScalar(withSet) - powerScalar(bare)) + flat);
 }
@@ -25017,7 +25104,7 @@ function gearSetBarHTML() {
   return `<div class="gearset-bar">${[0, 1].map(i => {
     const set = gearSets[i];
     const n = gearSetCount(set);
-    const meta = n ? `${n} worn · ${PWR_GLYPH}${gearSetPower(set)}` : 'empty';
+    const meta = n ? `${n} worn · ${PWR_GLYPH}${gearSetPower(set, i)}` : 'empty';
     return `<button class="gearset-btn${i === activeGearSet ? ' active' : ''}" onclick="toggleGearSet(${i})">
       <span class="gs-name">Set ${i + 1}</span><span class="gs-meta">${meta}</span>
     </button>`;
@@ -25048,6 +25135,82 @@ function toggleGearSet(idx) {
   renderPanel();
   draw();          // re-skin the sprite with the newly worn set
   saveGame();
+}
+
+// ── BOSS POINTS ── every NEW boss floor cleared grants one point (tracked by the
+// bossFirstKills ledger; points are DERIVED, never a stored counter). A point levels
+// a gear SLOT in the ACTIVE set, permanently scaling everything the gear worn there
+// contributes by +5%/level. The two sets invest independently from the same earned
+// pool (see systems/bossSlots.js).
+function ensureSlotLevels() {
+  if (!Array.isArray(player.slotLevels) || player.slotLevels.length < 2) {
+    player.slotLevels = sanitizeSlotLevels(player.slotLevels, SLOT_KEYS);
+  }
+  return player.slotLevels;
+}
+// Spend one Boss Point to raise `slot` in the active set. Uncapped; the only gate is
+// having a point left in this set's pool (each set draws the earned pool separately).
+function raiseSlotLevel(slot) {
+  if (!SLOTS[slot]) return;
+  const idx = activeGearSet;
+  const levels = ensureSlotLevels();
+  if (pointsAvailable(player.bossFirstKills, levels[idx]) <= 0) { log('No Boss Points to spend — clear a new boss floor to earn one.'); return; }
+  levels[idx][slot] = (levels[idx][slot] || 0) + 1;
+  bumpLoadout();          // the slot multiplier changed — invalidate the loadout caches
+  recomputeMaxStats();    // worn gear feeds max HP/MP; recompute & clamp
+  if (player.hp > player.maxHp) player.hp = player.maxHp;
+  if (player.mp > player.maxMp) player.mp = player.maxMp;
+  sfx('equip');
+  const lv = levels[idx][slot];
+  log(`<span data-spr=q_relic></span> Set ${idx + 1} ${SLOTS[slot].label} slot → <b>Lv ${lv}</b> (+${Math.round(BOSS_SLOTS.perLevel * lv * 100)}% to its gear).`, 'loot');
+  updateBars(); renderPanel(); saveGame();
+}
+// Reset EVERY slot level (both sets) back to unspent so points can be reassigned —
+// deliberately expensive (see BOSS_SLOTS.respecPerLevel). Fired from the Trainer.
+function respecSlots() {
+  const levels = ensureSlotLevels();
+  const invested = totalLevelsInvested(levels);
+  const cost = bossSlotRespecCost(levels);
+  if (invested <= 0 || spendableGold() < cost) return;
+  spendGold(cost);
+  player.slotLevels = [emptySlotLevels(), emptySlotLevels()];
+  bumpLoadout(); recomputeMaxStats();
+  if (player.hp > player.maxHp) player.hp = player.maxHp;
+  if (player.mp > player.maxMp) player.mp = player.maxMp;
+  sfx('shrine');
+  log(`<span data-spr=town_trainer></span> You reset every gear-slot investment — ${invested} Boss Point${invested === 1 ? '' : 's'} freed to reassign across both sets.`, 'important');
+  updateBars(); renderPanel(); if (typeof renderTrainer === 'function') renderTrainer(); saveGame();
+}
+// The GEAR tab's Boss-Point investment panel: a spendable row per slot for the ACTIVE
+// set, showing its level + bonus. Hidden until the hero has earned a point (cleared a
+// boss floor), so the tab stays clean early. Uses the canonical shop-row + act-btn.
+function bossSlotPanelHTML() {
+  const earned = pointsEarned(player.bossFirstKills);
+  if (earned <= 0) return '';
+  const levels = ensureSlotLevels();
+  const idx = activeGearSet;
+  const avail = pointsAvailable(player.bossFirstKills, levels[idx]);
+  const pct = Math.round(BOSS_SLOTS.perLevel * 100);
+  const rows = SLOT_KEYS.map(slot => {
+    const lv = levels[idx][slot] || 0;
+    const can = avail > 0;
+    return `<div class="shop-row has-actions boss-slot-row">
+      <span class="loot-icon">${dlIcon(SLOTS[slot].sprite, 24) || ''}</span>
+      <div class="shop-row-info">
+        <div class="shop-row-name">${SLOTS[slot].label}${lv ? ` <span class="boss-slot-lv">Lv&nbsp;${lv}</span>` : ''}</div>
+        <div class="shop-row-sub">${lv ? `+${pct * lv}% to all gear worn here` : 'No investment yet'}</div>
+      </div>
+      <button class="act-btn" ${can ? '' : 'disabled'} onclick="raiseSlotLevel('${slot}')" title="Spend 1 Boss Point (+${pct}%)"><span data-spr=q_relic></span>+1</button>
+    </div>`;
+  }).join('');
+  return `<div class="boss-slots">
+    <div class="boss-slots-head">
+      <span class="boss-slots-title"><span data-spr=q_relic></span> Boss Points · Set ${idx + 1}</span>
+      <span class="boss-slots-pool"><b>${avail}</b> to spend</span>
+    </div>
+    <div class="boss-slots-note">Each level permanently boosts everything the gear in that slot does by ${pct}%, forever. ${earned} earned all-time · Sets 1 &amp; 2 invest independently · reset at the town Trainer.</div>
+    ${rows}
+  </div>`;
 }
 
 // One-tap equip: route an item straight to its own slot.
@@ -26291,6 +26454,12 @@ function loadGame() {
       const cf = player.clearedFloors || {};
       for (const k in cf) { if (cf[k] && Number(k) % 5 === 0) player.bossFirstKills[k] = 1; }
     }
+    // Boss-point gear-slot levels — normalize to two clean per-set records (missing on
+    // pre-feature saves ⇒ two empty sets). Points are DERIVED (earned = distinct boss
+    // floors cleared, above; spent = sum of these levels), so nothing else migrates:
+    // an existing hero simply arrives with points equal to the boss floors they'd
+    // already cleared, ready to spend.
+    player.slotLevels = sanitizeSlotLevels(player.slotLevels, SLOT_KEYS);
     inTown = !!data.inTown;
     dungeonReturn = data.dungeonReturn || data.dungeonLevel || 1;
     // Restore an unclaimed death-grave, tolerating saves that predate it.
@@ -27007,6 +27176,16 @@ function lbTrimItem(it) {
 function lbLoadoutFromPlayer() {
   const gear = {};
   for (const slot of SLOT_KEYS) { const t = lbTrimItem((equipped || {})[slot]); if (t) gear[slot] = t; }
+  // Boss-point levels for the ACTIVE set (the one whose gear is snapshot above), lean:
+  // only slots actually invested. Shown beside each gear piece in the hero-detail view
+  // so any player can see what level a hero has raised each slot to.
+  const slotLevels = (() => {
+    const lv = (player.slotLevels && player.slotLevels[activeGearSet]) || null;
+    if (!lv) return null;
+    const o = {};
+    for (const s of SLOT_KEYS) if (lv[s] > 0) o[s] = lv[s];
+    return Object.keys(o).length ? o : null;
+  })();
   const skills = {};
   if (player.skills) for (const id in player.skills) { const r = player.skills[id] | 0; if (r > 0) skills[id] = r; }
   return {
@@ -27018,6 +27197,7 @@ function lbLoadoutFromPlayer() {
     gearPower: (typeof gearContributionPower === 'function') ? Math.round(gearContributionPower() || 0) : null,
     stats: (typeof heroStatData === 'function') ? heroStatData() : null, // the hero-sheet "Stats" panel, computed once by the owner
     gear,
+    slotLevels,   // boss-point gear-slot levels for the active set (slot → level), or null
     skills,
     skillSlots: Array.isArray(player.skillSlots) ? player.skillSlots.slice(0, 12) : [],
     autoSkill: player.autoSkill || null,
@@ -27295,16 +27475,23 @@ function lbHeroBuildHTML(r, lo) {
   }).join('');
   // Gear — one tile per slot; empty slots read as such so the paperdoll is complete.
   const gear = lo.gear || {};
+  const loSlotLv = lo.slotLevels || {};
+  // A boss-point slot-level badge (+bonus%) shown beside a slot's label — the level
+  // the hero has invested that gear slot to. Blank for un-invested slots.
+  const slotLvBadge = (slot) => {
+    const lv = loSlotLv[slot] || 0;
+    return lv > 0 ? `<span class="lb-gear-lv" title="Boss-point slot level: +${Math.round(BOSS_SLOTS.perLevel * lv * 100)}% to this slot's gear">Lv&nbsp;${lv}</span>` : '';
+  };
   const gearRow = SLOT_KEYS.map(slot => {
     const it = gear[slot];
     const label = (SLOTS[slot] || {}).label || slot;
-    if (!it) return `<div class="lb-gear lb-gear-empty"><span class="lb-gear-ic">${dlIcon((SLOTS[slot] || {}).sprite, 26) || ''}</span><div class="lb-gear-info"><div class="lb-gear-slot">${label}</div><div class="lb-gear-name lb-gear-none">— empty —</div></div></div>`;
+    if (!it) return `<div class="lb-gear lb-gear-empty"><span class="lb-gear-ic">${dlIcon((SLOTS[slot] || {}).sprite, 26) || ''}</span><div class="lb-gear-info"><div class="lb-gear-slot">${label}${slotLvBadge(slot)}</div><div class="lb-gear-name lb-gear-none">— empty —</div></div></div>`;
     const col = tierColor(it);
     const tip = lbItemTip(it);
     return `<div class="lb-gear" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
       <span class="lb-gear-ic">${iconMarkup(itemIcon(it), col)}</span>
       <div class="lb-gear-info">
-        <div class="lb-gear-slot">${label}</div>
+        <div class="lb-gear-slot">${label}${slotLvBadge(slot)}</div>
         <div class="lb-gear-name" style="color:${col}">${curseMark(it)}${escapeHtml(it.name || '')}${it.crafted ? ' ' + (dlIcon('ic_mallet', 12) || '') : ''}</div>
         <div class="lb-gear-power">${PWR_GLYPH} ${itemPower(it)}${it.ilvl ? ` · <span style="color:var(--blue-250)">ilvl ${it.ilvl}</span>` : ''}</div>
       </div>
@@ -30432,6 +30619,9 @@ const __DL_FN_BRIDGE = {
   gearSetCount,
   gearSetBarHTML,
   toggleGearSet,
+  raiseSlotLevel,
+  respecSlots,
+  bossSlotPanelHTML,
   quickEquip,
   toggleLock,
   refreshTownService,

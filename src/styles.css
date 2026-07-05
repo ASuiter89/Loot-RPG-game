@@ -2316,6 +2316,18 @@
   .gearset-btn.active { border-color: var(--gold); background: var(--orange-850); color: var(--gold); }
   .gearset-btn.active .gs-meta { color: var(--orange-300); }
 
+  /* ── BOSS POINTS ── gear-slot investment panel on the GEAR tab (below the doll). */
+  .boss-slots { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-4); }
+  .boss-slots-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: var(--space-3); flex-wrap: wrap; padding: 0 var(--space-2);
+  }
+  .boss-slots-title { color: var(--gold); font-size: var(--fs-head-sm); font-weight: bold; letter-spacing: 0.5px; }
+  .boss-slots-pool { color: var(--orange-300); font-size: var(--fs-body); white-space: nowrap; }
+  .boss-slots-pool b { color: var(--gold-350); font-size: var(--fs-strong); }
+  .boss-slots-note { color: var(--junk); font-size: var(--fs-sub); padding: 0 var(--space-2) var(--space-1); }
+  .boss-slot-lv { color: var(--gold-350); font-size: var(--fs-fine); font-weight: bold; margin-left: var(--space-2); }
+
   /* ── LOG ── */
   /* ── BOTTOM ROW: log (left) + dpad (right) ── */
   #bottom-row {
@@ -3628,6 +3640,7 @@
   .lb-gear-ic { flex: 0 0 auto; display: flex; }
   .lb-gear-info { flex: 1 1 auto; min-width: 0; }
   .lb-gear-slot { font-size: 1.1rem; color: var(--orange-500); text-transform: uppercase; letter-spacing: .5px; }
+  .lb-gear-lv { color: var(--gold-350); font-weight: bold; margin-left: var(--space-2); text-transform: none; letter-spacing: 0; }
   .lb-gear-name { font-size: 1.3rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lb-gear-none { color: var(--text-muted); font-weight: normal; }
   .lb-gear-power { font-size: 1.1rem; color: var(--gold-350); }

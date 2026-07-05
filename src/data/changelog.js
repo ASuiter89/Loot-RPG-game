@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "medium", v: "Boss Points — spend one per new boss floor to permanently level your gear slots", by: "Claude", notes: [
+    "Every boss floor you clear for the FIRST time now grants a Boss Point (farming a floor you've already cleared grants none). Spend it on the GEAR tab to level a gear slot.",
+    "Each slot level permanently boosts EVERYTHING the gear worn in that slot does — its stats, its attributes and its weapon damage — by 5%, with no cap, for as long as that piece is equipped.",
+    "Your two gear sets invest independently from the same pool of earned points, so both loadouts can be fully optimized — a point put into Set 1 is still there to spend on Set 2.",
+    "Slot investment lifts your Power too, so it counts on the leaderboard — and a hero's slot levels now show beside their gear in their leaderboard snapshot.",
+    "Changed your mind? The town Trainer can reset every slot (both sets) to free your points to reassign — but it's deliberately expensive.",
+  ] },
   { date: "2026-07-04", size: "medium", v: "Empower gear at the Enchanter — raise an item's level to your depth", by: "Claude", notes: [
     "The Enchanter can now EMPOWER a piece: raise its item level by 1, 10, or straight up to what could currently drop for you. Every stat, modifier and equip requirement scales up as if the piece had dropped that deep, so a favourite early find keeps pace as you descend.",
     "Empower is capped at what could naturally drop for you — your deepest floor plus one — so you can never push a piece past what the dungeon itself would hand you.",
