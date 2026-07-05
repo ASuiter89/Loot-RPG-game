@@ -96,14 +96,21 @@ describe('glideVitalFill', () => {
 describe('latchFillRate', () => {
   it('uses the live rate while recovery is active', () => {
     expect(latchFillRate({ live: 12.5, last: 0, vis: 50, cur: 60 })).toBe(12.5);
-    // and refreshes the latch even if a stale value was banked
-    expect(latchFillRate({ live: 12.5, last: 999, vis: 50, cur: 60 })).toBe(12.5);
   });
 
   it('keeps the last rate when recovery stopped but the fill still trails', () => {
     // The earned value has hit its cap (live 0) but the fill hasn't caught up — finish the
     // tail at the recovery pace, not the fast rate-less ease. THIS is the recharge-jump fix.
     expect(latchFillRate({ live: 0, last: 12.5, vis: 97, cur: 100 })).toBe(12.5);
+  });
+
+  it('holds the FASTEST recent rate while trailing (no crawl when recovery slows)', () => {
+    // An under-heal potion drains fast (14/s), then hands off to slow passive regen (2/s)
+    // while the fill still trails a drain-sized sliver. The tail must finish at the peak
+    // (14), not the slow live rate (2) — otherwise the bar crawls after the number is full.
+    expect(latchFillRate({ live: 2, last: 14, vis: 92, cur: 100 })).toBe(14);
+    // A faster live rate still wins over a slower banked one.
+    expect(latchFillRate({ live: 14, last: 2, vis: 92, cur: 100 })).toBe(14);
   });
 
   it('drops the latch once the fill has caught up (settled at the cap)', () => {
@@ -144,5 +151,38 @@ describe('latchFillRate', () => {
     const moving = tailSpeeds.filter(s => s > 1e-9);
     // Every moving tail frame sits at the steady recharge rate — never the fast ease.
     for (const s of moving) expect(s).toBeCloseTo(RATE, 5);
+  });
+
+  it('does not CRAWL the tail when a fast heal hands off to slow regen near the cap', () => {
+    // Reproduce the under-heal-potion regression: HP fills fast via a draining pool
+    // (~14/s), the pool empties BELOW max, then slow passive regen (2/s) carries HP to
+    // full. The fill trails a drain-sized sliver at the handoff; holding the peak rate must
+    // finish it promptly instead of crawling for seconds after HP reads full.
+    const MX = 100, TICK = 0.4, DRAIN = 14, REGEN = 2, frameDt = 1 / 60;
+    let real = 50, vis = 50, last = 0, beatAcc = 0;
+    let cappedAtFrame = -1, fullAtFrame = -1, frame = 0;
+    for (let i = 0; i < 60 * 12; i++) {
+      frame = i;
+      beatAcc += frameDt;
+      if (beatAcc >= TICK) {
+        beatAcc -= TICK;
+        // pool drains HP toward ~85, then passive regen carries the rest to 100
+        if (real < 85) real = Math.min(85, real + DRAIN * TICK);
+        else if (real < MX) real = Math.min(MX, real + REGEN * TICK);
+      }
+      const belowMax = real < MX;
+      const live = belowMax ? (real < 85 ? DRAIN : REGEN) : 0;   // rate gates to 0 at the cap
+      const rate = latchFillRate({ live, last, vis, cur: real });
+      last = rate;
+      vis = glideVitalFill({ vis, cur: real, max: MX, rate, dt: frameDt });
+      if (cappedAtFrame < 0 && real >= MX) cappedAtFrame = i;       // HP number reads full
+      if (fullAtFrame < 0 && vis >= MX - 1e-6) fullAtFrame = i;     // bar finishes filling
+      if (fullAtFrame >= 0) break;
+    }
+    expect(fullAtFrame).toBeGreaterThanOrEqual(0);
+    // The bar must catch up within ~half a second of the number capping (peak-rate finish),
+    // not the multi-second crawl the slow regen rate would produce.
+    const lagSeconds = (fullAtFrame - cappedAtFrame) * frameDt;
+    expect(lagSeconds).toBeLessThan(0.5);
   });
 });

@@ -53,18 +53,24 @@ export function glideVitalFill({ vis, cur, max, rate = 0, dt = 0, tau = 0.14, sn
 // glideVitalFill's rate-less ease branch, which is far faster than the recovery was, so the
 // bar visibly RUSHES the final bit ("charges fluidly, then the last little bit jumps").
 //
-// The fix: while the fill still trails the earned value after recovery stops, keep feeding
-// the LAST positive rate so the tail finishes at the same steady slope as the rest. The
-// caller banks the return as `last` for next frame (it doubles as the memory): a live rate
-// refreshes it, a caught-up/settled fill clears it back to 0 so a genuine later rate-less
-// gain still eases.
+// The fix: while the fill still trails the earned value, glide at the FASTEST recovery rate
+// seen during this unbroken trailing run — so the leftover sliver finishes at the pace it
+// was actually earned, not whatever rate happens to be live at the top. The caller banks
+// the return as `last` for next frame (it doubles as the memory): the latch keeps the peak
+// rate while trailing and clears back to 0 the instant the fill catches up (or a loss drops
+// cur below it), so a genuine later rate-less gain still eases.
+//
+// Why the PEAK, not just the last live rate: recovery can slow near the top without the
+// fill having caught up. e.g. an under-heal potion drains HP fast (~14/s), hands off to
+// slow passive regen (~2/s) that carries HP to full — the fill still trails a drain-sized
+// sliver, and closing it at 2/s would make the bar crawl for seconds after the number
+// already reads full. Holding the peak (14/s) closes it smoothly at the pace it filled.
 //
 //   live  the recovery rate the game reports this frame (0 once the earned value is capped)
-//   last  the rate returned last frame (the latch memory)
+//   last  the rate returned last frame (the latch memory / running peak while trailing)
 //   vis   the fill's current shown value (null before the first frame)
 //   cur   the earned value the fill is climbing toward
 export function latchFillRate({ live = 0, last = 0, vis = null, cur = 0 }) {
-  if (live > 0) return live;                  // actively recovering → the live rate drives the glide
-  if (vis != null && cur > vis) return last;  // recovery stopped but the fill still trails → finish at the last rate
-  return 0;                                    // caught up, or a loss → drop the latch (next gain eases as before)
+  if (vis == null || cur <= vis) return 0;    // first frame / caught up / loss → no latch (glide snaps or eases)
+  return Math.max(0, live, last);             // still trailing → finish at the fastest recent recovery rate
 }

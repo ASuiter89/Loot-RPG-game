@@ -23489,8 +23489,9 @@ function renderStaminaBar() {
 // integers. (glideVitalFill lives in systems/vitalFill.js so it can be unit-tested.)
 let _hpFillVis = null, _mpFillVis = null, _shieldVis = null;   // eased visual HP/MP/Spirit-Veil (null → snap on first frame)
 // Latched recovery rate per bar: the live rate drops to 0 the instant the earned value
-// hits its cap, but the fill trails a sliver behind — keep gliding that tail at the last
-// rate (latchFillRate) so the top finishes at the same slope, not the fast rate-less ease.
+// hits its cap, but the fill trails a sliver behind — keep gliding that tail at the fastest
+// recent recovery rate (latchFillRate) so the top finishes at the pace it filled, not the
+// fast rate-less ease (nor a crawl if recovery slowed just before the cap).
 let _hpFillRate = 0, _mpFillRate = 0, _shieldFillRate = 0;
 let _hpFillW = null, _mpFillW = null;       // last written fill widths (skip unchanged writes)
 let _hpShieldW = null;                       // last written Spirit Veil mask width (skip unchanged)
