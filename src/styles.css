@@ -1665,11 +1665,9 @@
     box-shadow: 0 -5px 16px color-mix(in srgb, var(--ink) 55%, transparent);
     padding-top: 6px; padding-bottom: 6px;
   }
-  /* Locked potions in town: greyed and inert — no ready pulse, no press feedback.
-     The TOWN gate reuses the same treatment while you're already in the hub. */
+  /* The TOWN gate greys itself while you're already in the hub — inert, no ready
+     pulse, no press feedback (potions stay live in town, so they keep their look). */
   .skillbar-btn.town-locked { opacity: 0.4; filter: grayscale(0.7); cursor: not-allowed; animation: none; }
-  .skillbar-btn.town-locked:active { transform: none; background: var(--red-700); }
-  .skillbar-btn.town-locked.mana:active { background: var(--blue-700); }
   .skillbar-btn.town.town-locked:active { transform: none; background: var(--green-800); }
 
   /* SKILLS-tab loadout tray — the bank of slots you drag learned actives into. It

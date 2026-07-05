@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Quaff potions in town", by: "Claude", notes: [
+    "The Health and Mana potions (Q/E) now work in town, not just the dungeon — top up instantly before a dive instead of waiting out the free rest.",
+    "They share the same cooldown they do in the dungeon, so town sips can't be spammed.",
+    "Combat skills stay parked for the dungeon — only potions unlocked in the hub.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Boss Point nudges on the GEAR tab and gear-set buttons", by: "Claude", notes: [
     "The GEAR tab now glows with a count when the loadout you're WEARING has Boss Points left to spend — the same nudge the HERO and SKILLS tabs already use for unspent points.",
     "Each gear-set button (Set 1 / Set 2) shows its own count too, so points waiting on the set you're NOT wearing are visible without switching to it. Your worn set lights up both the tab and its button.",
