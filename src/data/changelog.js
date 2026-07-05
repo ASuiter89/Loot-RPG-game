@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Bounty completion is unmissable", by: "Claude", notes: [
+    "Finishing a contract now pops a centre-screen \"Bounty complete!\" banner with a chime and flash, so you know to head back to town and claim.",
+    "The belt's bounty tracker no longer strands a finished contract's bar empty — a done bounty shows a full green bar, a green ✓, and a gentle glow so \"ready to claim\" reads at a glance.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Account-wide bestiary, no more codex freeze", by: "Claude", notes: [
     "The Bestiary is now account-wide: kills carry across every hero and save slot, so slaying a species on one hero fills in its card for all of them. Your codex survives death, a Reset Run, and switching slots — like the shared town stash.",
     "Existing per-hero kill counts fold into the shared codex automatically, so nothing already recorded is lost.",

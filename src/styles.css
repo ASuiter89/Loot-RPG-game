@@ -570,7 +570,8 @@
   #objective-chip .obj-ic { font-size: 1.5rem; line-height: 1; }
   #objective-chip .obj-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #objective-chip .obj-text b { color: var(--gold); }
-  #objective-chip .obj-text .obj-done { color: var(--green-500); }
+  #objective-chip .obj-text .obj-done { color: var(--green-500); font-weight: bold; animation: objDonePulse 1.6s ease-in-out infinite; }
+  @keyframes objDonePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
   #objective-chip .obj-streak { color: var(--orange-800); font-weight: bold; }
 
   /* Greed gate — the risk/reward "cursed floor" choice modal. */
@@ -1739,8 +1740,18 @@
   .sb-bounty-meter { display: flex; align-items: center; gap: 6px; }
   .sb-bounty-track { flex: 1 1 auto; height: 6px; }
   .sb-bounty-fill { background: linear-gradient(90deg, var(--xp), var(--gold)); }
-  .sb-mod-bounty.done .sb-bounty-fill { background: var(--uncommon); }
   .sb-bounty-prog { flex: 0 0 auto; font-family: var(--font-ui); font-weight: bold; font-size: 1.2rem; color: var(--gold); white-space: nowrap; }
+  /* A completed contract announces itself so "ready to claim" reads at a glance: a
+     full green bar, a green ✓ count, and a gentle glow pulse on the whole module. */
+  .sb-mod-bounty.done .sb-bounty-fill { background: var(--uncommon); }
+  .sb-mod-bounty.done .sb-bounty-prog { color: var(--uncommon); }
+  .sb-mod-bounty.done .sb-bounty-body { border-color: var(--uncommon); animation: bountyReadyPulse 1.6s ease-in-out infinite; }
+  /* Inset glow (not an outer box-shadow) so the belt's overflow:auto never clips the
+     halo — it pulses inside the module's own border box. */
+  @keyframes bountyReadyPulse {
+    0%, 100% { box-shadow: inset 0 0 5px color-mix(in srgb, var(--uncommon) 35%, transparent); }
+    50%      { box-shadow: inset 0 0 12px color-mix(in srgb, var(--uncommon) 80%, transparent); }
+  }
 
   /* Gear body: the two Set buttons filling the cell height, EQUAL width via a 2-track
      grid (each 1fr sizes to the wider button). */
