@@ -25131,32 +25131,50 @@ let _sbCdEls = null, _sbCdTextEls = null;
 // longest, then meals, then bounty — see styles.css). They never show on touch (the
 // bar there isn't inside .dh-belt, so no container establishes the query).
 
-// Loadout swap (Set 1 / Set 2) — reuses the GEAR-tab widget verbatim.
+// Each module is a labelled CELL that mirrors the skill buttons: an .sb-pill label on
+// top and a body the same height as a skill tile below. Empty states overlay the
+// same-size body (a dim prompt) rather than swapping in a different-shaped element, so
+// the component never changes size/layout between "has content" and "empty".
+
+// Loadout swap (Set 1 / Set 2) — body reuses the GEAR-tab widget.
 function beltLoadoutHtml() {
-  return `<div class="sb-mod sb-mod-loadout">${gearSetBarHTML()}</div>`;
+  return `<div class="sb-mod sb-mod-loadout"><span class="sb-pill sb-mod-pill">GEAR</span><div class="sb-mod-body sb-loadout-body">${gearSetBarHTML()}</div></div>`;
 }
-// Meal quick-slots — filled meal slots as tap-to-eat tiles (assigned at the Ramen
-// House). Empty markup when nothing is slotted, so the module collapses away.
+// Meal quick-slots — MEAL_SLOT_COUNT tiles the same size as the skill buttons: filled
+// slots are tap-to-eat bowls, empty ones dashed placeholders (like unassigned skill
+// slots). When nothing is slotted, a "Go cook something!" prompt OVERLAYS the tiles.
 function beltMealsHtml() {
-  const tiles = (player.mealSlots || []).map((s, i) => s
-    ? `<button class="skillbar-btn sb-meal" onclick="eatMealSlot(${i})" ${hoverTip(`<div class='ht-name'>${bowlIcon(14)} ${escapeHtml(s.bowl.name)}</div><div class='ht-line'>${escapeHtml(fxDesc(s.bowl.fx) || 'no effect')} · ${s.bowl.floors} floors</div><div class='ht-sub'>tap to eat · ${s.qty} left</div>`)}>
-        <span class="sb-icon">${bowlIcon(24)}</span><span class="sb-meal-qty">${s.qty}</span></button>`
-    : '').join('');
-  return tiles ? `<div class="sb-mod sb-mod-meals">${tiles}</div>` : '';
+  const slots = player.mealSlots || [];
+  const anyFilled = slots.some(s => s && s.qty > 0);
+  let tiles = '';
+  for (let i = 0; i < MEAL_SLOT_COUNT; i++) {
+    const s = slots[i];
+    tiles += (s && s.qty > 0)
+      ? `<button class="skillbar-btn sb-meal" onclick="eatMealSlot(${i})" ${hoverTip(`<div class='ht-name'>${bowlIcon(14)} ${escapeHtml(s.bowl.name)}</div><div class='ht-line'>${escapeHtml(fxDesc(s.bowl.fx) || 'no effect')} · ${s.bowl.floors} floors</div><div class='ht-sub'>tap to eat · ${s.qty} left</div>`)}><span class="sb-icon">${bowlIcon(24)}</span><span class="sb-meal-qty">${s.qty}</span></button>`
+      : `<div class="skillbar-btn sb-meal sb-meal-slot-empty"></div>`;
+  }
+  const overlay = anyFilled ? '' : `<div class="sb-mod-overlay">Go cook something!</div>`;
+  const tip = anyFilled ? '' : hoverTip(`<div class='ht-name'>${bowlIcon(14)} Meals</div><div class='ht-line'>Cook a bowl at the Ramen House and slot it here to eat it mid-run.</div>`);
+  return `<div class="sb-mod sb-mod-meals${anyFilled ? '' : ' sb-mod-idle'}" ${tip}><span class="sb-pill sb-mod-pill">MEALS</span><div class="sb-mod-body sb-meals-body">${tiles}${overlay}</div></div>`;
 }
-// Bounty tracker — the active contract's objective + a live progress bar, relocated off
-// the map corner. The objective LABEL is stable per contract (safe in the cached
-// markup); the progress count + bar width are volatile, so they ride dedicated spans
-// that syncBeltBounty() rewrites by textContent/width without busting the bar cache.
+// Bounty tracker — body shows the active contract's objective + a live progress bar,
+// or a "No bounty yet" OVERLAY on the same-size body. The objective LABEL is stable per
+// contract (safe in the cached markup); the progress count + bar width ride dedicated
+// spans that syncBeltBounty() rewrites without busting the bar cache.
 function beltBountyHtml() {
   const b = player.bounty;
-  if (!b) return '';
   const ic = dlIcon('npc_quest', 16) || '';
-  const label = escapeHtml(b.desc.replace('{n}', b.need));
-  return `<div class="sb-mod sb-mod-bounty" onclick="objectiveChipClick()" ${hoverTip(`<div class='ht-name'>${ic} Bounty</div><div class='ht-line'>${label}</div>`)}>
-    <span class="sb-bounty-ic">${ic}</span>
-    <span class="sb-bounty-body"><span class="sb-bounty-label">${label}</span><span class="bar-track sb-bounty-track"><span class="bar-fill sb-bounty-fill"></span></span></span>
-    <span class="sb-bounty-prog"></span></div>`;
+  // Compact the objective for the narrow belt cell — drop the trailing "…of/from
+  // foes" filler and shorten "elite foes" — so it fits without truncation (the full
+  // text still shows on hover and the map-corner chip).
+  const label = b ? escapeHtml(b.desc.replace('{n}', b.need).replace(/ (?:from|of) foes\b/, '').replace(/ elite foes\b/, ' elites')) : '';
+  const inner = b
+    ? `<span class="sb-bounty-ic">${ic}</span><div class="sb-bounty-info"><span class="sb-bounty-label">${label}</span><div class="sb-bounty-meter"><span class="bar-track sb-bounty-track"><span class="bar-fill sb-bounty-fill"></span></span><span class="sb-bounty-prog"></span></div></div>`
+    : `<div class="sb-mod-overlay">${ic}&nbsp;No bounty yet</div>`;
+  const tip = b
+    ? hoverTip(`<div class='ht-name'>${ic} Bounty</div><div class='ht-line'>${escapeHtml(b.desc.replace('{n}', b.need))}</div>`)
+    : hoverTip(`<div class='ht-name'>${ic} Bounty</div><div class='ht-line'>No active bounty — accept one at the town Bounty Board.</div>`);
+  return `<div class="sb-mod sb-mod-bounty${b ? '' : ' sb-mod-idle'}" ${b ? 'onclick="objectiveChipClick()"' : ''} ${tip}><span class="sb-pill sb-mod-pill">BOUNTY</span><div class="sb-mod-body sb-bounty-body">${inner}</div></div>`;
 }
 // Refresh the volatile bits of the belt bounty module — the progress count and bar
 // width — memoized so unchanged repaints skip the DOM writes (runs per skill-bar sync,
@@ -25192,7 +25210,10 @@ function renderSkillBar() {
   // renders even before any active is learned because the Health/Mana potions are
   // baseline kit.
   const town = inTown;
-  bar.style.display = 'flex';
+  // Reveal the bar but let CSS choose the display type — flex in the touch cluster,
+  // grid in the desktop belt (which centres the AUTO slot). An inline 'flex' here
+  // would override the belt's grid, so clear it instead of forcing a value.
+  bar.style.display = '';
   bar.classList.toggle('in-town', town);
   document.body.classList.toggle('town-bar', town);
   // Potion skills pinned to the far left of the bar: Health (Q) then Mana (E).
@@ -25309,11 +25330,9 @@ function renderSkillBar() {
   // manual slots. The two .sb-fill boxes grow (desktop belt only) to occupy the empty
   // space and centre their optional modules in it; the modules themselves are hidden
   // until the belt is wide enough (container queries). See the .sb-* flex CSS.
-  const html = `<div class="sb-left">${sprintCell}${townBtn}${healBtn}${manaBtn}</div>`
-    + `<div class="sb-fill sb-fill-left">${beltBountyHtml()}${beltMealsHtml()}</div>`
+  const html = `<div class="sb-side sb-side-left"><div class="sb-left">${sprintCell}${townBtn}${healBtn}${manaBtn}</div><div class="sb-fill sb-fill-left">${beltBountyHtml()}${beltMealsHtml()}</div></div>`
     + `<div class="sb-auto-wrap">${autoCell}</div>`
-    + `<div class="sb-fill sb-fill-right">${beltLoadoutHtml()}</div>`
-    + `<div class="sb-right">${skillsHtml}</div>`;
+    + `<div class="sb-side sb-side-right"><div class="sb-fill sb-fill-right">${beltLoadoutHtml()}</div><div class="sb-right">${skillsHtml}</div></div>`;
   if (html !== _lastSkillBarHtml) {   // identical markup — skip the DOM teardown + reflow
     _lastSkillBarHtml = html;
     bar.innerHTML = html;
