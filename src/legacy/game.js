@@ -33,6 +33,7 @@ import { rollDamage, spreadRange } from '../systems/damageRoll.js';
 import { spellSpreadFor } from '../data/spellSpread.js';
 import { SKILL_MILESTONES } from '../data/skillMilestones.js';
 import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/gearPower.js';
+import { equipSwapDelta } from '../systems/gearCompare.js';
 import { GEAR_POWER } from '../data/gearPower.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { KILL_LOOT, killLootParams } from '../systems/bossLoot.js';
@@ -3516,18 +3517,29 @@ function gearContributionPower() {
 // The true Power swing from equipping `item` into its slot — what the bag/shop
 // "upgrade" arrows compare against. Because itemPower values a piece against its
 // slot VACATED, itemPower(new) and itemPower(current occupant) share one baseline,
-// so their difference is the honest swap delta. Beyond the piece it replaces,
-// equipping a two-handed weapon also STRANDS an incompatible off-hand (loadItem
-// stows it), so that off-hand's Power is lost in the swap too — without this a 2H
-// could flag as a green upgrade while actually LOWERING your Power.
+// so their difference is the honest swap delta (systems/gearCompare.js). Two hand-
+// slot facts adjust that raw difference:
+//   • An off-hand can't be equipped at all while a two-hander fills the hand (no
+//     Titan's Grip) — there's no slot to put it in, so it is never an upgrade (0),
+//     matching the guard statDiffLine already uses for its "first equip" star.
+//   • Equipping a two-handed weapon STRANDS an incompatible off-hand (loadItem
+//     stows it), so that off-hand's Power is lost in the swap too — a 2H is a real
+//     upgrade only when it beats the main-hand weapon AND that off-hand combined.
 function equipUpgradeDelta(item) {
   if (!item || !item.slot) return 0;
   const active = activeSlots();
   const occ = equipped[item.slot];
-  let d = itemPowerRawCached(item) - ((occ && active[item.slot]) ? itemPowerRawCached(occ) : 0);
-  if (item.slot === 'weapon' && equipped.offhand && active.offhand && offhandEquipError(equipped.offhand, item)) {
-    d -= itemPowerRawCached(equipped.offhand);
-  }
+  // Off-hand blocked by the current main hand (a two-hander) → can't equip → not an upgrade.
+  const blocked = item.slot === 'offhand' && !!offhandEquipError(item, equipped.weapon);
+  // A 2H weapon swap strands an incompatible, currently-active off-hand.
+  const strands = item.slot === 'weapon' && equipped.offhand && active.offhand
+    && !!offhandEquipError(equipped.offhand, item);
+  const d = equipSwapDelta({
+    itemPower: itemPowerRawCached(item),
+    occupantPower: (occ && active[item.slot]) ? itemPowerRawCached(occ) : 0,
+    strandedOffhandPower: strands ? itemPowerRawCached(equipped.offhand) : 0,
+    blocked,
+  });
   return Math.round(d);
 }
 
@@ -7092,7 +7104,7 @@ window.gameGuide = function gameGuide(topic) {
     power: [
       `Power is a single number rating how strong a hero — or a single gear piece — is. It is BUILD-AWARE: not a fixed table, but the marginal gain in an effective COMBAT SCORE (a blend of your effective offense/DPS and survivability/EHP, built from the real combat formulas) that the piece's stats give THIS hero's current build.`,
       `So a stat that does nothing for your build is worth ~0 Power to you: a Crit Damage roll on a hero with no crit chance barely moves your damage, so it barely adds Power; Spell Power on a pure martial build, or Attack Speed on a pure caster, are near-dead weight and priced as such. The SAME item can be worth very different Power to two different heroes — that is the point. Chances are measured against your own LEVEL (a stable reference), and transient shrine/food buffs are excluded, so Power reflects your durable build, not the moment.`,
-      `Read it from gameState(): player.power is the overall headline (POWER on the hero sheet), player.gearPower is the slice your worn gear contributes (POWER = that + your level/attribute/skill base). Each equippable item in menu.inventory carries pow (its Power to you) and upgrade (the Power swing vs. what fills its slot now: positive = a genuine upgrade FOR YOUR BUILD). Sort/compare by pow, and trust upgrade over raw rarity — a higher-tier piece can be a downgrade if its stats don't suit you.`,
+      `Read it from gameState(): player.power is the overall headline (POWER on the hero sheet), player.gearPower is the slice your worn gear contributes (POWER = that + your level/attribute/skill base). Each equippable item in menu.inventory carries pow (its Power to you) and upgrade (the Power swing vs. what fills its slot now: positive = a genuine upgrade FOR YOUR BUILD). The hand slots fold in two rules: an off-hand you can't equip right now — a two-hander already fills the hand, no Titan's Grip — reads upgrade 0 (you can't swap it in), and a two-handed weapon's upgrade already subtracts the off-hand it would strand, so it only reads positive when it beats your main-hand weapon AND off-hand combined. Sort/compare by pow, and trust upgrade over raw rarity — a higher-tier piece can be a downgrade if its stats don't suit you.`,
       `Consequences an agent should expect: an item's pow can differ across two heroes and shrinks as your build saturates a stat (diminishing returns); the overall player.power still climbs monotonically with any real upgrade. To raise Power, stack stats your build actually uses (your class's damage lane, crit damage only once you have crit chance, more HP/mitigation for survivability), not just bigger rarities.`,
     ],
   };
