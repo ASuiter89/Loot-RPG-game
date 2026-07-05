@@ -24451,7 +24451,7 @@ function renderSkills(el) {
   // Sub-tab selector across the three trees.
   const tabBtn = (v, label) => `<button class="sk-vtab ${skillView === v ? 'on' : ''}" onclick="setSkillView('${v}')">${label}</button>`;
   const pathLabel = asc ? `${dlIcon(asc.icon,16)||''} ${asc.name.toUpperCase()}` : '<span data-spr=feat_door></span> PATH';
-  const tabs = `<div class="sk-vtabs">${tabBtn('passive', '<span data-spr=a_shield></span> PASSIVE')}${tabBtn('active', '<span data-spr=ic_stun></span> ACTIVE')}${tabBtn('path', pathLabel)}</div>`;
+  const tabs = `<div class="sk-vtabs">${tabBtn('active', '<span data-spr=ic_stun></span> ACTIVE')}${tabBtn('passive', '<span data-spr=a_shield></span> PASSIVE')}${tabBtn('path', pathLabel)}</div>`;
   // Second-level selector: one sub-tab per specialization branch, so each branch's
   // web gets the whole panel (five double-wide webs never share a screen).
   const bNames = (skillView === 'passive' || skillView === 'active') ? SKILL_BRANCHES[player.class] : null;

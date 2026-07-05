@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "ACTIVE skill tab now sits first", by: "Claude", notes: [
+    "On the SKILLS panel the tab order is now ACTIVE, then PASSIVE, then your class path — matching the tree you land on when you open Skills.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Belt module polish", by: "Claude", notes: [
     "The belt's bounty / meals / gear modules now match the skill buttons — a label pill above a tile the same height — and the meal slots read like the skill slots (filled bowls plus dashed empties).",
     "The AUTO slot stays dead-centre; the modules fill the gaps beside it only when there's room, and each is sized to fit its contents (long objectives, big gear power) without clipping.",
