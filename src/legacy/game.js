@@ -1819,6 +1819,42 @@ function lpcCrackOverlay(px, py, tw, th, sev, seed) {
   }
   ctx.restore();
 }
+// A wall island's floor-facing edges are overpainted by the surrounding ground:
+// drawLPCTerrain autotiles the floor OVER a solid wall base, so the visible
+// "wall" is only the part the floor layer's alpha leaves standing — exactly the
+// inverse mask wallShadowLayer() already builds. lpcCrackOverlay clips its
+// fissures to the whole tile, so around a lone rock they spill onto the grass.
+// Fix: paint the fracture onto a scratch tile, then punch it back out wherever
+// the floor autotiles over THIS cell (the floor tile's own alpha is the
+// floor-visible mask), and blit what survives — the crack, locked to the
+// non-transparent wall. (Built interiors lay square wall tiles that fill the
+// cell, so there is no bleed to mask and the plain overlay is already correct.)
+let _crackMaskCv = null;
+// PREVIEW ONLY — draw the raw full-tile fracture (pre-mask) so a capture/smoke
+// script can A/B the spill fix. Off on the play path; set by __previewCrackWall.
+let previewNoCrackMask = false;
+function lpcCrackOverlayMasked(px, py, tw, th, sev, seed, x, y) {
+  if (previewNoCrackMask) { lpcCrackOverlay(px, py, tw, th, sev, seed); return; }
+  const C = currentTheme();
+  const B = C.indoor ? null : (LPC_BIOME[C.name] || { floor: 'Grass', wall: 'Rock_Gray', water: 'Water' });
+  if (!B || !B.floor || !LPC_TABLE.table[B.floor]) { lpcCrackOverlay(px, py, tw, th, sev, seed); return; }
+  const W = Math.max(1, Math.round(tw)), H = Math.max(1, Math.round(th));
+  const cv = _crackMaskCv || (_crackMaskCv = document.createElement('canvas'));
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const mg = cv.getContext('2d');
+  mg.clearRect(0, 0, W, H);
+  mg.imageSmoothingEnabled = false;
+  const realCtx = ctx; ctx = mg;
+  try {
+    lpcCrackOverlay(0, 0, tw, th, sev, seed);              // fracture in local tile space
+    const inb = (X, Y) => X >= 0 && Y >= 0 && X < MAP_W && Y < MAP_H;
+    const isFloor = (X, Y) => inb(X, Y) && mapData[Y][X] !== 1 && mapData[Y][X] !== 10;
+    mg.globalCompositeOperation = 'destination-out';        // erase crack under the floor's alpha
+    lpcLayer(B.floor, isFloor, -x * tw, -y * tw, tw, x, y, x + 1, y + 1);
+    mg.globalCompositeOperation = 'source-over';
+  } finally { ctx = realCtx; }
+  realCtx.drawImage(cv, Math.round(px), Math.round(py));
+}
 function lpcDetail(C, ox, oy, tw, x0, y0, x1, y1) {
   for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
     const t = mapData[y][x]; if (t === 1 || t === 10 || t === 6 || t === 7) continue;
@@ -15156,7 +15192,7 @@ function isWallTile(x, y) {
 function drawWall(px, py, tw, th, x, y, seed, C, cracked) {
   // Indoor + outdoor both use the LPC autotiler now: drawLPCTerrain fills the
   // wall mass, so here we only add the crack overlay for damaged tiles.
-  if (lpcReady && !inTown) { if (cracked) lpcCrackOverlay(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed); return; }
+  if (lpcReady && !inTown) { if (cracked) lpcCrackOverlayMasked(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed, x, y); return; }
   if (C.wallStyle === 'forest') { drawForestWall(px, py, tw, th, x, y, seed, C, cracked); return; }
   if (C.wallStyle === 'pine') { drawPineWall(px, py, tw, th, x, y, seed, C, cracked); return; }
   if (C.wallStyle === 'mushroom') { drawMushroomWall(px, py, tw, th, x, y, seed, C, cracked); return; }
@@ -29180,6 +29216,39 @@ try {
         for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) { const t = mapData[y][x]; if (t === 6) w++; else if (t === 7) l++; }
         return { level: lvl, biome: (currentTheme().name || ''), indoor: !!currentTheme().indoor, water: w, lava: l, trees, decor };
       } catch (e) { return { err: String(e) }; }
+    };
+    // Preview helper: stage a cracked wall (tile 10) on screen at a chosen hit
+    // count, optionally pre-mask (raw full-tile fracture), park the hero a few
+    // tiles off so its arrival beam never covers the crop, and report the wall's
+    // on-screen rect — so a capture/smoke script can verify the fracture stays
+    // locked to the rock instead of spilling onto the surrounding floor. Prefers
+    // a lone rock (open floor on all four sides) — the worst case for spill.
+    window.__previewCrackWall = function (hits, masked) {
+      hits = (hits == null) ? MAX_CRACK_HITS - 1 : hits;
+      previewNoCrackMask = (masked === false);
+      let best = null, island = null;
+      for (let y = 1; y < MAP_H - 1; y++) for (let x = 1; x < MAP_W - 1; x++) {
+        if (mapData[y][x] !== 10) continue;
+        const L = mapData[y][x - 1] === 0, R = mapData[y][x + 1] === 0;
+        const U = mapData[y - 1][x] === 0, D = mapData[y + 1][x] === 0;
+        if (L && R && U && D && !island) island = { x, y, L, R, U, D };
+        if (((L && R) || (U && D)) && !best) best = { x, y, L, R, U, D };
+      }
+      best = island || best;
+      if (!best) { for (let y = 1; y < MAP_H - 1 && !best; y++) for (let x = 1; x < MAP_W - 1; x++) if (mapData[y][x] === 10) best = { x, y, island: false }; }
+      if (!best) return { err: 'no cracked wall' };
+      let placed = false;
+      for (const d of [4, 3, 2, 5]) { for (const [dx, dy] of [[d, 0], [-d, 0], [0, d], [0, -d]]) {
+        const nx = best.x + dx, ny = best.y + dy;
+        if (mapData[ny] && mapData[ny][nx] === 0) { setPlayerCell(nx, ny); placed = true; break; }
+      } if (placed) break; }
+      if (!placed) { const nb = [[best.x - 1, best.y], [best.x + 1, best.y], [best.x, best.y - 1], [best.x, best.y + 1]]; for (const [nx, ny] of nb) { if (mapData[ny] && mapData[ny][nx] === 0) { setPlayerCell(nx, ny); break; } } }
+      wallCracks[best.y + ',' + best.x] = hits;
+      updateBars(); draw();
+      const tw = lastCam.tw, th = lastCam.th;
+      const sx = Math.round(-lastCam.camX) + best.x * tw;
+      const sy = Math.round(-lastCam.camY) + best.y * th;
+      return { x: best.x, y: best.y, sx, sy, tw, th, sev: crackSeverity(hits), island: !!(best.L && best.R && best.U && best.D) };
     };
     // Position the hero just behind the TALLEST tree (prefer directly north) to
     // showcase occlusion. Clears the one-time depth banner for a clean shot.

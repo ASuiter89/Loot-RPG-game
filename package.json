@@ -11,8 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
-    "smoke": "node test/smoke/smoke.mjs && node test/smoke/reward-banner.mjs && node test/smoke/dungeon-facing.mjs && node test/smoke/teleporter-warp.mjs && node test/smoke/path-connectivity.mjs && node test/smoke/town-wallet.mjs && node test/smoke/touch-controls.mjs && node test/smoke/mobile-resize.mjs",
-    "smoke:pages": "node test/smoke/smoke.mjs index.html && node test/smoke/reward-banner.mjs index.html && node test/smoke/dungeon-facing.mjs index.html && node test/smoke/teleporter-warp.mjs index.html && node test/smoke/path-connectivity.mjs index.html && node test/smoke/town-wallet.mjs index.html && node test/smoke/touch-controls.mjs index.html && node test/smoke/mobile-resize.mjs index.html",
+    "smoke": "node test/smoke/smoke.mjs && node test/smoke/reward-banner.mjs && node test/smoke/dungeon-facing.mjs && node test/smoke/cracked-wall-render.mjs && node test/smoke/teleporter-warp.mjs && node test/smoke/path-connectivity.mjs && node test/smoke/town-wallet.mjs && node test/smoke/touch-controls.mjs && node test/smoke/mobile-resize.mjs",
+    "smoke:pages": "node test/smoke/smoke.mjs index.html && node test/smoke/reward-banner.mjs index.html && node test/smoke/dungeon-facing.mjs index.html && node test/smoke/cracked-wall-render.mjs index.html && node test/smoke/teleporter-warp.mjs index.html && node test/smoke/path-connectivity.mjs index.html && node test/smoke/town-wallet.mjs index.html && node test/smoke/touch-controls.mjs index.html && node test/smoke/mobile-resize.mjs index.html",
     "lint:styles": "node tools/styles-lint.js"
   },
   "devDependencies": {
