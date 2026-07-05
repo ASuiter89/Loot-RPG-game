@@ -17,7 +17,7 @@ import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
 import { milestonePower, rankScale, passiveRankScale, skillManaCost,
   earnedSkillPoints, earnedAscPoints,
   SKILL_POINTS_PER_LEVEL, SKILL_POINTS_AT_START, ASCEND_LEVEL, ASC_POINT_EVERY } from '../systems/skillMath.js';
-import { glideVitalFill } from '../systems/vitalFill.js';
+import { glideVitalFill, latchFillRate } from '../systems/vitalFill.js';
 import { telegraphPhase, telegraphFill, telegraphDanger, stepTelegraph,
   TELE_ACTIVE, TELE_DONE } from '../systems/telegraph.js';
 import { offscreenArrows, tileOnScreen } from '../systems/offscreenArrows.js';
@@ -23761,6 +23761,11 @@ function renderStaminaBar() {
 // drainPendingRecovery). This is purely how the fill is drawn; player.hp/.mp stay
 // integers. (glideVitalFill lives in systems/vitalFill.js so it can be unit-tested.)
 let _hpFillVis = null, _mpFillVis = null, _shieldVis = null;   // eased visual HP/MP/Spirit-Veil (null → snap on first frame)
+// Latched recovery rate per bar: the live rate drops to 0 the instant the earned value
+// hits its cap, but the fill trails a sliver behind — keep gliding that tail at the fastest
+// recent recovery rate (latchFillRate) so the top finishes at the pace it filled, not the
+// fast rate-less ease (nor a crawl if recovery slowed just before the cap).
+let _hpFillRate = 0, _mpFillRate = 0, _shieldFillRate = 0;
 let _hpFillW = null, _mpFillW = null;       // last written fill widths (skip unchanged writes)
 let _hpShieldW = null;                       // last written Spirit Veil mask width (skip unchanged)
 const VITAL_EASE_TAU = 0.14;   // seconds — ease time constant for a rate-less instant sub-burst
@@ -23786,10 +23791,13 @@ function mpRecoveryRate() {
 }
 function updateVitalFills(dt) {
   if (typeof player !== 'object' || !player || !(player.maxHp > 0)) return;
-  _hpFillVis = glideVitalFill({ vis: _hpFillVis, cur: hpContinuous(), max: player.maxHp,
-    rate: hpRecoveryRate(), dt, tau: VITAL_EASE_TAU, snapFrac: VITAL_SNAP_FRAC });
-  _mpFillVis = glideVitalFill({ vis: _mpFillVis, cur: mpContinuous(), max: player.maxMp,
-    rate: mpRecoveryRate(), dt, tau: VITAL_EASE_TAU, snapFrac: VITAL_SNAP_FRAC });
+  const hpCur = hpContinuous(), mpCur = mpContinuous();
+  _hpFillRate = latchFillRate({ live: hpRecoveryRate(), last: _hpFillRate, vis: _hpFillVis, cur: hpCur });
+  _hpFillVis = glideVitalFill({ vis: _hpFillVis, cur: hpCur, max: player.maxHp,
+    rate: _hpFillRate, dt, tau: VITAL_EASE_TAU, snapFrac: VITAL_SNAP_FRAC });
+  _mpFillRate = latchFillRate({ live: mpRecoveryRate(), last: _mpFillRate, vis: _mpFillVis, cur: mpCur });
+  _mpFillVis = glideVitalFill({ vis: _mpFillVis, cur: mpCur, max: player.maxMp,
+    rate: _mpFillRate, dt, tau: VITAL_EASE_TAU, snapFrac: VITAL_SNAP_FRAC });
   const clampPct = (v, mx) => (mx > 0 ? Math.max(0, Math.min(100, v / mx * 100)) : 0);
   const hpPct = clampPct(_hpFillVis, player.maxHp), mpPct = clampPct(_mpFillVis, player.maxMp);
   // Both layouts get the same width string, so one changed-check covers each pair;
@@ -23815,8 +23823,10 @@ function updateVitalFills(dt) {
   // in the +number beside HP). The SAME width drives the translucent blue mask (over HP)
   // and the gray missing-HP band (behind HP), so a receding shield uncovers red HP, then
   // gray. Both layouts share the width string, so one changed-check covers all four.
-  _shieldVis = glideVitalFill({ vis: _shieldVis, cur: player.shield || 0, max: player.maxShield,
-    rate: _shieldRechargeRate, dt, tau: VITAL_EASE_TAU, snapFrac: VITAL_SNAP_FRAC });
+  const shieldCur = player.shield || 0;
+  _shieldFillRate = latchFillRate({ live: _shieldRechargeRate, last: _shieldFillRate, vis: _shieldVis, cur: shieldCur });
+  _shieldVis = glideVitalFill({ vis: _shieldVis, cur: shieldCur, max: player.maxShield,
+    rate: _shieldFillRate, dt, tau: VITAL_EASE_TAU, snapFrac: VITAL_SNAP_FRAC });
   const shieldPct = (player.maxHp > 0 && player.maxShield > 0) ? clampPct(_shieldVis, player.maxHp) : 0;
   const shieldW = shieldPct + '%';
   if (shieldW !== _hpShieldW) {

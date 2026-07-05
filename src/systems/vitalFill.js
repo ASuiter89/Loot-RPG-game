@@ -42,3 +42,35 @@ export function glideVitalFill({ vis, cur, max, rate = 0, dt = 0, tau = 0.14, sn
   }
   return next > cur ? cur : next;                             // never lead the earned value
 }
+
+// Which recovery rate to glide the fill with THIS frame — a latch that keeps a trickle's
+// TAIL moving at the recovery pace instead of the fast rate-less ease.
+//
+// The fill glides one beat BEHIND the earned value (it reaches each beat's value right as
+// the next beat lands). But the live recovery rate reported by the game (passive regen,
+// Spirit-Veil recharge) drops to 0 the instant the EARNED value hits its cap — while the
+// fill is still a sliver short. With `live` now 0 that last sliver falls into
+// glideVitalFill's rate-less ease branch, which is far faster than the recovery was, so the
+// bar visibly RUSHES the final bit ("charges fluidly, then the last little bit jumps").
+//
+// The fix: while the fill still trails the earned value, glide at the FASTEST recovery rate
+// seen during this unbroken trailing run — so the leftover sliver finishes at the pace it
+// was actually earned, not whatever rate happens to be live at the top. The caller banks
+// the return as `last` for next frame (it doubles as the memory): the latch keeps the peak
+// rate while trailing and clears back to 0 the instant the fill catches up (or a loss drops
+// cur below it), so a genuine later rate-less gain still eases.
+//
+// Why the PEAK, not just the last live rate: recovery can slow near the top without the
+// fill having caught up. e.g. an under-heal potion drains HP fast (~14/s), hands off to
+// slow passive regen (~2/s) that carries HP to full — the fill still trails a drain-sized
+// sliver, and closing it at 2/s would make the bar crawl for seconds after the number
+// already reads full. Holding the peak (14/s) closes it smoothly at the pace it filled.
+//
+//   live  the recovery rate the game reports this frame (0 once the earned value is capped)
+//   last  the rate returned last frame (the latch memory / running peak while trailing)
+//   vis   the fill's current shown value (null before the first frame)
+//   cur   the earned value the fill is climbing toward
+export function latchFillRate({ live = 0, last = 0, vis = null, cur = 0 }) {
+  if (vis == null || cur <= vis) return 0;    // first frame / caught up / loss → no latch (glide snaps or eases)
+  return Math.max(0, live, last);             // still trailing → finish at the fastest recent recovery rate
+}
