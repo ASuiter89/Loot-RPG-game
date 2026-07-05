@@ -11044,7 +11044,7 @@ function renderMystic() {
       const label = DUR_LABEL[dur.floors] || (dur.floors + ' floors');
       return `<button class="pact-buy-btn" ${afford ? '' : 'disabled'} onclick="buyPact(${i}, ${dur.floors})">
         <span class="pact-floors">${label}</span>
-        <span class="pact-cost${afford ? '' : ' cost-short'}"><span data-spr=ic_money></span>${price.toLocaleString()}</span>
+        <span class="pact-cost${afford ? '' : ' cost-short'}"><span data-spr=ic_money></span>${fmtGold(price)}</span>
       </button>`;
     }).join('');
     return `<div class="pact-card" style="--accent:${accent};--accentSoft:${softOf(accent)}">
@@ -11477,7 +11477,7 @@ function renderMercCamp() {
       const label = dur.floors === 1 ? '1 floor' : `${dur.floors} floors`;
       return `<button class="pact-buy-btn" ${afford ? '' : 'disabled'} onclick="hireMerc('${t.id}', ${dur.floors})">
         <span class="pact-floors">${label}</span>
-        <span class="pact-cost${afford ? '' : ' cost-short'}"><span data-spr=ic_money></span>${cost.toLocaleString()}</span>
+        <span class="pact-cost${afford ? '' : ' cost-short'}"><span data-spr=ic_money></span>${fmtGold(cost)}</span>
       </button>`;
     }).join('');
     return `<div class="pact-card merc-card" style="--accent:${accent};--accentSoft:${hexA(accent, 0.14)}">
@@ -11502,7 +11502,7 @@ function hireMerc(id, floors) {
   spendGold(cost);
   player.merc = { kind: t.id, floors: dur.floors, mult: t.mult };
   sfx('buy');
-  log(`<span data-spr=a_shield></span> You hire a ${t.name} for <span data-spr=ic_money></span>${cost.toLocaleString()} — they'll join you for ${dur.floors} floor${dur.floors === 1 ? '' : 's'}.`, 'important');
+  log(`<span data-spr=a_shield></span> You hire a ${t.name} for <span data-spr=ic_money></span>${fmtGold(cost)} — they'll join you for ${dur.floors} floor${dur.floors === 1 ? '' : 's'}.`, 'important');
   updateBars(); renderMercCamp(); saveGame();
 }
 
@@ -23515,16 +23515,16 @@ function updateBars() {
   const hpBar = document.getElementById('hp-bar');
   // The HP/MP fill widths are eased every frame in updateVitalFills() so over-time
   // recovery climbs smoothly; here we only refresh the readouts and danger pulse.
-  document.getElementById('hp-text').textContent = `${player.hp}/${player.maxHp}`;
+  document.getElementById('hp-text').textContent = `${abbreviateNumber(player.hp)}/${abbreviateNumber(player.maxHp)}`;
   // Bulwark readout: its own number next to HP so both pools are legible (blue).
   const shieldNow = (player.maxShield > 0 && player.shield >= 1) ? Math.round(player.shield) : 0;
   const shTxt = document.getElementById('hp-shield-text');
-  if (shTxt) shTxt.textContent = shieldNow ? `+${shieldNow}` : '';
+  if (shTxt) shTxt.textContent = shieldNow ? `+${abbreviateNumber(shieldNow)}` : '';
   // Pulse the HP bar red when health drops to a dangerous level (≤25%, but not dead).
   const hpLow = player.hp > 0 && player.hp / player.maxHp <= 0.25;
   hpBar.classList.toggle('hp-low', hpLow);
   if (hpBar.parentElement) hpBar.parentElement.classList.toggle('hp-low-track', hpLow);
-  document.getElementById('mp-text').textContent = `${player.mp}/${player.maxMp}`;
+  document.getElementById('mp-text').textContent = `${abbreviateNumber(player.mp)}/${abbreviateNumber(player.maxMp)}`;
   // Computed once, then reused by both the mobile header and the desktop
   // bottom-HUD mirror below (each used to be computed twice per call, and
   // playerPower() walks all gear + skills every time).
@@ -23548,14 +23548,14 @@ function updateBars() {
     const dhHp = document.getElementById('dh-hp-fill');
     if (dhHp) dhHp.classList.toggle('hp-low', hpLow);
     const dhHpVal = document.getElementById('dh-hp-val');
-    if (dhHpVal) dhHpVal.innerHTML = `${player.hp}/${player.maxHp}` + (shieldNow ? ` <span class="dh-shield-val">+${shieldNow}</span>` : '');
-    dset('dh-mp-val', `${player.mp}/${player.maxMp}`);
+    if (dhHpVal) dhHpVal.innerHTML = `${abbreviateNumber(player.hp)}/${abbreviateNumber(player.maxHp)}` + (shieldNow ? ` <span class="dh-shield-val">+${abbreviateNumber(shieldNow)}</span>` : '');
+    dset('dh-mp-val', `${abbreviateNumber(player.mp)}/${abbreviateNumber(player.maxMp)}`);
     setPending('dh-hp-pending', player.hp, player.maxHp, pendHeal);
     setPending('dh-mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
     const dhXp = document.getElementById('dh-xp-fill');
     if (dhXp) dhXp.style.width = Math.min(100, player.xp / xpForLevel(player.level) * 100) + '%';
     dset('dh-xp-lvl', 'Lv ' + player.level);
-    dset('dh-power-num', power);
+    dset('dh-power-num', abbreviateNumber(power));
     dset('dh-gold-num', fmtGold(player.gold));
     const dhName = document.getElementById('dh-name');
     if (dhName) { dhName.textContent = player.name || ''; dhName.style.display = player.name ? '' : 'none'; }
@@ -23591,7 +23591,7 @@ function updateBars() {
     const doorHtml = dlIcon('feat_door', 14);
     if (doorHtml !== _clearStatusHtml) { _clearStatusHtml = doorHtml; clearEl.innerHTML = doorHtml; }
   }
-  setText('power-num', power);
+  setText('power-num', abbreviateNumber(power));
 
   // Desktop map-corner readout mirrors the floor + foe count (mobile keeps
   // these in the header). No lock icon: the foes pill simply hides once the
@@ -25956,6 +25956,10 @@ const LOG_MAX_LINES = 200;
 let _logEl = null;   // #log is static in the markup — resolve once, lazily
 function log(msg, cls='') {
   const el = _logEl || (_logEl = document.getElementById('log'));
+  // Every combat-log line goes through one abbreviator so damage, gold, heals and
+  // quantities read "14k" not "14,523" no matter which call site built the string.
+  // It skips HTML tags, so the sprite-span / colour markup in these lines is safe.
+  msg = abbreviateNumbersIn(msg);
   el.insertAdjacentHTML('beforeend', `<div class="log-line ${cls}">${msg}</div>`);
   while (el.childElementCount > LOG_MAX_LINES) el.removeChild(el.firstElementChild);
   el.scrollTop = el.scrollHeight;
@@ -27174,17 +27178,11 @@ if (typeof window !== 'undefined') {
 
 // Format a millisecond span as a compact human play-time string: "3h 12m",
 // "12m", or "45s" for brand-new heroes. Always returns at least "0s".
-// Compact gold display: exact under 1000, short form (1.2k, 12k, 3.4m) above so
-// big totals don't overflow the HUD / shop panels.
+// Compact gold display: exact under 1000, short form (1.2k, 12k, 3.4M) above so
+// big totals don't overflow the HUD / shop panels. Delegates to the shared
+// abbreviator so gold reads identically to every other number in the game.
 function fmtGold(n) {
-  n = Math.floor(n || 0);
-  if (n < 1000) return String(n);
-  for (const [div, suf] of [[1e9, 'b'], [1e6, 'm'], [1e3, 'k']]) {
-    if (n >= div) {
-      const v = n / div;
-      return (v < 10 ? v.toFixed(1).replace(/\.0$/, '') : String(Math.round(v))) + suf;
-    }
-  }
+  return abbreviateNumber(Math.floor(n || 0));
 }
 function formatPlayTime(ms) {
   let s = Math.floor((ms || 0) / 1000);

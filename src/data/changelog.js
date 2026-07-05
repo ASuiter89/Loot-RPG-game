@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "medium", v: "Big numbers now read at a glance", by: "Claude", notes: [
+    "Any number in the thousands or higher now shows in short form everywhere — 14,523 reads \"14k\", 2,400,000 reads \"2.4M\". Applies to damage, gold, HP/MP, Power, item stats, tooltips, shop and forge prices, the leaderboard and the combat log.",
+    "Values under a thousand still show in full. Short forms round DOWN, so a readout never claims more than you actually have.",
+  ] },
   { date: "2026-07-05", size: "large", v: "Class attribute overhaul + the Bulwark shield", by: "Claude", notes: [
     "Each class now deals weapon & skill damage off a SINGLE attribute — Warrior off Might, Rogue off Agility, Mage off Spirit, Templar off Vitality. The old secondary damage attribute (and the small off-class Might bonus) are gone; spells still scale off Spirit for everyone.",
     "Attributes re-homed: Might now raises Defense; Vitality raises max HP, HP regen AND Stamina; Spirit raises max MP, MP regen, spell power AND healing. Agility (evasion, accuracy, move/attack speed) and Luck (crit, loot quality) keep their roles.",

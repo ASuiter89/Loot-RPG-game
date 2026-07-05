@@ -33,10 +33,16 @@ export function abbreviateNumber(n, decimals) {
     out = String(Math.round(v)); // fallback (shouldn't be reached: 1e12 covers it)
     for (const [div, suf] of MAGNITUDES) {
       if (v >= div) {
-        const q = v / div;
-        out = (decimals != null
-          ? q.toFixed(decimals)
-          : (q < 10 ? trimZero(q.toFixed(1)) : String(Math.round(q)))) + suf;
+        // Truncate (never round up) so a value reads as "at least this much":
+        // 14 523 → "14k", not "15k". One decimal below ten of a unit, whole above,
+        // unless `decimals` forces a fixed precision. Integer math on the raw value
+        // avoids float drift (e.g. 1.9 * 10 landing at 18.9999).
+        const scale = decimals != null ? decimals : (v < 10 * div ? 1 : 0);
+        const pow = Math.pow(10, scale);
+        const t = Math.floor(v / (div / pow)) / pow;
+        out = (scale > 0
+          ? (decimals != null ? t.toFixed(scale) : trimZero(t.toFixed(scale)))
+          : String(t)) + suf;
         break;
       }
     }
@@ -66,16 +72,29 @@ export function formatDamageRange(min, max) {
   return lo0; // indistinguishable even at 2 decimals — effectively a point
 }
 
+// A big-number run in a display string: either 1000+ written plain ("14523") or
+// comma-grouped ("14,523"), optionally carrying a decimal tail ("14523.7"). Anything
+// under a thousand (fewer than four plain digits, no comma group) is left exact.
+const BIG_NUM = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{4,}(?:\.\d+)?/g;
+
 /**
- * Abbreviate every run of four or more digits (i.e. 1000+) inside a string,
- * leaving shorter numbers, symbols, labels and markup untouched. Used for on-screen
- * floating combat text so a deep-floor hit or a fat gold drop reads "12.3k" instead
- * of a wall of digits, while pop-ups like "BLOCK", "2×250" or "+50 MP" keep their
- * prefix/suffix. Non-string input is returned unchanged.
+ * Abbreviate every thousands-or-larger number inside a display string — plain
+ * ("14523") or comma-grouped ("14,523"), with an optional decimal tail — leaving
+ * shorter numbers, symbols, labels and HTML markup untouched. Digits inside an HTML
+ * tag (attribute values, `style` numbers, sprite-span keys) are never rewritten, so
+ * this is safe to run over any combat-log line, HUD string or tooltip fragment, not
+ * just plain floating text. Pop-ups like "BLOCK", "2×250" or "+50 MP" keep their
+ * prefix/suffix; "14,523 gold" reads "14k gold". Non-string input is returned as-is.
  * @param {string} text
  * @returns {string}
  */
 export function abbreviateNumbersIn(text) {
   if (typeof text !== 'string') return text;
-  return text.replace(/\d{4,}/g, (run) => abbreviateNumber(Number(run)));
+  // Walk the string as an alternating stream of HTML tags and the text between
+  // them; only the between-tag text is rewritten, so markup passes through intact.
+  return text.replace(/<[^>]*>|[^<]+/g, (chunk) =>
+    chunk[0] === '<'
+      ? chunk
+      : chunk.replace(BIG_NUM, (run) => abbreviateNumber(Number(run.replace(/,/g, '')))),
+  );
 }
