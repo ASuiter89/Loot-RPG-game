@@ -20066,14 +20066,12 @@ function dealDamage(e, dmg, isCrit) {
 }
 // Arcing power: strike the nearest OTHER living foe within a few tiles for `dmg`,
 // crediting a normal kill if it drops (no proc recursion — a direct hp subtract).
+// The arc jumps from the STRUCK foe (the impact point, which can be far from the
+// hero on a ranged/spell crit), so its reach is judged by line of sight FROM that
+// foe — the same rule as chain lightning — and it can't fork through a solid wall.
 function arcTo(from, dmg) {
   if (dmg <= 0) return;
-  let best = null, bestD = 99;
-  for (const o of enemies) {
-    if (o === from || o.dead) continue;
-    const d = Math.abs(o.x - from.x) + Math.abs(o.y - from.y);
-    if (d <= 3 && d < bestD) { best = o; bestD = d; }
-  }
+  const best = nextChainLink(from, enemies.filter(o => o !== from && !o.dead), 3, hasLineOfSight);
   if (!best) return;
   best.hp -= dmg; best.hitAt = Date.now();
   spawnFloatingText(best.x, best.y, `${dmg}`, '#8ad0ff');
