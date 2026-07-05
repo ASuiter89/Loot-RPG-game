@@ -2272,17 +2272,30 @@ function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
       tint: ENEMY_SILHOUETTE_TINT, draw: () => drawEnemyBody(e, px, py, cw, ch, tw, th) });
   });
   const realCtx = ctx;
+  // Two SEPARATE passes over the same (actor, tree) overlaps — never one interleaved
+  // loop. If we re-occluded and stamped each actor's silhouette back-to-back, the
+  // tree redraw (pass 1) for a LATER actor would paint the tree over an EARLIER
+  // actor's already-stamped silhouette wherever their boxes share a tile — so of two
+  // foes behind one tree the farther silhouette would blink out. Redraw every tree
+  // over every actor first, THEN stamp every silhouette on top of the finished trees,
+  // so no later tree redraw can ever land over a silhouette. The overlap guard is
+  // cheap (a few comparisons over the viewport-culled actor×occ lists) and re-running
+  // it per pass avoids allocating a per-frame pair list on this hot path.
+  // PASS 1 — re-occlude: redraw each tree clipped to the actor's box so it hides them.
+  const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false;
   for (const a of actors) for (const T of occ) {
     if (T.footY <= a.footY) continue;                     // tree not in front of actor
     if (a.r <= T.l || a.l >= T.l + T.dw || a.b <= T.t || a.t >= T.footY) continue; // no overlap
-    // 1) re-occlude — redraw the tree clipped to the actor's box so it hides them
-    const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false;
     ctx.save(); ctx.beginPath(); ctx.rect(a.l, a.t, a.r - a.l, a.b - a.t); ctx.clip();
     ctx.drawImage(decorSheet, T.d.dx, T.d.dy, T.d.w, T.d.h, T.l, T.t, T.dw, T.dh);
     ctx.restore();
-    ctx.imageSmoothingEnabled = sm;
-    // 2) render the actor's real sprite into the offscreen, flatten to a tint, mask
-    //    to the tree's opaque pixels, and blit over the covered region.
+  }
+  ctx.imageSmoothingEnabled = sm;
+  // PASS 2 — render each actor's real sprite into the offscreen, flatten to a tint,
+  // mask to the tree's opaque pixels, and blit over the covered region.
+  for (const a of actors) for (const T of occ) {
+    if (T.footY <= a.footY) continue;                     // tree not in front of actor
+    if (a.r <= T.l || a.l >= T.l + T.dw || a.b <= T.t || a.t >= T.footY) continue; // no overlap
     const bx = Math.floor(a.l), by = Math.floor(a.t), bw = Math.ceil(a.r) - bx, bh = Math.ceil(a.b) - by;
     if (bw <= 0 || bh <= 0) continue;
     const g = _silBuf(bw, bh);
