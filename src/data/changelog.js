@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "medium", v: "Maxed passives surge into a brand-new stat at rank 10", by: "Claude", notes: [
+    "Taking a base-tree passive to rank 10 now unlocks a NEW stat it never gave before — not just a bigger version of what it already scaled.",
+    "Each surge stat is thematic to its passive: a crit node gains crit damage, an HP node gains regen, a spell node gains crit, and so on.",
+    "The new stat stacks on top of the existing rank-3/7/10 bonus spikes and folds straight into the same combat math.",
+    "A passive's detail card names its rank-10 stat in the Rank bonuses ladder, and maxing one calls it out in the log.",
+    "Keystones are unchanged — single-rank build-definers, so they never surge.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Bounty completion is unmissable", by: "Claude", notes: [
     "Finishing a contract now pops a centre-screen \"Bounty complete!\" banner with a chime and flash, so you know to head back to town and claim.",
     "The belt's bounty tracker no longer strands a finished contract's bar empty — a done bounty shows a full green bar, a green ✓, and a gentle glow so \"ready to claim\" reads at a glance.",

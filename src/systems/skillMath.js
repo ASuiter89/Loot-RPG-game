@@ -5,6 +5,20 @@
 const MANA_PER_RANK = 0.08; // +8% of base mana per rank above the first
 const SKILL_MP_MULT = 1.5;  // global mana-cost multiplier (mana is rationed — spells cost more)
 
+// Every base-tree passive maxes at this rank; reaching it unlocks the node's
+// one-off "surge" (a new stat, see data/passiveSurges.js). Keystones max at 1,
+// so they never surge.
+export const PASSIVE_MAX_RANK = 10;
+
+/**
+ * Is a passive's max-rank "surge" bonus live? True once the node is at (or past)
+ * its max rank. `maxRank` defaults to the base-tree cap; pass a node's own `max`
+ * so single-rank keystones (max 1) are handled correctly.
+ */
+export function passiveSurgeLive(rank, maxRank = PASSIVE_MAX_RANK) {
+  return (rank || 0) >= (maxRank || PASSIVE_MAX_RANK);
+}
+
 /**
  * Flat power spikes granted at milestone ranks (3, 7, 10), summed.
  * @returns {number} bonus fraction (0 below rank 3, up to 0.78 at rank 10+).
