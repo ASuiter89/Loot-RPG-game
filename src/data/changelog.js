@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Area spells blast from the point of impact", by: "Claude", notes: [
+    "Meteor, Fireball, Blizzard, Firestorm, Condemn, Plague Bomb, Death Rain and every other impact-and-burst spell now spread their radius damage from where they LAND, not from you. A blast dropped onto a pack tucked behind a wall now catches the whole pack — foes you couldn't have hit directly still take the splash.",
+    "These spells also aim at the nearest foe you can actually SEE, so one closer foe hidden behind a wall no longer makes the cast fizzle with a clear target in view.",
+    "Mark detonations (Immolation, Death Blossom, Final Judgment popping a marked foe) burst outward from the marked foe the same way, and no longer blast through solid walls.",
+    "Chain spells (Chain Spark, Thunderstorm, Apocalypse) now arc foe-to-foe from each struck target, so a chain can bend around a corner to reach a foe the last target can see — instead of dropping every link you personally can't see.",
+    "Novas still radiate from you, and a blast's projectile still needs a clear line to the foe it lands on.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Cleaner desktop HUD layout", by: "Claude", notes: [
     "Gold moves off the bottom HUD into its own pill on the LOOT tab, just left of the crafting materials.",
     "Power drops from the bottom HUD — it already reads on the HERO tab.",
