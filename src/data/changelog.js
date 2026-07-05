@@ -19,6 +19,14 @@ export const CHANGELOG = [
   { date: "2026-07-04", size: "small", v: "See-through silhouettes render right behind overlapping trees", by: "Claude", notes: [
     "Standing (or watching a foe stand) behind two trees whose leaves overlap no longer paints a square patch where the farther tree jumps in front of the nearer one. The trees now keep their proper front-to-back order and the tinted silhouette reads cleanly through both.",
   ] },
+  { date: "2026-07-04", size: "medium", v: "Warp in at checkpoints; death no longer re-locks floors", by: "Claude", notes: [
+    "Warp to Dungeon now drops you in only on checkpoint floors — every fifth floor starting at 1 (1, 6, 11, 16, 21, and the same cadence onward in Endless), up to the deepest floor you've reached. Pick the checkpoint at or below where you're headed and walk down the rest. Return to Last Floor is unchanged: it still puts you back on the exact floor you portaled out of.",
+    "Dying no longer re-locks the deeper floors you'd reached — your depth progress stays put. Instead, because you can only warp in at checkpoints, a death sends you to the nearest checkpoint below where you fell, so you climb the last few floors again naturally.",
+    "The Dungeon Gate's grave marker now sits only on the difficulty tab, with the exact floor shown right beside it; the floor tiles no longer carry their own tombstone. The death screen no longer mentions floors re-locking.",
+  ] },
+  { date: "2026-07-04", size: "small", v: "Dungeon Gate tiles are big again on desktop", by: "Claude", notes: [
+    "The floor and difficulty tiles on the Dungeon Gate are back to their full desktop size. A recent phone-layout change had shrunk them into a long strip of tiny numbers on a wide screen; desktop now shows the roomy 5-across floor grid again, and phones keep the fluid layout that reflows to fit any screen.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Gear stats overhaul — no more caps, rarity that matters, stronger curses", by: "Claude", notes: [
     "Every gear stat now grows with BOTH item level and rarity — no hard caps anywhere. Attack speed, leech, cleave, cooldown and the rest keep climbing on deeper and rarer gear instead of freezing at a ceiling, so a legendary genuinely rolls bigger than a common.",
     "Stats that have a natural limit — crit rate, cooldown, mana cost, dodge, block, damage reduction, tenacity, double strike — now ease off with diminishing returns as they climb, approaching but never reaching 100% (or 0). More is always better, each point a little less than the last, and nothing is ever fully maxed.",
