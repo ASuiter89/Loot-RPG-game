@@ -4,10 +4,14 @@ import {
   LEGACY_GOLD_KEY,
   freshStash,
   goldValue,
+  materialsValue,
   sanitizeStash,
   mergeStash,
   depositGold,
   withdrawGold,
+  depositMaterial,
+  withdrawMaterial,
+  foldHeroMaterials,
 } from '../../src/persistence/stashSync.js';
 
 // A stashed item just needs a gear `slot` and (post-CRDT) a `_st` tag.
@@ -21,8 +25,11 @@ function v2(dep = {}, wd = {}, items = [], rm = []) {                    // CRDT
 // ═══════════════════════════ basics ═══════════════════════════════════════════
 
 describe('freshStash', () => {
-  it('is an empty v2 stash', () => {
-    expect(freshStash()).toEqual({ v: 2, gold: 0, items: [], ts: 0, gl: { dep: {}, wd: {} }, rm: [] });
+  it('is an empty stash: empty vault AND empty material wallet', () => {
+    expect(freshStash()).toEqual({
+      v: STASH_VERSION, gold: 0, items: [], ts: 0,
+      gl: { dep: {}, wd: {} }, rm: [], ml: {}, materials: {},
+    });
   });
 });
 
@@ -159,5 +166,81 @@ describe('depositGold / withdrawGold', () => {
     s = withdrawGold(s, 'pc', -5);
     expect(s.gold).toBe(0);
     expect(s.gl.dep).toEqual({});
+  });
+});
+
+// ═══════════════════════════ crafting materials ═══════════════════════════════
+
+describe('materialsValue', () => {
+  it('materialises every ledger to Σdep − Σwd, clamped at 0', () => {
+    const ml = {
+      scrap: { dep: { a: 40, b: 10 }, wd: { a: 5 } },
+      core:  { dep: { a: 3 }, wd: { a: 9 } }, // over-withdrawn → clamps to 0
+    };
+    expect(materialsValue(ml)).toEqual({ scrap: 45, core: 0 });
+    expect(materialsValue(null)).toEqual({});
+  });
+});
+
+describe('depositMaterial / withdrawMaterial', () => {
+  it('accumulate per-device, per-key, and re-materialize the wallet', () => {
+    let s = freshStash();
+    s = depositMaterial(s, 'scrap', 'pc', 100);
+    s = withdrawMaterial(s, 'scrap', 'pc', 30);
+    s = depositMaterial(s, 'glimmer', 'pc', 7);
+    expect(s.ml.scrap.dep.pc).toBe(100);
+    expect(s.ml.scrap.wd.pc).toBe(30);
+    expect(s.materials).toEqual({ scrap: 70, glimmer: 7 });
+  });
+  it('ignore non-positive amounts (no phantom keys)', () => {
+    let s = depositMaterial(freshStash(), 'scrap', 'pc', 0);
+    s = withdrawMaterial(s, 'core', 'pc', -5);
+    expect(s.materials).toEqual({});
+    expect(s.ml).toEqual({});
+  });
+});
+
+describe('foldHeroMaterials — one-time migration of per-hero wallets', () => {
+  it('sums DIFFERENT heroes and takes the MAX for the SAME hero (idempotent)', () => {
+    let s = freshStash();
+    foldHeroMaterials(s, 'HheroA', { scrap: 100, core: 2 });
+    foldHeroMaterials(s, 'HheroB', { scrap: 50 });
+    expect(s.materials).toEqual({ scrap: 150, core: 2 }); // different heroes sum
+    // Re-running the same hero (another device that synced it) must not double-count.
+    foldHeroMaterials(s, 'HheroA', { scrap: 100, core: 2 });
+    expect(s.materials).toEqual({ scrap: 150, core: 2 });
+    // A larger later balance for the same hero wins (MAX), still no double-count.
+    foldHeroMaterials(s, 'HheroA', { scrap: 130, core: 2 });
+    expect(s.materials).toEqual({ scrap: 180, core: 2 });
+  });
+  it('leaves real spends intact when re-folded', () => {
+    let s = freshStash();
+    foldHeroMaterials(s, 'HheroA', { scrap: 100 });
+    withdrawMaterial(s, 'scrap', 'pc', 40); // spent 40 → 60 on hand
+    expect(s.materials.scrap).toBe(60);
+    foldHeroMaterials(s, 'HheroA', { scrap: 100 }); // idempotent re-fold on next boot
+    expect(s.materials.scrap).toBe(60);
+  });
+});
+
+describe('mergeStash — materials merge with no loss, like gold', () => {
+  it('sums independent material gains from two devices', () => {
+    const base = depositMaterial(freshStash(), 'scrap', '_legacy', 100);
+    const pc = depositMaterial(sanitizeStash(base), 'scrap', 'pc', 40);      // 140 on PC
+    const phone = depositMaterial(sanitizeStash(base), 'scrap', 'phone', 25); // 125 on phone
+    expect(mergeStash(pc, phone).materials.scrap).toBe(165);                  // both gains survive
+  });
+  it('subtracts spends across devices and merges distinct material keys', () => {
+    const a = depositMaterial(freshStash(), 'scrap', '_legacy', 100);
+    withdrawMaterial(a, 'scrap', 'pc', 30);                    // PC spent 30
+    const b = depositMaterial(freshStash(), 'glimmer', 'phone', 9); // phone gained a different mat
+    const m = mergeStash(a, b);
+    expect(m.materials).toEqual({ scrap: 70, glimmer: 9 });
+  });
+  it('takes the per-device MAX of a material counter', () => {
+    const a = depositMaterial(freshStash(), 'core', 'x', 10);
+    const c = depositMaterial(freshStash(), 'core', 'x', 12);
+    expect(mergeStash(a, c).ml.core.dep.x).toBe(12);          // max(10, 12), not 22
+    expect(mergeStash(a, c).materials.core).toBe(12);
   });
 });

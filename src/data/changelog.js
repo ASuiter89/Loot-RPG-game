@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "medium", v: "Crafting materials are shared across your heroes; Hardcore gets its own vault", by: "Claude", notes: [
+    "Scrap, Glimmer, Core and Chaos Orbs are now a shared wallet across all your heroes — no depositing needed. Materials one hero finds are ready to spend on any other, so a new hero can craft and enchant from day one off your pooled stockpile.",
+    "Your existing heroes' materials are pooled together automatically on first load — nothing is lost, and it merges cleanly across devices when you're signed in.",
+    "Standard and Hardcore now keep SEPARATE vaults AND separate materials — nothing crosses between the two ladders. Your Standard vault and stockpile keep everything they had; a Hardcore hero starts its own fresh, walled-off pools.",
+  ] },
   { date: "2026-07-04", size: "large", v: "Gear stats overhaul — no more caps, rarity that matters, stronger curses", by: "Claude", notes: [
     "Every gear stat now grows with BOTH item level and rarity — no hard caps anywhere. Attack speed, leech, cleave, cooldown and the rest keep climbing on deeper and rarer gear instead of freezing at a ceiling, so a legendary genuinely rolls bigger than a common.",
     "Stats that have a natural limit — crit rate, cooldown, mana cost, dodge, block, damage reduction, tenacity, double strike — now ease off with diminishing returns as they climb, approaching but never reaching 100% (or 0). More is always better, each point a little less than the last, and nothing is ever fully maxed.",

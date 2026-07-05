@@ -74,8 +74,9 @@ async function main() {
       window.player.gold = 100;
       window.player.level = 20;
       window.player.maxFloor = 15;
-      if (!window.player.materials) window.player.materials = window.freshMaterials();
-      for (const k of Object.keys(window.player.materials)) window.player.materials[k] = 5;
+      // Crafting materials are an account-wide shared wallet (in the stash) now, not
+      // on the hero — seed a known baseline through the real gain path.
+      for (const k of Object.keys(window.freshMaterials())) window.gainMaterial(k, 5);
       window.inventory = [];
       for (let i = 0; i < 10; i++) { const it = window.generateItem(1, 12); if (it) { it.locked = false; window.inventory.push(it); } }
       window.currentTab = 'inv';
@@ -142,7 +143,7 @@ async function main() {
         // under 1000 so fmtGold shows exact digits — a ~70-gold craft would otherwise
         // round to the same "Nk" abbreviation and read as unchanged.
         window.player.gold = 999;
-        for (const k of Object.keys(window.player.materials)) window.player.materials[k] = 999;
+        for (const k of Object.keys(window.freshMaterials())) window.gainMaterial(k, 999);
         window.updateBars(); // paint the pre-craft gold/material totals
         before = snap();
         window.craftItem();
