@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   milestonePower, rankScale, passiveMilestonePower, passiveRankScale, skillManaCost,
   earnedSkillPoints, earnedAscPoints, ASCEND_LEVEL, ASC_POINT_EVERY,
+  PASSIVE_MAX_RANK, passiveSurgeLive,
 } from '../../src/systems/skillMath.js';
 
 describe('milestonePower', () => {
@@ -63,6 +64,29 @@ describe('passiveRankScale', () => {
     expect(passiveRankScale(3)).toBeCloseTo(1.08, 10);
     expect(passiveRankScale(7)).toBeCloseTo(1.18, 10);
     expect(passiveRankScale(10)).toBeCloseTo(1.30, 10);
+  });
+});
+
+describe('passiveSurgeLive', () => {
+  it('the base-tree passive cap is rank 10', () => {
+    expect(PASSIVE_MAX_RANK).toBe(10);
+  });
+  it('is false below max rank, true at or past it', () => {
+    expect(passiveSurgeLive(0)).toBe(false);
+    expect(passiveSurgeLive(9)).toBe(false);
+    expect(passiveSurgeLive(10)).toBe(true);
+    expect(passiveSurgeLive(11)).toBe(true);
+  });
+  it('guards a missing rank', () => {
+    expect(passiveSurgeLive(undefined)).toBe(false);
+    expect(passiveSurgeLive(null)).toBe(false);
+  });
+  it('honours a custom max — a single-rank keystone surges at rank 1', () => {
+    expect(passiveSurgeLive(1, 1)).toBe(true);
+    expect(passiveSurgeLive(0, 1)).toBe(false);
+    // a falsy max falls back to the base cap
+    expect(passiveSurgeLive(10, 0)).toBe(true);
+    expect(passiveSurgeLive(9, 0)).toBe(false);
   });
 });
 
