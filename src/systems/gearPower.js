@@ -77,7 +77,10 @@ export function defenseScore(c, T = GEAR_POWER) {
   const armorMit = def / (def + T.armorFlat + L * T.armorPerLvl);
   const taken = Math.max(T.minTaken,
     c.dmgTakenMult * (1 - dodge) * (1 - T.blockAmt * block) * (1 - dr) * (1 - armorMit));
-  let ehp = Math.max(1, c.maxHp) / taken;
+  // The Bulwark shield sits behind the same mitigation as HP (it soaks the
+  // post-mitigation blow), so it adds effective HP just like max HP does; shieldW
+  // credits a little extra for its free between-fight recharge. Missing → 0.
+  let ehp = (Math.max(1, c.maxHp) + T.shieldW * pos(c.maxShield)) / taken;
   ehp *= 1 + T.thornsW * pos(c.thornsPct) / 100 + T.tenacW * pos(c.tenacPct) / 100;
   ehp += T.regenW * pos(c.regen);
   return Math.max(T.eps, ehp);

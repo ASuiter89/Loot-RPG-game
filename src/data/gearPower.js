@@ -67,9 +67,10 @@ export const GEAR_POWER = {
   autoShare: 0.5,
   skillShare: 0.5,
   // A representative spell for the spell lane: base damage = spellFlat +
-  // level·spellPerLvl + spirit·spellPerSpirit, then ×(1 + Spell Power%). Mirrors
-  // spellBase(12, 2) with ATTR_FX.spellPerSpr = 3.
-  spellFlat: 12, spellPerLvl: 2, spellPerSpirit: 3,
+  // level·spellPerLvl + (Spirit×spell channel), then ×(1 + Spell Power%). The Spirit
+  // term is supplied by the adapter (buildPowerContext) via the class-scaled 'heal'/
+  // 'spellPower' channel, so it isn't duplicated here.
+  spellFlat: 12, spellPerLvl: 2,
   // Cast/attack cadence baselines (casts or swings per second before haste). The
   // martial base is 1/(PLAYER_ATK_BASE·avgStyle); the spell base is a slower ~1
   // per 2s active. Only ratios matter (everything is normalized by offRef).
@@ -97,6 +98,10 @@ export const GEAR_POWER = {
   // Mitigation can never round to zero (no free invulnerability), so EHP can't
   // blow up to infinity for a fully-stacked defensive build.
   minTaken: 0.05,
+  // The Bulwark shield as effective HP (see defenseScore). Slightly above 1.0 to
+  // credit its free between-fight recharge — a point of max Bulwark is worth a hair
+  // more than a point of max HP, which needs regen/potions to refill.
+  shieldW: 1.15,
   // Minor survivability contributors, folded as small EHP multipliers/adds.
   regenW: 6,       // HP regen/sec → equivalent HP over a short fight window
   thornsW: 0.15,   // reflected damage, per THORNS%
