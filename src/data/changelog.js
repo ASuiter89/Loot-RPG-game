@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Touch: tap worn gear to enchant it", by: "Claude", notes: [
+    "On a phone you can now tap a worn piece of gear at the Enchanter to pick it. A tap on an equipped slot used to flash its stat card instead of selecting it, so equipped gear was impossible to work on — now the tap selects it and its properties open on the piece's own screen.",
+  ] },
   { date: "2026-07-04", size: "small", v: "Menus flow to any screen; foldables play unfolded", by: "Claude", notes: [
     "Town and every other menu now reshape to whatever screen you're on — a narrow phone or a folded cover screen drops to a single scrollable column instead of running the buttons off the right edge, and a wide unfolded screen fans the tiles out into more columns. The difficulty and floor pickers and the craftsman's tiles reflow the same way.",
     "You can now reach Settings and the Bag while you're in Town on a phone — the two buttons stay tappable over the town menu instead of being hidden behind it.",
