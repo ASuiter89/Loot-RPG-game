@@ -42,3 +42,29 @@ export function glideVitalFill({ vis, cur, max, rate = 0, dt = 0, tau = 0.14, sn
   }
   return next > cur ? cur : next;                             // never lead the earned value
 }
+
+// Which recovery rate to glide the fill with THIS frame — a latch that keeps a trickle's
+// TAIL moving at the recovery pace instead of the fast rate-less ease.
+//
+// The fill glides one beat BEHIND the earned value (it reaches each beat's value right as
+// the next beat lands). But the live recovery rate reported by the game (passive regen,
+// Spirit-Veil recharge) drops to 0 the instant the EARNED value hits its cap — while the
+// fill is still a sliver short. With `live` now 0 that last sliver falls into
+// glideVitalFill's rate-less ease branch, which is far faster than the recovery was, so the
+// bar visibly RUSHES the final bit ("charges fluidly, then the last little bit jumps").
+//
+// The fix: while the fill still trails the earned value after recovery stops, keep feeding
+// the LAST positive rate so the tail finishes at the same steady slope as the rest. The
+// caller banks the return as `last` for next frame (it doubles as the memory): a live rate
+// refreshes it, a caught-up/settled fill clears it back to 0 so a genuine later rate-less
+// gain still eases.
+//
+//   live  the recovery rate the game reports this frame (0 once the earned value is capped)
+//   last  the rate returned last frame (the latch memory)
+//   vis   the fill's current shown value (null before the first frame)
+//   cur   the earned value the fill is climbing toward
+export function latchFillRate({ live = 0, last = 0, vis = null, cur = 0 }) {
+  if (live > 0) return live;                  // actively recovering → the live rate drives the glide
+  if (vis != null && cur > vis) return last;  // recovery stopped but the fill still trails → finish at the last rate
+  return 0;                                    // caught up, or a loss → drop the latch (next gain eases as before)
+}

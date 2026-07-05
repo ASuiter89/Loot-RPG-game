@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "HP, MP & Spirit Veil fill at a steady pace", by: "Claude", notes: [
+    "The bars used to charge smoothly, then rush the last sliver in a little jump as they topped off. Now the whole fill — including the final bit — climbs at one consistent rate, on HP, MP and the Spirit Veil alike.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Belt module polish", by: "Claude", notes: [
     "The belt's bounty / meals / gear modules now match the skill buttons — a label pill above a tile the same height — and the meal slots read like the skill slots (filled bowls plus dashed empties).",
     "The AUTO slot stays dead-centre; the modules fill the gaps beside it only when there's room, and each is sized to fit its contents (long objectives, big gear power) without clipping.",
