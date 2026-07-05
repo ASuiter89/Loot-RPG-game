@@ -100,6 +100,12 @@
          right-aligned (effects fill in from the right corner). Populated by
          renderStatusStrip(); hidden when nothing is active. -->
     <div id="buff-overlay" style="display:none"></div>
+    <!-- Hero name, overlaid centred across the top of the map on the desktop
+         layout (moved off the bottom HUD). Desktop-only — the touch/mobile header
+         keeps its own #hero-name-hud. The flex wrapper spans the map column and
+         centres the inner pill; updateBars() fills the pill and toggles the
+         wrapper. Hidden until named. -->
+    <div id="map-hero-name" style="display:none"><span class="mhn-pill" id="map-hero-name-txt"></span></div>
     <!-- Minimap: a small top-down sketch of the whole floor pinned to the
          top-left of the map. Drawn each frame by drawMinimap(); hidden in town
          and before a floor exists. Tap to collapse/expand (toggleMinimap). -->
@@ -112,10 +118,11 @@
     <!-- ── BOTTOM HUD ── Takes its own row under the map, spanning the space
          BETWEEN the log and loot panels, so it reflows when the log collapses or
          the drawer widens. Big flanking HP (left) and MP (right) bars are the
-         dominant elements; the middle carries the name, power/gold, a slim stamina
-         bar and all the skill slots (the #skill-bar is re-homed here by
-         syncDesktopHud). A segmented XP bar runs along the very bottom; the bars /
-         XP / END are filled by updateBars + renderStaminaBar. -->
+         dominant elements; the middle carries a matching-height endurance bar, and
+         all the skill slots sit in the belt below (the #skill-bar is re-homed here
+         by syncDesktopHud). A segmented XP bar runs along the very bottom; the bars
+         / XP / END are filled by updateBars + renderStaminaBar. (Gold now lives on
+         the LOOT tab, power on the HERO tab, and the name banners over the map.) -->
     <div id="desktop-hud">
       <div class="dh-top">
         <div class="dh-vital dh-hp" data-tip="<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health (HP)</div><div class='ht-line'>Your life. When it hits 0 you die. Restore it with potions, resting in town, and levelling up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
@@ -123,15 +130,13 @@
           <div class="dh-vital-track"><div class="dh-vital-shield-under" id="dh-hp-shield-under" style="width:0"></div><div class="dh-vital-pending hp" id="dh-hp-pending"></div><div class="dh-vital-fill hp" id="dh-hp-fill"></div><div class="dh-vital-shield" id="dh-hp-shield" style="width:0"></div><span class="dh-vital-val" id="dh-hp-val">100/100</span></div>
         </div>
         <div class="dh-mid">
-          <div class="dh-info">
-            <span class="dh-chip dh-power" data-tip="<div class='ht-name'><span data-spr='ui_power'></span> Power</div><div class='ht-line'>A rough measure of your overall strength, combining your level, equipped gear, spent attributes and skills.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr="ui_power"></span> <span id="dh-power-num">0</span></span>
-            <span class="dh-name" id="dh-name"></span>
-            <span class="dh-chip dh-gold" data-tip="<div class='ht-name' style='color:var(--gold)'><span data-spr=ic_money></span> Gold</div><div class='ht-line'>The dungeon's main currency. Spend it at the town shops, the Forge, the Enchanter, and the Stash.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr=ic_money></span> <span id="dh-gold-num">0</span></span>
-            <span class="dh-buffs" id="hud-buffs"></span>
-          </div>
+          <span class="dh-buffs" id="hud-buffs"></span>
+          <!-- Endurance: a third big bar flanked by HP & MP, matched to their
+               height. Its fill is CENTRED and shrinks toward the middle, so stamina
+               drains inward from both edges; the numeric value overlays it. -->
           <div class="dh-end" data-tip="<div class='ht-name' style='color:var(--gold-350)'><span data-spr=ic_stun></span> Stamina</div><div class='ht-line'>Fuels Sprinting (Shift) and Dashing (Space). Drains as you exert and refills after a short pause. Might deepens the pool and speeds its recharge.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
             <div class="dh-end-fill" id="dh-end-fill"></div>
-            
+            <span class="dh-end-val" id="dh-end-val">100/100</span>
           </div>
         </div>
         <div class="dh-vital dh-mp" data-tip="<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana (MP)</div><div class='ht-line'>Spent to cast class skills and spells. Regenerates slowly over time and partly recovers when you level up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">

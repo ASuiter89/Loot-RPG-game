@@ -320,6 +320,10 @@
   #stats { display: flex; align-items: center; gap: 14px; font-size: 1.3rem; }
   /* Hero nameplate sitting to the left of the HP bar in the header. */
   .hero-name-hud { display: flex; align-items: center; font-weight: bold; color: var(--gold); font-size: 1.4rem; letter-spacing: 0.5px; text-shadow: 0 0 5px color-mix(in srgb, var(--gold) 50%, transparent); white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+  /* The centred hero-name banner over the top of the map is desktop-only (the
+     desktop media query positions + styles it); the mobile/touch layout keeps the
+     header nameplate above instead. */
+  #map-hero-name { display: none; }
   .stat-bar { display: flex; align-items: center; gap: 4px; }
   .bar-track { width: 74px; height: 13px; background: var(--btn-off); border: 1px solid var(--ink); border-radius: 4px; box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 60%, transparent); overflow: hidden; }
   .bar-fill { height: 100%; border-radius: 3px; transition: width 0.2s; }
@@ -1575,18 +1579,24 @@
   /* ── DESKTOP BOTTOM HUD (flanking HP/MP bars) ──
      Shown only on the web layout (the desktop media query flips it on, places it
      in its own row under the map, hides the top header, and re-homes #skill-bar
-     into the belt). Big HP (left) & MP (right) bars dominate; the middle holds the
-     name, power/gold, a slim stamina bar and the skill slots; a segmented XP bar
-     runs along the bottom. */
+     into the belt). Big HP (left) & MP (right) bars flank a matching-height
+     endurance bar in the middle; the skill slots sit in the belt below and a
+     segmented XP bar runs along the bottom. (Gold moved to the LOOT tab, power to
+     the HERO tab, and the hero name to a banner over the top of the map.) */
   #desktop-hud { display: none; }
-  .dh-top { display: flex; align-items: center; gap: 12px; padding: 7px 14px 5px; }
+  /* The bars row grows to fill the HUD's spare height (the skill belt below no
+     longer absorbs it), so the HP/MP/END bars are thick and reach down close to
+     the skill pills; align-items:stretch hands that height to each column. */
+  .dh-top { display: flex; align-items: stretch; gap: 12px; padding: 7px 14px 5px; flex: 1 1 auto; min-height: 0; }
   /* Flanking vital bars — the dominant, most-visible elements. */
   .dh-vital { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 8px; }
   .dh-vital-tag { font-size: 1.6rem; font-weight: bold; letter-spacing: 1px; }
   .dh-hp .dh-vital-tag { color: var(--hp); text-shadow: 0 0 7px var(--hp); }
   .dh-mp .dh-vital-tag { color: var(--mp); text-shadow: 0 0 7px var(--mp); }
+  /* The track stretches to the full height of the (now taller) bars row; the
+     HP/MP tag beside it stays vertically centred. */
   .dh-vital-track {
-    position: relative; flex: 1 1 0; min-width: 0; height: 28px; border-radius: 7px;
+    position: relative; flex: 1 1 0; min-width: 0; align-self: stretch; min-height: 34px; border-radius: 7px;
     background: var(--bg); border: 1px solid var(--ink); overflow: hidden;
     box-shadow: inset 0 2px 5px color-mix(in srgb, var(--ink) 75%, transparent);
   }
@@ -1618,28 +1628,33 @@
   .dh-vital-fill.hp.hp-low { animation: dhHpLow 0.7s ease-in-out infinite; }
   @keyframes dhHpLow { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.6); } }
 
-  /* Middle: name + power/gold chips, then a slim stamina bar. */
-  .dh-mid { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 0 4px; }
-  .dh-info { display: flex; align-items: center; gap: 14px; white-space: nowrap; }
-  .dh-name { font-weight: bold; color: var(--gold); font-size: 1.6rem; letter-spacing: 0.5px; text-shadow: 0 0 6px color-mix(in srgb, var(--gold) 50%, transparent); max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
-  .dh-chip { display: flex; align-items: center; gap: 5px; font-size: 1.5rem; font-weight: bold; }
-  .dh-chip .dl-ic { vertical-align: middle; }
-  .dh-power { color: var(--gold-350); }
-  .dh-gold { color: var(--gold); }
-  .dh-buffs { display: flex; align-items: center; gap: 10px; }
+  /* Middle: the big endurance bar is the sole flow child, so it spans the full
+     bars-row height and lines up exactly with HP & MP. Any active pact/food buff
+     chips float over its top edge (absolute) rather than stealing bar height —
+     the pact/food indicators are re-homed here and never truly :empty. */
+  .dh-mid { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: center; padding: 0 4px; min-height: 0; position: relative; }
+  .dh-buffs { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 1.5rem; font-weight: bold; pointer-events: none; }
+  .dh-buffs > * { pointer-events: auto; }
   .dh-buffs:empty { display: none; }
+  /* Endurance bar: same look/size as the flanking HP/MP tracks. */
   .dh-end {
-    position: relative; width: 100%; min-width: 160px; height: 9px; border-radius: 5px;
-    background: var(--panel); border: 1px solid var(--ink); overflow: hidden; box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 70%, transparent);
+    position: relative; flex: 1 1 auto; width: 100%; min-width: 140px; min-height: 34px; border-radius: 7px;
+    background: var(--bg); border: 1px solid var(--ink); overflow: hidden;
+    box-shadow: inset 0 2px 5px color-mix(in srgb, var(--ink) 75%, transparent);
   }
+  /* Centred fill that shrinks toward the middle as stamina drains — empties from
+     both edges inward (mirror of the HP/MP bars, which empty toward the centre). */
   .dh-end-fill {
-    height: 100%; width: 100%; border-radius: 4px;
+    position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; border-radius: 6px;
     background: linear-gradient(180deg, var(--xp), var(--gold-350) 60%, var(--orange-750));
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--paper) 40%, transparent); transition: width 0.12s linear;
+    box-shadow: 0 0 10px color-mix(in srgb, var(--gold-350) 55%, transparent), inset 0 1px 0 color-mix(in srgb, var(--paper) 40%, transparent);
+    transition: width 0.14s linear;
   }
-  .dh-end-tag {
+  /* Stamina number overlaid on the bar — matches the HP/MP value styling. */
+  .dh-end-val {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    font-size: 1.1rem; font-weight: bold; letter-spacing: 2px; color: var(--gold-850); pointer-events: none;
+    font-family: var(--font-ui); font-weight: bold; font-size: 1.7rem; color: var(--paper);
+    letter-spacing: 0.5px; text-shadow: 0 1px 2px var(--ink), 0 0 6px color-mix(in srgb, var(--ink) 95%, transparent); pointer-events: none;
   }
   /* Skill belt: the re-homed #skill-bar spans the belt's full width so its left
      (Town/HP/MP) and right (manual slots) sections hug the column edges.
@@ -1647,15 +1662,15 @@
      also forces overflow-y to compute to 'auto' — which showed a phantom vertical
      scrollbar whenever the tallest slot (the auto-cast tile) sat a few px past the
      belt. Pin overflow-y:hidden so the belt never scrolls vertically.
-     The belt grows to fill the HUD's spare height (flex:1) and centres the skill
-     row, so the margin ABOVE the skills always matches the margin BELOW them; the
-     top/bottom padding is a guaranteed even minimum, and the XP bar stays pinned
-     to the very bottom of the HUD. */
-  .dh-belt { display: flex; align-items: center; justify-content: stretch; flex: 1 1 auto; min-height: 0; padding: calc(12px * var(--ui-scale,1)) 8px; overflow-x: auto; overflow-y: hidden; }
+     The belt hugs the skill row (flex:0 0 auto) with even top/bottom padding — the
+     bars row above (flex:1) now soaks up the HUD's spare height, so the thick
+     HP/MP/END bars reach down close to the pills. The XP bar stays pinned to the
+     very bottom of the HUD. */
+  .dh-belt { display: flex; align-items: center; justify-content: stretch; flex: 0 0 auto; min-height: 0; padding: calc(12px * var(--ui-scale,1)) 8px; overflow-x: auto; overflow-y: hidden; }
   .dh-belt > #skill-bar { flex: 1 1 auto; width: 100%; }
   .dh-belt::-webkit-scrollbar { height: 0; }
-  /* Segmented experience bar along the very bottom. */
-  #dh-xp { position: relative; height: 14px; background: linear-gradient(180deg, var(--bg), var(--bg)); border-top: 1px solid var(--frame); overflow: hidden; cursor: default; }
+  /* Segmented experience bar along the very bottom — double-height for readability. */
+  #dh-xp { position: relative; height: 28px; background: linear-gradient(180deg, var(--bg), var(--bg)); border-top: 1px solid var(--frame); overflow: hidden; cursor: default; }
   #dh-xp-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: linear-gradient(180deg, var(--xp), var(--gold)); box-shadow: 0 0 8px var(--gold); transition: width 0.3s ease; }
   #dh-xp .dh-xp-notches {
     position: absolute; inset: 0; pointer-events: none;
@@ -3795,6 +3810,18 @@
   .mat-chip { font-weight: bold; white-space: nowrap; }
   #town-mats, #shop-mats { padding: 4px 12px 8px; border-bottom: 1px solid var(--border); }
   #town-mats .mat-strip, #shop-mats .mat-strip { margin-bottom: 0; }
+  /* LOOT-tab wallet row: the gold pill keeps its own container to the LEFT of the
+     material strip at every drawer width. The gold pill never shrinks; the strip
+     takes the rest and wraps its own chips internally when the drawer is narrow,
+     so gold stays put rather than dropping to a line of its own. */
+  .loot-wallet { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+  .loot-wallet .mat-strip { margin-bottom: 0; flex: 0 1 auto; min-width: 0; }
+  /* Its own pill — mirrors the material strip's shell so the two read as a set. */
+  .loot-gold-pill {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 6px;
+    background: var(--orange-850); border: 1px solid var(--border);
+    color: var(--gold); font-size: 1.4rem; font-weight: bold; line-height: 1.2; white-space: nowrap;
+  }
   .forge-label {
     color: var(--xp); font-size: 1.3rem; font-weight: bold; letter-spacing: 1px; margin: 9px 0 4px;
   }
@@ -4125,6 +4152,26 @@
          minimap's current box size (+border +gap) so the two sit side by side
          and the pair reflows together when the MINIMAP size setting changes. */
       top: 8px; left: calc(var(--log-col) + 10px + var(--minimap-size, 108px) + 10px);
+    }
+    /* Hero name: a centred pill over the top of the map (moved off the bottom
+       HUD). The wrapper spans the map column — left: the log drawer's edge,
+       right: 0 (the loot drawer is a SIBLING of #game-wrap, so the map already
+       ends at game-wrap's right edge) — and flex-centres the inner pill, which
+       therefore stays centred over the map at any name length and reflows when the
+       log folds. Slightly larger than the old HUD name. */
+    #map-hero-name {
+      display: flex; justify-content: center; position: absolute; z-index: 50; pointer-events: none;
+      top: 8px; left: var(--log-col); right: 0;
+    }
+    #map-hero-name .mhn-pill {
+      max-width: 100%;
+      padding: 3px 18px; border-radius: 18px; text-align: center;
+      font-weight: bold; color: var(--gold); font-size: 2rem; letter-spacing: 0.5px;
+      text-shadow: 0 2px 4px var(--ink), 0 0 8px color-mix(in srgb, var(--ink) 90%, transparent);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 82%, transparent), color-mix(in srgb, var(--bg) 72%, transparent));
+      border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 55%, transparent);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     /* On PC there's room for a bigger HUD: bump the stat / gold / chip fonts and
        bars up so health, mana, floor, level, etc. are easier to read. */

@@ -7,7 +7,7 @@
 //   node test/smoke/town-wallet.mjs [path-to-html]   (default: ./index.html)
 //
 // Loads the REAL built shell in Chromium, drives the merchant + forge, and asserts
-// the persistent readouts (town header gold+mats, bottom HUD gold, LOOT-tab mats,
+// the persistent readouts (town header gold+mats, LOOT-tab gold pill + mats,
 // merchant mats) all move. Exits non-zero on any stale display or page exception.
 
 import { chromium } from 'playwright';
@@ -88,7 +88,7 @@ async function main() {
       window.shopTab('sell');
 
       const snap = () => ({
-        dhGold: txt('dh-gold-num'),
+        bagGold: txt('bag-gold-count'),
         hudGold: txt('gold-count'),
         townGold: txt('town-gold-count'),
         townMats: txt('town-mats'),
@@ -119,7 +119,7 @@ async function main() {
       else {
         window.shopSell(gIdx);
         const after = snap();
-        for (const k of ['dhGold', 'townGold', 'shopGold']) {
+        for (const k of ['bagGold', 'townGold', 'shopGold']) {
           if (before[k] === after[k]) fail.push(`sell at merchant left ${k} stale ("${before[k]}")`);
         }
       }

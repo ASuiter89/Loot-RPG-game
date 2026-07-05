@@ -12098,6 +12098,10 @@ function refreshWallet() {
   if (isOverlayOpen('shop-overlay'))   { setGoldPill('shop-gold-count', 'shop-gold-vault'); setMatStrip('shop-mats'); }
   if (isOverlayOpen('mystic-overlay')) { setGoldPill('mystic-gold-count', 'mystic-gold-vault'); }
   if (isOverlayOpen('town-overlay'))   { setGoldPill('town-gold-count', 'town-gold-vault'); setMatStrip('town-mats'); }
+  // The LOOT-tab gold pill (its own container, left of the material strip). Kept
+  // live in place so a pickup or sale updates it without a full panel rebuild;
+  // no-ops when the pill isn't on-screen (setGoldPill guards a missing element).
+  setGoldPill('bag-gold-count');
 }
 
 // ══════════════════════════════════════════
@@ -23309,7 +23313,7 @@ function spendAttr(key, ev) {
 // so it's split out and also called from the game loop, not just on updateBars().
 // Last written width/label — this runs every frame, and a full or idle stamina
 // bar is the common case, so skip the style/text writes when nothing changed.
-let _stamW = null, _stamTxt = null, _dhEndW = null;
+let _stamW = null, _stamTxt = null, _dhEndW = null, _dhEndTxt = null;
 function renderStaminaBar() {
   const bar = hudEl('stam-bar');
   if (!bar) return;
@@ -23322,10 +23326,16 @@ function renderStaminaBar() {
     const label = `${Math.round(st)}/${mx}`;
     if (label !== _stamTxt) { _stamTxt = label; txt.textContent = label; }
   }
-  // Mirror onto the desktop bottom-HUD stamina bar.
+  // Mirror onto the desktop bottom-HUD endurance bar — a centred fill that shrinks
+  // toward the middle (width drives the shrink) with the value overlaid on top.
   {
     const dhEnd = hudEl('dh-end-fill');
     if (dhEnd && w !== _dhEndW) { _dhEndW = w; dhEnd.style.width = w; }
+    const dhEndVal = hudEl('dh-end-val');
+    if (dhEndVal) {
+      const label = `${Math.round(st)}/${mx}`;
+      if (label !== _dhEndTxt) { _dhEndTxt = label; dhEndVal.textContent = label; }
+    }
   }
 }
 
@@ -23555,17 +23565,21 @@ function updateBars() {
     const dhXp = document.getElementById('dh-xp-fill');
     if (dhXp) dhXp.style.width = Math.min(100, player.xp / xpForLevel(player.level) * 100) + '%';
     dset('dh-xp-lvl', 'Lv ' + player.level);
-    dset('dh-power-num', power);
-    dset('dh-gold-num', fmtGold(player.gold));
-    const dhName = document.getElementById('dh-name');
-    if (dhName) { dhName.textContent = player.name || ''; dhName.style.display = player.name ? '' : 'none'; }
+    // Power now reads from the HERO tab and gold from the LOOT tab, so neither is
+    // mirrored on the bottom HUD anymore; the name moved to the map-top banner.
   }
 
-  // Hero nameplate at the far left of the header (hidden until a name is set).
-  const nameHud = document.getElementById('hero-name-hud');
-  if (nameHud) {
-    if (player.name) { nameHud.textContent = player.name; nameHud.style.display = ''; }
-    else { nameHud.style.display = 'none'; }
+  // Hero nameplate: the touch/mobile header shows it at the far left; the desktop
+  // layout overlays it centred over the top of the map. Keep both copies current
+  // (each falls back to its own CSS display when a name is set, or hides otherwise).
+  {
+    const nm = player.name || '';
+    const hh = document.getElementById('hero-name-hud');
+    if (hh) { hh.textContent = nm; hh.style.display = nm ? '' : 'none'; }
+    const mhTxt = document.getElementById('map-hero-name-txt');
+    if (mhTxt) mhTxt.textContent = nm;
+    const mh = document.getElementById('map-hero-name');
+    if (mh) mh.style.display = nm ? '' : 'none';
   }
 
   // Header HUD: current floor, level + XP progress, enemies remaining.
@@ -23938,6 +23952,11 @@ function renderPanel() {
   const el = document.getElementById('panel-content');
   if (currentTab === 'inv') {
     const strip = matStripHTML();
+    // Gold rides in its own pill to the LEFT of the material strip — the LOOT tab's
+    // wallet row. refreshWallet() keeps #bag-gold-count live between panel rebuilds.
+    const goldTip = `<div class='ht-name' style='color:var(--gold)'><span data-spr=ic_money></span> Gold</div><div class='ht-line'>The dungeon's main currency. Spend it at the town shops, the Forge, the Enchanter, and the Stash.</div>`.replace(/"/g, '&quot;');
+    const goldPill = `<div class="loot-gold-pill" data-tip="${goldTip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr=ic_money></span> <span id="bag-gold-count">${fmtGold(player.gold)}</span></div>`;
+    const wallet = `<div class="loot-wallet">${goldPill}${strip}</div>`;
     // Sort the displayed list by slot (weapon, head, chest, …) while keeping each
     // row's original inventory index so equip/select still target the right item.
     const slotOrder = {};
@@ -24039,7 +24058,7 @@ function renderPanel() {
     // Everything above the item rows rides in one sticky wrapper, so the
     // subtabs / sort / filter / Auto-Loot / bulk / stat-key controls stay
     // frozen at the top of the drawer while the list scrolls beneath them.
-    const lootHead = `<div class="loot-head">${strip + subtabs + lootCtrls + autoBar + bulkBar + lootGlossaryHTML()}</div>`;
+    const lootHead = `<div class="loot-head">${wallet + subtabs + lootCtrls + autoBar + bulkBar + lootGlossaryHTML()}</div>`;
     if (rows.length === 0) {
       const emptyMsg = inventory.length === 0 ? 'No items yet.<br>Explore!'
         : lootStatFilter.length ? 'No items match the stat filter.' : 'Nothing here.';
