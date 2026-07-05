@@ -7,6 +7,15 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "large", v: "Bestiary codex & a unique/set Collection vault tab", by: "Claude", notes: [
+    "New Bestiary — a browsable codex of every foe, opened from the pause menu. Each card fills in as you slay more of a species; a boss card stays a sealed silhouette until your first kill, then opens fully.",
+    "A foe's stats reveal one field at a time over ten kills (a boss is all-or-nothing on the first kill), mirroring the dungeon hover card. Filter by creatures, bosses, or discovered, and track completion.",
+    "Bosses now also stay sealed on the dungeon hover card until you've slain them once, instead of reading fully on sight.",
+    "The Vault gains a Collection tab: one slot for every unique and set piece in the game, laid out as a grid of tiles that adds columns as the screen widens.",
+    "An empty slot shows a darkened silhouette — hover it to preview the fixed properties the piece can roll (values omitted, since they scale with drop depth). Store a matching piece and the slot lights up with your best-rolled copy.",
+    "Storing a unique or set piece now files it in the Collection instead of ordinary storage. A slot can hold several copies — it shows your strongest with a count badge, and you can withdraw any of them.",
+    "Filter the Collection by gear slot, unique vs set, a specific set, or acquired/missing. Like the rest of the Vault it's shared across your heroes, with separate Standard and Hardcore collections.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Shorter Spirit Veil tooltip", by: "Claude", notes: [
     "Trimmed the Spirit Veil blurb on the HP bar's hover tooltip to a couple of tight sentences, matching the HP line above it.",
   ] },
