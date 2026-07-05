@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "medium", v: "Empower gear at the Enchanter — raise an item's level to your depth", by: "Claude", notes: [
+    "The Enchanter can now EMPOWER a piece: raise its item level by 1, 10, or straight up to what could currently drop for you. Every stat, modifier and equip requirement scales up as if the piece had dropped that deep, so a favourite early find keeps pace as you descend.",
+    "Empower is capped at what could naturally drop for you — your deepest floor plus one — so you can never push a piece past what the dungeon itself would hand you.",
+    "Costs gold plus Scrap (and a Core on rare and up), scaling with the item's rarity and item level. A single level is a modest bill; jumping ten at once costs more, since the deeper levels are the priciest.",
+    "Works on any gear — including uniques, set pieces and cursed items — because empowering only scales the values a deeper drop would already carry; it never changes which modifiers a piece holds (a cursed item's drawback scales right alongside its boost).",
+  ] },
   { date: "2026-07-04", size: "small", v: "Removed the Dev tuning tab", by: "Claude", notes: [
     "Retired the Settings ▸ Dev difficulty-slider panel — the game now ships on its tuned defaults, no on-the-fly balance knobs.",
     "Any saved slider overrides are cleared on load, so every hero reverts to the standard balance.",
