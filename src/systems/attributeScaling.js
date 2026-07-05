@@ -37,18 +37,16 @@ export function attrDamageFor(attrTotal, cls, perPoint = ATTR_DMG_PER_POINT) {
 }
 
 /**
- * Max Bulwark shield: total Spirit × per-point × class multiplier, capped at a
- * fraction of max HP so it can never out-size the health pool.
+ * Max Spirit Veil: total Spirit × per-point × class multiplier. Scales LINEARLY off
+ * Spirit, independently of HP and with NO cap — a Spirit-stacked build's Veil can
+ * exceed its HP. Per point it is deliberately below Vitality→HP, so it accrues slower.
  * @param {number} spirit total Spirit (incl. base + gear)
  * @param {string} cls hero class id
- * @param {number} maxHp the hero's max HP (for the ceiling)
  * @returns {number} max shield (≥ 0)
  */
-export function shieldMax(spirit, cls, maxHp) {
+export function shieldMax(spirit, cls) {
   const mult = SHIELD.classMult[cls] ?? SHIELD.classMultDefault;
-  const raw = Math.max(0, spirit) * SHIELD.perSpirit * mult;
-  const cap = Math.max(0, maxHp) * SHIELD.maxFracOfHp;
-  return Math.max(0, Math.min(cap, raw));
+  return Math.max(0, spirit) * SHIELD.perSpirit * mult;
 }
 
 /**
@@ -72,8 +70,8 @@ export function shieldRechargeDelay() {
 }
 
 /**
- * Max Bulwark gained per point of Spirit for a class (ignoring the max-HP cap) —
- * the marginal used by the gear Power model to value +Spirit's shield.
+ * Max Spirit Veil gained per point of Spirit for a class — the marginal used by the
+ * gear Power model to value +Spirit's shield.
  * @param {string} cls hero class id
  * @returns {number}
  */

@@ -2,7 +2,7 @@
 //
 // This is the single hand-tunable source of truth for how each of the five
 // attributes converts into the hero's derived stats, and for the Spirit-fuelled
-// Bulwark shield + Spirit-scaled healing. Pure data: no logic, no imports. The
+// Spirit Veil shield + Spirit-scaled healing. Pure data: no logic, no imports. The
 // pure lookup helpers live in src/systems/attributeScaling.js; the legacy shell
 // reads them through a thin `attrCoef()` adapter.
 //
@@ -84,18 +84,23 @@ export const LUCK_FX = {
   critPerLuck: 0.85,   // Luck → crit rating per point (unchanged, all classes)
 };
 
-// ── Bulwark — the persistent Spirit shield ("Mana Shield"-style energy pool) ──
+// ── Spirit Veil — the persistent Spirit shield ("Mana Shield"-style energy pool) ──
 // A blue over-HP buffer that soaks damage before health and recharges after a
-// clean, damage-free window. Nothing else refills it (no potions/skills). Scales
-// off total Spirit; class multiplier is STEEP so it's a real caster layer and
-// near-trivial for martials. Recharge tuned "tankier".
+// clean, damage-free window. Nothing else refills it (no potions/skills).
+//
+// Max Veil scales LINEARLY off total Spirit (class-scaled), SEPARATELY from HP and
+// with NO HP-relative cap. The per-point amounts are an ABSOLUTE range across the
+// classes that get it — Mage ~8, Templar ~6, Rogue ~4.4, Warrior ~3 per point of
+// Spirit — which sits UNDER the per-point HP-from-Vitality range (~6–16), so the Veil
+// is a "slower than HP overall" defensive layer rather than scaled to each class's own
+// HP growth. Uncapped, so a Spirit-stacked, Vitality-light build's Veil can exceed HP.
 export const SHIELD = {
-  perSpirit:   1.4,    // max Bulwark per point of total Spirit (before class mult)
-  classMult:   { mage: 1.0, templar: 0.6, rogue: 0.3, warrior: 0.15 },
-  classMultDefault: 0.3, // classless fallback
-  maxFracOfHp: 0.6,    // hard ceiling: Bulwark can never exceed 60% of max HP
+  perSpirit:   8.0,    // max Spirit Veil per point of total Spirit for the top class (Mage);
+                       // other classes take a share via classMult below.
+  classMult:   { mage: 1.0, templar: 0.75, rogue: 0.55, warrior: 0.375 }, // → 8 / 6 / 4.4 / 3 per pt
+  classMultDefault: 0.55, // classless fallback (mid of the range)
   rechargeDelay: 3.5,  // seconds without taking ANY damage before recharge starts
-  baseRechargePct: 0.125, // fraction of max Bulwark restored per second (~8s to full)
+  baseRechargePct: 0.125, // fraction of max Spirit Veil restored per second (~8s to full)
   // Spirit speeds the recharge a little (class-scaled by classMult). Measured from
   // the starting Spirit baseline so a fresh hero sits at baseRechargePct.
   spiritBase: 10,      // == ATTR_BASE; recharge speed-up counts Spirit above this

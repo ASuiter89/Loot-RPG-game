@@ -169,7 +169,7 @@
     --xp: #ffe9a0;
     --hp: #ff3b4e;
     --mp: #3a8bff;
-    --shield: #5c9bff;             /* Bulwark energy shield — a clear steel-blue, bluer than the MP fill */
+    --shield: #5c9bff;             /* Spirit Veil energy shield — a clear steel-blue, bluer than the MP fill */
     /* Interactive / buttons */
     --interactive: #8a6fff; /* accent: hover borders, focus glow */
     --btn-text: #b9a3ff;       /* text-style action buttons */
@@ -341,7 +341,7 @@
   .bar-pending { position: absolute; top: 0; left: 0; height: 100%; z-index: 1; border-radius: 3px; transition: width 0.2s; }
   .hp-pending { background: color-mix(in srgb, var(--hp) 42%, transparent); }
   .mp-pending { background: color-mix(in srgb, var(--mp) 42%, transparent); }
-  /* Bulwark shield — a thin translucent blue/white mask laid OVER the HP bar. Its
+  /* Spirit Veil shield — a thin translucent blue/white mask laid OVER the HP bar. Its
      width is shield/maxShield of the FULL track (independent of HP). The gray
      "under" band fills the same width BEHIND the red fill, so where HP is missing
      but shield still covers it reads gray (not empty); as the shield recedes it
@@ -350,8 +350,8 @@
   .bar-shield { position: absolute; top: 0; left: 0; height: 100%; z-index: 3; border-radius: 3px; pointer-events: none; box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--shield) 68%, transparent);
     background: linear-gradient(100deg, color-mix(in srgb, var(--shield) 52%, transparent) 0%, color-mix(in srgb, var(--paper) 34%, transparent) 46%, color-mix(in srgb, var(--shield) 52%, transparent) 92%);
-    background-size: 220% 100%; animation: bulwark-shimmer 2.6s linear infinite; transition: width 0.2s; }
-  @keyframes bulwark-shimmer { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
+    background-size: 220% 100%; animation: veil-shimmer 2.6s linear infinite; transition: width 0.2s; }
+  @keyframes veil-shimmer { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
   @media (prefers-reduced-motion: reduce) { .bar-shield, .dh-vital-shield { animation: none; } }
   .shield-text { color: var(--shield); font-size: 1.2rem; font-weight: bold; margin-left: 3px; text-shadow: 0 0 5px color-mix(in srgb, var(--shield) 60%, transparent); }
   /* Danger pulse — toggled in updateBars() when HP gets critically low.
@@ -1611,14 +1611,14 @@
   .dh-vital-pending.hp { background: color-mix(in srgb, var(--hp) 40%, transparent); }
   .dh-vital-pending.mp { background: color-mix(in srgb, var(--mp) 40%, transparent); }
   .dh-mp .dh-vital-pending { left: auto; right: 0; }
-  /* Bulwark shield mask on the big desktop HP bar — same layering as the header
+  /* Spirit Veil shield mask on the big desktop HP bar — same layering as the header
      bars: a gray missing-HP band behind the fill, a shimmering blue/white mask on
      top, both sized to shield/maxShield of the full track. */
   .dh-vital-shield-under { position: absolute; top: 0; bottom: 0; left: 0; z-index: 1; border-radius: 6px; background: color-mix(in srgb, var(--junk) 65%, transparent); transition: width 0.22s ease; }
   .dh-vital-shield { position: absolute; top: 0; bottom: 0; left: 0; z-index: 3; border-radius: 6px; pointer-events: none; box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--shield) 62%, transparent);
     background: linear-gradient(100deg, color-mix(in srgb, var(--shield) 50%, transparent) 0%, color-mix(in srgb, var(--paper) 36%, transparent) 46%, color-mix(in srgb, var(--shield) 50%, transparent) 92%);
-    background-size: 220% 100%; animation: bulwark-shimmer 2.6s linear infinite; transition: width 0.22s ease; }
+    background-size: 220% 100%; animation: veil-shimmer 2.6s linear infinite; transition: width 0.22s ease; }
   .dh-vital-val {
     position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; justify-content: center; gap: 0.4em;
     font-family: var(--font-ui); font-weight: bold; font-size: 1.7rem; color: var(--paper);

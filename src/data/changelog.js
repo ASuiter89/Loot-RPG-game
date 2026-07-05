@@ -14,13 +14,13 @@ export const CHANGELOG = [
     "Hero name lifts to a centred banner across the top of the map.",
     "Endurance is now a full-height bar between HP and MP with its stamina value overlaid, draining inward from both edges toward the middle.",
   ] },
-  { date: "2026-07-05", size: "large", v: "Class attribute overhaul + the Bulwark shield", by: "Claude", notes: [
+  { date: "2026-07-05", size: "large", v: "Class attribute overhaul + the Spirit Veil shield", by: "Claude", notes: [
     "Each class now deals weapon & skill damage off a SINGLE attribute — Warrior off Might, Rogue off Agility, Mage off Spirit, Templar off Vitality. The old secondary damage attribute (and the small off-class Might bonus) are gone; spells still scale off Spirit for everyone.",
     "Attributes re-homed: Might now raises Defense; Vitality raises max HP, HP regen AND Stamina; Spirit raises max MP, MP regen, spell power AND healing. Agility (evasion, accuracy, move/attack speed) and Luck (crit, loot quality) keep their roles.",
     "How much each point of an attribute gives is now CLASS-SCALED — the Templar gets the most HP per Vitality, the Mage the most spell power per Spirit, the Warrior the most Defense per Might, the Rogue the most evasion per Agility, and so on.",
-    "NEW — the Bulwark: a Spirit-fuelled blue shield layered over your HP that soaks every hit, damage-over-time and hazard BEFORE your health, and recharges on its own after a few damage-free seconds. No potion, skill or heal refills it — only the passive recharge. It's a real second health bar for casters (Mage > Templar > Rogue > Warrior) and near-trivial without Spirit, and shows as a shimmering blue mask on the HP bar with its own number.",
+    "NEW — the Spirit Veil: a Spirit-fuelled blue shield layered over your HP that soaks every hit, damage-over-time and hazard BEFORE your health, and recharges on its own after a few damage-free seconds. No potion, skill or heal refills it — only the passive recharge. It's a real second health bar for casters (Mage > Templar > Rogue > Warrior) and near-trivial without Spirit, and shows as a shimmering blue mask on the HP bar with its own number.",
     "Cast heals now scale off Spirit and Spell Power (class-scaled) and lost their flat 20%-of-max-HP cap, so a high-Spirit healer mends far more per cast (still only up to the health you're missing).",
-    "Item Power is no longer weighted by class guesswork — it's derived purely from how a piece changes THIS hero's real damage and survivability (and now counts the Bulwark). So Spell Power reads ~0 Power for a hero with no spell skills whatever their class, and +Spirit is valued for the shield it grants.",
+    "Item Power is no longer weighted by class guesswork — it's derived purely from how a piece changes THIS hero's real damage and survivability (and now counts the Spirit Veil). So Spell Power reads ~0 Power for a hero with no spell skills whatever their class, and +Spirit is valued for the shield it grants.",
   ] },
   { date: "2026-07-05", size: "small", v: "Honest upgrade arrows around two-handed weapons", by: "Claude", notes: [
     "An off-hand in your bag no longer lights up as an upgrade while a two-handed weapon fills your hands — there's no free slot to equip it into, so it's not a swap you can make.",
