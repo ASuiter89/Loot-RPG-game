@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Hero snapshot now shows the full Stats panel and every learned skill", by: "Claude", notes: [
+    "A leaderboard hero's snapshot now includes the whole Stats panel from the Hero tab — attack, defense, HP/MP and regen, the ratings and the % they yield, crit, tenacity, conqueror's scars, and every bonus from their gear.",
+    "The skills list now shows ALL learned skills — passives included, each with its rank — grouped into Actives and Passives, with hot-barred picks marked.",
+  ] },
   { date: "2026-07-04", size: "medium", v: "Boss first-kill jackpot — the first time you clear a boss floor, it spills a windfall", by: "Claude", notes: [
     "The FIRST time you clear a given boss floor, its guardian now drops a jackpot — about 3x the loot at noticeably better quality. A one-time windfall for each boss floor.",
     "Endless keeps paying: because bosses recur there, the windfall tracks by FLOOR, so every new or deeper boss floor you conquer pays its own. Farming a floor you've already cleared still drops well at the normal boss rate (and re-killing it soon after still thins the spoils), so pushing deeper is always the richer prize.",

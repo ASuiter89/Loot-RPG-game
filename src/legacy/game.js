@@ -23792,6 +23792,63 @@ function renderPanel() {
   }
 }
 
+// Extended gear stats (leech, thorns, find, caster %s, …) surfaced on the Stats
+// panel: every one the hero carries from gear is listed so nothing stays hidden.
+// [statKey, DawnLike sprite key, label] — the sprite is unused by the current text
+// rows but kept so a future iconified row needs no data change.
+const HERO_EXT_STATS = [
+  ['IDMG','ic_stun','Increased dmg'], ['BOSSDMG','ui_level','Dmg vs bosses'], ['EXEC','w_dagger','Execute'],
+  ['PEN','w_spear','Armor pen'], ['MAGICPEN','ic_orb','Magic pen'], ['CLEAVE','w_axe','Cleave'],
+  ['LEECH','ic_heart','Life leech'], ['MPLEECH','ic_orb','Mana leech'], ['HPKILL','ic_heart','Life on kill'],
+  ['MPKILL','ic_orb','Mana on kill'], ['THORNS','spikes_up','Thorns'],
+  ['SKILLPWR','w_scythe','Skill power'], ['SPELLPWR','ic_orb','Spell power'],
+  ['ATKSPD','w_dagger','Attack speed'], ['CASTSPD','ic_wand','Cast speed'],
+  ['MCR','ui_mp','Mana cost reduc'], ['GOLDFIND','ic_money','Gold find'], ['XPGAIN','scroll','XP gain'],
+  ['MAGICFIND','chest','Magic find'], ['MATFIND','mat_scrap','Material find'],
+  ['BLEED','ic_heart','Bleed chance'], ['STUNPWR','ic_stun','Stun power'],
+];
+// The derived-stat rows of the hero-sheet "Stats" panel, as plain data so the live
+// sheet (renderHero) AND a leaderboard snapshot (lbLoadoutFromPlayer) render the
+// identical panel from one computation — the snapshot serializes the returned object
+// and re-renders it, never recomputing against the viewer's own build.
+// Each row is { label, val } where `val` is display HTML (may carry a subtle "→ %"
+// span). Rating→% figures are measured against the hero's CURRENT floor.
+function heroStatData() {
+  const uiFoe = { level: curDepth() };
+  const v = (label, val) => ({ label, val: String(val) });
+  const rtg = (label, r, c) => v(label, `${Math.round(r)} <span style="opacity:0.6">→ ${Math.round(c * 100)}%</span>`);
+  const main = [];
+  main.push(v('Attack power', Math.round(totalStat('ATK') + attrDamage())));
+  main.push(v('Attack speed', '+' + Math.round(playerAttackSpeedPct()) + '% <span style="opacity:0.6">→ ' + (1 / playerAttackInterval()).toFixed(2) + '/s</span>'));
+  main.push(v('Move speed', '+' + Math.round(((1 + totalStat('MOVESPD') / 100) * agiMoveMult() - 1) * 100) + '%'));
+  if (totalStat('CDR') > 0) main.push(v('Cooldown reduction', `${Math.round(totalStat('CDR'))} <span style="opacity:0.6">→ ${Math.round(cooldownReductionFrac() * 100)}%</span>`));
+  if (totalStat('DBLSTRIKE') > 0) main.push(v('Double strike', `${Math.round(totalStat('DBLSTRIKE'))} <span style="opacity:0.6">→ ${Math.round(rated(totalStat('DBLSTRIKE'), DBLSTRIKE_SCALE) * 100)}%</span>`));
+  main.push(v('Max Stamina', Math.round(player.maxStamina || baseMaxStamina())));
+  main.push(v('Stamina regen', '+' + (Math.round(staminaRegenPerSec() * 10) / 10) + '/s'));
+  main.push(v('Defense', Math.round(playerDefense())));
+  main.push(v('Max HP', player.maxHp));
+  main.push(v('Max MP', player.maxMp));
+  main.push(v('HP regen', '+' + (Math.round(hpRegenPerSec() * 100) / 100) + '/s'));
+  main.push(v('MP regen', '+' + (Math.round(mpRegenPerSec() * 100) / 100) + '/s'));
+  main.push(rtg('Accuracy', playerAccuracyRating(), hitChanceVs(uiFoe)));
+  main.push(rtg('Evasion (dodge)', playerEvasionRating(), dodgeChanceVs(uiFoe)));
+  main.push(rtg('Crit', playerCritRating(), critChanceVs(uiFoe)));
+  main.push(v('Crit damage', Math.round(critDamageMult() * 100) + '%'));
+  if (playerBlockRating() > 0) main.push(rtg('Block', playerBlockRating(), blockChanceVs(curDepth())));
+  if (playerDRRating() > 0) main.push(rtg('Dmg reduction', playerDRRating(), drFractionVs(curDepth())));
+  if (playerTenacity() > 0) main.push(v('Tenacity', '−' + Math.round(playerTenacity() * 100) + '% stun/slow'));
+  const gear = HERO_EXT_STATS.map(([k, sp, name]) => {
+    const t = totalStat(k);
+    return t ? v(name, '+' + t + (PCT_STATS.has(k) ? '%' : '')) : null;
+  }).filter(Boolean);
+  return {
+    note: `Dodge · hit · crit · block are <b>ratings</b>, shown as the % they yield vs your current floor (${floorLabel(curDepth())}). Deeper floors need more rating for the same %.`,
+    main,
+    scars: diffClearedCount() ? { pct: Math.round((1 - diffDebuffMult()) * 100), count: diffClearedCount() } : null,
+    gear,
+  };
+}
+
 // HERO tab: overall power, derived stats, and the attributes you can raise.
 function renderHero(el) {
   const pts = player.attrPoints || 0;
@@ -23819,55 +23876,16 @@ function renderHero(el) {
   }).join('');
   // Derived combat stats so the player can see what their attributes/gear produce.
   const stat = (label, val) => `<div class="hc-line" style="display:flex;justify-content:space-between"><span style="opacity:0.8">${label}</span><b>${val}</b></div>`;
-  // Extended gear stats (leech, thorns, find, caster %s, …): every one the hero
-  // currently carries from gear is listed so nothing stays hidden. Zero-value
-  // stats are skipped to keep the panel readable.
-  // [statKey, DawnLike sprite key, label]. Each stat gets its own dedicated
-  // atlas tile (rendered via data-spr) so nothing relies on a shared emoji.
-  const EXT = [
-    ['IDMG','ic_stun','Increased dmg'], ['BOSSDMG','ui_level','Dmg vs bosses'], ['EXEC','w_dagger','Execute'],
-    ['PEN','w_spear','Armor pen'], ['MAGICPEN','ic_orb','Magic pen'], ['CLEAVE','w_axe','Cleave'],
-    ['LEECH','ic_heart','Life leech'], ['MPLEECH','ic_orb','Mana leech'], ['HPKILL','ic_heart','Life on kill'],
-    ['MPKILL','ic_orb','Mana on kill'], ['THORNS','spikes_up','Thorns'],
-    ['SKILLPWR','w_scythe','Skill power'], ['SPELLPWR','ic_orb','Spell power'],
-    ['ATKSPD','w_dagger','Attack speed'], ['CASTSPD','ic_wand','Cast speed'],
-    ['MCR','ui_mp','Mana cost reduc'], ['GOLDFIND','ic_money','Gold find'], ['XPGAIN','scroll','XP gain'],
-    ['MAGICFIND','chest','Magic find'], ['MATFIND','mat_scrap','Material find'],
-    ['BLEED','ic_heart','Bleed chance'], ['STUNPWR','ic_stun','Stun power'],
-  ];
-  const extRows = EXT.map(([k, sp, name]) => {
-    const t = totalStat(k);
-    if (!t) return '';
-    return stat(name, '+' + t + (PCT_STATS.has(k) ? '%' : ''));
-  }).join('');
-  // Chance stats are ratings shown as the % they currently produce against the
-  // floor you're on (the % rises/falls as the floor's level changes).
-  const uiFoe = { level: curDepth() };
-  const rtg = (label, r, c) => stat(label, `${Math.round(r)} <span style="opacity:0.6">→ ${Math.round(c * 100)}%</span>`);
+  // The Stats panel is data-driven via heroStatData() so a leaderboard snapshot can
+  // render the EXACT same rows from a serialized copy (see lbLoadoutFromPlayer).
+  const sd = heroStatData();
+  const extRows = sd.gear.map(r => stat(r.label, r.val)).join('');
   const derived = `<div class="hero-class" style="border-color:var(--btn-off)">
       <div class="hc-head"><span class="hc-name">📊 Stats</span></div>
-      <div class="hc-line" style="opacity:0.55;font-size:1.3rem;margin:-2px 0 3px">Dodge · hit · crit · block are <b>ratings</b>, shown as the % they yield vs your current floor (${floorLabel(curDepth())}). Deeper floors need more rating for the same %.</div>
-      ${stat('Attack power', Math.round(totalStat('ATK') + attrDamage()))}
-      ${stat('Attack speed', '+' + Math.round(playerAttackSpeedPct()) + '% <span style="opacity:0.6">→ ' + (1 / playerAttackInterval()).toFixed(2) + '/s</span>')}
-      ${stat('Move speed', '+' + Math.round(((1 + totalStat('MOVESPD') / 100) * agiMoveMult() - 1) * 100) + '%')}
-      ${totalStat('CDR') > 0 ? stat('Cooldown reduction', `${Math.round(totalStat('CDR'))} <span style="opacity:0.6">→ ${Math.round(cooldownReductionFrac() * 100)}%</span>`) : ''}
-      ${totalStat('DBLSTRIKE') > 0 ? stat('Double strike', `${Math.round(totalStat('DBLSTRIKE'))} <span style="opacity:0.6">→ ${Math.round(rated(totalStat('DBLSTRIKE'), DBLSTRIKE_SCALE) * 100)}%</span>`) : ''}
-      ${stat('Max Stamina', Math.round(player.maxStamina || baseMaxStamina()))}
-      ${stat('Stamina regen', '+' + (Math.round(staminaRegenPerSec() * 10) / 10) + '/s')}
-      ${stat('Defense', Math.round(playerDefense()))}
-      ${stat('Max HP', player.maxHp)}
-      ${stat('Max MP', player.maxMp)}
-      ${stat('HP regen', '+' + (Math.round(hpRegenPerSec() * 100) / 100) + '/s')}
-      ${stat('MP regen', '+' + (Math.round(mpRegenPerSec() * 100) / 100) + '/s')}
-      ${rtg('Accuracy', playerAccuracyRating(), hitChanceVs(uiFoe))}
-      ${rtg('Evasion (dodge)', playerEvasionRating(), dodgeChanceVs(uiFoe))}
-      ${rtg('Crit', playerCritRating(), critChanceVs(uiFoe))}
-      ${stat('Crit damage', Math.round(critDamageMult()*100) + '%')}
-      ${playerBlockRating() > 0 ? rtg('Block', playerBlockRating(), blockChanceVs(curDepth())) : ''}
-      ${playerDRRating() > 0 ? rtg('Dmg reduction', playerDRRating(), drFractionVs(curDepth())) : ''}
-      ${playerTenacity() > 0 ? stat('Tenacity', '−' + Math.round(playerTenacity() * 100) + '% stun/slow') : ''}
-      ${diffClearedCount() ? `<div class="hc-line" style="display:flex;justify-content:space-between;color:var(--red-250);margin-top:4px"><span><span data-spr=w_sword></span> Conqueror's scars</span><b>−${Math.round((1 - diffDebuffMult()) * 100)}%</b></div>
-      <div class="hc-line" style="opacity:0.62;font-size:1.2rem;color:var(--red-250)">${diffClearedCount()} difficult${diffClearedCount() === 1 ? 'y' : 'ies'} conquered — lowers Max&nbsp;HP &amp; damage dealt.</div>` : ''}
+      <div class="hc-line" style="opacity:0.55;font-size:1.3rem;margin:-2px 0 3px">${sd.note}</div>
+      ${sd.main.map(r => stat(r.label, r.val)).join('')}
+      ${sd.scars ? `<div class="hc-line" style="display:flex;justify-content:space-between;color:var(--red-250);margin-top:4px"><span><span data-spr=w_sword></span> Conqueror's scars</span><b>−${sd.scars.pct}%</b></div>
+      <div class="hc-line" style="opacity:0.62;font-size:1.2rem;color:var(--red-250)">${sd.scars.count} difficult${sd.scars.count === 1 ? 'y' : 'ies'} conquered — lowers Max&nbsp;HP &amp; damage dealt.</div>` : ''}
       ${extRows ? `<div class="hc-line" style="opacity:0.5;margin-top:4px">— from gear —</div>${extRows}` : ''}
     </div>`;
   const cls = playerClass();
@@ -27001,6 +27019,7 @@ function lbLoadoutFromPlayer() {
     playMs: Math.max(0, Math.floor(player.playMs || 0)),
     attributes: player.attributes ? Object.assign({}, player.attributes) : {},
     gearPower: (typeof gearContributionPower === 'function') ? Math.round(gearContributionPower() || 0) : null,
+    stats: (typeof heroStatData === 'function') ? heroStatData() : null, // the hero-sheet "Stats" panel, computed once by the owner
     gear,
     skills,
     skillSlots: Array.isArray(player.skillSlots) ? player.skillSlots.slice(0, 12) : [],
@@ -27294,42 +27313,78 @@ function lbHeroBuildHTML(r, lo) {
       </div>
     </div>`;
   }).join('');
-  // Skills — the hotbar (in slot order) first, then any other learned nodes, each
-  // as an icon chip with its rank. Resolved against the hero's own class/path trees.
+  // Stats — the hero-sheet "Stats" panel, re-rendered from the owner-computed
+  // snapshot (heroStatData at submit time), so another hero's derived stats show
+  // exactly as they saw them, not recomputed against the viewer. Older rows saved
+  // before this existed simply omit the section.
+  const st = lo.stats;
+  const statRow = row => `<div class="lb-statrow"><span class="lb-statk">${row.label}</span><span class="lb-statv">${row.val}</span></div>`;
+  const statsSection = (st && Array.isArray(st.main)) ? `
+    <div class="lb-hero-sec">
+      <div class="lb-hero-sectitle">Stats</div>
+      <div class="lb-statnote">${st.note || ''}</div>
+      <div class="lb-stats">
+        ${st.main.map(statRow).join('')}
+        ${st.scars ? `<div class="lb-statrow lb-scars"><span class="lb-statk"><span data-spr=w_sword></span> Conqueror's scars</span><span class="lb-statv">−${st.scars.pct}%</span></div>
+        <div class="lb-statnote lb-scars-note">${st.scars.count} difficult${st.scars.count === 1 ? 'y' : 'ies'} conquered — lowers Max&nbsp;HP &amp; damage dealt.</div>` : ''}
+        ${(st.gear && st.gear.length) ? `<div class="lb-statsep">— from gear —</div>${st.gear.map(statRow).join('')}` : ''}
+      </div>
+    </div>` : '';
+
+  // Skills — EVERY learned node, grouped Actives then Passives so nothing is hidden;
+  // the hotbar picks (and the ⟳ auto-cast) ride a gold border + their key inside the
+  // Actives group. Each chip shows its RANK. Resolved against the hero's own trees.
   const skills = lo.skills || {};
-  const seen = {};
+  const placed = new Set();
   const chip = (id, slotLabel) => {
     const node = lbSkillNode(r.player_class, r.ascension, id);
     if (!node) return '';
-    seen[id] = true;
+    placed.add(id);
     const rank = skills[id] || 1;
-    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(node.icon, 16) || ''} ${escapeHtml(node.name || id)}</div><div class='ht-line'>${node.desc || ''}</div><div class='ht-sub'>${node.type === 'active' ? `Active${node.mp ? ' · ' + node.mp + ' MP' : ''}${node.cd ? ' · ' + node.cd + 's cd' : ''}` : 'Passive'} · rank ${rank}</div>`.replace(/"/g, '&quot;');
+    const isActive = node.type === 'active';
+    const kind = isActive ? `Active${node.mp ? ' · ' + node.mp + ' MP' : ''}${node.cd ? ' · ' + node.cd + 's cd' : ''}` : 'Passive';
+    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(node.icon, 16) || ''} ${escapeHtml(node.name || id)}</div><div class='ht-line'>${node.desc || ''}</div><div class='ht-sub'>${kind} · rank ${rank}</div>`.replace(/"/g, '&quot;');
     return `<div class="lb-skill${slotLabel ? ' lb-skill-slotted' : ''}" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
       <span class="lb-skill-ic">${dlIcon(node.icon, 26) || ''}</span>
       <span class="lb-skill-rank">${rank}</span>
       ${slotLabel ? `<span class="lb-skill-key">${slotLabel}</span>` : ''}
     </div>`;
   };
-  const barChips = [];
-  (lo.skillSlots || []).forEach((id, idx) => { if (id) { const c = chip(id, String(idx + 1)); if (c) barChips.push(c); } });
-  if (lo.autoSkill) { const c = chip(lo.autoSkill, '⟳'); if (c) barChips.push(c); }
-  const otherChips = Object.keys(skills).filter(id => !seen[id]).map(id => chip(id, '')).filter(Boolean);
-  const skillHTML = (barChips.length || otherChips.length)
-    ? `${barChips.join('')}${otherChips.join('')}`
+  // Hotbar first (kept in slot order), then the auto-cast pick — all actives.
+  const activeChips = [];
+  (lo.skillSlots || []).forEach((id, idx) => { if (id && !placed.has(id)) { const c = chip(id, String(idx + 1)); if (c) activeChips.push(c); } });
+  if (lo.autoSkill && !placed.has(lo.autoSkill)) { const c = chip(lo.autoSkill, '⟳'); if (c) activeChips.push(c); }
+  // Every remaining learned node, split by kind so passives are visibly included.
+  const passiveChips = [];
+  Object.keys(skills).forEach(id => {
+    if (placed.has(id)) return;
+    const node = lbSkillNode(r.player_class, r.ascension, id);
+    if (!node) return;
+    const c = chip(id, '');
+    if (!c) return;
+    (node.type === 'active' ? activeChips : passiveChips).push(c);
+  });
+  const learnedCount = Object.keys(skills).filter(id => lbSkillNode(r.player_class, r.ascension, id)).length;
+  const skillGroup = (label, chips) => chips.length
+    ? `<div class="lb-skill-group"><div class="lb-skill-grouplbl">${label}</div><div class="lb-skills">${chips.join('')}</div></div>` : '';
+  const skillsSection = (activeChips.length || passiveChips.length)
+    ? `${skillGroup('Actives', activeChips)}${skillGroup('Passives', passiveChips)}`
     : '<div class="lb-hero-none">No skills learned yet.</div>';
+
   const gp = (lo.gearPower != null) ? `<span class="lb-hero-gp">${PWR_GLYPH} ${fmtGold(lo.gearPower)} from gear</span>` : '';
   return `
     <div class="lb-hero-sec">
       <div class="lb-hero-sectitle">Attributes</div>
       <div class="lb-attrs">${attrRow}</div>
     </div>
+    ${statsSection}
     <div class="lb-hero-sec">
       <div class="lb-hero-sectitle">Gear ${gp}</div>
       <div class="lb-gears">${gearRow}</div>
     </div>
     <div class="lb-hero-sec">
-      <div class="lb-hero-sectitle">Skills</div>
-      <div class="lb-skills">${skillHTML}</div>
+      <div class="lb-hero-sectitle">Skills${learnedCount ? ` <span class="lb-hero-gp">${learnedCount} learned</span>` : ''}</div>
+      ${skillsSection}
     </div>`;
 }
 
