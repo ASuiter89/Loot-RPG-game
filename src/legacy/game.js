@@ -83,6 +83,9 @@ import { UNIQUES, uniqueForBase, uniquesForSlot } from '../data/uniques.js';
 import { ITEM_SETS } from '../data/itemSets.js';
 import { setPieceCount, setComplete as setIsComplete, setStatContribution,
   rollSetPiece } from '../systems/itemSets.js';
+import { isBestiaryFieldKnown, speciesDiscovered, bestiaryRevealRatio } from '../systems/bestiary.js';
+import { buildCollectionCatalog, collectionFacets, groupStoredArtifacts, acquiredKeySet,
+  filterCatalog, collectionProgress, itemCatalogKey } from '../systems/uniqueCollection.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -6106,9 +6109,14 @@ let player = { x: 5, y: 5,
   // climb the few floors above it, foes go easier (see spawnEnemies); null = none.
   reliefFloor: null,
   // Bestiary: how many of each enemy type (keyed by its sprite glyph) you've
-  // slain. Drives the tap-to-inspect codex card — stats stay ??? until you've
-  // killed enough to learn them (fully revealed at 10; bosses are exempt).
+  // slain. Drives the tap-to-inspect codex card and the Bestiary screen — stats
+  // stay ??? until you've killed enough to learn them (fully revealed at 10;
+  // bosses fill out on their first kill).
   bestiary: {},
+  // Per-species specimen record for the Bestiary screen: the depth-scaled numbers
+  // (level/HP/damage/typed defence) of the DEEPEST foe of each type you've slain,
+  // since the codex has no live spawn to read them from. Keyed like `bestiary`.
+  bestiaryLore: {},
   // First-kill jackpot ledger: absolute boss-floor depth (dungeonLevel) → 1 once this
   // hero has cleared it. The FIRST clear of each boss floor spills ~3x the loot at
   // better quality (see onEnemyDefeated / systems/bossLoot.js); re-clears revert to
@@ -6955,6 +6963,20 @@ window.gameState = function gameState(radius) {
       gold: player.gold,                 // coins in hand (what death loss is taken from)
       vaultGold: (stash && stash.gold) || 0,   // banked in the town Vault — safe from death
       spendableGold: spendableGold(),    // carried + vault: what a town shop can actually charge (shortfall auto-drawn from the vault)
+      // Unique/set Collection (the Vault's Collection tab): distinct authored
+      // artifacts you have ≥1 stored copy of, out of the full roster. Storing a
+      // unique/set piece files it here (account-wide, per ladder); withdraw returns it.
+      collection: (() => {
+        const owned = acquiredKeySet(groupStoredArtifacts((stash && stash.items) || [], itemPower));
+        const prog = collectionProgress(_COLL_CATALOG, owned);
+        return { have: prog.have, total: prog.total };
+      })(),
+      // Bestiary: species slain at least once, out of the full roster. Drives the
+      // inspect card + the Bestiary screen; a boss reveals fully on its first kill.
+      bestiary: (() => {
+        const r = bestiaryRoster();
+        return { discovered: r.filter(s => speciesDiscovered(bestiaryKills(s))).length, total: r.length };
+      })(),
       materials: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, heroMaterials()[k] || 0])),   // scrap/glimmer/core/chaos (commonest→rarest); ACCOUNT-SHARED across heroes (per ladder)
       materialsUnlocked: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, materialUnlocked(k)])),  // which mats the CURRENT tier can drop from kills (salvage ignores this)
       autoLoot: player.autoLoot ? Object.assign({}, player.autoLoot) : null,       // per-rarity keep/scrap/sell
@@ -7151,7 +7173,7 @@ window.gameGuide = function gameGuide(topic) {
       `CURSED FLOOR (the "greed" gate): rarely, on descending to a non-boss floor from depth 3+, a WORLD-PAUSING prompt offers to brave the floor for DOUBLED loot & gold at the cost of tougher non-boss foes (more HP and damage). Movement freezes until you choose — gameState().greed.pending is true, mode is 'greed' and blockingOverlay is 'greed-overlay'; call acceptGreed() to take it (gameState().greed.active then reads true, mult 2) or declineGreed() to skip.`,
     ],
     enemies: [
-      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), firstKill (a boss floor you haven't cleared yet — its kill drops a jackpot; see below), affix (an elite-style modifier), armor / magicResist (typed defence — see below), and status (e.g. ["stun"], ["slow"]).`,
+      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), firstKill (a boss floor you haven't cleared yet — its kill drops a jackpot; see below), affix (an elite-style modifier), armor / magicResist (typed defence — see below), and status (e.g. ["stun"], ["slow"]). Every species you slay is also logged in the Bestiary codex (pause menu; gameGuide("bestiary")).`,
       `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
       `Behaviors (gameState().enemies[i].behavior): chaser (steady, 1 tile/turn), swift (2 tiles/turn), pack (1 tile/turn, but rushes to 2 when you drop below 50% HP — wolves/tigers), erratic (darts unpredictably), brute (slow — acts every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand). A foe with the ice CHILL status is likewise dragged to that half-cadence, but chill is a STATUS (it shows in enemies[i].status), not a behavior.`,
       `Each archetype also has its OWN toughness & punch, not just movement: brutes are tanky and hit hard but swing slowly; swift vermin and erratic flyers are frail and jab for less; casters are squishy but strike from range; lurkers ambush for a heavier blow; packs are individually weak but swarm. So two foes on the same floor can differ a lot — read the behavior, not just the sprite.`,
@@ -7190,7 +7212,7 @@ window.gameGuide = function gameGuide(topic) {
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House (SLOT moves the bowl's whole stack) to eat it straight from the bottom-HUD belt mid-run without returning to cook; eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
-      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
+      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress.`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
@@ -7211,6 +7233,14 @@ window.gameGuide = function gameGuide(topic) {
       `Read it from gameState(): player.power is the overall headline (POWER on the hero sheet), player.gearPower is the slice your worn gear contributes (POWER = that + your level/attribute/skill base). Each equippable item in menu.inventory carries pow (its Power to you) and upgrade (the Power swing vs. what fills its slot now: positive = a genuine upgrade FOR YOUR BUILD). The hand slots fold in two rules: an off-hand you can't equip right now — a two-hander already fills the hand, no Titan's Grip — reads upgrade 0 (you can't swap it in), and a two-handed weapon's upgrade already subtracts the off-hand it would strand, so it only reads positive when it beats your main-hand weapon AND off-hand combined. Sort/compare by pow, and trust upgrade over raw rarity — a higher-tier piece can be a downgrade if its stats don't suit you.`,
       `Consequences an agent should expect: an item's pow can differ across two heroes and shrinks as your build saturates a stat (diminishing returns); the overall player.power still climbs monotonically with any real upgrade. To raise Power, stack stats your build actually uses (your class's damage lane, crit damage only once you have crit chance, more HP/mitigation for survivability), not just bigger rarities.`,
     ],
+    bestiary: [
+      `Every foe is recorded in a BESTIARY — a codex opened from the pause menu (Bestiary). Hovering a foe in the dungeon already pops an inspect card; the Bestiary collects one card per species so you can browse the whole roster, filter it (creatures / bosses / discovered), and track completion. gameState().menu.bestiary reports species discovered out of the total.`,
+      `A species' stats stay hidden as "???" until you've slain enough of it to learn them — each stat field reveals at its own kill threshold, fully known at ${BESTIARY_FULL} kills. A BOSS is all-or-nothing: its card is a sealed silhouette until your FIRST kill, then opens completely. The depth-scaled numbers (level/HP/damage/typed defence) are recorded from the DEEPEST specimen of each species you've slain.`,
+    ],
+    collection: [
+      `The Vault has a COLLECTION tab: one slot for every unique and set piece in the game. A slot is a darkened silhouette (hover to preview the fixed properties it can roll — labels only, since the values roll with drop depth) until you store a matching piece there; then it lights up with your best-rolled copy. Storing a unique/set piece always files it here instead of ordinary Storage; a slot can hold MULTIPLE copies (it shows the strongest with a ×N badge, and clicking lists them all to withdraw).`,
+      `The Collection is account-wide and per-ladder, exactly like the rest of the Vault (Standard and Hardcore keep separate ones). Filter it by gear slot, unique vs set, a specific set, or acquired/missing. gameState().menu.collection reports distinct pieces collected out of the total.`,
+    ],
   };
   if (topic == null) return Object.assign({ topics: Object.keys(G) }, G);
   const t = String(topic).toLowerCase().replace(/[^a-z]/g, '');
@@ -7223,6 +7253,8 @@ window.gameGuide = function gameGuide(topic) {
     power: 'power', itempower: 'power', gearpower: 'power', upgrade: 'power', upgrades: 'power', rating: 'power', strength: 'power', build: 'power',
     hazard: 'hazards', trap: 'hazards', traps: 'hazards', projectile: 'hazards', barrier: 'hazards', fire: 'hazards', terrain: 'hazards', tiles: 'hazards', greed: 'hazards', cursed: 'hazards', curse: 'hazards', shrine: 'hazards', teleporter: 'hazards', fountain: 'hazards',
     enemy: 'enemies', boss: 'enemies', bosses: 'enemies', ai: 'enemies', minion: 'enemies', minions: 'enemies', ally: 'enemies', allies: 'enemies', affix: 'enemies', enrage: 'enemies', berserk: 'enemies', conquest: 'enemies', scar: 'enemies', rainbow: 'enemies',
+    bestiary: 'bestiary', codex: 'bestiary', monster: 'bestiary', monsters: 'bestiary', species: 'bestiary', inspect: 'bestiary', lore: 'bestiary',
+    collection: 'collection', showcase: 'collection', museum: 'collection', unique: 'collection', uniques: 'collection', set: 'collection', sets: 'collection', setpiece: 'collection', artifact: 'collection', artifacts: 'collection',
     quest: 'quests', quests: 'quests', escort: 'quests', rescue: 'quests', fetch: 'quests', tribute: 'quests', forage: 'quests', beacon: 'quests', beacons: 'quests', objective: 'quests', bounty: 'town',
     classs: 'progression', classes: 'progression', clas: 'progression', attribute: 'progression', attributes: 'progression', level: 'progression', leveling: 'progression', skilltree: 'progression', ascension: 'progression', ascend: 'progression', xp: 'progression',
     bosspoint: 'progression', bosspoints: 'progression', bossslot: 'progression', bossslots: 'progression', slotlevel: 'progression', slotlevels: 'progression', gearslot: 'progression', gearslots: 'progression',
@@ -9054,13 +9086,11 @@ function bestiaryKills(e) { return (player.bestiary && player.bestiary[bestiaryK
 // Tiny stable string hash, so each species reveals its stats in a fixed (but
 // per-species "random") order rather than flickering each time you peek.
 function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
-// Is one stat field known yet? Each field has a per-species threshold in 1..10;
-// reach it (or 10 total kills, or it's a boss) and the number shows.
+// Is one stat field known yet? Regular species reveal a field once kills reach its
+// per-species threshold in 1..10 (or 10 total kills); a BOSS is all-or-nothing —
+// sealed until your first kill, then fully known. (Pure logic in systems/bestiary.)
 function statKnown(e, field, kills) {
-  if (e.isBoss) return true;
-  if (kills >= BESTIARY_FULL) return true;
-  const threshold = 1 + (hashStr(bestiaryKey(e) + '|' + field) % BESTIARY_FULL);
-  return kills >= threshold;
+  return isBestiaryFieldKnown(bestiaryKey(e), field, kills, !!e.isBoss, hashStr, BESTIARY_FULL);
 }
 // Map a screen point to the map tile under it, using the last camera transform.
 function clientToTile(cx, cy) {
@@ -9139,10 +9169,13 @@ function renderEnemyCard(e) {
     const known = statKnown(e, k, kills);
     return `<span class="ec-k">${label}</span><span class="ec-v${known ? '' : ' hidden'}">${known ? val : '???'}</span>`;
   }).join('');
-  // Footer: discovery progress (bosses skip the gating entirely).
+  // Footer: discovery progress. A boss is all-or-nothing — sealed until its first
+  // kill, then fully known; a regular species fills in over ten kills.
   let foot;
   if (e.isBoss) {
-    foot = `<div class="ec-foot">Boss — fully known</div>`;
+    foot = kills >= 1
+      ? `<div class="ec-foot">Boss vanquished — fully known</div>`
+      : `<div class="ec-foot">Boss — defeat it once to record its lore</div>`;
   } else {
     const cap = Math.min(kills, BESTIARY_FULL);
     const pct = Math.round(cap / BESTIARY_FULL * 100);
@@ -9178,6 +9211,100 @@ document.addEventListener('pointerdown', ev => {
   if (ev.target === canvas) return;             // the canvas handler decides
   closeEnemyCard();
 }, true);
+
+// ── BESTIARY SCREEN ──────────────────────────────────────────────────────────
+// A browsable codex of every foe in the game, opened from the pause menu. Each
+// card mirrors the hover inspect-card fields and fills in as you slay more of a
+// species (fully at BESTIARY_FULL); a boss stays a sealed silhouette until your
+// first kill, then opens fully. Since the codex has no live spawn to read, the
+// depth-scaled numbers come from the specimen record stashed on kill
+// (player.bestiaryLore — the deepest of each type you've faced).
+let _bestiaryFilter = 'all'; // all | creatures | bosses | discovered
+const BESTIARY_FILTERS = [['all', 'All'], ['creatures', 'Creatures'], ['bosses', 'Bosses'], ['discovered', 'Discovered']];
+// The full roster: every regular species (MONSTERS) then every boss (BOSSES).
+function bestiaryRoster() {
+  const out = [];
+  if (typeof MONSTERS === 'object') for (const type in MONSTERS) {
+    const m = MONSTERS[type];
+    out.push({ type, name: m.name, color: m.color, sprite: m.sprite, behavior: m.behavior, isBoss: false });
+  }
+  if (typeof BOSSES !== 'undefined') for (const b of BOSSES) {
+    out.push({ type: b.type, name: b.name, color: b.color, sprite: b.sprite, behavior: b.behavior, isBoss: true, blurb: b.blurb });
+  }
+  return out;
+}
+// Real pixel art for a codex entry: the monster/boss atlas tile, falling back to
+// the DawnLike sprite, then a tinted placeholder square (as the canvas does for
+// art-less species) — never an emoji.
+function bestiaryIcon(stub, px) {
+  const icon = (!stub.isBoss && monsterIcon(stub.type, px)) || (stub.isBoss && bossIcon(stub.type, px)) || (stub.sprite && dlIcon(stub.sprite, px));
+  return icon || `<span class="bst-blank" style="background:${stub.color || ICON_EMPTY_COLOR}"></span>`;
+}
+function bestiaryCardHTML(stub) {
+  const kills = bestiaryKills(stub);
+  const disc = speciesDiscovered(kills);
+  const L = (player.bestiaryLore && player.bestiaryLore[bestiaryKey(stub)]) || {};
+  const styleLbl = ENEMY_STYLE_LABEL[stub.behavior] || 'Hunter';
+  const rangedLbl = (BEHAVIORS[stub.behavior] && BEHAVIORS[stub.behavior].ranged) ? 'Ranged' : 'Melee';
+  const fields = [
+    ['lvl',   'Level',     L.level != null ? L.level : null],
+    ['hp',    'Health',    L.hp != null ? abbreviateNumber(L.hp) : null],
+    ['dmg',   'Damage',    L.dmg != null ? abbreviateNumber(L.dmg) : null],
+    ['armor', 'Armor',     L.armor != null ? `${L.armor}%` : null],
+    ['mres',  'Magic res', L.mres != null ? `${L.mres}%` : null],
+    ['style', 'Style',     styleLbl],
+    ['reach', 'Attack',    rangedLbl],
+  ];
+  const rows = fields.map(([k, label, val]) => {
+    const known = statKnown(stub, k, kills);
+    // Known but never recorded (killed before the codex existed) reads as "—".
+    const shown = known ? (val == null ? '—' : val) : '???';
+    return `<span class="bst-k">${label}</span><span class="bst-v${known ? '' : ' hidden'}">${shown}</span>`;
+  }).join('');
+  const sub = stub.isBoss ? 'BOSS' : 'CREATURE';
+  let foot;
+  if (stub.isBoss) {
+    foot = disc ? `<div class="bst-foot">Vanquished — fully known</div>`
+                : `<div class="bst-foot">Undiscovered — defeat it once to record its lore</div>`;
+  } else {
+    const cap = Math.min(kills, BESTIARY_FULL);
+    const pct = Math.round(cap / BESTIARY_FULL * 100);
+    foot = `<div class="bst-foot">Slain ${cap}/${BESTIARY_FULL}<span class="bst-bar"><i style="width:${pct}%"></i></span></div>`;
+  }
+  const blurb = (disc && stub.isBoss && stub.blurb) ? `<div class="bst-blurb">${escapeHtml(stub.blurb)}</div>` : '';
+  return `<div class="bst-card${disc ? '' : ' locked'}${stub.isBoss ? ' boss' : ''}">
+    <div class="bst-head"><span class="bst-ic">${bestiaryIcon(stub, 26)}</span>
+      <div class="bst-htext"><div class="bst-name">${disc ? escapeHtml(stub.name) : '???'}</div><div class="bst-sub">${sub}</div></div></div>
+    <div class="bst-grid">${rows}</div>${foot}${blurb}</div>`;
+}
+function renderBestiary() {
+  const body = document.getElementById('bestiary-body');
+  if (!body) return;
+  const roster = bestiaryRoster();
+  const discovered = roster.filter(s => speciesDiscovered(bestiaryKills(s))).length;
+  const shown = roster.filter(s => {
+    if (_bestiaryFilter === 'creatures') return !s.isBoss;
+    if (_bestiaryFilter === 'bosses') return s.isBoss;
+    if (_bestiaryFilter === 'discovered') return speciesDiscovered(bestiaryKills(s));
+    return true;
+  });
+  const tabs = BESTIARY_FILTERS.map(([id, label]) =>
+    `<button class="bst-filter${_bestiaryFilter === id ? ' active' : ''}" onclick="setBestiaryFilter('${id}')">${label}</button>`).join('');
+  const cards = shown.length
+    ? shown.map(bestiaryCardHTML).join('')
+    : '<div class="bst-empty">No foes match this filter yet — venture deeper.</div>';
+  body.innerHTML =
+    `<div class="bst-toolbar"><div class="bst-tally">Discovered <b>${discovered}</b> / ${roster.length}</div>
+      <div class="bst-filters">${tabs}</div></div>
+    <div class="bst-grid-wrap">${cards}</div>`;
+}
+function setBestiaryFilter(id) { _bestiaryFilter = id; renderBestiary(); }
+function showBestiary() {
+  renderBestiary();
+  const ov = document.getElementById('bestiary-overlay');
+  if (ov) ov.classList.add('open');
+}
+function closeBestiary() { const ov = document.getElementById('bestiary-overlay'); if (ov) ov.classList.remove('open'); }
 
 // Keep the loot drawer populated and open.
 function syncWebPanel() {
@@ -12942,15 +13069,32 @@ function stashItemRow(item, action, btnLabel, btnClass) {
     <button class="${btnClass}" onclick="${action}">${btnLabel}</button>
   </div>`;
 }
+// The Vault is tabbed: STORAGE (gold + ordinary gear) and COLLECTION (the "one of
+// every unique / set piece" showcase). A stored artifact lives in the same
+// stash.items list either way — the Collection tab is a filtered VIEW of it — so
+// depositing a unique needs no special routing; it simply appears in the showcase.
+let stashTab = 'storage'; // 'storage' | 'collection'
+function stashTabTo(tab) { stashTab = tab; _collOpenKey = null; renderStash(); }
 function renderStash() {
+  const tabs = `<div class="stash-tabs">
+    <button class="stash-tab${stashTab === 'storage' ? ' active' : ''}" onclick="stashTabTo('storage')"><span data-spr=ic_coffer></span> Storage</button>
+    <button class="stash-tab${stashTab === 'collection' ? ' active' : ''}" onclick="stashTabTo('collection')"><span data-spr=q_relic></span> Collection</button>
+  </div>`;
+  setTownContent(tabs + (stashTab === 'collection' ? stashCollectionHTML() : stashStorageHTML()));
+}
+function stashStorageHTML() {
   const g = stash.gold || 0;
-  const stored = stash.items.length
-    ? stash.items.map((it, i) => stashItemRow(it, `stashWithdrawItem(${i})`, 'TAKE', 'shop-buy-btn')).join('')
-    : '<div class="shop-empty">The vault is empty.</div>';
+  // Uniques and set pieces live in the Collection tab, so keep them out of the
+  // ordinary gear list here (each row still carries its true stash.items index so
+  // withdraw works). Everything else shows as before.
+  const storedRows = stash.items.map((it, i) => ({ it, i })).filter(x => !isFixedItem(x.it));
+  const stored = storedRows.length
+    ? storedRows.map(({ it, i }) => stashItemRow(it, `stashWithdrawItem(${i})`, 'TAKE', 'shop-buy-btn')).join('')
+    : '<div class="shop-empty">No ordinary gear stored. Uniques &amp; set pieces live in the Collection tab.</div>';
   const bag = inventory.length
     ? inventory.map((it, i) => stashItemRow(it, `stashDepositItem(${i})`, 'STORE', 'shop-sell-btn')).join('')
     : '<div class="shop-empty">Your bag is empty.</div>';
-  setTownContent(`
+  return `
     <div class="town-blurb">The Vault Keeper guards your fortune. Gold and gear stored here are safe from death — never lost when you fall in the dungeon — and shared across all your heroes. Town shops will draw on vault gold when your carried coin runs short, so your savings stay useful. ${player.hardcore ? 'Hardcore heroes keep their own separate vault &amp; crafting materials.' : 'Crafting materials are pooled across your heroes too, no depositing needed.'}</div>
     <div class="shop-row">
       <span class="loot-icon"><span data-spr=ic_coffer></span></span>
@@ -12968,10 +13112,10 @@ function renderStash() {
       <button class="shop-sell-all-btn" onclick="stashDepositGold(player.gold)">DEPOSIT ALL</button>
       <button class="shop-sell-all-btn" onclick="stashWithdrawGold(stash.gold)">WITHDRAW ALL</button>
     </div>
-    <div class="stash-section-title"><span data-spr="ic_coffer"></span> In the Vault (${stash.items.length})</div>
+    <div class="stash-section-title"><span data-spr="ic_coffer"></span> In the Vault (${storedRows.length})</div>
     ${stored}
     <div class="stash-section-title"><span data-spr="ui_bag"></span> Your Bag (${inventory.length})</div>
-    ${bag}`);
+    ${bag}`;
 }
 function stashGoldAmount(amt) {
   if (amt != null) return Math.floor(amt);
@@ -13038,7 +13182,9 @@ function stashDepositItem(i) {
   item._st = newStashTag();   // OR-set identity for this deposit (fresh, so it beats any old tombstone)
   stash.items.push(item);
   sfx('equip');
-  log(`<span data-spr=ic_coffer></span> Stored ${logItem(item)} in the vault.`);
+  // A unique / set piece is filed in the Collection tab (a view over this same
+  // list); ordinary gear stays in Storage. Say so, so the piece isn't "lost".
+  log(`<span data-spr=ic_coffer></span> Stored ${logItem(item)}${isFixedItem(item) ? ' in your Collection' : ' in the vault'}.`);
   renderStash(); renderPanel(); saveGame(); saveStash();
 }
 function stashWithdrawItem(i) {
@@ -13052,6 +13198,113 @@ function stashWithdrawItem(i) {
   sfx('equip');
   log(`<span data-spr=ic_coffer></span> Took ${logItem(item)} from the vault.`);
   renderStash(); renderPanel(); saveGame(); saveStash();
+}
+
+// ── VAULT COLLECTION TAB ── the "one of every unique / set piece" showcase. Every
+// authored artifact gets a fixed-size tile: a darkened silhouette until you've
+// stored a matching piece, lit with your best-rolled copy once you have. A cell
+// holds a STACK — store as many rolls of a piece as you like; the tile shows the
+// strongest and a ×N badge, and clicking it lists every copy to withdraw. All of
+// this is a filtered VIEW over stash.items (grouped by the def id each stored
+// artifact already carries), so it needs no new save data and no deposit-time
+// routing — storing a unique simply makes it appear here.
+let _collOpenKey = null; // catalog key whose stored copies are expanded, or null
+const _collFilter = { slot: '', kind: '', setId: '', acquired: '' };
+const _COLL_CATALOG = buildCollectionCatalog();
+// data-tip lives in a double-quoted attribute, so any double quotes in the built
+// markup (icon styles etc.) must be entity-escaped or they'd close the attribute.
+function _collAttr(s) { return String(s).replace(/"/g, '&quot;'); }
+function setCollFilter(field, val) { _collFilter[field] = val; _collOpenKey = null; renderStash(); }
+function openCollCell(key) { _collOpenKey = key; renderStash(); }
+function closeCollCell() { _collOpenKey = null; renderStash(); }
+// Stored copies of every catalog key, best roll first (shared by grid + detail).
+function collGroups() { return groupStoredArtifacts(stash.items, itemPower); }
+// Desktop hover on a FILLED tile pops the real gear card for its best-rolled copy.
+function collTileHover(ev, key) {
+  const g = collGroups()[key];
+  if (g && g.length) showTooltipForItem(g[0].item, ev.currentTarget);
+}
+// The rollable-property preview shown on an EMPTY tile: the artifact's name, slot,
+// signature power and the fixed stats it WILL carry — labels only, no values (those
+// roll with the depth it drops on). A self-contained hovertip card.
+function collPreviewTip(entry) {
+  const color = entry.kind === 'set' ? SET_RARITY_COLOR : ((TIERS.unique || {}).color || ICON_EMPTY_COLOR);
+  const kindLine = entry.kind === 'set'
+    ? `<div class="coll-tip-tag" style="color:${SET_RARITY_COLOR}">✦ ${escapeHtml(entry.setName)} set piece</div>`
+    : `<div class="coll-tip-tag" style="color:${color}">✦ Unique</div>`;
+  const pw = ITEM_POWERS[entry.power];
+  const powLine = pw ? `<div class="coll-tip-pow" style="color:${pw.color}">${escapeHtml(pw.name)} — ${escapeHtml(pw.desc)}</div>` : '';
+  const row = (label, native) => `<div class="coll-tip-stat${native ? ' native' : ''}">${escapeHtml(label)}${native ? ' <span class="coll-tip-native">native</span>' : ''}</div>`;
+  const rows = [row(STAT_LABELS[entry.native] || entry.native, true)];
+  for (const m of entry.mods) {
+    if (m.kind === 'attr') { const A = ATTRIBUTES[m.key]; rows.push(row('+ ' + ((A && A.label) || m.key), false)); }
+    else rows.push(row(STAT_LABELS[m.key] || m.key, false));
+  }
+  return `<div class="coll-tip-name" style="color:${color}">${escapeHtml(entry.name)}</div>`
+    + `<div class="coll-tip-sub">${slotLabelIcon(entry.slot)} · ${escapeHtml(entry.base)}</div>`
+    + kindLine + powLine
+    + `<div class="coll-tip-hdr">Rolls these properties — values scale with the depth it drops on:</div>`
+    + `<div class="coll-tip-stats">${rows.join('')}</div>`
+    + `<div class="coll-tip-note">Store a copy to fill this slot.</div>`;
+}
+function collTileHTML(entry, group) {
+  const setDot = entry.kind === 'set' ? `<span class="coll-setdot" style="background:${SET_RARITY_COLOR}"></span>` : '';
+  if (group && group.length) {
+    const best = group[0].item;
+    const badge = group.length > 1 ? `<span class="coll-count">×${group.length}</span>` : '';
+    return `<div class="coll-tile filled" title="${_collAttr(escapeHtml(best.name))}"
+      onmouseenter="collTileHover(event,'${entry.key}')" onmouseleave="hideTooltip()" onclick="openCollCell('${entry.key}')">
+      <span class="coll-ic">${iconMarkup(itemIcon(best), tierColor(best), true, 30)}</span>${setDot}${badge}</div>`;
+  }
+  const stub = { name: entry.base, slot: entry.slot };
+  return `<div class="coll-tile locked" data-tip="${_collAttr(collPreviewTip(entry))}"
+    onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+    <span class="coll-ic">${iconMarkup(itemIcon(stub), ICON_EMPTY_COLOR, true, 30)}</span>${setDot}</div>`;
+}
+function stashCollectionHTML() {
+  if (_collOpenKey) return collDetailHTML(_collOpenKey);
+  const groups = collGroups();
+  const owned = acquiredKeySet(groups);
+  const facets = collectionFacets(_COLL_CATALOG);
+  const prog = collectionProgress(_COLL_CATALOG, owned);
+  const f = {
+    slot: _collFilter.slot || null,
+    kind: _collFilter.kind || null,
+    setId: _collFilter.setId || null,
+    acquired: _collFilter.acquired === 'yes' ? true : (_collFilter.acquired === 'no' ? false : null),
+  };
+  const shown = filterCatalog(_COLL_CATALOG, f, owned);
+  const opt = (v, l, sel) => `<option value="${v}"${sel === v ? ' selected' : ''}>${l}</option>`;
+  const slotOpts = opt('', 'All slots', _collFilter.slot) + facets.slots.map(s => opt(s, (SLOTS[s] ? SLOTS[s].label : s), _collFilter.slot)).join('');
+  const kindOpts = [['', 'Unique &amp; set'], ['unique', 'Unique only'], ['set', 'Set only']].map(([v, l]) => opt(v, l, _collFilter.kind)).join('');
+  const setOpts = opt('', 'All sets', _collFilter.setId) + facets.sets.map(s => opt(s.id, escapeHtml(s.name), _collFilter.setId)).join('');
+  const acqOpts = [['', 'Acquired &amp; missing'], ['yes', 'Acquired only'], ['no', 'Missing only']].map(([v, l]) => opt(v, l, _collFilter.acquired)).join('');
+  const tiles = shown.length ? shown.map(e => collTileHTML(e, groups[e.key])).join('') : '<div class="coll-empty">No artifacts match these filters.</div>';
+  return `
+    <div class="town-blurb">One slot for every unique and set piece in the game. A slot stays a darkened silhouette — hover to preview the properties it can roll — until you store a matching piece; then it lights up with your best-rolled copy, which you can withdraw any time. Storing a unique or set piece always sends it here, shared across all your heroes.</div>
+    <div class="coll-head"><div class="coll-prog">Collected <b>${prog.have}</b> / ${prog.total}</div></div>
+    <div class="coll-filters">
+      <select onchange="setCollFilter('slot',this.value)">${slotOpts}</select>
+      <select onchange="setCollFilter('kind',this.value)">${kindOpts}</select>
+      <select onchange="setCollFilter('setId',this.value)">${setOpts}</select>
+      <select onchange="setCollFilter('acquired',this.value)">${acqOpts}</select>
+    </div>
+    <div class="coll-grid">${tiles}</div>`;
+}
+function collDetailHTML(key) {
+  const entry = _COLL_CATALOG.find(e => e.key === key);
+  const group = collGroups()[key] || [];
+  if (!entry || !group.length) { _collOpenKey = null; return stashCollectionHTML(); }
+  const color = entry.kind === 'set' ? SET_RARITY_COLOR : ((TIERS.unique || {}).color || ICON_EMPTY_COLOR);
+  const rows = group.map(({ item, index }) => stashItemRow(item, `stashWithdrawItem(${index})`, 'TAKE', 'shop-buy-btn')).join('');
+  const note = group.length > 1 ? `<div class="stash-section-title">${group.length} stored — strongest first</div>` : '';
+  return `
+    <button class="modal-nav-btn coll-back" onclick="closeCollCell()">‹ Back to Collection</button>
+    <div class="coll-detail-head"><span class="coll-ic">${iconMarkup(itemIcon(group[0].item), color, true, 30)}</span>
+      <div><div class="coll-detail-name" style="color:${color}">${escapeHtml(entry.name)}</div>
+      <div class="coll-detail-sub">${slotLabelIcon(entry.slot)}${entry.kind === 'set' ? ' · ' + escapeHtml(entry.setName) + ' set' : ' · Unique'}</div></div></div>
+    ${note}
+    ${rows}`;
 }
 
 // ── TRAINER — respec spent attribute points ──
@@ -20223,11 +20476,22 @@ function onEnemyDefeated(e) {
   // summoner boss can't be farmed by killing the fodder it spawns endlessly.
   if (e.minion) { sfx('kill'); updateFloorClear(); return; }
   fireSkillTrigger('kill', { enemy: e }); // on-kill procs: charges, heals, frenzy…
-  // Bestiary: chalk up this species so the inspect card reveals more of its stats.
+  // Bestiary: chalk up this species so the inspect card reveals more of its stats,
+  // and record a specimen's depth-scaled numbers (level/HP/damage/typed defence)
+  // for the codex — which, unlike the live hover card, has no spawn to read. Keep
+  // the DEEPEST specimen seen so the codex shows the strongest form you've faced.
   if (!e.isGoblin) {
     if (!player.bestiary) player.bestiary = {};
     const bk = bestiaryKey(e);
     player.bestiary[bk] = (player.bestiary[bk] || 0) + 1;
+    if (!player.bestiaryLore) player.bestiaryLore = {};
+    const prev = player.bestiaryLore[bk];
+    if (!prev || (e.level || 0) >= (prev.level || 0)) {
+      player.bestiaryLore[bk] = {
+        level: e.level || 0, hp: e.maxHp || 0, dmg: e.dmg || 0,
+        armor: Math.round(enemyArmorPct(e) * 100), mres: Math.round(enemyMagicResPct(e) * 100),
+      };
+    }
   }
   const label = enemyLabel(e);
   // Diminishing returns for repeatedly farming the same boss floor (1 for everything else).
@@ -30845,6 +31109,11 @@ const __DL_FN_BRIDGE = {
   stashWithdrawGold,
   stashDepositItem,
   stashWithdrawItem,
+  stashTabTo,
+  setCollFilter,
+  openCollCell,
+  closeCollCell,
+  collTileHover,
   respecCost,
   skillRespecCost,
   openTrainer,
@@ -31446,6 +31715,9 @@ const __DL_FN_BRIDGE = {
   renderTitleAchievements,
   showAchievements,
   closeAchievements,
+  showBestiary,
+  closeBestiary,
+  setBestiaryFilter,
   heroCardHtml,
   renderSettingsHero,
   showTitle,

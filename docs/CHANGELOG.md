@@ -8,6 +8,27 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — Bestiary codex & unique/set Collection vault tab
+
+- 📦 New pure module `src/systems/bestiary.js` holds the kill-gated reveal logic
+  shared by the live inspect card and the new Bestiary screen: `isBestiaryFieldKnown`
+  (a regular species reveals one stat field per kill-threshold, fully known at the
+  cap; a boss is all-or-nothing on its first kill), `fieldRevealThreshold`,
+  `speciesDiscovered`, `bestiaryRevealRatio`. The monolith's `statKnown` now
+  delegates to it.
+- 📦 New pure module `src/systems/uniqueCollection.js` turns the static unique/set
+  data into the Collection tab's model: `buildCollectionCatalog` (one entry per
+  authored artifact), `itemCatalogKey` (maps a stored item back to its slot),
+  `groupStoredArtifacts` (best-roll-first stacks over `stash.items`, so the tab is a
+  pure VIEW — no new save data), `collectionFacets`/`filterCatalog`/`acquiredKeySet`/
+  `collectionProgress`. The legacy `renderStash` now renders Storage + Collection
+  tabs; a per-species specimen record (`player.bestiaryLore`) is captured on kill so
+  the codex has depth-scaled numbers to show. `gameState().menu` gains `bestiary` +
+  `collection` summaries; `gameGuide` gains `bestiary` + `collection` topics.
+- 🧪 `test/systems/bestiary.test.js` and `test/systems/uniqueCollection.test.js`
+  cover the reveal thresholds, boss gating, catalog build, item→slot keying,
+  best-first grouping, filtering and progress.
+
 ## Fix — AoE spells blast from the point of impact
 
 - 📦 New pure module `src/systems/aoeTargeting.js` holds the per-shape line-of-sight
