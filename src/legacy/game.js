@@ -2831,12 +2831,12 @@ function costLabelHi(cost) {
   const parts = [];
   if (cost.gold) {
     const short = (cost.gold || 0) > spendableGold();
-    parts.push(`<span class="${short ? 'cost-short' : ''}"><span data-spr=ic_money></span>${cost.gold}</span>`);
+    parts.push(`<span class="${short ? 'cost-short' : ''}"><span data-spr=ic_money></span>${fmtGold(cost.gold)}</span>`);
   }
   for (const k of CRAFT_MAT_KEYS) if (cost[k]) {
     const short = cost[k] > (m[k] || 0);
     const ic = `<span data-spr=mat_${k}></span>`;
-    parts.push(`<span class="${short ? 'cost-short' : ''}">${cost[k]}${ic}</span>`);
+    parts.push(`<span class="${short ? 'cost-short' : ''}">${abbreviateNumber(cost[k])}${ic}</span>`);
   }
   return parts.join('  ');
 }
@@ -2857,7 +2857,7 @@ function matStripHTML() {
     const ic = `<span data-spr=mat_${k}></span>`; // exact DawnLike material tile (no emoji)
     // Gear-style hover card instead of a native title box, escaped for the attr.
     const tip = `<div class='ht-name' style='color:${mat.color}'>${ic} ${mat.name}</div><div class='ht-line'>${mat.desc}</div>`.replace(/"/g, '&quot;');
-    return `<span class="mat-chip" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()" style="color:${mat.color}">${ic} ${m[k] || 0}</span>`;
+    return `<span class="mat-chip" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()" style="color:${mat.color}">${ic} ${abbreviateNumber(m[k] || 0)}</span>`;
   }).join('');
   return `<div class="mat-strip">${chips}</div>`;
 }
@@ -9090,8 +9090,8 @@ function renderEnemyCard(e) {
   const mresPct = Math.round(enemyMagicResPct(e) * 100);
   const fields = [
     ['lvl',   'Level',  e.level || '—'],
-    ['hp',    'Health', e.maxHp],
-    ['dmg',   'Damage', e.dmg],
+    ['hp',    'Health', abbreviateNumber(e.maxHp)],
+    ['dmg',   'Damage', abbreviateNumber(e.dmg)],
     ['armor', 'Armor',  `${armorPct}%`],
     ['mres',  'Magic res', `${mresPct}%`],
     ['style', 'Style',  styleLbl],
@@ -10795,9 +10795,11 @@ function itemStatLine(item, opts) {
   const chip = (code, full) => `<span class="stat-abbr" ${hoverTip(full)}>${code}</span>`;
   const parts = Object.entries(item.stats).map(([k, v]) => {
     const short = STAT_SHORT[k] || k, full = STAT_LABELS[k] || k;
-    if (typeof v === 'string') return `${v} ${chip(short, full)}`; // DMG range
+    if (typeof v === 'string') return `${abbreviateNumbersIn(v)} ${chip(short, full)}`; // DMG range (each end abbreviated)
     const unit = PCT_STATS.has(k) ? '%' : '';
-    return `${v < 0 ? '' : '+'}${v}${unit} ${chip(short, full)}`;
+    // abbreviateNumbersIn only compacts a 4+ digit integer part, so a small % or a
+    // fractional stat is left exact while a big flat bonus (+1500) reads "+1.5k".
+    return `${v < 0 ? '' : '+'}${abbreviateNumbersIn(String(v))}${unit} ${chip(short, full)}`;
   });
   if (item.attrs) for (const [k, v] of Object.entries(item.attrs)) {
     const a = ATTRIBUTES[k] || {};
@@ -10806,7 +10808,7 @@ function itemStatLine(item, opts) {
   const body = parts.join(' · ');
   const powHtml = itemPowerFront(item);   // glowing special power — leads the line
   const setTag = itemSetTag(item);        // set membership — trails the line
-  const lead = (item.slot && !(opts && opts.noPower)) ? `${PWR_GLYPH}${itemPower(item)}` : '';
+  const lead = (item.slot && !(opts && opts.noPower)) ? `${PWR_GLYPH}${abbreviateNumber(itemPower(item))}` : '';
   return [lead, powHtml, body].filter(Boolean).join(' · ') + setTag;
 }
 
@@ -10846,7 +10848,7 @@ function statDiffLine(item) {
     const c = d > 0 ? '#5ee08a' : '#e0556b';
     // The code is a hoverable chip so pointing at it reveals the full stat name.
     const chip = `<span class="stat-abbr" ${hoverTip(lootStatName(k))}>${lootStatCode(k)}</span>`;
-    (d > 0 ? pos : neg).push(`<span style="color:${c}">${d > 0 ? '+' : ''}${d} ${chip}</span>`);
+    (d > 0 ? pos : neg).push(`<span style="color:${c}">${d > 0 ? '+' : ''}${abbreviateNumbersIn(String(d))} ${chip}</span>`);
   }
   if (!pos.length && !neg.length) return '<span style="color:var(--junk)">no stat change</span>';
   const gains = pos.length ? `<span class="diff-gains">${pos.join('  ')}</span>` : '';
@@ -10894,7 +10896,7 @@ function renderShop() {
   // Pay-to-restock button — re-rolls the wares for gold (the stock otherwise
   // stays put when you close and reopen).
   const rcost = refreshShopCost();
-  const refreshBtn = `<button class="shop-refresh-btn" ${spendableGold() >= rcost ? '' : 'disabled'} onclick="refreshShop()">🔄 Restock — <span data-spr=ic_money></span>${rcost}</button>`;
+  const refreshBtn = `<button class="shop-refresh-btn" ${spendableGold() >= rcost ? '' : 'disabled'} onclick="refreshShop()">🔄 Restock — <span data-spr=ic_money></span>${fmtGold(rcost)}</button>`;
   if (merchant.stock.length === 0) {
     el.innerHTML = '<div class="shop-empty">Sold out! Pay to restock for fresh wares.</div>' + refreshBtn;
     return;
@@ -10914,7 +10916,7 @@ function renderShop() {
       const equippedHere = equipped[s.item.slot];
       const delta = equipUpgradeDelta(s.item);
       isUpgrade = delta > 0;
-      sub += ` <span class="item-power">${PWR_GLYPH}${ip}</span>`;
+      sub += ` <span class="item-power">${PWR_GLYPH}${abbreviateNumber(ip)}</span>`;
       if (equippedHere) sub += `  ${statDiffLine(s.item)}`;
     }
     const sicon = itemIcon(s.item);
@@ -11577,7 +11579,7 @@ function renderTransmutePick(indices) {
       <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
       <div class="shop-row-info ${rarityClass(it)}">
         <div class="shop-row-name">${it.name}${craftedMark(it)}</div>
-        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${itemPower(it)}</span></div>
+        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${abbreviateNumber(itemPower(it))}</span></div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
       </div>
     </div>`;
@@ -13152,11 +13154,11 @@ function rerollValueCost(item) { return calcRerollValueCost(enchItemArgs(item));
 // level & rarity, so the UI can show the value band a reroll would land in.
 function statRangeLabel(item, stat) {
   const r = affixStatRange(stat, item.ilvl, tierMult(item.tier));
-  return r.min === r.max ? `${r.min}` : `${r.min}–${r.max}`;
+  return formatDamageRange(r.min, r.max);
 }
 function attrRangeLabel(item) {
   const r = affixAttrRange(item.ilvl, tierMult(item.tier));
-  return r.min === r.max ? `${r.min}` : `${r.min}–${r.max}`;
+  return formatDamageRange(r.min, r.max);
 }
 // Other property TYPES this slot could roll into (the pool minus what's present,
 // minus the property itself) — what a TYPE reroll might swap a property for.
@@ -13435,7 +13437,7 @@ function renderEnchanter() {
       <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
       <div class="shop-row-info ${rarityClass(it)}">
         <div class="shop-row-name">${it.name}${craftedMark(it)}</div>
-        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${itemPower(it)}</span></div>
+        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${abbreviateNumber(itemPower(it))}</span></div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
         ${reqBadge}
       </div>
@@ -13478,7 +13480,7 @@ function renderEnchantItem(item) {
   // says WHY (headline vs the permanent curse).
   const lockRows = locked.filter(k => k in item.stats).map(k => {
     const v = item.stats[k];
-    const valStr = (typeof v === 'string') ? v : (v < 0 ? '' : '+') + v;
+    const valStr = (typeof v === 'string') ? abbreviateNumbersIn(v) : (v < 0 ? '' : '+') + abbreviateNumbersIn(String(v));
     const curse = item.cursed && !head.includes(k);
     const style = curse ? 'opacity:0.85;color:var(--danger)' : 'opacity:0.6';
     const tag = curse ? '(cursed)' : '(headline)';
@@ -13497,12 +13499,12 @@ function renderEnchantItem(item) {
     const esc = s => s.replace(/"/g, '&quot;');
     const valTip = esc(fixed
       ? `<div class="ht-name">Reroll Value</div><div class="ht-line">${labelTag} has a fixed value (${rangeStr}) at this item level — nothing to reroll.</div>`
-      : `<div class="ht-name">Reroll Value</div><div class="ht-line">Keeps ${labelTag}, rolls a new number.</div><div class="ht-sub">Lands ${rangeStr} at ilvl ${item.ilvl} (now ${curVal < 0 ? '' : '+'}${curVal}).</div>`);
+      : `<div class="ht-name">Reroll Value</div><div class="ht-line">Keeps ${labelTag}, rolls a new number.</div><div class="ht-sub">Lands ${rangeStr} at ilvl ${item.ilvl} (now ${curVal < 0 ? '' : '+'}${abbreviateNumbersIn(String(curVal))}).</div>`);
     const typeTip = esc(swaps.length
       ? `<div class="ht-name">Reroll Modifier</div><div class="ht-line">Swaps ${labelTag} for a random other modifier this slot can hold:</div><div class="ht-sub">${swaps.join(', ')}</div>`
       : `<div class="ht-name">Reroll Modifier</div><div class="ht-line">No other modifier is available — every type this slot can roll is already present.</div>`);
     return `<div class="shop-row has-actions"><div class="shop-row-info">
-        <div class="shop-row-name" style="${color}">${curVal < 0 ? '' : '+'}${curVal} <span class="stat-abbr" ${hoverTip(statMeaningTip(kind, key))}>${label}</span></div>
+        <div class="shop-row-name" style="${color}">${curVal < 0 ? '' : '+'}${abbreviateNumbersIn(String(curVal))} <span class="stat-abbr" ${hoverTip(statMeaningTip(kind, key))}>${label}</span></div>
         <div class="shop-row-sub">rolls ${rangeStr} at ilvl ${item.ilvl}</div></div>
       <div class="row-actions">
       <span class="ench-tipwrap" data-tip="${valTip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><button class="act-btn sm" ${canVal?'':'disabled'} onclick="enchantRerollValue(${item.id},'${kind}','${key}')">Value ${costLabelHi(valCost)}</button></span>
@@ -13573,7 +13575,7 @@ function renderFixedEnchantItem(item) {
   const line = (k, valStr, tag, danger) =>
     `<div class="hc-line" style="opacity:0.85${danger ? ';color:var(--danger)' : ''}"><span data-spr=feat_door></span> ${valStr} <span class="stat-abbr" ${hoverTip(statMeaningTip('stat', k))}>${STAT_LABELS[k] || k}</span> <span style="font-size:1.2rem">${tag}</span></div>`;
   const statRows = Object.entries(item.stats).map(([k, v]) => {
-    const valStr = (typeof v === 'string') ? v : (v < 0 ? '' : '+') + v;
+    const valStr = (typeof v === 'string') ? abbreviateNumbersIn(v) : (v < 0 ? '' : '+') + abbreviateNumbersIn(String(v));
     let tag, danger = false;
     if (head.includes(k)) tag = cursed ? '(headline)' : '(native)';
     else if (cursed) { danger = penaltyStats.includes(k); tag = danger ? '(cursed)' : '(locked)'; }
@@ -24110,18 +24112,18 @@ const HERO_EXT_STATS = [
 function heroStatData() {
   const uiFoe = { level: curDepth() };
   const v = (label, val) => ({ label, val: String(val) });
-  const rtg = (label, r, c) => v(label, `${Math.round(r)} <span style="opacity:0.6">→ ${Math.round(c * 100)}%</span>`);
+  const rtg = (label, r, c) => v(label, `${abbreviateNumber(r)} <span style="opacity:0.6">→ ${Math.round(c * 100)}%</span>`);
   const main = [];
-  main.push(v('Attack power', Math.round(totalStat('ATK') + attrDamage())));
+  main.push(v('Attack power', abbreviateNumber(totalStat('ATK') + attrDamage())));
   main.push(v('Attack speed', '+' + Math.round(playerAttackSpeedPct()) + '% <span style="opacity:0.6">→ ' + (1 / playerAttackInterval()).toFixed(2) + '/s</span>'));
   main.push(v('Move speed', '+' + Math.round(((1 + totalStat('MOVESPD') / 100) * agiMoveMult() - 1) * 100) + '%'));
-  if (totalStat('CDR') > 0) main.push(v('Cooldown reduction', `${Math.round(totalStat('CDR'))} <span style="opacity:0.6">→ ${Math.round(cooldownReductionFrac() * 100)}%</span>`));
-  if (totalStat('DBLSTRIKE') > 0) main.push(v('Double strike', `${Math.round(totalStat('DBLSTRIKE'))} <span style="opacity:0.6">→ ${Math.round(rated(totalStat('DBLSTRIKE'), DBLSTRIKE_SCALE) * 100)}%</span>`));
-  main.push(v('Max Stamina', Math.round(player.maxStamina || baseMaxStamina())));
+  if (totalStat('CDR') > 0) main.push(v('Cooldown reduction', `${abbreviateNumber(totalStat('CDR'))} <span style="opacity:0.6">→ ${Math.round(cooldownReductionFrac() * 100)}%</span>`));
+  if (totalStat('DBLSTRIKE') > 0) main.push(v('Double strike', `${abbreviateNumber(totalStat('DBLSTRIKE'))} <span style="opacity:0.6">→ ${Math.round(rated(totalStat('DBLSTRIKE'), DBLSTRIKE_SCALE) * 100)}%</span>`));
+  main.push(v('Max Stamina', abbreviateNumber(player.maxStamina || baseMaxStamina())));
   main.push(v('Stamina regen', '+' + (Math.round(staminaRegenPerSec() * 10) / 10) + '/s'));
-  main.push(v('Defense', Math.round(playerDefense())));
-  main.push(v('Max HP', player.maxHp));
-  main.push(v('Max MP', player.maxMp));
+  main.push(v('Defense', abbreviateNumber(playerDefense())));
+  main.push(v('Max HP', abbreviateNumber(player.maxHp)));
+  main.push(v('Max MP', abbreviateNumber(player.maxMp)));
   main.push(v('HP regen', '+' + (Math.round(hpRegenPerSec() * 100) / 100) + '/s'));
   main.push(v('MP regen', '+' + (Math.round(mpRegenPerSec() * 100) / 100) + '/s'));
   main.push(rtg('Accuracy', playerAccuracyRating(), hitChanceVs(uiFoe)));
@@ -24133,7 +24135,7 @@ function heroStatData() {
   if (playerTenacity() > 0) main.push(v('Tenacity', '−' + Math.round(playerTenacity() * 100) + '% stun/slow'));
   const gear = HERO_EXT_STATS.map(([k, sp, name]) => {
     const t = totalStat(k);
-    return t ? v(name, '+' + t + (PCT_STATS.has(k) ? '%' : '')) : null;
+    return t ? v(name, '+' + abbreviateNumbersIn(String(t)) + (PCT_STATS.has(k) ? '%' : '')) : null;
   }).filter(Boolean);
   return {
     note: `Dodge · hit · crit · block are <b>ratings</b>, shown as the % they yield vs your current floor (${floorLabel(curDepth())}). Deeper floors need more rating for the same %.`,
@@ -24200,9 +24202,9 @@ function renderHero(el) {
     <div class="hero-nameplate">${escapeHtml(player.name || 'Adventurer')}</div>
     <div class="hero-power">
       <div class="hp-label">${PWR_GLYPH} POWER</div>
-      <div class="hp-value">${playerPower()}</div>
+      <div class="hp-value">${abbreviateNumber(playerPower())}</div>
     </div>
-    <div class="hero-sub">Level ${player.level} · ${gearPower} from gear</div>
+    <div class="hero-sub">Level ${player.level} · ${abbreviateNumber(gearPower)} from gear</div>
     ${classBlock}
     <div class="hero-points">${pts > 0 ? `${pts} point${pts>1?'s':''} to spend!` : 'No points to spend — level up for more.'}</div>
     ${rows}
@@ -25299,7 +25301,7 @@ function renderDollSlot(slot, mode) {
   const pwrBadge = !item ? ''
     : inactive
       ? `<span class="item-power pd-pwr" style="background:var(--magenta-800);color:var(--red-350)">⚠</span>`
-      : `<span class="item-power pd-pwr">${PWR_GLYPH}${itemPower(item)}</span>`;
+      : `<span class="item-power pd-pwr">${PWR_GLYPH}${abbreviateNumber(itemPower(item))}</span>`;
   const capHTML = !item
     ? `<div class="pd-cap">${cap}</div>`
     : inactive
@@ -27786,7 +27788,7 @@ function lbHeroBuildHTML(r, lo) {
       <div class="lb-gear-info">
         <div class="lb-gear-slot">${label}${slotLvBadge(slot)}</div>
         <div class="lb-gear-name" style="color:${col}">${curseMark(it)}${escapeHtml(it.name || '')}${it.crafted ? ' ' + (dlIcon('ic_mallet', 12) || '') : ''}</div>
-        <div class="lb-gear-power">${PWR_GLYPH} ${itemPower(it)}${it.ilvl ? ` · <span style="color:var(--blue-250)">ilvl ${it.ilvl}</span>` : ''}</div>
+        <div class="lb-gear-power">${PWR_GLYPH} ${abbreviateNumber(itemPower(it))}${it.ilvl ? ` · <span style="color:var(--blue-250)">ilvl ${it.ilvl}</span>` : ''}</div>
       </div>
     </div>`;
   }).join('');
