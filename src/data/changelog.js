@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "small", v: "Hero snapshot now shows the full Stats panel and every learned skill", by: "Claude", notes: [
+    "A leaderboard hero's snapshot now includes the whole Stats panel from the Hero tab — attack, defense, HP/MP and regen, the ratings and the % they yield, crit, tenacity, conqueror's scars, and every bonus from their gear.",
+    "The skills list now shows ALL learned skills — passives included, each with its rank — grouped into Actives and Passives, with hot-barred picks marked.",
+  ] },
   { date: "2026-07-04", size: "medium", v: "Click a leaderboard hero to inspect their build", by: "Claude", notes: [
     "Every row on the leaderboard is now clickable — tap a hero to open a snapshot of their build: worn gear (hover any piece for its full stats), attributes, and the skills they've learned with ranks.",
     "The board list itself is unchanged and just as quick; a hero's full loadout is fetched only when you open them.",
