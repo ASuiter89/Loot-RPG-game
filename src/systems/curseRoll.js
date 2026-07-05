@@ -1,40 +1,38 @@
 // ── CURSED-ITEM ROLL MATH ──
-// A cursed drop pairs a big BOOST on one property with a big DRAWBACK on another.
-// The size of each swing is computed here — kept pure so it can be unit-tested and,
-// crucially, so the boost and the penalty use the SAME sizing (an equally strong
-// upside and downside).
+// A cursed drop pairs a big BOOST on one property with an equally big DRAWBACK on
+// another. The size of each swing is computed here — kept pure so it can be
+// unit-tested and, crucially, so the boost and the penalty use the SAME sizing (an
+// equally strong upside and downside).
 //
-// A swing is sized RELATIVE TO THE STAT it lands on: a curse moves a stat by a fixed
-// MULTIPLE of that stat's own normal top-end roll. That keeps a curse strong for
-// whatever it hits — a big Attack Speed %, a big HP pool — instead of one flat number
-// that leaves a low-cap percent stat untouched but blows another out to hundreds of
-// percent (the old bug: a flat swing added to Attack Speed, cap 15%, produced ~300%).
+// A swing is sized RELATIVE TO THE STAT it lands on: a curse moves a stat by a
+// MULTIPLE of that stat's own normal top-end roll, so it's strong for whatever it
+// hits — a big Attack Speed %, a big HP pool — and never out of proportion to the
+// stat. The multiple GRADUATES WITH RARITY (see CURSE_TIER_MULT): a curse on a
+// legendary is far stronger than on an uncommon.
 
-// How many times a stat's normal ceiling a cursed swing is worth. Tuned so a curse is
-// clearly the strongest single source of a stat — well past what the Enchanter can
-// roll — while staying bounded and readable.
-export const CURSE_STAT_MULT = 2.5;
+// How many times a stat's normal ceiling a cursed swing is worth, by rarity tier.
+// Ramps 2.2× (uncommon) → 5× (legendary), so rarer cursed gear swings harder in
+// both directions. Uniques are fixed artifacts and never cursed, so they're absent.
+export const CURSE_TIER_MULT = { uncommon: 2.2, rare: 2.9, epic: 3.8, legendary: 5.0 };
 
-// Crit chance and Luck are 0–100% chances in play, so a big swing would break them —
-// they keep a tiny fixed clamp instead of the stat-relative swing.
-export function isTinyCurseStat(stat) { return stat === 'CRIT' || stat === 'LCK'; }
-
-// The clamped swing for crit chance / Luck (unchanged from the original tuning).
-export function tinyCurseSwing(lvl, mult) {
-  return Math.max(1, Math.min(5, Math.round((1 + lvl * 0.1) * mult)));
+// The curse multiplier for a tier (falls back to the gentlest tier for anything not
+// listed — only uncommon..legendary can ever be cursed).
+export function curseTierMult(tier) {
+  return CURSE_TIER_MULT[tier] || CURSE_TIER_MULT.uncommon;
 }
 
-// The swing for every other stat: a multiple of that stat's own normal maximum roll
+// The swing for one stat: its rarity multiplier × that stat's own normal maximum roll
 // (pass `affixStatRange(stat, lvl, mult).max` in). Used for BOTH the boost and the
-// penalty, so a curse's drawback is always as strong as its gift.
-export function statCurseSwing(normalMax, curseMult = CURSE_STAT_MULT) {
+// penalty, so a curse's drawback is always as strong as its gift. No caps: the value
+// is whatever the stat's own (uncapped) ceiling × the rarity multiple works out to.
+export function statCurseSwing(normalMax, curseMult) {
   return Math.max(1, Math.round(Math.max(0, normalMax) * curseMult));
 }
 
-// The most a cursed value of a stat can now reach: a full normal roll PLUS a curse
-// swing on top. The save-repair pass clamps any legacy out-of-band value to this, so
-// a pre-fix ~300% Attack Speed item is pulled back in-band the next time it loads.
-export function cursedStatCeiling(normalMax, curseMult = CURSE_STAT_MULT) {
+// The most a cursed value of a stat can reach: a full normal roll PLUS a curse swing
+// on top. The save-repair pass clamps any legacy out-of-band value to this, so an
+// item from the old uncapped-curse bug is pulled back in-band the next time it loads.
+export function cursedStatCeiling(normalMax, curseMult) {
   const nm = Math.max(0, normalMax);
   return Math.round(nm) + statCurseSwing(nm, curseMult);
 }

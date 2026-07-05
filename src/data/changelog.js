@@ -7,11 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
-  { date: "2026-07-04", size: "small", v: "Cursed items rebalanced — strong, fair, and permanent", by: "Claude", notes: [
-    "Cursed items now swing each stat relative to the stat itself, so a curse is powerful for whatever it lands on without the wild out-of-band rolls a bug used to produce (a ~300% attack-speed item is no longer possible).",
-    "A curse's drawback is now exactly as strong as its boost — great power, matching price.",
-    "Cursed items can no longer be augmented or reforged at the Enchanter: a curse binds power to price, so the trade is permanent.",
-    "Old saves are repaired on load — any existing over-inflated cursed stat is pulled back in-band automatically.",
+  { date: "2026-07-04", size: "large", v: "Gear stats overhaul — no more caps, rarity that matters, stronger curses", by: "Claude", notes: [
+    "Every gear stat now grows with BOTH item level and rarity — no hard caps anywhere. Attack speed, leech, cleave, cooldown and the rest keep climbing on deeper and rarer gear instead of freezing at a ceiling, so a legendary genuinely rolls bigger than a common.",
+    "Stats that have a natural limit — crit rate, cooldown, mana cost, dodge, block, damage reduction, tenacity, double strike — now ease off with diminishing returns as they climb, approaching but never reaching 100% (or 0). More is always better, each point a little less than the last, and nothing is ever fully maxed.",
+    "Tenacity and Double Strike lost their old walls and join that curve — tenacity can no longer hit a flat 80% cap, and double strike no longer wastes anything past a guaranteed hit.",
+    "Cursed items are much stronger and scale with rarity: a curse swings a stat by ~2.2× a normal roll on an uncommon up to ~5× on a legendary, with an equally strong drawback on another stat. Cursed items still can't be reforged at the Enchanter — the boost and its price are permanent.",
+    "Old saves are repaired on load — any stat left over-inflated by the earlier curse bug is pulled back in-band automatically.",
   ] },
   { date: "2026-07-04", size: "small", v: "Menus flow to any screen; foldables play unfolded", by: "Claude", notes: [
     "Town and every other menu now reshape to whatever screen you're on — a narrow phone or a folded cover screen drops to a single scrollable column instead of running the buttons off the right edge, and a wide unfolded screen fans the tiles out into more columns. The difficulty and floor pickers and the craftsman's tiles reflow the same way.",
