@@ -34,6 +34,7 @@ import { SKILL_MILESTONES } from '../data/skillMilestones.js';
 import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/gearPower.js';
 import { GEAR_POWER } from '../data/gearPower.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
+import { KILL_LOOT, killLootParams } from '../systems/bossLoot.js';
 import { resistFraction, penFraction, mitigate, physicalShare } from '../systems/defense.js';
 import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
@@ -6153,6 +6154,12 @@ let player = { x: 5, y: 5,
   // slain. Drives the tap-to-inspect codex card — stats stay ??? until you've
   // killed enough to learn them (fully revealed at 10; bosses are exempt).
   bestiary: {},
+  // First-kill jackpot ledger: absolute boss-floor depth (dungeonLevel) → 1 once this
+  // hero has cleared it. The FIRST clear of each boss floor spills ~3x the loot at
+  // better quality (see onEnemyDefeated / systems/bossLoot.js); re-clears revert to
+  // the normal boss payout. Keyed by FLOOR, not species, so Endless — where bosses
+  // recur — keeps paying a windfall for each new depth. Per-character.
+  bossFirstKills: {},
   // Skill tree — 1 skill point earned per level (separate from attribute points),
   // spent on the class's passive/active/path nodes. `skills` maps node id → rank;
   // `skillCds` holds each active skill's independent cooldown. `skillSlots` is the
@@ -6857,6 +6864,7 @@ window.gameState = function gameState(radius) {
       warded: (e.shieldT || 0) > 0,            // boss ward up → your damage is HALVED
       enraged: !!e.enraged,                    // boss permanently hits +50% (triggers below 40% HP)
       berserk: (e.berserkT || 0) > 0,          // boss temporary damage spike — wait it out like a ward
+      firstKill: !!(e.isBoss && !bossFirstKilled()), // this boss FLOOR's jackpot is unclaimed → its kill drops ~3x loot
       affix: e.affix || null,                  // elite-style modifier on ~22% of ordinary foes (see gameGuide "enemies")
       // Typed defence: % of a blow this foe shrugs off, per school. Physical armor
       // blunts your weapon attacks & martial SKILLS (pierced by Armor Pen); magic
@@ -7129,6 +7137,7 @@ window.gameGuide = function gameGuide(topic) {
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
       `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. Off-class weapons can be carried and sold but not equipped.`,
+      `Bosses spill the MOST loot of any foe, and the FIRST time you clear a given boss FLOOR its guardian pays a jackpot — ~3x the drops at noticeably better quality (a one-time windfall per boss floor). In Endless, where boss species recur, this tracks by floor, so every new or deeper boss floor keeps paying; farming a floor you've already cleared drops at the normal boss rate. gameState().enemies[i].firstKill flags a boss whose floor windfall is still unclaimed. See gameGuide("enemies") for the boss rules.`,
       `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them.`,
       `Crafting materials (Scrap → Glimmer → Core → Chaos, common→rare) come mainly two ways. Foes DROP them, gated by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four). SALVAGING gear sheds them by the item's rarity regardless of difficulty — so a lucky high-rarity find is your main early route to a material your tier can't yet drop. Bounty rewards and Treasure Goblins are bonus exceptions that ignore the gate — they can hand you a rarer material early. Materials are deliberately scarce; see gameGuide("autoloot") for the salvage bands.`,
     ],
@@ -7155,7 +7164,7 @@ window.gameGuide = function gameGuide(topic) {
       `CURSED FLOOR (the "greed" gate): rarely, on descending to a non-boss floor from depth 3+, a WORLD-PAUSING prompt offers to brave the floor for DOUBLED loot & gold at the cost of tougher non-boss foes (more HP and damage). Movement freezes until you choose — gameState().greed.pending is true, mode is 'greed' and blockingOverlay is 'greed-overlay'; call acceptGreed() to take it (gameState().greed.active then reads true, mult 2) or declineGreed() to skip.`,
     ],
     enemies: [
-      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), affix (an elite-style modifier), armor / magicResist (typed defence — see below), and status (e.g. ["stun"], ["slow"]).`,
+      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), firstKill (a boss floor you haven't cleared yet — its kill drops a jackpot; see below), affix (an elite-style modifier), armor / magicResist (typed defence — see below), and status (e.g. ["stun"], ["slow"]).`,
       `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
       `Behaviors (gameState().enemies[i].behavior): chaser (steady, 1 tile/turn), swift (2 tiles/turn), pack (1 tile/turn, but rushes to 2 when you drop below 50% HP — wolves/tigers), erratic (darts unpredictably), brute (slow — acts every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand). A foe with the ice CHILL status is likewise dragged to that half-cadence, but chill is a STATUS (it shows in enemies[i].status), not a behavior.`,
       `Each archetype also has its OWN toughness & punch, not just movement: brutes are tanky and hit hard but swing slowly; swift vermin and erratic flyers are frail and jab for less; casters are squishy but strike from range; lurkers ambush for a heavier blow; packs are individually weak but swarm. So two foes on the same floor can differ a lot — read the behavior, not just the sprite.`,
@@ -7164,7 +7173,7 @@ window.gameGuide = function gameGuide(topic) {
       `Ranged foes fire DODGEABLE bolts, not guaranteed hits — a bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
       `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly.`,
       `Treasure Goblins (isGoblin) flee, never attack, and do NOT block the exit — chase fast for jackpot loot (they vanish ~15 ticks after first hit) or ignore them.`,
-      `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
+      `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. FIRST-KILL JACKPOT: the first time you CLEAR a given boss floor (enemies[i].firstKill true until then), its guardian spills ~3x the loot at noticeably better quality — a one-time windfall per boss floor. Because boss species RECUR across floors in Endless, this tracks by FLOOR: each new or deeper boss floor you conquer pays its own windfall, while farming a floor you've already cleared drops at the normal boss rate (minus farm fatigue on a quick re-kill). So descending to a fresh boss floor is always the richer prize. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
       `Summoned allies (gameState().allies) act before foes and soak hits, but expire after ttl turns and have capped damage — resummon and don't expect them to solo a boss.`,
       `On a fresh floor you get a brief moment of arrival immunity — use it to reposition out of a bad spawn before engaging.`,
     ],
@@ -19837,6 +19846,16 @@ function arcTo(from, dmg) {
 // gold and loot rather than an infinite fountain. Fatigue is per boss floor and
 // RECOVERS over real time (one step per ~5 min), and never drops rewards to zero,
 // so a break resets it and a fresh/deeper boss is always full value.
+// The persistent key for a boss FLOOR's first-kill jackpot. Keyed by absolute depth
+// (dungeonLevel already encodes difficulty tier + floor, and it's the SAME key the
+// farm-fatigue table uses), so re-killing a floor's boss never re-pays, but a NEW or
+// DEEPER boss floor always does. Keying by floor rather than species is what keeps
+// Endless — where boss species RECUR across floors — rewarding each fresh depth:
+// every boss floor you conquer is its own first clear.
+function bossFloorKey(dl) { return String(dl == null ? dungeonLevel : dl); }
+// Has this hero already claimed the current boss floor's first-kill jackpot?
+function bossFirstKilled() { return !!(player.bossFirstKills && player.bossFirstKills[bossFloorKey()]); }
+
 const BOSS_FARM_CURVE = [1, 0.6, 0.4, 0.28, 0.2, 0.15]; // by prior kills; floors at 15%
 const BOSS_FARM_RECOVER_MS = 5 * 60 * 1000;             // one fatigue step recovers per 5 min
 function bossFarmMult(e) {
@@ -19867,7 +19886,17 @@ function onEnemyDefeated(e) {
   const label = enemyLabel(e);
   // Diminishing returns for repeatedly farming the same boss floor (1 for everything else).
   const farm = bossFarmMult(e);
-  if (e.isBoss && farm < 1) log(`⚠️ ${label} has been slain here recently — its spoils are thinner (${Math.round(farm * 100)}%). Rest or move on to reset.`, 'important');
+  // First-kill jackpot: is this the hero's FIRST clear of THIS boss floor? Keyed by
+  // floor (see bossFloorKey), so in Endless — where boss species recur — each new or
+  // deeper boss floor pays its own windfall, while farming a floor you've already
+  // cleared does not. Capture it BEFORE recording, so the loot roll below pays exactly
+  // once. A floor's first boss kill is by definition its first, so farm fatigue is
+  // still full (farm === 1) and XP/gold/loot all pay in full — no "thinner spoils".
+  if (e.isBoss && !player.bossFirstKills) player.bossFirstKills = {};
+  const bfk = e.isBoss ? bossFloorKey() : null;
+  const firstBossKill = !!e.isBoss && !player.bossFirstKills[bfk];
+  if (firstBossKill) player.bossFirstKills[bfk] = 1;
+  if (e.isBoss && farm < 1 && !firstBossKill) log(`⚠️ ${label} has been slain here recently — its spoils are thinner (${Math.round(farm * 100)}%). Rest or move on to reset.`, 'important');
   const xpMult = e.isBoss ? 5 : (e.isElite ? 2 : 1);
   const goldMult = e.isBoss ? 3 : (e.isElite ? 2 : 1);
   const xp = Math.round(12 * dungeonLevel * xpMult * farm * pfx('xp', 1) * (1 + (totalStat('XPGAIN') + skillBonus('xpGain')) / 100 + foodFx('xpPct')));
@@ -19910,26 +19939,30 @@ function onEnemyDefeated(e) {
   // the per-pick NoDrop (the single-player echo of D2's "players X" trick), so
   // juicing loot raises how MUCH drops without ever flooding you with legendaries.
   {
-    const picksBase = e.isBoss ? 5 : (e.isElite ? 3 : 1);
-    const noDropBase = e.isBoss ? 0.20 : (e.isElite ? 0.45 : 0.85);
-    const qbonus = e.isBoss ? 3 : (e.isElite ? 2 : 1);   // per-item quality nudge
+    // Per-tier pick shape, with the first-kill jackpot folded in (systems/bossLoot.js):
+    // a boss's FIRST kill makes ~3x the picks at a higher quality with a slashed
+    // empty-pick chance; a farmed re-kill uses the plain boss numbers.
+    const lootP = killLootParams({ isBoss: e.isBoss, isElite: e.isElite, firstKill: firstBossKill }, KILL_LOOT);
+    const qbonus = lootP.quality;                          // per-item quality nudge
     const dlvl = e.level || dungeonLevel;
-    // Farm fatigue thins a re-killed boss's loot too (fewer picks), but always
-    // leaves at least one — you can keep farming, just for less.
-    const picks = Math.max(1, Math.round((picksBase + (buffs.fortune ? 1 : 0)) * farm));
-    const noDrop = Math.pow(noDropBase, 1 + Math.max(0, lootMult - 1) / 2);
+    // Farm fatigue thins a re-killed boss's loot (fewer picks), but always leaves at
+    // least one. A first kill is a one-time windfall and ignores fatigue entirely.
+    const effFarm = lootP.firstKill ? 1 : farm;
+    const picks = Math.max(1, Math.round((lootP.picks + (buffs.fortune ? 1 : 0)) * effFarm));
+    const noDrop = Math.pow(lootP.noDrop, 1 + Math.max(0, lootMult - 1) / 2);
+    if (lootP.firstKill) { log(`<span data-spr=mat_glimmer></span> First kill! ${label} spills a windfall of loot.`, 'important'); screenFlash('#ffd24b'); addShake(6); }
     let dropped = 0;
     for (let p = 0; p < picks; p++) {
       if (Math.random() >= noDrop) {                       // this pick yields an item
         const it = generateItem(qbonus, dlvl);
-        if (acquireLoot(it) === 'keep') log(`${e.isBoss ? '<span data-spr=chest></span>' : '<span data-spr=chest></span>'} ${logItem(it)}`, 'loot');
+        if (acquireLoot(it) === 'keep') log(`<span data-spr=chest></span> ${logItem(it)}`, 'loot');
         dropped++;
       }
     }
     // Elites and bosses never leave you empty-handed (D2's guaranteed pick).
     if (dropped === 0 && (e.isBoss || e.isElite)) {
       const it = generateItem(qbonus, dlvl);
-      if (acquireLoot(it) === 'keep') log(`${e.isBoss ? '<span data-spr=chest></span>' : '<span data-spr=chest></span>'} ${logItem(it)}`, 'loot');
+      if (acquireLoot(it) === 'keep') log(`<span data-spr=chest></span> ${logItem(it)}`, 'loot');
       dropped++;
     }
     if (dropped > 0) sfx('loot');
@@ -26301,6 +26334,16 @@ function loadGame() {
     if (player.playMs == null) player.playMs = 0;
     // Migrate saves that predate cleared-floor tracking.
     if (!player.clearedFloors || typeof player.clearedFloors !== 'object') player.clearedFloors = {};
+    // First-kill jackpot ledger, keyed by absolute boss-floor depth (see bossFloorKey).
+    // Seed it for OLD saves from the boss floors this hero has ALREADY cleared
+    // (clearedFloors — the SAME key space), so a conquered floor doesn't re-pay its
+    // one-time windfall; only new or deeper boss floors do. Fresh saves already start
+    // with an empty ledger, so this only migrates pre-feature saves.
+    if (!player.bossFirstKills || typeof player.bossFirstKills !== 'object') {
+      player.bossFirstKills = {};
+      const cf = player.clearedFloors || {};
+      for (const k in cf) { if (cf[k] && Number(k) % 5 === 0) player.bossFirstKills[k] = 1; }
+    }
     inTown = !!data.inTown;
     dungeonReturn = data.dungeonReturn || data.dungeonLevel || 1;
     // Restore an unclaimed death-grave, tolerating saves that predate it.
@@ -30151,6 +30194,8 @@ const __DL_FN_BRIDGE = {
   dealDamage,
   arcTo,
   bossFarmMult,
+  bossFloorKey,
+  bossFirstKilled,
   onEnemyDefeated,
   attackEnemy,
   tryRangedAttack,

@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-04", size: "medium", v: "Boss first-kill jackpot — the first time you clear a boss floor, it spills a windfall", by: "Claude", notes: [
+    "The FIRST time you clear a given boss floor, its guardian now drops a jackpot — about 3x the loot at noticeably better quality. A one-time windfall for each boss floor.",
+    "Endless keeps paying: because bosses recur there, the windfall tracks by FLOOR, so every new or deeper boss floor you conquer pays its own. Farming a floor you've already cleared still drops well at the normal boss rate (and re-killing it soon after still thins the spoils), so pushing deeper is always the richer prize.",
+    "Existing heroes keep credit for boss floors they've already cleared — those don't pay the windfall again; only new or deeper ones do.",
+  ] },
   { date: "2026-07-04", size: "medium", v: "Click a leaderboard hero to inspect their build", by: "Claude", notes: [
     "Every row on the leaderboard is now clickable — tap a hero to open a snapshot of their build: worn gear (hover any piece for its full stats), attributes, and the skills they've learned with ranks.",
     "The board list itself is unchanged and just as quick; a hero's full loadout is fetched only when you open them.",
