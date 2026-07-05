@@ -83,7 +83,7 @@ import { UNIQUES, uniqueForBase, uniquesForSlot } from '../data/uniques.js';
 import { ITEM_SETS } from '../data/itemSets.js';
 import { setPieceCount, setComplete as setIsComplete, setStatContribution,
   rollSetPiece } from '../systems/itemSets.js';
-import { isBestiaryFieldKnown, speciesDiscovered, bestiaryRevealRatio } from '../systems/bestiary.js';
+import { isBestiaryFieldKnown, speciesDiscovered, bestiaryRevealRatio, emptyDex, sanitizeDex, foldLegacyBestiary, recordKill } from '../systems/bestiary.js';
 import { buildCollectionCatalog, collectionFacets, groupStoredArtifacts, acquiredKeySet,
   filterCatalog, collectionProgress, itemCatalogKey } from '../systems/uniqueCollection.js';
 
@@ -6117,15 +6117,9 @@ let player = { x: 5, y: 5,
   // Comeback relief anchor: the floor you revived toward after a death. While you
   // climb the few floors above it, foes go easier (see spawnEnemies); null = none.
   reliefFloor: null,
-  // Bestiary: how many of each enemy type (keyed by its sprite glyph) you've
-  // slain. Drives the tap-to-inspect codex card and the Bestiary screen — stats
-  // stay ??? until you've killed enough to learn them (fully revealed at 10;
-  // bosses fill out on their first kill).
-  bestiary: {},
-  // Per-species specimen record for the Bestiary screen: the depth-scaled numbers
-  // (level/HP/damage/typed defence) of the DEEPEST foe of each type you've slain,
-  // since the codex has no live spawn to read them from. Keyed like `bestiary`.
-  bestiaryLore: {},
+  // Bestiary kill tally + specimen lore are NOT stored here — they moved to the
+  // ACCOUNT-WIDE ledger (bestiaryDex, keyed on its own localStorage key) so slaying
+  // a species on one hero fills in its codex for every hero. See loadBestiaryDex().
   // First-kill jackpot ledger: absolute boss-floor depth (dungeonLevel) → 1 once this
   // hero has cleared it. The FIRST clear of each boss floor spills ~3x the loot at
   // better quality (see onEnemyDefeated / systems/bossLoot.js); re-clears revert to
@@ -7245,6 +7239,7 @@ window.gameGuide = function gameGuide(topic) {
     bestiary: [
       `Every foe is recorded in a BESTIARY — a codex opened from the pause menu (Bestiary). Hovering a foe in the dungeon already pops an inspect card; the Bestiary collects one card per species so you can browse the whole roster, filter it (creatures / bosses / discovered), and track completion. gameState().menu.bestiary reports species discovered out of the total.`,
       `A species' stats stay hidden as "???" until you've slain enough of it to learn them — each stat field reveals at its own kill threshold, fully known at ${BESTIARY_FULL} kills. A BOSS is all-or-nothing: its card is a sealed silhouette until your FIRST kill, then opens completely. The depth-scaled numbers (level/HP/damage/typed defence) are recorded from the DEEPEST specimen of each species you've slain.`,
+      `The bestiary is ACCOUNT-WIDE: kills accumulate across every hero and save slot, so slaying a species on one hero reveals its card for all of them, and it survives death, a Reset Run, or switching slots — like the shared town stash. Kill counts are cumulative lifetime totals across your heroes.`,
     ],
     collection: [
       `The Vault has a COLLECTION tab: one slot for every unique and set piece in the game. A slot is a darkened silhouette (hover to preview the fixed properties it can roll — labels only, since the values roll with drop depth) until you store a matching piece there; then it lights up with your best-rolled copy. Storing a unique/set piece always files it here instead of ordinary Storage; a slot can hold MULTIPLE copies (it shows the strongest with a ×N badge, and clicking lists them all to withdraw).`,
@@ -9091,7 +9086,56 @@ const ENEMY_STYLE_LABEL = {
   brute: 'Brute', caster: 'Caster', pack: 'Pack hunter',
 };
 function bestiaryKey(e) { return (e.type || e.name || '?').replace(/️/g, ''); }
-function bestiaryKills(e) { return (player.bestiary && player.bestiary[bestiaryKey(e)]) || 0; }
+// ── BESTIARY LEDGER (account-wide) ──────────────────────────────────────────
+// The kill tally + specimen lore that drive the codex are ACCOUNT-WIDE, not per
+// hero: slaying a species on ANY hero reveals its card for EVERY hero — exactly
+// like the shared town stash and account-wide achievements. The ledger lives in its
+// own localStorage key OUTSIDE the save slots, so it survives a death, a Reset Run,
+// or a slot switch, and every hero reads/writes the one shared copy. `kills` is a
+// cumulative lifetime count per species key; `lore` keeps the DEEPEST specimen seen.
+// The pure shape + merge algebra lives in systems/bestiary.js.
+const BESTIARY_KEY = 'dungeonLoot_bestiary_v1';
+let bestiaryDex = emptyDex();
+function bestiaryKills(e) { return bestiaryDex.kills[bestiaryKey(e)] || 0; }
+function writeBestiaryDex() { try { localStorage.setItem(BESTIARY_KEY, JSON.stringify(bestiaryDex)); } catch (e) {} }
+// Persist after a change: stamp the write time, then save locally.
+function saveBestiaryDex() { bestiaryDex.ts = Date.now(); writeBestiaryDex(); }
+// Coalesce bursts of kills (a floor-clearing cleave, a summoner's fodder) into one
+// deferred write, like saveGameSoon/saveStashSoon do.
+let _saveDexSoonTimer = null;
+function saveBestiaryDexSoon(delay = 500) {
+  if (_saveDexSoonTimer) return;
+  _saveDexSoonTimer = setTimeout(() => { _saveDexSoonTimer = null; saveBestiaryDex(); }, delay);
+}
+// Load the account-wide ledger, then fold in any legacy PER-HERO bestiary left on
+// existing saves (from before it went account-wide).
+function loadBestiaryDex() {
+  try { bestiaryDex = sanitizeDex(JSON.parse(localStorage.getItem(BESTIARY_KEY))); }
+  catch (e) { bestiaryDex = emptyDex(); }
+  migrateLegacyBestiaries();
+}
+// One-time fold of the legacy per-hero bestiary (player.bestiary / bestiaryLore, from
+// before the ledger was account-wide) into the shared ledger: SUM the kills into the
+// cumulative total, keep the deeper lore, then STRIP the two fields from each save so
+// the same kills can never be folded twice. Idempotent across boots (a stripped save
+// has nothing left to fold) and self-healing for a save imported or cloud-restored
+// later. Runs before loadGame(), so the active hero's own save is already stripped
+// when it loads and its kills aren't double-counted.
+function migrateLegacyBestiaries() {
+  const has = (o) => o && typeof o === 'object' && Object.keys(o).length > 0;
+  let touched = false;
+  for (const i of allLocalSlotIndices()) {
+    let d;
+    try { d = JSON.parse(localStorage.getItem(slotKey(i))); } catch (e) { continue; }
+    const p = d && d.player;
+    if (!p || (!has(p.bestiary) && !has(p.bestiaryLore))) continue;
+    foldLegacyBestiary(bestiaryDex, p.bestiary, p.bestiaryLore);
+    delete p.bestiary; delete p.bestiaryLore;
+    try { localStorage.setItem(slotKey(i), JSON.stringify(d)); } catch (e) {}
+    touched = true;
+  }
+  if (touched) saveBestiaryDex();
+}
 // Tiny stable string hash, so each species reveals its stats in a fixed (but
 // per-species "random") order rather than flickering each time you peek.
 function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
@@ -9227,7 +9271,7 @@ document.addEventListener('pointerdown', ev => {
 // species (fully at BESTIARY_FULL); a boss stays a sealed silhouette until your
 // first kill, then opens fully. Since the codex has no live spawn to read, the
 // depth-scaled numbers come from the specimen record stashed on kill
-// (player.bestiaryLore — the deepest of each type you've faced).
+// (bestiaryDex.lore — the deepest of each type you've faced, account-wide).
 let _bestiaryFilter = 'all'; // all | creatures | bosses | discovered
 const BESTIARY_FILTERS = [['all', 'All'], ['creatures', 'Creatures'], ['bosses', 'Bosses'], ['discovered', 'Discovered']];
 // The full roster: every regular species (MONSTERS) then every boss (BOSSES).
@@ -9242,17 +9286,47 @@ function bestiaryRoster() {
   }
   return out;
 }
-// Real pixel art for a codex entry: the monster/boss atlas tile, falling back to
-// the DawnLike sprite, then a tinted placeholder square (as the canvas does for
-// art-less species) — never an emoji.
+// A codex icon paints from a SMALL per-species raster baked ONCE and cached, then
+// stamped as a tiny <img>. The old path emitted a `.mon-ic`/`.dl-ic` span per card,
+// each windowing into the full atlas via `background-size` — so opening the codex
+// asked the browser to DOWNSCALE the whole 1024×704 monster sheet ~176 times on one
+// frame (~25ms/card), freezing the game ~2s the first time it opened. A pre-baked
+// 64px tile decodes once (cached by its data-URL) and costs nothing to repaint, so
+// the grid renders in a few ms. (2026-07 codex-perf fix.)
+const CODEX_TILE_PX = 64; // bake at the native monster-tile size, crisp at any UI scale
+const _codexTileCache = new Map(); // `${tag}|${idx}` -> data-URL (or '' if the bake failed)
+function bakedAtlasTile(tag, sheet, ts, cols, idx) {
+  const ck = tag + '|' + idx;
+  const hit = _codexTileCache.get(ck);
+  if (hit !== undefined) return hit;
+  let url = '';
+  try {
+    const cv = document.createElement('canvas'); cv.width = CODEX_TILE_PX; cv.height = CODEX_TILE_PX;
+    const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+    g.drawImage(sheet, (idx % cols) * ts, ((idx / cols) | 0) * ts, ts, ts, 0, 0, CODEX_TILE_PX, CODEX_TILE_PX);
+    url = cv.toDataURL();
+  } catch (e) { url = ''; }
+  _codexTileCache.set(ck, url);
+  return url;
+}
+// Real pixel art for a codex entry: the baked monster/boss atlas tile, falling back
+// to the DawnLike sprite, then a tinted placeholder square (as the canvas does for
+// art-less species) — never an emoji. Only bake once the source sheet has loaded, so
+// an early open doesn't cache an empty tile.
 function bestiaryIcon(stub, px) {
-  const icon = (!stub.isBoss && monsterIcon(stub.type, px)) || (stub.isBoss && bossIcon(stub.type, px)) || (stub.sprite && dlIcon(stub.sprite, px));
+  let url = '';
+  if (!stub.isBoss && monsterReady && MONSTER_SPRITE_IDX[stub.type] !== undefined)
+    url = bakedAtlasTile('mon', monsterSheet, MON_TS, MON_COLS, MONSTER_SPRITE_IDX[stub.type]);
+  else if (stub.isBoss && bossReady && BOSS_SPRITE_IDX[stub.type] !== undefined)
+    url = bakedAtlasTile('boss', bossSheet, BOSS_TS, BOSS_COLS, BOSS_SPRITE_IDX[stub.type]);
+  if (url) return `<img class="bst-sprite" width="${px}" height="${px}" src="${url}" alt="">`;
+  const icon = (stub.sprite && dlIcon(stub.sprite, px));
   return icon || `<span class="bst-blank" style="background:${stub.color || ICON_EMPTY_COLOR}"></span>`;
 }
 function bestiaryCardHTML(stub) {
   const kills = bestiaryKills(stub);
   const disc = speciesDiscovered(kills);
-  const L = (player.bestiaryLore && player.bestiaryLore[bestiaryKey(stub)]) || {};
+  const L = bestiaryDex.lore[bestiaryKey(stub)] || {};
   const styleLbl = ENEMY_STYLE_LABEL[stub.behavior] || 'Hunter';
   const rangedLbl = (BEHAVIORS[stub.behavior] && BEHAVIORS[stub.behavior].ranged) ? 'Ranged' : 'Melee';
   const fields = [
@@ -11818,7 +11892,7 @@ function transmute(tier, ids) {
 // ══════════════════════════════════════════
 // player.bounty = { kind, need, snap, gold, mat, ilvl, desc }. Progress is read
 // live from the hero's running totals, so no per-tick tracking is needed.
-function bountyKills() { return Object.values(player.bestiary || {}).reduce((a, b) => a + (+b || 0), 0); }
+function bountyKills() { return Object.values(bestiaryDex.kills).reduce((a, b) => a + (+b || 0), 0); }
 function bountyProgress(b) {
   if (!b) return 0;
   if (b.kind === 'slay')  return Math.max(0, bountyKills() - b.snap);
@@ -20490,17 +20564,11 @@ function onEnemyDefeated(e) {
   // for the codex — which, unlike the live hover card, has no spawn to read. Keep
   // the DEEPEST specimen seen so the codex shows the strongest form you've faced.
   if (!e.isGoblin) {
-    if (!player.bestiary) player.bestiary = {};
-    const bk = bestiaryKey(e);
-    player.bestiary[bk] = (player.bestiary[bk] || 0) + 1;
-    if (!player.bestiaryLore) player.bestiaryLore = {};
-    const prev = player.bestiaryLore[bk];
-    if (!prev || (e.level || 0) >= (prev.level || 0)) {
-      player.bestiaryLore[bk] = {
-        level: e.level || 0, hp: e.maxHp || 0, dmg: e.dmg || 0,
-        armor: Math.round(enemyArmorPct(e) * 100), mres: Math.round(enemyMagicResPct(e) * 100),
-      };
-    }
+    recordKill(bestiaryDex, bestiaryKey(e), {
+      level: e.level || 0, hp: e.maxHp || 0, dmg: e.dmg || 0,
+      armor: Math.round(enemyArmorPct(e) * 100), mres: Math.round(enemyMagicResPct(e) * 100),
+    });
+    saveBestiaryDexSoon();
   }
   const label = enemyLabel(e);
   // Diminishing returns for repeatedly farming the same boss floor (1 for everything else).
@@ -29379,8 +29447,11 @@ const AI_UP = '<polyline points="6 14 12 8 18 14"/><polyline points="6 20 12 14 
 const AI_CROWN = '<path d="M4 19h16M5 8l3 4 4-7 4 7 3-4-1 11H6z"/>';
 const AI_CHEST = '<rect x="3" y="8" width="18" height="12" rx="1"/><path d="M3 8l3-4h12l3 4"/><line x1="12" y1="8" x2="12" y2="20"/>';
 const _aSum = o => Object.values(o || {}).reduce((a, b) => a + (+b || 0), 0);
-const _aKills = p => _aSum(p.bestiary);
-const _aSpecies = p => Object.keys(p.bestiary || {}).length;
+// Slay feats read the ACCOUNT-WIDE bestiary ledger (kills across every hero), not the
+// tested hero — so a per-slot backfill pass grants against the unified total, and the
+// feat can't regress when you switch to a fresher hero.
+const _aKills = () => _aSum(bestiaryDex.kills);
+const _aSpecies = () => Object.keys(bestiaryDex.kills).length;
 const _aSkills = p => Object.keys(p.skills || {}).length;
 const _aMaxSkill = p => { const v = Object.values(p.skills || {}); return v.length ? Math.max(...v) : 0; };
 const _aRecipes = p => (p.discoveredRecipes || []).length;
@@ -29746,6 +29817,11 @@ function titleSound() { toggleSound(); refreshTitleToggles(); }
 // Load the hardcore death ledger + earned feats BEFORE the save, so loadGame() can
 // recognise (and refuse to load) a hero who has already permanently died.
 loadHcMeta();
+// Load the account-wide bestiary ledger (kills + specimen lore), folding in any legacy
+// per-hero bestiary left on existing saves. Runs BEFORE the achievement backfill (whose
+// slay feats read the ledger) and before loadGame() (so the active hero's save is already
+// stripped of its legacy fields and its kills aren't double-counted).
+loadBestiaryDex();
 // Seed the account-wide (Kitten) feat set from every existing save on this device, so
 // achievements earned before this feature — or on a slot not yet replayed — are
 // unified into one account tally instead of appearing to differ between slots.

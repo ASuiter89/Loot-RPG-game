@@ -2324,6 +2324,7 @@
   #bestiary-body .bst-card.locked { opacity: 0.85; }
   #bestiary-body .bst-head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
   #bestiary-body .bst-ic { width: 34px; height: 34px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+  #bestiary-body .bst-sprite { display: block; image-rendering: pixelated; object-fit: contain; }
   #bestiary-body .bst-blank { display: inline-block; width: 26px; height: 26px; border-radius: var(--radius-xs); border: 1px solid var(--tint-black); }
   #bestiary-body .bst-card.locked .bst-ic { filter: brightness(0) contrast(0.2); opacity: 0.5; }
   #bestiary-body .bst-name { font-weight: bold; font-size: var(--fs-body); color: var(--gold-350); line-height: 1.15; }

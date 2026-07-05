@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   fieldRevealThreshold, isBestiaryFieldKnown, speciesDiscovered, bestiaryRevealRatio,
+  emptyDex, sanitizeDex, deeperSpecimen, foldLegacyBestiary, recordKill,
 } from '../../src/systems/bestiary.js';
 
 // Mirror of the legacy FNV-ish hash so the tests exercise realistic thresholds.
@@ -55,5 +56,77 @@ describe('bestiary discovery + ratio', () => {
     expect(bestiaryRevealRatio(0, true, FULL)).toBe(0);
     expect(bestiaryRevealRatio(1, true, FULL)).toBe(1);
     expect(bestiaryRevealRatio(9, true, FULL)).toBe(1);
+  });
+});
+
+describe('account-wide bestiary ledger', () => {
+  it('emptyDex is a fresh, isolated ledger', () => {
+    const a = emptyDex(), b = emptyDex();
+    expect(a).toEqual({ kills: {}, lore: {}, ts: 0 });
+    a.kills.rat = 1;
+    expect(b.kills.rat).toBeUndefined(); // not a shared reference
+  });
+
+  it('sanitizeDex coerces / drops garbage', () => {
+    expect(sanitizeDex(null)).toEqual({ kills: {}, lore: {}, ts: 0 });
+    expect(sanitizeDex('nope')).toEqual({ kills: {}, lore: {}, ts: 0 });
+    const d = sanitizeDex({
+      kills: { rat: 5, bad: -2, nan: 'x', frac: 3.9 },
+      lore: { rat: { level: 12, hp: 100, dmg: 8, armor: 10, mres: 5 }, junk: 7, empty: null },
+      ts: 42,
+    });
+    expect(d.kills).toEqual({ rat: 5, frac: 3 }); // floors, drops <=0 and NaN
+    expect(d.lore.rat).toEqual({ level: 12, hp: 100, dmg: 8, armor: 10, mres: 5 });
+    expect(d.lore.junk).toBeUndefined();
+    expect(d.lore.empty).toBeUndefined();
+    expect(d.ts).toBe(42);
+  });
+
+  it('sanitizeDex repairs a malformed ts and non-finite lore numbers', () => {
+    const d = sanitizeDex({ kills: {}, lore: { rat: { level: Infinity, hp: NaN } }, ts: -1 });
+    expect(d.ts).toBe(0);
+    expect(d.lore.rat).toEqual({ level: 0, hp: 0, dmg: 0, armor: 0, mres: 0 });
+  });
+
+  it('deeperSpecimen keeps the higher level (ties keep incumbent)', () => {
+    const shallow = { level: 3, hp: 30, dmg: 4, armor: 1, mres: 0 };
+    const deep = { level: 9, hp: 90, dmg: 12, armor: 5, mres: 3 };
+    expect(deeperSpecimen(null, shallow)).toEqual(shallow);
+    expect(deeperSpecimen(shallow, null)).toEqual(shallow);
+    expect(deeperSpecimen(shallow, deep)).toEqual(deep);
+    expect(deeperSpecimen(deep, shallow)).toEqual(deep); // shallower ignored
+    expect(deeperSpecimen(shallow, { level: 3, hp: 999 }).hp).toBe(999); // tie -> take newest
+    expect(deeperSpecimen(null, null)).toBe(null);
+  });
+
+  it('foldLegacyBestiary SUMs kills and keeps the deeper lore', () => {
+    const dex = emptyDex();
+    foldLegacyBestiary(dex, { rat: 4, bat: 2 }, { rat: { level: 5, hp: 50 } });
+    foldLegacyBestiary(dex, { rat: 3, wolf: 1 }, { rat: { level: 9, hp: 90 }, wolf: { level: 7 } });
+    expect(dex.kills).toEqual({ rat: 7, bat: 2, wolf: 1 }); // 4+3 cumulative
+    expect(dex.lore.rat.level).toBe(9); // deeper of the two
+    expect(dex.lore.wolf.level).toBe(7);
+  });
+
+  it('foldLegacyBestiary tolerates missing maps', () => {
+    const dex = emptyDex();
+    expect(() => foldLegacyBestiary(dex, undefined, undefined)).not.toThrow();
+    expect(dex).toEqual(emptyDex());
+  });
+
+  it('recordKill increments the count and tracks the deepest specimen', () => {
+    const dex = emptyDex();
+    recordKill(dex, 'rat', { level: 3, hp: 30, dmg: 4, armor: 1, mres: 0 });
+    recordKill(dex, 'rat', { level: 8, hp: 80, dmg: 9, armor: 4, mres: 2 });
+    recordKill(dex, 'rat', { level: 2, hp: 20, dmg: 3, armor: 0, mres: 0 }); // shallower
+    expect(dex.kills.rat).toBe(3);
+    expect(dex.lore.rat.level).toBe(8); // deepest of the three
+  });
+
+  it('recordKill works without a specimen (boss/legacy foe)', () => {
+    const dex = emptyDex();
+    recordKill(dex, 'ratking', null);
+    expect(dex.kills.ratking).toBe(1);
+    expect(dex.lore.ratking).toBeUndefined();
   });
 });
