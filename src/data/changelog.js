@@ -7,6 +7,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Hero card shows your gold again", by: "Andrew Suiter", notes: ["Title-screen and pause-menu hero card now show your real gold — it read 0 for any hero carrying 1,000 or more."] },
   { date: "2026-07-05", size: "large", v: "All-new hand-generated icon art", by: "Andrew Suiter", notes: [
     "Every shared game icon — loot, gear slots, weapons, world features, materials, HUD and status icons, potions, cooking ingredients, pets and quest markers — is redrawn as fresh, higher-detail art in one consistent style.",
     "Icons now size to their actual artwork instead of a fixed tile, so each reads at its true shape and fills its space in menus, the HUD and on the map.",
