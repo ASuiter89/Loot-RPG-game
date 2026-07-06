@@ -29,6 +29,7 @@ import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach
 import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
+import { restockCost } from '../systems/restockCost.js';
 import { isCritical } from '../systems/crit.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
@@ -6405,6 +6406,11 @@ let shopSortOpen = false, shopFilterOpen = false;
 // reopening the shop shows the SAME stock); rebuilt on a new town visit or paid
 // restock. null until first opened. See openTownService / refreshShop.
 let townShopStock = null;
+// Paid restocks bought this town visit — each one makes the next restock dearer
+// (see refreshShopCost). Persists across close/reopen like townShopStock, so you
+// can't dodge the surcharge by leaving and re-entering the shop; resets on a new
+// town visit alongside townShopStock.
+let townRestocks = 0;
 let mystic = null;    // { x, y } — the Wandering Mystic, when present this floor
 let pact = null;      // active pact: { id, icon, name, desc, floors, fx } or null
 let hasFountain = false;
@@ -7268,7 +7274,7 @@ window.gameGuide = function gameGuide(topic) {
       `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Death does not re-lock any floors: instead Warp to Dungeon only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Dungeon Gate flags the tier holding that grave (with the exact floor beside the tier's grave badge; gameState().graveSite.where), so you can dive straight back to it.`,
       `Town's top row has TWO gates. Warp to Dungeon opens the tier + floor picker, but you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. Return to Last Floor drops you straight back onto the EXACT floor you left through the Town Portal — same enemies, loot and layout, right where you stood — and lights up ONLY when you left by portal or conquest, never after a death (then it's darkened, so take Warp to Dungeon; gameState().menu.returnToLastFloor.available reports this, .where the floor it returns to). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon.`,
-      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
+      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
@@ -11077,10 +11083,12 @@ function rollShopStock(ilvl, lo, hi) {
   }
   return stock;
 }
-// Gold to lay out a whole new set of wares, scaling with the merchant's tier.
+// Gold to lay out a whole new set of wares: a base scaling with the merchant's
+// tier, surcharged for every restock already bought this visit so re-rolling the
+// table is a deliberate gold sink, not a spammable slot machine (see restockCost).
 function refreshShopCost() {
   const ilvl = (merchant && merchant.ilvl) || (player.maxFloor || 1) + 1;
-  return Math.round(40 + ilvl * 14);
+  return restockCost(40 + ilvl * 14, (merchant && merchant.restocks) || 0);
 }
 // Pay to re-roll the open merchant's stock (persists for the town shop).
 function refreshShop() {
@@ -11089,7 +11097,8 @@ function refreshShop() {
   if (spendableGold() < cost) { log(`<span data-spr=ic_money></span> Not enough gold to restock — need <span data-spr=ic_money></span>${cost}.`); sfx('denied'); return; }
   spendGold(cost);
   merchant.stock = rollShopStock(merchant.ilvl || (player.maxFloor || 1) + 1, merchant.stockLo || 3, merchant.stockHi || 4);
-  if (merchant.town) townShopStock = merchant.stock; // keep the persisted town wares in sync
+  merchant.restocks = ((merchant.restocks) || 0) + 1; // next restock this visit costs more
+  if (merchant.town) { townShopStock = merchant.stock; townRestocks = merchant.restocks; } // keep persisted town wares + surcharge in sync
   sfx('buy');
   log(`🔄 The merchant clears the table and lays out fresh wares for <span data-spr=ic_money></span>${cost}.`, 'important');
   updateBars(); renderShop(); saveGame();
@@ -11784,7 +11793,7 @@ function buildTown() {
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null; nextDiffPortal = null;
   quest = null; teleporters = {}; shrineData = {};
   floorThemeOverride = null; floorIslandTheme = null; furnitureMap = {}; decorMap = {}; // town is never an indoor/island floor
-  townShopStock = null;        // fresh merchant wares each town visit
+  townShopStock = null; townRestocks = 0; // fresh merchant wares + reset restock surcharge each town visit
   traps = []; projectiles = []; bossHazards = []; bossTelegraphs = []; clearAttackFx(); // real-time hazards / fx never linger into town
   hasFountain = false; groundKey = null; hasKey = false;
   floorMod = FLOOR_MODS[0]; floorTint = 'rgba(120,90,40,0.10)';
@@ -12312,7 +12321,7 @@ function openTownService(kind) {
     // The town wares persist for the whole visit — generated once, then reused
     // when you close and reopen the shop (a paid Restock re-rolls them).
     if (!townShopStock) townShopStock = rollShopStock(ilvl, 4, 6);
-    merchant = { x: 0, y: 0, stock: townShopStock, sale: 1, town: true, ilvl, stockLo: 4, stockHi: 6 };
+    merchant = { x: 0, y: 0, stock: townShopStock, sale: 1, town: true, ilvl, stockLo: 4, stockHi: 6, restocks: townRestocks };
     openShop();
     return;
   }
