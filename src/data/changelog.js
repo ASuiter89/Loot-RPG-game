@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Island floors ringed by the sea", by: "Claude", notes: [
+    "Some outdoor floors now come up as an island — the whole map edge is open water instead of a rock wall, so you fight on a sandy shore surrounded by sea.",
+    "The water is the boundary: you can see and shoot across it but can't walk off. Everything reachable stays reachable — the sea only replaces the impassable frame.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Cave passages open up", by: "Jeff Louie", notes: [
     "Most cave corridors between rooms now carve two tiles wide — cramped single-tile squeezes drop to roughly 1 hall in 3, kept as occasional chokepoints instead of the default.",
   ] },
