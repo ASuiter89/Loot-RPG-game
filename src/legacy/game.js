@@ -80,6 +80,50 @@ import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
 import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
 import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKILL_ICON_ATLAS } from '../assets/skillIconsAtlas.js';
 import { BOSS_ATLAS_URL } from '../assets/bossAtlas.js';
+// ── ENDGAME SYSTEMS (pure cores; wired into the shell below) ──
+import { COVENANTS } from '../data/covenants.js';
+import { DREAD_REWARDS, MARK_MILESTONES } from '../data/dreadRewards.js';
+import { activeDread, covenantById, sortedCovenants, covenantMultipliers,
+  dreadRewardMult, isUnlocked as covIsUnlocked, sanitizeActiveSet,
+  projectedSummary as covProjectedSummary } from '../systems/covenants.js';
+import { emptyGrid as emptyDreadGrid, recordBossClear as recordDreadClear,
+  highestRung as dreadHighestRung, classProgress as dreadClassProgress,
+  marksEarned as dreadMarksEarned, sanitizeGrid as sanitizeDreadGrid } from '../systems/dreadChecklist.js';
+import { malaiseMult, malaiseActive, combinedMalaiseRate } from '../systems/malaise.js';
+import { WEAVE } from '../data/ascendantWeave.js';
+import { GLYPHS } from '../data/glyphs.js';
+import { boardPointsSpent as weaveSpent, boardPointsAvailable as weaveAvail,
+  nodesAllocated as weaveNodes, pointsInConstellation as weaveInArm,
+  canAllocate as weaveCanAllocate, allocate as weaveDoAllocate,
+  refundNode as weaveRefundNode, refundAll as weaveRefundAll,
+  keystonesActive as weaveKeystones, glyphRadiusNodes as weaveGlyphRadius,
+  weaveStatContribution, weaveDepthRank, sanitizeBoard as sanitizeWeaveBoard } from '../systems/ascendantWeave.js';
+import { rollGlyph, glyphPower } from '../systems/glyphRoll.js';
+import { MIRRORFORGE } from '../data/mirrorforge.js';
+import { fpBudget, fpSpent as mfSpent, fpRemaining, fpCost, matCost as mfMatCost,
+  canApply as mfCanApply, applyAttune, applyExalt, applyDivine, applyCorrupt,
+  canMirror as mfCanMirror, applyMirror, shatterToAttunement,
+  radiantChance, rollRadiant, aetherUnlocked } from '../systems/mirrorforge.js';
+import { PANTHEON, PANTHEON_SHARDS } from '../data/pinnacle.js';
+import { PINNACLE_UNIQUES, pinnacleUniqueById, allPinnacleUniqueIds } from '../data/pinnacleUniques.js';
+import { bossById as pinnacleBossById, baseBosses, uberFor, summonCost as pinnacleSummonCost,
+  canSummon as pinnacleCanSummon, previewLootPool, rollPinnacleDrop, nextBossPity,
+  firstClearReward, uberUnlocked } from '../systems/pinnacle.js';
+import { initFight as pinnacleInitFight, currentPhase as pinnacleCurrentPhase,
+  pendingTelegraphs as pinnaclePendingTelegraphs, stepFight as pinnacleStepFight } from '../systems/pinnacleFight.js';
+import { CYCLES } from '../data/cycles.js';
+import { CYCLE_MODIFIERS } from '../data/cycleModifiers.js';
+import { cycleById, isCycleLive, activeCycle, cycleJourneyProgress,
+  cycleJourneyComplete, cycleRewardsEarned, cycleRankReward } from '../systems/cycles.js';
+import { resolveModifier as resolveCycleModifier, modifierEnemyAffix,
+  applyLootTierShift, applyPayoutMult, applyDensityMult, applyXpMult } from '../systems/cycleModifiers.js';
+import { DEEDS } from '../data/deeds.js';
+import { RENOWN_TRACK } from '../data/renownTrack.js';
+import { TITLES, FRAMES, BADGES } from '../data/titles.js';
+import { deedSatisfied, deedProgress, evaluateDeeds, deedsByCategory } from '../systems/deeds.js';
+import { renownRank, unlockedRewards, nextReward as renownNextReward } from '../systems/renown.js';
+import { nextPity, targetBias, shouldRedirect, pickMissingTarget,
+  isPityGuaranteed, pityRemaining, targetStillValid } from '../systems/collectionTargeting.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 import { planReconcile, freshDelMeta, sanitizeDelMeta, isTombstoned, addTombstone,
   mergeDelMeta, delCloudHasAll, sanitizeHcMeta, mergeHcMeta, hcMetaCloudHasAll } from '../persistence/saveSync.js';
@@ -6138,6 +6182,17 @@ let player = { x: 5, y: 5,
   // level boosts everything the gear worn there contributes by 5% while equipped. The
   // two sets invest independently from the same earned pool. See systems/bossSlots.js.
   slotLevels: [emptySlotLevels(), emptySlotLevels()],
+  // ── ENDGAME state (a fresh hero starts empty; loadGame() migrates old saves) ──
+  covenantsActive: [],        // Dread Covenants sworn for the next descent
+  dreadGrid: {},              // per-class "highest Dread cleared" checklist
+  weaveBoard: { nodes: {} },  // Ascendant Weave constellation allocations
+  weaveGlyphs: [],            // socketed/held glyphs
+  weaveDepthPoints: 0,        // cosmetic infinite Weave Depth (no power)
+  aether: 0,                  // Mirrorforge deep material (hero-side)
+  attunement: 0, attuneTarget: null, attunePity: 0,  // Mirrorforge targeting pity
+  pinnacleShards: {},         // Pantheon effigy shard currencies
+  pinnacleCleared: {}, pinnaclePity: {},             // Pantheon first-clear ledger + pity
+  cycleId: null, journeyPoints: 0, cycleRewardsClaimed: [],  // Cycles enrollment + journey
   // Skill tree — 1 skill point earned per level (separate from attribute points),
   // spent on the class's passive/active/path nodes. `skills` maps node id → rank;
   // `skillCds` holds each active skill's independent cooldown. `skillSlots` is the
@@ -28335,6 +28390,28 @@ function loadGame() {
     // an existing hero simply arrives with points equal to the boss floors they'd
     // already cleared, ready to spend.
     player.slotLevels = sanitizeSlotLevels(player.slotLevels, SLOT_KEYS);
+    // ── ENDGAME save migration ── every new field defaults gracefully so old
+    // saves load byte-identical (each sanitizer tolerates undefined → empty).
+    // Dread Covenants: the sworn set for the next descent + the per-class checklist.
+    player.covenantsActive = sanitizeActiveSet(player.covenantsActive);
+    player.dreadGrid = sanitizeDreadGrid(player.dreadGrid);
+    // Ascendant Weave: the constellation board, socketed glyphs, cosmetic depth.
+    player.weaveBoard = sanitizeWeaveBoard(player.weaveBoard, WEAVE);
+    player.weaveGlyphs = Array.isArray(player.weaveGlyphs) ? player.weaveGlyphs.filter(g => g && typeof g === 'object') : [];
+    player.weaveDepthPoints = Math.max(0, Math.floor(player.weaveDepthPoints) || 0);
+    // Mirrorforge: the deep material (hero-side, not the shared wallet), attunement pity.
+    player.aether = Math.max(0, Math.floor(player.aether) || 0);
+    player.attunement = Math.max(0, Math.floor(player.attunement) || 0);
+    player.attuneTarget = (typeof player.attuneTarget === 'string') ? player.attuneTarget : null;
+    player.attunePity = Math.max(0, Math.floor(player.attunePity) || 0);
+    // Pantheon: shard currencies, per-boss first-clear ledger + pity.
+    player.pinnacleShards = (player.pinnacleShards && typeof player.pinnacleShards === 'object') ? player.pinnacleShards : {};
+    player.pinnacleCleared = (player.pinnacleCleared && typeof player.pinnacleCleared === 'object') ? player.pinnacleCleared : {};
+    player.pinnaclePity = (player.pinnaclePity && typeof player.pinnaclePity === 'object') ? player.pinnaclePity : {};
+    // Cycles: seasonal enrollment + the custom journey counter + claimed milestones.
+    player.cycleId = (typeof player.cycleId === 'string') ? player.cycleId : null;
+    player.journeyPoints = Math.max(0, Math.floor(player.journeyPoints) || 0);
+    player.cycleRewardsClaimed = Array.isArray(player.cycleRewardsClaimed) ? player.cycleRewardsClaimed.filter(x => typeof x === 'string') : [];
     inTown = !!data.inTown;
     dungeonReturn = data.dungeonReturn || data.dungeonLevel || 1;
     // Restore an unclaimed death-grave, tolerating saves that predate it.
