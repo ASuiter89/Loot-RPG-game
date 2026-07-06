@@ -16670,12 +16670,16 @@ function draw() {
     drawSpriteC(f.sprite || 'food', px + tw/2, py + th/2, foodSize);
   });
 
-  // Coin piles — a soft circular golden glow so loose gold catches the eye.
+  // Coin piles — a soft circular golden glow so loose gold catches the eye. The
+  // heap swells with its value: a shallow-floor handful stays about tile-sized,
+  // while a deep-floor hoard mounds up to roughly double, sprite and glow both
+  // (capped so it still reads as a pile sitting on its tile).
   groundGold.forEach(g => {
     if (g.x + 1 < x0 || g.x > x1 || g.y + 1 < y0 || g.y > y1) return; // off-screen
     const px = offX + g.x * tw, py = offY + g.y * th;
-    glowUnder(px + tw/2, py + th/2, tw * 0.42, 'rgba(255,224,102,0.4)');
-    if (spriteReady) drawSpriteC('coins', px + tw/2, py + th/2, itemSpritePx(tw));
+    const heap = 1 + Math.min((g.amount || 0) / 70, 1.0); // ~1x early → 2x deep
+    glowUnder(px + tw/2, py + th/2, tw * 0.42 * heap, 'rgba(255,224,102,0.4)');
+    if (spriteReady) drawSpriteC('coins', px + tw/2, py + th/2, itemSpritePx(tw) * heap);
   });
 
   // Vault key — glints on the floor until grabbed.
