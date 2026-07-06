@@ -8,6 +8,11 @@
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
   { date: "2026-07-06", size: "small", v: "Beaten boss floors unlock the next warp checkpoint", by: "Andrew Suiter", notes: ["Heroes who cleared a boss floor before clears began opening the next checkpoint early now get that checkpoint at the Dungeon Gate on load — no need to physically descend to it first. A clear already unlocks the next floor going forward; this heals older saves whose progress predated that."] },
+  { date: "2026-07-06", size: "small", v: "Cursor options fixed up", by: "Claude", notes: [
+    "Settings cursor picker shows its style swatches again — they'd gone blank.",
+    "Cursor options are blade, sword, dagger, spear and staff; the dagger pointer now aims up-left instead of down-right.",
+    "Bow art (skeleton archers, the quiver, ranged combat log) no longer shows a grey patch between the bow and its string.",
+  ] },
   { date: "2026-07-06", size: "small", v: "First dungeon floor seals its stairs again", by: "Andrew Suiter", notes: ["The real first floor after the beach now keeps its stairs down sealed until you clear the foes, like every other floor — the beach tutorial was wrongly marking floor 1 pre-cleared, so its stairs opened on arrival."] },
   { date: "2026-07-06", size: "small", v: "Hero card depth reads as a gate icon", by: "Andrew Suiter", notes: ["Title-screen and pause-menu hero card swaps the word \"Deepest\" for the red dungeon-gate icon, so the depth and gold both fit on the card without crowding."] },
   { date: "2026-07-06", size: "small", v: "Hero card shows your gold again", by: "Andrew Suiter", notes: ["Title-screen and pause-menu hero card now show your real gold — it read 0 for any hero carrying 1,000 or more."] },
