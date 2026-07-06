@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Foe attacks launch from the foe, not the tile next to it", by: "Claude", notes: [
+    "Enemy sprites now stay locked to the tile the foe actually occupies, drawn and moved the same way the hero is — the sprite no longer drifts up to a tile off its cell while chasing you.",
+    "Because of that drift, ranged bolts and strike lunges used to fly out of a neighbouring tile, or from across a wall from where the foe showed on the map. Every foe attack now originates from where its sprite stands.",
+  ] },
   { date: "2026-07-05", size: "small", v: "See a weapon's swing speed before you equip it", by: "Claude", notes: [
     "Weapon tooltips and the Forge preview now show a base swing rate — attacks/sec plus a Slow / Normal / Fast tag — beside the reach grid, so you know how fast a weapon hits without equipping it first.",
     "The rate is the weapon type's base speed before Attack Speed and Agility: light daggers swing fastest, heavy two-handers and staves slowest.",
