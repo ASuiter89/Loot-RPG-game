@@ -10,6 +10,10 @@ export const CHANGELOG = [
   { date: "2026-07-05", size: "small", v: "Weapon type shows up top on the item card", by: "Jeff Louie", notes: [
     "A weapon's type and hand (e.g. Dagger · 1H) now sits right under its name instead of down among the stats, so you read what it is at a glance.",
   ] },
+  { date: "2026-07-05", size: "small", v: "Stamina recharges in town; death revives you at full strength", by: "Claude", notes: [
+    "Stamina now refills while you rest in town, alongside HP and MP — it used to sit frozen there, so a drained bar (and a save made in town) stayed empty until you dived back in.",
+    "Dying and waking in town now restores you to FULL HP, MP and Stamina — no more reviving weakened. The gold/XP loss and dropped-bag grave still stand.",
+  ] },
   { date: "2026-07-05", size: "medium", v: "Ramen House pantry overhaul", by: "Claude", notes: [
     "Pantry rows are bigger and clearer: readable EAT button and a larger ramen-bowl icon sized to the row (its transparent padding no longer shrinks the art).",
     "Identical bowls now stack into a single row with an ×N count instead of one line per bowl.",

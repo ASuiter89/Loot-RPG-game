@@ -7068,7 +7068,7 @@ window.gameGuide = function gameGuide(topic) {
     overview: [
       `Dungeon Loot is a real-time, loot-driven pixel dungeon crawler. Delve floor by floor, kill foes, grab ever-better gear, and survive as deep as you can.`,
       `Depth is one continuous counter across four difficulty tiers of 25 floors each: Normal (1-25), Hardened (26-50), Brutal (51-75), Endless (76+, uncapped). gameState().floorDisplay and .tier show where you are.`,
-      `Core loop per floor: clear every hostile to unseal the down-stairs, loot, then descend. Every 5th floor is a boss floor. Death is NOT game over — it sends you to town weakened; your hero lives on.`,
+      `Core loop per floor: clear every hostile to unseal the down-stairs, loot, then descend. Every 5th floor is a boss floor. Death is NOT game over — it sends you back to town (you lose some gold/XP and drop your bag as a recoverable grave) but revives you at full HP/MP/Stamina; your hero lives on.`,
       `There is no single "win" — the goal is to push as deep as you can. Best objective on any normal floor: clear all foes, grab nearby loot, reach the down-stairs.`,
       `gameState() shows the live situation; gameGuide() explains the rules. Use them together.`,
     ],
@@ -7103,7 +7103,7 @@ window.gameGuide = function gameGuide(topic) {
       `The hero faces and animates in the direction it walks — down/up/left/right — cycling a walk animation while moving and resting on a standing frame when still. It's purely cosmetic; gameState().player.faceDir reports the current 4-way facing.`,
       `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~34/sec). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch auto-sprint).`,
       `DASH (${key('dash')}) is a quick burst (costs 35 Stamina, ~0.55s cooldown). It only repositions fast — there are no i-frames and enemies are solid, so you can't dash THROUGH a foe to escape.`,
-      `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec). The Vitality attribute deepens the pool and speeds its recharge. Check player.dashReady before dashing.`,
+      `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec) — including while you rest in town, alongside HP/MP. The Vitality attribute deepens the pool and speeds its recharge. Check player.dashReady before dashing.`,
       `Being Slowed (a debuff) halves speed; being Stunned roots you entirely (see gameState().effects).`,
       `Foes are solid, so a single one body-blocks you — slide along it and step around. But a MOB can't pin you forever: when bodies plug your heading AND the lanes you'd slide into to go around them, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall, and a lone foe with any real gap beside it stays solid).`,
     ],
@@ -7240,9 +7240,9 @@ window.gameGuide = function gameGuide(topic) {
       `Hardcore mode (one life, permadeath) is also chosen on the name screen and locks in for that hero. Class can be retrained later at the town Trainer, but name, body type and Hardcore are fixed once you begin. While the class screen is open gameState().mode is 'classSelect'; on the name screen it's 'nameSelect'.`,
     ],
     town: [
-      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Death does not re-lock any floors: instead Warp to Dungeon only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Dungeon Gate flags the tier holding that grave (with the exact floor beside the tier's grave badge; gameState().graveSite.where), so you can dive straight back to it.`,
+      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Death does not re-lock any floors: instead Warp to Dungeon only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Dungeon Gate flags the tier holding that grave (with the exact floor beside the tier's grave badge; gameState().graveSite.where), so you can dive straight back to it.`,
       `Town's top row has TWO gates. Warp to Dungeon opens the tier + floor picker, but you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. Return to Last Floor drops you straight back onto the EXACT floor you left through the Town Portal — same enemies, loot and layout, right where you stood — and lights up ONLY when you left by portal or conquest, never after a death (then it's darkened, so take Warp to Dungeon; gameState().menu.returnToLastFloor.available reports this, .where the floor it returns to). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
-      `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon.`,
+      `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon.`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks.`,
@@ -23396,9 +23396,9 @@ function footDist(e) {
   return best;
 }
 
-// Death drags you back to the safe TOWN, revived at half HP/MP with every ailment
-// cleansed. It still stings — half your purse goes to the healer and you lose a
-// little XP — but it no longer erases your build over a stray hazard step: you
+// Death drags you back to the safe TOWN, revived at FULL HP/MP/Stamina with every
+// ailment cleansed. It still stings — half your purse goes to the healer and you
+// lose a little XP — but it no longer erases your build over a stray hazard step: you
 // KEEP every equipped piece, and your whole bag is left behind as a recoverable
 // grave on the floor where you fell. Walk back to the grave to reclaim it all.
 // Class-flavoured cry for the Last Stand survival, so the clutch save reads as
@@ -23520,14 +23520,16 @@ function handleDeath() {
   buildTown();     // clears inTown=false → true and resets town state
   revivedInTown = true;  // flag so the town hub spells out how to get back to questing
   openTownHub();   // drop the player into the town menu
-  // Revived in town but WEAKENED — only half health and mana, not a full heal.
-  player.hp = Math.max(1, Math.round(player.maxHp * 0.5));
-  player.mp = Math.round(player.maxMp * 0.5);
+  // Revived in town at FULL strength — a killing blow costs you gold, XP and your
+  // bag (dropped as a recoverable grave), but you wake rested: full HP and MP.
+  player.hp = player.maxHp;
+  player.mp = player.maxMp;
   showDeathScreen(lostGold, lostXp, lostBag, (graveSite ? fellOn : 0));
   dmgTaken = [];
-  log(`<span data-spr=b_deathknight></span> ${player.name || HERO} was SLAIN on ${floorLabel(fellOn)}! Lost <span data-spr=ic_money></span>${lostGold}${lostXp ? ` and ${lostXp} XP` : ''}${lostBag ? `, and dropped your bag (${lostBag}) — reclaim it on ${floorLabel(fellOn)}` : ''} — revived weakened in town. The dungeon eases up while you find your feet.`, 'important');
+  log(`<span data-spr=b_deathknight></span> ${player.name || HERO} was SLAIN on ${floorLabel(fellOn)}! Lost <span data-spr=ic_money></span>${lostGold}${lostXp ? ` and ${lostXp} XP` : ''}${lostBag ? `, and dropped your bag (${lostBag}) — reclaim it on ${floorLabel(fellOn)}` : ''} — revived at full strength in town. The dungeon eases up while you find your feet.`, 'important');
   recomputeMaxStats();
   player.shield = player.maxShield; player._noDmgSecs = 0;   // revive in town with a full Spirit Veil
+  player.stamina = player.maxStamina; player._stamDelay = 0;   // …and a full, ready Stamina bar (no post-death exertion delay)
   updateBars();
   renderPanel();
   saveGame();
@@ -30765,10 +30767,13 @@ function gameLoop(ts) {
     if (!rtPaused()) safeStep('hazards', () => { updateTraps(dt); updateProjectiles(dt); stepBossTelegraphs(dt); });
   } else if (inTown && !clockPaused()) {
     // In town the hero can't move or fight, but time still flows just like standing
-    // still in the dungeon: HP/MP regen, skill & potion cooldowns, and status/buff
-    // timers all keep ticking. Movement, combat and hazards stay paused.
+    // still in the dungeon: HP/MP AND Stamina regen, skill & potion cooldowns, and
+    // status/buff timers all keep ticking. Movement, combat and hazards stay paused.
+    // Stamina regen normally rides in updatePlayer(), which is gated out in town
+    // (rtPaused), so refill it here or it would sit frozen while HP/MP recover.
     safeStep('cooldowns', () => tickCooldowns(dt));
     safeStep('world', () => stepWorldClock(dt));
+    safeStep('stamRegen', () => regenStamina(dt));
   }
   safeStep('actorRender', () => updateActorRender(dt));
   safeStep('hudFlush', () => flushHudDirty());     // damage events mark the HUD dirty; one updateBars() lands here same-frame
