@@ -51,6 +51,7 @@ import { resistFraction, penFraction, mitigate, physicalShare } from '../systems
 import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
+import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
 import { isSsf, walletGain, walletSpend } from '../systems/ssf.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
@@ -6811,7 +6812,8 @@ window.gameState = function gameState(radius) {
     // 'touch' once the mobile layer is active (floating joystick + thumb buttons),
     // else 'mouse'. Purely informational — every action is still driveable from the
     // keyboard/console in both modes.
-    input: (typeof document !== 'undefined' && document.body && document.body.classList.contains('touch')) ? 'touch' : 'mouse',
+    input: (typeof document !== 'undefined' && document.body && document.body.classList.contains('touch')) ? 'touch'
+         : (typeof document !== 'undefined' && document.body && document.body.classList.contains('pad')) ? 'pad' : 'mouse',
     inTown: !!inTown,
     floor: dungeonLevel,                                                   // continuous depth (1, 2, 3, …)
     floorDisplay: (typeof displayFloor === 'function') ? displayFloor() : dungeonLevel, // 1–25 within a tier
@@ -7324,6 +7326,12 @@ window.gameGuide = function gameGuide(topic) {
       `The Vault has a COLLECTION tab: one slot for every unique and set piece in the game. A slot is a darkened silhouette (hover to preview the fixed properties it can roll — labels only, since the values roll with drop depth) until you store a matching piece there; then it lights up with your best-rolled copy. Storing a unique/set piece always files it here instead of ordinary Storage; a slot can hold MULTIPLE copies (it shows the strongest with a ×N badge, and clicking lists them all to withdraw).`,
       `The Collection is account-wide and per-ladder, exactly like the rest of the Vault (Standard and Hardcore keep separate ones). Filter it by gear slot, unique vs set, a specific set, or acquired/missing. gameState().menu.collection reports distinct pieces collected out of the total.`,
     ],
+    controller: [
+      `A gamepad is a fully supported input layer alongside keyboard/mouse/touch — plug in a PlayStation, Xbox or Steam Deck / generic pad and it's revealed on the first input (gameState().input reads 'pad'; keyboard stays live too). Everything in the game is doable on the pad. Button names below give PlayStation then Xbox: ✕/A, ○/B, □/X, △/Y.`,
+      `In the dungeon: LEFT STICK moves (analog 8-way). R2 sprints (hold; taps to latch in Toggle mode). R1 dashes. ✕/A interacts / uses / opens a chest / talks to an NPC. ○/B opens the Bag. □/X toggles the combat log. △/Y opens a town portal. HOLD L1 and press ✕○□△ to cast skill slots 1–4 (the auto-cast slot still fires itself). D-pad: Left = health potion, Right = mana potion, Up = swap weapon set, Down = cycle auto-attack focus. RIGHT STICK aims a soft inspect reticle over foes (and scrolls the combat log while it's open). L3 (left-stick click) collapses/expands the minimap.`,
+      `In menus (every overlay, shop, craft screen, the Bag): D-pad or LEFT STICK move the selection — the selected control's tooltip pops. ✕/A selects (activates a button, cycles a dropdown, or opens the on-screen keyboard on a text field). ○/B backs out / closes. L1 / R1 switch tabs (settings tabs, leaderboard tabs, bag tabs). Left/right on a focused dropdown cycles its option; the right stick scrolls long lists.`,
+      `Anywhere: Options/Menu pauses to Settings. R3 (right-stick click) toggles a VIRTUAL CURSOR — a mouse driven by the right stick, ✕/A = click — that works over the map and any menu, the universal fallback for anything else. View/Share opens an on-screen controller cheat-sheet. Text entry (hero name, cloud-save login) uses an on-screen keyboard with a Random-name key. See docs/CONTROLLER.md for the full map.`,
+    ],
   };
   if (topic == null) return Object.assign({ topics: Object.keys(G) }, G);
   const t = String(topic).toLowerCase().replace(/[^a-z]/g, '');
@@ -7345,6 +7353,7 @@ window.gameGuide = function gameGuide(topic) {
     ssf: 'character', solo: 'character', soloselffound: 'character', selffound: 'character', hardcore: 'character', permadeath: 'character',
     shop: 'town', merchant: 'town', craft: 'town', crafting: 'town', forge: 'town', ramen: 'town', mystic: 'town', stash: 'town', portal: 'town', gate: 'town', warp: 'town', lastfloor: 'town', transmuter: 'town', transmute: 'town', fuse: 'town', vault: 'town', gambler: 'town', gamble: 'town', sellsword: 'town', merc: 'town', mercenary: 'town', trainer: 'town', healer: 'town', enchanter: 'town', enchant: 'town',
     control: 'controls', key: 'controls', keys: 'controls', keybind: 'controls', keybinds: 'controls', keybinding: 'controls',
+    controller: 'controller', gamepad: 'controller', pad: 'controller', joypad: 'controller', joystick: 'controller', dualsense: 'controller', dualshock: 'controller', xbox: 'controller', playstation: 'controller', steamdeck: 'controller', button: 'controller', buttons: 'controller',
     heal: 'healing', healing: 'healing', recovery: 'healing', regen: 'healing', regeneration: 'healing', potion: 'healing', potions: 'healing', mana: 'healing', mp: 'healing', leech: 'healing', lifesteal: 'healing', overtime: 'healing', pending: 'healing', hp: 'healing', hitpoints: 'healing', sustain: 'healing',
     veil: 'veil', spiritveil: 'veil', manaveil: 'veil', shield: 'veil', shields: 'veil', ward: 'veil', energyshield: 'veil', overshield: 'veil', spiritshield: 'veil', defense: 'veil', defence: 'veil',
     drive: 'driving', driving: 'driving', api: 'driving', act: 'driving', acting: 'driving', input: 'driving',
@@ -20061,8 +20070,10 @@ function doDash() {
   let dx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let dy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
   // Touch: dash in the joystick's current push direction (a double-tap-drag on the
-  // stick triggers this — see the pointer handlers).
+  // stick triggers this — see the pointer handlers). Gamepad: dash in the left
+  // stick's current push (R1 with the stick held).
   if (dx === 0 && dy === 0 && touchStick.active && touchStick.mag > 0) { dx = touchStick.ix; dy = touchStick.iy; }
+  if (dx === 0 && dy === 0 && padStick.active && padStick.mag > 0) { dx = padStick.ix; dy = padStick.iy; }
   // Click-to-move: with no manual direction, dash toward the target — or, when a
   // route around a wall is planned, toward the next waypoint so we don't dash into it.
   if (dx === 0 && dy === 0 && moveTarget.active) {
@@ -20112,9 +20123,11 @@ function updatePlayer(dt) {
   // Input vector — keyboard (WASD / arrows).
   let ix = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let iy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
-  // Touch joystick overrides the keyboard vector while it's engaged. It reads as
-  // "manual input" below, so it cancels any click-to-move the same way a key does.
+  // Touch joystick / gamepad left-stick override the keyboard vector while engaged.
+  // Both read as "manual input" below, so they cancel any click-to-move the same way
+  // a key does. Touch wins if somehow both are live (a pad plugged into a phone).
   if (touchStick.active && touchStick.mag > 0) { ix = touchStick.ix; iy = touchStick.iy; }
+  else if (padStick.active && padStick.mag > 0) { ix = padStick.ix; iy = padStick.iy; }
   // Click-to-move: with no keyboard input, steer toward the click target.
   // Any manual input cancels it (you take back the wheel). While the button is held
   // the target tracks the cursor, so the hero keeps walking toward it; a plain click
@@ -25382,7 +25395,7 @@ function skillLoadoutTrayHtml() {
     const isAuto = i === AUTO_SLOT;
     const s = id ? byId[id] : null;
     const key = isAuto ? '' : skillKeyLabel(i + 1);
-    const pill = isAuto ? 'AUTO' : kbShort(key);
+    const pill = isAuto ? 'AUTO' : sbPill('skill' + (i + 1));
     const dropIdx = isAuto ? `'${AUTO_SLOT}'` : i;
     const drag = s ? `draggable="true" ondragstart="skillDragStart(event,'${s.id}',${dropIdx})" ondragend="skillDragEnd()"` : '';
     const label = isAuto ? 'auto-cast slot' : 'slot ' + (i + 1);
@@ -25920,10 +25933,10 @@ function renderSkillBar() {
   // the _lastSkillBarHtml cache, forcing a full bar rebuild each tick. The
   // .sb-cd-text placeholders stay empty in the cached string and are filled via
   // textContent in syncSkillBarCountdowns() on every render call instead.
-  const healBtn = cell(kbShort(kbLabel('healthPotion')), 'hp', `<button class="skillbar-btn potion ${potReady && !hpFull ? 'ready' : 'empty'} ${urgent ? 'urgent' : ''} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} onclick="useHealthPotion()">
+  const healBtn = cell(sbPill('healthPotion'), 'hp', `<button class="skillbar-btn potion ${potReady && !hpFull ? 'ready' : 'empty'} ${urgent ? 'urgent' : ''} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} onclick="useHealthPotion()">
       <span class="sb-icon">${HEAL_POTION_SVG}</span><span class="sb-info sb-cd-text" data-cdt="pot" id="heal-label"></span>${cdDial('pot')}
     </button>`);
-  const manaBtn = cell(kbShort(kbLabel('manaPotion')), 'mp', `<button class="skillbar-btn potion mana ${potReady && !mpFull ? 'ready' : 'empty'} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} onclick="useManaPotion()">
+  const manaBtn = cell(sbPill('manaPotion'), 'mp', `<button class="skillbar-btn potion mana ${potReady && !mpFull ? 'ready' : 'empty'} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} onclick="useManaPotion()">
       <span class="sb-icon">${MANA_POTION_SVG}</span><span class="sb-info sb-cd-text" data-cdt="pot"></span>${cdDial('pot')}
     </button>`);
   // The four manual slots are rendered filled or empty (keys 1–4, all styled alike).
@@ -25939,7 +25952,7 @@ function renderSkillBar() {
     const s = id ? byId[id] : null;
     if (!s) {
       const tip = `<div class='ht-name'>Empty slot ${i + 1}</div><div class='ht-line'>Drag a learned skill here, or tap to assign one.</div>${key ? `<div class='ht-sub'>casts with ${key}</div>` : ''}`;
-      return cell(kbShort(key), '', `<button class="skillbar-btn slot-empty" ${dropAttrs(i)} ${hoverTip(tip)} onclick="openSlotPicker(${i})">
+      return cell(sbPill('skill' + (i + 1)), '', `<button class="skillbar-btn slot-empty" ${dropAttrs(i)} ${hoverTip(tip)} onclick="openSlotPicker(${i})">
       <span class="sb-icon big slot-plus">＋</span>
     </button>`);
     }
@@ -25949,7 +25962,7 @@ function renderSkillBar() {
     const castHint = key ? ` · press ${key}` : '';
     const moveHint = 'drag to rearrange · drag a tree skill to swap';
     const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
-    return cell(kbShort(key), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
+    return cell(sbPill('skill' + (i + 1)), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}',${i})" ondragend="skillDragEnd()" ${dropAttrs(i)} ${hoverTip(tip)} onclick="castSkillById('${s.id}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
     </button>`);
@@ -25994,7 +26007,7 @@ function renderSkillBar() {
       : ch
       ? `<div class='ht-name'><span data-spr=feat_gate_red></span> Town Portal</div><div class='ht-line'>Opening… ${Math.ceil(portalCharge)} second${Math.ceil(portalCharge) === 1 ? '' : 's'} left. A foe's hit shatters it.</div><div class='ht-sub'>press ${kbLabel('portal')} or move to cancel</div>`
       : `<div class='ht-name'><span data-spr=feat_gate_red></span> Town Portal</div><div class='ht-line'>Open a portal to the safe hub. It channels for a few seconds — you can't act while it does — moving or a foe's hit cancels it.</div><div class='ht-sub'>press ${kbLabel('portal')}</div>`;
-    townBtn = cell(kbShort(kbLabel('portal')), 'town', `<button class="skillbar-btn town${here ? ' town-locked' : ''}${ch ? ' channeling' : ''}" ${hoverTip(townTip)} ${here ? '' : 'onclick="enterTown()"'}>
+    townBtn = cell(sbPill('portal'), 'town', `<button class="skillbar-btn town${here ? ' town-locked' : ''}${ch ? ' channeling' : ''}" ${hoverTip(townTip)} ${here ? '' : 'onclick="enterTown()"'}>
       <span class="sb-icon">${dlIconFill('feat_gate_red')}</span><span class="sb-info sb-cd-text" data-cdt="portal"></span>
     </button>`);
   }
@@ -27236,6 +27249,607 @@ document.addEventListener('keydown', e => {
     return;
   }
 });
+
+// ══════════════════════════════════════════
+// GAMEPAD (CONTROLLER) SUPPORT
+// ══════════════════════════════════════════
+// An ADDITIVE input layer, built like the touch layer and reusing the same
+// window-bridged handlers (doDash, pickup, castSkillById, enterTown, togglePanel…).
+// Keyed off body.pad (revealed on the first real gamepad input, dropped when the
+// last pad disconnects); it NEVER disables keyboard/mouse, so a machine with no pad
+// is byte-identical to before. Pure math (stick vectors, edge detection, spatial
+// menu navigation) lives in src/systems/gamepadMath.js; the polling + DOM wiring is
+// here, next to the touch wiring it mirrors. See docs/CONTROLLER.md for the full map.
+
+// Standard Gamepad button indices (the browser normalises PlayStation / Xbox /
+// Steam Deck onto this layout; only the glyph labels differ). Face indices are
+// position-based: 0 bottom, 1 right, 2 left, 3 top — so ✕○□△ line up with A B X Y.
+const PAD_BTN = { CROSS:0, CIRCLE:1, SQUARE:2, TRIANGLE:3, L1:4, R1:5, L2:6, R2:7,
+                  SELECT:8, START:9, L3:10, R3:11, DUP:12, DDOWN:13, DLEFT:14, DRIGHT:15 };
+// Left-stick movement vector, injected into updatePlayer exactly like touchStick.
+const padStick = { active: false, ix: 0, iy: 0, mag: 0 };
+let _padPrev = {};            // gamepad.index -> previous poll's pressed[] (for edges)
+let _padOn = false;           // body.pad revealed?
+let _padGlyphs = 'xbox';      // which glyph set the connected pad uses ('ps' | 'xbox')
+// Menu focus state.
+let _padContainer = null;     // the DOM container currently being navigated
+let padFocusEl = null;        // the focused element within it
+let _padFocusIdx = 0;         // its index in the container's reading-order focusables
+let _padBagFocus = false;     // desktop: is the (always-present) Bag column being navigated?
+let _padNavDir = null, _padNavT = 0;   // hold-to-repeat gate for menu navigation
+const PAD_NAV_DELAY = 0.38, PAD_NAV_RATE = 0.11;   // seconds: first repeat, then each step
+// Virtual cursor (universal fallback — a mouse on a stick).
+const padCursor = { on: false, x: 0, y: 0 };
+const PAD_CURSOR_SPEED = 900;   // px/sec at full stick
+// Virtual keyboard target (the <input> being typed into), or null.
+let _padKbTarget = null, _padKbShift = false;
+
+function isPadMode() { return _padOn; }
+function setPadMode(on) {
+  if (_padOn === on) return;
+  _padOn = on;
+  document.body.classList.toggle('pad', on);
+  if (!on) {
+    // Pad unplugged — drop ALL transient pad state so a reconnect starts clean (in
+    // play, stick centred), not stuck sprinting / in cursor mode / mid-keyboard.
+    padStick.active = false; padStick.mag = 0;
+    sprintHeld = false; padCursor.on = false; _padBagFocus = false; _padKbTarget = null;
+    const kb = document.getElementById('pad-kbd'); if (kb) kb.classList.remove('open');
+    const hp = document.getElementById('pad-help'); if (hp) hp.classList.remove('open');
+    padClearFocus(); padHideCursor();
+  }
+  try { updatePadHintbar(); } catch (_) {}
+  try { if (typeof renderSkillBar === 'function') renderSkillBar(); } catch (_) {}   // pills flip to/from pad glyphs
+}
+// Pick a glyph set from the pad's id string. Sony pads (vendor 054c / DualSense /
+// DualShock) show ✕○□△; everything else (Xbox, Steam Deck, generic XInput) shows
+// A/B/X/Y. Steam Deck reports as an Xbox-style pad, which is what we want.
+function padDetectGlyphs(id) {
+  return /054c|09cc|sony|dualshock|dualsense|playstation|wireless controller/i.test(id || '') ? 'ps' : 'xbox';
+}
+const PAD_GLYPHS = {
+  ps:   { cross:'✕', circle:'○', square:'□', triangle:'△', l1:'L1', r1:'R1', l2:'L2', r2:'R2', l3:'L3', r3:'R3', options:'Options', view:'Create', lstick:'L-Stick', rstick:'R-Stick', dpad:'D-Pad' },
+  xbox: { cross:'A', circle:'B', square:'X', triangle:'Y', l1:'LB', r1:'RB', l2:'LT', r2:'RT', l3:'L3', r3:'R3', options:'☰',      view:'⧉',      lstick:'L-Stick', rstick:'R-Stick', dpad:'D-Pad' },
+};
+function padGlyph(name) { return (PAD_GLYPHS[_padGlyphs] || PAD_GLYPHS.xbox)[name] || ''; }
+// The controller glyph for a keybound action — shown in the skill-bar hotkey pills
+// (and cast hints) INSTEAD of the keyboard key while a pad is in use, so the pills
+// read "L1✕" not "1". Skills are the L1 + face layer; potions/swap ride the D-pad.
+function padActionGlyph(id) {
+  const g = padGlyph;
+  switch (id) {
+    case 'skill1': return g('l1') + g('cross');
+    case 'skill2': return g('l1') + g('circle');
+    case 'skill3': return g('l1') + g('square');
+    case 'skill4': return g('l1') + g('triangle');
+    case 'healthPotion': return '◀';   // D-pad left
+    case 'manaPotion':   return '▶';   // D-pad right
+    case 'swapWeapon':   return '▲';   // D-pad up
+    case 'portal':   return g('triangle');
+    case 'bag':      return g('circle');
+    case 'dash':     return g('r1');
+    case 'interact': return g('cross');
+    default: return '';
+  }
+}
+// Skill-bar pill label: the pad glyph under body.pad, else the (short) keyboard key.
+function sbPill(id) { return isPadMode() ? padActionGlyph(id) : kbShort(kbLabel(id)); }
+
+// The first connected gamepad, or null. getGamepads() returns a live snapshot each
+// call (entries can be null for empty slots).
+function firstGamepad() {
+  let list; try { list = navigator.getGamepads ? navigator.getGamepads() : []; } catch (_) { return null; }
+  if (!list) return null;
+  for (const gp of list) if (gp && gp.connected) return gp;
+  return null;
+}
+
+// The frame entry point (called from gameLoop). Reads the pad, computes button
+// edges, and routes to the play / menu / cursor / keyboard handler for the context.
+function pollGamepads(ts, dt) {
+  const gp = firstGamepad();
+  if (!gp) { if (padStick.active) { padStick.active = false; padStick.mag = 0; } return; }
+  const btns = gp.buttons || [];
+  const axes = gp.axes || [];
+  // pressed[] as plain booleans (triggers count as pressed past a light threshold).
+  const pressed = [];
+  for (let i = 0; i < btns.length; i++) { const b = btns[i]; pressed[i] = !!(b && (b.pressed || b.value > 0.5)); }
+  const anyInput = pressed.some(Boolean) || axes.some(a => Math.abs(a) > 0.35);
+  if (!_padOn) { if (!anyInput) return; _padGlyphs = padDetectGlyphs(gp.id); setPadMode(true); }
+  const prev = _padPrev[gp.index] || [];
+  const down = edgePressed(prev, pressed);
+  const up = edgeReleased(prev, pressed);
+  _padPrev[gp.index] = pressed;
+
+  // ── Global buttons (work in every context) ──
+  if (down.includes(PAD_BTN.START)) toggleSettingsMenu();           // pause / settings
+  if (down.includes(PAD_BTN.SELECT)) togglePadHelp();               // controller cheat-sheet
+  if (down.includes(PAD_BTN.R3)) padToggleCursor();                 // virtual mouse on/off
+  // Releasing R2 clears the sprint hold in EVERY context. Only padDrivePlay reads
+  // `up`, so a release while a menu / cursor is up would otherwise never be seen and
+  // sprint would stay latched on when play resumes.
+  if (up.includes(PAD_BTN.R2)) sprintHeld = false;
+
+  // While the help card is up it captures the pad — ✕/○ dismiss it, everything else
+  // is swallowed so nothing fires on the screen behind it. Neutralise the stick too,
+  // or a stick held when help opened keeps walking the (un-paused) hero behind it.
+  const help = document.getElementById('pad-help');
+  if (help && help.classList.contains('open')) {
+    padStick.active = false; padStick.mag = 0;
+    if (down.includes(PAD_BTN.CROSS) || down.includes(PAD_BTN.CIRCLE)) togglePadHelp();
+    return;
+  }
+
+  if (padCursor.on) { padDriveCursor(down, axes, dt); return; }
+  if (padMenuOpen()) { padDriveMenu(down, axes, pressed, dt, ts); return; }
+  padDrivePlay(down, up, axes, pressed, dt);
+}
+
+// ── PLAY CONTEXT (dungeon) ───────────────────────────────────────────────────
+function padCastSlot(i) { const sk = (typeof slotSkill === 'function') ? slotSkill(i) : null; if (sk) castSkillById(sk.id); }
+function padOpenBag() {
+  if (isTouchMode()) { if (!document.body.classList.contains('bag-open')) toggleBag(); }
+  // Desktop: expand the drawer THROUGH setPanelCollapsed so the map backing buffer
+  // re-fits to the new (narrower) column — a raw class toggle skips that re-fit and
+  // leaves the map horizontally squished.
+  else { togglePanel(); if (typeof setPanelCollapsed === 'function') setPanelCollapsed(false); }
+  _padBagFocus = true; _padContainer = null;   // force focus (re)init onto the drawer
+}
+function padDrivePlay(down, up, axes, pressed, dt) {
+  // Leaving a menu → drop the focus ring so it never lingers over the map.
+  if (_padContainer || padFocusEl) { _padContainer = null; padClearFocus(); }
+  // Left stick → hero movement (injected into updatePlayer like the touch stick).
+  const v = padStickVector(axes[0] || 0, axes[1] || 0);
+  padStick.active = v.mag > 0; padStick.ix = v.ix; padStick.iy = v.iy; padStick.mag = v.mag;
+  // R2 sprint — hold, or (in Toggle mode) tap to latch, mirroring Shift.
+  if (down.includes(PAD_BTN.R2)) {
+    if (sprintMode === 'toggle') { sprintLatched = !sprintLatched; if (typeof sfx === 'function') sfx('click'); if (typeof renderSkillBar === 'function') renderSkillBar(); }
+    else sprintHeld = true;
+  }
+  // (R2 release is cleared globally in pollGamepads so it fires in every context.)
+  // Face buttons: plain = actions, with L1 held = the four skill slots.
+  if (pressed[PAD_BTN.L1]) {
+    if (down.includes(PAD_BTN.CROSS))    padCastSlot(0);
+    if (down.includes(PAD_BTN.CIRCLE))   padCastSlot(1);
+    if (down.includes(PAD_BTN.SQUARE))   padCastSlot(2);
+    if (down.includes(PAD_BTN.TRIANGLE)) padCastSlot(3);
+  } else {
+    if (down.includes(PAD_BTN.CROSS))    pickup();
+    if (down.includes(PAD_BTN.CIRCLE))   padOpenBag();
+    if (down.includes(PAD_BTN.SQUARE))   toggleLog();
+    if (down.includes(PAD_BTN.TRIANGLE)) enterTown();
+  }
+  if (down.includes(PAD_BTN.R1)) doDash();
+  if (down.includes(PAD_BTN.L3) && typeof toggleMinimap === 'function') toggleMinimap();   // collapse/expand the minimap
+  // D-pad quick items / toggles (HP left · MP right, mirroring the skill bar).
+  if (down.includes(PAD_BTN.DLEFT))  useHealthPotion();
+  if (down.includes(PAD_BTN.DRIGHT)) useManaPotion();
+  if (down.includes(PAD_BTN.DUP))    toggleGearSet();
+  if (down.includes(PAD_BTN.DDOWN))  cycleTargetMode();
+  // Right stick → a soft inspect reticle over the map (pops a foe's codex card, like
+  // mouse hover). Doesn't intercept any button; promote to a full cursor with R3.
+  padPlayInspect(axes);
+}
+function padPlayInspect(axes) {
+  const rx = axes[2] || 0, ry = axes[3] || 0;
+  // While the combat log is expanded (Square toggles it), the right stick scrolls its
+  // history instead of aiming the reticle — the only controller path to read old lines.
+  const row = document.getElementById('bottom-row');
+  if (row && !row.classList.contains('log-collapsed') && Math.abs(ry) > 0.3) {
+    const logEl = document.getElementById('log');
+    if (logEl) { logEl.scrollTop += ry * 16; padHideCursor(); return; }
+  }
+  if (Math.hypot(rx, ry) < 0.35) { padHideCursor(); return; }
+  const cv = document.getElementById('canvas'); if (!cv) return;
+  const r = cv.getBoundingClientRect();
+  if (!padCursor.x && !padCursor.y) { padCursor.x = r.left + r.width / 2; padCursor.y = r.top + r.height / 2; }
+  padCursor.x = Math.max(r.left, Math.min(r.right, padCursor.x + rx * 12));
+  padCursor.y = Math.max(r.top, Math.min(r.bottom, padCursor.y + ry * 12));
+  padShowCursor();
+  try { if (typeof updateHoverCard === 'function') updateHoverCard(padCursor.x, padCursor.y); } catch (_) {}
+}
+
+// ── MENU CONTEXT (any overlay, shop, craft screen, the Bag) ──────────────────
+// Ordered set of modal containers to consider (a superset of the RT-blocking list
+// plus the non-pausing popups). The topmost open one is what we navigate.
+// The full set of modal containers to consider (kept in sync with RT_BLOCKING_OVERLAYS
+// plus the non-pausing popups). Spelled out rather than spread from
+// RT_BLOCKING_OVERLAYS because that const is declared LATER in this module — reading
+// it here (even via typeof) would hit its temporal dead zone and throw at load.
+const PAD_MODAL_IDS = [
+  'title-overlay','name-overlay','class-overlay','hc-death-overlay','death-overlay',
+  'shop-overlay','mystic-overlay','town-overlay','settings-menu','version-overlay','howto-overlay',
+  'autoloot-overlay','newrun-overlay','keybind-overlay','conquest-overlay','slots-overlay',
+  'account-overlay','lb-overlay','lb-hero-overlay','graveyard-overlay','slotpick-overlay',
+  'greed-overlay','boss-gate-overlay','bestiary-overlay','achievements-overlay','pad-kbd',
+];
+function padTopModal() {
+  let best = null, bestZ = -Infinity;
+  for (const id of PAD_MODAL_IDS) {
+    const el = document.getElementById(id);
+    if (!el || !el.classList.contains('open')) continue;
+    if (!el.getClientRects().length) continue;
+    const z = parseInt(getComputedStyle(el).zIndex, 10) || 0;
+    // Later DOM order breaks a z tie (paints on top).
+    if (z > bestZ || (z === bestZ && best && (best.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING))) { bestZ = z; best = el; }
+  }
+  return best;
+}
+function padActiveContainer() {
+  let base = padTopModal();
+  if (!base && _padBagFocus) {
+    if (isTouchMode()) { if (document.body.classList.contains('bag-open')) base = document.getElementById('side-panel'); }
+    else { const sp = document.getElementById('side-panel'); if (sp && sp.getClientRects().length) base = sp; }
+    if (!base) _padBagFocus = false;   // drawer was closed elsewhere — drop back to play
+  }
+  if (!base) return null;
+  // If an actionable DETAIL POPOVER is open inside the base container, confine focus
+  // to it. The skill-tree Learn/Auto/Hide card is absolutely positioned OVER the
+  // nodes, so navigating the whole tree would let focus slip onto a node hidden
+  // behind the card — instead, selecting a node drops focus straight onto Learn.
+  const pop = base.querySelector && base.querySelector('#sk-pop');
+  if (pop && pop.getClientRects().length && pop.querySelector('button, [onclick]')) return pop;
+  return base;
+}
+function padMenuOpen() { return !!padActiveContainer(); }
+
+// Native + role-based interactive tags. `summary` matters (the "Stat abbreviations"
+// collapsible etc.); `label` toggles its checkbox on click.
+const PAD_FOCUS_SEL = 'button, [role="button"], [role="tab"], [role="menuitem"], a[href], input:not([type="hidden"]), select, textarea, summary, label, [tabindex]:not([tabindex="-1"])';
+// Game-specific clickable rows/tiles wired via DELEGATED listeners (no inline onclick)
+// — inspect rows in the merchant / loot / gear lists. The game replaces EVERY cursor
+// with a custom blade image (!important), so a `cursor:pointer` heuristic can't find
+// these; naming the classes is the reliable path.
+const PAD_CLICK_CLASS_SEL = '.shop-row-info, .shop-row, .loot-info, .slot-info, .loot-row, .sk-tnode, .lt-slot, .pd-slot';
+function padIsBackdrop(e) { return /event\.target/.test(e.getAttribute('onclick') || ''); }
+// Every visible, enabled, clickable element inside a container, in reading order.
+// Detection is deliberately broad so NOTHING the mouse can click is unreachable:
+// native / role interactive tags, inline onclick (minus modal backdrops), and the
+// delegated-listener row classes above. Cached for a beat (see padCurrentEls).
+function padFocusablesIn(c) {
+  if (!c) return [];
+  const prime = new Set();
+  c.querySelectorAll(PAD_FOCUS_SEL).forEach(e => prime.add(e));
+  c.querySelectorAll(PAD_CLICK_CLASS_SEL).forEach(e => prime.add(e));
+  c.querySelectorAll('[onclick]').forEach(e => { if (!padIsBackdrop(e)) prime.add(e); });
+  const vw = window.innerWidth, vh = window.innerHeight, maxArea = 0.85 * vw * vh;
+  const out = [];
+  prime.forEach(e => {
+    if (e.disabled || e.getAttribute('aria-disabled') === 'true') return;
+    if (e.closest('[hidden]')) return;
+    if (!e.getClientRects().length) return;                     // display:none / not laid out
+    const r = e.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return;
+    if (r.width * r.height > maxArea) return;                   // full-screen backdrop / wrapper
+    out.push(e);
+  });
+  const rects = out.map(e => e.getBoundingClientRect());
+  return readingOrder(rects).map(i => out[i]);
+}
+// Cache the focusable set for a short window so the (heavier) cursor-style scan runs
+// a few times a second, not every frame. Invalidated on container change, on a timer
+// (catches re-renders / popovers), and explicitly after an activation opens new UI.
+let _padEls = [], _padElsAt = 0, _padElsContainer = null;
+function padCurrentEls(container, ts) {
+  const now = ts || 0;
+  if (container !== _padElsContainer || _padElsAt === 0 || (now - _padElsAt) > 140) {
+    _padEls = padFocusablesIn(container);
+    _padElsContainer = container; _padElsAt = now;
+  }
+  return _padEls;
+}
+function padInvalidateEls() { _padElsAt = 0; }
+function padClearFocus() {
+  if (padFocusEl) {
+    padFocusEl.classList.remove('pad-focused');
+    try { padFocusEl.dispatchEvent(new MouseEvent('mouseleave')); } catch (_) {}
+  }
+  padFocusEl = null;
+  if (typeof hideHoverTip === 'function') hideHoverTip();
+  padUpdateRing(null);
+}
+// Focus an element: ring + reading it into view + (when fireTip) firing its hover
+// handlers so the gear/foe/skill card or control tip pops on selection.
+function padApplyFocus(el, fireTip) {
+  if (padFocusEl && padFocusEl !== el) { padFocusEl.classList.remove('pad-focused'); try { padFocusEl.dispatchEvent(new MouseEvent('mouseleave')); } catch (_) {} }
+  padFocusEl = el;
+  if (!el) { padUpdateRing(null); return; }
+  el.classList.add('pad-focused');
+  try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (_) {}
+  if (fireTip) {
+    try {
+      const r = el.getBoundingClientRect();
+      const p = { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+      el.dispatchEvent(new MouseEvent('mouseenter', p));
+      el.dispatchEvent(new MouseEvent('mousemove', p));
+    } catch (_) {}
+  }
+  padUpdateRing(el);
+}
+// Called each frame while a menu is up: keep padFocusEl resolved against the live
+// DOM (menus re-render), re-initialising to the first element when the container
+// changes and clamping the index otherwise.
+function padSyncFocus(container, ts) {
+  const changed = container !== _padContainer;
+  if (changed) { _padContainer = container; _padFocusIdx = 0; padClearFocus(); padInvalidateEls(); }
+  const els = padCurrentEls(container, ts);
+  if (!els.length) { if (padFocusEl) padClearFocus(); return els; }
+  _padFocusIdx = Math.max(0, Math.min(_padFocusIdx, els.length - 1));
+  const el = els[_padFocusIdx];
+  if (el !== padFocusEl) padApplyFocus(el, changed || !padFocusEl);   // fire tip on first focus only
+  else padUpdateRing(el);
+  return els;
+}
+function padMoveFocus(dir, els) {
+  if (!els.length) return;
+  const i = els.indexOf(padFocusEl);
+  if (i < 0) { _padFocusIdx = 0; padApplyFocus(els[0], true); return; }
+  const rects = els.map(e => e.getBoundingClientRect());
+  const pick = pickInDirection(rects[i], rects, dir);
+  if (pick >= 0) { _padFocusIdx = pick; padApplyFocus(els[pick], true); if (typeof sfx === 'function') sfx('click'); }
+}
+// Edge + hold-to-repeat gate: a fresh direction steps immediately, a held one
+// repeats after PAD_NAV_DELAY then every PAD_NAV_RATE.
+function padNavPulse(dir, dt) {
+  if (dir !== _padNavDir) { _padNavDir = dir; _padNavT = PAD_NAV_DELAY; return dir; }
+  if (!dir) return null;
+  _padNavT -= dt;
+  if (_padNavT <= 0) { _padNavT = PAD_NAV_RATE; return dir; }
+  return null;
+}
+function padActivateFocused() {
+  const el = padFocusEl; if (!el) return;
+  const tag = el.tagName;
+  if (tag === 'INPUT' && /^(|text|email|password|search|tel|url|number)$/i.test(el.type || 'text')) { padKbOpen(el); return; }
+  if (tag === 'SELECT') { padCycleSelect(el, 1); return; }
+  el.click();
+  padInvalidateEls();   // the click may have opened a popover / sub-panel — refresh reachables now
+}
+function padCycleSelect(sel, step) {
+  const n = sel.options.length; if (!n) return;
+  sel.selectedIndex = (sel.selectedIndex + step + n) % n;
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+}
+function padBack() {
+  const c = padActiveContainer();
+  if (c && c.id === 'pad-kbd') { padKbDone(); return; }   // ○ closes the on-screen keyboard (keeps what's typed)
+  if (c && c.id === 'sk-pop') {   // ○ closes the skill-detail card back to the tree
+    selectedSkillId = null; if (typeof renderPanel === 'function') renderPanel();
+    _padContainer = null; padClearFocus(); padInvalidateEls();
+    if (typeof sfx === 'function') sfx('click');
+    return;
+  }
+  if (c && c.id === 'side-panel') {   // the desktop Bag column isn't an Esc target — exit its focus to play
+    _padBagFocus = false; _padContainer = null; padClearFocus();
+    if (!isTouchMode()) setPanelCollapsed(true); else if (document.body.classList.contains('bag-open')) toggleBag();
+    if (typeof sfx === 'function') sfx('click');
+    return;
+  }
+  if (typeof handleEscape === 'function') handleEscape();
+}
+// The nearest actually-scrollable ancestor of the focused element (up to the menu
+// container), so the right stick scrolls whatever list/panel focus sits in.
+function padScrollableAncestor(el, container) {
+  for (let n = el; n; n = n.parentElement) {
+    if (n.scrollHeight - n.clientHeight > 4) {
+      const oy = getComputedStyle(n).overflowY;
+      if (oy === 'auto' || oy === 'scroll') return n;
+    }
+    if (n === container || n === document.body) break;
+  }
+  if (container && container.scrollHeight - container.clientHeight > 4) return container;
+  return null;
+}
+// Tab strips (settings tabs, leaderboard tabs/modes, bag HERO/SKILLS/LOOT…) hop with
+// the bumpers. Generic: find the tab-like buttons, step from the active one.
+const PAD_TAB_SEL = '.settings-tab-btn, .lb-tab, .lb-mode, [role="tab"], .panel-tab, .bag-tab, .tab-btn, .modal-nav-btn';
+function padSwitchTab(container, step) {
+  if (!container) return;
+  const tabs = [...container.querySelectorAll(PAD_TAB_SEL)].filter(t => t.getClientRects().length && !t.disabled);
+  if (tabs.length < 2) return;
+  let cur = tabs.findIndex(t => /(^|\s)(active|on|sel|selected)(\s|$)/.test(t.className) || t.getAttribute('aria-selected') === 'true');
+  if (cur < 0) cur = 0;
+  const next = tabs[(cur + step + tabs.length) % tabs.length];
+  if (next) { next.click(); _padFocusIdx = 0; padClearFocus(); padInvalidateEls(); }
+}
+function padDriveMenu(down, axes, pressed, dt, ts) {
+  padStick.active = false; padStick.mag = 0;   // no hero walking while navigating a menu
+  const container = padActiveContainer();
+  const els = padSyncFocus(container, ts);
+  // Navigation from the D-pad or the left stick, with hold-to-repeat.
+  let raw = null;
+  if (pressed[PAD_BTN.DUP]) raw = 'up'; else if (pressed[PAD_BTN.DDOWN]) raw = 'down';
+  else if (pressed[PAD_BTN.DLEFT]) raw = 'left'; else if (pressed[PAD_BTN.DRIGHT]) raw = 'right';
+  if (!raw) raw = stickToDir(axes[0] || 0, axes[1] || 0);
+  const navDir = padNavPulse(raw, dt);
+  // Left/right on a focused <select> cycles its option instead of moving focus, so a
+  // long native dropdown (e.g. the music-vibe picker) is fully drivable.
+  if (navDir && (navDir === 'left' || navDir === 'right') && padFocusEl && padFocusEl.tagName === 'SELECT') {
+    padCycleSelect(padFocusEl, navDir === 'right' ? 1 : -1);
+  } else if (navDir) padMoveFocus(navDir, els);
+  if (down.includes(PAD_BTN.CROSS)) padActivateFocused();
+  if (down.includes(PAD_BTN.CIRCLE)) padBack();
+  if (down.includes(PAD_BTN.SQUARE)) padActivateFocused();   // secondary confirm (some rows split action off)
+  if (down.includes(PAD_BTN.L1)) padSwitchTab(container, -1);
+  if (down.includes(PAD_BTN.R1)) padSwitchTab(container, 1);
+  // Right stick free-scrolls whatever scrollable region the focus sits in, so long
+  // lists / tooltips stay reachable without walking focus through every item.
+  const ry = axes[3] || 0;
+  if (Math.abs(ry) > 0.25 && padFocusEl) {
+    const sc = padScrollableAncestor(padFocusEl, container);
+    if (sc) sc.scrollTop += ry * 24;
+  }
+}
+
+// ── VIRTUAL CURSOR (universal fallback: a real mouse driven by the right stick) ──
+function padToggleCursor() {
+  padCursor.on = !padCursor.on;
+  if (padCursor.on) {
+    if (!padCursor.x && !padCursor.y) { padCursor.x = window.innerWidth / 2; padCursor.y = window.innerHeight / 2; }
+    padClearFocus(); padShowCursor();
+  } else { padHideCursor(); }
+  try { updatePadHintbar(); } catch (_) {}
+  if (typeof sfx === 'function') sfx('click');
+}
+function padDriveCursor(down, axes, dt) {
+  padStick.active = false; padStick.mag = 0;
+  const sx = axes[2] || 0, sy = axes[3] || 0;
+  const spd = PAD_CURSOR_SPEED * dt;
+  padCursor.x = Math.max(0, Math.min(window.innerWidth, padCursor.x + sx * spd));
+  padCursor.y = Math.max(0, Math.min(window.innerHeight, padCursor.y + sy * spd));
+  padShowCursor();
+  // Left stick can also nudge it (either thumb works).
+  padCursor.x = Math.max(0, Math.min(window.innerWidth, padCursor.x + (axes[0] || 0) * spd));
+  padCursor.y = Math.max(0, Math.min(window.innerHeight, padCursor.y + (axes[1] || 0) * spd));
+  if (down.includes(PAD_BTN.CROSS)) padCursorClick();
+  if (down.includes(PAD_BTN.CIRCLE)) padToggleCursor();   // ○ exits cursor mode
+}
+// Left-click at the cursor by dispatching the real pointer + mouse + click sequence
+// at that point — so it drives the canvas (click-to-move / chase / inspect) AND any
+// DOM control, reusing every existing mouse handler.
+function padCursorClick() {
+  const x = padCursor.x, y = padCursor.y;
+  const t = document.elementFromPoint(x, y);
+  if (!t) return;
+  const base = { clientX: x, clientY: y, button: 0, buttons: 1, bubbles: true, cancelable: true };
+  const pbase = Object.assign({ pointerId: 1, pointerType: 'mouse', isPrimary: true }, base);
+  try { t.dispatchEvent(new PointerEvent('pointerdown', pbase)); } catch (_) {}
+  try { t.dispatchEvent(new MouseEvent('mousedown', base)); } catch (_) {}
+  try { t.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, pbase, { buttons: 0 }))); } catch (_) {}
+  try { t.dispatchEvent(new MouseEvent('mouseup', Object.assign({}, base, { buttons: 0 }))); } catch (_) {}
+  try { t.dispatchEvent(new MouseEvent('click', Object.assign({}, base, { buttons: 0 }))); } catch (_) {}
+}
+function padCursorEl() { return document.getElementById('pad-cursor'); }
+function padShowCursor() { const c = padCursorEl(); if (!c) return; c.style.left = padCursor.x + 'px'; c.style.top = padCursor.y + 'px'; c.classList.add('on'); }
+function padHideCursor() { const c = padCursorEl(); if (c) c.classList.remove('on'); }
+
+// ── FOCUS RING ── a floating box tracked over the focused element each frame, so it
+// follows re-renders and scrolling without touching the element's own styles.
+function padUpdateRing(el) {
+  const ring = document.getElementById('pad-ring'); if (!ring) return;
+  if (!el) { ring.classList.remove('on'); return; }
+  const r = el.getBoundingClientRect();
+  if (r.width < 1 && r.height < 1) { ring.classList.remove('on'); return; }
+  ring.style.left = r.left + 'px'; ring.style.top = r.top + 'px';
+  ring.style.width = r.width + 'px'; ring.style.height = r.height + 'px';
+  ring.classList.add('on');
+}
+
+// ── VIRTUAL KEYBOARD ── text entry (hero name, cloud-save login). It's just another
+// menu container full of buttons, so the generic focus navigator drives it; these
+// helpers open it over a target <input> and type into it.
+const PAD_KB_ROWS = [
+  ['1','2','3','4','5','6','7','8','9','0'],
+  ['q','w','e','r','t','y','u','i','o','p'],
+  ['a','s','d','f','g','h','j','k','l'],
+  ['z','x','c','v','b','n','m'],
+  ['@','.','_','-'],
+];
+function padKbOpen(input) {
+  _padKbTarget = input; _padKbShift = false;
+  const ov = document.getElementById('pad-kbd'); if (!ov) return;
+  padKbRender();
+  ov.classList.add('open');
+  _padContainer = null;   // force focus onto the keyboard
+}
+function padKbRender() {
+  const ov = document.getElementById('pad-kbd'); if (!ov) return;
+  const cap = _padKbShift;
+  const keyBtn = (ch) => `<button class="pad-kb-key" onclick="padKbType('${ch === "'" ? "\\'" : ch}')">${cap && /[a-z]/.test(ch) ? ch.toUpperCase() : ch}</button>`;
+  const rows = PAD_KB_ROWS.map(r => `<div class="pad-kb-row">${r.map(keyBtn).join('')}</div>`).join('');
+  const nameField = _padKbTarget && _padKbTarget.id === 'name-input';
+  ov.innerHTML =
+    `<div class="pad-kb-card">
+       <div class="pad-kb-preview" id="pad-kb-preview">${(_padKbTarget && _padKbTarget.value) || ''}</div>
+       ${rows}
+       <div class="pad-kb-row">
+         <button class="pad-kb-key wide" onclick="padKbShift()">⇧ ${cap ? 'ABC' : 'abc'}</button>
+         <button class="pad-kb-key wide2" onclick="padKbSpace()">␣ Space</button>
+         <button class="pad-kb-key wide" onclick="padKbBack()">⌫</button>
+         ${nameField ? '<button class="pad-kb-key wide" onclick="padKbRandom()">🎲</button>' : ''}
+         <button class="pad-kb-key wide done" onclick="padKbDone()">✓ Done</button>
+       </div>
+     </div>`;
+}
+function padKbSyncPreview() { const p = document.getElementById('pad-kb-preview'); if (p && _padKbTarget) p.textContent = _padKbTarget.value || ''; }
+function padKbType(ch) {
+  if (!_padKbTarget) return;
+  if (_padKbShift && /[a-z]/.test(ch)) ch = ch.toUpperCase();
+  const max = parseInt(_padKbTarget.getAttribute('maxlength'), 10);
+  if (!(max > 0) || _padKbTarget.value.length < max) {
+    _padKbTarget.value += ch;
+    _padKbTarget.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  if (_padKbShift) { _padKbShift = false; padKbRender(); } else padKbSyncPreview();
+}
+function padKbSpace() { padKbType(' '); }
+function padKbBack() { if (!_padKbTarget) return; _padKbTarget.value = _padKbTarget.value.slice(0, -1); _padKbTarget.dispatchEvent(new Event('input', { bubbles: true })); padKbSyncPreview(); }
+function padKbShift() { _padKbShift = !_padKbShift; padKbRender(); }
+// A self-contained hero-name pool so a pad player can roll a name instead of typing
+// one out key-by-key (the game has no name generator otherwise).
+const PAD_KB_NAMES = ['Aldric','Bryn','Cassia','Doran','Elara','Fenwick','Grimm','Halric','Isolde','Jorah','Kaelen','Lyra','Morgane','Nyx','Orin','Perrin','Quinn','Rowan','Sable','Thane','Ulric','Vesper','Wyn','Xara','Ysolde','Zephyr'];
+function padKbRandom() {
+  if (!_padKbTarget) return;
+  const i = Math.floor(Math.random() * PAD_KB_NAMES.length);
+  _padKbTarget.value = PAD_KB_NAMES[i];
+  _padKbTarget.dispatchEvent(new Event('input', { bubbles: true }));
+  padKbSyncPreview();
+}
+function padKbDone() {
+  const ov = document.getElementById('pad-kbd'); if (ov) ov.classList.remove('open');
+  const t = _padKbTarget; _padKbTarget = null; _padContainer = null;
+  if (t) { try { t.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {} }
+}
+
+// ── HINT BAR & HELP ── discoverability. The hint bar shows the current context's
+// key bindings; View opens a full cheat-sheet of the whole scheme.
+function padHint(glyph, label) { return `<span class="pad-hint"><b>${glyph}</b>${label}</span>`; }
+function updatePadHintbar() {
+  const bar = document.getElementById('pad-hintbar'); if (!bar) return;
+  if (!_padOn) { bar.classList.remove('on'); return; }
+  let html;
+  if (padCursor.on) html = padHint(padGlyph('rstick'), 'Move') + padHint(padGlyph('cross'), 'Click') + padHint(padGlyph('circle'), 'Exit cursor');
+  else if (padMenuOpen()) html = padHint(padGlyph('dpad'), 'Navigate') + padHint(padGlyph('cross'), 'Select') + padHint(padGlyph('circle'), 'Back') + padHint(padGlyph('l1') + '/' + padGlyph('r1'), 'Tabs');
+  else html = padHint(padGlyph('lstick'), 'Move') + padHint(padGlyph('cross'), 'Use') + padHint(padGlyph('l1') + '+' + padGlyph('cross') + padGlyph('circle') + padGlyph('square') + padGlyph('triangle'), 'Skills') + padHint(padGlyph('r2'), 'Sprint') + padHint(padGlyph('options'), 'Menu') + padHint(padGlyph('view'), 'Help');
+  bar.innerHTML = html; bar.classList.add('on');
+}
+function padHelpRow(keys, action) { return `<div class="pad-help-row"><span class="pad-help-keys">${keys}</span><span class="pad-help-act">${action}</span></div>`; }
+function togglePadHelp() {
+  const ov = document.getElementById('pad-help'); if (!ov) return;
+  if (ov.classList.contains('open')) { ov.classList.remove('open'); return; }
+  const g = padGlyph;
+  ov.innerHTML =
+    `<div class="pad-help-card">
+       <div class="pad-help-title">Controller</div>
+       <div class="pad-help-sec">In the dungeon</div>
+       ${padHelpRow(g('lstick'), 'Move')}
+       ${padHelpRow(g('r2'), 'Sprint (hold)')}
+       ${padHelpRow(g('r1'), 'Dash')}
+       ${padHelpRow(g('cross'), 'Interact / use / open chest')}
+       ${padHelpRow(g('circle'), 'Open Bag')}
+       ${padHelpRow(g('square'), 'Toggle log')}
+       ${padHelpRow(g('triangle'), 'Town portal')}
+       ${padHelpRow(g('l1') + ' + ' + g('cross') + g('circle') + g('square') + g('triangle'), 'Cast skills 1–4')}
+       ${padHelpRow(g('dpad') + ' ←/→', 'Health / Mana potion')}
+       ${padHelpRow(g('dpad') + ' ↑/↓', 'Swap weapon / target focus')}
+       ${padHelpRow(g('rstick'), 'Inspect a foe')}
+       <div class="pad-help-sec">In menus</div>
+       ${padHelpRow(g('dpad') + ' / ' + g('lstick'), 'Move selection (tooltip shows)')}
+       ${padHelpRow(g('cross'), 'Select')}
+       ${padHelpRow(g('circle'), 'Back')}
+       ${padHelpRow(g('l1') + ' / ' + g('r1'), 'Switch tabs')}
+       <div class="pad-help-sec">Anywhere</div>
+       ${padHelpRow(g('options'), 'Pause / settings')}
+       ${padHelpRow(g('r3'), 'Virtual cursor (a mouse on the stick)')}
+       ${padHelpRow(g('view'), 'This help')}
+       <button class="pad-kb-key wide done" onclick="togglePadHelp()" style="margin-top:8px">Close</button>
+     </div>`;
+  ov.classList.add('open');
+}
+
+// ── connect / disconnect ──
+window.addEventListener('gamepadconnected', (e) => { _padGlyphs = padDetectGlyphs(e.gamepad && e.gamepad.id); });
+window.addEventListener('gamepaddisconnected', () => { if (!firstGamepad()) { _padPrev = {}; setPadMode(false); } });
 
 // ══════════════════════════════════════════
 // HELPERS
@@ -30945,6 +31559,7 @@ function gameLoop(ts) {
   _lastTs = ts;
   if (dt > 0.1) dt = 0.1;          // clamp after a stall so nothing teleports
   perfFrameSample(ts, dt);         // dev perf HUD sampling — a single boolean check while hidden
+  safeStep('pad', () => pollGamepads(ts, dt));   // controller: poll + route (menus work while paused)
   tickAnimClock(ts);               // advance the looping-animation clock (frozen while paused)
   // The teleport fade/beam animation runs on its own even while the world is paused
   // by it (rtPaused → true during transit) — it must keep playing to reach the warp.
@@ -31001,6 +31616,10 @@ requestAnimationFrame(gameLoop);
 // This shrinks as handlers move to delegated listeners during extraction.
 // ===================================================================
 const __DL_FN_BRIDGE = {
+  // Controller layer — the keyboard/help overlays render inline onclick= handlers,
+  // and a few are handy to reach from tests.
+  togglePadHelp, padKbType, padKbSpace, padKbBack, padKbShift, padKbRandom, padKbDone, padKbOpen,
+  pollGamepads, setPadMode, padToggleCursor,
   slotLabelIcon,
   isCasterGear,
   itemStatPool,

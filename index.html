@@ -635,6 +635,16 @@
 <div id="hovertip"></div>
 <div id="enemy-card" onclick="closeEnemyCard()"></div>
 
+<!-- ── CONTROLLER (gamepad) layer ── all shown only under body.pad (see the GAMEPAD
+     section in game.js + styles.css). The ring tracks the focused menu element; the
+     cursor is the right-stick virtual mouse; the hint bar shows context bindings; the
+     help + on-screen keyboard are .open-toggled overlays populated by JS. -->
+<div id="pad-ring" aria-hidden="true"></div>
+<div id="pad-cursor" aria-hidden="true"></div>
+<div id="pad-hintbar" aria-hidden="true"></div>
+<div id="pad-help" aria-hidden="true"></div>
+<div id="pad-kbd" aria-hidden="true"></div>
+
 <div id="screen-flash"></div>
 
 <div id="low-hp-vignette"></div>

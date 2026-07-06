@@ -7,6 +7,14 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "big", v: "Full controller support", by: "Claude", notes: [
+    "Plug in a PlayStation, Xbox or Steam Deck / generic gamepad — everything in the game is now playable on a controller, revealed the moment you touch it. Keyboard and mouse stay live.",
+    "In the dungeon: left stick moves, R2 sprints, R1 dashes. ✕ interacts/uses, ○ opens the Bag, □ toggles the log, △ opens a town portal. Hold L1 and press ✕○□△ to cast your four skills.",
+    "D-pad: health & mana potions (left/right), swap weapon set (up), cycle auto-attack focus (down). Right stick inspects foes; L3 collapses the minimap.",
+    "In every menu, shop and craft screen: D-pad or left stick move the selection (its tooltip pops), ✕ selects, ○ backs out, L1/R1 switch tabs.",
+    "On-screen keyboard for naming a hero and cloud-save sign-in; a virtual cursor (R3) reaches anything else, and View opens a full button-map cheat-sheet.",
+    "Button glyphs auto-match your pad — ✕○□△ for PlayStation, A/B/X/Y for Xbox.",
+  ] },
   { date: "2026-07-05", size: "medium", v: "Solo Self-Found mode — a hero who walks alone", by: "Jeff Louie", notes: [
     "New SOLO SELF-FOUND toggle on the name screen, beside Hardcore — arm either or both. An SSF hero never touches the shared account pools: only what they find on their own run can be used.",
     "The Vault Keeper turns SSF heroes away — no banking or withdrawing gold or gear, and town shops charge carried coin only. Crafting materials fill a private per-hero wallet instead of the shared one.",
