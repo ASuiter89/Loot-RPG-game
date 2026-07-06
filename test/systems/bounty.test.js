@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bountyProgress, bountyDone, bountyNewlyComplete } from '../../src/systems/bounty.js';
+import { bountyProgress, bountyDone, bountyNewlyComplete, bountyCoreReward, BOUNTY_CORE_BASE } from '../../src/systems/bounty.js';
 
 // A hero-totals snapshot with sensible zeros, overridable per case.
 const totals = (o = {}) => ({
@@ -100,5 +100,39 @@ describe('bountyNewlyComplete', () => {
   it('does not re-fire for a bounty already flagged done (e.g. loaded mid-complete)', () => {
     const b = { kind: 'slay', need: 1, snap: 0, doneNotified: true };
     expect(bountyNewlyComplete(b, totals({ kills: 5 }))).toBe(false);
+  });
+});
+
+describe('bountyCoreReward', () => {
+  it('pays the baseline at the shallowest depth', () => {
+    expect(bountyCoreReward(1, 1)).toBe(BOUNTY_CORE_BASE);
+    expect(BOUNTY_CORE_BASE).toBe(2);
+  });
+
+  it('scales up as depth increases', () => {
+    const shallow = bountyCoreReward(1, 1);
+    const mid = bountyCoreReward(15, 1);
+    const deep = bountyCoreReward(30, 1);
+    expect(mid).toBeGreaterThan(shallow);
+    expect(deep).toBeGreaterThan(mid);
+  });
+
+  it('scales up with a heavier contract weight at the same depth', () => {
+    expect(bountyCoreReward(20, 1.8)).toBeGreaterThan(bountyCoreReward(20, 1.0));
+  });
+
+  it('never drops below the baseline and returns a whole number', () => {
+    for (const d of [0, 1, 5, 40]) {
+      for (const w of [0.5, 1, 1.8]) {
+        const n = bountyCoreReward(d, w);
+        expect(n).toBeGreaterThanOrEqual(BOUNTY_CORE_BASE);
+        expect(Number.isInteger(n)).toBe(true);
+      }
+    }
+  });
+
+  it('treats a missing/zero depth as floor 1 and defaults the weight to 1', () => {
+    expect(bountyCoreReward(0)).toBe(bountyCoreReward(1, 1));
+    expect(bountyCoreReward(undefined)).toBe(bountyCoreReward(1, 1));
   });
 });
