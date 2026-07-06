@@ -9016,6 +9016,31 @@ window.addEventListener('resize', onViewportResize);
 // those too so the full-screen canvas always matches the visible area.
 window.addEventListener('orientationchange', onViewportResize);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
+// ── MAP BOX OBSERVER ──
+// The map canvas fills whatever the side panels leave it, and that box changes
+// from MANY places: a window drag, the log/loot drawer folding, the bag drawer
+// un-collapsing (toggleBag), a UI-SIZE change. Making every one of those remember
+// to re-fit the backing buffer is fragile — a raw class toggle silently skips the
+// re-fit and leaves the map stretched/squished (see the note in padOpenBag), and
+// the timed per-frame slide re-fit only covers its own short window, so a change
+// that settles outside it stays distorted until the next window resize. Observing
+// the canvas box directly is the robust backstop: whenever its size actually
+// changes — for any reason, including every intermediate size as a column slides —
+// re-fit the buffer to match and redraw. Setting the buffer never changes the
+// element's box (its size is CSS-driven), so this can't feed back into a loop.
+if (typeof ResizeObserver === 'function') {
+  let _roW = canvas.width, _roH = canvas.height;   // last buffer size we fit to
+  const mapBoxObserver = new ResizeObserver(() => {
+    resizeCanvas();
+    // Only redraw when the fit actually changed the buffer, so idle ticks (and the
+    // per-frame slide re-fit having already synced it) cost nothing.
+    if (canvas.width !== _roW || canvas.height !== _roH) {
+      _roW = canvas.width; _roH = canvas.height;
+      try { draw(); } catch (e) {}
+    }
+  });
+  mapBoxObserver.observe(canvas);
+}
 
 // The loot drawer is a permanent column — always open; tapping the map never closes it.
 
@@ -17240,8 +17265,13 @@ function draw() {
       drawMark(nfx, nfy, GREEN, npcSprite, true);
       const dx0 = offX + nfx * tw, dy0 = offY + nfy * th;
       const following = quest.type === 'escort' && quest.npc.following;
-      // A pixel arrow marks "follow me" (up) vs "quest here" (down).
-      if (spriteReady) drawSpriteC(following ? 'ic_up' : 'ic_down', dx0 + tw/2, dy0 - th*0.04, Math.round(tw*0.34));
+      // A pixel arrow marks "follow me" (up) vs "quest here" (down). Float it
+      // clear ABOVE the giver's head, not over the face: the giver draws big
+      // (side tw*1.4, centred at dy0 + th*0.34 — see drawMark), so its top sits
+      // ~0.36·th above dy0; park the arrow just over that top with a small gap.
+      const npcSz = Math.round(tw * 1.4), arrowSz = Math.round(tw * 0.34);
+      const npcTop = dy0 + th*0.34 - npcSz/2;
+      if (spriteReady) drawSpriteC(following ? 'ic_up' : 'ic_down', dx0 + tw/2, npcTop - arrowSz/2 - th*0.04, arrowSz);
     }
     if (quest.item && !quest.hasItem) drawMark(quest.item.x, quest.item.y, GOLD, 'q_relic');
     if (quest.spot) drawMark(quest.spot.x, quest.spot.y, GOLD, quest.spot.sprite);

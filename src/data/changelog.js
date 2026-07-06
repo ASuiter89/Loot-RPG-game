@@ -17,6 +17,12 @@ export const CHANGELOG = [
     "Every system ships with bespoke pixel art — panel crests, affliction sigils, tiered glyphs, the six deep gods with ascended Uber variants, per-lineage Effigy shards, and deed trophies, frames and badges — plus six animated town keepers who run the new services.",
     "For console play: gameGuide(“covenants”/“weave”/“mirrorforge”/“pantheon”/“cycles”/“deeds”) explains each, and gameState().endgame reports their live state.",
   ] },
+  { date: "2026-07-06", size: "small", v: "Map no longer stretches when the loot drawer opens or folds", by: "Claude", notes: [
+    "Fixed the map stretching or squishing out of shape when the loot drawer folds, unfolds, or the bag opens — the play area now re-fits itself to whatever width it's given and stays crisp, no page refresh needed.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Quest-giver arrow floats above the head, not over the face", by: "Jeff Louie", notes: [
+    "Fixed the \"follow me\" / \"quest here\" arrow over a quest-giver so it now floats clear above their head instead of covering their face.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Belt BOUNTY / MEALS modules jump to their town service", by: "Jeff Louie", notes: [
     "In town, clicking the belt's BOUNTY module now opens the Bounty Board (even with no active contract), and clicking the MEALS module opens the Ramen House — a one-tap shortcut to each.",
   ] },
