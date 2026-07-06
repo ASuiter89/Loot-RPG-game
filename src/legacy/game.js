@@ -6397,6 +6397,12 @@ let graveMarker = null;
 let nextDiffPortal = null;
 let merchant = null;  // { x, y, stock: [...] } when present
 let shopMode = 'buy';  // merchant tab: 'buy' | 'sell'
+// Merchant Sort / Filter — mirrors the LOOT drawer's controls but keeps its own
+// independent state, so ordering/narrowing the wares never disturbs the bag's
+// view. Shared across the BUY (wares) and SELL (bag) tabs.
+let shopSort = 'rarity';        // 'rarity' | 'power' | 'slot' | 'value'
+let shopStatFilter = [];        // stat/attr keys to narrow to (empty = no filter)
+let shopSortOpen = false, shopFilterOpen = false;
 // The town Merchant's wares persist for the whole town visit (so closing and
 // reopening the shop shows the SAME stock); rebuilt on a new town visit or paid
 // restock. null until first opened. See openTownService / refreshShop.
@@ -11163,6 +11169,30 @@ function shopClose() {
   closeShop();
 }
 
+// Merchant Sort / Filter handlers — mirror the LOOT drawer's, driving the shop's
+// own state (shopSort / shopStatFilter) so the wares view is independent of the bag.
+function setShopSort(k) { shopSort = k; renderShop(); }
+function toggleShopSortMenu() { shopSortOpen = !shopSortOpen; if (shopSortOpen) shopFilterOpen = false; renderShop(); }
+function toggleShopFilterMenu() { shopFilterOpen = !shopFilterOpen; if (shopFilterOpen) shopSortOpen = false; renderShop(); }
+function toggleShopStat(k) {
+  const i = shopStatFilter.indexOf(k);
+  if (i < 0) shopStatFilter.push(k); else shopStatFilter.splice(i, 1);
+  renderShop();
+}
+function clearShopStats() { shopStatFilter = []; renderShop(); }
+// The Sort/Filter control cluster for the merchant, over `items` (the wares on
+// the BUY tab, the bag on the SELL tab — the source for the stat-filter options).
+function shopSortFilterHTML(items) {
+  return sortFilterCtrlsHTML({
+    sort: shopSort, sortOpen: shopSortOpen,
+    statFilter: shopStatFilter, filterOpen: shopFilterOpen,
+    items,
+    fns: { sort: 'setShopSort', sortMenu: 'toggleShopSortMenu', filterMenu: 'toggleShopFilterMenu', stat: 'toggleShopStat', clear: 'clearShopStats' },
+    sortHint: 'Order the wares by rarity, power, slot or value.',
+    emptyHint: 'No stats to filter.',
+  });
+}
+
 function renderShop() {
   setGoldPill('shop-gold-count', 'shop-gold-vault');
   setMatStrip('shop-mats'); // materials show at the merchant too, so scrapping here has visible feedback
@@ -11181,7 +11211,26 @@ function renderShop() {
     el.innerHTML = '<div class="shop-empty">Sold out! Pay to restock for fresh wares.</div>' + refreshBtn;
     return;
   }
-  el.innerHTML = '<div class="shop-grid">' + merchant.stock.map((s, i) => {
+  // Sort + filter the wares like the bag — keep each entry's original stock index
+  // so Buy / tooltip still target the right ware after reordering.
+  const ctrls = shopSortFilterHTML(merchant.stock);
+  const slotOrder = {};
+  SLOT_KEYS.forEach((sk, idx) => { slotOrder[sk] = idx; });
+  const tierKeys = Object.keys(TIERS);
+  const stockRows = merchant.stock.map((s, i) => ({
+    s, i, item: s.item,
+    pow: s.item.slot ? itemPower(s.item) : -1,
+    tr: tierKeys.indexOf(s.item.tier),
+    so: s.item.slot in slotOrder ? slotOrder[s.item.slot] : 99,
+  })).filter(r => itemRowVisible(r.item, 'all', shopStatFilter));
+  stockRows.sort(makeRowCompare(shopSort));
+  if (stockRows.length === 0) {
+    // Stock isn't empty — the stat filter just hid everything. Keep the controls
+    // on screen so the filter can be cleared.
+    el.innerHTML = ctrls + '<div class="shop-empty">No wares match the filter.</div>' + refreshBtn;
+    return;
+  }
+  el.innerHTML = ctrls + '<div class="shop-grid">' + stockRows.map(({ s, i }) => {
     const price = stockPrice(s);
     const afford = spendableGold() >= price;
     let name, sub, cls = '', stats = '', isUpgrade = false;
@@ -11225,22 +11274,37 @@ function shopTab(mode) { shopMode = mode; renderShop(); }
 function shopSell(i) { sellFromBag(i); if (merchant) renderShop(); }
 function shopScrap(i) { scrapFromBag(i); if (merchant) renderShop(); }
 function shopBulk(which) {
-  // Sell / scrap the whole bag (ignore the LOOT-tab filter), sparing locked pieces.
-  const prev = lootFilter; lootFilter = 'all';
-  bagBulk(which);
-  lootFilter = prev;
+  // Sell / scrap everything the shop's stat filter currently shows (ignore the
+  // slot dimension — the shop has no slot subtabs), sparing locked pieces.
+  bagBulk(which, it => itemRowVisible(it, 'all', shopStatFilter));
   if (merchant) renderShop();
 }
 function renderShopSellHTML() {
   if (!inventory.length) return '<div class="shop-empty">Your bag is empty — nothing to sell.</div>';
-  const unlocked = inventory.filter(it => !it.locked);
+  const ctrls = shopSortFilterHTML(inventory);
+  // Which bag pieces the stat filter shows — bulk actions + their totals honor it.
+  const visible = it => itemRowVisible(it, 'all', shopStatFilter);
+  const unlocked = inventory.filter(it => visible(it) && !it.locked);
   const bulkGold = unlocked.reduce((a, it) => a + Math.max(1, Math.round(it.value * 0.5)), 0);
   const scrapN = unlocked.filter(it => it.slot && TIERS[it.tier]).length;
   const bulk = `<div class="shop-sell-bulk">`
     + `<button class="loot-bulk-btn" ${unlocked.length ? '' : 'disabled'} onclick="shopBulk('sell')"><span data-spr=ic_money></span> Sell all · <span data-spr=ic_money></span>${fmtGold(bulkGold)}</button>`
     + (scrapN ? `<button class="loot-bulk-btn" onclick="shopBulk('scrap')"><span data-spr=mat_scrap></span> Scrap all · ${scrapN}</button>` : '')
     + `</div>`;
-  const rows = inventory.map((it, i) => {
+  // Sort + filter the shown rows, keeping each item's real inventory index so
+  // sell/scrap still target the right piece.
+  const slotOrder = {};
+  SLOT_KEYS.forEach((sk, idx) => { slotOrder[sk] = idx; });
+  const tierKeys = Object.keys(TIERS);
+  const decorated = inventory.map((it, i) => ({
+    it, i, item: it,
+    pow: it.slot ? itemPower(it) : -1,
+    tr: tierKeys.indexOf(it.tier),
+    so: it.slot in slotOrder ? slotOrder[it.slot] : 99,
+  })).filter(r => visible(r.it));
+  decorated.sort(makeRowCompare(shopSort));
+  if (decorated.length === 0) return ctrls + '<div class="shop-empty">No items match the stat filter.</div>';
+  const rows = decorated.map(({ it, i }) => {
     const price = Math.max(1, Math.round(it.value * 0.5));
     const sub = it.slot ? SLOTS[it.slot].label : 'item';
     const locked = it.locked;
@@ -11253,7 +11317,7 @@ function renderShopSellHTML() {
       + `<div class="shop-row-info ${rarityClass(it)}"><div class="shop-row-name">${curseMark(it)}${it.name}</div><div class="shop-row-sub">${sub}</div></div>`
       + `${lock}${scrapBtn}${sellBtn}</div>`;
   }).join('');
-  return bulk + rows;
+  return ctrls + bulk + rows;
 }
 
 function buyItem(i) {
@@ -13162,11 +13226,13 @@ function scrapFromBag(i) {
   updateBars(); renderPanel(); saveGame();
 }
 
-// Bulk sell / scrap everything currently visible under the LOOT filter, always
-// sparing locked pieces. `which` is 'sell' or 'scrap' (scrap skips non-gear).
-function bagBulk(which) {
+// Bulk sell / scrap every unlocked bag item the `visible` predicate accepts,
+// always sparing locked pieces. `which` is 'sell' or 'scrap' (scrap skips
+// non-gear). Defaults to the LOOT filter; the merchant passes its own so a
+// "Sell all" there only ever hits what the shop's filter shows.
+function bagBulk(which, visible = lootRowVisible) {
   const targets = inventory.filter(it =>
-    lootRowVisible(it) && !it.locked &&
+    visible(it) && !it.locked &&
     (which === 'sell' || (it.slot && TIERS[it.tier])));
   if (!targets.length) return;
   let gold = 0; const mats = {};
@@ -24465,8 +24531,8 @@ function setLootFilter(slot) {
   renderPanel();
 }
 
-// The LOOT-tab sort options, in menu order. Each supplies a comparator over
-// {item} rows (see lootRowCompare).
+// The sort options shared by the LOOT drawer and the merchant, in menu order.
+// Each key selects a comparator over decorated rows (see makeRowCompare).
 const LOOT_SORTS = [
   { key: 'rarity', label: 'Rarity' },
   { key: 'power',  label: 'Power'  },
@@ -24476,6 +24542,53 @@ const LOOT_SORTS = [
 function setLootSort(k) { lootSort = k; renderPanel(); }
 function toggleLootSortMenu() { lootSortOpen = !lootSortOpen; if (lootSortOpen) lootFilterOpen = false; renderPanel(); }
 function toggleLootFilterMenu() { lootFilterOpen = !lootFilterOpen; if (lootFilterOpen) lootSortOpen = false; renderPanel(); }
+
+// A comparator over decorated sort rows ({ item, pow, tr, so }) for the given
+// sort key — shared by the LOOT drawer and the merchant so both order gear
+// identically (pieces this class can't wield mix in rather than sinking).
+function makeRowCompare(sort) {
+  return (a, b) => {
+    switch (sort) {
+      case 'power': return b.pow - a.pow || b.tr - a.tr || a.so - b.so;
+      case 'slot':  return a.so - b.so || b.tr - a.tr || b.pow - a.pow;
+      case 'value': return (b.item.value || 0) - (a.item.value || 0) || b.tr - a.tr || b.pow - a.pow;
+      // Highest rarity first (unique → junk); Power breaks ties, then slot.
+      case 'rarity':
+      default:      return b.tr - a.tr || b.pow - a.pow || a.so - b.so;
+    }
+  };
+}
+
+// Shared Sort + Filter (stat) control cluster used by the LOOT drawer and the
+// merchant. `m` carries each surface's own state plus the global handler names
+// that drive it, so the two render identically yet stay independent:
+//   { sort, sortOpen, statFilter, filterOpen, items, fns, sortHint, emptyHint }
+// fns = { sort, sortMenu, filterMenu, stat, clear } — window handler names.
+function sortFilterCtrlsHTML(m) {
+  const sortLabel = (LOOT_SORTS.find(s => s.key === m.sort) || LOOT_SORTS[0]).label;
+  const controls = `<div class="loot-controls">
+      <button class="loot-ctrl-btn ${m.sortOpen ? 'open' : ''}" onclick="${m.fns.sortMenu}()" ${hoverTip(`<div class='ht-name'>⇅ Sort</div><div class='ht-line'>${m.sortHint}</div>`)}>⇅ Sort <span class="lc-val">${sortLabel}</span><span class="lc-caret">${m.sortOpen ? '▾' : '▸'}</span></button>
+      <button class="loot-ctrl-btn ${m.filterOpen ? 'open' : ''} ${m.statFilter.length ? 'on' : ''}" onclick="${m.fns.filterMenu}()" ${hoverTip(`<div class='ht-name'>⚑ Filter</div><div class='ht-line'>Show only gear that carries the stats you pick.</div>`)}>⚑ Filter${m.statFilter.length ? ` <span class="lc-val">${m.statFilter.length}</span>` : ''}<span class="lc-caret">${m.filterOpen ? '▾' : '▸'}</span></button>
+    </div>`;
+  const sortPop = m.sortOpen ? '<div class="loot-ctrl-pop">' + LOOT_SORTS.map(s =>
+    `<button class="loot-ctrl-opt ${m.sort === s.key ? 'active' : ''}" onclick="${m.fns.sort}('${s.key}')">${s.label}</button>`
+  ).join('') + '</div>' : '';
+  // Stat-filter options = the stat/attribute codes actually present in `items`,
+  // in glossary order, so you only ever see stats you can filter by.
+  let filterPop = '';
+  if (m.filterOpen) {
+    const present = new Set();
+    m.items.forEach(it => itemStatKeys(it).forEach(k => present.add(k)));
+    const order = [...Object.keys(STAT_SHORT), ...ATTR_KEYS];
+    const opts = order.filter(k => present.has(k));
+    present.forEach(k => { if (!opts.includes(k)) opts.push(k); });
+    filterPop = '<div class="loot-ctrl-pop">' + (opts.length
+      ? opts.map(k => `<button class="loot-ctrl-opt loot-stat-chip ${m.statFilter.includes(k) ? 'active' : ''}" onclick="${m.fns.stat}('${k}')" ${hoverTip(`<div class='ht-name'>${lootStatCode(k)}</div><div class='ht-line'>${lootStatName(k)}</div>`)}>${lootStatCode(k)}</button>`).join('')
+          + (m.statFilter.length ? `<button class="loot-ctrl-opt loot-ctrl-clear" onclick="${m.fns.clear}()">Clear filter</button>` : '')
+      : `<span class="lc-hint">${m.emptyHint}</span>`) + '</div>';
+  }
+  return controls + sortPop + filterPop;
+}
 // Toggle one stat/attribute in the LOOT stat filter (keeps the panel open so you
 // can pick several in a row).
 function toggleLootStat(k) {
@@ -24498,14 +24611,18 @@ function lootStatCode(k) { return STAT_SHORT[k] || (ATTRIBUTES[k] && ATTRIBUTES[
 function lootStatName(k) {
   return STAT_LABELS[k] || (ATTRIBUTES[k] && ATTRIBUTES[k].label) || k;
 }
-// Does an item pass the LOOT tab's slot subtab AND stat filter? Shared by the
-// list render and the bulk sell/scrap so "Sell all" only ever hits visible rows.
-function lootRowVisible(item) {
+// Does an item pass a slot filter ('all', a SLOT_KEYS value, or 'other') AND a
+// stat filter (empty = no narrowing; else the item must carry ANY chosen stat)?
+// Shared by the LOOT drawer and the merchant so both surfaces filter identically.
+function itemRowVisible(item, filter, statFilter) {
   const c = item.slot || 'other';
-  if (!(lootFilter === 'all' || c === lootFilter)) return false;
-  if (lootStatFilter.length && !itemStatKeys(item).some(k => lootStatFilter.includes(k))) return false;
+  if (!(filter === 'all' || c === filter)) return false;
+  if (statFilter.length && !itemStatKeys(item).some(k => statFilter.includes(k))) return false;
   return true;
 }
+// The LOOT tab's own visibility (its slot subtab + stat filter). Used by the list
+// render and the bulk sell/scrap so "Sell all" only ever hits visible rows.
+function lootRowVisible(item) { return itemRowVisible(item, lootFilter, lootStatFilter); }
 
 // Collapsible key to the short stat/attribute codes that show on compact loot
 // rows (e.g. "+3 ATK · THN · +5 MIG"), so a new player can decode them without
@@ -24618,29 +24735,14 @@ function renderPanel() {
     ).join('') + '</div>';
     // Sort + stat-filter controls: two dropdown buttons, each opening an inline
     // options panel below the row (so nothing floats over the list on mobile).
-    const sortLabel = (LOOT_SORTS.find(s => s.key === lootSort) || LOOT_SORTS[0]).label;
-    const controls = `<div class="loot-controls">
-      <button class="loot-ctrl-btn ${lootSortOpen ? 'open' : ''}" onclick="toggleLootSortMenu()" ${hoverTip(`<div class='ht-name'>⇅ Sort</div><div class='ht-line'>Order the bag by rarity, power, slot or value.</div>`)}>⇅ Sort <span class="lc-val">${sortLabel}</span><span class="lc-caret">${lootSortOpen ? '▾' : '▸'}</span></button>
-      <button class="loot-ctrl-btn ${lootFilterOpen ? 'open' : ''} ${lootStatFilter.length ? 'on' : ''}" onclick="toggleLootFilterMenu()" ${hoverTip(`<div class='ht-name'>⚑ Filter</div><div class='ht-line'>Show only gear that carries the stats you pick.</div>`)}>⚑ Filter${lootStatFilter.length ? ` <span class="lc-val">${lootStatFilter.length}</span>` : ''}<span class="lc-caret">${lootFilterOpen ? '▾' : '▸'}</span></button>
-    </div>`;
-    const sortPop = lootSortOpen ? '<div class="loot-ctrl-pop">' + LOOT_SORTS.map(s =>
-      `<button class="loot-ctrl-opt ${lootSort === s.key ? 'active' : ''}" onclick="setLootSort('${s.key}')">${s.label}</button>`
-    ).join('') + '</div>' : '';
-    // Stat-filter options = the stat/attribute codes actually present in the bag,
-    // in glossary order, so you only ever see stats you can filter by.
-    let filterPop = '';
-    if (lootFilterOpen) {
-      const present = new Set();
-      inventory.forEach(it => itemStatKeys(it).forEach(k => present.add(k)));
-      const order = [...Object.keys(STAT_SHORT), ...ATTR_KEYS];
-      const opts = order.filter(k => present.has(k));
-      present.forEach(k => { if (!opts.includes(k)) opts.push(k); });
-      filterPop = '<div class="loot-ctrl-pop">' + (opts.length
-        ? opts.map(k => `<button class="loot-ctrl-opt loot-stat-chip ${lootStatFilter.includes(k) ? 'active' : ''}" onclick="toggleLootStat('${k}')" ${hoverTip(`<div class='ht-name'>${lootStatCode(k)}</div><div class='ht-line'>${lootStatName(k)}</div>`)}>${lootStatCode(k)}</button>`).join('')
-            + (lootStatFilter.length ? `<button class="loot-ctrl-opt loot-ctrl-clear" onclick="clearLootStats()">Clear filter</button>` : '')
-        : `<span class="lc-hint">No stats to filter yet — pick up some gear first.</span>`) + '</div>';
-    }
-    const lootCtrls = controls + sortPop + filterPop;
+    const lootCtrls = sortFilterCtrlsHTML({
+      sort: lootSort, sortOpen: lootSortOpen,
+      statFilter: lootStatFilter, filterOpen: lootFilterOpen,
+      items: inventory,
+      fns: { sort: 'setLootSort', sortMenu: 'toggleLootSortMenu', filterMenu: 'toggleLootFilterMenu', stat: 'toggleLootStat', clear: 'clearLootStats' },
+      sortHint: 'Order the bag by rarity, power, slot or value.',
+      emptyHint: 'No stats to filter yet — pick up some gear first.',
+    });
     // Rarity rank for sorting: junk 0 → unique 6 (higher = rarer).
     const TIER_KEYS = Object.keys(TIERS);
     // One pass over the bag: build the visible rows, decorating each with its sort
@@ -24663,23 +24765,8 @@ function renderPanel() {
         bulkGold += Math.max(1, Math.round(item.value * 0.5));
       }
     });
-    // Sort comparator over the decorated rows — the chosen key orders everything
-    // alike (pieces this class can't wield mix in rather than sinking).
-    const lootRowCompare = (a, b) => {
-      switch (lootSort) {
-        case 'power':
-          return b.pow - a.pow || b.tr - a.tr || a.so - b.so;
-        case 'slot':
-          return a.so - b.so || b.tr - a.tr || b.pow - a.pow;
-        case 'value':
-          return (b.item.value || 0) - (a.item.value || 0) || b.tr - a.tr || b.pow - a.pow;
-        case 'rarity':
-        default:
-          // Highest rarity first (unique → junk); Power breaks ties, then slot.
-          return b.tr - a.tr || b.pow - a.pow || a.so - b.so;
-      }
-    };
-    rows.sort(lootRowCompare);
+    // Order the decorated rows by the chosen sort key (shared with the merchant).
+    rows.sort(makeRowCompare(lootSort));
     const mMoney = '<span data-spr=ic_money></span>', mScrap = '<span data-spr=mat_scrap></span>';
     const bulkBar = bulkN ? `<div class="loot-bulk-bar">
       <button class="loot-bulk-btn" onclick="bagBulk('sell')">${mMoney} Sell all · <span data-spr=ic_money></span>${fmtGold(bulkGold)}</button>
@@ -31265,6 +31352,11 @@ const __DL_FN_BRIDGE = {
   shopBack,
   shopClose,
   renderShop,
+  setShopSort,
+  toggleShopSortMenu,
+  toggleShopFilterMenu,
+  toggleShopStat,
+  clearShopStats,
   shopTab,
   shopSell,
   shopScrap,
