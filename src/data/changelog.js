@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Nothing can wall off a one-tile hallway", by: "Claude", notes: [
+    "A solid prop or a wandering merchant/mystic can no longer stand in a one-tile-wide hall and block you from walking straight through — any that would is moved into open space when the floor builds.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Cave passages open up", by: "Jeff Louie", notes: [
     "Most cave corridors between rooms now carve two tiles wide — cramped single-tile squeezes drop to roughly 1 hall in 3, kept as occasional chokepoints instead of the default.",
   ] },
