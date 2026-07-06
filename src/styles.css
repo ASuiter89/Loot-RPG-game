@@ -3344,6 +3344,7 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .slot-name.muted { color: var(--orange-500); font-weight: normal; font-style: italic; }
+  .slot-name .slot-cls { color: var(--orange-400); font-weight: normal; font-size: 1.3rem; }
   .slot-stats { font-size: 1.3rem; color: var(--orange-400); margin-bottom: 8px; line-height: 1.4; }
   .slot-stats .slot-time { color: var(--orange-500); }
   .slot-actions { display: flex; gap: 6px; }
