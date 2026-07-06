@@ -51,7 +51,9 @@ import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '..
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
-import { emptyMealSlots, sanitizeMealSlots, assignMealToSlot, takeFromMealSlot, returnSlotToPantry, filledSlotCount, mealSignature } from '../systems/meals.js';
+import { emptyMealSlots, sanitizeMealSlots, assignMealToSlot, assignMealToSlotAt, groupPantry, removePantryStack, takeFromMealSlot, returnSlotToPantry, filledSlotCount, mealSignature } from '../systems/meals.js';
+import { cookableCount, cookBatchOptions } from '../systems/cooking.js';
+import { trimFillStyle } from '../utils/iconTrim.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
 import { bountyProgress as _bountyProgress, bountyDone as _bountyDone, bountyNewlyComplete } from '../systems/bounty.js';
 import { forgeSections } from '../systems/forgeFlow.js';
@@ -1589,6 +1591,25 @@ function dlIconFill(name) {
   return `<span class="dl-ic dl-fill" style="background-size:${cols*100}% ${rows*100}%;` +
     `background-position:${(col/(cols-1)*100).toFixed(3)}% ${(row/(rows-1)*100).toFixed(3)}%"></span>`;
 }
+// A sprite that FILLS its parent like dlIconFill, but positioned on its OPAQUE box
+// (alpha-trimmed) so the visible art — not the tile's transparent padding — fills the
+// element. The element's aspect ratio is stamped to the box aspect so the art fills
+// with no letterbox; CSS then sizes it (e.g. to a row's text height). Used where the
+// icon must match surrounding text height regardless of the layout's root font size.
+function dlIconTrimFill(name) {
+  const i = SPRITE_IDX[name];
+  if (i === undefined || !spriteReady) return '';
+  const box = _iconTrimBox(name);
+  if (!box) return dlIconFill(name);   // fall back to a whole-tile fill until the alpha box is measurable
+  const aw = spriteSheet.naturalWidth || 256, ah = spriteSheet.naturalHeight || 144;
+  const col = i % ATLAS_COLS, row = (i / ATLAS_COLS) | 0;
+  const s = trimFillStyle(col * ATLAS_TS + box.x0, row * ATLAS_TS + box.y0, box.w, box.h, aw, ah);
+  return `<span class="dl-ic dl-trimfill" style="aspect-ratio:${s.ar};` +
+    `background-size:${s.bgW.toFixed(3)}% ${s.bgH.toFixed(3)}%;` +
+    `background-position:${s.posX.toFixed(3)}% ${s.posY.toFixed(3)}%"></span>`;
+}
+// The pantry/meal-slot bowl icon, sized by CSS to fill its row's text height.
+function bowlIconFill() { return dlIconTrimFill(RAMEN_BOWL_SPRITE); }
 function enemySprite(e) {
   // Sprites are referenced directly: every enemy carries its own `sprite` (bosses,
   // mimics, scripted foes) or resolves it from its MONSTERS entry. No emoji lookup.
@@ -7224,7 +7245,7 @@ window.gameGuide = function gameGuide(topic) {
       `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon.`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
-      `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House (SLOT moves the bowl's whole stack) to eat it straight from the bottom-HUD belt mid-run without returning to cook; eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks.`,
+      `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
@@ -12438,11 +12459,15 @@ function potRemove(k) {
 }
 function potClear() { cookPot = {}; refreshCooking(); }
 
-// Cook the pot into a bowl: stack every topping's buff, add any secret-recipe
-// bonus, consume the toppings, and stock the finished bowl in the pantry.
-function cookPotNow() {
+// Cook the pot into bowls: stack every topping's buff, add any secret-recipe bonus,
+// consume the toppings, and stock the finished bowl(s) in the pantry. `n` cooks a
+// BATCH of that many identical bowls at once (Cook ×N) — clamped to what your toppings
+// can afford — so you don't tap Cook over and over. Defaults to one bowl.
+function cookPotNow(n) {
   const total = Object.values(cookPot).reduce((a, c) => a + c, 0);
   if (total !== RAMEN_INGREDIENT_COUNT) { log(`<span data-spr=ramen_bowl></span> A bowl of ramen takes exactly ${RAMEN_INGREDIENT_COUNT} toppings — you have ${total}.`); return; }
+  const affordable = cookableCount(cookPot, player.ingredients || {});
+  const count = Math.max(1, Math.min(Math.floor(n) || 1, affordable));
   const bowl = bowlFromPot(cookPot);
   if (bowl.match && !isDiscovered(bowl.match.id)) {
     if (!Array.isArray(player.discoveredRecipes)) player.discoveredRecipes = [];
@@ -12450,11 +12475,12 @@ function cookPotNow() {
     log(`${bowlIcon(14)} Secret recipe discovered: ${bowl.name}! It carries a bonus on top of its toppings.`, 'important');
     screenFlash('#ffd24b');
   }
-  for (const [k, c] of Object.entries(cookPot)) player.ingredients[k] = Math.max(0, ingCount(k) - c);
+  for (const [k, c] of Object.entries(cookPot)) player.ingredients[k] = Math.max(0, ingCount(k) - c * count);
   cookPot = {};
   if (!Array.isArray(player.pantry)) player.pantry = [];
-  player.pantry.push({ name: bowl.name, fx: bowl.fx, floors: bowl.floors, recipe: bowl.recipe });
-  log(`${bowlIcon(14)} You cook up ${bowl.name}${fxDesc(bowl.fx) ? ' — ' + fxDesc(bowl.fx) : ''}.`, 'loot');
+  for (let j = 0; j < count; j++) player.pantry.push({ name: bowl.name, fx: bowl.fx, floors: bowl.floors, recipe: bowl.recipe });
+  const label = count > 1 ? `${count}× ${bowl.name}` : bowl.name;
+  log(`${bowlIcon(14)} You cook up ${label}${fxDesc(bowl.fx) ? ' — ' + fxDesc(bowl.fx) : ''}.`, 'loot');
   sfx('shrine');
   updateBars(); saveGame(); refreshCooking();
 }
@@ -12499,6 +12525,67 @@ function unassignMeal(slotIndex) {
   player.pantry = r.pantry; player.mealSlots = r.mealSlots;
   sfx('click');
   updateBars(); renderSkillBar(); saveGame(); refreshCooking();
+}
+
+// Trash a whole pantry stack (a bowl you'll never eat). Two-tap confirm: the first
+// tap arms this stack (button flips to "Sure?"), a second tap within a few seconds
+// dumps every matching bowl. Keyed by meal signature so it survives the re-render and
+// disarms on its own. `pantryTrashArmed` holds the armed stack's signature, or null.
+let pantryTrashArmed = null;
+function trashBowlStack(pantryIndex) {
+  const bowl = (player.pantry || [])[pantryIndex];
+  if (!bowl) { pantryTrashArmed = null; return; }
+  const sig = mealSignature(bowl);
+  if (pantryTrashArmed !== sig) {
+    pantryTrashArmed = sig;
+    sfx('click');
+    refreshCooking();
+    setTimeout(() => { if (pantryTrashArmed === sig) { pantryTrashArmed = null; refreshCooking(); } }, 3000);
+    return;
+  }
+  pantryTrashArmed = null;
+  const r = removePantryStack(player.pantry, pantryIndex);
+  player.pantry = r.pantry;
+  sfx('error');
+  log(`${bowlIcon(14)} Tossed ${r.removed}× ${bowl.name}.`);
+  saveGame(); refreshCooking();
+}
+
+// ── Pantry → meal-slot drag & drop ──────────────────────────────────────────
+// Drag a cooked bowl from the pantry onto a meal slot to assign it there (the mouse
+// counterpart of the SLOT button; touch keeps using SLOT). `mealDrag` holds the
+// dragged bowl's pantry index while a drag is in flight.
+let mealDrag = null;
+function mealDragStart(e, pantryIndex) {
+  mealDrag = { pantryIndex };
+  if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'copy'; try { e.dataTransfer.setData('text/plain', 'meal:' + pantryIndex); } catch (_) {} }
+}
+function mealDragEnd() {
+  mealDrag = null;
+  const hot = document.querySelectorAll('.meal-drop-hot');
+  for (let i = 0; i < hot.length; i++) hot[i].classList.remove('meal-drop-hot');
+}
+function mealSlotDragOver(e) { if (!mealDrag) return; e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; }
+function mealSlotDragEnter(e, el) { if (mealDrag && el) el.classList.add('meal-drop-hot'); }
+function mealSlotDragLeave(e, el) { if (el) el.classList.remove('meal-drop-hot'); }
+// Drop a dragged pantry bowl onto slot `slotIndex`: fill that exact slot (or merge if
+// it already holds the same meal); if it holds a DIFFERENT meal, fall back to the
+// auto-placing assign so the drop still lands somewhere sensible.
+function mealSlotDrop(e, slotIndex) {
+  e.preventDefault();
+  if (!mealDrag) return;
+  const d = mealDrag; mealDragEnd();
+  const idx = d.pantryIndex;
+  const bowl = (player.pantry || [])[idx];
+  if (!bowl) return;
+  const name = bowl.name || 'meal';
+  let r = assignMealToSlotAt(player.pantry, player.mealSlots, idx, slotIndex, MEAL_SLOT_COUNT);
+  if (!r.assigned) r = assignMealToSlot(player.pantry, player.mealSlots, idx, MEAL_SLOT_COUNT);
+  if (!r.assigned) { log(`${bowlIcon(14)} No free meal slot — clear one first.`); sfx('error'); return; }
+  player.pantry = r.pantry; player.mealSlots = r.mealSlots;
+  sfx('click');
+  updateBars(); renderSkillBar(); saveGame(); refreshCooking();
+  log(`${bowlIcon(14)} Slotted ${r.assigned}× ${name} — eat it from the belt anytime.`);
 }
 
 // Eat one bowl straight from a HUD meal slot (works anywhere — this is the whole point
@@ -12556,16 +12643,25 @@ function renderCookingHTML() {
       : '';
     html += `<div class="pot-preview">Bowl: <b>${fxDesc(preview.fx) || 'no effect'}</b> · ${preview.floors} floors${secret}</div>`;
     const ready = potTotal === RAMEN_INGREDIENT_COUNT;
-    const cookBtn = ready
-      ? `<button class="cook-btn" onclick="cookPotNow()"><span data-spr=ic_fire></span> Cook</button>`
-      : `<button class="cook-btn" disabled>Add ${RAMEN_INGREDIENT_COUNT - potTotal} more</button>`;
-    html += `<div class="cook-actions">${cookBtn}<button class="cook-btn ghost" onclick="potClear()">Clear</button></div>`;
+    let cookBtns;
+    if (!ready) {
+      cookBtns = `<button class="cook-btn" disabled>Add ${RAMEN_INGREDIENT_COUNT - potTotal} more</button>`;
+    } else {
+      // Cook one bowl, or a whole batch at once (Cook ×N) — up to what your toppings
+      // can afford, so you're not tapping Cook over and over for a stack.
+      const opts = cookBatchOptions(cookableCount(cookPot, player.ingredients || {}));
+      cookBtns = opts.map(n =>
+        `<button class="cook-btn" onclick="cookPotNow(${n})"><span data-spr=ic_fire></span> ${n === 1 ? 'Cook' : 'Cook ×' + n}</button>`
+      ).join('');
+    }
+    html += `<div class="cook-actions">${cookBtns}<button class="cook-btn ghost" onclick="potClear()">Clear</button></div>`;
   }
 
-  // Pantry — cooked bowls waiting to be eaten or slotted. Each row can be eaten now
-  // (EAT) or SLOTted: SLOT sends the bowl's WHOLE matching stack to a meal slot so it
-  // can be eaten from the belt mid-run. SLOT is disabled only when the slots are full
-  // and none already holds this meal.
+  // Pantry — cooked bowls waiting to be eaten or slotted. Identical bowls STACK into
+  // one row with an ×N count. Each row can be eaten one at a time (EAT), SLOTted (sends
+  // the WHOLE matching stack to a meal slot — also draggable onto a slot below), or
+  // TRASHed (two-tap confirm dumps the whole stack). SLOT is disabled only when the
+  // slots are full and none already holds this meal.
   html += `<div class="cook-sec">Pantry</div>`;
   const pantry = player.pantry || [];
   if (!pantry.length) {
@@ -12573,13 +12669,17 @@ function renderCookingHTML() {
   } else {
     const slots = player.mealSlots || [];
     const slotsFull = filledSlotCount(slots) >= MEAL_SLOT_COUNT;
-    html += pantry.map((b, i) => {
-      const canSlot = !slotsFull || slots.some(s => s && mealSignature(s.bowl) === mealSignature(b));
-      return `<div class="food-row has-actions"><span class="food-emoji">${bowlIcon(20)}</span>
-        <div class="food-info"><div class="food-name">${b.name}</div><div class="food-fx">${fxDesc(b.fx) || 'no effect'} · ${b.floors} floors</div></div>
+    html += groupPantry(pantry).map(g => {
+      const b = g.bowl, i = g.index;
+      const canSlot = !slotsFull || slots.some(s => s && mealSignature(s.bowl) === g.sig);
+      const armed = pantryTrashArmed === g.sig;
+      const count = g.qty > 1 ? ` <span class="meal-qty">×${g.qty}</span>` : '';
+      return `<div class="food-row has-actions" draggable="true" ondragstart="mealDragStart(event,${i})" ondragend="mealDragEnd()" title="Drag onto a meal slot or the HUD belt to slot this stack"><span class="food-emoji">${bowlIconFill()}</span>
+        <div class="food-info"><div class="food-name">${b.name}${count}</div><div class="food-fx">${fxDesc(b.fx) || 'no effect'} · ${b.floors} floors</div></div>
         <div class="food-row-btns">
           <button class="row-btn eat-btn" onclick="eatBowl(${i})">EAT</button>
           <button class="row-btn slot-btn" onclick="assignMeal(${i})"${canSlot ? '' : ' disabled'} title="Send this bowl's whole stack to a meal slot">SLOT</button>
+          <button class="row-btn trash-btn${armed ? ' armed' : ''}" onclick="trashBowlStack(${i})" title="Discard this whole stack">${armed ? 'SURE?' : 'TRASH'}</button>
         </div></div>`;
     }).join('');
   }
@@ -12587,12 +12687,13 @@ function renderCookingHTML() {
   // Meal Slots — assigned here at the Ramen House only; each holds a whole stack of one
   // meal so it can be eaten from the belt in the dungeon without recooking or returning.
   html += `<div class="cook-sec">Meal Slots (${filledSlotCount(player.mealSlots)}/${MEAL_SLOT_COUNT})</div>`;
-  html += `<div class="cook-empty cook-hint">Slot a cooked bowl above to carry its whole stack into the dungeon — eat it straight from the belt, no need to return here.</div>`;
+  html += `<div class="cook-empty cook-hint">Drag a cooked bowl onto a slot below or the HUD belt (on touch, tap SLOT) to carry its whole stack into the dungeon — eat it straight from the belt, no need to return here.</div>`;
+  const dropAttrs = (i) => `ondragover="mealSlotDragOver(event)" ondrop="mealSlotDrop(event,${i})" ondragenter="mealSlotDragEnter(event,this)" ondragleave="mealSlotDragLeave(event,this)"`;
   html += (player.mealSlots || []).map((s, i) => s
-    ? `<div class="food-row has-actions meal-slot-row"><span class="food-emoji">${bowlIcon(20)}</span>
+    ? `<div class="food-row has-actions meal-slot-row" ${dropAttrs(i)}><span class="food-emoji">${bowlIconFill()}</span>
         <div class="food-info"><div class="food-name">${s.bowl.name} <span class="meal-qty">×${s.qty}</span></div><div class="food-fx">${fxDesc(s.bowl.fx) || 'no effect'} · ${s.bowl.floors} floors each</div></div>
         <button class="row-btn clear-btn" onclick="unassignMeal(${i})" title="Return this stack to the pantry">CLEAR</button></div>`
-    : `<div class="food-row meal-slot-empty"><span class="food-emoji">${bowlIcon(20)}</span><div class="food-info"><div class="food-fx">Empty slot</div></div></div>`
+    : `<div class="food-row meal-slot-empty" ${dropAttrs(i)}><span class="food-emoji dl-drop-plus">＋</span><div class="food-info"><div class="food-fx">Empty slot — drop a bowl here</div></div></div>`
   ).join('');
 
   // Secret recipe book — discovered recipes shown in full; the rest collapsed into
@@ -25544,12 +25645,16 @@ function beltLoadoutHtml() {
 function beltMealsHtml() {
   const slots = player.mealSlots || [];
   const anyFilled = slots.some(s => s && s.qty > 0);
+  // Each belt tile is also a drop target: drag a cooked bowl from the Ramen House
+  // pantry straight onto it to slot it (desktop — the town menu leaves the belt
+  // visible below it). Same handlers as the in-menu Meal Slots rows.
+  const drop = (i) => `ondragover="mealSlotDragOver(event)" ondrop="mealSlotDrop(event,${i})" ondragenter="mealSlotDragEnter(event,this)" ondragleave="mealSlotDragLeave(event,this)"`;
   let tiles = '';
   for (let i = 0; i < MEAL_SLOT_COUNT; i++) {
     const s = slots[i];
     tiles += (s && s.qty > 0)
-      ? `<button class="skillbar-btn sb-meal" onclick="eatMealSlot(${i})" ${hoverTip(`<div class='ht-name'>${bowlIcon(14)} ${escapeHtml(s.bowl.name)}</div><div class='ht-line'>${escapeHtml(fxDesc(s.bowl.fx) || 'no effect')} · ${s.bowl.floors} floors</div><div class='ht-sub'>tap to eat · ${s.qty} left</div>`)}><span class="sb-icon">${bowlIcon(24)}</span><span class="sb-meal-qty">${s.qty}</span></button>`
-      : `<div class="skillbar-btn sb-meal sb-meal-slot-empty"></div>`;
+      ? `<button class="skillbar-btn sb-meal" onclick="eatMealSlot(${i})" ${drop(i)} ${hoverTip(`<div class='ht-name'>${bowlIcon(14)} ${escapeHtml(s.bowl.name)}</div><div class='ht-line'>${escapeHtml(fxDesc(s.bowl.fx) || 'no effect')} · ${s.bowl.floors} floors</div><div class='ht-sub'>tap to eat · ${s.qty} left</div>`)}><span class="sb-icon">${bowlIcon(24)}</span><span class="sb-meal-qty">${s.qty}</span></button>`
+      : `<div class="skillbar-btn sb-meal sb-meal-slot-empty" ${drop(i)}></div>`;
   }
   const overlay = anyFilled ? '' : `<div class="sb-mod-overlay">Go cook something!</div>`;
   const tip = anyFilled ? '' : hoverTip(`<div class='ht-name'>${bowlIcon(14)} Meals</div><div class='ht-line'>Cook a bowl at the Ramen House and slot it here to eat it mid-run.</div>`);
@@ -31244,6 +31349,13 @@ const __DL_FN_BRIDGE = {
   eatBowl,
   assignMeal,
   unassignMeal,
+  trashBowlStack,
+  mealDragStart,
+  mealDragEnd,
+  mealSlotDragOver,
+  mealSlotDragEnter,
+  mealSlotDragLeave,
+  mealSlotDrop,
   eatMealSlot,
   renderCookingHTML,
   craftIlvl,

@@ -1727,6 +1727,8 @@
   .sb-meal:hover { border-color: var(--green-650); filter: brightness(1.12); }
   .sb-meal:active { background: var(--green-650); }
   .sb-meal.sb-meal-slot-empty { background: var(--panel); border: 1px dashed var(--border); opacity: 0.72; cursor: default; }
+  /* Belt meal tile lit up while a pantry bowl is dragged over it (drag-to-slot). */
+  .sb-meal.meal-drop-hot { border-color: var(--gold); box-shadow: 0 0 6px color-mix(in srgb, var(--gold) 55%, transparent); filter: brightness(1.15); opacity: 1; }
   .sb-meal-qty {
     position: absolute; right: 1px; bottom: 0; z-index: 4; padding: 0 4px; border-radius: 6px;
     background: color-mix(in srgb, var(--ink) 78%, transparent); color: var(--paper);
@@ -4550,8 +4552,13 @@
   .cook-active-name { color: var(--orange-250); font-weight: bold; font-size: 1.5rem; }
   .cook-active-fx { color: var(--text); font-size: 1.2rem; margin-top: 1px; }
   .cook-active-floors { color: var(--orange-400); font-size: 1.2rem; margin-top: 1px; }
-  .ing-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-  .ing-chip { display: flex; flex-direction: row; align-items: center; gap: 10px; flex: 0 0 240px; max-width: 100%; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 32px 8px 10px; cursor: pointer; text-align: left; position: relative; color: var(--text); }
+  /* Grid (not flex-wrap) so EVERY topping card is the same height: grid-auto-rows:1fr
+     sizes all rows to the tallest card's content, and each card stretches to fill —
+     its icon+text then centre in the uniform box. auto-fit keeps the fixed-width
+     centred columns; the min(100%,…) floor lets a lone column shrink on a narrow
+     screen instead of overflowing. */
+  .ing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(240px * var(--ui-scale,1))), calc(240px * var(--ui-scale,1)))); grid-auto-rows: 1fr; justify-content: center; gap: 6px; }
+  .ing-chip { display: flex; flex-direction: row; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 32px 8px 10px; cursor: pointer; text-align: left; position: relative; color: var(--text); }
   .ing-chip:active { background: var(--panel-raised); }
   .ing-chip:disabled { opacity: 0.4; cursor: default; }
   .ing-emoji { font-size: 2.6rem; flex: 0 0 auto; line-height: 1; display: flex; align-items: center; }
@@ -4565,16 +4572,28 @@
   .pot-preview { font-size: 1.2rem; color: var(--orange-400); margin: 6px 2px 2px; }
   .pot-preview b { color: var(--xp); }
   .pot-secret { color: var(--gold-350); font-size: 1.2rem; margin-top: 2px; }
-  .cook-actions { display: flex; gap: 6px; margin: 8px 2px 2px; }
+  .cook-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 2px 2px; }
   .cook-btn { flex: 1; background: linear-gradient(180deg, var(--orange-700), var(--orange-600)); border: 1px solid var(--orange-250); color: var(--paper); font-family: var(--font-ui); font-weight: bold; font-size: 1.4rem; letter-spacing: 1px; padding: 8px 0; border-radius: 6px; cursor: pointer; }
   .cook-btn:active { filter: brightness(0.9); }
   .cook-btn.ghost { background: var(--panel-raised); border-color: var(--border); color: var(--orange-400); flex: 0 0 70px; }
   .food-row, .recipe-row { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 4px 2px; }
   .recipe-row.locked { opacity: 0.7; }
-  .food-emoji { font-size: 2.2rem; width: calc(24px * var(--ui-scale,1)); text-align: center; }
+  /* Icon column is exactly the two text lines tall (their summed line-heights), so a
+     fill icon (dl-trimfill) matches the name+fx block beside it at ANY root font size.
+     A FIXED height (not align-self:stretch) is deliberate: the trim-fill icon's width
+     tracks its height via aspect-ratio, so a stretch-to-row height would feed back
+     (tall row -> wide icon -> narrower text -> taller row) and balloon on a cramped
+     width. Fixed-px icons (recipe rows) just centre in the box. */
+  .food-emoji { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; height: calc((1.3rem + 1.2rem) * 1.35); min-width: calc(24px * var(--ui-scale,1)); font-size: 2.2rem; text-align: center; }
+  .food-emoji .dl-trimfill { height: 100%; width: auto; }
+  .dl-drop-plus { color: var(--gold); font-weight: bold; opacity: 0.7; }
   .food-info { flex: 1; min-width: 0; }
-  .food-name { font-size: 1.3rem; color: var(--text); font-weight: bold; }
-  .food-fx { font-size: 1.2rem; color: var(--green-350); }
+  .food-name { font-size: 1.3rem; line-height: 1.35; color: var(--text); font-weight: bold; }
+  .food-fx { font-size: 1.2rem; line-height: 1.35; color: var(--green-350); }
+  /* Pantry rows are draggable onto a meal slot below (the mouse path for SLOT). */
+  .food-row[draggable="true"] { cursor: grab; }
+  .food-row[draggable="true"]:active { cursor: grabbing; }
+  .meal-slot-row.meal-drop-hot, .meal-slot-empty.meal-drop-hot { border-color: var(--gold); background: var(--orange-850); box-shadow: 0 0 6px color-mix(in srgb, var(--gold) 50%, transparent); }
   .recipe-need { font-size: 1.2rem; margin-top: 2px; }
   .recipe-need .need.ok { color: var(--green-350); }
   .recipe-need .need.no { color: var(--red-400); }
@@ -4584,12 +4603,23 @@
   .food-row.eatable:hover { border-color: var(--uncommon); background: var(--green-800); }
   .food-row.eatable:hover .eat-btn { background: var(--green-550); }
   .food-row.eatable:active { background: var(--green-800); }
-  /* Ramen-House meal-slot controls: EAT + SLOT on each pantry row, and the assigned
-     slot rows (with their stack count + CLEAR). */
-  .food-row-btns { display: flex; gap: 5px; flex: 0 0 auto; }
+  /* Ramen-House meal-slot controls: EAT + SLOT + TRASH on each pantry row, and the
+     assigned slot rows (with their stack count + CLEAR). The base .row-btn carries no
+     size, so give the food-row buttons a legible size + tap padding here (scoped to
+     .food-row so the save-slot .slot-btn is untouched). Wrap when a narrow sheet can't
+     fit all three side by side. */
+  .food-row .row-btn { box-sizing: border-box; font-size: 1.3rem; padding: 8px 11px; letter-spacing: 0.5px; line-height: 1; }
+  .food-row-btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; flex: 0 1 auto; }
+  /* On desktop, slotting a bowl is a DRAG action (drag the pantry row onto a meal
+     slot below, or onto the HUD belt's MEALS tiles) — so the SLOT button is hidden
+     here and only reappears on touch (body.touch), where drag isn't available. */
+  .food-row-btns .slot-btn { display: none; }
   .slot-btn { background: var(--panel-raised); border-color: var(--gold); color: var(--gold); }
   .slot-btn:active { background: var(--orange-850); }
   .slot-btn:disabled { opacity: 0.45; cursor: default; border-color: var(--border); color: var(--btn-off); }
+  .trash-btn { background: var(--panel-raised); border-color: var(--red-650); color: var(--red-300); }
+  .trash-btn:active { background: var(--orange-850); }
+  .trash-btn.armed { background: var(--hp); color: var(--paper); border-color: var(--paper); }
   .clear-btn { background: var(--panel-raised); border-color: var(--border); color: var(--text); }
   .meal-slot-row { border-color: var(--gold); }
   .meal-qty { color: var(--gold); font-size: 1.2rem; }
@@ -4850,6 +4880,13 @@
   }
   body.touch .shop-row.has-actions > .row-actions .ench-tipwrap { display: flex; }
   body.touch .shop-row.has-actions > .row-actions .act-btn { flex: 1; width: 100%; }
+  /* Ramen pantry rows on touch: drag isn't available, so SLOT comes back — and the
+     three actions (EAT / SLOT / TRASH) stack in a vertical column on the right,
+     each a bit shorter, instead of a horizontal row that crushes the bowl name on a
+     narrow screen. */
+  body.touch .food-row-btns { flex-direction: column; align-items: stretch; flex: 0 0 auto; gap: 4px; }
+  body.touch .food-row-btns .slot-btn { display: block; }
+  body.touch .food-row .row-btn { padding: 5px 10px; font-size: 1.2rem; }
   /* Dungeon Gate pickers reflow fluidly on touch (desktop keeps its fixed 5-up /
      4-up tracks). Pack as many tiles as fit, wrapping to a new row instead of
      clipping the 5th floor column / a long difficulty label on a narrow or foldable
