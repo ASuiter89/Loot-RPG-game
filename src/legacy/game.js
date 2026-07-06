@@ -4367,6 +4367,7 @@ const CLASSES = {
   warrior: {
     name: 'Warrior', icon: 'w_sword', color: '#e08a3c',
     blurb: 'A frontline bruiser — hits hardest of the melee, lightly armoured.',
+    lore: 'Forged in a hundred battles, the Warrior meets every foe head-on. Where others plan, they charge — trusting steel, muscle, and an unbreakable will.',
     passive: '+10% damage dealt · −10% damage taken',
     dmgAttrs: { primary: 'might', secondary: 'vitality' },
     weapons: ['Sword','Axe','Mace','Spear','Scythe'],
@@ -4374,6 +4375,7 @@ const CLASSES = {
   rogue: {
     name: 'Rogue', icon: 'w_dagger', color: '#5ec27a',
     blurb: 'A nimble striker — the deadliest weapon hits, but fragile.',
+    lore: 'A shadow that moves between the torchlight, the Rogue kills before the enemy knows the fight has begun. Speed and a whispered blade are the only armour worth trusting.',
     passive: '+12% damage · crits & dodge that scale with level',
     dmgAttrs: { primary: 'agility', secondary: 'might' },
     weapons: ['Dagger','Sword','Bow'],
@@ -4381,6 +4383,7 @@ const CLASSES = {
   mage: {
     name: 'Mage', icon: 'ic_orb', color: '#7d9bff',
     blurb: 'A glass-cannon caster — a deep mana pool and ranged fire.',
+    lore: 'Bound to the deep currents of magic, the Mage bends raw arcane force to will. Armour is traded away for command over fire, frost, and the spaces between — power that unravels the moment focus breaks.',
     passive: '+30% max MP · +15% spell power · −10% damage taken',
     dmgAttrs: { primary: 'spirit', secondary: 'luck' },
     weapons: ['Staff','Dagger'],
@@ -4388,6 +4391,7 @@ const CLASSES = {
   templar: {
     name: 'Templar', icon: 'a_shield', color: '#e8c95a',
     blurb: 'A holy veil — the sturdiest hero, and mends its own wounds.',
+    lore: 'Sworn to a holy light, the Templar stands as the last wall between the innocent and the dark. Faith mends every wound as fast as the enemy can open it.',
     passive: '+20% max HP · −15% damage taken · stronger regen',
     dmgAttrs: { primary: 'vitality', secondary: 'spirit' },
     weapons: ['Sword','Mace','Spear'],
@@ -25130,15 +25134,9 @@ function renderHero(el) {
     <div class="hero-class" style="border-color:${cls.color}">
       <div class="hc-head"><span class="hc-icon">${dlIcon(cls.icon, 28)}</span>
         <span class="hc-name" style="color:${cls.color}">${cls.name}</span></div>
+      ${cls.lore ? `<div class="hc-line" style="opacity:0.75;font-style:italic">${cls.lore}</div>` : ''}
       <div class="hc-line">${cls.passive}</div>
       <div class="hc-line"><span data-spr=w_sword></span> Damage scales with <b>${ATTRIBUTES[dmgAttr].label}</b></div>
-      ${(() => { const pri = primarySkill(), sig = classSignature(player.class);
-        return pri ? `<div class="hc-line">${dlIcon(pri.icon,18)||''} <b>${pri.name}</b> — ${skillDescHtml(pri.node, skillRank(pri.id))} <span style="opacity:0.7">(${pri.mp} MP · ${'press ' + skillKeyLabel(1)})</span></div>`
-          : (sig ? `<div class="hc-line" style="opacity:0.8">Spend a skill point to learn ${dlIcon(sig.icon,16)||''} <b>${sig.name}</b> (SKILLS tab)</div>` : ''); })()}
-      ${ascData() ? `<div class="hc-line" style="color:${ascData().color}">${dlIcon(ascData().icon,18)||''} <b>${ascData().name}</b> — ${ascData().blurb}</div>`
-        : (cls && (player.level || 1) >= ASCEND_LEVEL ? `<div class="hc-line" style="color:var(--gold)"><span data-spr=mat_glimmer></span> Ready to ascend — visit the Trainer <span data-spr=town_trainer></span></div>` : '')}
-      <div class="hc-line" style="opacity:0.75">Favours: ${cls.weapons.join(', ')} <span style="opacity:0.7">· any weapon usable if you meet its stat</span></div>
-      <div class="hc-line" style="opacity:0.6">Change class · ascend at the town Trainer <span data-spr=town_trainer></span></div>
     </div>` : '';
   el.innerHTML = `
     <div class="hero-nameplate">${escapeHtml(player.name || 'Adventurer')}</div>

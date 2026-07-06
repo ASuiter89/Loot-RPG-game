@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Hero tab leads with class lore, drops the clutter", by: "Jeff Louie", notes: [
+    "Each class on the HERO tab now opens with a line or two of lore beneath its name.",
+    "Trimmed the class panel down to what matters — no more signature-spell, ascension, favoured-weapon or change-class notes crowding the card.",
+  ] },
   { date: "2026-07-06", size: "small", v: "More compact \"Stat abbreviations\" key", by: "Jeff Louie", notes: [
     "Tightened the line spacing and padding in the \"Stat abbreviations\" key so the whole reference fits in less space without shrinking the text below its readable size.",
   ] },
