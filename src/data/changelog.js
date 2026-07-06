@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Mana bar pulses when you're short to cast", by: "Claude", notes: [
+    "Trying to cast a skill without enough mana now gives the mana bar a brief, faint blue pulse — a quick nudge toward why nothing fired.",
+    "Skill buttons already grey out while recharging or when you can't afford them; this points the eye at the mana pool as the reason.",
+  ] },
   { date: "2026-07-06", size: "medium", v: "Cloud saves survive playing on two devices", by: "Claude", notes: [
     "A game window left open no longer overwrites progress you made on another device — leave it open on one machine, keep playing on another, and the first window catches up instead of clobbering your newer save.",
     "A window that's open but not being played now goes idle after a minute (or when its tab is hidden) and stops writing and mirroring saves; the moment you return it re-checks your account and pulls down anything a second device advanced.",
