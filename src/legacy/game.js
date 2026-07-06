@@ -55,6 +55,7 @@ import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection,
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
 import { isSsf, walletGain, walletSpend } from '../systems/ssf.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
+import { moatCells, seaMargin } from '../systems/islandFloor.js';
 import { emptyMealSlots, sanitizeMealSlots, assignMealToSlot, assignMealToSlotAt, groupPantry, removePantryStack, takeFromMealSlot, returnSlotToPantry, filledSlotCount, mealSignature } from '../systems/meals.js';
 import { cookableCount, cookBatchOptions } from '../systems/cooking.js';
 import { trimFillStyle } from '../utils/iconTrim.js';
@@ -6827,6 +6828,7 @@ window.gameState = function gameState(radius) {
     floorDisplay: (typeof displayFloor === 'function') ? displayFloor() : dungeonLevel, // 1–25 within a tier
     tier: (typeof diffOf === 'function' && typeof DIFFS !== 'undefined') ? ((DIFFS[diffOf(dungeonLevel) - 1] || {}).name || null) : null,
     isBossFloor: dungeonLevel % 5 === 0,                                   // a guardian holds this floor
+    island: (typeof floorIslandTheme !== 'undefined') && !!floorIslandTheme, // landmass ringed by impassable sea (~ tiles frame the map)
     floorCleared: (typeof floorCleared !== 'undefined') ? !!floorCleared : null,
     hostilesLeft: (typeof hostilesRemaining === 'function') ? hostilesRemaining() : live.length, // foes still sealing the stairs
     // Explicit exit coordinates + whether the down-stairs are still sealed.
@@ -7257,6 +7259,7 @@ window.gameGuide = function gameGuide(topic) {
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `BOSS TELEGRAPHS (gameState().hazards.telegraphs) are a guardian's wind-up attacks — a floor indicator that fills, flashes, then detonates. Each carries its shape (disc = filled circle; ring = donut, lethal in the band between innerR and r but SAFE in the centre hole and beyond r; lane = beam between (x1,y1)-(x2,y2); cone = wedge of radius r opening ±halfAngle around facing), its centre (x,y)/geometry, seconds until it lands (secsToHit), and danger:true when it hurts. They are ALWAYS dodgeable by MOVING out of the zone before secsToHit hits 0 (for a ring, step past r or into the hole) — never an RNG dodge. Red = damage; cyan = a benign spawn marker. A tracking disc follows you early in its wind-up, then locks — keep moving and it lands where you were.`,
       `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, the exit is north, and four pillars give cover. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
+      `ISLAND FLOORS (gameState().island true) come up now and then on outdoor floors: the landmass is ringed by open SEA, so the whole map edge is deep water (~) instead of a rock wall. You can see and shoot across it but never walk off — the shore IS the boundary. Nothing reachable is lost; the sea only replaces the impassable frame, so play it like any other floor.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom restores 50% of max HP and refills MP to full, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one plays a short walk-through-portal animation — the portal swallows you, the camera pans across to the partner pad, and you step out there (~0.9s, world frozen, unhittable; gameState().transit reads 'warp'). It also clears any click-to-move route, so you won't auto-walk back toward the pad you clicked. Use it deliberately, not while fleeing.`,
@@ -10241,7 +10244,8 @@ function generateMap() {
   // in after the rooms are carved. Set BEFORE anything reads currentTheme().
   furnitureMap = {}; decorMap = {};
   floorThemeOverride = previewForceIndoor != null ? INDOOR_THEMES[previewForceIndoor % INDOOR_THEMES.length]
-    : ((!tutorialActive && Math.random() < 0.28) ? pick(INDOOR_THEMES) : null);
+    : ((!tutorialActive && !previewForceIsland && Math.random() < 0.28) ? pick(INDOOR_THEMES) : null);
+  floorIslandTheme = null; // island roll happens below, after the boss-floor bailout
   rollFloorMod();
   // ~35% of floors get a subtle colour wash for atmosphere.
   floorTint = Math.random() < 0.35 ? pick(FLOOR_TINTS) : null;
@@ -10259,6 +10263,15 @@ function generateMap() {
   // (hero enters south, guardian holds the centre, exit at the north). Build it
   // and stop — none of the procedural rooms/loot/NPC/decor passes below run.
   if (dungeonLevel % 5 === 0) { buildBossArena(); return; }
+
+  // ── ISLAND FLOOR? ── now and then an outdoor floor is a landmass ringed by open
+  // sea instead of the usual rock frame (the moat pass near the end floods the
+  // border rock to water). Never on indoor floors (they'd have no shore) or boss
+  // floors (their arena returned above). Set the coastal theme BEFORE anything
+  // reads currentTheme(), so the ground autotiles as sand from here on.
+  const islandFloor = !floorThemeOverride && !tutorialActive &&
+    (previewForceIsland || Math.random() < ISLAND_FLOOR_CHANCE);
+  if (islandFloor) floorIslandTheme = pick(ISLAND_THEMES);
 
   // ── ROOMS ── a handful of rectangles, occasionally one big grand hall.
   const rooms = [];
@@ -10329,6 +10342,9 @@ function generateMap() {
   // Indoor floors are built rooms — no open water or lava pools inside (spikes,
   // a trip-trap, still make sense). Keeps the LPC-skipping draw path liquid-free.
   if (floorThemeOverride) { floorHazards.delete('water'); floorHazards.delete('lava'); }
+  // Islands are already ringed by sea — no lava (it would clash with the shore),
+  // and no interior water pools either so the coastline stays the star.
+  if (floorIslandTheme) { floorHazards.delete('lava'); floorHazards.delete('water'); }
 
   // ── WATER POOLS (impassable) ── inside rooms, never on a room centre or start.
   if (floorHazards.has('water')) rooms.forEach(r => {
@@ -10446,6 +10462,15 @@ function generateMap() {
     const hor = mapData[y][x-1] === 0 && mapData[y][x+1] === 0;
     const ver = mapData[y-1][x] === 0 && mapData[y+1][x] === 0;
     if (hor || ver) { mapData[y][x] = 10; cracks--; }
+  }
+
+  // ── ISLAND MOAT ── ring the landmass with open sea. Runs AFTER every carve so
+  // it only ever converts leftover border ROCK to water (moatCells skips floor,
+  // stairs, cracked walls and hazards) — impassable stays impassable, so it can't
+  // strand a room or the exit. Just terrain paint; the floor caches key on
+  // floorSerial/mapEpoch already bumped up top, and this all precedes the first draw.
+  if (floorIslandTheme) {
+    for (const c of moatCells(mapData, MAP_W, MAP_H, seaMargin(MAP_W, MAP_H))) mapData[c.y][c.x] = 6;
   }
 
   // ── FOUNTAIN ── (~8%, or forced by a floor modifier).
@@ -11787,7 +11812,7 @@ function buildTown() {
   enemies = []; merchant = null; mystic = null; minions = []; combatBuffs = {};
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null; nextDiffPortal = null;
   quest = null; teleporters = {}; shrineData = {};
-  floorThemeOverride = null; furnitureMap = {}; decorMap = {}; // town is never an indoor-themed floor
+  floorThemeOverride = null; floorIslandTheme = null; furnitureMap = {}; decorMap = {}; // town is never an indoor/island floor
   townShopStock = null;        // fresh merchant wares each town visit
   traps = []; projectiles = []; bossHazards = []; bossTelegraphs = []; clearAttackFx(); // real-time hazards / fx never linger into town
   hasFountain = false; groundKey = null; hasKey = false;
@@ -15659,15 +15684,31 @@ const INDOOR_THEMES = [
     mortar:'#2e3824', seam:'#3a462e', speckle:'#c8c0ae', accent:'rgba(150,230,140,0.20)', stairsGlow:'#dfffc8',
     furniture:[70,71,73,74,76,80,72,75,21,54] },
 ];
+// ── ISLAND THEMES ── occasional OUTDOOR floors that come up as a landmass ringed
+// by open sea (generateMap's moat pass floods the border rock to water). Both are
+// sandy shores that read as land meeting water; their names match LPC_BIOME
+// entries so the autotiler grounds them in Sand. Reuse the existing theme objects
+// (no colour duplication to drift) — the island is a STRUCTURAL change, not a new
+// palette.
+const ISLAND_THEMES = [
+  TUTORIAL_THEME,                                      // 'the Sunlit Shore' — pale beach sand, rocky coast
+  THEMES.find((t) => t.name === 'the Coral Lagoon'),  // teal-and-coral tropical shore, leafy inland walls
+];
+// Share of eligible (outdoor, non-boss) floors that come up as an island.
+const ISLAND_FLOOR_CHANCE = 0.12;
 // When a floor rolls indoor, this holds that floor's chosen indoor theme; null on
 // ordinary outdoor floors. Set in generateMap, cleared in town.
 let floorThemeOverride = null;
+// When a floor rolls as an island, this holds its coastal theme; null otherwise.
+let floorIslandTheme = null;
 let previewForceIndoor = null; // preview only: force a specific INDOOR_THEMES index
+let previewForceIsland = false; // preview only: force an island floor
 let previewDrawSolids = false; // preview only: paint solid tiles red to verify collision
 // Themed by the DISPLAYED floor, so each difficulty replays the same visual
 // progression (floor 1 always looks like floor 1) — only the red wash deepens.
-// An indoor floor (floorThemeOverride) and the tutorial beach override this.
-function currentTheme() { return floorThemeOverride || (tutorialActive ? TUTORIAL_THEME : THEMES[(displayFloor() - 1) % THEMES.length]); }
+// An indoor floor (floorThemeOverride), an island floor (floorIslandTheme) and the
+// tutorial beach override this.
+function currentTheme() { return floorThemeOverride || floorIslandTheme || (tutorialActive ? TUTORIAL_THEME : THEMES[(displayFloor() - 1) % THEMES.length]); }
 
 // Rounded-rect helper (older canvases lack ctx.roundRect).
 function roundRectPath(x, y, w, h, r) {
@@ -31000,7 +31041,7 @@ try {
       try {
         dungeonLevel = Math.max(1, lvl | 0);
         try { tutorialActive = false; } catch (e) {}
-        try { floorThemeOverride = null; } catch (e) {}
+        try { floorThemeOverride = null; floorIslandTheme = null; previewForceIndoor = null; previewForceIsland = false; } catch (e) {}
         revivedInTown = false; closeTown(); recordDepth();
         statusEffects = []; setPlayerCell(5, 5); arrivalDir = 'down';
         generateMap();
@@ -31012,8 +31053,28 @@ try {
         let w = 0, l = 0, trees = 0, decor = 0;
         for (const k in decorMap) { decor++; if (DECOR_INDEX[decorMap[k]].ht >= 2.4) trees++; }
         for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) { const t = mapData[y][x]; if (t === 6) w++; else if (t === 7) l++; }
-        return { level: lvl, biome: (currentTheme().name || ''), indoor: !!currentTheme().indoor, water: w, lava: l, trees, decor };
+        return { level: lvl, biome: (currentTheme().name || ''), indoor: !!currentTheme().indoor, island: !!floorIslandTheme, water: w, lava: l, trees, decor };
       } catch (e) { return { err: String(e) }; }
+    };
+    // Force an ISLAND floor and regenerate, so the sea-ringed layout can be
+    // previewed deterministically (normally ~12% of outdoor floors, at random).
+    window.__previewIsland = function (lvl) {
+      try {
+        dungeonLevel = Math.max(1, (lvl == null ? dungeonLevel : lvl) | 0);
+        if (dungeonLevel % 5 === 0) dungeonLevel++;   // dodge boss floors (fixed arenas, no island)
+        tutorialActive = false; floorThemeOverride = null; previewForceIndoor = null;
+        previewForceIsland = true;
+        revivedInTown = false; closeTown(); recordDepth();
+        statusEffects = []; setPlayerCell(5, 5); arrivalDir = 'down';
+        generateMap();
+        previewForceIsland = false;
+        player.hp = player.maxHp = 9999999; player.mp = player.maxMp = 9999999;
+        if (typeof closeTitle === 'function') closeTitle();
+        updateBars(); draw();
+        let sea = 0;
+        for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (mapData[y][x] === 6) sea++;
+        return { level: dungeonLevel, biome: (currentTheme().name || ''), island: !!floorIslandTheme, sea };
+      } catch (e) { previewForceIsland = false; return { err: String(e) }; }
     };
     // Preview helper: stage a cracked wall (tile 10) on screen at a chosen hit
     // count, optionally pre-mask (raw full-tile fracture), park the hero a few

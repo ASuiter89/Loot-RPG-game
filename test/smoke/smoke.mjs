@@ -53,7 +53,7 @@ if (!existsSync(target)) {
 // must remain present through the refactor; add to the list only intentionally.
 const EXPECTED_STATE_KEYS = [
   'mode', 'canMove', 'blockingOverlay', 'transit', 'inTown', 'floor', 'floorDisplay', 'tier',
-  'isBossFloor', 'floorCleared', 'hostilesLeft', 'stairs', 'player', 'effects',
+  'isBossFloor', 'island', 'floorCleared', 'hostilesLeft', 'stairs', 'player', 'effects',
   'sets', 'skills', 'autoSkill', 'enemies', 'chests', 'coins', 'food', 'vaultKey',
   'carryingKey', 'grave', 'graveSite', 'npcs', 'allies', 'hazards', 'shrines', 'teleporters',
   'quest', 'conquestGate', 'greed', 'menu', 'legend', 'guide', 'map',
