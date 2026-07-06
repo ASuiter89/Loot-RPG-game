@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Merchant wares open sorted by Power; leaner town stock", by: "Jeff Louie", notes: [
+    "The Merchant's wares now open sorted by Power, highest first — matching the loot drawer — so the strongest pieces sit up top instead of grouped by rarity.",
+    "The town Merchant now lays out 3–5 pieces (was 4–6); the wandering merchant carries a wider 5–8, so the detour stays the bigger haul.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Merchant restock costs more each time you buy it", by: "Jeff Louie", notes: [
     "Paying the town Merchant to restock now surcharges every restock you buy in a visit — the second costs more than the first, and so on — so re-rolling for a lucky ware is a real gold sink, not a spammable pull. The surcharge resets the next time you return to town.",
   ] },
