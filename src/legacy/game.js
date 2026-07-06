@@ -1187,7 +1187,15 @@ function drawTownWalk(kind, cx, footY, size) {
 // DOM: an inline CSS-step-animated walk-down icon for the town menu; '' if none.
 function townWalkIcon(kind, px) {
   const url = TOWN_NPC_ART[kind];
-  if (!url) return '';
+  // Endgame services have no dedicated walk-sprite yet — fall back to a themed
+  // static atlas icon (PLACEHOLDER art; see ASSETS_TODO.md) so the hub tile isn't
+  // blank. These key existing icons in the sprite atlas.
+  if (!url) {
+    const EG_ICON = { covenants: 'ic_cursed', weave: 'mat_glimmer', mirrorforge: 'mat_chaos',
+      pantheon: 'feat_gate_red', cycles: 'feat_gate_red', deeds: 'q_relic' };
+    if (EG_ICON[kind]) return dlIcon(EG_ICON[kind], px);
+    return '';
+  }
   // Scale with the UI SIZE setting so town-service sprites grow with the rest of
   // the interface, matching dlIconAt (width/height, the 4-frame strip size and
   // the animation offset all key off px, so one multiply scales them together).
@@ -12344,6 +12352,13 @@ function openTownService(kind) {
   if (kind === 'sellsword') { openMercCamp();  return; }
   if (kind === 'transmuter'){ openTransmuter(); return; }
   if (kind === 'bounty')  { openBounty();    return; }
+  // ── Endgame services ──
+  if (kind === 'covenants')   { openCovenants();   return; }
+  if (kind === 'weave')       { openWeave();       return; }
+  if (kind === 'mirrorforge') { openMirrorforge(); return; }
+  if (kind === 'pantheon')    { openPantheon();    return; }
+  if (kind === 'cycles')      { openCycles();      return; }
+  if (kind === 'deeds')       { openDeeds();       return; }
 }
 
 
@@ -12381,6 +12396,17 @@ const TOWN_MENU = [
     req: { ok: () => diffOf(player.maxFloor || 1) >= 3, need: 'Reach Brutal' } },
   // The Vault is open from the start — except to a Solo Self-Found hero, whose
   // vault is sealed for life (they never touch the shared pools).
+  // ── ENDGAME services (the loot-driven late game) ──
+  { kind: 'weave',      name: 'Ascendant Weave', desc: 'Spend Boss Points on a power board',
+    req: { ok: () => pointsEarned(player.bossFirstKills) >= 1, need: 'Clear a boss floor' } },
+  { kind: 'covenants',  name: 'Covenant Altar',  desc: 'Swear afflictions for greater rewards',
+    req: { ok: () => diffClearedCount() >= 1,            need: 'Unlock Hardened' } },
+  { kind: 'mirrorforge',name: 'Mirrorforge',     desc: 'Perfect & Mirror your gear',
+    req: { ok: () => diffOf(player.maxFloor || 1) >= 3,  need: 'Reach Brutal' } },
+  { kind: 'pantheon',   name: 'Pantheon',        desc: 'Summon apex gods for Mythics',
+    req: { ok: () => (player.maxFloor || 1) > FINITE_DEPTH, need: 'Reach Endless' } },
+  { kind: 'cycles',     name: 'Cycles',          desc: 'Join the seasonal ladder' },
+  { kind: 'deeds',      name: 'Hall of Deeds',   desc: 'Renown, titles & trophies' },
   { kind: 'stash',     name: 'Vault',       desc: 'Store gold & gear safe',
     req: { ok: () => !isSsf(player),                  need: 'Sealed — Solo Self-Found' } },
 ];
@@ -31751,6 +31777,2101 @@ requestAnimationFrame(gameLoop);
 //      (e.g. onclick="selectedSkillId=null") update the real variable.
 // This shrinks as handlers move to delegated listeners during extraction.
 // ===================================================================
+
+/* ═══ ENDGAME SYSTEMS BLOCK ═══ */
+// Pure cores live in src/systems + src/data (unit-tested); this block wires them
+// into the live game — town panels, in-run hooks, gameState()/gameGuide(). It is
+// assembled from per-system function sets. Mutable run/UI state is declared here;
+// the functions below (and the seam hooks elsewhere in game.js) read/write it.
+let _egCovDread = 0, _egCovMult = null, _egCovReward = null, _egCovMalaiseRate = 0, _egFloorEnterMs = 0;
+let _egWeaveCache = null;
+let _egMfSel = -1, _egMfDivineAether = false;
+let _egPinnacleFight = null, _egPinnacleBoss = null, _egPinnacleFightStartMs = 0, _egPinnacleBossId = null;
+let _egCycleCache = null;
+let hallDeeds = { completed: [], renown: 0, title: null, frame: null, badge: null, claimed: [], classesPlayed: [], mirrored: 0, bountiesTotal: 0 };
+// Current Endless-tier depth (0 in the finite tiers) — the faucet gate for glyph
+// drops, radiant affixes, Aether and Pantheon ubers.
+function endlessDepthNow() { return (typeof isEndless === 'function' && isEndless()) ? (dungeonLevel - FINITE_DEPTH) : 0; }
+// Called from generateMap() when a floor is (re)built: stamp the floor-enter clock
+// (malaise ramp) and refresh the per-descent covenant caches.
+function egOnFloorEnter() { _egFloorEnterMs = Date.now(); try { egDeriveCovenantRun(); } catch (e) {} }
+
+
+// ── COVENANTS ──
+// ── Dread Covenants: altar UI + run-hook glue ────────────────────────────────────
+// Pasted verbatim into src/legacy/game.js module scope. Function declarations only —
+// no imports/exports, no module-level state (those globals are pre-declared by the
+// orchestrator). The pure cores (activeDread, covenantMultipliers, dreadRewardMult,
+// recordDreadClear, malaiseMult, …) and the game's shell helpers are already in scope.
+
+// Recompute the whole live covenant run-state from the hero's active set. Called on
+// every toggle and at descent so the spawn/loot/boss hooks read a fresh bundle.
+function egDeriveCovenantRun() {
+  try {
+    const ids = (player && Array.isArray(player.covenantsActive)) ? player.covenantsActive : [];
+    _egCovDread = activeDread(ids);
+    _egCovMult = covenantMultipliers(ids);
+    _egCovReward = dreadRewardMult(_egCovDread);
+    _egCovMalaiseRate = combinedMalaiseRate(ids);
+  } catch (e) {
+    // A corrupt set must never break boot or a descent — fall back to the neutral run.
+    _egCovDread = 0;
+    _egCovMult = null;
+    _egCovReward = null;
+    _egCovMalaiseRate = 0;
+    if (typeof log === 'function') log('Covenant state failed to derive — running unbound.', 'important');
+  }
+}
+
+// How many account completion marks the hero holds (drives covenant unlocks).
+function egCovMarks() {
+  try { return dreadMarksEarned(player.dreadGrid); }
+  catch (e) { return 0; }
+}
+
+// ── spawn-side hooks (called from spawnEnemies) ──────────────────────────────────
+function egCovSpawnHp(base, floorElapsedSec) {
+  const hp = _egCovMult ? _egCovMult.enemyHpMult : 1;
+  return base * hp * malaiseMult(floorElapsedSec, _egCovMalaiseRate || 0);
+}
+function egCovSpawnDmg(base, floorElapsedSec) {
+  const dmg = _egCovMult ? _egCovMult.enemyDmgMult : 1;
+  return base * dmg * malaiseMult(floorElapsedSec, _egCovMalaiseRate || 0);
+}
+function egCovDensity(count) {
+  return Math.round((count || 0) * (_egCovMult ? _egCovMult.densityMult : 1));
+}
+function egCovEliteAdd() {
+  return _egCovMult ? _egCovMult.eliteChanceAdd : 0;
+}
+function egCovHeal(amount) {
+  return Math.round((amount || 0) * (_egCovMult ? _egCovMult.healingMult : 1));
+}
+
+// ── loot / boss-point hooks ──────────────────────────────────────────────────────
+// Intrinsic (per-covenant sweetener) folds with the Dread-curve reward multiplier.
+function egCovLootQtyMult() {
+  const intrinsic = _egCovMult ? _egCovMult.dropQtyMult : 1;
+  const curve = _egCovReward ? _egCovReward.lootQty : 1;
+  return intrinsic * curve;
+}
+function egCovRarityMult() {
+  const intrinsic = _egCovMult ? _egCovMult.rarityMult : 1;
+  const curve = _egCovReward ? _egCovReward.rarity : 1;
+  return intrinsic * curve;
+}
+function egCovMaterialMult() {
+  return _egCovReward ? _egCovReward.material : 1;
+}
+function egCovBossPointMult() {
+  const intrinsic = _egCovMult ? _egCovMult.bossPointMult : 1;
+  const curve = _egCovReward ? _egCovReward.bossPoint : 1;
+  return intrinsic * curve;
+}
+
+// ── boss-kill hook ───────────────────────────────────────────────────────────────
+// Record the clear on the per-class/per-boss Dread grid, then — for any completion
+// mark newly earned by this clear whose reward banks collection pity — nudge the
+// shared attunement targeting toward a still-missing artifact slot.
+function egCovRecordBossClear(cls, bossKey) {
+  try {
+    const marksNow = egCovMarks();
+    if (!_egCovDread || _egCovDread <= 0) return { marks: marksNow };
+    const beforeGrid = player.dreadGrid;
+    const marksBefore = marksNow;
+    const newGrid = recordDreadClear(beforeGrid, cls, bossKey, _egCovDread);
+    player.dreadGrid = newGrid;
+    const marksAfter = egCovMarks();
+
+    // For each targetBias milestone that flipped from unmet → met on THIS clear, bank
+    // one point of collection pity (and lock a target if none is chosen yet).
+    for (const m of MARK_MILESTONES) {
+      if (!m || !m.reward || m.reward.type !== 'targetBias') continue;
+      let wasMet = false, nowMet = false;
+      try { wasMet = dreadMarksEarned(beforeGrid, [m]) >= 1; nowMet = dreadMarksEarned(newGrid, [m]) >= 1; }
+      catch (e) { wasMet = false; nowMet = false; }
+      if (wasMet || !nowMet) continue;
+      if (!player.attuneTarget) {
+        try {
+          const owned = acquiredKeySet(groupStoredArtifacts((stash && stash.items) || [], itemPower));
+          const keys = (_COLL_CATALOG || []).map(e => e && e.key).filter(Boolean);
+          const tgt = pickMissingTarget(keys, owned, Math.random);
+          if (tgt) player.attuneTarget = tgt;
+        } catch (e) { /* collection unavailable — still bank the pity below */ }
+      }
+      player.attunePity = nextPity(player.attunePity, false);
+    }
+
+    if (marksAfter > marksBefore) {
+      if (typeof sfx === 'function') sfx('levelup');
+      log(`<span data-spr=cov_altar></span> <b>Covenant mark earned</b> — a deeper oath opens at the altar.`, 'important');
+    }
+    saveGameSoon();
+    return { marks: marksAfter };
+  } catch (e) {
+    if (typeof log === 'function') log('Covenant boss-clear record failed.', 'important');
+    return { marks: egCovMarks() };
+  }
+}
+
+// ── altar UI ─────────────────────────────────────────────────────────────────────
+function openCovenants() {
+  try {
+    openTownModal('Covenant Altar', 'cov_altar');
+    setTownContent(renderCovenants());
+  } catch (e) {
+    if (typeof log === 'function') log('The Covenant Altar failed to open.', 'important');
+  }
+}
+
+// Format a difficulty/reward multiplier for the preview (e.g. 1.25 → "×1.25").
+function _egCovFmtMult(n) {
+  const v = (typeof n === 'number' && isFinite(n)) ? n : 1;
+  return '×' + v.toFixed(2);
+}
+
+function renderCovenants() {
+  try {
+    const ids = (player && Array.isArray(player.covenantsActive)) ? player.covenantsActive : [];
+    const marks = egCovMarks();
+    const summary = covProjectedSummary(ids);
+    const M = summary.multipliers, R = summary.rewards;
+
+    let html = `<div class="town-blurb">Swear <b>afflictions</b> before you descend — each raises the danger AND, by your total <b>Dread</b>, the loot, boss points and crafting materials you haul back. Toggles apply to your <b>next</b> descent; beating a boss under Dread earns account <b>marks</b> that open deeper oaths.</div>`;
+
+    // Live "if you descend now…" preview.
+    const eff = {
+      loot: (M.dropQtyMult || 1) * (R.lootQty || 1),
+      rarity: (M.rarityMult || 1) * (R.rarity || 1),
+      boss: (M.bossPointMult || 1) * (R.bossPoint || 1),
+      mat: (R.material || 1),
+    };
+    const dreadColor = summary.dread > 0 ? 'var(--gold)' : 'var(--text)';
+    html += `<div class="shop-row no-icon">
+      <div class="shop-row-info">
+        <div class="shop-row-name">Total Dread <span style="color:${dreadColor}">${summary.dread}</span></div>
+        <div class="shop-row-stats">Danger — enemy HP ${_egCovFmtMult(M.enemyHpMult)} · damage ${_egCovFmtMult(M.enemyDmgMult)} · density ${_egCovFmtMult(M.densityMult)} · healing ${_egCovFmtMult(M.healingMult)} · elites +${Math.round((M.eliteChanceAdd || 0) * 100)}%</div>
+        <div class="shop-row-stats">Reward — loot ${_egCovFmtMult(eff.loot)} · rarity ${_egCovFmtMult(eff.rarity)} · boss pts ${_egCovFmtMult(eff.boss)} · materials ${_egCovFmtMult(eff.mat)}</div>
+        ${malaiseActive(ids) ? `<div class="shop-row-sub" style="color:var(--danger)">A malaise clock ticks — enemies strengthen the longer you linger on a floor. Descend quickly.</div>` : ''}
+      </div>
+    </div>`;
+
+    // Per-class checklist summary against the canonical boss roster.
+    try {
+      const roster = (typeof BOSSES !== 'undefined' && Array.isArray(BOSSES)) ? BOSSES.map(b => b.type) : [];
+      const cls = player && player.class;
+      if (cls && roster.length) {
+        const cp = dreadClassProgress(player.dreadGrid, cls, roster);
+        html += `<div class="cook-sec">This class</div>`;
+        html += `<div class="town-blurb" style="opacity:0.85"><b>${cp.cleared}/${cp.total}</b> bosses beaten under Dread · best Dread reached <b>${cp.bestDread}</b> · <b>${marks}</b> mark${marks === 1 ? '' : 's'} earned account-wide.</div>`;
+      }
+    } catch (e) { /* checklist is optional flavor */ }
+
+    // The affliction list — unlocked ones toggle; locked ones show their mark gate.
+    html += `<div class="cook-sec">Afflictions</div>`;
+    html += '<div class="shop-grid">';
+    for (const c of sortedCovenants()) {
+      if (!c || !c.id) continue;
+      const unlocked = covIsUnlocked(c.id, marks);
+      const on = ids.includes(c.id);
+      const rowCls = `shop-row ${on ? 'picked' : ''} ${unlocked ? '' : 'locked'}`;
+      const click = unlocked ? `onclick="covToggle('${c.id}')"` : '';
+      const border = on ? 'border-color:var(--gold)' : '';
+      const gate = unlocked
+        ? `<span style="color:var(--danger)">Dread ${c.dread}</span>`
+        : `<span style="color:var(--danger)">Locked — needs ${c.unlockOrder} mark${c.unlockOrder === 1 ? '' : 's'} (Dread ${c.dread})</span>`;
+      html += `<div class="${rowCls}" ${click} style="${border}">
+        <span class="loot-icon">${dlIcon(c.sprite || 'cov_altar', 30)}</span>
+        <div class="shop-row-info">
+          <div class="shop-row-name">${escapeHtml(c.name || c.id)}${on ? ' <span style="color:var(--gold)">✓</span>' : ''}</div>
+          <div class="shop-row-sub">${gate}</div>
+          <div class="shop-row-stats">${escapeHtml(c.desc || '')}</div>
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+
+    // Clear-all — only useful when something is sworn.
+    html += `<div class="cook-actions"><button class="cook-btn ghost" ${ids.length ? '' : 'disabled'} onclick="covClearAll()">Clear all oaths</button></div>`;
+    return html;
+  } catch (e) {
+    if (typeof log === 'function') log('The altar could not be rendered.', 'important');
+    return `<div class="town-blurb">The altar stands silent — try again.</div>`;
+  }
+}
+
+function covToggle(id) {
+  try {
+    if (!id) return;
+    if (!Array.isArray(player.covenantsActive)) player.covenantsActive = [];
+    if (!covIsUnlocked(id, egCovMarks())) { if (typeof sfx === 'function') sfx('error'); return; }
+    const i = player.covenantsActive.indexOf(id);
+    if (i >= 0) player.covenantsActive.splice(i, 1);
+    else player.covenantsActive.push(id);
+    player.covenantsActive = sanitizeActiveSet(player.covenantsActive);
+    egDeriveCovenantRun();
+    if (typeof sfx === 'function') sfx('click');
+    saveGameSoon();
+    setTownContent(renderCovenants());
+  } catch (e) {
+    if (typeof log === 'function') log('That oath could not be sworn.', 'important');
+  }
+}
+
+function covClearAll() {
+  try {
+    player.covenantsActive = [];
+    egDeriveCovenantRun();
+    if (typeof sfx === 'function') sfx('click');
+    saveGameSoon();
+    setTownContent(renderCovenants());
+  } catch (e) {
+    if (typeof log === 'function') log('Could not clear your oaths.', 'important');
+  }
+}
+
+// ── AI-play API glue ─────────────────────────────────────────────────────────────
+function egCovGameStateBlock() {
+  try {
+    const ids = (player && Array.isArray(player.covenantsActive)) ? player.covenantsActive : [];
+    const marks = egCovMarks();
+    if (!ids.length && !marks) return null;
+    return {
+      dread: _egCovDread || 0,
+      active: ids.slice(),
+      multipliers: _egCovMult ? {
+        enemyHpMult: _egCovMult.enemyHpMult,
+        enemyDmgMult: _egCovMult.enemyDmgMult,
+        densityMult: _egCovMult.densityMult,
+        healingMult: _egCovMult.healingMult,
+        eliteChanceAdd: _egCovMult.eliteChanceAdd,
+        lootQtyMult: egCovLootQtyMult(),
+        rarityMult: egCovRarityMult(),
+        materialMult: egCovMaterialMult(),
+        bossPointMult: egCovBossPointMult(),
+      } : null,
+      malaise: { active: malaiseActive(ids), rate: _egCovMalaiseRate || 0 },
+      marks,
+    };
+  } catch (e) { return null; }
+}
+
+function egCovGuideTopic() {
+  return [
+    'Dread Covenants: opt-in curses you swear at the Covenant Altar in town BEFORE a descent. Each is worth some Dread; your total Dread is the number the whole system pivots on.',
+    'Every covenant only ever makes enemies tougher, deadlier, denser, more elite, or your healing weaker — never a hard lockout. It is always pressure you can out-gear, out-skill or out-run.',
+    'Swearing raises danger AND reward: higher total Dread multiplies loot quantity, drop rarity, boss points and crafting materials along soft-capped curves (generous early, bending to a ceiling).',
+    'Oaths apply to your NEXT descent. Toggle them on the altar; the live preview shows the exact danger and reward multipliers for the set you have chosen.',
+    'Beating a boss while bound by Dread records the clear on a per-class, per-boss checklist at the highest Dread you beat it. Reaching milestones earns account-wide marks.',
+    'Marks unlock deeper covenants — each covenant needs a certain mark count to become available. Some marks also bank collection targeting (attunement) pity toward a missing artifact.',
+    'Tempo covenants (Haste, Relentless) add a malaise clock: enemies grow steadily stronger the longer you linger on a floor, then plateau. Descend quickly to keep it low.',
+  ];
+}
+
+// ── WEAVE ──
+// ══════════════════════════════════════════════════════════════════════════
+// THE ASCENDANT WEAVE — shell integration (board UI + live stat hooks)
+// ══════════════════════════════════════════════════════════════════════════
+// Top-level function declarations only. Runs inside game.js's module scope, so
+// it calls game.js globals + the imported pure-core aliases directly. No import/
+// export, no module-level state (those globals are pre-declared elsewhere).
+//
+// The pure math (systems/ascendantWeave.js + systems/glyphRoll.js) is imported
+// into game.js under: weaveSpent, weaveAvail, weaveNodes, weaveInArm,
+// weaveCanAllocate, weaveDoAllocate, weaveRefundNode, weaveRefundAll,
+// weaveKeystones, weaveGlyphRadius, weaveStatContribution, weaveDepthRank,
+// sanitizeWeaveBoard, rollGlyph, glyphPower, plus the WEAVE / GLYPHS tables.
+
+// ── live stat contribution (memoized) ────────────────────────────────────────
+
+// The board's whole aggregated contribution: { flat:{key:sum}, mult:{stat:prod} }.
+// Memoized on _egWeaveCache keyed by a cheap signature so the hot totalStat /
+// totalAttr path only recomputes when the board, its socketed glyphs, or the
+// depth counter actually change. An empty board returns a true no-op.
+// NOTE: attrs = player.attributes (the ALLOCATED block) — never totalAttr, which
+// would recurse (totalAttr calls back into the weave hooks).
+function egWeaveContrib() {
+  try {
+    const board = (typeof player === 'object' && player && player.weaveBoard) || { nodes: {} };
+    const nodesObj = (board && board.nodes) || {};
+    const glyphs = (player && Array.isArray(player.weaveGlyphs)) ? player.weaveGlyphs : [];
+    // Signature: lit-node map + a compact glyph fingerprint (socket + value drive
+    // the contribution) + the cosmetic depth counter. Node map is ~25 keys, tiny.
+    let gsig = '';
+    for (let i = 0; i < glyphs.length; i++) {
+      const g = glyphs[i];
+      gsig += g ? ((g.socketId || '') + ':' + (g.value || 0) + '|') : '|';
+    }
+    const sig = JSON.stringify(nodesObj) + '#' + glyphs.length + '#' + gsig + '#' + ((player && player.weaveDepthPoints) || 0);
+    if (_egWeaveCache && _egWeaveCache.sig === sig) return _egWeaveCache.val;
+    const attrs = (player && player.attributes) || {};
+    const val = weaveStatContribution(board, glyphs, attrs) || { flat: {}, mult: {} };
+    if (!val.flat) val.flat = {};
+    if (!val.mult) val.mult = {};
+    _egWeaveCache = { sig: sig, val: val };
+    return val;
+  } catch (e) {
+    return { flat: {}, mult: {} };
+  }
+}
+
+// Flat additive contribution for a stat/attribute key (0 if none). Called from
+// the orchestrator's totalStat/totalAttr — kept allocation-free and never throws.
+function egWeaveFlat(key) {
+  try { return (egWeaveContrib().flat[key]) || 0; } catch (e) { return 0; }
+}
+
+// Multiplicative contribution for a stat key (1 if none). Same hot-path contract.
+function egWeaveMult(key) {
+  try { const m = egWeaveContrib().mult[key]; return (typeof m === 'number' && isFinite(m)) ? m : 1; } catch (e) { return 1; }
+}
+
+// Drop the memo — call after ANY board/glyph mutation, BEFORE bumpLoadout().
+function egWeaveInvalidate() { _egWeaveCache = null; }
+
+// ── small render helpers ─────────────────────────────────────────────────────
+
+// A node payload ({ might:2 } / { ATK:4 }) → a short, art-bearing label. Attribute
+// keys use the attribute's own icon+label; every other key is a gear stat code.
+function _egWeavePayloadLabel(payload) {
+  const parts = [];
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  for (const k in p) {
+    const v = p[k];
+    const sign = (typeof v === 'number' && v < 0) ? '' : '+';
+    if (typeof ATTRIBUTES === 'object' && ATTRIBUTES && ATTRIBUTES[k]) {
+      parts.push(`${sign}${v} ${attrLabelIcon(k)}`);
+    } else {
+      const lab = (typeof STAT_LABELS === 'object' && STAT_LABELS && STAT_LABELS[k]) || k;
+      parts.push(`${sign}${v} ${escapeHtml(String(lab))}`);
+    }
+  }
+  return parts.join(', ');
+}
+
+// A human label for a socket id (core, or an arm's name).
+function _egWeaveSocketLabel(socketId) {
+  if (socketId === 'core') return 'Core';
+  const list = (WEAVE && Array.isArray(WEAVE.constellations)) ? WEAVE.constellations : [];
+  const c = list.find((x) => x && ('sock_' + x.id) === socketId);
+  return c ? c.name : String(socketId || '');
+}
+
+// The set of LIT-or-not node ids currently reached by any socketed glyph — drives
+// the "a glyph amplifies this node" marker. Uses each glyph's own reach radius so
+// the marker matches what weaveStatContribution actually multiplies.
+function _egWeaveCoveredSet() {
+  const set = new Set();
+  const glyphs = (player && Array.isArray(player.weaveGlyphs)) ? player.weaveGlyphs : [];
+  for (const g of glyphs) {
+    if (!g || !g.socketId) continue;
+    let ids = [];
+    try { ids = weaveGlyphRadius(g.socketId, WEAVE, g.radius) || []; } catch (e) { ids = []; }
+    for (const id of ids) set.add(id);
+  }
+  return set;
+}
+
+// ── panel ────────────────────────────────────────────────────────────────────
+
+function openWeave() {
+  try {
+    openTownModal('Ascendant Weave', 'weave_star');
+    setTownContent(renderWeave());
+  } catch (e) {
+    if (typeof log === 'function') log('The Weave could not be opened.');
+  }
+}
+
+// Build the whole board panel as an HTML string (setTownContent consumes it).
+function renderWeave() {
+  try {
+    const board = (player && player.weaveBoard) || { nodes: {} };
+    const attrs = (player && player.attributes) || {};
+    const earned = pointsEarned(player.bossFirstKills);
+    const avail = weaveAvail(earned, board);
+    const lit = weaveNodes(board) || [];
+    const activeKs = weaveKeystones(board, attrs) || [];
+    const covered = _egWeaveCoveredSet();
+
+    let html = '';
+
+    // Intro + point budget. The board is an independent drawer from the boss-point
+    // pool — spending here never touches gear-slot points, and vice-versa.
+    html += `<div class="town-blurb">The Weave pours boss points into a bounded constellation board — five attribute arms, three rings deep. It draws its own pool from the same points, <b>separate</b> from your gear slots. Light nodes for modest bonuses, cross a keystone's gate for a build-defining boost, and socket glyphs to amplify the nodes they sit near. Nodes refund freely, so experiment.</div>`;
+    html += `<div class="shop-row"><div class="shop-row-info"><div class="shop-row-name">${dlIcon('weave_star', 18)} <b>${avail}</b> boss point${avail === 1 ? '' : 's'} free to weave</div><div class="shop-row-sub">${earned} earned in total · lit nodes: ${lit.length}</div></div><button class="act-btn" onclick="weaveRespecUI()">RESPEC ALL</button></div>`;
+
+    // Cosmetic Weave Depth prestige bar — grants NO power, label says so.
+    const dr = weaveDepthRank((player && player.weaveDepthPoints) || 0);
+    const span = dr.span > 0 ? dr.span : 1;
+    const pct = Math.max(0, Math.min(100, Math.round((dr.into / span) * 100)));
+    html += `<div class="ench-group">${dlIcon('weave_star', 16)} Weave Depth</div>`;
+    html += `<div class="shop-row"><div class="shop-row-info"><div class="shop-row-name">Rank ${dr.rank} · ${escapeHtml(dr.title || '')}</div><div class="shop-row-sub">${dr.into} / ${span} depth to next rank · cosmetic, grants no power</div><div style="margin-top:4px;height:10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel);overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--gold)"></div></div></div></div>`;
+
+    // The five constellation arms, each a section header + a responsive grid of its
+    // five nodes. Node grids reuse .shop-grid (fluid auto-fill columns).
+    const consts = (WEAVE && Array.isArray(WEAVE.constellations)) ? WEAVE.constellations : [];
+    const allNodes = (WEAVE && Array.isArray(WEAVE.nodes)) ? WEAVE.nodes : [];
+    for (const c of consts) {
+      const inArm = weaveInArm(board, c.id);
+      html += `<div class="ench-group">${attrLabelIcon(c.attr)} ${escapeHtml(c.name)} <span style="opacity:0.7;font-weight:normal">— ${inArm} pt${inArm === 1 ? '' : 's'} spent</span></div>`;
+      html += '<div class="shop-grid">';
+      const armNodes = allNodes.filter((n) => n && n.constellation === c.id);
+      for (const n of armNodes) {
+        const isLit = lit.includes(n.id);
+        const canA = !isLit && weaveCanAllocate(n.id, board, earned);
+        const label = _egWeavePayloadLabel(n.payload) || 'Node';
+        const mark = covered.has(n.id) ? ` <span title="A socketed glyph amplifies this node" style="color:var(--gold)">✦</span>` : '';
+        let cls = 'shop-row has-actions';
+        let btn;
+        if (isLit) {
+          cls += ' upgrade';
+          btn = `<button class="act-btn" onclick="weaveRefundUI('${n.id}')">REFUND</button>`;
+        } else if (canA) {
+          btn = `<button class="act-btn" onclick="weaveAllocateUI('${n.id}')">LIGHT</button>`;
+        } else {
+          cls += ' cant-afford';
+          btn = `<button class="act-btn" disabled>LOCKED</button>`;
+        }
+        html += `<div class="${cls}"><div class="shop-row-info"><div class="shop-row-name">${label}${mark}</div><div class="shop-row-sub">Ring ${n.band}${isLit ? ' · lit' : (canA ? ' · ready' : ' · locked')}</div></div>${btn}</div>`;
+      }
+      html += '</div>';
+    }
+
+    // Keystones — build-definers, dormant until their arm is entered AND their gate
+    // (attribute total, or points in the arm) is crossed.
+    const keystones = (WEAVE && Array.isArray(WEAVE.keystones)) ? WEAVE.keystones : [];
+    if (keystones.length) {
+      html += `<div class="ench-group">${dlIcon('weave_star', 16)} Keystones</div>`;
+      html += '<div class="shop-grid">';
+      for (const ks of keystones) {
+        const active = activeKs.includes(ks.id);
+        const arm = consts.find((x) => x && x.id === ks.constellation);
+        const armName = arm ? arm.name : ks.constellation;
+        const gate = ks.gate || {};
+        let gateStr;
+        if (gate.attr != null && gate.total != null) gateStr = `Enter ${escapeHtml(armName)} · reach ${gate.total} ${attrLabelIcon(gate.attr)}`;
+        else if (gate.n != null) gateStr = `Spend ${gate.n} pts in ${escapeHtml(armName)}`;
+        else gateStr = `Enter ${escapeHtml(armName)}`;
+        const cls = active ? 'shop-row upgrade' : 'shop-row cant-afford';
+        const nameStyle = active ? 'color:var(--gold)' : '';
+        html += `<div class="${cls}"><div class="shop-row-info"><div class="shop-row-name" style="${nameStyle}">${escapeHtml(ks.name)}${active ? ' ✦' : ''}</div><div class="shop-row-sub">${escapeHtml(ks.desc || '')}</div><div class="shop-row-stats">${gateStr} · ${active ? '<b style="color:var(--gold)">ACTIVE</b>' : 'dormant'}</div></div></div>`;
+      }
+      html += '</div>';
+    }
+
+    // Glyphs & sockets. Each glyph multiplies the payload of every LIT node it
+    // reaches from its socket — placement is the puzzle.
+    html += `<div class="ench-group">${dlIcon('glyph', 16)} Glyphs &amp; Sockets</div>`;
+    const glyphs = (player && Array.isArray(player.weaveGlyphs)) ? player.weaveGlyphs : [];
+    if (!glyphs.length) {
+      html += `<div class="town-blurb" style="opacity:0.8">No glyphs yet. They drop from kills at deep Endless depth, then socket here to amplify the nodes they cover.</div>`;
+    } else {
+      const sockets = (WEAVE && Array.isArray(WEAVE.sockets)) ? WEAVE.sockets : [];
+      html += '<div class="shop-grid">';
+      for (let i = 0; i < glyphs.length; i++) {
+        const g = glyphs[i];
+        if (!g) continue;
+        const icon = dlIcon(g.tier ? ('glyph_' + g.tier) : 'glyph', 32);
+        const valPct = Math.round(((g.value || 0)) * 100);
+        const tert = g.tertiary ? (' · ' + escapeHtml(String(g.tertiary))) : '';
+        let controls;
+        if (g.socketId) {
+          controls = `Socketed at <b>${escapeHtml(_egWeaveSocketLabel(g.socketId))}</b> <button class="act-btn" onclick="weaveUnsocketUI(${i})">UNSOCKET</button>`;
+        } else {
+          let btns = `<span style="opacity:0.7">Socket into:</span> `;
+          for (const s of sockets) {
+            btns += `<button class="act-btn" onclick="weaveSocketUI(${i},'${s.id}')">${escapeHtml(_egWeaveSocketLabel(s.id))}</button> `;
+          }
+          controls = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:2px">${btns}</div>`;
+        }
+        html += `<div class="shop-row"><span class="loot-icon">${icon}</span><div class="shop-row-info"><div class="shop-row-name" style="color:${g.color || 'var(--text)'}">${escapeHtml(g.name || 'Glyph')}</div><div class="shop-row-sub">+${valPct}% to covered lit nodes${tert}</div><div class="shop-row-stats">${controls}</div></div></div>`;
+      }
+      html += '</div>';
+    }
+
+    return html;
+  } catch (e) {
+    if (typeof log === 'function') log('The Weave could not be drawn.');
+    return `<div class="town-blurb">The Weave could not be drawn.</div>`;
+  }
+}
+
+// ── mutation follow-up (shared) ──────────────────────────────────────────────
+// Invalidate the memo, refresh derived stats, clamp resources, save, re-render.
+function _egWeaveApply() {
+  egWeaveInvalidate();
+  if (typeof bumpLoadout === 'function') bumpLoadout();
+  if (typeof recomputeMaxStats === 'function') recomputeMaxStats();
+  if (player) {
+    if (player.hp > player.maxHp) player.hp = player.maxHp;
+    if (player.mp > player.maxMp) player.mp = player.maxMp;
+  }
+  if (typeof saveGameSoon === 'function') saveGameSoon();
+  setTownContent(renderWeave());
+}
+
+// ── inline-onclick handlers (defensive) ──────────────────────────────────────
+
+function weaveAllocateUI(nodeId) {
+  try {
+    const board = (player && player.weaveBoard) || { nodes: {} };
+    const earned = pointsEarned(player.bossFirstKills);
+    if (!weaveCanAllocate(nodeId, board, earned)) { sfx('error'); return; }
+    player.weaveBoard = weaveDoAllocate(board, nodeId);
+    sfx('levelup');
+    _egWeaveApply();
+  } catch (e) {
+    log('Weave: could not light that node.');
+  }
+}
+
+function weaveRefundUI(nodeId) {
+  try {
+    const board = (player && player.weaveBoard) || { nodes: {} };
+    player.weaveBoard = weaveRefundNode(board, nodeId);
+    sfx('click');
+    _egWeaveApply();
+  } catch (e) {
+    log('Weave: could not refund that node.');
+  }
+}
+
+function weaveRespecUI() {
+  try {
+    player.weaveBoard = weaveRefundAll();
+    sfx('click');
+    log('The Weave unravels — every node refunded.');
+    _egWeaveApply();
+  } catch (e) {
+    log('Weave: could not respec the board.');
+  }
+}
+
+function weaveSocketUI(glyphIdx, socketId) {
+  try {
+    const glyphs = (player && Array.isArray(player.weaveGlyphs)) ? player.weaveGlyphs : null;
+    const g = glyphs && glyphs[glyphIdx];
+    if (!g) { sfx('error'); return; }
+    g.socketId = socketId;
+    sfx('click');
+    _egWeaveApply();
+  } catch (e) {
+    log('Weave: could not socket that glyph.');
+  }
+}
+
+function weaveUnsocketUI(glyphIdx) {
+  try {
+    const glyphs = (player && Array.isArray(player.weaveGlyphs)) ? player.weaveGlyphs : null;
+    const g = glyphs && glyphs[glyphIdx];
+    if (!g) { sfx('error'); return; }
+    g.socketId = null;
+    sfx('click');
+    _egWeaveApply();
+  } catch (e) {
+    log('Weave: could not unsocket that glyph.');
+  }
+}
+
+// ── loot hook: a glyph drops on a deep-Endless kill ──────────────────────────
+function egWeaveDropGlyph(endlessDepth) {
+  try {
+    const g = rollGlyph(Math.random, endlessDepth);
+    if (!g) return;
+    g.socketId = null;
+    if (!player) return;
+    if (!Array.isArray(player.weaveGlyphs)) player.weaveGlyphs = [];
+    player.weaveGlyphs.push(g);
+    egWeaveInvalidate();
+    const icon = dlIcon(g.tier ? ('glyph_' + g.tier) : 'glyph', 24);
+    log(`${icon} A <span style="color:${g.color || 'var(--gold)'}">${escapeHtml(g.name || 'glyph')}</span> glyph settles into your satchel — socket it in the Ascendant Weave.`, 'loot');
+    if (typeof sfx === 'function') sfx('loot');
+    if (typeof saveGameSoon === 'function') saveGameSoon();
+  } catch (e) {
+    // A bad drop must never break the kill path.
+  }
+}
+
+// ── AI-play API blocks ───────────────────────────────────────────────────────
+
+function egWeaveGameStateBlock() {
+  try {
+    const board = (player && player.weaveBoard) || { nodes: {} };
+    const attrs = (player && player.attributes) || {};
+    return {
+      available: weaveAvail(pointsEarned(player.bossFirstKills), board),
+      nodes: weaveNodes(board) || [],
+      keystones: weaveKeystones(board, attrs) || [],
+      glyphs: (player && Array.isArray(player.weaveGlyphs)) ? player.weaveGlyphs.length : 0,
+      depth: weaveDepthRank((player && player.weaveDepthPoints) || 0),
+    };
+  } catch (e) {
+    return { available: 0, nodes: [], keystones: [], glyphs: 0, depth: weaveDepthRank(0) };
+  }
+}
+
+function egWeaveGuideTopic() {
+  return [
+    'THE ASCENDANT WEAVE — an endgame choice board fed by the SAME boss points as your gear slots, but as an INDEPENDENT drawer: points lit here never reduce what your gear slots can spend, and vice-versa.',
+    'Points free to the board = boss points earned minus points already lit on the board. Every node costs 1 and refunds for free (Respec all), so you can freely re-plan a build.',
+    'Five arms, one per attribute — Ferocity (Might), Aegis (Vitality), Zephyr (Agility), Oracle (Spirit), Fortune (Luck) — each three rings deep. Light an arm\'s entry node first; band-2 branches need the entry, band-3 tips need either branch.',
+    'KEYSTONES are build-definers that stay dormant until you ENTER their arm (light at least one node there) AND cross their gate — a hero attribute TOTAL, or a number of points spent in that arm. Each folds a multiplier or flat bonus into one stat.',
+    'GLYPHS drop from kills at deep Endless depth and socket into the board. A socketed glyph MULTIPLIES the payload of every LIT node it physically reaches from its socket, so WHERE you place it decides which nodes it amplifies.',
+    'WEAVE DEPTH is a purely cosmetic prestige rank — an ever-receding badge that grants NO power, only a title.',
+    'An untouched board is a true no-op: with no nodes lit, no keystone can ignite and socketed glyphs cover nothing, so the hero is byte-identical to having no Weave at all.',
+  ];
+}
+
+// ── MIRRORFORGE ──
+// ── THE MIRRORFORGE — legacy-shell integration (pasted verbatim into game.js) ──
+// Bench UI + real-item adapter over the pure Mirrorforge core (systems/mirrorforge.js)
+// and the shared collection-targeting pity (systems/collectionTargeting.js). Real
+// gear stores rolls in item.stats{}/item.attrs{}; the core operates on a minimal
+// {tier,rank,ilvl,affixes[]} contract, so egMfToContract/egMfFromContract map both
+// ways. Every onclick body is try/catch-guarded so a stray error logs instead of
+// breaking the frame; optional helpers are typeof-guarded.
+
+// ── ADAPTER: real item → minimal Mirrorforge contract ──
+function egMfToContract(item) {
+  const it = item || {};
+  const ilvl = it.ilvl || 1;
+  const mult = (typeof tierMult === 'function') ? tierMult(it.tier) : 1;
+  const locked = (typeof lockedStats === 'function') ? (lockedStats(it) || []) : [];
+  const affixes = [];
+  const stats = it.stats || {};
+  for (const key in stats) {
+    if (locked.indexOf(key) >= 0) continue;                 // headline/native/curse rolls aren't sculptable
+    const r = (typeof affixStatRange === 'function') ? (affixStatRange(key, ilvl, mult) || {}) : {};
+    affixes.push({ key, val: stats[key], min: r.min || 0, max: (r.max != null ? r.max : (r.min || 0)), kind: 'stat' });
+  }
+  const attrs = it.attrs || {};
+  for (const key in attrs) {
+    const r = (typeof affixAttrRange === 'function') ? (affixAttrRange(ilvl, mult) || {}) : {};
+    affixes.push({ key, val: attrs[key], min: r.min || 0, max: (r.max != null ? r.max : (r.min || 0)), kind: 'attr' });
+  }
+  return {
+    tier: it.tier,
+    rank: Math.max(0, Object.keys(TIERS).indexOf(it.tier)),
+    ilvl,
+    affixes,
+    mirrored: !!it.mirrored,
+    sealed: !!it.sealed,
+    radiant: !!it.radiant,
+    _fpSpent: it._fpSpent || 0,
+    _src: it,
+  };
+}
+
+// ── ADAPTER: sculpted contract → real item (shallow clone, fold affixes back) ──
+function egMfFromContract(item, contract) {
+  const src = item || {};
+  const c = contract || {};
+  const out = Object.assign({}, src);
+  out.stats = Object.assign({}, src.stats || {});
+  out.attrs = Object.assign({}, src.attrs || {});
+  const affs = Array.isArray(c.affixes) ? c.affixes : [];
+  for (const a of affs) {
+    if (!a || a.key == null) continue;
+    // A curse penalty (negative val, e.g. key 'CURSE') lands on stats and brands the item cursed.
+    if (a.key === 'CURSE' || (a.curse && a.val < 0)) {
+      out.stats[a.key] = a.val;
+      out.cursed = true;
+      out.curseStat = a.key;
+      continue;
+    }
+    // A corrupt addAffix new key (e.g. 'MIRRORFORGE') writes to stats; attrs to attrs; everything else to stats.
+    if (a.kind === 'attr') out.attrs[a.key] = a.val;
+    else out.stats[a.key] = a.val;
+  }
+  out.mirrored = !!c.mirrored;
+  out.sealed = !!c.sealed;
+  out.radiant = !!c.radiant;
+  out._fpSpent = c._fpSpent || 0;
+  if (c.signature) out.signature = c.signature;
+  if (c._corrupt) out._corrupt = c._corrupt;
+  if (c.cursed) out.cursed = true;
+  return out;
+}
+
+// ── WALLET snapshot the core's canApply/spend understand (+ Aether from the hero) ──
+function egMfWallet() {
+  const m = (typeof heroMaterials === 'function') ? (heroMaterials() || {}) : {};
+  return { scrap: m.scrap || 0, glimmer: m.glimmer || 0, core: m.core || 0, chaos: m.chaos || 0, aether: player.aether || 0 };
+}
+
+// ── Spend an action's bill: staples via spendCost, Aether off the hero directly ──
+function egMfSpend(action) {
+  const c = mfMatCost(action) || {};
+  const pay = {};
+  if (c.gold) pay.gold = c.gold;
+  if (c.scrap) pay.scrap = c.scrap;
+  if (c.glimmer) pay.glimmer = c.glimmer;
+  if (c.core) pay.core = c.core;
+  if (c.chaos) pay.chaos = c.chaos;
+  spendCost(pay);
+  if (c.aether) player.aether = Math.max(0, (player.aether || 0) - c.aether);
+}
+
+// ── Open the bench ──
+function openMirrorforge() {
+  try {
+    openTownModal('Mirrorforge', 'mf_anvil');
+    _egMfSel = -1;
+    setTownContent(renderMirrorforge());
+    if (typeof sfx === 'function') sfx('click');
+  } catch (e) { if (typeof log === 'function') log('Mirrorforge failed to open'); }
+}
+
+// ── Render the whole bench (returns an HTML string for setTownContent) ──
+function renderMirrorforge() {
+  try {
+    const endlessDepth = (typeof isEndless === 'function' && isEndless()) ? (dungeonLevel - FINITE_DEPTH) : 0;
+    const REASONS = {
+      unknown: 'Not available here', mirrored: 'Already perfected — locked',
+      sealed: 'Sealed by a Corrupt', fp: 'Not enough Forging Potential',
+      mats: 'Not enough materials', noitem: 'No item selected',
+    };
+    const reasonLine = (r) => `<div style="color:var(--danger);font-size:1.2rem;margin:2px 0">${REASONS[r] || 'Unavailable'}</div>`;
+    const aetherTag = (n) => n ? ` ${n}<span data-spr=mat_aether></span>` : '';
+
+    // ── LEFT: gear picker (only wearable pieces) ──
+    let left = `<div class="section-header"><span data-spr=chest></span> Your Gear</div>`;
+    const picks = [];
+    for (let i = 0; i < inventory.length; i++) {
+      const it = inventory[i];
+      if (it && it.slot) picks.push({ i, it });
+    }
+    if (!picks.length) {
+      left += `<div class="town-blurb" style="opacity:0.75">No wearable gear in your bag to sculpt. Bring back a piece with a slot.</div>`;
+    } else {
+      for (const p of picks) {
+        const it = p.it, sel = (p.i === _egMfSel);
+        const col = (TIERS[it.tier] && TIERS[it.tier].color) || 'var(--text)';
+        const slotLabel = (typeof SLOTS === 'object' && SLOTS && it.slot && SLOTS[it.slot]) ? SLOTS[it.slot].label : (it.slot || '');
+        const tags = [];
+        if (it.mirrored) tags.push('Perfected');
+        if (it.sealed) tags.push('Sealed');
+        if (it.radiant) tags.push('Radiant');
+        if (it.cursed) tags.push('Cursed');
+        const tagStr = tags.length ? ` · ${escapeHtml(tags.join(' · '))}` : '';
+        left += `<div class="shop-row has-actions${sel ? ' picked' : ''}">
+          <span class="loot-icon">${dlIcon(it.icon || 'mf_gem', 30)}</span>
+          <div class="shop-row-info">
+            <div class="shop-row-name" style="color:${col}">${escapeHtml(it.name || 'Item')}</div>
+            <div class="shop-row-sub">${escapeHtml(slotLabel)} · ilvl ${it.ilvl || 1}${tagStr}</div>
+          </div>
+          <button class="act-btn" onclick="mfPick(${p.i})">${sel ? 'WORKING' : 'PICK'}</button>
+          <button class="act-btn sm" onclick="mfShatter(${p.i})">Shatter</button>
+        </div>`;
+      }
+    }
+
+    // ── RIGHT: bench + status ──
+    let right = `<div class="section-header"><span data-spr=mf_anvil></span> Mirrorforge Bench</div>`;
+
+    // Attunement / target / pity status (always shown).
+    const attunement = player.attunement || 0;
+    const aether = player.aether || 0;
+    let targetName = 'none';
+    if (player.attuneTarget) {
+      const e = _COLL_CATALOG.find(x => x.key === player.attuneTarget);
+      targetName = e ? e.name : player.attuneTarget;
+    }
+    const pityLeft = pityRemaining(player.attunePity || 0);
+    const spendNeed = (MIRRORFORGE.attunement && MIRRORFORGE.attunement.spendCost) || 50;
+    const canAim = attunement >= spendNeed && !player.attuneTarget;
+    right += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%, 140px),1fr));gap:var(--space-2);align-items:center;margin-bottom:var(--space-2)">
+      <div style="font-size:1.2rem"><span data-spr=mat_glimmer></span> Attunement <b style="color:var(--gold)">${attunement}</b></div>
+      <div style="font-size:1.2rem"><span data-spr=mat_aether></span> Aether <b style="color:var(--gold)">${aether}</b></div>
+      <div style="font-size:1.2rem">Target <b>${escapeHtml(targetName)}</b></div>
+      <div style="font-size:1.2rem">Pity <b>${pityLeft}</b> to guaranteed</div>
+      <button class="act-btn sm" ${canAim ? '' : 'disabled'} onclick="egMfSpendAttunement()">Aim farm (${spendNeed})</button>
+    </div>`;
+
+    const item = (_egMfSel >= 0 && _egMfSel < inventory.length) ? inventory[_egMfSel] : null;
+    if (!item || !item.slot) {
+      right += `<div class="town-blurb" style="opacity:0.75">Pick a piece on the left to sculpt its Forging Potential.</div>`;
+    } else {
+      const c = egMfToContract(item);
+      const wallet = egMfWallet();
+      const budget = fpBudget(c), rem = fpRemaining(c), spent = mfSpent(c);
+      const pct = budget > 0 ? Math.max(0, Math.min(100, Math.round(rem / budget * 100))) : 0;
+      const col = (TIERS[item.tier] && TIERS[item.tier].color) || 'var(--text)';
+      const fixed = !!item.fixed;
+      const aetherOK = (player.aether > 0) && aetherUnlocked(endlessDepth);
+
+      right += `<div class="shop-row">
+        <span class="loot-icon">${dlIcon(item.icon || 'mf_gem', 30)}</span>
+        <div class="shop-row-info">
+          <div class="shop-row-name" style="color:${col}">${escapeHtml(item.name || 'Item')}</div>
+          <div class="shop-row-sub">ilvl ${item.ilvl || 1} · rank ${c.rank}${item.radiant ? ' · Radiant' : ''}${item.sealed ? ' · Sealed' : ''}${item.mirrored ? ' · Perfected' : ''}</div>
+        </div></div>`;
+
+      // FP meter.
+      right += `<div style="margin:var(--space-2) 0">
+        <div style="font-size:1.2rem;margin-bottom:4px">Forging Potential <b style="color:var(--gold)">${rem}</b> / ${budget} FP left <span style="opacity:0.7">(${spent} spent)</span></div>
+        <div style="height:10px;border:1px solid var(--border);border-radius:var(--radius-1);background:var(--panel);overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--gold)"></div></div>
+      </div>`;
+
+      // Affix readout.
+      if (c.affixes.length) {
+        let al = '';
+        for (const a of c.affixes) {
+          al += `<div style="font-size:1.2rem;padding:1px 0"><b>${escapeHtml(a.key)}</b> ${a.val} <span style="opacity:0.6">(${a.min}–${a.max})</span></div>`;
+        }
+        right += `<div style="margin-bottom:var(--space-2)">${al}</div>`;
+      } else {
+        right += `<div class="town-blurb" style="opacity:0.7">This piece has no sculptable bonus affixes.</div>`;
+      }
+
+      if (fixed) right += `<div style="font-size:1.2rem;opacity:0.75;margin-bottom:var(--space-2)">Fixed item — only Exalt, Divine, Mirror and Shatter are available.</div>`;
+
+      // Build the affix-key buttons (Attune) and affix-index buttons (Exalt/Divine).
+      const keyBtns = (action, ok) => {
+        if (!c.affixes.length) return `<span style="opacity:0.6;font-size:1.2rem">no affixes</span>`;
+        return c.affixes.map(a => {
+          const ak = String(a.key).replace(/[^\w]/g, '');
+          return `<button class="act-btn sm" ${ok ? '' : 'disabled'} onclick="mfDo('${action}','${ak}')">${escapeHtml(a.key)}</button>`;
+        }).join('');
+      };
+      const idxBtns = (action, ok) => {
+        if (!c.affixes.length) return `<span style="opacity:0.6;font-size:1.2rem">no affixes</span>`;
+        return c.affixes.map((a, ai) =>
+          `<button class="act-btn sm" ${ok ? '' : 'disabled'} onclick="mfDo('${action}',${ai})">${escapeHtml(a.key)}</button>`
+        ).join('');
+      };
+      const actionBlock = (title, desc, action, body) => {
+        const cost = mfMatCost(action);
+        const g = mfCanApply(action, c, rem, wallet);
+        return `<div style="border:1px solid var(--border);border-radius:var(--radius-2);padding:var(--space-2);margin-bottom:var(--space-2)">
+          <div style="font-size:1.3rem"><b>${title}</b> <span style="font-size:1.2rem;opacity:0.85">${costLabel(cost)}${aetherTag(cost.aether)} · ${fpCost(action, c)} FP</span></div>
+          <div style="font-size:1.2rem;opacity:0.8;margin:2px 0">${desc}</div>
+          ${g.ok ? '' : reasonLine(g.reason)}
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">${body(g.ok)}</div>
+        </div>`;
+      };
+
+      // ATTUNE — reforge affixes, chosen key rolls strong (off for fixed items).
+      if (!fixed) {
+        right += actionBlock('Attune', 'Reforge the bonus affixes; the stat you pick is guaranteed to roll in the top half of its band.', 'attune', (ok) => keyBtns('attune', ok));
+      }
+      // EXALT — deterministic push toward ceiling.
+      right += actionBlock('Exalt', 'Push one affix halfway to its ceiling. No RNG — repeat to converge on max.', 'exalt', (ok) => idxBtns('exalt', ok));
+      // DIVINE — reroll one value, optional Aether top-decile snap.
+      {
+        const cost = mfMatCost('divine');
+        const g = mfCanApply('divine', c, rem, wallet);
+        right += `<div style="border:1px solid var(--border);border-radius:var(--radius-2);padding:var(--space-2);margin-bottom:var(--space-2)">
+          <div style="font-size:1.3rem"><b>Divine</b> <span style="font-size:1.2rem;opacity:0.85">${costLabel(cost)}${aetherTag(cost.aether)} · ${fpCost('divine', c)} FP</span></div>
+          <div style="font-size:1.2rem;opacity:0.8;margin:2px 0">Reroll one affix's value in-band${_egMfDivineAether ? ' — snapped into its top decile (Aether)' : ''}.</div>
+          <div style="margin:4px 0"><button class="act-btn sm${_egMfDivineAether && aetherOK ? ' on' : ''}" ${aetherOK ? '' : 'disabled'} onclick="mfToggleAether()"><span data-spr=mat_aether></span> Use Aether: ${(_egMfDivineAether && aetherOK) ? 'ON' : 'OFF'}</button></div>
+          ${g.ok ? '' : reasonLine(g.reason)}
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">${idxBtns('divine', g.ok)}</div>
+        </div>`;
+      }
+      // CORRUPT — irreversible gamble that seals (off for fixed items).
+      if (!fixed) {
+        const cost = mfMatCost('corrupt');
+        const g = mfCanApply('corrupt', c, rem, wallet);
+        right += `<div style="border:1px solid var(--danger);border-radius:var(--radius-2);padding:var(--space-2);margin-bottom:var(--space-2)">
+          <div style="font-size:1.3rem"><b style="color:var(--danger)">Corrupt</b> <span style="font-size:1.2rem;opacity:0.85">${costLabel(cost)}${aetherTag(cost.aether)} · ${fpCost('corrupt', c)} FP</span></div>
+          <div style="font-size:1.2rem;opacity:0.8;margin:2px 0">Irreversible — SEALS the item. May bless it, brand a signature, make it radiant, or lay a heavy curse.</div>
+          ${g.ok ? '' : reasonLine(g.reason)}
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"><button class="act-btn sm" ${g.ok ? '' : 'disabled'} onclick="if(confirm('Corrupt is irreversible and seals this item. Proceed?'))mfDo('corrupt')">Corrupt this item</button></div>
+        </div>`;
+      }
+      // MIRROR — lock a flawless copy (Aether-gated).
+      {
+        const cost = mfMatCost('mirror');
+        const g = mfCanApply('mirror', c, rem, wallet);
+        right += `<div style="border:1px solid var(--border);border-radius:var(--radius-2);padding:var(--space-2);margin-bottom:var(--space-2)">
+          <div style="font-size:1.3rem"><b style="color:var(--gold)">Mirror</b> <span style="font-size:1.2rem;opacity:0.85">${costLabel(cost)}${aetherTag(cost.aether)}</span></div>
+          <div style="font-size:1.2rem;opacity:0.8;margin:2px 0">Lock a flawless copy into your Perfected collection (Owned → Perfected).</div>
+          ${g.ok ? '' : reasonLine(g.reason)}
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"><button class="act-btn sm" ${g.ok ? '' : 'disabled'} onclick="mfDo('mirror')">Mirror this item</button></div>
+        </div>`;
+      }
+    }
+
+    return `<div class="town-blurb">The Mirrorforge sculpts your gear against a finite <b>Forging Potential</b> budget, then <b>Mirrors</b> a flawless copy into a second collection axis. Every spend is permanent, so plan the layers. <b>Shatter</b> a worked piece for <b>Attunement</b> to aim a farm at a still-missing artifact.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%, 320px),1fr));gap:var(--space-3);align-items:start">
+      <div style="min-width:0">${left}</div>
+      <div style="min-width:0">${right}</div>
+    </div>`;
+  } catch (e) {
+    return `<div class="town-blurb" style="color:var(--danger)">The Mirrorforge could not render right now.</div>`;
+  }
+}
+
+// ── Pick an item to work on ──
+function mfPick(i) {
+  try {
+    _egMfSel = i;
+    setTownContent(renderMirrorforge());
+    if (typeof sfx === 'function') sfx('click');
+  } catch (e) { if (typeof log === 'function') log('Mirrorforge action failed'); }
+}
+
+// ── Perform an action on the selected item ──
+function mfDo(action, arg) {
+  try {
+    const item = inventory[_egMfSel];
+    if (!item) { log('No item selected.'); return; }
+    const gate = mfCanApply(action, egMfToContract(item), fpRemaining(egMfToContract(item)), egMfWallet());
+    if (!gate || !gate.ok) { log('Cannot ' + action + ' this item right now.'); return; }
+    egMfSpend(action);
+    const c = egMfToContract(item);
+    let res;
+    if (action === 'attune') res = applyAttune(c, arg, Math.random);
+    else if (action === 'exalt') res = applyExalt(c, arg);
+    else if (action === 'divine') res = applyDivine(c, arg, _egMfDivineAether, Math.random);
+    else if (action === 'corrupt') res = applyCorrupt(c, Math.random);
+    else if (action === 'mirror') { res = applyMirror(c); if (typeof egHallBumpMirror === 'function') egHallBumpMirror(); }
+    else res = c;
+    inventory[_egMfSel] = egMfFromContract(item, res);
+    if (typeof bumpLoadout === 'function') bumpLoadout();
+    if (typeof recomputeMaxStats === 'function') recomputeMaxStats();
+    saveGameSoon();
+    if (typeof sfx === 'function') sfx(action === 'corrupt' ? 'loot' : 'levelup');
+    log('<span data-spr=mf_anvil></span> Mirrorforge: ' + action + ' applied.', 'loot');
+    setTownContent(renderMirrorforge());
+  } catch (e) { log('Mirrorforge action failed'); }
+}
+
+// ── Toggle the Divine "use Aether" top-decile snap ──
+function mfToggleAether() {
+  try {
+    _egMfDivineAether = !_egMfDivineAether;
+    setTownContent(renderMirrorforge());
+  } catch (e) { if (typeof log === 'function') log('Mirrorforge action failed'); }
+}
+
+// ── Shatter a bag piece into Attunement (the pity currency) ──
+function mfShatter(i) {
+  try {
+    const it = inventory[i];
+    if (!it) return;
+    const gain = shatterToAttunement(egMfToContract(it));
+    player.attunement = (player.attunement || 0) + gain;
+    inventory.splice(i, 1);
+    if (_egMfSel >= i) _egMfSel = -1;
+    saveGameSoon();
+    if (typeof sfx === 'function') sfx('loot');
+    setTownContent(renderMirrorforge());
+    log('<span data-spr=mf_anvil></span> Shattered for +' + gain + ' Attunement.', 'important');
+  } catch (e) { }
+}
+
+// ── Spend Attunement to aim the farm at a still-missing artifact ──
+function egMfSpendAttunement() {
+  try {
+    const need = (MIRRORFORGE.attunement && MIRRORFORGE.attunement.spendCost) || 50;
+    if ((player.attunement || 0) < need) { log('Not enough Attunement (need ' + need + ').'); return; }
+    if (player.attuneTarget) { log('A target is already set.'); return; }
+    const owned = acquiredKeySet(groupStoredArtifacts((stash && stash.items) || [], itemPower));
+    const keys = _COLL_CATALOG.map(e => e.key);
+    const target = pickMissingTarget(keys, owned, Math.random);
+    if (!target) { log('Your collection is already complete — nothing to aim for.'); return; }
+    player.attuneTarget = target;
+    player.attunement = (player.attunement || 0) - need;
+    saveGameSoon();
+    if (typeof sfx === 'function') sfx('levelup');
+    const e = _COLL_CATALOG.find(x => x.key === target);
+    log('<span data-spr=mf_anvil></span> Farm aimed at <b>' + escapeHtml(e ? e.name : target) + '</b>.', 'important');
+    setTownContent(renderMirrorforge());
+  } catch (err) { log('Mirrorforge action failed'); }
+}
+
+// ── Drop-time hook: flag an affix radiant in deep Endless ──
+function egMfRadiantOnAffix(item, endlessDepth) {
+  try {
+    if (rollRadiant(Math.random, endlessDepth)) { if (item) item.radiant = true; return true; }
+    return false;
+  } catch (e) { return false; }
+}
+
+// ── Drop-time hook: roll an Aether drop (deep-Endless-gated) ──
+function egMfAetherDrop(endlessDepth) {
+  try { return (aetherUnlocked(endlessDepth) && Math.random() < 0.10) ? 1 : 0; }
+  catch (e) { return 0; }
+}
+
+// ── Count of Perfected (mirrored) copies in the stash ──
+function egMfPerfectedCount() {
+  try {
+    const items = (stash && stash.items) || [];
+    let n = 0;
+    for (const it of items) if (it && it.mirrored) n++;
+    return n;
+  } catch (e) { return 0; }
+}
+
+// ── gameState() live block ──
+function egMfGameStateBlock() {
+  return {
+    aether: player.aether || 0,
+    attunement: player.attunement || 0,
+    target: player.attuneTarget || null,
+    perfected: egMfPerfectedCount(),
+  };
+}
+
+// ── gameGuide() reference lines ──
+function egMfGuideTopic() {
+  return [
+    'Mirrorforge: a deep-crafting bench that turns your late-game material glut into a bounded, planned climb toward perfect gear.',
+    'Forging Potential (FP): each item has a finite budget = 100 + 20*rank + 2*ilvl. Every sculpt spends FP, so perfection must be planned, not brute-forced.',
+    'Attune: reforge the bonus affixes; the stat you choose is guaranteed to roll in the top half of its band. The cheap, repeatable aim.',
+    'Exalt: deterministically shove one affix halfway to its ceiling each cast (no RNG) — converges on max with diminishing returns.',
+    'Divine: reroll one affix value in-band; toggle Use Aether to snap it into the top decile for a near-perfect roll.',
+    'Corrupt: a one-shot, irreversible gamble that SEALS the item — may add an affix, make it radiant, brand a signature, or lay a heavy curse.',
+    'Mirror: lock a flawless copy into the Perfected collection axis (Owned -> Perfected). Costs heavy materials plus the deep material Aether.',
+    'Radiant affixes are greater rolls that appear on drops deep in Endless (chance climbs with depth) and from a lucky Corrupt.',
+    'Aether: a deep-Endless material that only starts dropping at Endless depth 90; it fuels Mirror and the Aether Divine.',
+    'Shatter: retire a worked item for Attunement, the pity currency. Spend Attunement to aim your farm at a still-missing artifact; a dry streak bends toward it.',
+  ];
+}
+
+// ── PANTHEON ──
+// ─────────────────────────────────────────────────────────────────────────────
+// PANTHEON OF THE DEEP — shell integration (pasted verbatim into src/legacy/game.js)
+//
+// Top-level function declarations only. Runs INSIDE game.js scope, so it calls
+// game.js globals (player, inventory, enemies, log, sfx, dlIcon, …) and the already
+// imported pure-core pinnacle aliases (pinnacleBossById, baseBosses, uberFor,
+// pinnacleSummonCost, pinnacleCanSummon, previewLootPool, rollPinnacleDrop,
+// nextBossPity, firstClearReward, uberUnlocked, PANTHEON, PANTHEON_SHARDS,
+// pinnacleUniqueById, pinnacleInitFight, pinnacleStepFight, pinnacleCurrentPhase,
+// pinnaclePendingTelegraphs) directly.
+//
+// Every handler body is wrapped in try/catch and every optional internal API is
+// typeof-guarded, so a missing shell helper no-ops rather than breaking boot. The
+// summit fight is REAL and playable: the summoned god is force-spawned into a live
+// dungeon floor with a real, telegraphed boss moveset cloned from an existing
+// guardian, and the phase/enrage/add-wave overlay rides on top of it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The hero's live purse in the exact shape pinnacleCanSummon expects.
+function egPinnacleWallet() {
+  try {
+    var mats = (typeof heroMaterials === 'function') ? (heroMaterials() || {}) : {};
+    return {
+      gold: (typeof spendableGold === 'function') ? (spendableGold() || 0) : ((player && player.gold) || 0),
+      chaos: mats.chaos || 0,
+      scrap: mats.scrap || 0,
+      glimmer: mats.glimmer || 0,
+      core: mats.core || 0,
+      shards: (player && player.pinnacleShards) || {},
+    };
+  } catch (e) {
+    return { gold: 0, chaos: 0, scrap: 0, glimmer: 0, core: 0, shards: {} };
+  }
+}
+
+// The Endless depth the hero has reached (0 while inside the finite ladder).
+function egPinnacleEndlessDepth() {
+  try {
+    var endless = (typeof isEndless === 'function') ? isEndless() : false;
+    var floor = (typeof FINITE_DEPTH === 'number') ? FINITE_DEPTH : 75;
+    var dl = (typeof dungeonLevel === 'number') ? dungeonLevel : 0;
+    return endless ? Math.max(0, dl - floor) : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+// A short, readable label for a shard currency id ('tideheartShard' -> 'Tideheart').
+function egShardLabel(type) {
+  try {
+    if (!type) return 'Shard';
+    var s = String(type).replace(/Shard$/, '');
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  } catch (e) {
+    return 'Shard';
+  }
+}
+
+// One line summarising an Effigy recipe ({shards:{type,count}, gold, chaos?}).
+function egPinnacleRecipeLine(recipe) {
+  try {
+    if (!recipe) return 'no recipe';
+    var parts = [];
+    if (recipe.shards && recipe.shards.type) {
+      parts.push(dlIcon('pin_shard', 14) + (recipe.shards.count || 0) + ' ' + egShardLabel(recipe.shards.type));
+    }
+    if (recipe.gold) {
+      var g = (typeof fmtGold === 'function') ? fmtGold(recipe.gold) : recipe.gold;
+      parts.push(dlIcon('ic_money', 14) + g);
+    }
+    if (recipe.chaos) parts.push(dlIcon('mat_chaos', 14) + recipe.chaos + ' chaos');
+    return parts.join(' &nbsp;·&nbsp; ');
+  } catch (e) {
+    return '';
+  }
+}
+
+// The Mythic pool of a god as a readable name list.
+function egPinnaclePoolLine(bossId) {
+  try {
+    var pv = (typeof previewLootPool === 'function') ? (previewLootPool(bossId) || {}) : {};
+    var pool = pv.pool || [];
+    var names = pool.map(function (mid) {
+      var d = (typeof pinnacleUniqueById === 'function') ? pinnacleUniqueById(mid) : null;
+      return (d && d.name) || mid;
+    });
+    if (!names.length) return 'no Mythic pool';
+    return 'Mythics: ' + names.join(', ');
+  } catch (e) {
+    return '';
+  }
+}
+
+// ── PANTHEON MODAL ───────────────────────────────────────────────────────────
+
+function openPantheon() {
+  try {
+    if (typeof openTownModal === 'function') openTownModal('Pantheon of the Deep', 'pin_altar');
+    if (typeof setTownContent === 'function') setTownContent(renderPantheon());
+  } catch (e) {
+    try { log('The altar will not open.'); } catch (_e) {}
+  }
+}
+
+function renderPantheon() {
+  try {
+    var wallet = egPinnacleWallet();
+    var shardBag = (player && player.pinnacleShards) || {};
+    var cleared = (player && player.pinnacleCleared) || {};
+    var pity = (player && player.pinnaclePity) || {};
+    var endlessDepth = egPinnacleEndlessDepth();
+
+    // ── Shard wallet strip (top) ──
+    var shardCells = '';
+    try {
+      if (typeof PANTHEON_SHARDS === 'object' && PANTHEON_SHARDS) {
+        shardCells = Object.keys(PANTHEON_SHARDS).map(function (k) {
+          var type = PANTHEON_SHARDS[k];
+          var n = shardBag[type] || 0;
+          return '<span class="cos-chip">' + dlIcon('pin_shard', 16) + ' ' + egShardLabel(type) + ' <b>' + n + '</b></span>';
+        }).join('');
+      }
+    } catch (_e) {}
+    var wchaos = wallet.chaos || 0;
+    var walletStrip =
+      '<div class="town-blurb" style="margin-bottom:4px">Effigy shards you have banked:</div>' +
+      '<div class="cos-chips" style="margin-bottom:10px">' + shardCells +
+      '<span class="cos-chip">' + dlIcon('mat_chaos', 16) + ' Chaos <b>' + wchaos + '</b></span></div>';
+
+    // ── Per-god summon cards ──
+    var bosses = (typeof baseBosses === 'function') ? (baseBosses() || []) : [];
+    var rows = bosses.map(function (boss) {
+      var id = boss.id;
+      var recipe = (typeof pinnacleSummonCost === 'function') ? pinnacleSummonCost(id) : null;
+      var afford = (typeof pinnacleCanSummon === 'function') ? !!pinnacleCanSummon(recipe, wallet) : false;
+      var clearedTag = cleared[id]
+        ? '<span style="color:var(--success)">felled — now farmable</span>'
+        : '<span style="color:var(--gold)">never cleared · first kill pays a bonus</span>';
+      var pv = (typeof previewLootPool === 'function') ? (previewLootPool(id) || {}) : {};
+      var thresh = pv.pityThreshold || 1;
+      var pityLine = 'pity ' + (pity[id] || 0) + '/' + thresh;
+
+      var stats =
+        egPinnacleRecipeLine(recipe) + '<br>' +
+        egPinnaclePoolLine(id) + '<br>' +
+        clearedTag + ' &nbsp;·&nbsp; ' + pityLine;
+
+      var card =
+        '<div class="shop-row has-actions ' + (afford ? '' : 'cant-afford') + '">' +
+          '<span class="loot-icon">' + dlIcon(boss.atlasKey || 'pin_boss', 40) + '</span>' +
+          '<div class="shop-row-info">' +
+            '<div class="shop-row-name">' + boss.name + '</div>' +
+            '<div class="shop-row-stats">' + stats + '</div>' +
+          '</div>' +
+          '<button class="act-btn ' + (afford ? '' : 'short') + '" ' + (afford ? '' : 'disabled') +
+            ' onclick="pantheonSummon(\'' + id + '\')">Summon</button>' +
+        '</div>';
+
+      // ── Uber staircase ──
+      var uber = (typeof uberFor === 'function') ? uberFor(id) : null;
+      if (uber) {
+        var unlocked = (typeof uberUnlocked === 'function')
+          ? !!uberUnlocked(uber, !!cleared[id], endlessDepth) : false;
+        if (unlocked) {
+          var urecipe = (typeof pinnacleSummonCost === 'function') ? pinnacleSummonCost(uber.id) : null;
+          var uafford = (typeof pinnacleCanSummon === 'function') ? !!pinnacleCanSummon(urecipe, wallet) : false;
+          var upv = (typeof previewLootPool === 'function') ? (previewLootPool(uber.id) || {}) : {};
+          var upity = 'pity ' + (pity[uber.id] || 0) + '/' + (upv.pityThreshold || 1);
+          card +=
+            '<div class="shop-row has-actions ' + (uafford ? '' : 'cant-afford') + '" style="margin-left:16px">' +
+              '<span class="loot-icon">' + dlIcon(uber.atlasKey || 'pin_boss', 36) + '</span>' +
+              '<div class="shop-row-info">' +
+                '<div class="shop-row-name">⇧ ' + uber.name + '</div>' +
+                '<div class="shop-row-stats">' + egPinnacleRecipeLine(urecipe) + '<br>' +
+                  egPinnaclePoolLine(uber.id) + '<br>' +
+                  (cleared[uber.id] ? '<span style="color:var(--success)">felled</span>' : '<span style="color:var(--gold)">not yet cleared</span>') +
+                  ' &nbsp;·&nbsp; ' + upity + '</div>' +
+              '</div>' +
+              '<button class="act-btn ' + (uafford ? '' : 'short') + '" ' + (uafford ? '' : 'disabled') +
+                ' onclick="pantheonSummon(\'' + uber.id + '\')">Summon</button>' +
+            '</div>';
+        } else {
+          var need = Math.max(0, Math.floor(uber.uberMinEndlessDepth || 0));
+          card +=
+            '<div class="shop-row" style="margin-left:16px;opacity:0.72">' +
+              '<span class="loot-icon">' + dlIcon('pin_locked', 36) + '</span>' +
+              '<div class="shop-row-info">' +
+                '<div class="shop-row-name">⇧ ' + uber.name + ' <span style="color:var(--danger)">(locked)</span></div>' +
+                '<div class="shop-row-stats">Ascends once you have felled ' + boss.name +
+                  ' and reached Endless depth ' + need + '.</div>' +
+              '</div>' +
+            '</div>';
+        }
+      }
+      return card;
+    }).join('');
+
+    var clearedCount = 0;
+    try { clearedCount = Object.keys(cleared).length; } catch (_e) {}
+    var totalBosses = bosses.length;
+
+    return (
+      '<div class="town-blurb">Assemble a single-use Effigy from the shards deep foes leave behind, forge it at the Altar, and drag a god of the deep into a bespoke arena. Each is a multi-phase skill check that drops <b>Mythic</b> artifacts found nowhere else. Beat a god\'s base form and climb deep enough into Endless to summon its far deadlier Uber. Cleared ' + clearedCount + '/' + totalBosses + ' gods.</div>' +
+      walletStrip +
+      rows
+    );
+  } catch (e) {
+    return '<div class="town-blurb">The Pantheon is silent.</div>';
+  }
+}
+
+function pantheonSummon(bossId) {
+  try {
+    var recipe = (typeof pinnacleSummonCost === 'function') ? pinnacleSummonCost(bossId) : null;
+    if (!recipe) { log('That god cannot be summoned.'); return; }
+    if (!(typeof pinnacleCanSummon === 'function') || !pinnacleCanSummon(recipe, egPinnacleWallet())) {
+      log('Not enough to summon.');
+      return;
+    }
+    // Pay the Effigy cost.
+    if (recipe.gold && typeof spendCost === 'function') spendCost({ gold: recipe.gold });
+    if (recipe.chaos && typeof gainMaterial === 'function') gainMaterial('chaos', -recipe.chaos);
+    if (recipe.shards && recipe.shards.type && player && player.pinnacleShards) {
+      var t = recipe.shards.type;
+      player.pinnacleShards[t] = Math.max(0, (player.pinnacleShards[t] || 0) - (recipe.shards.count || 0));
+    }
+    var bossDef = (typeof pinnacleBossById === 'function') ? pinnacleBossById(bossId) : null;
+    egPinnacleEnterArena(bossDef);
+    if (typeof closeTown === 'function') closeTown();
+  } catch (e) {
+    try { log('Summon failed'); } catch (_e) {}
+  }
+}
+
+// ── ARENA / FIGHT ────────────────────────────────────────────────────────────
+
+// Pick a real guardian `type` (with a live telegraphed moveset in BOSS_MOVESETS)
+// to clone the fight AI from, chosen thematically per god-lineage.
+function egPinnacleTemplateType(bossDef) {
+  try {
+    var base = (bossDef && (bossDef.uberOf || bossDef.id)) || '';
+    var map = {
+      thallor: 'tidewarden', nyxara: 'allseer', vorgrim: 'inferno',
+      sylvaine: 'ratking', kaethon: 'cindra', umbriel: 'ourok',
+    };
+    return map[base] || 'inferno';
+  } catch (e) {
+    return 'inferno';
+  }
+}
+
+// Drop the hero into a real dungeon floor and force-spawn the summoned god as a
+// live, fully-telegraphed boss. Everything optional is guarded, so a missing
+// internal API degrades to "marker only" rather than breaking boot.
+function egPinnacleEnterArena(bossDef) {
+  try {
+    if (!bossDef) { log('The altar flickers — no god answers the call.'); return; }
+
+    // 1 · Enter a real floor to fight on. Use the hero's deepest re-enterable depth,
+    //     nudged off a boss floor (multiple of 5) so we neither trip the boss gate
+    //     nor stack a floor guardian on top of our summoned god.
+    var depth = Math.max(1, (player && player.maxFloor) || 1, (typeof dungeonLevel === 'number' ? dungeonLevel : 1) || 1);
+    if (depth % 5 === 0) depth = Math.max(1, depth - 1);
+    if (typeof enterDungeonAt === 'function') { try { enterDungeonAt(depth); } catch (_e) {} }
+
+    // 2 · Force-spawn the god. Clone a real guardian's combat profile so the
+    //     existing enemy AI drives a genuine, telegraphed boss fight.
+    var e = null;
+    if (typeof enemies !== 'undefined' && Array.isArray(enemies) &&
+        typeof mapData !== 'undefined' && mapData && typeof MAP_W === 'number' && typeof MAP_H === 'number') {
+      // Clean 1v1 arena: clear scattered mobs, minions and lingering hazards.
+      enemies.length = 0;
+      try { if (typeof minions !== 'undefined' && Array.isArray(minions)) minions.length = 0; } catch (_e) {}
+      try { if (typeof bossHazards !== 'undefined' && Array.isArray(bossHazards)) bossHazards.length = 0; } catch (_e) {}
+      try { if (typeof bossTelegraphs !== 'undefined' && Array.isArray(bossTelegraphs)) bossTelegraphs.length = 0; } catch (_e) {}
+
+      var ttype = egPinnacleTemplateType(bossDef);
+      var tmpl = null;
+      try { if (typeof BOSSES !== 'undefined' && Array.isArray(BOSSES)) { tmpl = BOSSES.filter(function (b) { return b && b.type === ttype; })[0] || null; } } catch (_e) {}
+
+      var size = (tmpl && tmpl.size) || 2;
+      // Centre the god, keeping it off the hero's doorstep, then carve open arena.
+      var cx = Math.floor(MAP_W / 2), cy = Math.floor(MAP_H / 2);
+      var px = (player && player.x) || 5, py = (player && player.y) || 5;
+      if (Math.abs(cx - px) + Math.abs(cy - py) < 7) { cx = MAP_W - 6; cy = MAP_H - 6; }
+      cx = Math.max(2, Math.min(MAP_W - size - 2, cx));
+      cy = Math.max(2, Math.min(MAP_H - size - 2, cy));
+      try {
+        var pad = 3;
+        for (var ay = cy - pad; ay < cy + size + pad; ay++) {
+          for (var ax = cx - pad; ax < cx + size + pad; ax++) {
+            if (ax > 0 && ay > 0 && ax < MAP_W - 1 && ay < MAP_H - 1 && mapData[ay] && mapData[ay][ax] === 1) mapData[ay][ax] = 0;
+          }
+        }
+        if (typeof bumpMapEpoch === 'function') bumpMapEpoch();
+        if (typeof pathGridDirty === 'function') pathGridDirty();
+      } catch (_e) {}
+
+      // HP / damage on the same curve spawnEnemies uses for a guardian, then the
+      // god's authored hp.mult on top.
+      var bossLevel = (typeof dungeonLevel === 'number' ? dungeonLevel : 1) + 2;
+      var baseHp, baseDmg;
+      try {
+        var threat = (typeof depthThreat === 'function') ? depthThreat(bossLevel) : 1;
+        var bhm = (typeof bossHpMult === 'function') ? bossHpMult() : 1;
+        var B = (typeof BALANCE === 'object' && BALANCE) ? BALANCE : {};
+        baseHp = Math.round((50 + bossLevel * 23) * threat * (B.bossHpMult || 1) * (B.enemyHpMult || 1) * bhm);
+        baseDmg = Math.round((9 + bossLevel * 2.1) * threat * (B.bossDmgMult || 1) * (B.enemyDmgMult || 1));
+      } catch (_e) {}
+      if (!(baseHp > 0)) baseHp = 500 + bossLevel * 120;
+      if (!(baseDmg > 0)) baseDmg = 12 + bossLevel * 2;
+      var mult = (bossDef.hp && typeof bossDef.hp.mult === 'number' && bossDef.hp.mult > 0) ? bossDef.hp.mult : 8;
+      var finalHp = Math.max(1, Math.round(baseHp * mult));
+
+      e = {
+        x: cx, y: cy,
+        hp: finalHp, maxHp: finalHp,
+        type: (tmpl && tmpl.type) || ttype,
+        name: bossDef.name || (tmpl && tmpl.name) || 'The Deep God',
+        level: bossLevel,
+        dmg: baseDmg,
+        size: size,
+        dead: false, isBoss: true,
+        pinnacle: bossDef.id,
+        statusChance: (tmpl && tmpl.ability === 'curse') ? 0.45 : 0.3,
+        behavior: (tmpl && tmpl.behavior) || 'caster',
+        bossAbility: (tmpl && tmpl.ability) || null,
+        specials: (tmpl && tmpl.specials ? tmpl.specials.slice() : []),
+        cd: 3, shieldT: 0,
+        spawnT: Date.now(),
+      };
+      enemies.push(e);
+      if (typeof bumpEnemyPos === 'function') bumpEnemyPos();
+    }
+
+    // 3 · Arm the pure phase state machine + start the fight clock.
+    _egPinnacleBoss = e;
+    _egPinnacleBossId = bossDef.id;
+    _egPinnacleFight = (typeof pinnacleInitFight === 'function') ? pinnacleInitFight(bossDef) : null;
+    _egPinnacleFightStartMs = Date.now();
+
+    // 4 · Dramatic summon banner.
+    try {
+      log(dlIcon('pin_altar', 16) + ' <b>' + (bossDef.name || 'A god of the deep') + '</b> answers the Effigy and steps into the arena!', 'important');
+      if (typeof sfx === 'function') sfx('bosskill');
+      if (typeof screenFlash === 'function') screenFlash('#c87bff');
+      if (typeof addShake === 'function') addShake(10);
+    } catch (_e) {}
+
+    try {
+      if (typeof updateBars === 'function') updateBars();
+      if (typeof draw === 'function') draw();
+      if (typeof saveGameSoon === 'function') saveGameSoon();
+    } catch (_e) {}
+  } catch (err) {
+    try { log('The summoning collapses.'); } catch (_e) {}
+  }
+}
+
+// Called each worldTick: advance the phase overlay atop the live boss AI.
+function egPinnacleTick() {
+  try {
+    if (!_egPinnacleFight) return;
+    if (!_egPinnacleBoss || _egPinnacleBoss.dead) { _egPinnacleFight = null; _egPinnacleBoss = null; return; }
+
+    var bossDef = (typeof pinnacleBossById === 'function') ? pinnacleBossById(_egPinnacleBossId) : null;
+    var hpFrac = Math.max(0, _egPinnacleBoss.hp / (_egPinnacleBoss.maxHp || 1));
+    var elapsedSec = (Date.now() - _egPinnacleFightStartMs) / 1000;
+    if (typeof pinnacleStepFight !== 'function') return;
+
+    var r = pinnacleStepFight(_egPinnacleFight, { hpFrac: hpFrac, elapsedSec: elapsedSec }, Math.random, bossDef);
+    _egPinnacleFight = r.state;
+    var events = (r && r.events) || [];
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      try {
+        if (ev.type === 'phase') {
+          log('The ' + ((bossDef && bossDef.name) || 'guardian') + ' shifts — phase ' + (ev.phaseIndex != null ? (ev.phaseIndex + 1) : '') + (ev.phaseId ? ' (' + ev.phaseId + ')' : ''), 'important');
+          if (typeof screenFlash === 'function') screenFlash('#c87bff');
+          if (typeof addShake === 'function') addShake(5);
+        } else if (ev.type === 'enrage') {
+          _egPinnacleBoss.enraged = true;
+          // A real DPS check: a modest permanent damage spike per phase-enrage.
+          _egPinnacleBoss.dmg = Math.round((_egPinnacleBoss.dmg || 1) * 1.25);
+          log('The ' + ((bossDef && bossDef.name) || 'guardian') + ' ENRAGES — its blows redouble!', 'important');
+          if (typeof sfx === 'function') sfx('bosskill');
+          if (typeof screenFlash === 'function') screenFlash('#ff3344');
+        } else if (ev.type === 'addwave') {
+          // Spawn ev.count adds near the god via the existing vermin-summon path.
+          var n = Math.max(0, Math.floor(ev.count || 0));
+          if (n > 0 && typeof spawnVerminAt === 'function' && typeof MAP_W === 'number') {
+            var placed = 0;
+            for (var d = 1; d <= 3 && placed < n; d++) {
+              var ring = [[d, 0], [-d, 0], [0, d], [0, -d], [d, d], [-d, -d], [d, -d], [-d, d]];
+              for (var k = 0; k < ring.length && placed < n; k++) {
+                var sx = _egPinnacleBoss.x + ring[k][0], sy = _egPinnacleBoss.y + ring[k][1];
+                try { if (spawnVerminAt(_egPinnacleBoss, sx, sy)) placed++; } catch (_e) {}
+              }
+            }
+          }
+        } else if (ev.type === 'telegraph') {
+          // The cloned guardian moveset already lays down real, dodgeable telegraphs;
+          // the pure overlay's telegraph events are advisory here — no-op to stay safe.
+        }
+      } catch (_e) {}
+    }
+  } catch (e) {
+    // never let the overlay break the world tick
+  }
+}
+
+// Called from onEnemyDefeated when e.pinnacle is set: roll the Mythic drop, pity,
+// and first-clear rewards.
+function egPinnacleOnBossKill(e) {
+  try {
+    var bossDef = (typeof pinnacleBossById === 'function') ? pinnacleBossById(e.pinnacle) : null;
+    if (!bossDef) return;
+    var pv = (typeof previewLootPool === 'function') ? (previewLootPool(bossDef.id) || {}) : {};
+    var pool = pv.pool || [];
+    if (!player.pinnaclePity) player.pinnaclePity = {};
+    if (!player.pinnacleCleared) player.pinnacleCleared = {};
+    if (!player.pinnacleShards) player.pinnacleShards = {};
+    var pity = player.pinnaclePity[bossDef.id] || 0;
+
+    var r = (typeof rollPinnacleDrop === 'function') ? rollPinnacleDrop(pool, pity, Math.random, bossDef) : null;
+    if (r && r.itemId) {
+      var def = (typeof pinnacleUniqueById === 'function') ? pinnacleUniqueById(r.itemId) : null;
+      if (def && typeof buildUnique === 'function') {
+        var lvl = Math.max((typeof dungeonLevel === 'number' ? dungeonLevel : 1), (player.maxFloor || 1));
+        var it = buildUnique(def, lvl);
+        if (it) {
+          it.mythic = true;
+          if (typeof acquireLoot === 'function') acquireLoot(it);
+          log(dlIcon('mf_anvil', 16) + ' <b>Mythic:</b> ' + def.name + ' falls from the ' + (bossDef.name || 'god') + '!', 'loot');
+          if (typeof sfx === 'function') sfx('loot');
+          if (typeof screenFlash === 'function') screenFlash('#ff3344');
+          if (typeof addShake === 'function') addShake(8);
+        }
+      }
+    }
+    if (typeof nextBossPity === 'function') {
+      player.pinnaclePity[bossDef.id] = nextBossPity(pity, !!(r && r.itemId), bossDef);
+    }
+
+    if (!player.pinnacleCleared[bossDef.id]) {
+      var fc = (typeof firstClearReward === 'function') ? firstClearReward(bossDef) : null;
+      if (fc) {
+        if (fc.gold) player.gold = (player.gold || 0) + fc.gold;
+        if (fc.chaos && typeof gainMaterial === 'function') gainMaterial('chaos', fc.chaos);
+        if (fc.shards && fc.shards.type) {
+          player.pinnacleShards[fc.shards.type] = (player.pinnacleShards[fc.shards.type] || 0) + (fc.shards.count || 1);
+        }
+      }
+      player.pinnacleCleared[bossDef.id] = 1;
+      log('First clear of ' + (bossDef.name || 'the god') + '! The Deep remembers.', 'important');
+      if (typeof sfx === 'function') sfx('levelup');
+    }
+
+    _egPinnacleFight = null;
+    _egPinnacleBoss = null;
+    if (typeof saveGameSoon === 'function') saveGameSoon();
+  } catch (err) {
+    // swallow — a botched reward must never break the kill flow
+  }
+}
+
+// From a normal Endless boss kill, a small chance to drop one Effigy shard.
+function egPinnacleShardDrop(endlessDepth) {
+  try {
+    if (typeof PANTHEON_SHARDS !== 'object' || !PANTHEON_SHARDS) return null;
+    var types = Object.keys(PANTHEON_SHARDS).map(function (k) { return PANTHEON_SHARDS[k]; });
+    if (!types.length) return null;
+    if (Math.random() < 0.5) {
+      var t = types[Math.floor(Math.random() * types.length)];
+      if (!player.pinnacleShards) player.pinnacleShards = {};
+      player.pinnacleShards[t] = (player.pinnacleShards[t] || 0) + 1;
+      try { log(dlIcon('pin_shard', 14) + ' An Effigy shard (' + egShardLabel(t) + ') glints among the spoils.', 'loot'); } catch (_e) {}
+      return t;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Live-state block for gameState(): what the agent needs to fight a Pantheon god.
+function egPinnacleGameStateBlock() {
+  try {
+    if (_egPinnacleFight) {
+      var bd = (typeof pinnacleBossById === 'function') ? pinnacleBossById(_egPinnacleBossId) : null;
+      var phase = null;
+      try {
+        var cp = (typeof pinnacleCurrentPhase === 'function') ? pinnacleCurrentPhase(_egPinnacleFight, bd) : null;
+        phase = (cp && cp.id) || null;
+      } catch (_e) {}
+      var hpFrac = _egPinnacleBoss ? Math.round((_egPinnacleBoss.hp / (_egPinnacleBoss.maxHp || 1)) * 100) / 100 : 0;
+      var teleg = [];
+      try { if (typeof pinnaclePendingTelegraphs === 'function') teleg = pinnaclePendingTelegraphs(_egPinnacleFight); } catch (_e) {}
+      return {
+        active: true,
+        boss: _egPinnacleBossId,
+        bossName: (bd && bd.name) || null,
+        phase: phase,
+        enraged: !!(_egPinnacleBoss && _egPinnacleBoss.enraged),
+        hpFrac: hpFrac,
+        telegraphs: teleg,
+      };
+    }
+    var clearedN = 0;
+    try { clearedN = Object.keys((player && player.pinnacleCleared) || {}).length; } catch (_e) {}
+    var total = (typeof baseBosses === 'function') ? (baseBosses() || []).length : 0;
+    return {
+      active: false,
+      shards: (player && player.pinnacleShards) || {},
+      cleared: clearedN,
+      totalBosses: total,
+    };
+  } catch (e) {
+    return { active: false, shards: {}, cleared: 0, totalBosses: 0 };
+  }
+}
+
+// gameGuide() topic: how the Pantheon works, in plain player-facing terms.
+function egPinnacleGuideTopic() {
+  return [
+    'PANTHEON OF THE DEEP: summon-on-demand capstone bosses that drop exclusive Mythic gear found nowhere else.',
+    'Deep and Endless bosses sometimes drop an Effigy SHARD (six kinds, one per god-lineage). Bank them.',
+    'At the Altar (Pantheon of the Deep), spend a fixed count of one shard type plus gold — and chaos for Ubers — to forge a single-use Effigy and summon that god.',
+    'Summoning drops you into a bespoke arena for a multi-phase fight: the god shifts phase as you drain its HP, spawns adds in some phases, and soft-enrages if you are too slow (a DPS check). Dodge every telegraphed zone by MOVING out of it.',
+    'Each god drops from a small pool of Mythic uniques with per-boss bad-luck protection (pity): every dry kill raises the counter, and at the threshold the next Mythic is GUARANTEED.',
+    'The roster is a Base -> Uber staircase: six Base gods anyone can eventually summon, each with a deadlier Uber that unlocks only after you have felled its Base form AND reached a minimum Endless depth. Ubers cost more, hit harder, and drop a strictly better pool.',
+    "A god's FIRST clear pays a one-time bonus (gold, shards, chaos) plus boss points; farming it afterward still drops Mythics but not the bonus.",
+  ];
+}
+
+// ── CYCLES ──
+// ══════════════════════════════════════════════════════════════════════════
+// CYCLES — shell integration (seasonal ladder "Cycles & the Legacy Realm")
+// Pasted verbatim into src/legacy/game.js; runs INSIDE game.js scope. Reads the
+// pure-core cycle aliases (activeCycle / cycleJourneyProgress / resolveCycleModifier
+// …) and wires them to the live hero, the town modal UI, and the AI-play API.
+// Top-level function declarations only. Defensive: handler bodies try/catch + log;
+// optional helpers guarded by typeof. `_egCycleCache` is pre-declared — never redeclare.
+// ══════════════════════════════════════════════════════════════════════════
+
+// Live cycle snapshot, recomputed only when the wall-clock MINUTE rolls over (the
+// season windows change on the order of days, so a per-minute cache is plenty and
+// keeps this off the hot path). Caches { min, res } on the pre-declared global.
+function egCycleNow() {
+  try {
+    const min = Math.floor(Date.now() / 60000);
+    if (_egCycleCache && _egCycleCache.min === min && _egCycleCache.res) return _egCycleCache.res;
+    const res = activeCycle(Date.now());
+    _egCycleCache = { min: min, res: res };
+    return res;
+  } catch (_e) {
+    return { cycle: null, countdownMs: 0, phase: 'ended' };
+  }
+}
+
+// The cycle that is LIVE right now, or null (pre-season / gap / ended).
+function egCycleLive() {
+  const n = egCycleNow();
+  return (n && n.phase === 'live' && n.cycle) ? n.cycle : null;
+}
+
+// Is THIS hero enrolled in the live cycle? (tag must match the live season's id).
+function egCycleEnrolled() {
+  try {
+    const c = egCycleLive();
+    return !!(c && player && player.cycleId === c.id);
+  } catch (_e) {
+    return false;
+  }
+}
+
+// The resolved headline-rule params for the live season IF this hero is enrolled;
+// otherwise the neutral (no-change) shape so every call site can read a knob safely.
+function egCycleMod() {
+  try {
+    if (egCycleEnrolled()) {
+      const c = egCycleLive();
+      return resolveCycleModifier(c.headlineModifierId);
+    }
+  } catch (_e) { /* fall through to neutral */ }
+  return { lootTierShift: 0, bountyPayoutMult: 1, enemyAffix: null, densityMult: 1, xpMult: 1 };
+}
+
+// ── APPLY the headline rule at the shell's call sites ────────────────────────
+// Each is a thin, no-throw wrapper: pass the base value, get the season-adjusted
+// value (identity when not enrolled / no live cycle).
+function egCycleLootWeights(weights) {
+  try { return applyLootTierShift(weights, egCycleMod().lootTierShift); } catch (_e) { return weights; }
+}
+function egCycleDensity(count) {
+  try { return applyDensityMult(count, egCycleMod().densityMult); } catch (_e) { return count; }
+}
+function egCyclePayout(gold) {
+  try { return applyPayoutMult(gold, egCycleMod().bountyPayoutMult); } catch (_e) { return gold; }
+}
+function egCycleXp(xp) {
+  try { return applyXpMult(xp, egCycleMod().xpMult); } catch (_e) { return xp; }
+}
+function egCycleEnemyAffix() {
+  try { return egCycleMod().enemyAffix; } catch (_e) { return null; }
+}
+
+// Snapshot of this hero's live running totals in the shape cycleJourneyProgress reads.
+// A fresh seasonal hero starts every counter at 0, so the live total IS the season delta.
+function egCycleTotals() {
+  try {
+    return {
+      kills: player.kills || 0,
+      maxFloor: player.maxFloor || 1,
+      clearedFloors: Object.keys(player.clearedFloors || {}).length,
+      bossKills: player.bossKills || 0,
+      eliteKills: player.eliteKills || 0,
+      goldEarned: player.goldEarned || 0,
+      journeyPoints: player.journeyPoints || 0
+    };
+  } catch (_e) {
+    return { kills: 0, maxFloor: 1, clearedFloors: 0, bossKills: 0, eliteKills: 0, goldEarned: 0, journeyPoints: 0 };
+  }
+}
+
+// Per-tick milestone check: grant any newly-completed Journey rewards exactly once
+// (tracked in player.cycleRewardsClaimed). Rewards are kept small and mostly cosmetic —
+// a milestone reward with a .gold or .mat field pays out; the rest is just the banner.
+function egCycleTick() {
+  try {
+    if (!egCycleEnrolled()) return;
+    const cyc = egCycleLive();
+    if (!Array.isArray(player.cycleRewardsClaimed)) player.cycleRewardsClaimed = [];
+    const prog = cycleJourneyProgress(egCycleTotals(), cyc);
+    const earned = cycleRewardsEarned(prog, cyc);
+    for (const e of earned) {
+      if (!e || !e.id) continue;
+      if (player.cycleRewardsClaimed.includes(e.id)) continue;
+      player.cycleRewardsClaimed.push(e.id);
+      if (e.reward && e.reward.gold) { player.gold = (player.gold || 0) + e.reward.gold; }
+      if (e.reward && e.reward.mat && typeof gainMaterial === 'function') { gainMaterial(e.reward.mat, e.reward.qty || 1); }
+      log(dlIcon('cycle_banner', 16) + ' Journey milestone complete!', 'important');
+      if (typeof sfx === 'function') sfx('levelup');
+      saveGameSoon();
+    }
+  } catch (_e) { /* never let a milestone check throw into the tick loop */ }
+}
+
+// ── TOWN MODAL: the Cycles board ─────────────────────────────────────────────
+function openCycles() {
+  try {
+    openTownModal('Cycles', 'cycle_banner');
+    setTownContent(renderCycles());
+  } catch (_e) { /* modal open is best-effort */ }
+}
+
+// Build the Cycles board HTML (returned, not mounted). Shows the season banner +
+// headline rule + human countdown; an Enroll button when a live season isn't joined;
+// or the Journey checklist (with a completion badge) once enrolled.
+function renderCycles() {
+  try {
+    const n = egCycleNow();
+    const cyc = n.cycle;
+    const abbr = (v) => (typeof abbreviateNumber === 'function') ? abbreviateNumber(v) : String(v);
+    // Format a duration (ms) into a compact d/h/m string.
+    const fmt = (ms) => {
+      let s = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+      const d = Math.floor(s / 86400); s -= d * 86400;
+      const h = Math.floor(s / 3600); s -= h * 3600;
+      const m = Math.floor(s / 60);
+      if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
+      if (h > 0) return h + 'h ' + m + 'm';
+      return m + 'm';
+    };
+
+    let html = '<div class="town-blurb">Cycles are opt-in <b>seasons</b>: a fresh hero from level 1, racing a fixed <b>Journey</b> of milestones under one <b>headline rule</b> that changes how the run plays. The leaderboard is <b>snapshot &amp; reset</b> at season end, and when a season closes your seasonal hero forks into a permanent Legacy hero — nothing is lost. Enrolling tags <b>this</b> hero to the season.</div>';
+
+    if (n.phase === 'live' && cyc) {
+      const modRow = (Array.isArray(CYCLE_MODIFIERS) ? CYCLE_MODIFIERS : []).find(m => m && m.id === cyc.headlineModifierId) || null;
+      const modName = modRow ? modRow.name : 'Open Cycle';
+      const modDesc = modRow ? modRow.desc : 'No headline rule — the classic loop.';
+      html += '<div class="shop-row"><div class="shop-row-info">'
+        + '<div class="shop-row-name">' + dlIcon('cycle_banner', 18) + ' ' + escapeHtml(cyc.name) + '</div>'
+        + '<div class="shop-row-stats"><b>Live now</b> · ends in ' + escapeHtml(fmt(n.countdownMs)) + '</div>'
+        + '<div class="shop-row-stats"><b>Headline rule:</b> ' + escapeHtml(modName) + ' — ' + escapeHtml(modDesc) + '</div>'
+        + '</div></div>';
+
+      if (!egCycleEnrolled()) {
+        html += '<div class="shop-row has-actions"><div class="shop-row-info">'
+          + '<div class="shop-row-name">Join the season</div>'
+          + '<div class="shop-row-stats">Tag this hero to ' + escapeHtml(cyc.name) + ' and start the Journey.</div>'
+          + '</div><button class="act-btn" onclick="cycleEnrollUI()">Enroll this hero</button></div>';
+      } else {
+        const totals = egCycleTotals();
+        const prog = cycleJourneyProgress(totals, cyc);
+        if (cycleJourneyComplete(totals, cyc)) {
+          html += '<div class="town-blurb" style="color:var(--success)"><b>&#10003; Journey complete!</b> Every milestone this season is done.</div>';
+        }
+        html += '<div class="town-blurb">Your Journey — progress since you enrolled:</div>';
+        const nameById = {};
+        (Array.isArray(cyc.journey) ? cyc.journey : []).forEach(s => { if (s && s.id) nameById[s.id] = s.name || s.id; });
+        html += '<div class="shop-grid">';
+        for (const p of prog) {
+          if (!p) continue;
+          const label = escapeHtml(nameById[p.id] || p.id || 'Milestone');
+          const mark = p.done ? '<span style="color:var(--success)">&#10003;</span>' : '<span style="opacity:0.5">&bull;</span>';
+          html += '<div class="shop-row"><div class="shop-row-info">'
+            + '<div class="shop-row-name">' + mark + ' ' + label + '</div>'
+            + '<div class="shop-row-stats">' + escapeHtml(abbr(p.have)) + ' / ' + escapeHtml(abbr(p.need)) + (p.done ? ' · <b style="color:var(--success)">done</b>' : '') + '</div>'
+            + '</div></div>';
+        }
+        html += '</div>';
+      }
+    } else if (n.phase === 'pre') {
+      const nm = cyc ? escapeHtml(cyc.name) : 'the next Cycle';
+      html += '<div class="shop-row"><div class="shop-row-info">'
+        + '<div class="shop-row-name">' + dlIcon('cycle_banner', 18) + ' Next: ' + nm + '</div>'
+        + '<div class="shop-row-stats">No season is live right now. Opens in <b>' + escapeHtml(fmt(n.countdownMs)) + '</b>.</div>'
+        + '</div></div>';
+    } else {
+      const nm = cyc ? escapeHtml(cyc.name) : null;
+      html += '<div class="shop-row"><div class="shop-row-info">'
+        + '<div class="shop-row-name">' + dlIcon('cycle_banner', 18) + ' Seasons concluded</div>'
+        + '<div class="shop-row-stats">' + (nm ? 'The last season was ' + nm + '. ' : '') + 'No Cycle is live right now — check back when the next one opens.</div>'
+        + '</div></div>';
+    }
+    return html;
+  } catch (_e) {
+    return '<div class="town-blurb">Cycles are unavailable right now.</div>';
+  }
+}
+
+// Enroll this hero into the live cycle (from the board's Enroll button).
+function cycleEnrollUI() {
+  try {
+    const c = egCycleLive();
+    if (!c) { log('No live Cycle to join.'); if (typeof sfx === 'function') sfx('click'); return; }
+    player.cycleId = c.id;
+    if (!Array.isArray(player.cycleRewardsClaimed)) player.cycleRewardsClaimed = [];
+    saveGameSoon();
+    if (typeof sfx === 'function') sfx('levelup');
+    log('Enrolled in the ' + escapeHtml(c.name) + ' Cycle.', 'important');
+    setTownContent(renderCycles());
+  } catch (_e) { /* enroll is best-effort */ }
+}
+
+// ── AI-PLAY API ──────────────────────────────────────────────────────────────
+// Live snapshot block for gameState(): phase, season name, enrollment, countdown,
+// and (when enrolled) the Journey progress rows.
+function egCycleGameStateBlock() {
+  try {
+    const n = egCycleNow();
+    return {
+      phase: n.phase,
+      cycle: n.cycle ? n.cycle.name : null,
+      enrolled: egCycleEnrolled(),
+      countdownMs: n.countdownMs,
+      journey: egCycleEnrolled() ? cycleJourneyProgress(egCycleTotals(), egCycleLive()) : null
+    };
+  } catch (_e) {
+    return { phase: 'ended', cycle: null, enrolled: false, countdownMs: 0, journey: null };
+  }
+}
+
+// How-to reference lines for gameGuide()'s Cycles topic.
+function egCycleGuideTopic() {
+  return [
+    'Cycles are opt-in seasonal ladders: an enrolled hero races the live season under a rotating headline rule that changes how the run plays (loot, spawns, XP, economy).',
+    'Each Cycle has a fixed milestone Journey; completing a milestone banks its reward. A fresh seasonal hero starts every counter at 0, so progress is just your live total.',
+    'The leaderboard is snapshot-and-reset at season end — your standing is captured, then the board clears for the next Cycle.',
+    'Enrolling tags THIS hero to the live season; when the season closes the hero forks into a permanent Legacy hero, so nothing is lost — only un-seasoned.'
+  ];
+}
+
+// ── DEEDS ──
+// ── THE HALL OF DEEDS — shell integration ────────────────────────────────────
+// Account-wide, POWER-FREE renown honour roll. These are top-level declarations
+// pasted verbatim into src/legacy/game.js: they run in game.js scope and call its
+// globals + the imported pure-core aliases (deedSatisfied/deedProgress/evaluateDeeds/
+// deedsByCategory, renownRank/unlockedRewards/renownNextReward, DEEDS/RENOWN_TRACK/
+// TITLES/FRAMES/BADGES) directly. The orchestrator pre-declares `let hallDeeds`.
+//
+// Persistence mirrors the account-wide bestiary ledger (writeBestiaryDex /
+// loadBestiaryDex / saveBestiaryDexSoon): one localStorage key, defensive parse,
+// in-place mutation of the shared object. Renown NEVER grants a stat — deeds only
+// unlock stash tabs, titles, frames and badges.
+
+// Load the account-wide deeds ledger, folding stored fields over the default shape.
+// Mutates the existing hallDeeds object IN PLACE (never reassigns) so every module
+// that already captured the reference keeps seeing the live values.
+function loadHallDeeds() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('dungeonLoot_deeds_v1'));
+    const def = { completed: [], renown: 0, title: null, frame: null, badge: null, claimed: [], classesPlayed: [], mirrored: 0, bountiesTotal: 0 };
+    const m = Object.assign(def, raw && typeof raw === 'object' ? raw : {});
+    m.completed = Array.isArray(m.completed) ? m.completed : [];
+    m.claimed = Array.isArray(m.claimed) ? m.claimed : [];
+    m.classesPlayed = Array.isArray(m.classesPlayed) ? m.classesPlayed : [];
+    Object.assign(hallDeeds, m);
+  } catch (_e) {}
+}
+
+// Persist the ledger. Cheap and change-agnostic; a corrupt localStorage never throws.
+function writeHallDeeds() {
+  try { localStorage.setItem('dungeonLoot_deeds_v1', JSON.stringify(hallDeeds)); } catch (_e) {}
+}
+
+// Deferred-save shim to parallel saveBestiaryDexSoon(). Module-level debounce state is
+// not allowed in this pasted block, so this just writes now — the payload is tiny.
+function saveHallDeedsSoon(delay) {
+  try { writeHallDeeds(); } catch (_e) {}
+}
+
+// ── Ledger bumps called from gameplay edges (breadth / mastery / bounty deeds) ──
+function egHallAddClass(cls) {
+  try {
+    if (cls && !hallDeeds.classesPlayed.includes(cls)) { hallDeeds.classesPlayed.push(cls); writeHallDeeds(); }
+  } catch (_e) {}
+}
+function egHallBumpMirror() {
+  try { hallDeeds.mirrored = (hallDeeds.mirrored || 0) + 1; writeHallDeeds(); } catch (_e) {}
+}
+function egHallBumpBounty() {
+  try { hallDeeds.bountiesTotal = (hallDeeds.bountiesTotal || 0) + 1; writeHallDeeds(); } catch (_e) {}
+}
+
+// Assemble the read-only account SNAPSHOT the pure deeds core evaluates against (see
+// data/deeds.js for the contract). Reads the live Collection, Bestiary dex, hero
+// records and the persisted ledger counters. Left un-caught on purpose: if a live
+// system is momentarily unavailable and throws, egDeedsEvaluate()'s catch skips the
+// write rather than persisting a zeroed snapshot that would drop earned deeds.
+function egDeedsSnapshot() {
+  const owned = acquiredKeySet(groupStoredArtifacts((stash && stash.items) || [], itemPower));
+  const coll = collectionProgress(_COLL_CATALOG, owned);
+  const roster = bestiaryRoster();
+  const disc = roster.filter(s => speciesDiscovered(bestiaryKills(s))).length;
+  return {
+    collection: { have: coll.have, total: coll.total },
+    bestiary: { discovered: disc, total: roster.length },
+    diffCleared: player.diffCleared || 0,
+    maxFloor: player.maxFloor || 1,
+    endlessFloor: Math.max(0, (player.maxFloor || 1) - FINITE_DEPTH),
+    bounties: { total: hallDeeds.bountiesTotal || 0, perClass: {} },
+    classesPlayed: hallDeeds.classesPlayed || [],
+    setsCompleted: 0,
+    mirrored: hallDeeds.mirrored || 0,
+  };
+}
+
+// Re-evaluate the whole catalog, persist the completed set + lifetime renown, announce
+// anything newly earned (mirrors checkAchievements' banner style), then apply any
+// newly-crossed renown rewards.
+function egDeedsEvaluate() {
+  try {
+    const snap = egDeedsSnapshot();
+    const r = evaluateDeeds(snap, hallDeeds.completed || []);
+    hallDeeds.completed = r.completedIds;
+    hallDeeds.renown = r.totalRenown;
+    for (const id of (r.newlyCompleted || [])) {
+      const d = DEEDS.find(x => x.id === id);
+      log(dlIcon('deed_trophy', 16) + ' <b>Deed earned:</b> ' + escapeHtml(d ? d.name : id) + ' (+' + (d ? d.renown : 0) + ' Renown)', 'important');
+      if (typeof sfx === 'function') sfx('levelup');
+    }
+    egRenownApplyRewards();
+    writeHallDeeds();
+    return r;
+  } catch (_e) { return null; }
+}
+
+// Claim every renown reward the lifetime total has unlocked, once each. Only stashTab
+// touches the game (a pure storage QoL grant, guarded on the optional helper); titles,
+// frames, badges and qol are inert — they surface in the wardrobe and grant NO power.
+function egRenownApplyRewards() {
+  try {
+    for (const rw of unlockedRewards(hallDeeds.renown || 0)) {
+      const key = (rw.type || '') + ':' + (rw.id || '');
+      if (hallDeeds.claimed.includes(key)) continue;
+      hallDeeds.claimed.push(key);
+      if (rw.type === 'stashTab' && typeof addStashTab === 'function') { addStashTab(); }
+      // title / frame / badge / qol: unlocked -> shown in the wardrobe; POWER-FREE, no stat effects.
+    }
+  } catch (_e) {}
+}
+
+// Open the Hall on the shared town overlay: mount, evaluate (so a just-earned deed
+// lights up immediately), then paint.
+function openDeeds() {
+  try {
+    openTownModal('Hall of Deeds', 'deed_trophy');
+    egDeedsEvaluate();
+    setTownContent(renderDeeds());
+  } catch (_e) { try { log('Could not open the Hall of Deeds.', 'important'); } catch (_e2) {} }
+}
+
+// Build the Hall body: a renown/rank header with a progress bar + next-reward teaser,
+// then one section per deed category (each tile shows DONE or a have/need meter with a
+// source hint), then a power-free Wardrobe of unlocked titles/frames/badges. Reuses the
+// canonical .town-blurb / .stash-section-title / .shop-grid / .shop-row / .act-btn /
+// .bar-track+.bar-fill / .coll-head components.
+function renderDeeds() {
+  try {
+    const snap = egDeedsSnapshot();
+    const renown = hallDeeds.renown || 0;
+    const rr = renownRank(renown);
+    const completed = hallDeeds.completed || [];
+    const rpct = Math.round(100 * (rr.pct || 0));
+    const nextRw = renownNextReward(renown);
+    const rwLabel = function (rw) {
+      if (!rw) return 'the top of the ladder';
+      if (rw.type === 'title') { const t = (TITLES || []).find(x => x.id === rw.id); return 'the title &ldquo;' + escapeHtml(t ? t.text : rw.id) + '&rdquo;'; }
+      if (rw.type === 'frame') return 'a portrait frame';
+      if (rw.type === 'badge') return 'a profile badge';
+      if (rw.type === 'stashTab') return 'an extra stash tab';
+      if (rw.type === 'qol') return 'a quality-of-life unlock';
+      return 'a reward';
+    };
+    const catName = { collection: 'Collection', bestiary: 'Bestiary', conquest: 'Conquest', depth: 'Depth', bounty: 'Bounties', breadth: 'Class Breadth', mastery: 'Mastery' };
+
+    let html = '';
+    html += '<div class="town-blurb">The Hall of Deeds is your account-wide honour roll &mdash; every hero you play feeds the same tally. Renown is a <b>power-free</b> status ladder: it unlocks stash tabs, titles, frames and badges, <b>never</b> a stat.</div>';
+    html += '<div class="coll-head"><div class="coll-prog">Renown <b>' + renown + '</b> &middot; Rank <b>' + (rr.rank || 0) + '</b></div><div class="coll-prog">Deeds <b>' + completed.length + '</b> / ' + DEEDS.length + '</div></div>';
+    html += '<div class="bar-track" style="margin:2px 0 4px"><div class="bar-fill" style="width:' + rpct + '%;background:var(--gold)"></div></div>';
+    if (rr.nextThreshold == null) {
+      html += '<div class="shop-row-stats" style="margin-bottom:10px">Maxed &mdash; every renown rank unlocked.</div>';
+    } else {
+      html += '<div class="shop-row-stats" style="margin-bottom:10px">' + (rr.into || 0) + ' / ' + (rr.span || 0) + ' renown to Rank ' + ((rr.rank || 0) + 1) + ' &mdash; next reward: ' + rwLabel(nextRw) + '.</div>';
+    }
+
+    // Deed sections — order comes straight from deedsByCategory() (data-driven).
+    for (const sec of deedsByCategory()) {
+      html += '<div class="stash-section-title">' + escapeHtml(catName[sec.category] || sec.category) + '</div>';
+      html += '<div class="shop-grid">';
+      for (const deed of sec.deeds) {
+        const done = completed.includes(deed.id);
+        const p = deedProgress(deed, snap);
+        const pc = Math.round(100 * (p.pct || 0));
+        let meter;
+        if (done) {
+          meter = '<div class="shop-row-stats" style="color:var(--uncommon)">&#10003; Earned &middot; +' + deed.renown + ' Renown</div>';
+        } else {
+          meter = '<div class="shop-row-stats">' + p.have + ' / ' + p.need + ' &middot; +' + deed.renown + ' Renown</div>'
+            + '<div class="bar-track" style="margin:4px 0 0"><div class="bar-fill" style="width:' + pc + '%;background:var(--gold)"></div></div>';
+        }
+        html += '<div class="shop-row has-actions no-icon' + (done ? ' upgrade' : '') + '">'
+          + '<div class="shop-row-info">'
+          + '<div class="shop-row-name">' + dlIcon(deed.sprite, 18) + ' ' + escapeHtml(deed.name) + '</div>'
+          + '<div class="shop-row-sub">' + escapeHtml(deed.desc) + '</div>'
+          + meter
+          + '</div></div>';
+      }
+      html += '</div>';
+    }
+
+    // Wardrobe — the power-free cosmetics the renown ladder has handed out so far.
+    const unlocked = unlockedRewards(renown) || [];
+    const titles = unlocked.filter(r => r && r.type === 'title');
+    const frames = unlocked.filter(r => r && r.type === 'frame');
+    const badges = unlocked.filter(r => r && r.type === 'badge');
+    html += '<div class="stash-section-title">Wardrobe &middot; power-free cosmetics</div>';
+    html += '<div class="town-blurb" style="opacity:.85">Only how your name and portrait read on the roster &mdash; earned from renown, changing no stat.</div>';
+    html += '<div class="shop-grid">';
+    if (!titles.length && !frames.length && !badges.length) {
+      html += '<div class="coll-empty">Earn renown to unlock titles, frames and badges.</div>';
+    }
+    for (const rw of titles) {
+      const t = (TITLES || []).find(x => x.id === rw.id);
+      const worn = hallDeeds.title === rw.id;
+      html += '<div class="shop-row has-actions no-icon">'
+        + '<div class="shop-row-info"><div class="shop-row-name">' + escapeHtml(t ? t.text : rw.id) + '</div><div class="shop-row-stats">Title</div></div>'
+        + '<button class="act-btn" ' + (worn ? 'disabled' : '') + ' onclick="deedEquipTitle(\'' + rw.id + '\')">' + (worn ? 'WORN' : 'WEAR') + '</button>'
+        + '</div>';
+    }
+    for (const rw of frames) {
+      const f = (FRAMES || []).find(x => x.id === rw.id);
+      const worn = hallDeeds.frame === rw.id;
+      html += '<div class="shop-row has-actions">'
+        + '<span class="loot-icon">' + dlIcon(f ? f.sprite : 'q_relic', 20) + '</span>'
+        + '<div class="shop-row-info"><div class="shop-row-name">Portrait Frame</div><div class="shop-row-stats">Frame</div></div>'
+        + '<button class="act-btn" ' + (worn ? 'disabled' : '') + ' onclick="deedEquipFrame(\'' + rw.id + '\')">' + (worn ? 'WORN' : 'USE') + '</button>'
+        + '</div>';
+    }
+    for (const rw of badges) {
+      const b = (BADGES || []).find(x => x.id === rw.id);
+      html += '<div class="shop-row has-actions">'
+        + '<span class="loot-icon">' + dlIcon(b ? b.sprite : 'q_relic', 20) + '</span>'
+        + '<div class="shop-row-info"><div class="shop-row-name">Profile Badge</div><div class="shop-row-stats">Badge &middot; always shown</div></div>'
+        + '</div>';
+    }
+    html += '</div>';
+    return html;
+  } catch (_e) {
+    try { log('Hall of Deeds failed to render.', 'important'); } catch (_e2) {}
+    return '<div class="town-blurb">The Hall of Deeds is momentarily unavailable.</div>';
+  }
+}
+
+// Wear an unlocked title (pure cosmetic) and repaint.
+function deedEquipTitle(id) {
+  try {
+    hallDeeds.title = id;
+    writeHallDeeds();
+    if (typeof sfx === 'function') sfx('click');
+    setTownContent(renderDeeds());
+  } catch (_e) {}
+}
+// Wear an unlocked portrait frame (pure cosmetic) and repaint.
+function deedEquipFrame(id) {
+  try {
+    hallDeeds.frame = id;
+    writeHallDeeds();
+    if (typeof sfx === 'function') sfx('click');
+    setTownContent(renderDeeds());
+  } catch (_e) {}
+}
+
+// Compact live block for gameState().menu.deeds — rank, lifetime renown, completed /
+// total, and the worn title (all account-wide, all power-free).
+function egDeedsGameStateBlock() {
+  try {
+    return { rank: renownRank(hallDeeds.renown || 0).rank, renown: hallDeeds.renown || 0, completed: (hallDeeds.completed || []).length, total: DEEDS.length, title: hallDeeds.title || null };
+  } catch (_e) {
+    return { rank: 0, renown: 0, completed: 0, total: (DEEDS && DEEDS.length) || 0, title: null };
+  }
+}
+
+// The gameGuide() how-to text for the Hall — plain, self-contained lines.
+function egDeedsGuideTopic() {
+  return [
+    'The Hall of Deeds (in town) is an account-wide honour roll shared by every hero. Renown is a POWER-FREE status ladder — completing deeds never grants a stat.',
+    'Deeds are permanent milestones across seven tracks: Collection (distinct uniques/sets stored), Bestiary (species discovered), Conquest (difficulties cleared), Depth (deepest floor plus a separate Endless ladder), Bounties (lifetime contracts completed), Class Breadth (distinct classes levelled), and Mastery (items forged in the Mirrorforge).',
+    'Each completed deed adds its Renown to a lifetime total that never resets. Crossing a renown rank threshold unlocks that rank\'s reward.',
+    'Rewards are cosmetic or quality-of-life only — extra stash tabs, wearable titles, portrait frames, profile badges, and QoL unlocks. Chasing deeds never gates power behind grind.',
+    'Equip an unlocked title or frame from the Wardrobe at the bottom of the Hall. gameState().menu.deeds reports your rank, lifetime renown, deeds completed, and worn title.',
+  ];
+}
+
+/* ═══ END ENDGAME SYSTEMS BLOCK ═══ */
+
 const __DL_FN_BRIDGE = {
   // Controller layer — the keyboard/help overlays render inline onclick= handlers,
   // and a few are handy to reach from tests.
@@ -32277,6 +34398,13 @@ const __DL_FN_BRIDGE = {
   bossGateReady,
   bossGateCancel,
   openTownService,
+  // ── Endgame panel handlers (inline onclick=) ──
+  openCovenants, covToggle, covClearAll,
+  openWeave, weaveAllocateUI, weaveRefundUI, weaveRespecUI, weaveSocketUI, weaveUnsocketUI,
+  openMirrorforge, mfPick, mfDo, mfToggleAether, mfShatter, egMfSpendAttunement,
+  openPantheon, pantheonSummon,
+  openCycles, cycleEnrollUI,
+  openDeeds, deedEquipTitle, deedEquipFrame,
   _tbR,
   _tbI,
   _tbSky,
