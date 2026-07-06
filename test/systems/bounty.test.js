@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { bountyProgress, bountyDone, bountyNewlyComplete } from '../../src/systems/bounty.js';
+import { bountyProgress, bountyDone, bountyNewlyComplete, bountyCoreReward, BOUNTY_CORE_BASE, bountyMaterialReward, bountyXpReward } from '../../src/systems/bounty.js';
+import { BOUNTY_MAT_TUNING, BOUNTY_XP_BASE } from '../../src/data/bountyRewards.js';
 
 // A hero-totals snapshot with sensible zeros, overridable per case.
 const totals = (o = {}) => ({
@@ -100,5 +101,100 @@ describe('bountyNewlyComplete', () => {
   it('does not re-fire for a bounty already flagged done (e.g. loaded mid-complete)', () => {
     const b = { kind: 'slay', need: 1, snap: 0, doneNotified: true };
     expect(bountyNewlyComplete(b, totals({ kills: 5 }))).toBe(false);
+  });
+});
+
+describe('bountyCoreReward', () => {
+  it('pays the baseline at the shallowest depth', () => {
+    expect(bountyCoreReward(1, 1)).toBe(BOUNTY_CORE_BASE);
+    expect(BOUNTY_CORE_BASE).toBe(2);
+  });
+
+  it('scales up as depth increases', () => {
+    const shallow = bountyCoreReward(1, 1);
+    const mid = bountyCoreReward(15, 1);
+    const deep = bountyCoreReward(30, 1);
+    expect(mid).toBeGreaterThan(shallow);
+    expect(deep).toBeGreaterThan(mid);
+  });
+
+  it('scales up with a heavier contract weight at the same depth', () => {
+    expect(bountyCoreReward(20, 1.8)).toBeGreaterThan(bountyCoreReward(20, 1.0));
+  });
+
+  it('never drops below the baseline and returns a whole number', () => {
+    for (const d of [0, 1, 5, 40]) {
+      for (const w of [0.5, 1, 1.8]) {
+        const n = bountyCoreReward(d, w);
+        expect(n).toBeGreaterThanOrEqual(BOUNTY_CORE_BASE);
+        expect(Number.isInteger(n)).toBe(true);
+      }
+    }
+  });
+
+  it('treats a missing/zero depth as floor 1 and defaults the weight to 1', () => {
+    expect(bountyCoreReward(0)).toBe(bountyCoreReward(1, 1));
+    expect(bountyCoreReward(undefined)).toBe(bountyCoreReward(1, 1));
+  });
+
+  it('is a thin alias over the general material reward for Core', () => {
+    for (const d of [1, 12, 30]) for (const w of [0.8, 1, 1.6])
+      expect(bountyCoreReward(d, w)).toBe(bountyMaterialReward('core', d, w));
+  });
+});
+
+describe('bountyMaterialReward', () => {
+  it('pays each material its own baseline at the shallowest depth', () => {
+    for (const key of Object.keys(BOUNTY_MAT_TUNING)) {
+      expect(bountyMaterialReward(key, 1, 1)).toBe(BOUNTY_MAT_TUNING[key].base);
+    }
+  });
+
+  it('pays more of a common material than a scarce one at the same depth/effort', () => {
+    const scrap = bountyMaterialReward('scrap', 20, 1);
+    const glimmer = bountyMaterialReward('glimmer', 20, 1);
+    const core = bountyMaterialReward('core', 20, 1);
+    const chaos = bountyMaterialReward('chaos', 20, 1);
+    expect(scrap).toBeGreaterThan(glimmer);
+    expect(glimmer).toBeGreaterThanOrEqual(core);
+    expect(core).toBeGreaterThan(chaos);
+  });
+
+  it('scales up with depth and with a heavier contract weight', () => {
+    expect(bountyMaterialReward('scrap', 30, 1)).toBeGreaterThan(bountyMaterialReward('scrap', 1, 1));
+    expect(bountyMaterialReward('scrap', 20, 1.8)).toBeGreaterThan(bountyMaterialReward('scrap', 20, 1));
+  });
+
+  it('never drops below the material baseline, returns a whole number, and falls back to Core for an unknown key', () => {
+    for (const key of ['scrap', 'glimmer', 'core', 'chaos', 'mystery']) {
+      for (const d of [0, 1, 5, 40]) for (const w of [0.3, 1, 1.8]) {
+        const n = bountyMaterialReward(key, d, w);
+        const floor = (BOUNTY_MAT_TUNING[key] || BOUNTY_MAT_TUNING.core).base;
+        expect(n).toBeGreaterThanOrEqual(floor);
+        expect(Number.isInteger(n)).toBe(true);
+      }
+    }
+    expect(bountyMaterialReward('mystery', 12, 1.4)).toBe(bountyMaterialReward('core', 12, 1.4));
+  });
+});
+
+describe('bountyXpReward', () => {
+  it('pays the baseline at the shallowest depth', () => {
+    expect(bountyXpReward(1, 1)).toBe(BOUNTY_XP_BASE);
+  });
+
+  it('scales up with depth and with a heavier contract weight', () => {
+    expect(bountyXpReward(20, 1)).toBeGreaterThan(bountyXpReward(1, 1));
+    expect(bountyXpReward(20, 1.5)).toBeGreaterThan(bountyXpReward(20, 1));
+  });
+
+  it('never drops below the baseline, returns a whole number, and floors depth at 1', () => {
+    for (const d of [0, 1, 8, 40]) for (const w of [0.4, 1, 1.6]) {
+      const n = bountyXpReward(d, w);
+      expect(n).toBeGreaterThanOrEqual(BOUNTY_XP_BASE);
+      expect(Number.isInteger(n)).toBe(true);
+    }
+    expect(bountyXpReward(0)).toBe(bountyXpReward(1, 1));
+    expect(bountyXpReward(undefined)).toBe(bountyXpReward(1, 1));
   });
 });

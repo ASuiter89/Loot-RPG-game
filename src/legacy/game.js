@@ -29,6 +29,7 @@ import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach
 import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
+import { restockCost } from '../systems/restockCost.js';
 import { isCritical } from '../systems/crit.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
@@ -62,7 +63,7 @@ import { cookableCount, cookBatchOptions } from '../systems/cooking.js';
 import { trimFillStyle } from '../utils/iconTrim.js';
 import { cursorHotspotPx } from '../systems/cursorMath.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
-import { bountyProgress as _bountyProgress, bountyDone as _bountyDone, bountyNewlyComplete } from '../systems/bounty.js';
+import { bountyProgress as _bountyProgress, bountyDone as _bountyDone, bountyNewlyComplete, bountyMaterialReward, bountyXpReward } from '../systems/bounty.js';
 import { forgeSections } from '../systems/forgeFlow.js';
 import { weaponSpeedInfo } from '../systems/weaponSpeed.js';
 import { CURSE_TIER_MULT, curseTierMult, statCurseSwing, cursedStatCeiling } from '../systems/curseRoll.js';
@@ -235,18 +236,18 @@ const SLOT_AFFIX_POOLS = {
   // A weapon slot lists BOTH power/speed families; itemStatPool() then hard-gates
   // them by the weapon's category — a martial weapon keeps only SKILLPWR/ATKSPD, a
   // caster weapon (Staff/Wand) only SPELLPWR/CASTSPD — so the two never mix.
-  weapon: { stats: ['ATK','ACC','CRIT','CRITDMG','IDMG','DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','MAGICPEN','LEECH','MPLEECH','SPELLPWR','SKILLPWR','BLEED','STUNPWR','ATKSPD','CASTSPD'], attrs: ['might','agility','spirit'] },
-  head:   { stats: ['HP','MP','REGEN','CRIT','CRITDMG','SPD','MAGICFIND','XPGAIN','SPELLPWR','SKILLPWR','CDR','MCR','CASTSPD','MAGICPEN','DODGE','MPKILL','MATFIND'], attrs: ['vitality','spirit','luck'] },
+  weapon: { stats: ['ATK','ACC','CRIT','CRITDMG','IDMG','AREA','DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','MAGICPEN','LEECH','MPLEECH','SPELLPWR','SKILLPWR','BLEED','STUNPWR','ATKSPD','CASTSPD'], attrs: ['might','agility','spirit'] },
+  head:   { stats: ['HP','MP','REGEN','CRIT','CRITDMG','SPD','MAGICFIND','XPGAIN','AREA','SPELLPWR','SKILLPWR','CDR','MCR','CASTSPD','MAGICPEN','DODGE','MPKILL','MATFIND'], attrs: ['vitality','spirit','luck'] },
   chest:  { stats: ['HP','REGEN','MP','DR','BLOCK','THORNS','HPKILL','DODGE','MAGICFIND','TENAC','STAM','STAMREG'], attrs: ['vitality','spirit','luck'] },
-  hands:  { stats: ['CRIT','ACC','CRITDMG','IDMG','DBLSTRIKE','SPD','PEN','LEECH','EXEC','CDR','CLEAVE','BLOCK','THORNS','ATKSPD','SKILLPWR'], attrs: ['might','agility','spirit'] },
+  hands:  { stats: ['CRIT','ACC','CRITDMG','IDMG','AREA','DBLSTRIKE','SPD','PEN','LEECH','EXEC','CDR','CLEAVE','BLOCK','THORNS','ATKSPD','SKILLPWR'], attrs: ['might','agility','spirit'] },
   legs:   { stats: ['SPD','HP','REGEN','DODGE','DR','BLOCK','MP','GOLDFIND','XPGAIN','HPKILL','TENAC','STAM','STAMREG'], attrs: ['agility','vitality','luck'] },
-  ring:   { stats: ['CRIT','ACC','CRITDMG','ATK','IDMG','SKILLPWR','LEECH','MPLEECH','GOLDFIND','MAGICFIND','MATFIND','HP','MP','DEF','DBLSTRIKE','BOSSDMG','EXEC','PEN','MAGICPEN','MCR','MPKILL','CLEAVE'], attrs: ['might','agility','luck','spirit','vitality'] },
-  amulet: { stats: ['MP','HP','REGEN','SPELLPWR','CASTSPD','MAGICPEN','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC','STAM','STAMREG'], attrs: ['spirit','luck','vitality','might','agility'] },
+  ring:   { stats: ['CRIT','ACC','CRITDMG','ATK','IDMG','AREA','SKILLPWR','LEECH','MPLEECH','GOLDFIND','MAGICFIND','MATFIND','HP','MP','DEF','DBLSTRIKE','BOSSDMG','EXEC','PEN','MAGICPEN','MCR','MPKILL','CLEAVE'], attrs: ['might','agility','luck','spirit','vitality'] },
+  amulet: { stats: ['MP','HP','REGEN','SPELLPWR','CASTSPD','AREA','MAGICPEN','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC','STAM','STAMREG'], attrs: ['spirit','luck','vitality','might','agility'] },
   // Off-hands: defensive layers + caster utility. A shield's BLOCK headline already
   // flows through totalStat('BLOCK') into combat, so it needs no special-casing.
   // Like weapons, the power/speed stats here are gated by family in itemStatPool()
   // (caster Tome/Focus → SPELLPWR/CASTSPD; shields & martial off-hands → SKILLPWR).
-  offhand:{ stats: ['BLOCK','DR','THORNS','HP','REGEN','MP','SPELLPWR','CASTSPD','MAGICPEN','SKILLPWR','CDR','MCR','CRIT','DODGE','TENAC'], attrs: ['vitality','spirit','luck'] },
+  offhand:{ stats: ['BLOCK','DR','THORNS','HP','REGEN','MP','SPELLPWR','CASTSPD','AREA','MAGICPEN','SKILLPWR','CDR','MCR','CRIT','DODGE','TENAC'], attrs: ['vitality','spirit','luck'] },
 };
 // Skill/Spell power & their speed levers are mutually exclusive by gear type. The
 // two families below are the ones itemStatPool() drops from the "wrong" gear so a
@@ -3010,6 +3011,10 @@ const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', H
   // Spell Power amps spells; Cast Speed shortens the recharge of spell actives the
   // way Attack Speed quickens auto-attacks. Both are gated to matching gear.
   SKILLPWR:'Skill Power %', CASTSPD:'Cast Speed %',
+  // Area of Effect % widens every radius skill (a nova around you, a lobbed blast) so
+  // one cast catches more of a pack — see resolveCast. Helps all classes; single-
+  // target casts (bolts, melee) have no radius, so it does nothing for them.
+  AREA:'Area of Effect %',
   CDR:'Cooldown Rating', MCR:'Mana Cost Reduc %',
   // ── weapon-flavour stats ── BLEED chance to open a bleeding wound (a DoT);
   // STUNPWR raises crushing weapons' stun chance & duration.
@@ -3022,7 +3027,7 @@ const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', VEIL:'
   CRITDMG:'CDMG', REGEN:'REG', LEECH:'LCH', MPLEECH:'MLC', HPKILL:'HoK', MPKILL:'MoK',
   THORNS:'THN', DR:'DR', BLOCK:'BLK', DODGE:'DGE', IDMG:'IDMG', DBLSTRIKE:'2X', CLEAVE:'CLV',
   BOSSDMG:'vsB', EXEC:'EXE', PEN:'PEN', MAGICPEN:'MPN', GOLDFIND:'GF', XPGAIN:'XP', MAGICFIND:'MF', MATFIND:'MTF',
-  SPELLPWR:'SP', SKILLPWR:'SKP', CASTSPD:'CSP', CDR:'CDR', MCR:'MCR', BLEED:'BLD', STUNPWR:'STN', ATKSPD:'ASP', TENAC:'TEN' };
+  SPELLPWR:'SP', SKILLPWR:'SKP', CASTSPD:'CSP', AREA:'AOE', CDR:'CDR', MCR:'MCR', BLEED:'BLD', STUNPWR:'STN', ATKSPD:'ASP', TENAC:'TEN' };
 // Stats whose value is a percentage — shown with a trailing % and consumed as /100
 // throughout combat. (CRIT/CRITDMG were always percentages; they're listed too so
 // the compact line shows their unit.)
@@ -3031,52 +3036,53 @@ const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', VEIL:'
 // effective % they currently produce. CRITDMG stays a % (it's a damage multiplier).
 const PCT_STATS = new Set(['CRITDMG','LEECH','MPLEECH','IDMG',
   'DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','MAGICPEN','GOLDFIND','XPGAIN','MAGICFIND','MATFIND',
-  'SPELLPWR','SKILLPWR','CASTSPD','MCR','BLEED','STUNPWR','ATKSPD','TENAC']);
+  'SPELLPWR','SKILLPWR','CASTSPD','AREA','MCR','BLEED','STUNPWR','ATKSPD','TENAC']);
 // One-line "what this stat does" blurbs, surfaced by hovering a stat name (see
 // statMeaningTip) in the Enchanter, hero sheet and item cards.
 const STAT_DESC = {
-  ATK: 'Your physical attack power.',
-  DEF: 'Reduces incoming physical damage.',
-  SPD: 'How quickly you move and act.',
-  LCK: 'Fortune — better crit chance and richer loot.',
-  HP: 'Your maximum health.',
-  VEIL: 'Flat bonus to your maximum Spirit Veil — the blue shield that soaks damage before your health.',
-  STAM: 'Deepens your Stamina pool — the reserve that fuels sprinting and dashing — with no attribute investment needed.',
-  STAMREG: 'Refills your Stamina faster after you sprint or dash — no attribute investment needed.',
-  MP: 'Your maximum mana for casting skills.',
-  CRIT: 'Chance to land critical hits (contested vs the foe\'s level).',
-  CRITDMG: 'Bonus damage your critical hits deal.',
-  REGEN: 'Health recovered over time.',
-  DMG: 'Flat bonus damage added to your hits.',
-  ACC: 'Chance to hit (contested vs the foe\'s evasion).',
-  LEECH: 'Heals you for a share of your physical attack and skill damage — not spells.',
-  MPLEECH: 'Restores mana for a share of your physical attack and skill damage — not spells.',
-  HPKILL: 'Restores health on every kill.',
-  MPKILL: 'Restores mana on every kill.',
-  THORNS: 'Reflects damage back at melee attackers.',
-  DR: 'Flat reduction of all damage taken.',
-  BLOCK: 'Chance to block and absorb part of a hit.',
-  DODGE: 'Chance to evade an attack entirely.',
-  IDMG: 'Increases all damage you deal.',
-  DBLSTRIKE: 'Chance to strike twice in one attack. A rating: the chance is DBL/(DBL+100), so it climbs toward but never reaches a guaranteed second hit — more is always better, each point a little less than the last.',
-  CLEAVE: 'Your hits splash damage to nearby foes.',
-  BOSSDMG: 'Extra damage dealt to bosses.',
-  EXEC: 'Finishes off low-health foes (bosses just bleed extra).',
-  PEN: 'Ignores part of the foe\'s armor — makes your weapon attacks and martial skills hit harder.',
-  MAGICPEN: 'Ignores part of the foe\'s magic resistance — makes your spells (and a hybrid\'s magic half) hit harder.',
-  GOLDFIND: 'Increases gold dropped by foes.',
-  XPGAIN: 'Increases experience earned.',
-  MAGICFIND: 'Improves the rarity of loot that drops.',
-  MATFIND: 'Increases crafting materials found.',
-  SPELLPWR: 'Amplifies your spell damage.',
-  SKILLPWR: 'Amplifies your weapon-based (martial) skills.',
+  ATK: 'Physical attack power.',
+  DEF: 'Cuts physical damage taken.',
+  SPD: 'Move and act speed.',
+  LCK: 'Better crit chance and loot.',
+  HP: 'Max health.',
+  VEIL: 'Bigger Spirit Veil shield (soaks damage before health).',
+  STAM: 'Bigger Stamina pool for sprint/dash.',
+  STAMREG: 'Stamina refills faster.',
+  MP: 'Max mana.',
+  CRIT: 'Crit chance (vs foe level).',
+  CRITDMG: 'Bonus crit damage.',
+  REGEN: 'Health regen over time.',
+  DMG: 'Flat bonus damage.',
+  ACC: 'Hit chance (vs foe evasion).',
+  LEECH: 'Heal from attack/skill damage (not spells).',
+  MPLEECH: 'Mana from attack/skill damage (not spells).',
+  HPKILL: 'Health per kill.',
+  MPKILL: 'Mana per kill.',
+  THORNS: 'Reflects melee damage.',
+  DR: 'Flat cut to all damage taken.',
+  BLOCK: 'Chance to absorb part of a hit.',
+  DODGE: 'Chance to evade an attack.',
+  IDMG: 'Increases all damage dealt.',
+  DBLSTRIKE: 'Chance to strike twice (diminishing returns).',
+  CLEAVE: 'Hits splash to nearby foes.',
+  BOSSDMG: 'Extra damage to bosses.',
+  EXEC: 'Finishes low-health foes (bosses bleed extra).',
+  PEN: 'Ignores part of foe armor (attacks/martial skills).',
+  MAGICPEN: 'Ignores part of foe magic resist (spells).',
+  GOLDFIND: 'More gold dropped.',
+  XPGAIN: 'More experience earned.',
+  MAGICFIND: 'Better loot rarity.',
+  MATFIND: 'More crafting materials.',
+  SPELLPWR: 'Boosts spell damage.',
+  SKILLPWR: 'Boosts martial skill damage.',
   CASTSPD: 'Spell skills recharge faster.',
-  CDR: 'Shortens every skill\'s cooldown. A rating: the % it cuts is CDR/(CDR+100), so it climbs toward but never reaches 100% — more is always better, each point a little less than the last.',
+  CDR: 'Shortens all cooldowns (diminishing returns).',
   MCR: 'Skills cost less mana.',
-  BLEED: 'Chance to open a bleeding wound (damage over time).',
-  STUNPWR: 'Raises stun chance and duration of crushing hits.',
-  ATKSPD: 'You auto-attack more often.',
-  TENAC: 'Shortens stuns, freezes and slows on you. A rating: the reduction is TEN/(TEN+100), so it climbs toward but never reaches full immunity — more is always better, each point a little less than the last.',
+  BLEED: 'Chance to bleed foes over time.',
+  STUNPWR: 'More stun chance and duration.',
+  ATKSPD: 'Auto-attack more often.',
+  TENAC: 'Shortens stuns, freezes and slows (diminishing returns).',
+  AREA: 'Widens area-of-effect skills (nova / blast).',
 };
 // Tooltip body (full name + what it does) for a hoverable stat/attribute name.
 function statMeaningTip(kind, key) {
@@ -3394,7 +3400,7 @@ const POWER_STAT_AXIS = {
   ATK: 'atkFlat', IDMG: 'idmgPct', CRIT: 'critRating', LCK: 'critRating',
   SKILLPWR: 'skillPwrPct', SPELLPWR: 'spellPwrPct', ATKSPD: 'atkSpdPct', CASTSPD: 'castSpdPct',
   CDR: 'cdrRating', PEN: 'penPct', MAGICPEN: 'magicPenPct', DBLSTRIKE: 'dblStrikePct', CLEAVE: 'cleavePct',
-  BOSSDMG: 'bossDmgPct', EXEC: 'execPct', BLEED: 'bleedPct', STUNPWR: 'stunPct',
+  BOSSDMG: 'bossDmgPct', EXEC: 'execPct', BLEED: 'bleedPct', STUNPWR: 'stunPct', AREA: 'areaPct',
   ACC: 'accRating', SPD: 'dodgeRating', DODGE: 'dodgeRating', DEF: 'def', DR: 'drRating',
   BLOCK: 'blockRating', THORNS: 'thornsPct', TENAC: 'tenacPct', LEECH: 'leechPct',
   HPKILL: 'hpKill', REGEN: 'regen',
@@ -3451,7 +3457,7 @@ function buildPowerContext() {
     magicPenPct: totalStat('MAGICPEN') + 100 * skillBonus('mpen'),
     dblStrikePct: Math.round(rated(totalStat('DBLSTRIKE'), DBLSTRIKE_SCALE) * 100), // effective chance, eased
     cleavePct: totalStat('CLEAVE'), bossDmgPct: totalStat('BOSSDMG'), execPct: totalStat('EXEC'),
-    bleedPct: totalStat('BLEED'), stunPct: totalStat('STUNPWR'),
+    bleedPct: totalStat('BLEED'), stunPct: totalStat('STUNPWR'), areaPct: totalStat('AREA'),
     accRating: playerAccuracyRating(),
     // Defense aggregates.
     maxHp,
@@ -6478,13 +6484,18 @@ let shopMode = 'buy';  // merchant tab: 'buy' | 'sell'
 // Merchant Sort / Filter — mirrors the LOOT drawer's controls but keeps its own
 // independent state, so ordering/narrowing the wares never disturbs the bag's
 // view. Shared across the BUY (wares) and SELL (bag) tabs.
-let shopSort = 'rarity';        // 'rarity' | 'power' | 'slot' | 'value'
+let shopSort = 'power';         // 'rarity' | 'power' | 'slot' | 'value' — default matches the loot drawer
 let shopStatFilter = [];        // stat/attr keys to narrow to (empty = no filter)
 let shopSortOpen = false, shopFilterOpen = false;
 // The town Merchant's wares persist for the whole town visit (so closing and
 // reopening the shop shows the SAME stock); rebuilt on a new town visit or paid
 // restock. null until first opened. See openTownService / refreshShop.
 let townShopStock = null;
+// Paid restocks bought this town visit — each one makes the next restock dearer
+// (see refreshShopCost). Persists across close/reopen like townShopStock, so you
+// can't dodge the surcharge by leaving and re-entering the shop; resets on a new
+// town visit alongside townShopStock.
+let townRestocks = 0;
 let mystic = null;    // { x, y } — the Wandering Mystic, when present this floor
 let pact = null;      // active pact: { id, icon, name, desc, floors, fx } or null
 let hasFountain = false;
@@ -6921,7 +6932,7 @@ window.gameState = function gameState(radius) {
       // rating/(rating+100) that nears but never reaches 1.0.
       offense: (typeof totalStat === 'function') ? {
         skillPower: totalStat('SKILLPWR'), spellPower: totalStat('SPELLPWR'),
-        increasedDmg: totalStat('IDMG'),
+        increasedDmg: totalStat('IDMG'), area: totalStat('AREA'),
         attackSpeed: totalStat('ATKSPD'), castSpeed: totalStat('CASTSPD'),
         cooldownRating: totalStat('CDR'),
         cooldownReduction: (typeof cooldownReductionFrac === 'function') ? Math.round(cooldownReductionFrac() * 1000) / 1000 : 0,
@@ -7126,7 +7137,14 @@ window.gameState = function gameState(radius) {
       bounty: (player.bounty && typeof bountyProgress === 'function') ? {
         kind: player.bounty.kind, desc: player.bounty.desc,
         progress: Math.min(bountyProgress(player.bounty), player.bounty.need), need: player.bounty.need,
-        done: bountyDone(player.bounty), reward: { gold: player.bounty.gold, ilvl: player.bounty.ilvl },
+        done: bountyDone(player.bounty),
+        // A mix of 1–3 rewards: gold / a crafting material / XP / a gear piece (some
+        // gear pieces guarantee a rarity). See gameGuide("town").
+        rewards: bountyRewardList(player.bounty).map(r =>
+          r.t === 'gold' ? { type: 'gold', amount: r.amt }
+          : r.t === 'mat' ? { type: 'material', material: r.mat, amount: r.amt }
+          : r.t === 'xp' ? { type: 'xp', amount: r.amt }
+          : { type: 'gear', ilvl: r.ilvl, guaranteedTier: r.tier || null }),
       } : null,   // accepted Bounty Board contract + live progress
       // Meal slots — HUD stacks assigned at the Ramen House, eaten from the belt in the
       // dungeon (see systems/meals.js). Each is { name, floors, fx, qty } or null.
@@ -7269,10 +7287,11 @@ window.gameGuide = function gameGuide(topic) {
       `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
       `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
       `HYBRID (a weapon strike that also channels magic — the Templar's holy strikes, the Rogue's shadow/toxic strikes): lands a physical part AND a magic part in one cast. The physical part scales like a SKILL (weapon + Skill Power, leeches, meets armor); the magic part scales like a SPELL (Spirit + Spell Power, no leech, meets magic resist). Only the physical half leeches. Recharged by CDR + Cast Speed. Its tooltip shows the exact split ("40 physical + 30 magic"), so build BOTH power stats to max it — or lean one and accept the other half stays modest.`,
+      `AREA OF EFFECT: any active with a RADIUS — a nova bursting around you, a lobbed blast — strikes every foe inside that radius. Gear Area of Effect % (AREA) widens that radius (rounded to whole tiles, so it steps up a tile once you've stacked enough), catching more of a pack per cast. It helps EVERY class's radius skills but does nothing for single-target casts (bolts, melee, a bolt that hits one foe). Read your total in gameState().player.offense.area.`,
       `TYPED MITIGATION: a foe shrugs off a slice of each blow, and the slice depends on the SCHOOL. Physical armor blunts auto-attacks + martial skills (Armor Pen % pierces it); magic resistance blunts spells (Magic Pen % pierces it). Enemies differ — a stone golem is armored but soft to magic, a wraith resists magic but not steel. gameState().enemies[i] reports each foe's armor and magicResist (whole %); the bestiary card shows both. Hit a foe with the school it's SOFT to; a HYBRID splits across both, so it's never fully walled.`,
       `So NO — Attack does not feed everything: ATK + weapon Damage power auto-attacks and martial skills only; spells ignore them and live on Spirit + Spell Power. The three % amps (IDMG / Skill Power / Spell Power) are one-per-source and never cross over — and a HYBRID's two halves each ride their own lane.`,
       `RANGES & ROLLS: weapons and spells both deal a RANGE, not one fixed number. A weapon rolls its printed min–max; a SPELL now rolls too — around its base by a per-spell spread (a focused magic missile rolls tight, a chaotic meteor rolls wild), so no two spells feel the same. Each roll is taken at fine (fractional) precision BEFORE your multipliers apply, so even a small weapon produces organic, varied hits instead of two or three repeating numbers — the damage finally dealt is still a whole number. Every range is symmetric about the old value, so averages (and balance) are unchanged; only the texture is new.`,
-      `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). CDR is a RATING, not a flat %: the fraction it actually cuts off a cooldown is CDR/(CDR+100), so it climbs toward but never reaches 100% (no cap — the math just can't get there), and the hero sheet / tooltips show that real % — a cooldown drops by exactly the amount shown. gameState().player.offense reports skillPower / spellPower / increasedDmg / attackSpeed / castSpeed, the raw cooldownRating, and cooldownReduction as the 0..1 fraction it yields.`,
+      `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). CDR is a RATING, not a flat %: the fraction it actually cuts off a cooldown is CDR/(CDR+100), so it climbs toward but never reaches 100% (no cap — the math just can't get there), and the hero sheet / tooltips show that real % — a cooldown drops by exactly the amount shown. gameState().player.offense reports skillPower / spellPower / increasedDmg / area / attackSpeed / castSpeed, the raw cooldownRating, and cooldownReduction as the 0..1 fraction it yields.`,
       `TOOLTIP READOUT: each damage skill's description reads "deals X to Y damage" — its ABSOLUTE base per-hit range (the ability's own damage: rank, coefficient and your caster power — weapon roll/ATK/attributes for a skill, Spirit for a spell — before ANY situational buff, depth armour or crit). Below it sit two pills versus a typical foe at your current depth. "Damage lo–hi per hit" is that base after everything PERSISTENT except crit and cast rate — class %, gear IDMG/Skill/Spell Power, the difficulty scar and the foe's armour — the honest number that pops over a foe on ONE strike. A multi-strike cast shows a "×N" badge instead of inflating the range; status/elemental procs and transient buffs (shrines, food, war-cries) stay out. "DPS" is the effective sustained damage per second: that per-hit range's midpoint, lifted by crit chance × crit damage, times hits-per-cast, times how often the skill can be cast (cooldown after Cooldown Reduction / Cast Speed). Crit and cast rate live ONLY in DPS — never in the Damage pill. On rank-up the preview shows the new base range, not a bare %. Big numbers abbreviate (1.2k, 3.4M). gameState() skills carry { damage:{min,max,hits,base:{min,max}}, dps, cooldownFull }.`,
       `Gear gating is thoughtful: a MELEE/RANGED weapon can only roll Skill Power & Attack Speed; a WAND/STAFF only Spell Power & Cast Speed. Gloves & rings lean martial (Skill Power); amulets & caster off-hands lean arcane (Spell/Cast). So the weapon you wield already points your build at one lane.`,
     ],
@@ -7359,13 +7378,13 @@ window.gameGuide = function gameGuide(topic) {
       `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Death does not re-lock any floors: instead Warp to Dungeon only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Dungeon Gate flags the tier holding that grave (with the exact floor beside the tier's grave badge; gameState().graveSite.where), so you can dive straight back to it.`,
       `Town's top row has TWO gates. Warp to Dungeon opens the tier + floor picker, but you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. Return to Last Floor drops you straight back onto the EXACT floor you left through the Town Portal — same enemies, loot and layout, right where you stood — and lights up ONLY when you left by portal or conquest, never after a death (then it's darkened, so take Warp to Dungeon; gameState().menu.returnToLastFloor.available reports this, .where the floor it returns to). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon.`,
-      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
+      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
-      `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks.`,
+      `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
-      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress (including menu.bounty.done once it's ready to claim).`,
+      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim its reward. Each contract pays a DIFFERENT MIX of 1–3 rewards — gold, a crafting material (any of scrap/glimmer/core/chaos, scaled by depth), a lump of XP, or a gear piece scaled to your depth (the toughest boss contracts guarantee a rarer piece) — and a contract paying fewer things pays more of each. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract, its live progress (including menu.bounty.done once it's ready to claim), and menu.bounty.rewards listing exactly what it pays. In town, clicking the belt's BOUNTY module opens the board (even with no active contract).`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
     tips: [
@@ -11183,10 +11202,12 @@ function rollShopStock(ilvl, lo, hi) {
   }
   return stock;
 }
-// Gold to lay out a whole new set of wares, scaling with the merchant's tier.
+// Gold to lay out a whole new set of wares: a base scaling with the merchant's
+// tier, surcharged for every restock already bought this visit so re-rolling the
+// table is a deliberate gold sink, not a spammable slot machine (see restockCost).
 function refreshShopCost() {
   const ilvl = (merchant && merchant.ilvl) || (player.maxFloor || 1) + 1;
-  return Math.round(40 + ilvl * 14);
+  return restockCost(40 + ilvl * 14, (merchant && merchant.restocks) || 0);
 }
 // Pay to re-roll the open merchant's stock (persists for the town shop).
 function refreshShop() {
@@ -11195,7 +11216,8 @@ function refreshShop() {
   if (spendableGold() < cost) { log(`<span data-spr=ic_money></span> Not enough gold to restock — need <span data-spr=ic_money></span>${cost}.`); sfx('denied'); return; }
   spendGold(cost);
   merchant.stock = rollShopStock(merchant.ilvl || (player.maxFloor || 1) + 1, merchant.stockLo || 3, merchant.stockHi || 4);
-  if (merchant.town) townShopStock = merchant.stock; // keep the persisted town wares in sync
+  merchant.restocks = ((merchant.restocks) || 0) + 1; // next restock this visit costs more
+  if (merchant.town) { townShopStock = merchant.stock; townRestocks = merchant.restocks; } // keep persisted town wares + surcharge in sync
   sfx('buy');
   log(`🔄 The merchant clears the table and lays out fresh wares for <span data-spr=ic_money></span>${cost}.`, 'important');
   updateBars(); renderShop(); saveGame();
@@ -11212,13 +11234,13 @@ function spawnMerchant(footReach) {
   } while ((mapData[my][mx] !== 0 || (mx === player.x && my === player.y) || getEnemyAt(mx,my)
             || isChokePoint(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
   if (tries >= 100) return;
-  // A full randomized stock of gamble-priced gear pieces — at least six, so the
-  // wanderer is always worth the detour. (Potions are no longer sold — they're a
-  // built-in skill now.) ilvl/range stored so a paid restock re-rolls the same
-  // kind of wares.
+  // A full randomized stock of gamble-priced gear pieces — at least five, so the
+  // wanderer is always worth the detour (a wider table than the town shop's).
+  // (Potions are no longer sold — they're a built-in skill now.) ilvl/range stored
+  // so a paid restock re-rolls the same kind of wares.
   const ilvl = dungeonLevel + 1;
   const sale = Math.random() < 0.25 ? 0.7 : 1; // sometimes a 30%-off flash sale
-  merchant = { x: mx, y: my, stock: rollShopStock(ilvl, 6, 8), sale, ilvl, stockLo: 6, stockHi: 8 };
+  merchant = { x: mx, y: my, stock: rollShopStock(ilvl, 5, 8), sale, ilvl, stockLo: 5, stockHi: 8 };
   log('<span data-spr=mat_glimmer></span> A robed merchant has wandered onto this floor...', 'important');
   if (sale < 1) log('<span data-spr=scroll></span> The merchant is holding a flash sale — 30% off everything!', 'important');
 }
@@ -11890,7 +11912,7 @@ function buildTown() {
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null; nextDiffPortal = null;
   quest = null; teleporters = {}; shrineData = {};
   floorThemeOverride = null; floorIslandTheme = null; furnitureMap = {}; decorMap = {}; // town is never an indoor/island floor
-  townShopStock = null;        // fresh merchant wares each town visit
+  townShopStock = null; townRestocks = 0; // fresh merchant wares + reset restock surcharge each town visit
   traps = []; projectiles = []; bossHazards = []; bossTelegraphs = []; clearAttackFx(); // real-time hazards / fx never linger into town
   hasFountain = false; groundKey = null; hasKey = false;
   floorMod = FLOOR_MODS[0]; floorTint = 'rgba(120,90,40,0.10)';
@@ -12223,21 +12245,38 @@ function bountyPool() {
   const depth = player.maxFloor || 1, g = 60 + depth * 18, R = m => Math.round(g * m);
   const K = bountyKills(), CF = Object.keys(player.clearedFloors || {}).length;
   const BK = player.bossKills || 0, EK = player.eliteKills || 0, GE = player.goldEarned || 0;
+  // Reward builders. A contract no longer always pays the same gold + Core + gear
+  // trio — it hands out a MIX of 1–3 of these, and single-reward contracts use a
+  // heavier multiplier so a lone payout still feels worth it. Amounts scale by
+  // depth (and the per-reward weight) via systems/bounty.js; gear geared to depth.
+  //   GOLD(w)          — a gold purse                 MAT(key, w) — a crafting material
+  //   XP(w)            — a lump of experience         GEAR(bonus, tier?) — a gear piece,
+  //                                                    optionally of a GUARANTEED rarity
+  const GOLD = w => ({ t: 'gold', amt: R(w) });
+  const MAT = (mat, w = 1) => ({ t: 'mat', mat, amt: bountyMaterialReward(mat, depth, w) });
+  const XP = (w = 1) => ({ t: 'xp', amt: bountyXpReward(depth, w) });
+  const GEAR = (bonus = 1, tier = null) => ({ t: 'gear', ilvl: depth + bonus, tier });
   return [
-    { kind: 'slay',  title: 'Thin the Ranks',    need: 12 + depth,        snap: K,  desc: n => `Slay ${n} foes`,           gold: R(1.0), mat: ['scrap', 6],    ilvl: depth + 1 },
-    { kind: 'slay',  title: 'Cull the Horde',    need: 25 + depth,        snap: K,  desc: n => `Slay ${n} foes`,           gold: R(1.4), mat: ['scrap', 9],    ilvl: depth + 1 },
-    { kind: 'slay',  title: 'Slaughterhouse',    need: 45 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           gold: R(2.0), mat: ['scrap', 14],   ilvl: depth + 2 },
-    { kind: 'slay',  title: 'Exterminator',      need: 70 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           gold: R(2.6), mat: ['core', 2],     ilvl: depth + 3 },
-    { kind: 'clear', title: 'Sweep the Halls',   need: 3,                 snap: CF, desc: n => `Clear ${n} floors of foes`, gold: R(1.3), mat: ['glimmer', 2],  ilvl: depth + 2 },
-    { kind: 'clear', title: 'Purge the Depths',  need: 5,                 snap: CF, desc: n => `Clear ${n} floors of foes`, gold: R(2.0), mat: ['glimmer', 3],  ilvl: depth + 3 },
-    { kind: 'delve', title: 'Press Onward',      need: depth + 2,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     gold: R(1.4), mat: ['core', 2],     ilvl: depth + 2 },
-    { kind: 'delve', title: 'Into the Deep',     need: depth + 5,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     gold: R(2.2), mat: ['core', 3],     ilvl: depth + 4 },
-    { kind: 'boss',  title: 'Giant Slayer',      need: 2,                 snap: BK, desc: n => `Slay ${n} bosses`,         gold: R(1.6), mat: ['core', 2],     ilvl: depth + 3 },
-    { kind: 'boss',  title: 'Champion Hunter',   need: 4,                 snap: BK, desc: n => `Slay ${n} bosses`,         gold: R(2.4), mat: ['core', 3],     ilvl: depth + 4 },
-    { kind: 'elite', title: 'Elite Contract',    need: 5,                 snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(1.5), mat: ['glimmer', 2],  ilvl: depth + 2 },
-    { kind: 'elite', title: 'Bane of Champions', need: 10,                snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(2.3), mat: ['glimmer', 3],  ilvl: depth + 3 },
-    { kind: 'gold',  title: 'Treasure Hunter',   need: 400 + depth * 90,  snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  gold: R(1.2), mat: ['scrap', 10],   ilvl: depth + 1 },
-    { kind: 'gold',  title: "Dragon's Hoard",    need: 1200 + depth * 220,snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  gold: R(1.9), mat: ['core', 2],     ilvl: depth + 3 },
+    // Slay — escalating kill counts, escalating (and varied) payouts.
+    { kind: 'slay',  title: 'Thin the Ranks',    need: 12 + depth,        snap: K,  desc: n => `Slay ${n} foes`,           rewards: [GOLD(1.5)] },
+    { kind: 'slay',  title: 'Cull the Horde',    need: 25 + depth,        snap: K,  desc: n => `Slay ${n} foes`,           rewards: [GOLD(1.1), MAT('scrap', 1.2)] },
+    { kind: 'slay',  title: 'Slaughterhouse',    need: 45 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           rewards: [MAT('glimmer', 1.4), GEAR(2)] },
+    { kind: 'slay',  title: 'Exterminator',      need: 70 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           rewards: [GOLD(1.5), MAT('core', 1.4), GEAR(3)] },
+    // Clear floors.
+    { kind: 'clear', title: 'Sweep the Halls',   need: 3,                 snap: CF, desc: n => `Clear ${n} floors of foes`, rewards: [GOLD(1.2), XP(1.2)] },
+    { kind: 'clear', title: 'Purge the Depths',  need: 5,                 snap: CF, desc: n => `Clear ${n} floors of foes`, rewards: [MAT('core', 1.5), GEAR(3)] },
+    // Delve deep.
+    { kind: 'delve', title: 'Press Onward',      need: depth + 2,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     rewards: [GEAR(2)] },
+    { kind: 'delve', title: 'Into the Deep',     need: depth + 5,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     rewards: [GOLD(1.4), MAT('chaos', 1.3), GEAR(4)] },
+    // Bosses — the top-effort contracts, so they can pay a GUARANTEED rare piece.
+    { kind: 'boss',  title: 'Giant Slayer',      need: 2,                 snap: BK, desc: n => `Slay ${n} bosses`,         rewards: [GOLD(1.7), GEAR(3, 'epic')] },
+    { kind: 'boss',  title: 'Champion Hunter',   need: 4,                 snap: BK, desc: n => `Slay ${n} bosses`,         rewards: [MAT('chaos', 1.4), GEAR(4, 'legendary')] },
+    // Elites.
+    { kind: 'elite', title: 'Elite Contract',    need: 5,                 snap: EK, desc: n => `Slay ${n} elite foes`,     rewards: [GOLD(1.3), MAT('glimmer', 1.2)] },
+    { kind: 'elite', title: 'Bane of Champions', need: 10,                snap: EK, desc: n => `Slay ${n} elite foes`,     rewards: [GOLD(1.1), MAT('core', 1.4), XP(1.3)] },
+    // Plunder gold.
+    { kind: 'gold',  title: 'Treasure Hunter',   need: 400 + depth * 90,  snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  rewards: [GOLD(2.4)] },
+    { kind: 'gold',  title: "Dragon's Hoard",    need: 1200 + depth * 220,snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  rewards: [GOLD(1.4), MAT('core', 1.6), GEAR(3)] },
   ];
 }
 function rollBounties() {
@@ -12249,6 +12288,42 @@ function rollBounties() {
   for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp; }
   return arr.slice(0, 10);
 }
+// Normalize a contract's rewards to the { t, … } list shape. New bounties carry a
+// `rewards` array; an older save's active bounty stored the flat gold/mat/ilvl trio,
+// so synthesize the list from those fields when `rewards` is absent.
+function bountyRewardList(b) {
+  if (b && Array.isArray(b.rewards) && b.rewards.length) return b.rewards;
+  const out = [];
+  if (b && b.gold) out.push({ t: 'gold', amt: b.gold });
+  if (b && b.mat) out.push({ t: 'mat', mat: b.mat[0], amt: b.mat[1] });
+  if (b && b.ilvl) out.push({ t: 'gear', ilvl: b.ilvl });
+  return out;
+}
+// One reward → inline "pixel-icon + amount" markup (a real atlas tile / vector
+// icon, never an emoji standing in for the reward). A guaranteed-rarity gear piece
+// tints its gear icon (and the word "gear") in that tier's colour — rarity is shown
+// by COLOUR only, never a text label.
+const BOUNTY_GEAR_TIER_VAR = { epic: 'var(--epic)', legendary: 'var(--legendary)', unique: 'var(--unique)' };
+function bountyRewardHtml(r) {
+  if (r.t === 'gold') return `<b style="color:var(--gold)"><span data-spr=ic_money></span>${fmtGold(r.amt)} gold</b>`;
+  if (r.t === 'mat') { const m = CRAFT_MATERIALS[r.mat] || {}; return `<span data-spr=mat_${r.mat}></span>${abbreviateNumber(r.amt)} ${m.name || r.mat}`; }
+  if (r.t === 'xp') return `<span data-spr=ui_level></span>${abbreviateNumber(r.amt)} XP`;
+  if (r.t === 'gear') {
+    const col = r.tier ? (BOUNTY_GEAR_TIER_VAR[r.tier] || 'var(--gold)') : null;
+    const ic = iconMarkup('chestplate', col || ICON_EMPTY_COLOR, true, 16);
+    const label = col ? `a guaranteed <b style="color:${col}">gear</b> piece` : 'a piece of gear';
+    return `${ic} ${label}`;
+  }
+  return '';
+}
+// Stacked reward rows — one reward per line — for a bounty (board offer or the
+// active contract), so a 1–3 reward payout reads clearly instead of a run-on line.
+function bountyRewardsHtml(b) {
+  return `<div class="bounty-rewards">` +
+    bountyRewardList(b).map(r => `<div class="bounty-reward">${bountyRewardHtml(r)}</div>`).join('') +
+    `</div>`;
+}
+
 function openBounty() { openTownModal('Bounty Board', 'scroll'); renderBounty(); }
 function renderBounty() {
   let html = '';
@@ -12260,20 +12335,21 @@ function renderBounty() {
     const cur = (b.kind === 'delve') ? `<br><span style="opacity:.85">You're currently on ${floorLabel(Math.max(1, dungeonLevel || player.maxFloor || 1))}.</span>` : '';
     html += `<div class="town-blurb"><b>Active bounty:</b> ${b.desc.replace('{n}', abbreviateNumber(b.need))}${cur}<br>
       <div class="bar-track" style="margin:6px 0"><div class="bar-fill" style="width:${pct}%;background:${done ? 'var(--uncommon)' : 'var(--gold)'}"></div></div>
-      ${abbreviateNumber(prog)} / ${abbreviateNumber(b.need)} — reward: <b style="color:var(--gold)"><span data-spr=ic_money></span>${fmtGold(b.gold)}</b> + ${b.mat[1]}<span data-spr=mat_${b.mat[0]}></span> + a piece of gear.</div>`;
+      ${abbreviateNumber(prog)} / ${abbreviateNumber(b.need)} — reward:${bountyRewardsHtml(b)}</div>`;
     html += `<div class="town-menu" style="gap:8px">
       <button class="act-btn" ${done ? '' : 'disabled'} style="width:100%;padding:10px" onclick="claimBounty()">${done ? '✅ Claim reward' : 'In progress…'}</button>
       <button class="slotpick-cancel" style="width:100%" onclick="abandonBounty()">Abandon bounty</button></div>`;
     setTownContent(html);
     return;
   }
-  html += `<div class="town-blurb">Take a contract from the board and complete it out in the dungeon, then return to claim gold, materials and a piece of gear geared to your depth. Fresh contracts are posted from time to time — one bounty at a time.</div>`;
+  html += `<div class="town-blurb">Take a contract from the board and complete it out in the dungeon, then return to claim its reward — every contract pays a different mix of gold, crafting materials, XP or gear geared to your depth. Fresh contracts are posted from time to time — one bounty at a time.</div>`;
   const offers = _bountyOffers = rollBounties();
   html += '<div class="shop-grid">' + offers.map((o, i) => {
     return `<div class="shop-row has-actions no-icon">
       <div class="shop-row-info">
         <div class="shop-row-name">${o.title}</div>
-        <div class="shop-row-stats">${o.desc(o.need)} · <span data-spr=ic_money></span>${fmtGold(o.gold)} + ${o.mat[1]}<span data-spr=mat_${o.mat[0]}></span> + gear</div>
+        <div class="shop-row-stats">${o.desc(o.need)}</div>
+        ${bountyRewardsHtml(o)}
       </div>
       <button class="act-btn" onclick="acceptBounty(${i})">ACCEPT</button>
     </div>`;
@@ -12286,25 +12362,37 @@ function acceptBounty(i) {
   // Store the fully-resolved description (a delve bounty's floorTag can't take a
   // placeholder); the display sites' harmless .replace('{n}', …) still handles
   // any older save whose desc was stored with a {n} token.
-  player.bounty = { kind: o.kind, need: o.need, snap: o.snap, gold: o.gold, mat: o.mat, ilvl: o.ilvl, desc: o.desc(o.need) };
+  player.bounty = { kind: o.kind, need: o.need, snap: o.snap, rewards: o.rewards, desc: o.desc(o.need) };
   sfx('click');
   log(`<span data-spr=scroll></span> Bounty accepted: ${o.desc(o.need)}.`, 'important');
   renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame();
 }
 function claimBounty() {
   const b = player.bounty; if (!b || !bountyDone(b)) return;
-  player.gold += b.gold;
-  // Curated-reward exception: a bounty pays its listed material ungated by
-  // difficulty — you earned the contract, so the payout ignores the drop gate.
-  if (b.mat) gainMaterial(b.mat[0], b.mat[1]);
-  const item = generateItem(2, b.ilvl || ((player.maxFloor || 1) + 1));
-  inventory.push(item);
+  const rewards = bountyRewardList(b);
+  const parts = [];             // combat-log fragments, one per reward paid
+  let bannerItem = null;        // best gear piece to celebrate with the drop banner
+  let gainedXp = false;
+  for (const r of rewards) {
+    if (r.t === 'gold') { player.gold += r.amt; parts.push(`+<span data-spr=ic_money></span>${fmtGold(r.amt)}`); }
+    // Curated-reward exception: a bounty pays its listed material ungated by
+    // difficulty — you earned the contract, so the payout ignores the drop gate.
+    else if (r.t === 'mat') { gainMaterial(r.mat, r.amt); parts.push(`+${abbreviateNumber(r.amt)}<span data-spr=mat_${r.mat}></span>`); }
+    else if (r.t === 'xp') { player.xp += r.amt; gainedXp = true; parts.push(`+${abbreviateNumber(r.amt)} XP`); }
+    else if (r.t === 'gear') {
+      const item = generateItem(2, r.ilvl || ((player.maxFloor || 1) + 1), r.tier || null);
+      inventory.push(item);
+      if (!bannerItem || TIER_ORDER.indexOf(item.tier) > TIER_ORDER.indexOf(bannerItem.tier)) bannerItem = item;
+      parts.push(logItem(item));
+    }
+  }
   player.bounty = null;
-  // A legendary/unique bounty payoff gets the full drop banner; lesser rewards keep
+  // A legendary/unique gear payoff gets the full drop banner; lesser rewards keep
   // the gold-flash fanfare.
-  if (isTopTierItem(item)) lootReveal(item);
+  if (bannerItem && isTopTierItem(bannerItem)) lootReveal(bannerItem);
   else { sfx('levelup'); screenFlash('#ffd24b'); }
-  log(`<span data-spr=scroll></span> Bounty complete! +<span data-spr=ic_money></span>${b.gold}, materials, and ${logItem(item)}.`, 'loot');
+  if (gainedXp) checkLevelUp();
+  log(`<span data-spr=scroll></span> Bounty complete! ${parts.join(', ')}.`, 'loot');
   // renderSkillBar() clears the belt's now-stale bounty module at once — otherwise
   // its green "ready to claim" pulse would linger until the next world-tick rebuild.
   updateBars(); renderPanel(); renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame();
@@ -12383,12 +12471,13 @@ function updateObjectiveChip() {
   }
   chip.style.display = '';
 }
-// Tap the chip: open the Bounty Board in town, or log the live progress in the
-// dungeon (where the board isn't reachable).
+// Tap the chip / belt module: open the Bounty Board in town (whether or not a
+// contract is active — you may want to go accept one), or log the live progress in
+// the dungeon (where the board isn't reachable).
 function objectiveChipClick() {
+  if (inTown) { openBounty(); return; }
   const b = (typeof player === 'object' && player) ? player.bounty : null;
   if (!b) return;
-  if (inTown) { openBounty(); return; }
   const prog = Math.min(bountyProgress(b), b.need);
   log(`<span data-spr=scroll></span> Bounty: ${b.desc.replace('{n}', b.need)} — ${prog}/${b.need}.`);
 }
@@ -12415,8 +12504,8 @@ function openTownService(kind) {
     const ilvl = Math.max(dungeonReturn, player.maxFloor || 1) + 1;
     // The town wares persist for the whole visit — generated once, then reused
     // when you close and reopen the shop (a paid Restock re-rolls them).
-    if (!townShopStock) townShopStock = rollShopStock(ilvl, 4, 6);
-    merchant = { x: 0, y: 0, stock: townShopStock, sale: 1, town: true, ilvl, stockLo: 4, stockHi: 6 };
+    if (!townShopStock) townShopStock = rollShopStock(ilvl, 3, 5);
+    merchant = { x: 0, y: 0, stock: townShopStock, sale: 1, town: true, ilvl, stockLo: 3, stockHi: 5, restocks: townRestocks };
     openShop();
     return;
   }
@@ -15316,6 +15405,10 @@ const AFFIX_CURVES = {
   SKILLPWR:{pct:0.3}, CASTSPD:{pct:0.3},
   CDR:{pct:0.12}, MCR:{pct:0.16},
   BLEED:{pct:0.3}, STUNPWR:{pct:0.5}, ATKSPD:{pct:0.3},
+  // Area of Effect: a per-roll growth like the other pack-scaling offense %s. Grows
+  // with depth/rarity (uncapped); resolveCast rounds the widened radius to whole tiles,
+  // so it only steps a cast up a tile once enough is stacked — gentle by design.
+  AREA:{pct:0.45},
   TENAC:{pct:0.35},
 };
 function affixStatRange(stat, lvl, mult) {
@@ -19315,6 +19408,7 @@ const ITEM_POWERS = {
   prospector:  { name: 'Prospector',   color: '#ffd24b', desc: 'Foes drop +30% more gold.',             stats: { GOLDFIND: 30 } },
   scholar:     { name: 'Scholar',      color: '#a9e08a', desc: 'Earn +20% experience.',                 stats: { XPGAIN: 20 } },
   salvager:    { name: 'Salvager',     color: '#c0a06a', desc: 'Find +30% more crafting materials.',    stats: { MATFIND: 30 } },
+  sweeping:    { name: 'Sweeping',     color: '#ffbe6a', desc: 'Area skills reach noticeably wider.',   stats: { AREA: 22 } },
 };
 function rollItemPower() { const ks = Object.keys(ITEM_POWERS); return ks[Math.floor(Math.random() * ks.length)]; }
 // How many active worn pieces carry a given power (so two Vampiric pieces stack).
@@ -21936,6 +22030,18 @@ function resolveCast(node, rank) {
     if (c.chain)  c.chain  += 1;
     if (c.count)  c.count  += 1;
     if (c.repeat) c.repeat += 1;
+  }
+  // Gear Area of Effect %: widen every radius skill (nova / blast) so a +AoE build
+  // catches more of a pack per cast. Rounded to whole tiles (targeting steps by tile)
+  // and clamped to never shrink the base, so it only ever grows a cast. Copies c
+  // first, so the shared node.cast is never mutated; single-target casts have no
+  // radius, so they no-op here.
+  if (c.radius) {
+    const areaPct = (typeof totalStat === 'function') ? totalStat('AREA') / 100 : 0;
+    if (areaPct > 0) {
+      c = Object.assign({}, c);
+      c.radius = Math.max(c.radius, Math.round(c.radius * (1 + areaPct)));
+    }
   }
   // D2 synergy: this ability's damage scales with hard points in related skills.
   const synM = synergyMult(node);
@@ -24988,7 +25094,7 @@ function lootGlossaryHTML() {
   // so the long list stays scannable (and flows into two columns on desktop).
   // Keyed by internal stat key so it can never drift from STAT_SHORT/STAT_LABELS.
   const STAT_GROUPS = [
-    ['Offense', ['ATK','ACC','CRIT','CRITDMG','IDMG','PEN','MAGICPEN','DBLSTRIKE','CLEAVE','EXEC','BOSSDMG','ATKSPD','BLEED','STUNPWR']],
+    ['Offense', ['ATK','ACC','CRIT','CRITDMG','IDMG','PEN','MAGICPEN','DBLSTRIKE','CLEAVE','AREA','EXEC','BOSSDMG','ATKSPD','BLEED','STUNPWR']],
     ['Defense', ['DEF','HP','VEIL','DR','BLOCK','DODGE','TENAC','THORNS']],
     ['Sustain', ['REGEN','LEECH','MPLEECH','HPKILL','MPKILL']],
     ['Caster',  ['MP','SPELLPWR','SKILLPWR','CASTSPD','CDR','MCR']],
@@ -24999,8 +25105,14 @@ function lootGlossaryHTML() {
   const placed = new Set(STAT_GROUPS.flatMap(([, keys]) => keys));
   const leftover = Object.keys(STAT_SHORT).filter(k => !placed.has(k));
   if (leftover.length) STAT_GROUPS.push(['Other', leftover]);
-  const statRow = k =>
-    `<div class="gl-row"><span class="gl-code">${STAT_SHORT[k]}</span><span class="gl-mean">${STAT_LABELS[k] || k}</span></div>`;
+  // One glossary row: short code, full name (emphasised), then a plain-language
+  // blurb of what it does. Same shape for item stats, attributes and item powers
+  // so the whole key reads uniformly — every entry explains itself, not just
+  // names itself. `color` tints code + name (item powers keep their loot-row hue).
+  const glRow = (code, name, desc, color) =>
+    `<div class="gl-row"><span class="gl-code"${color ? ` style="color:${color}"` : ''}>${code}</span>` +
+    `<span class="gl-mean"><b class="gl-name"${color ? ` style="color:${color}"` : ''}>${name}</b>${desc ? ' — ' + desc : ''}</span></div>`;
+  const statRow = k => glRow(STAT_SHORT[k], STAT_LABELS[k] || k, STAT_DESC[k]);
   const group = (name, inner) => `<div class="gl-group"><div class="gl-sect">${name}</div>${inner}</div>`;
   const statSects = STAT_GROUPS.map(([name, keys]) =>
     group(name, keys.slice()
@@ -25009,12 +25121,19 @@ function lootGlossaryHTML() {
   ).join('');
   const attrRows = ATTR_KEYS.map(k => {
     const a = ATTRIBUTES[k];
-    return `<div class="gl-row"><span class="gl-code">${a.short}</span><span class="gl-mean">${a.label} — ${a.desc}</span></div>`;
+    return glRow(a.short, a.label, a.desc);
   }).join('');
+  // The build-defining "✦ Name" powers on legendary and unique gear, straight from
+  // ITEM_POWERS so the key can never drift from what actually rolls. Alphabetical
+  // by display name; each keeps its loot-row color so the tag is recognisable.
+  const powerRows = Object.values(ITEM_POWERS)
+    .slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map(p => glRow('✦', p.name, p.desc, p.color)).join('');
   return _lootGlossaryHTML = `<details class="loot-glossary"><summary>Stat abbreviations</summary>` +
     `<div class="gl-body">` +
     statSects +
     group('Attributes', attrRows) +
+    group('Item powers — legendary &amp; unique gear', powerRows) +
     `</div></details>`;
 }
 
@@ -25187,7 +25306,7 @@ function renderPanel() {
 // rows but kept so a future iconified row needs no data change.
 const HERO_EXT_STATS = [
   ['IDMG','ic_stun','Increased dmg'], ['BOSSDMG','ui_level','Dmg vs bosses'], ['EXEC','w_dagger','Execute'],
-  ['PEN','w_spear','Armor pen'], ['MAGICPEN','ic_orb','Magic pen'], ['CLEAVE','w_axe','Cleave'],
+  ['PEN','w_spear','Armor pen'], ['MAGICPEN','ic_orb','Magic pen'], ['CLEAVE','w_axe','Cleave'], ['AREA','sk_wa_slam','Area of effect'],
   ['LEECH','ic_heart','Life leech'], ['MPLEECH','ic_orb','Mana leech'], ['HPKILL','ic_heart','Life on kill'],
   ['MPKILL','ic_orb','Mana on kill'], ['THORNS','spikes_up','Thorns'],
   ['SKILLPWR','w_scythe','Skill power'], ['SPELLPWR','ic_orb','Spell power'],
@@ -26094,13 +26213,22 @@ function beltMealsHtml() {
   let tiles = '';
   for (let i = 0; i < MEAL_SLOT_COUNT; i++) {
     const s = slots[i];
+    // A filled tile taps-to-eat; stopPropagation keeps that from ALSO firing the
+    // module's town shortcut (beltMealsClick → Ramen House) underneath it.
     tiles += (s && s.qty > 0)
-      ? `<button class="skillbar-btn sb-meal" onclick="eatMealSlot(${i})" ${drop(i)} ${hoverTip(`<div class='ht-name'>${bowlIcon(14)} ${escapeHtml(s.bowl.name)}</div><div class='ht-line'>${escapeHtml(fxDesc(s.bowl.fx) || 'no effect')} · ${s.bowl.floors} floors</div><div class='ht-sub'>tap to eat · ${s.qty} left</div>`)}><span class="sb-icon">${bowlIcon(24)}</span><span class="sb-meal-qty">${s.qty}</span></button>`
+      ? `<button class="skillbar-btn sb-meal" onclick="event.stopPropagation(); eatMealSlot(${i})" ${drop(i)} ${hoverTip(`<div class='ht-name'>${bowlIcon(14)} ${escapeHtml(s.bowl.name)}</div><div class='ht-line'>${escapeHtml(fxDesc(s.bowl.fx) || 'no effect')} · ${s.bowl.floors} floors</div><div class='ht-sub'>tap to eat · ${s.qty} left</div>`)}><span class="sb-icon">${bowlIcon(24)}</span><span class="sb-meal-qty">${s.qty}</span></button>`
       : `<div class="skillbar-btn sb-meal sb-meal-slot-empty" ${drop(i)}></div>`;
   }
   const overlay = anyFilled ? '' : `<div class="sb-mod-overlay">Go cook something!</div>`;
   const tip = anyFilled ? '' : hoverTip(`<div class='ht-name'>${bowlIcon(14)} Meals</div><div class='ht-line'>Cook a bowl at the Ramen House and slot it here to eat it mid-run.</div>`);
-  return `<div class="sb-mod sb-mod-meals${anyFilled ? '' : ' sb-mod-idle'}" ${tip}><span class="sb-pill sb-mod-pill">MEALS</span><div class="sb-mod-body sb-meals-body">${tiles}${overlay}</div></div>`;
+  // In town the whole module is a shortcut to the Ramen House (see beltMealsClick).
+  return `<div class="sb-mod sb-mod-meals${anyFilled ? '' : ' sb-mod-idle'}" onclick="beltMealsClick()" ${tip}><span class="sb-pill sb-mod-pill">MEALS</span><div class="sb-mod-body sb-meals-body">${tiles}${overlay}</div></div>`;
+}
+// Clicking the belt MEALS module while in town opens the Ramen House (where you
+// cook bowls and slot them); in the dungeon it's inert — only the filled tiles act
+// (tap-to-eat), and their onclick stops propagation so eating never also fires this.
+function beltMealsClick() {
+  if (inTown) openRamen();
 }
 // Bounty tracker — body shows the active contract's objective + a live progress bar,
 // or a "No bounty yet" OVERLAY on the same-size body. The objective LABEL is stable per
@@ -26119,7 +26247,10 @@ function beltBountyHtml() {
   const tip = b
     ? hoverTip(`<div class='ht-name'>${ic} Bounty</div><div class='ht-line'>${escapeHtml(b.desc.replace('{n}', b.need))}</div>`)
     : hoverTip(`<div class='ht-name'>${ic} Bounty</div><div class='ht-line'>No active bounty — accept one at the town Bounty Board.</div>`);
-  return `<div class="sb-mod sb-mod-bounty${b ? '' : ' sb-mod-idle'}" ${b ? 'onclick="objectiveChipClick()"' : ''} ${tip}><span class="sb-pill sb-mod-pill">BOUNTY</span><div class="sb-mod-body sb-bounty-body">${inner}</div></div>`;
+  // Always clickable: in town it's a shortcut to the Bounty Board even with no
+  // active contract (so you can go accept one); in the dungeon a click logs live
+  // progress on the active contract (and is inert when there's none).
+  return `<div class="sb-mod sb-mod-bounty${b ? '' : ' sb-mod-idle'}" onclick="objectiveChipClick()" ${tip}><span class="sb-pill sb-mod-pill">BOUNTY</span><div class="sb-mod-body sb-bounty-body">${inner}</div></div>`;
 }
 // Refresh the volatile bits of the belt bounty module — the progress count and bar
 // width — memoized so unchanged repaints skip the DOM writes (runs per skill-bar sync,
@@ -34886,6 +35017,7 @@ const __DL_FN_BRIDGE = {
   mealSlotDragLeave,
   mealSlotDrop,
   eatMealSlot,
+  beltMealsClick,
   renderCookingHTML,
   craftIlvl,
   craftBaseFactors,

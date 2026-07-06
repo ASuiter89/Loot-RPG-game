@@ -16,6 +16,44 @@ export const CHANGELOG = [
     "Hall of Deeds: an account-wide Renown ladder that turns your Collection, Bestiary, Conquest, depth records and bounties into deeds paying titles, frames, badges and trophies — status only, never power.",
     "For console play: gameGuide(“covenants”/“weave”/“mirrorforge”/“pantheon”/“cycles”/“deeds”) explains each, and gameState().endgame reports their live state.",
   ] },
+  { date: "2026-07-06", size: "small", v: "Belt BOUNTY / MEALS modules jump to their town service", by: "Jeff Louie", notes: [
+    "In town, clicking the belt's BOUNTY module now opens the Bounty Board (even with no active contract), and clicking the MEALS module opens the Ramen House — a one-tap shortcut to each.",
+  ] },
+  { date: "2026-07-06", size: "medium", v: "Bounties pay a varied mix of rewards", by: "Jeff Louie", notes: [
+    "Bounties no longer always hand out the same gold + material + gear trio. Each contract now pays a different MIX of 1–3 rewards, and one paying fewer things pays more of each.",
+    "New reward types join the pool: any of the four crafting materials (not just Core), a lump of XP, and — on the toughest boss contracts — a gear piece of a guaranteed rarity.",
+    "The board and active-bounty panel now list each reward on its own line, with its pixel icon, so what a contract pays reads at a glance.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "New gear stat: Area of Effect widens your radius skills", by: "Jeff Louie", notes: [
+    "Gear can now roll Area of Effect % (AOE) — it widens the radius of every burst skill (a nova around you, a lobbed blast), so one cast sweeps up more of a pack. It helps all classes and does nothing for single-target casts.",
+    "Rolls on weapons, helms, gloves, rings, amulets and off-hands, and the new \"Sweeping\" item power grants a big chunk of it. The widened radius rounds to whole tiles, so it steps a skill up a tile once you've stacked enough.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Gear screen: fainter hero, red pulse on unusable worn gear", by: "Jeff Louie", notes: [
+    "The hero backdrop behind the GEAR paper doll is now fainter, so the equipment slots read cleaner against it.",
+    "A worn piece you no longer meet the requirement for now throbs a red glow on its slot, drawing the eye straight to the gear that's stopped helping until you re-qualify.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "More compact \"Stat abbreviations\" key", by: "Jeff Louie", notes: [
+    "Tightened the line spacing and padding in the \"Stat abbreviations\" key so the whole reference fits in less space without shrinking the text below its readable size.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Merchant wares open sorted by Power; leaner town stock", by: "Jeff Louie", notes: [
+    "The Merchant's wares now open sorted by Power, highest first — matching the loot drawer — so the strongest pieces sit up top instead of grouped by rarity.",
+    "The town Merchant now lays out 3–5 pieces (was 4–6); the wandering merchant carries a wider 5–8, so the detour stays the bigger haul.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Merchant restock costs more each time you buy it", by: "Jeff Louie", notes: [
+    "Paying the town Merchant to restock now surcharges every restock you buy in a visit — the second costs more than the first, and so on — so re-rolling for a lucky ware is a real gold sink, not a spammable pull. The surcharge resets the next time you return to town.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Terser stat-abbreviation blurbs", by: "Jeff Louie", notes: [
+    "Trimmed every stat blurb in the \"Stat abbreviations\" key to a few words — same meaning, far less to read.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Bounties now pay scarce Core, scaling with depth", by: "Jeff Louie", notes: [
+    "Every Bounty Board contract now rewards Core — the scarce mid-tier crafting material — instead of a mix of lesser mats, making the board a reliable route to it.",
+    "The Core payout scales up the deeper you are, so contracts taken further down hand over more; tougher contracts pay more than lighter ones at the same depth.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Stat abbreviations key explains everything on a loot row", by: "Jeff Louie", notes: [
+    "The collapsible \"Stat abbreviations\" key under the Loot tab now gives each stat a one-line blurb of what it does, not just its full name — so you can decode a loot row without hunting for tooltips.",
+    "The ✦ item powers on legendary and unique gear — Vampiric, Duelist's, Warmage and all the rest — get their own section in the key, each in its loot-row color with what it does.",
+    "The whole key prints in finer type so the much bigger reference stays compact.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Dropped food refuels mana & stamina too", by: "Claude", notes: [
     "Snacks picked up off the floor now restore MP and Stamina alongside HP — the same amount to all three, so a bite is a quick top-up for casters and sprinters, not just wounded fighters.",
   ] },

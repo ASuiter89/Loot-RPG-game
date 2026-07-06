@@ -1753,6 +1753,9 @@
   /* Meal quick-slots: MEAL_SLOT_COUNT skill-sized tiles. Filled = food-green bowls with a
      stack badge; empty = dashed placeholders (matching unassigned skill slots). */
   .sb-meals-body { gap: calc(4px * var(--ui-scale,1)); }
+  /* In town the whole MEALS module is a shortcut to the Ramen House, so it reads as
+     clickable; in the dungeon only the filled tiles act, so no module-wide pointer. */
+  #skill-bar.in-town .sb-mod-meals, #skill-bar.in-town .sb-mod-meals .sb-meal-slot-empty { cursor: pointer; }
   .sb-meal { border-color: var(--green-600); background: var(--green-800); color: var(--green-50); }
   .sb-meal:hover { border-color: var(--green-650); filter: brightness(1.12); }
   .sb-meal:active { background: var(--green-650); }
@@ -2171,17 +2174,19 @@
   .loot-ctrl-pop .lc-hint { flex: 1 1 100%; color: var(--junk); font-size: 1.2rem; padding: 2px; }
   .loot-ctrl-clear { flex: 1 1 100%; color: var(--danger); }
 
-  /* ── LOOT GLOSSARY ── collapsible key to the short stat codes on loot rows. */
+  /* ── LOOT GLOSSARY ── collapsible key to the short stat codes on loot rows.
+     Fine-print tier: the key is a dense reference (every stat, attribute and
+     item power), so it uses the smallest size on the type scale. */
   .loot-glossary {
     margin: 10px 4px 4px;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--bg);
-    font-size: 1.2rem;
+    font-size: var(--fs-fine);
   }
   .loot-glossary > summary {
     cursor: pointer;
-    padding: 7px 10px;
+    padding: 5px 10px;
     color: var(--warn);
     font-weight: bold;
     list-style: none;
@@ -2191,7 +2196,7 @@
   .loot-glossary > summary::before { content: '▸ '; }
   .loot-glossary[open] > summary::before { content: '▾ '; }
   .loot-glossary > summary:hover { color: var(--gold); }
-  .gl-body { padding: 0 10px 8px; }
+  .gl-body { padding: 0 10px 6px; }
   /* On desktop the long stat key flows into two balanced columns; each themed
      group is a single unit so a header never splits from its rows. */
   @media (min-width: 760px) {
@@ -2202,13 +2207,15 @@
     color: var(--junk);
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    font-size: 1.2rem;
-    margin: 8px 0 3px;
+    font-size: var(--fs-fine);
+    margin: 5px 0 2px;
   }
   /* First header in a group hugs the top of its column (the group already spaces
      itself); rely on the group wrapper for inter-group rhythm instead. */
   .gl-group:first-child > .gl-sect { margin-top: 0; }
-  .gl-row { display: flex; gap: 8px; padding: 1px 0; line-height: 1.35; }
+  /* Rows carry a terse description that may wrap to a 2nd line; keep the vertical
+     rhythm tight so the full key stays a compact reference. */
+  .gl-row { display: flex; gap: 8px; padding: 1px 0; line-height: 1.22; }
   .gl-code {
     flex: 0 0 42px;
     color: var(--warn);
@@ -2216,6 +2223,9 @@
     text-align: right;
   }
   .gl-mean { flex: 1; color: var(--neutral-250); min-width: 0; }
+  /* The stat/attribute name leads each blurb — brighter and bolder than its
+     description so the key stays scannable by name. */
+  .gl-name { color: var(--text); font-weight: 600; }
 
   .item-junk      { color: var(--junk); }
   .item-normal    { color: var(--normal); }
@@ -2461,8 +2471,14 @@
   .pd-slot.filled { background: color-mix(in srgb, var(--ink) 75%, transparent); }
   /* A worn piece whose attribute requirement is no longer met: greyed & desaturated
      so the gear panel shows at a glance it's being ignored until you re-qualify. */
-  .pd-slot.pd-inactive { background: color-mix(in srgb, var(--magenta-800) 60%, transparent); }
+  .pd-slot.pd-inactive { background: color-mix(in srgb, var(--magenta-800) 60%, transparent); animation: pd-req-pulse 1.3s ease-in-out infinite; }
   .pd-slot.pd-inactive .dl-ic, .pd-slot.pd-inactive .pd-emoji { opacity: 0.45; filter: grayscale(0.7); }
+  /* A no-longer-usable worn piece throbs a red glow so the eye lands on the exact
+     slot to re-qualify (overrides the inline red box-shadow while it animates). */
+  @keyframes pd-req-pulse {
+    0%, 100% { box-shadow: 0 0 5px color-mix(in srgb, var(--red-350) 45%, transparent); }
+    50%      { box-shadow: 0 0 16px 2px color-mix(in srgb, var(--red-350) 95%, transparent); }
+  }
   .pd-emoji { font-size: 3rem; line-height: 1; filter: grayscale(0.1); }
   .pd-pwr { position: absolute; bottom: 1px; right: 3px; font-size: 1.2rem; }
 
@@ -2496,7 +2512,7 @@
     transform: translate(-50%, -50%);
     height: 125%; width: auto;
     z-index: 0; pointer-events: none;
-    opacity: 0.38;
+    opacity: 0.2;
     filter: drop-shadow(0 3px 8px rgba(0,0,0,0.4));
   }
   .pda-body img, .pda-body .dl-ic { display: block; height: 100%; width: auto; image-rendering: pixelated; }
@@ -2712,6 +2728,12 @@
   .shop-row-name { font-weight: bold; font-size: 1.4rem; }
   .shop-row-sub { font-size: 1.2rem; opacity: 0.7; }
   .shop-row-stats { font-size: 1.2rem; color: var(--meta); margin-top: 2px; line-height: 1.3; }
+  /* Bounty reward payout — a contract pays a MIX of 1–3 rewards (gold / crafting
+     material / XP / gear), so each reward gets its OWN line rather than being
+     crammed into one run-on string. Each line is a pixel icon + amount. */
+  .bounty-rewards { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-3); }
+  .bounty-reward { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-body); color: var(--text); line-height: 1.25; }
+  .bounty-reward .svg-icon, .bounty-reward [data-spr] { flex: none; }
   /* Merchant gear card (.shop-card): the icon rides inline at the head of the
      name line — one fixed size for every piece, bespoke vector or reused atlas
      tile — so the first line reads "icon name" and every line below (slot/power,
