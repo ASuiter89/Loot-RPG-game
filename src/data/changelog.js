@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Gear screen: fainter hero, red pulse on unusable worn gear", by: "Jeff Louie", notes: [
+    "The hero backdrop behind the GEAR paper doll is now fainter, so the equipment slots read cleaner against it.",
+    "A worn piece you no longer meet the requirement for now throbs a red glow on its slot, drawing the eye straight to the gear that's stopped helping until you re-qualify.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Merchant wares open sorted by Power; leaner town stock", by: "Jeff Louie", notes: [
     "The Merchant's wares now open sorted by Power, highest first — matching the loot drawer — so the strongest pieces sit up top instead of grouped by rarity.",
     "The town Merchant now lays out 3–5 pieces (was 4–6); the wandering merchant carries a wider 5–8, so the detour stays the bigger haul.",
