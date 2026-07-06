@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Merchant restock costs more each time you buy it", by: "Jeff Louie", notes: [
+    "Paying the town Merchant to restock now surcharges every restock you buy in a visit — the second costs more than the first, and so on — so re-rolling for a lucky ware is a real gold sink, not a spammable pull. The surcharge resets the next time you return to town.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Terser stat-abbreviation blurbs", by: "Jeff Louie", notes: [
     "Trimmed every stat blurb in the \"Stat abbreviations\" key to a few words — same meaning, far less to read.",
   ] },
