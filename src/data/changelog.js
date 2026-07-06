@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Gold outline on Sell all / Scrap all", by: "Jeff Louie", notes: [
+    "The bag's Sell all and Scrap all buttons now carry a gold outline so they stand out atop the LOOT drawer.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Foe attacks launch from the foe, not the tile next to it", by: "Claude", notes: [
     "Enemy sprites now stay locked to the tile the foe actually occupies, drawn and moved the same way the hero is — the sprite no longer drifts up to a tile off its cell while chasing you.",
     "Because of that drift, ranged bolts and strike lunges used to fly out of a neighbouring tile, or from across a wall from where the foe showed on the map. Every foe attack now originates from where its sprite stands.",
