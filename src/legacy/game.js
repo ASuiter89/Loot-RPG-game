@@ -14955,6 +14955,14 @@ function spawnEnemies() {
 // room list and give anything still barren a reason to exist: a foe if the room has
 // a tile safely outside the hero's entry aggro bubble, otherwise (the entry room and
 // its neighbours) a small coin pile so arriving still feels rewarding rather than
+// Gold in one loose floor pile. Deliberately super-linear in depth so the reward
+// snowballs the deeper you push: a shallow-floor pile is a handful, but the term
+// squared in `dungeonLevel` makes deep-floor piles pay hundreds — a real lure to
+// descend. Shared by both spawn sites so the curve stays in one place.
+function coinPileAmount() {
+  return rnd(3, 10) + dungeonLevel * 3 + Math.round(dungeonLevel * dungeonLevel * 0.4);
+}
+
 // landing you in an empty hall. Rooms that already hold a foe, chest, food, coins,
 // the grave, or a feature (shrine/fountain/teleporter/stairs/vault) are left alone,
 // and boss floors are skipped (their arena is the whole point).
@@ -14982,7 +14990,7 @@ function populateEmptyRooms() {
       else if (!near) near = { x: sx, y: sy };
     }
     if (far) spawnFloorMob(far.x, far.y);
-    else if (near) groundGold.push({ x: near.x, y: near.y, amount: rnd(3, 10) + dungeonLevel * 2 });
+    else if (near) groundGold.push({ x: near.x, y: near.y, amount: coinPileAmount() });
   }
 }
 
@@ -15047,7 +15055,7 @@ function spawnGroundLoot() {
     do {
       cx = rnd(1, MAP_W-1); cy = rnd(1, MAP_H-1); tries++;
     } while ((mapData[cy][cx] !== 0 || (cx === player.x && cy === player.y)) && tries < 100);
-    if (tries < 100) groundGold.push({ x: cx, y: cy, amount: rnd(3, 10) + dungeonLevel * 2 });
+    if (tries < 100) groundGold.push({ x: cx, y: cy, amount: coinPileAmount() });
   }
 }
 
@@ -16671,16 +16679,12 @@ function draw() {
     drawSpriteC(f.sprite || 'food', px + tw/2, py + th/2, foodSize);
   });
 
-  // Coin piles — a soft circular golden glow so loose gold catches the eye. The
-  // heap swells with its value: a shallow-floor handful stays about tile-sized,
-  // while a deep-floor hoard mounds up to roughly double, sprite and glow both
-  // (capped so it still reads as a pile sitting on its tile).
+  // Coin piles — a soft circular golden glow so loose gold catches the eye.
   groundGold.forEach(g => {
     if (g.x + 1 < x0 || g.x > x1 || g.y + 1 < y0 || g.y > y1) return; // off-screen
     const px = offX + g.x * tw, py = offY + g.y * th;
-    const heap = 1 + Math.min((g.amount || 0) / 70, 1.0); // ~1x early → 2x deep
-    glowUnder(px + tw/2, py + th/2, tw * 0.42 * heap, 'rgba(255,224,102,0.4)');
-    if (spriteReady) drawSpriteC('coins', px + tw/2, py + th/2, itemSpritePx(tw) * heap);
+    glowUnder(px + tw/2, py + th/2, tw * 0.42, 'rgba(255,224,102,0.4)');
+    if (spriteReady) drawSpriteC('coins', px + tw/2, py + th/2, itemSpritePx(tw));
   });
 
   // Vault key — glints on the floor until grabbed.
