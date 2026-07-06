@@ -11,6 +11,10 @@ export const CHANGELOG = [
     "Enemy sprites now stay locked to the tile the foe actually occupies, drawn and moved the same way the hero is — the sprite no longer drifts up to a tile off its cell while chasing you.",
     "Because of that drift, ranged bolts and strike lunges used to fly out of a neighbouring tile, or from across a wall from where the foe showed on the map. Every foe attack now originates from where its sprite stands.",
   ] },
+  { date: "2026-07-05", size: "small", v: "Melee reaches a half tile further", by: "Claude", notes: [
+    "Auto-attacks and melee-range skills now connect from a half tile away instead of demanding you stand right on top of a foe — the hit gate follows where the sprites actually are, not the tiles they snap to.",
+    "Weapon reach numbers and tooltips are unchanged; this only softens the exact distance at which a swing lands.",
+  ] },
   { date: "2026-07-05", size: "small", v: "See a weapon's swing speed before you equip it", by: "Claude", notes: [
     "Weapon tooltips and the Forge preview now show a base swing rate — attacks/sec plus a Slow / Normal / Fast tag — beside the reach grid, so you know how fast a weapon hits without equipping it first.",
     "The rate is the weapon type's base speed before Attack Speed and Agility: light daggers swing fastest, heavy two-handers and staves slowest.",
