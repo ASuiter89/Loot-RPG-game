@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Deeper floors, bigger gold piles on the ground", by: "Claude", notes: [
+    "Loose coin piles now visibly swell with their value — a shallow-floor handful stays tile-sized, a deep-floor hoard mounds up to roughly double, glow and all.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Gear can now boost Max Stamina & Stamina Regen", by: "Claude", notes: [
     "Two new item stats: Max Stamina (STM) deepens your sprint/dash reserve, Stamina Regen (SRG) refills it faster after you exert. Both roll on chest, legs and amulets.",
     "So classes that don't pump the pool's attribute can still sprint and dash freely — buy your Stamina on gear instead.",
