@@ -940,12 +940,23 @@
   .hc-tog-text { font-size: 1.3rem; color: var(--red-150); line-height: 1.45; }
   .hc-tog-text b { color: var(--red-350); letter-spacing: .5px; }
   .hc-tog-text .hc-tog-sub { display: block; color: var(--junk); font-size: 1.2rem; margin-top: 3px; }
+  /* Solo Self-Found toggle — the same component recolored gold-amber: SSF is a
+     self-reliance vow, not a death sentence, so it wears the treasure palette. */
+  .hc-toggle.ssf { border-color: var(--orange-650); }
+  .hc-toggle.ssf.on { border-color: var(--orange-550); background: var(--gold-850); box-shadow: 0 0 14px color-mix(in srgb, var(--gold-350) 25%, transparent); }
+  .hc-toggle.ssf .hc-tog-box { border-color: var(--orange-550); }
+  .hc-toggle.ssf.on .hc-tog-box { border-color: var(--gold-350); background: var(--orange-550); }
+  .hc-toggle.ssf .hc-tog-text { color: var(--gold-200); }
+  .hc-toggle.ssf .hc-tog-text b { color: var(--gold-350); }
 
   /* Small crimson "HARDCORE" tag reused on the title card, slots list and graveyard. */
   .hc-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 1.2rem; font-weight: bold;
     letter-spacing: 1px; color: var(--red-200); border: 1px solid var(--red-550); background: color-mix(in srgb, var(--red-800) 25%, transparent);
     border-radius: 4px; padding: 1px 5px; }
   .hc-tag .dl-ic { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--red-800) 50%, transparent)); }
+  /* …and its gold "SSF" twin. */
+  .hc-tag.ssf { color: var(--gold-200); border-color: var(--orange-550); background: color-mix(in srgb, var(--gold-850) 60%, transparent); }
+  .hc-tag.ssf .dl-ic { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--gold-350) 40%, transparent)); }
   .hero-card .hc-tag { margin-top: 8px; }
   .gy-row.hc { background: linear-gradient(90deg, color-mix(in srgb, var(--red-700) 16%, transparent), transparent); }
   .gy-row.hc .gy-name { color: var(--red-200); }

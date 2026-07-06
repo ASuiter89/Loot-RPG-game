@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "medium", v: "Solo Self-Found mode — a hero who walks alone", by: "Jeff Louie", notes: [
+    "New SOLO SELF-FOUND toggle on the name screen, beside Hardcore — arm either or both. An SSF hero never touches the shared account pools: only what they find on their own run can be used.",
+    "The Vault Keeper turns SSF heroes away — no banking or withdrawing gold or gear, and town shops charge carried coin only. Crafting materials fill a private per-hero wallet instead of the shared one.",
+    "SSF heroes wear a gold SOLO SELF-FOUND tag on the title card, save slots and graveyard, matching Hardcore's crimson one.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Bag's frozen header no longer leaks the list above the gold & materials card", by: "Claude", notes: [
     "The LOOT drawer's pinned header (gold & materials pill, slot tabs, sort/filter) now hugs the very top as the list scrolls — closing a thin strip where scrolling items used to peek through just above the gold & materials card.",
   ] },

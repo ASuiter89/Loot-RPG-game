@@ -782,6 +782,11 @@
       <span class="hc-tog-box"></span>
       <span class="hc-tog-text"><b id="hc-tog-label"><span data-spr=ic_cursed></span> HARDCORE</b> — one life. Die and this hero is gone <b>forever</b>.<span class="hc-tog-sub">Permadeath. Sign in to sync it across devices.</span></span>
     </label>
+    <label class="hc-toggle ssf" id="ssf-toggle">
+      <input type="checkbox" id="ssf-checkbox" onchange="syncSsfToggle()">
+      <span class="hc-tog-box"></span>
+      <span class="hc-tog-text"><b id="ssf-tog-label"><span data-spr=ui_bag></span> SOLO SELF-FOUND</b> — no shared Vault or materials. Only what <b>this hero</b> finds can be used.<span class="hc-tog-sub">Walks alone. Stacks with Hardcore for the purest challenge.</span></span>
+    </label>
     <button class="ov-btn" onclick="submitName()">Begin Your Quest ▶</button>
     <span class="ov-link" onclick="showLeaderboard()"><span data-spr="ui_trophy"></span> View the Leaderboards</span>
   </div>

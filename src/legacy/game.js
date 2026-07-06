@@ -52,6 +52,7 @@ import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
+import { isSsf, walletGain, walletSpend } from '../systems/ssf.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
 import { emptyMealSlots, sanitizeMealSlots, assignMealToSlot, assignMealToSlotAt, groupPantry, removePantryStack, takeFromMealSlot, returnSlotToPantry, filledSlotCount, mealSignature } from '../systems/meals.js';
 import { cookableCount, cookBatchOptions } from '../systems/cooking.js';
@@ -2869,6 +2870,12 @@ function canAfford(cost) {
 }
 function spendCost(cost) {
   if (cost.gold) spendGold(cost.gold);
+  // A Solo Self-Found hero pays materials from their private per-hero wallet;
+  // everyone else spends from the ladder's shared stash pool.
+  if (isSsf(player)) {
+    if (walletSpend(player.materials || (player.materials = freshMaterials()), cost, CRAFT_MAT_KEYS)) saveGameSoon();
+    return;
+  }
   let spentMat = false;
   for (const k of CRAFT_MAT_KEYS) if (cost[k]) { withdrawMaterial(stash, k, stashDeviceId(), cost[k]); spentMat = true; }
   if (spentMat) saveStash(); // materials live in the shared stash — persist the spend
@@ -2898,11 +2905,20 @@ function costLabelHi(cost) {
   return parts.join('  ');
 }
 function freshMaterials() { return { scrap: 0, glimmer: 0, core: 0, chaos: 0 }; }
-// The active ladder's shared material wallet (a plain { key: amount } snapshot).
-// Materials are pooled across every hero, so this reads the account-wide stash —
-// there is no per-hero material store any more.
-function heroMaterials() { return (stash && stash.materials) || {}; }
+// The active hero's material wallet (a plain { key: amount } snapshot). Normally
+// the account-wide shared stash pool — materials pool across every hero on the
+// ladder. The one exception is a SOLO SELF-FOUND hero (see systems/ssf.js), who
+// keeps a private wallet on their own save and never touches the shared pool.
+function heroMaterials() {
+  if (isSsf(player)) return player.materials || {};
+  return (stash && stash.materials) || {};
+}
 function gainMaterial(k, n) {
+  if (isSsf(player)) {
+    walletGain(player.materials || (player.materials = freshMaterials()), k, n); // private per-hero wallet
+    saveGameSoon();
+    return;
+  }
   depositMaterial(stash, k, stashDeviceId(), n); // shared pool — every hero gains into the same wallet
   saveStashSoon();                               // persist (debounced; gains can arrive in bursts on a kill/salvage)
 }
@@ -6194,6 +6210,8 @@ let player = { x: 5, y: 5,
   // Crafting materials are NOT stored on the hero — they're an account-wide shared
   // wallet in the stash (Standard and Hardcore keep separate wallets), so every
   // hero draws on the same pool. See heroMaterials() / gainMaterial() / spendCost().
+  // EXCEPTION: a Solo Self-Found hero (player.ssf) keeps a private `materials`
+  // wallet right here on the save and never touches the shared pool.
   // Auto-loot rules: per-rarity disposition for freshly-dropped gear ('keep' |
   // 'scrap' | 'sell'). Everything defaults to 'keep' so the feature is off until
   // the player opts in from the settings menu.
@@ -6829,6 +6847,8 @@ window.gameState = function gameState(radius) {
       level: player.level, xp: player.xp,
       xpToNext: (typeof xpForLevel === 'function') ? xpForLevel(player.level) : null,
       gold: player.gold, class: player.class, ascension: player.ascension,
+      hardcore: !!player.hardcore,  // one life — death is permanent (see gameGuide("character"))
+      ssf: !!player.ssf,            // Solo Self-Found — vault sealed, private materials, carried gold only
       attributes: player.attributes ? Object.assign({}, player.attributes) : null, // might/vitality/agility/spirit/luck
       // Overall Power (the hero-sheet headline) and the slice of it your worn gear
       // contributes. Power is BUILD-AWARE: it's an effective combat score (offense ×
@@ -7021,8 +7041,8 @@ window.gameState = function gameState(radius) {
         ],
       },
       gold: player.gold,                 // coins in hand (what death loss is taken from)
-      vaultGold: (stash && stash.gold) || 0,   // banked in the town Vault — safe from death
-      spendableGold: spendableGold(),    // carried + vault: what a town shop can actually charge (shortfall auto-drawn from the vault)
+      vaultGold: isSsf(player) ? 0 : ((stash && stash.gold) || 0),   // banked in the town Vault — safe from death (always 0 for an SSF hero: their vault is sealed)
+      spendableGold: spendableGold(),    // carried + vault: what a town shop can actually charge (shortfall auto-drawn from the vault; carried only for SSF)
       // Unique/set Collection (the Vault's Collection tab): distinct authored
       // artifacts you have ≥1 stored copy of, out of the full roster. Storing a
       // unique/set piece files it here (account-wide, per ladder); withdraw returns it.
@@ -7037,7 +7057,7 @@ window.gameState = function gameState(radius) {
         const r = bestiaryRoster();
         return { discovered: r.filter(s => speciesDiscovered(bestiaryKills(s))).length, total: r.length };
       })(),
-      materials: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, heroMaterials()[k] || 0])),   // scrap/glimmer/core/chaos (commonest→rarest); ACCOUNT-SHARED across heroes (per ladder)
+      materials: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, heroMaterials()[k] || 0])),   // scrap/glimmer/core/chaos (commonest→rarest); ACCOUNT-SHARED across heroes (per ladder) — except an SSF hero, who sees their private wallet here
       materialsUnlocked: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, materialUnlocked(k)])),  // which mats the CURRENT tier can drop from kills (salvage ignores this)
       autoLoot: player.autoLoot ? Object.assign({}, player.autoLoot) : null,       // per-rarity keep/scrap/sell
       foodBuff: player.foodBuff ? { name: player.foodBuff.name, floors: player.foodBuff.floors } : null,
@@ -7264,6 +7284,7 @@ window.gameGuide = function gameGuide(topic) {
       `Create a hero in TWO steps from the title's ENTER THE DUNGEON button: first PICK A CLASS (Warrior/Rogue/Mage/Templar), then on the next screen ENTER A NAME and choose a body type — Female or Male. Both screens have a ◀ Back button (Esc does the same): the class pick backs out to the title, the name screen back to the class pick — a typed name and toggles are kept.`,
       `Body type is cosmetic — it only sets which hero sprite is drawn. Every class (Warrior, Rogue, Mage, Templar) has its own female and male hero art, shown in-world and anywhere the hero appears (paperdoll, save slots, graveyard, leaderboard, title card). gameState().player.sex reports it ('male'|'female') and .name reports the chosen name.`,
       `Hardcore mode (one life, permadeath) is also chosen on the name screen and locks in for that hero. Class can be retrained later at the town Trainer, but name, body type and Hardcore are fixed once you begin. While the class screen is open gameState().mode is 'classSelect'; on the name screen it's 'nameSelect'.`,
+      `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet.`,
     ],
     town: [
       `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Death does not re-lock any floors: instead Warp to Dungeon only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Dungeon Gate flags the tier holding that grave (with the exact floor beside the tier's grave badge; gameState().graveSite.where), so you can dive straight back to it.`,
@@ -7273,7 +7294,7 @@ window.gameGuide = function gameGuide(topic) {
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
-      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
+      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress (including menu.bounty.done once it's ready to claim).`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
@@ -7321,6 +7342,7 @@ window.gameGuide = function gameGuide(topic) {
     classs: 'progression', classes: 'progression', clas: 'progression', attribute: 'progression', attributes: 'progression', level: 'progression', leveling: 'progression', skilltree: 'progression', ascension: 'progression', ascend: 'progression', xp: 'progression',
     bosspoint: 'progression', bosspoints: 'progression', bossslot: 'progression', bossslots: 'progression', slotlevel: 'progression', slotlevels: 'progression', gearslot: 'progression', gearslots: 'progression',
     character: 'character', creation: 'character', create: 'character', sex: 'character', gender: 'character', male: 'character', female: 'character', name: 'character', naming: 'character', newgame: 'character', body: 'character',
+    ssf: 'character', solo: 'character', soloselffound: 'character', selffound: 'character', hardcore: 'character', permadeath: 'character',
     shop: 'town', merchant: 'town', craft: 'town', crafting: 'town', forge: 'town', ramen: 'town', mystic: 'town', stash: 'town', portal: 'town', gate: 'town', warp: 'town', lastfloor: 'town', transmuter: 'town', transmute: 'town', fuse: 'town', vault: 'town', gambler: 'town', gamble: 'town', sellsword: 'town', merc: 'town', mercenary: 'town', trainer: 'town', healer: 'town', enchanter: 'town', enchant: 'town',
     control: 'controls', key: 'controls', keys: 'controls', keybind: 'controls', keybinds: 'controls', keybinding: 'controls',
     heal: 'healing', healing: 'healing', recovery: 'healing', regen: 'healing', regeneration: 'healing', potion: 'healing', potions: 'healing', mana: 'healing', mp: 'healing', leech: 'healing', lifesteal: 'healing', overtime: 'healing', pending: 'healing', hp: 'healing', hitpoints: 'healing', sustain: 'healing',
@@ -8765,10 +8787,11 @@ function showGraveyard() {
       const portrait = heroFaceIcon(su.cls, su.sex, 30) || dlIcon(su.cls ? CLASSES[su.cls].icon : 'npc_mage', 30);
       const clsName = su.cls ? CLASSES[su.cls].name : 'Wanderer';
       const hcMark = su.hardcore ? ` <span class="hc-tag">${hcIcon(10)} HC</span>` : '';
+      const ssfMark = su.ssf ? ` <span class="hc-tag ssf">${ssfIcon(10)} SSF</span>` : '';
       const cur = (i === activeSlot) ? ` <span style="color:var(--gold);font-size:9px">● NOW</span>` : '';
       return `<div class="gy-row${su.hardcore ? ' hc' : ''}">`
         + `<span class="gy-portrait">${portrait}</span>`
-        + `<span class="gy-info"><span class="gy-name">${escapeHtml(su.name || 'Adventurer')}${hcMark}${cur}</span>`
+        + `<span class="gy-info"><span class="gy-name">${escapeHtml(su.name || 'Adventurer')}${hcMark}${ssfMark}${cur}</span>`
         + `<span class="gy-sub">${escapeHtml(clsName)} · Lv ${su.level}</span></span>`
         + `<span class="gy-stats"><span class="gy-floor">${floorLabel(su.floor)}</span>`
         + `<span class="gy-meta"><span data-spr=ic_money></span>${fmtGold(su.gold)} · ${formatPlayTime(ms)}</span></span>`
@@ -8779,9 +8802,10 @@ function showGraveyard() {
       const clsName = r.asc ? ASCENSIONS[r.asc].name : (r.cls ? CLASSES[r.cls].name : 'Wanderer');
       const date = fmtGraveDate(r.ts);
       const hcMark = r.hardcore ? ` <span class="hc-tag">${hcIcon(10)} HC</span>` : '';
+      const ssfMark = r.ssf ? ` <span class="hc-tag ssf">${ssfIcon(10)} SSF</span>` : '';
       return `<div class="gy-row${r.hardcore ? ' hc' : ''}">`
         + `<span class="gy-portrait">${portrait}</span>`
-        + `<span class="gy-info"><span class="gy-name">${escapeHtml(r.name || 'Adventurer')}${hcMark}</span>`
+        + `<span class="gy-info"><span class="gy-name">${escapeHtml(r.name || 'Adventurer')}${hcMark}${ssfMark}</span>`
         + `<span class="gy-sub">${escapeHtml(clsName)} · Lv ${r.level}</span></span>`
         + `<span class="gy-stats"><span class="gy-floor">${floorLabel(r.floor)}</span>`
         + `<span class="gy-meta"><span data-spr=ic_money></span>${fmtGold(r.gold)} · ${formatPlayTime(r.playMs || 0)}${date ? ' · ' + date : ''}</span></span>`
@@ -12311,7 +12335,10 @@ const TOWN_MENU = [
     req: { ok: () => diffClearedCount() >= 1,           need: 'Unlock Hardened' } },
   { kind: 'sellsword', dl: 'hero_warrior',   name: 'Sellsword',   desc: 'Hire a companion',
     req: { ok: () => diffOf(player.maxFloor || 1) >= 3, need: 'Reach Brutal' } },
-  { kind: 'stash',     dl: 'town_vault',     name: 'Vault',       desc: 'Store gold & gear safe' },
+  // The Vault is open from the start — except to a Solo Self-Found hero, whose
+  // vault is sealed for life (they never touch the shared pools).
+  { kind: 'stash',     dl: 'town_vault',     name: 'Vault',       desc: 'Store gold & gear safe',
+    req: { ok: () => !isSsf(player),                  need: 'Sealed — Solo Self-Found' } },
 ];
 // ── TOWN AMBIENT BACKGROUND ── a different living scene drifts behind the town
 // menu each visit, so the safe haven feels alive rather than a static list. Every
@@ -13407,6 +13434,13 @@ function stashItemRow(item, action, btnLabel, btnClass) {
 let stashTab = 'storage'; // 'storage' | 'collection'
 function stashTabTo(tab) { stashTab = tab; _collOpenKey = null; renderStash(); }
 function renderStash() {
+  // A Solo Self-Found hero is turned away at the door: no banked gold, no stored
+  // gear, no Collection filing. (The hub tile is already locked for SSF — this
+  // guards every other path into the panel.)
+  if (isSsf(player)) {
+    setTownContent(`<div class="town-blurb">${ssfIcon(14)} <b>Solo Self-Found.</b> The Vault Keeper turns you away — this hero walks alone. No banked gold, no stored gear, no shared materials: only what you find on your own run.</div>`);
+    return;
+  }
   const tabs = `<div class="stash-tabs">
     <button class="stash-tab${stashTab === 'storage' ? ' active' : ''}" onclick="stashTabTo('storage')"><span data-spr=ic_coffer></span> Storage</button>
     <button class="stash-tab${stashTab === 'collection' ? ' active' : ''}" onclick="stashTabTo('collection')"><span data-spr=q_relic></span> Collection</button>
@@ -13477,8 +13511,10 @@ function stashWithdrawGold(amt) {
 // pays from carried coins first, then auto-withdraws any shortfall from the
 // vault. The vault still shields that gold from death loss — it's just no longer
 // walled off from the shops. (Dungeon costs like altar offerings stay
-// carried-only; the vault lives in town.)
-function spendableGold() { return (player.gold || 0) + ((stash && stash.gold) || 0); }
+// carried-only; the vault lives in town.) A Solo Self-Found hero's vault is
+// sealed, so for them "can afford" means carried coin only — which also makes
+// spendGold's vault-draw branch unreachable for SSF.
+function spendableGold() { return isSsf(player) ? (player.gold || 0) : (player.gold || 0) + ((stash && stash.gold) || 0); }
 function spendGold(amt) {
   amt = Math.floor(amt) || 0;
   if (amt <= 0) return true;
@@ -13500,7 +13536,7 @@ const _walletVaultHtml = {}; // element id -> last vault-note innerHTML we wrote
 function refreshVaultNote(id) {
   const el = document.getElementById(id);
   if (!el) return;
-  const v = (stash && stash.gold) || 0;
+  const v = isSsf(player) ? 0 : ((stash && stash.gold) || 0); // an SSF hero can't dip into the vault — never tease its balance
   const html = v > 0 ? ` <span class="gold-vault-note">+ <span data-spr=ic_money></span>${fmtGold(v)} in vault</span>` : '';
   if (_walletVaultHtml[id] === html) return; // unchanged — don't rewrite (keeps the painted coin sprite)
   _walletVaultHtml[id] = html;
@@ -27404,6 +27440,7 @@ function migrateHeroMaterials() {
       const d = JSON.parse(raw);
       const p = d && d.player;
       if (!p || !p.materials || typeof p.materials !== 'object') continue;
+      if (isSsf(p)) continue; // an SSF hero's wallet is private BY DESIGN — never fold it into the shared pool
       foldHeroMaterials(stashFor(!!p.hardcore), heroMatKey(p, i), p.materials);
     } catch (e) {}
   }
@@ -27423,7 +27460,7 @@ function loadStash() {
   // If the sweep already ran on a prior boot, the ACTIVE hero may be one that synced
   // down from the cloud since — fold its legacy wallet too (same per-hero key, so an
   // already-swept hero re-folds idempotently and a new one is captured).
-  if (alreadySwept && player && player.materials && typeof player.materials === 'object') {
+  if (alreadySwept && player && !isSsf(player) && player.materials && typeof player.materials === 'object') {
     foldHeroMaterials(stashFor(!!player.hardcore), heroMatKey(player, activeSlot), player.materials);
   }
   stash = stashFor(!!(player && player.hardcore)); // active ladder for this session
@@ -27527,6 +27564,8 @@ function loadGame() {
     // (see loadStash → migrateHeroMaterials). Any legacy `player.materials` on an
     // older save is left untouched here and folded into the shared pool once, on
     // load, by that migration — so no wallet is lost and nothing double-counts.
+    // (A Solo Self-Found hero's `player.materials` is their LIVE private wallet —
+    // the migration skips them, and it must stay on the save untouched.)
     // Migrate saves that predate auto-loot: seed the per-rarity rule map (all
     // 'keep', i.e. the feature off) and repair any invalid/missing entries.
     autoLootConfig();
@@ -27784,6 +27823,7 @@ function recordFallenHero() {
     gold: player.maxGold || player.gold || 0,
     playMs: player.playMs || 0,
     hardcore: !!player.hardcore,
+    ssf: !!player.ssf,
     ts: Date.now(),
   });
   saveGraveyard(filtered);
@@ -27868,6 +27908,9 @@ function nAchGrant(id) {
 // The pixel skull/cursed tile that brands everything hardcore (toggle, tags,
 // graveyard, death screen), referenced directly by its atlas key.
 function hcIcon(px) { return (typeof dlIcon === 'function' && dlIcon('ic_cursed', px)) || ''; }
+// The pixel bag that brands everything Solo Self-Found (toggle, tags) — the
+// hero's own bag is all they ever have.
+function ssfIcon(px) { return (typeof dlIcon === 'function' && dlIcon('ui_bag', px)) || ''; }
 
 // ── DELETION TOMBSTONE LEDGER (cross-device delete propagation) ──────────────
 // The mirror image of the hardcore death ledger, but for ordinary user-initiated
@@ -28122,6 +28165,7 @@ function slotSummary(i) {
       gold: p.gold || 0,
       inTown: !!d.inTown,
       hardcore: !!p.hardcore,
+      ssf: !!p.ssf,
       ts: d.ts || 0,
       playMs: p.playMs || 0,
     };
@@ -28200,11 +28244,12 @@ function renderSlots() {
     const armed = slotDeleteArmed === i;
     const delBtn = `<button class="slot-btn danger${armed ? ' armed' : ''}" onclick="deleteSlot(${i})">${armed ? 'Sure?' : 'Del'}</button>`;
     const hcMark = s.hardcore ? `<span class="hc-tag">${hcIcon(10)} HC</span>` : '';
+    const ssfMark = s.ssf ? `<span class="hc-tag ssf">${ssfIcon(10)} SSF</span>` : '';
     html += `<div class="slot-row${isActive ? ' active' : ''}">
       <div class="slot-head">
         <span class="slot-num">SLOT ${i + 1}</span>${badge}
         <span class="slot-class">${icon}</span>
-        <span class="slot-name">${who}${clsTag}</span>${hcMark}
+        <span class="slot-name">${who}${clsTag}</span>${hcMark}${ssfMark}
       </div>
       <div class="slot-stats">Lv ${s.level} · ${where} · <span data-spr=ic_money></span>${fmtGold(s.gold)} · <span class="slot-time">⏱️ ${formatPlayTime(s.playMs)}</span>${time ? ` · <span class="slot-time">saved ${time}</span>` : ''}</div>
       <div class="slot-actions">${playBtn}${delBtn}</div>
@@ -29653,6 +29698,13 @@ function showNameEntry() {
   const lbl = document.getElementById('hc-tog-label');
   if (lbl) lbl.innerHTML = `${hcIcon(14)} HARDCORE`;
   syncHardcoreToggle();
+  // Solo Self-Found rides the same pattern: an armed toggle survives backing out,
+  // the label wears the pixel bag, and the row styling tracks the checkbox.
+  const scb = document.getElementById('ssf-checkbox');
+  if (scb) scb.checked = !!(player.ssf || scb.checked);
+  const slbl = document.getElementById('ssf-tog-label');
+  if (slbl) slbl.innerHTML = `${ssfIcon(14)} SOLO SELF-FOUND`;
+  syncSsfToggle();
   // Body-type picker: default to any previous/in-progress choice, else male.
   // Classes with bespoke male/female art show the sprite previews; the rest hide
   // the thumbnails but still record a choice.
@@ -29678,6 +29730,12 @@ function nameBack() {
 function syncHardcoreToggle() {
   const cb = document.getElementById('hc-checkbox');
   const row = document.getElementById('hc-toggle');
+  if (row) row.classList.toggle('on', !!(cb && cb.checked));
+}
+// Same for the Solo Self-Found row (gold when armed).
+function syncSsfToggle() {
+  const cb = document.getElementById('ssf-checkbox');
+  const row = document.getElementById('ssf-toggle');
   if (row) row.classList.toggle('on', !!(cb && cb.checked));
 }
 // Body-type (sex) picker state for the name screen. pendingSex holds the choice
@@ -29721,6 +29779,10 @@ function submitName() {
   // fresh hero, so there's no path to un-hardcore an existing one.
   const cb = document.getElementById('hc-checkbox');
   if (cb && cb.checked) player.hardcore = true;
+  // Solo Self-Found locks in the same way — the name screen only shows for a
+  // fresh hero, so there's never a path to un-SSF an existing one.
+  const scb = document.getElementById('ssf-checkbox');
+  if (scb && scb.checked) player.ssf = true;
   const ov = document.getElementById('name-overlay');
   if (ov) ov.classList.remove('open');
   namePaused = false; // resume — naming is done
@@ -30042,7 +30104,13 @@ function heroCardHtml() {
   const lvl = player.level || 1;
   const deepest = player.maxFloor || 1;
   const gold = fmtGold ? fmtGold(player.gold || 0) : (player.gold || 0);
-  const hcTag = player.hardcore ? `<div><span class="hc-tag">${hcIcon(11)} HARDCORE · ONE LIFE</span></div>` : '';
+  // Mode tags under the stats line — crimson HARDCORE, gold SOLO SELF-FOUND
+  // (a hero can wear both).
+  const modeTags = [
+    player.hardcore ? `<span class="hc-tag">${hcIcon(11)} HARDCORE · ONE LIFE</span>` : '',
+    player.ssf ? `<span class="hc-tag ssf">${ssfIcon(11)} SOLO SELF-FOUND</span>` : '',
+  ].filter(Boolean).join(' ');
+  const hcTag = modeTags ? `<div>${modeTags}</div>` : '';
   // An animated walking hero sprite sits to the RIGHT of the left-aligned text,
   // standing a bit taller than the stacked name/class/stats block so it reads big.
   // Falls back to the static face (then atlas tile) until the walk sheet has loaded.
@@ -32140,6 +32208,7 @@ const __DL_FN_BRIDGE = {
   showNameEntry,
   nameBack,
   syncHardcoreToggle,
+  syncSsfToggle,
   pickSex,
   refreshSexPreviews,
   submitName,
