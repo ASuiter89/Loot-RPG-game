@@ -514,15 +514,6 @@ const ICON_PATHS = {
     talisman: [['M50 26 C63.255 26 74 36.745 74 50 C74 63.255 63.255 74 50 74 C36.745 74 26 63.255 26 50 C26 36.745 36.745 26 50 26 Z','dark'],['M50 12 C70.987 12 88 29.013 88 50 C88 70.987 70.987 88 50 88 C29.013 88 12 70.987 12 50 C12 29.013 29.013 12 50 12 ZM50 26 C63.255 26 74 36.745 74 50 C74 63.255 63.255 74 50 74 C36.745 74 26 63.255 26 50 C26 36.745 36.745 26 50 26 Z','gold'],['M50 39 C56.075 39 61 43.925 61 50 C61 56.075 56.075 61 50 61 C43.925 61 39 56.075 39 50 C39 43.925 43.925 39 50 39 Z','gemR']],
 };
 
-// Map every legacy emoji (from the old icon system) to its new vector key, so
-// saved wardrobe looks and cosmetic choices survive the switch.
-const LEGACY_EMOJI_KEYS = {
-  '<span data-spr=a_head></span>':'helm','<span data-spr=a_head></span>':'cap','<span data-spr=b_ratking></span>':'crown','<span data-spr=hero_rogue></span>':'hood','<span data-spr=a_head></span>':'hood','<span data-spr=a_head></span>':'circlet','<span data-spr=a_head></span>':'circlet',
-  '<span data-spr=a_shield></span>':'chestplate','<span data-spr=a_shield></span>':'chestplate','<span data-spr=a_chest></span>':'robe','<span data-spr=a_chest></span>':'cuirass','<span data-spr=a_chest></span>':'tunic','<span data-spr=mat_scrap></span>':'mail','<span data-spr=mat_scrap></span>':'mail',
-  '<span data-spr=a_hands></span>':'gloves','<span data-spr=a_legs></span>':'legs',
-  '<span data-spr=w_dagger></span>':'sword','<span data-spr=w_dagger></span>':'sword','<span data-spr=w_axe></span>':'axe','<span data-spr=w_dagger></span>':'dagger','<span data-spr=ic_wand></span>':'staff','<span data-spr=w_bow></span>':'bow','<span data-spr=ic_mallet></span>':'mace','<span data-spr=w_spear></span>':'spear','<span data-spr=w_sword></span>':'scythe','<span data-spr=w_sword></span>':'scythe',
-  '<span data-spr=a_ring></span>':'ring','<span data-spr=a_amulet></span>':'amulet','<span data-spr=a_amulet></span>':'talisman','<span data-spr=ic_orb></span>':'orb',
-};
 const ICON_EMPTY_COLOR = '#5a5a68';
 // Set pieces are their own top rarity: they roll only at the unique tier but wear
 // a distinct colour (mirrors the --set token) instead of the unique red, so a set
@@ -2659,42 +2650,6 @@ function drawLiquid(px, py, tw, th, x, y, seed, C, kind) {
   }
 }
 
-// Autotiled wall piece: pick the corner/edge/face that matches which of this
-// cell's 4 neighbours are open floor (vs. more wall). Map edges & cracked walls
-// (tile 10) count as wall; out-of-bounds counts as wall so borders stay solid.
-function wallSpriteName(x, y) {
-  const isWall = (xx, yy) => (yy < 0 || yy >= MAP_H || xx < 0 || xx >= MAP_W) ? true
-    : (mapData[yy][xx] === 1 || mapData[yy][xx] === 10);
-  const oN = !isWall(x, y - 1), oE = !isWall(x + 1, y), oS = !isWall(x, y + 1), oW = !isWall(x - 1, y);
-  const open = oN + oE + oS + oW;
-  // DawnLike directional walls for a carved (thick-rock) dungeon. Mapping
-  // derived directly from the official Dungeon.tmx example. INNER corners (floor
-  // on two adjacent orthogonal sides) and OUTER corners (floor only on a
-  // diagonal) use DIFFERENT tiles — they're point-opposites of each other.
-  if (open === 4) return 'wall_iso';           // isolated single block
-  if (open === 3) {
-    // End of a standalone wall: BOTTOM (floor below, wall above) uses the iso
-    // base piece; TOP (floor above, wall below) is a plain vertical wall; a side
-    // opening is the end of a horizontal run.
-    if (!oN) return 'wall_iso';
-    if (!oS) return 'wall_V';
-    return 'wall_H';
-  }
-  // Inner corners: brick fills the two SOLID sides.
-  if (oN && oE) return 'wall_TR';
-  if (oN && oW) return 'wall_TL';
-  if (oS && oE) return 'wall_BR';
-  if (oS && oW) return 'wall_BL';
-  // Straight edges.
-  if (oN || oS) return 'wall_H';               // floor above/below → horizontal
-  if (oE || oW) return 'wall_V';               // floor left/right → vertical
-  // Outer corners: floor only on a diagonal (rock wrapping a room's corner).
-  if (!isWall(x + 1, y + 1)) return 'wall_TL'; // floor SE
-  if (!isWall(x - 1, y + 1)) return 'wall_TR'; // floor SW
-  if (!isWall(x + 1, y - 1)) return 'wall_BL'; // floor NE
-  if (!isWall(x - 1, y - 1)) return 'wall_BR'; // floor NW
-  return null;                                 // fully buried rock → background
-}
 
 // Slots that actually change how the hero sprite looks.
 const VISUAL_SLOTS = ['head','chest','weapon'];
@@ -3981,38 +3936,38 @@ function foodFx(key) {
 // (drawn as a coloured square until real art lands), AI behaviour, and an
 // optional sprite key. `sprite:null` renders the colour square placeholder.
 const MONSTERS = {
-  rat: { name: 'Rat', color: '#9f7841', behavior: 'swift', sprite: 'e_rat' },
+  rat: { name: 'Rat', color: '#9f7841', behavior: 'swift' },
   giantrat: { name: 'Giant Rat', color: '#9f9c41', behavior: 'swift', sprite: null },
   sewerrat: { name: 'Sewer Rat', color: '#7e9f41', behavior: 'swift', sprite: null },
   plaguerat: { name: 'Plague Rat', color: '#5a9f41', behavior: 'swift', sprite: null },
-  bat: { name: 'Bat', color: '#9f9a41', behavior: 'erratic', sprite: 'e_bat' },
+  bat: { name: 'Bat', color: '#9f9a41', behavior: 'erratic' },
   giantbat: { name: 'Giant Bat', color: '#7f9f41', behavior: 'erratic', sprite: null },
   vampirebat: { name: 'Vampire Bat', color: '#5b9f41', behavior: 'erratic', sprite: null },
-  cavesnake: { name: 'Cave Snake', color: '#9f9941', behavior: 'lurker', sprite: 'e_snake' },
+  cavesnake: { name: 'Cave Snake', color: '#9f9941', behavior: 'lurker' },
   viper: { name: 'Viper', color: '#819f41', behavior: 'lurker', sprite: null },
-  bogfrog: { name: 'Bog Frog', color: '#5d9f41', behavior: 'lurker', sprite: 'e_frog' },
+  bogfrog: { name: 'Bog Frog', color: '#5d9f41', behavior: 'lurker' },
   cavespider: { name: 'Cave Spider', color: '#9f9741', behavior: 'swift', sprite: null },
   giantspider: { name: 'Giant Spider', color: '#839f41', behavior: 'swift', sprite: null },
   webspinner: { name: 'Web Spinner', color: '#5e9f41', behavior: 'lurker', sprite: null },
   slime: { name: 'Slime', color: '#9f9541', behavior: 'chaser', sprite: null },
-  rotgrub: { name: 'Rot Grub', color: '#849f41', behavior: 'swift', sprite: 'e_worm' },
+  rotgrub: { name: 'Rot Grub', color: '#849f41', behavior: 'swift' },
   maggot: { name: 'Maggot', color: '#609f41', behavior: 'swift', sprite: null },
   centipede: { name: 'Centipede', color: '#9f9441', behavior: 'swift', sprite: null },
-  scorpion: { name: 'Scorpion', color: '#869f41', behavior: 'lurker', sprite: 'e_scorpion' },
+  scorpion: { name: 'Scorpion', color: '#869f41', behavior: 'lurker' },
   firebeetle: { name: 'Fire Beetle', color: '#629f41', behavior: 'swift', sprite: null },
   willowisp: { name: 'Will-o-Wisp', color: '#9f9241', behavior: 'erratic', sprite: null },
   kobold: { name: 'Kobold', color: '#879f41', behavior: 'chaser', sprite: null },
-  wolf: { name: 'Wolf', color: '#9f414c', behavior: 'pack', sprite: 'e_wolf' },
+  wolf: { name: 'Wolf', color: '#9f414c', behavior: 'pack' },
   direwolf: { name: 'Dire Wolf', color: '#9f5a41', behavior: 'pack', sprite: null },
   timberwolf: { name: 'Timber Wolf', color: '#9f7e41', behavior: 'pack', sprite: null },
-  cavebear: { name: 'Cave Bear', color: '#9c9f41', behavior: 'brute', sprite: 'e_bear' },
+  cavebear: { name: 'Cave Bear', color: '#9c9f41', behavior: 'brute' },
   grizzly: { name: 'Grizzly', color: '#9f5841', behavior: 'brute', sprite: null },
   boar: { name: 'Boar', color: '#9f7c41', behavior: 'brute', sprite: null },
-  tusker: { name: 'Tusker', color: '#9d9f41', behavior: 'brute', sprite: 'e_boar' },
+  tusker: { name: 'Tusker', color: '#9d9f41', behavior: 'brute' },
   panther: { name: 'Panther', color: '#9f5741', behavior: 'pack', sprite: null },
-  sabercat: { name: 'Saber Cat', color: '#9f7b41', behavior: 'pack', sprite: 'e_tiger' },
+  sabercat: { name: 'Saber Cat', color: '#9f7b41', behavior: 'pack' },
   hyena: { name: 'Hyena', color: '#9f9f41', behavior: 'pack', sprite: null },
-  vulture: { name: 'Vulture', color: '#9f5541', behavior: 'erratic', sprite: 'e_eagle' },
+  vulture: { name: 'Vulture', color: '#9f5541', behavior: 'erratic' },
   constrictor: { name: 'Constrictor', color: '#9f7941', behavior: 'lurker', sprite: null },
   gianttoad: { name: 'Giant Toad', color: '#9f9d41', behavior: 'lurker', sprite: null },
   owlbear: { name: 'Owlbear', color: '#9f5341', behavior: 'brute', sprite: null },
@@ -4022,7 +3977,7 @@ const MONSTERS = {
   wildape: { name: 'Wild Ape', color: '#9f7641', behavior: 'brute', sprite: null },
   stagbeetle: { name: 'Stag Beetle', color: '#9f9a41', behavior: 'chaser', sprite: null },
   cavelurker: { name: 'Cave Lurker', color: '#9f5041', behavior: 'lurker', sprite: null },
-  goblin: { name: 'Goblin', color: '#9f9f41', behavior: 'chaser', sprite: 'e_goblin' },
+  goblin: { name: 'Goblin', color: '#9f9f41', behavior: 'chaser' },
   goblinarcher: { name: 'Goblin Archer', color: '#7b9f41', behavior: 'caster', sprite: null },
   hobgoblin: { name: 'Hobgoblin', color: '#579f41', behavior: 'chaser', sprite: null },
   orc: { name: 'Orc', color: '#419f4f', behavior: 'brute', sprite: null },
@@ -4034,18 +3989,18 @@ const MONSTERS = {
   darkacolyte: { name: 'Dark Acolyte', color: '#419f4c', behavior: 'caster', sprite: null },
   koboldshaman: { name: 'Kobold Shaman', color: '#7f9f41', behavior: 'caster', sprite: null },
   gnoll: { name: 'Gnoll', color: '#5b9f41', behavior: 'pack', sprite: null },
-  ogre: { name: 'Ogre', color: '#419f4a', behavior: 'brute', sprite: 'e_ogre' },
+  ogre: { name: 'Ogre', color: '#419f4a', behavior: 'brute' },
   ogrebrute: { name: 'Ogre Brute', color: '#819f41', behavior: 'brute', sprite: null },
-  troll: { name: 'Troll', color: '#5d9f41', behavior: 'brute', sprite: 'e_troll' },
+  troll: { name: 'Troll', color: '#5d9f41', behavior: 'brute' },
   harpy: { name: 'Harpy', color: '#419f48', behavior: 'erratic', sprite: null },
   marauder: { name: 'Marauder', color: '#839f41', behavior: 'chaser', sprite: null },
   wargrider: { name: 'Warg Rider', color: '#5e9f41', behavior: 'pack', sprite: null },
   goblinbomber: { name: 'Goblin Bomber', color: '#419f47', behavior: 'swift', sprite: null },
   warlock: { name: 'Warlock', color: '#849f41', behavior: 'caster', sprite: null },
-  skeleton: { name: 'Skeleton', color: '#419f78', behavior: 'chaser', sprite: 'm_skeleton' },
-  skeletonarcher: { name: 'Skeleton Archer', color: '#419f9c', behavior: 'caster', sprite: 'm_skelarcher' },
+  skeleton: { name: 'Skeleton', color: '#419f78', behavior: 'chaser' },
+  skeletonarcher: { name: 'Skeleton Archer', color: '#419f9c', behavior: 'caster' },
   skeletonknight: { name: 'Skeleton Knight', color: '#417e9f', behavior: 'brute', sprite: null },
-  zombie: { name: 'Zombie', color: '#415a9f', behavior: 'brute', sprite: 'e_zombie' },
+  zombie: { name: 'Zombie', color: '#415a9f', behavior: 'brute' },
   rottingzombie: { name: 'Rotting Zombie', color: '#419f9a', behavior: 'brute', sprite: null },
   ghoul: { name: 'Ghoul', color: '#417f9f', behavior: 'swift', sprite: null },
   ghast: { name: 'Ghast', color: '#415b9f', behavior: 'swift', sprite: null },
@@ -4053,7 +4008,7 @@ const MONSTERS = {
   gravewight: { name: 'Grave Wight', color: '#41819f', behavior: 'brute', sprite: null },
   wraith: { name: 'Wraith', color: '#415d9f', behavior: 'erratic', sprite: null },
   specter: { name: 'Specter', color: '#419f97', behavior: 'erratic', sprite: null },
-  shade: { name: 'Shade', color: '#41839f', behavior: 'lurker', sprite: 'm_shadow' },
+  shade: { name: 'Shade', color: '#41839f', behavior: 'lurker' },
   banshee: { name: 'Banshee', color: '#415e9f', behavior: 'caster', sprite: null },
   revenant: { name: 'Revenant', color: '#419f95', behavior: 'brute', sprite: null },
   bonegolem: { name: 'Bone Golem', color: '#41849f', behavior: 'brute', sprite: null },
@@ -4062,9 +4017,9 @@ const MONSTERS = {
   corpseeater: { name: 'Corpse Eater', color: '#41869f', behavior: 'swift', sprite: null },
   grimwraith: { name: 'Grim Wraith', color: '#41629f', behavior: 'erratic', sprite: null },
   barrowwight: { name: 'Barrow Wight', color: '#419f92', behavior: 'brute', sprite: null },
-  imp: { name: 'Imp', color: '#9f4170', behavior: 'caster', sprite: 'e_imp' },
+  imp: { name: 'Imp', color: '#9f4170', behavior: 'caster' },
   lesserdemon: { name: 'Lesser Demon', color: '#9f414c', behavior: 'caster', sprite: null },
-  devil: { name: 'Devil', color: '#9f5a41', behavior: 'caster', sprite: 'e_devil' },
+  devil: { name: 'Devil', color: '#9f5a41', behavior: 'caster' },
   hellhound: { name: 'Hellhound', color: '#9f7e41', behavior: 'pack', sprite: null },
   cerberus: { name: 'Cerberus', color: '#9f414d', behavior: 'pack', sprite: null },
   succubus: { name: 'Succubus', color: '#9f5841', behavior: 'caster', sprite: null },
@@ -4125,7 +4080,7 @@ const MONSTERS = {
   drake: { name: 'Drake', color: '#419f50', behavior: 'brute', sprite: null },
   wyvern: { name: 'Wyvern', color: '#419f74', behavior: 'erratic', sprite: null },
   youngdragon: { name: 'Young Dragon', color: '#419f99', behavior: 'brute', sprite: null },
-  wyrm: { name: 'Wyrm', color: '#41819f', behavior: 'brute', sprite: 'e_dragon' },
+  wyrm: { name: 'Wyrm', color: '#41819f', behavior: 'brute' },
   elderwyrm: { name: 'Elder Wyrm', color: '#419f73', behavior: 'brute', sprite: null },
   frostdragon: { name: 'Frost Dragon', color: '#419f97', behavior: 'caster', sprite: null },
   firedragon: { name: 'Fire Dragon', color: '#41839f', behavior: 'caster', sprite: null },
@@ -4180,37 +4135,37 @@ const ENEMY_POOL = [
 // 5-9, Brutal 10-14 (see the boss-spawn block in spawnEnemies).
 const BOSSES = [
   // ── Tier 1 · Normal (cells 0-4) ──
-  { type: 'ratking',     sprite: 'b_ratking',     name: 'Rat King',      floor: 5,  behavior: 'chaser', ability: 'summon',    blurb: 'swarms you with vermin, quakes the ground and whirls into the pack', size: 2,
+  { type: 'ratking',     name: 'Rat King',      floor: 5,  behavior: 'chaser', ability: 'summon',    blurb: 'swarms you with vermin, quakes the ground and whirls into the pack', size: 2,
     specials: ['summon','shockwave','walls','quake','whirlwind','summonelite'] },
-  { type: 'inferno',     sprite: 'b_inferno',     name: 'Inferno Demon', floor: 10, behavior: 'caster', ability: 'firebolt',  blurb: 'walls the floor in flame, rains firestorms and looses volleys of fire', size: 2,
+  { type: 'inferno',     name: 'Inferno Demon', floor: 10, behavior: 'caster', ability: 'firebolt',  blurb: 'walls the floor in flame, rains firestorms and looses volleys of fire', size: 2,
     specials: ['firewall','firestorm','blink','shield','volley','berserk'] },
-  { type: 'dragon',      sprite: 'b_dragon',      name: 'Elder Dragon',  floor: 15, behavior: 'brute',  ability: 'enrage',    blurb: 'charges, whirls its tail, breathes fire and flies into a rage', size: 3,
+  { type: 'dragon',      name: 'Elder Dragon',  floor: 15, behavior: 'brute',  ability: 'enrage',    blurb: 'charges, whirls its tail, breathes fire and flies into a rage', size: 3,
     specials: ['enrage','firestorm','shockwave','chain','charge','whirlwind','berserk'] },
-  { type: 'deathknight', sprite: 'b_deathknight', name: 'Death Knight',  floor: 20, behavior: 'chaser', ability: 'lifesteal', blurb: 'chains you in, siphons your life, raises champions and mends its wounds', size: 2,
+  { type: 'deathknight', name: 'Death Knight',  floor: 20, behavior: 'chaser', ability: 'lifesteal', blurb: 'chains you in, siphons your life, raises champions and mends its wounds', size: 2,
     specials: ['chain','frost','heal','summon','drain','vortex','summonelite'] },
-  { type: 'allseer',     sprite: 'b_allseer',     name: 'The All-Seer',  floor: 25, behavior: 'caster', ability: 'curse',     blurb: 'hexes and drains from afar, spits venom, drags you in and blinks away', size: 3,
+  { type: 'allseer',     name: 'The All-Seer',  floor: 25, behavior: 'caster', ability: 'curse',     blurb: 'hexes and drains from afar, spits venom, drags you in and blinks away', size: 3,
     specials: ['curseblast','walls','blink','frost','shield','volley','venom','vortex','drain'] },
   // ── Tier 2 · Hardened (cells 5-9) ──
-  { type: 'cindra',      sprite: 'b_cindra',      name: 'Cindra, the Arcane Weaver', floor: 5, behavior: 'caster', ability: 'curse', blurb: 'weaves arcane bullet-storms with narrow gaps, blinks away and hexes from afar', size: 2,
+  { type: 'cindra',      name: 'Cindra, the Arcane Weaver', floor: 5, behavior: 'caster', ability: 'curse', blurb: 'weaves arcane bullet-storms with narrow gaps, blinks away and hexes from afar', size: 2,
     specials: ['volley','curseblast','blink','frost','shield'] },
-  { type: 'emberbound',  sprite: 'b_emberbound',  name: 'Emberbound, the Ashen Warden', floor: 10, behavior: 'brute', ability: 'enrage', blurb: 'sets the floor spreading with flame, charges through the fire and rages', size: 2,
+  { type: 'emberbound',  name: 'Emberbound, the Ashen Warden', floor: 10, behavior: 'brute', ability: 'enrage', blurb: 'sets the floor spreading with flame, charges through the fire and rages', size: 2,
     specials: ['firewall','firestorm','charge','shockwave','berserk'] },
-  { type: 'masquerade',  sprite: 'b_masquerade',  name: 'The Masquerade, Duke of Mirrors', floor: 15, behavior: 'caster', ability: 'curse', blurb: 'splits into mirror-decoys, flits behind you and cuts with conjured blades', size: 2,
+  { type: 'masquerade',  name: 'The Masquerade, Duke of Mirrors', floor: 15, behavior: 'caster', ability: 'curse', blurb: 'splits into mirror-decoys, flits behind you and cuts with conjured blades', size: 2,
     specials: ['blink','volley','walls','shield','chain'] },
-  { type: 'magmaw',      sprite: 'b_magmaw',      name: 'Magmaw, the Molten Devourer', floor: 20, behavior: 'brute', ability: 'enrage', blurb: 'slams with molten force that hurls you back, heaves the ground and erupts', size: 3,
+  { type: 'magmaw',      name: 'Magmaw, the Molten Devourer', floor: 20, behavior: 'brute', ability: 'enrage', blurb: 'slams with molten force that hurls you back, heaves the ground and erupts', size: 3,
     specials: ['shockwave','quake','charge','firestorm','berserk'] },
-  { type: 'mortisvane',  sprite: 'b_mortisvane',  name: 'Mortis Vane, the Necrolord', floor: 25, behavior: 'caster', ability: 'lifesteal', blurb: 'raises the dead to shield itself, drains your life and mends its wounds', size: 2,
+  { type: 'mortisvane',  name: 'Mortis Vane, the Necrolord', floor: 25, behavior: 'caster', ability: 'lifesteal', blurb: 'raises the dead to shield itself, drains your life and mends its wounds', size: 2,
     specials: ['summon','summonelite','chain','drain','heal','frost'] },
   // ── Tier 3 · Brutal (cells 10-14) ──
-  { type: 'vael',        sprite: 'b_vael',        name: 'Vael the Sunderer', floor: 5, behavior: 'caster', ability: 'firebolt', blurb: 'sweeps the arena with rotating prism-beams and shatters into crystal shards', size: 3,
+  { type: 'vael',        name: 'Vael the Sunderer', floor: 5, behavior: 'caster', ability: 'firebolt', blurb: 'sweeps the arena with rotating prism-beams and shatters into crystal shards', size: 3,
     specials: ['volley','whirlwind','blink','shield','curseblast'] },
-  { type: 'tidewarden',  sprite: 'b_tidewarden',  name: 'The Tidewarden', floor: 10, behavior: 'brute', ability: 'enrage', blurb: 'floods the arena to bare the spikes beneath, drags you under and lashes the dry ground', size: 3,
+  { type: 'tidewarden',  name: 'The Tidewarden', floor: 10, behavior: 'brute', ability: 'enrage', blurb: 'floods the arena to bare the spikes beneath, drags you under and lashes the dry ground', size: 3,
     specials: ['walls','vortex','shockwave','frost','chain'] },
-  { type: 'shrike',      sprite: 'b_shrike',      name: 'The Shrike', floor: 15, behavior: 'chaser', ability: 'lifesteal', blurb: 'fades into shadow, marks you from cover and executes with a killing dash', size: 2,
+  { type: 'shrike',      name: 'The Shrike', floor: 15, behavior: 'chaser', ability: 'lifesteal', blurb: 'fades into shadow, marks you from cover and executes with a killing dash', size: 2,
     specials: ['blink','charge','chain','whirlwind'] },
-  { type: 'kaggoroth',   sprite: 'b_kaggoroth',   name: 'Kaggoroth, the Chained Titan', floor: 20, behavior: 'brute', ability: 'enrage', blurb: 'shifts through three war-forms — charging, then sieging, then breaking apart', size: 3,
+  { type: 'kaggoroth',   name: 'Kaggoroth, the Chained Titan', floor: 20, behavior: 'brute', ability: 'enrage', blurb: 'shifts through three war-forms — charging, then sieging, then breaking apart', size: 3,
     specials: ['charge','shockwave','quake','volley','walls','summon','berserk','firestorm'] },
-  { type: 'ourok',       sprite: 'b_ourok',       name: 'Ourok, the Dungeon Heart', floor: 25, behavior: 'caster', ability: 'curse', blurb: 'reshapes the room around you and turns every trick the dungeon taught against you', size: 3,
+  { type: 'ourok',       name: 'Ourok, the Dungeon Heart', floor: 25, behavior: 'caster', ability: 'curse', blurb: 'reshapes the room around you and turns every trick the dungeon taught against you', size: 3,
     specials: ['walls','whirlwind','summon','summonelite','volley','curseblast','vortex','blink','shield','drain'] },
 ];
 // The finite guardians in difficulty order (5 per tier) — selection indexes this
@@ -4252,16 +4207,9 @@ const BEHAVIORS = {
   caster:  { speed: 1, range: 4, ranged: true, keepAway: 2, castChance: 0.7, atkMult: 1.2, hpMult: 0.7, dmgMult: 1.0 },
   pack:    { speed: 1, range: 1, packRush: true, atkMult: 0.8, hpMult: 0.85, dmgMult: 0.9 },
 };
-// Map each enemy sprite to a behaviour; anything unlisted hunts you down (chaser).
-const ENEMY_BEHAVIOR = {
-  '<span data-spr=e_rat></span>':'swift','<span data-spr=e_mouse></span>':'swift','<span data-spr=e_ant></span>':'swift','<span data-spr=e_cricket></span>':'swift','<span data-spr=e_beetle></span>':'swift','<span data-spr=e_roach></span>':'swift','<span data-spr=e_bee></span>':'swift','<span data-spr=e_mosquito></span>':'swift','<span data-spr=e_worm></span>':'swift',
-  '<span data-spr=e_bat></span>':'erratic','<span data-spr=e_ghost></span>':'erratic','<span data-spr=e_skunk></span>':'erratic','<span data-spr=e_eagle></span>':'erratic',
-  '<span data-spr=e_snake></span>':'lurker','<span data-spr=e_scorpion></span>':'lurker','<span data-spr=e_lizard></span>':'lurker','<span data-spr=e_octopus></span>':'lurker','<span data-spr=e_squid></span>':'lurker','<span data-spr=e_frog></span>':'lurker','<span data-spr=e_snail></span>':'lurker',
-  '<span data-spr=e_bear></span>':'brute','<span data-spr=e_boar></span>':'brute','<span data-spr=e_rhino></span>':'brute','<span data-spr=e_bison></span>':'brute','<span data-spr=e_troll></span>':'brute','<span data-spr=e_trex></span>':'brute','<span data-spr=e_sauropod></span>':'brute','<span data-spr=e_dragon></span>':'brute','<span data-spr=b_dragon></span>':'brute','<span data-spr=e_lobster></span>':'brute','<span data-spr=e_zombie></span>':'brute','<span data-spr=e_croc></span>':'brute','<span data-spr=e_hedgehog></span>':'brute',
-  '<span data-spr=e_vampire></span>':'caster','<span data-spr=e_imp></span>':'caster','<span data-spr=e_devil></span>':'caster','<span data-spr=e_alien></span>':'caster','<span data-spr=e_genie></span>':'caster',
-  '<span data-spr=e_wolf></span>':'pack','<span data-spr=e_tiger></span>':'pack',
-};
-function behaviorFor(type) { return (typeof MONSTERS === 'object' && MONSTERS[type] && MONSTERS[type].behavior) || ENEMY_BEHAVIOR[type] || 'chaser'; }
+// Each monster's archetype comes from its MONSTERS entry; anything unlisted hunts
+// you down (chaser).
+function behaviorFor(type) { return (typeof MONSTERS === 'object' && MONSTERS[type] && MONSTERS[type].behavior) || 'chaser'; }
 
 // ── WEAPON ATTACK STYLES ──
 // Each weapon base name swings differently, so loadout shapes how you fight:
@@ -10625,7 +10573,7 @@ function buildTutorialMap() {
   // neutral — static and harmless until the player strikes it, so a brand-new
   // hero can approach safely and learn combat on their own terms. Once hit it
   // wakes up and fights back, but only ever shambles (slow).
-  const skl = { x: caveX, y: SHORE - 5, type: 'skeleton', sprite: 'm_skeleton', name: 'Skeleton',
+  const skl = { x: caveX, y: SHORE - 5, type: 'skeleton', name: 'Skeleton',
     hp: 24, maxHp: 24, level: 1, dmg: 4, dead: false, behavior: 'chaser',
     passive: true, provoked: false, slow: true };
   enemies.push(skl);
@@ -11720,7 +11668,7 @@ function renderMercCamp() {
     // (.hero-card) instead of the Mystic's inline ability-icon head: name +
     // description left-aligned, the walking sprite right-aligned and standing about
     // as tall as those two lines. Hence the .merc-card one-off + the bigger sprite.
-    const icon = townWalkIcon(MERC_ART[t.id], 64) || dlIcon((typeof MINION_SPRITE === 'object' && MINION_SPRITE && MINION_SPRITE[t.minion]) || 'hero_warrior', 64);
+    const icon = townWalkIcon(MERC_ART[t.id], 64) || dlIcon((typeof MINION_SPRITE === 'object' && MINION_SPRITE && MINION_SPRITE[t.minion]) || '', 64);
     const buttons = MERC_DURATIONS.map(dur => {
       const cost = mercCost(t.mult, depth, dur.mult);
       const afford = spendableGold() >= cost;
@@ -12136,26 +12084,26 @@ function openTownService(kind) {
 // Hardened" gates on having conquered Normal (which opens the Hardened tier).
 // Order here IS the on-screen order (the Dungeon Gate renders above this list).
 const TOWN_MENU = [
-  { kind: 'healer',    dl: 'town_healer',    name: 'Healer',      desc: 'Rest, cure & potions' },
-  { kind: 'merchant',  dl: 'npc_shop',       name: 'Merchant',    desc: 'Potions & fresh gear' },
-  { kind: 'ramen',     dl: 'ramen_bowl',     name: 'Ramen House', desc: 'Cook toppings into buffs' },
-  { kind: 'forge',     dl: 'town_craftsman', name: 'Craftsman',   desc: 'Forge blank gear from mats',
+  { kind: 'healer',    name: 'Healer',      desc: 'Rest, cure & potions' },
+  { kind: 'merchant',       name: 'Merchant',    desc: 'Potions & fresh gear' },
+  { kind: 'ramen',     name: 'Ramen House', desc: 'Cook toppings into buffs' },
+  { kind: 'forge', name: 'Craftsman',   desc: 'Forge blank gear from mats',
     req: { ok: () => (player.level || 1) >= 5,          need: 'Reach level 5' } },
-  { kind: 'gambler',   dl: 'npc_gambler',    name: 'Gambler',     desc: 'Wager gold for loot',
+  { kind: 'gambler',    name: 'Gambler',     desc: 'Wager gold for loot',
     req: { ok: () => (player.maxFloor || 1) >= 10,      need: 'Reach depth 10' } },
-  { kind: 'trainer',   dl: 'town_trainer',   name: 'Trainer',     desc: 'Respec & change class',
+  { kind: 'trainer',   name: 'Trainer',     desc: 'Respec & change class',
     req: { ok: () => (player.level || 1) >= 10,         need: 'Reach level 10' } },
-  { kind: 'enchanter', dl: 'town_enchanter', name: 'Enchanter',   desc: 'Add & reroll affixes',
+  { kind: 'enchanter', name: 'Enchanter',   desc: 'Add & reroll affixes',
     req: { ok: () => (player.level || 1) >= 10,         need: 'Reach level 10' } },
-  { kind: 'transmuter',dl: 'npc_mage',       name: 'Transmuter',  desc: 'Fuse 3 items into 1 rarer',
+  { kind: 'transmuter',       name: 'Transmuter',  desc: 'Fuse 3 items into 1 rarer',
     req: { ok: () => diffOf(player.maxFloor || 1) >= 2, need: 'Reach Hardened' } },
-  { kind: 'bounty',    dl: 'npc_quest',      name: 'Bounty Board',desc: 'Take a bounty for a reward',
+  { kind: 'bounty',      name: 'Bounty Board',desc: 'Take a bounty for a reward',
     req: { ok: () => diffClearedCount() >= 1,           need: 'Unlock Hardened' } },
-  { kind: 'mystic',    dl: 'npc_mage',       name: 'Mystic',      desc: 'Forge a risky pact',
+  { kind: 'mystic',       name: 'Mystic',      desc: 'Forge a risky pact',
     req: { ok: () => diffClearedCount() >= 1,           need: 'Unlock Hardened' } },
-  { kind: 'sellsword', dl: 'hero_warrior',   name: 'Sellsword',   desc: 'Hire a companion',
+  { kind: 'sellsword',   name: 'Sellsword',   desc: 'Hire a companion',
     req: { ok: () => diffOf(player.maxFloor || 1) >= 3, need: 'Reach Brutal' } },
-  { kind: 'stash',     dl: 'town_vault',     name: 'Vault',       desc: 'Store gold & gear safe' },
+  { kind: 'stash',     name: 'Vault',       desc: 'Store gold & gear safe' },
 ];
 // ── TOWN AMBIENT BACKGROUND ── a different living scene drifts behind the town
 // menu each visit, so the safe haven feels alive rather than a static list. Every
@@ -12238,7 +12186,7 @@ function openTownHub() {
   document.getElementById('town-back').hidden = true;
   document.getElementById('town-overlay').classList.add('open');
   const tiles = TOWN_MENU.map(s => {
-    const icon = `<span class="tm-icon">${townWalkIcon(s.kind, 68) || dlIcon(s.dl)}</span>`;
+    const icon = `<span class="tm-icon">${townWalkIcon(s.kind, 68)}</span>`;
     if (s.req && !s.req.ok()) {
       // Locked: greyed, inert, and captioned with the unlock requirement.
       // Keep a trailing number glued to its label (e.g. "level\u00A05") so it
@@ -14590,7 +14538,7 @@ function spawnEnemies() {
         enemies.push({
           x: ex, y: ey,
           hp: bossHp, maxHp: bossHp,
-          type: boss.type, sprite: boss.sprite, name: boss.name,
+          type: boss.type, name: boss.name,
           level: bossLevel,
           dmg: bossDmg,
           size: bsize,
@@ -14640,7 +14588,7 @@ function spawnEnemies() {
       const gHp = Math.round((12 + dungeonLevel * 7) * 1.2);
       enemies.push({
         x: gx, y: gy, hp: gHp, maxHp: gHp,
-        type: 'goblin', sprite: 'e_goblin', name: 'Treasure', dmg: 1,
+        type: 'goblin', name: 'Treasure', dmg: 1,
         level: dungeonLevel + 2,   // its jackpot chest drops gear a bit above the floor
         dead: false, isGoblin: true,
       });
@@ -23173,7 +23121,7 @@ function bossSummonElite(e, dist) {
     const x = e.x + dx, y = e.y + dy;
     if (!enemyTileFree(x, y)) continue;
     const hp = Math.max(1, Math.round((16 + dungeonLevel * 6) * 1.6));
-    enemies.push({ x, y, hp, maxHp: hp, type: 'zombie', sprite: 'e_zombie', level: dungeonLevel + 1,
+    enemies.push({ x, y, hp, maxHp: hp, type: 'zombie', level: dungeonLevel + 1,
       dmg: Math.max(1, Math.round((4 + dungeonLevel) * 1.3)), dead: false, behavior: 'brute', minion: true });
     e.summoned++; e.cd = 7;
     spawnParticles(x, y, '#88aa66', 8, 0.1);
@@ -25917,7 +25865,7 @@ function renderPaperdoll() {
   // sits on the body. POS is [left%, top%] of the doll frame, tuned to the idle
   // sprite — head up top, amulet at the neck, chest on the torso, a hand on each
   // side, gloves & ring by the hands, greaves down at the legs.
-  const body = heroFaceIcon(player.class, player.sex, 232) || dlIcon('hero', 232);
+  const body = heroFaceIcon(player.class, player.sex, 232);
   const bodyHTML = body ? `<div class="pda-body">${body}</div>` : '';
   // Middle column (head → amulet → chest → legs) is evenly stacked at a uniform
   // ~19% step, and the whole cluster is vertically CENTRED in the frame (its
@@ -25948,7 +25896,7 @@ function renderPaperdoll() {
 // The Enchanter's Equipped section reuses the same paper-doll body, but each worn
 // piece is tapped to pick it for enchanting (no gear-set bar, no ✕ unequip).
 function renderEnchantDoll() {
-  const body = heroFaceIcon(player.class, player.sex, 132) || dlIcon('hero', 132);
+  const body = heroFaceIcon(player.class, player.sex, 132);
   const bodyHTML = body ? `<div class="pd-body">${body}</div>` : '';
   const cells = [
     renderDollSlot('amulet', 'enchant'), renderDollSlot('head', 'enchant'),  renderDollSlot('ring', 'enchant'),
@@ -27422,7 +27370,9 @@ function loadGame() {
         .map(w => ({ icon: iconKeyFromName(w.name, slot), name: w.name }))
         .filter(w => w.icon && !seen.has(w.icon) && seen.add(w.icon));
       const cur = player.cosmetics[slot];
-      if (cur && !ICON_PATHS[cur]) player.cosmetics[slot] = LEGACY_EMOJI_KEYS[cur] || null;
+      // Older saves may hold a non-vector cosmetic value (an old emoji or atlas
+      // key); those no longer map to anything, so clear them to the default look.
+      if (cur && !ICON_PATHS[cur]) player.cosmetics[slot] = null;
     }
     inventory.forEach(recordWardrobe);
     wornItems.forEach(recordWardrobe);
@@ -30722,7 +30672,6 @@ const __DL_FN_BRIDGE = {
   drawTerrTile,
   drawFurnitureAt,
   drawLiquid,
-  wallSpriteName,
   iconKeyFromName,
   iconForBase,
   potionIcon,
