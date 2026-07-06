@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Merchant restocks cost more the deeper you go — and each restock", by: "Jeff Louie", notes: [
+    "Restock price now climbs steeply with floor depth, so deep-dive restocks are a real cost instead of pocket change.",
+    "Every restock you buy raises the next one's price; it resets when you leave the merchant or start a new town visit.",
+  ] },
   { date: "2026-07-05", size: "medium", v: "Ramen House pantry overhaul", by: "Claude", notes: [
     "Pantry rows are bigger and clearer: readable EAT button and a larger ramen-bowl icon sized to the row (its transparent padding no longer shrinks the art).",
     "Identical bowls now stack into a single row with an ×N count instead of one line per bowl.",
