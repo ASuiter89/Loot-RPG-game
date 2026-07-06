@@ -48,3 +48,17 @@ export function bountyNewlyComplete(bounty, totals) {
   if (bounty.doneNotified) bounty.doneNotified = false;
   return false;
 }
+
+// How much Core (the scarce mid-tier crafting material) a contract pays out.
+// Every bounty rewards Core so the board is a reliable route to it. The amount
+// starts at a baseline of 2 and scales up with dungeon depth, so deeper contracts
+// pay more; a per-contract `mult` (its relative effort) scales it further. Pure
+// and deterministic — the legacy shell passes the hero's depth and each offer's
+// weight. Never drops below the baseline, and rounds to a whole material count.
+export const BOUNTY_CORE_BASE = 2;        // shallow-floor payout for a light contract
+export const BOUNTY_CORE_PER_DEPTH = 0.15; // extra Core per floor of depth
+export function bountyCoreReward(depth, mult = 1) {
+  const d = Math.max(1, depth || 1);
+  const scaled = (BOUNTY_CORE_BASE + (d - 1) * BOUNTY_CORE_PER_DEPTH) * mult;
+  return Math.max(BOUNTY_CORE_BASE, Math.round(scaled));
+}

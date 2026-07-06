@@ -62,7 +62,7 @@ import { cookableCount, cookBatchOptions } from '../systems/cooking.js';
 import { trimFillStyle } from '../utils/iconTrim.js';
 import { cursorHotspotPx } from '../systems/cursorMath.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
-import { bountyProgress as _bountyProgress, bountyDone as _bountyDone, bountyNewlyComplete } from '../systems/bounty.js';
+import { bountyProgress as _bountyProgress, bountyDone as _bountyDone, bountyNewlyComplete, bountyCoreReward } from '../systems/bounty.js';
 import { forgeSections } from '../systems/forgeFlow.js';
 import { weaponSpeedInfo } from '../systems/weaponSpeed.js';
 import { CURSE_TIER_MULT, curseTierMult, statCurseSwing, cursedStatCeiling } from '../systems/curseRoll.js';
@@ -7274,7 +7274,7 @@ window.gameGuide = function gameGuide(topic) {
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
-      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress (including menu.bounty.done once it's ready to claim).`,
+      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + Core (the scarce mid-tier crafting material — every bounty pays it, and the amount scales up with your depth) + a gear piece scaled to your depth. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress (including menu.bounty.done once it's ready to claim).`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
     tips: [
@@ -12116,21 +12116,24 @@ function bountyPool() {
   const depth = player.maxFloor || 1, g = 60 + depth * 18, R = m => Math.round(g * m);
   const K = bountyKills(), CF = Object.keys(player.clearedFloors || {}).length;
   const BK = player.bossKills || 0, EK = player.eliteKills || 0, GE = player.goldEarned || 0;
+  // Every contract pays scarce Core, scaled by depth (deeper = more) and by the
+  // contract's own effort weight — see bountyCoreReward() in systems/bounty.js.
+  const C = w => ['core', bountyCoreReward(depth, w)];
   return [
-    { kind: 'slay',  title: 'Thin the Ranks',    need: 12 + depth,        snap: K,  desc: n => `Slay ${n} foes`,           gold: R(1.0), mat: ['scrap', 6],    ilvl: depth + 1 },
-    { kind: 'slay',  title: 'Cull the Horde',    need: 25 + depth,        snap: K,  desc: n => `Slay ${n} foes`,           gold: R(1.4), mat: ['scrap', 9],    ilvl: depth + 1 },
-    { kind: 'slay',  title: 'Slaughterhouse',    need: 45 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           gold: R(2.0), mat: ['scrap', 14],   ilvl: depth + 2 },
-    { kind: 'slay',  title: 'Exterminator',      need: 70 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           gold: R(2.6), mat: ['core', 2],     ilvl: depth + 3 },
-    { kind: 'clear', title: 'Sweep the Halls',   need: 3,                 snap: CF, desc: n => `Clear ${n} floors of foes`, gold: R(1.3), mat: ['glimmer', 2],  ilvl: depth + 2 },
-    { kind: 'clear', title: 'Purge the Depths',  need: 5,                 snap: CF, desc: n => `Clear ${n} floors of foes`, gold: R(2.0), mat: ['glimmer', 3],  ilvl: depth + 3 },
-    { kind: 'delve', title: 'Press Onward',      need: depth + 2,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     gold: R(1.4), mat: ['core', 2],     ilvl: depth + 2 },
-    { kind: 'delve', title: 'Into the Deep',     need: depth + 5,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     gold: R(2.2), mat: ['core', 3],     ilvl: depth + 4 },
-    { kind: 'boss',  title: 'Giant Slayer',      need: 2,                 snap: BK, desc: n => `Slay ${n} bosses`,         gold: R(1.6), mat: ['core', 2],     ilvl: depth + 3 },
-    { kind: 'boss',  title: 'Champion Hunter',   need: 4,                 snap: BK, desc: n => `Slay ${n} bosses`,         gold: R(2.4), mat: ['core', 3],     ilvl: depth + 4 },
-    { kind: 'elite', title: 'Elite Contract',    need: 5,                 snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(1.5), mat: ['glimmer', 2],  ilvl: depth + 2 },
-    { kind: 'elite', title: 'Bane of Champions', need: 10,                snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(2.3), mat: ['glimmer', 3],  ilvl: depth + 3 },
-    { kind: 'gold',  title: 'Treasure Hunter',   need: 400 + depth * 90,  snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  gold: R(1.2), mat: ['scrap', 10],   ilvl: depth + 1 },
-    { kind: 'gold',  title: "Dragon's Hoard",    need: 1200 + depth * 220,snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  gold: R(1.9), mat: ['core', 2],     ilvl: depth + 3 },
+    { kind: 'slay',  title: 'Thin the Ranks',    need: 12 + depth,        snap: K,  desc: n => `Slay ${n} foes`,           gold: R(1.0), mat: C(1.0), ilvl: depth + 1 },
+    { kind: 'slay',  title: 'Cull the Horde',    need: 25 + depth,        snap: K,  desc: n => `Slay ${n} foes`,           gold: R(1.4), mat: C(1.2), ilvl: depth + 1 },
+    { kind: 'slay',  title: 'Slaughterhouse',    need: 45 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           gold: R(2.0), mat: C(1.5), ilvl: depth + 2 },
+    { kind: 'slay',  title: 'Exterminator',      need: 70 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           gold: R(2.6), mat: C(1.8), ilvl: depth + 3 },
+    { kind: 'clear', title: 'Sweep the Halls',   need: 3,                 snap: CF, desc: n => `Clear ${n} floors of foes`, gold: R(1.3), mat: C(1.2), ilvl: depth + 2 },
+    { kind: 'clear', title: 'Purge the Depths',  need: 5,                 snap: CF, desc: n => `Clear ${n} floors of foes`, gold: R(2.0), mat: C(1.6), ilvl: depth + 3 },
+    { kind: 'delve', title: 'Press Onward',      need: depth + 2,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     gold: R(1.4), mat: C(1.2), ilvl: depth + 2 },
+    { kind: 'delve', title: 'Into the Deep',     need: depth + 5,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     gold: R(2.2), mat: C(1.8), ilvl: depth + 4 },
+    { kind: 'boss',  title: 'Giant Slayer',      need: 2,                 snap: BK, desc: n => `Slay ${n} bosses`,         gold: R(1.6), mat: C(1.4), ilvl: depth + 3 },
+    { kind: 'boss',  title: 'Champion Hunter',   need: 4,                 snap: BK, desc: n => `Slay ${n} bosses`,         gold: R(2.4), mat: C(1.8), ilvl: depth + 4 },
+    { kind: 'elite', title: 'Elite Contract',    need: 5,                 snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(1.5), mat: C(1.2), ilvl: depth + 2 },
+    { kind: 'elite', title: 'Bane of Champions', need: 10,                snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(2.3), mat: C(1.6), ilvl: depth + 3 },
+    { kind: 'gold',  title: 'Treasure Hunter',   need: 400 + depth * 90,  snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  gold: R(1.2), mat: C(1.0), ilvl: depth + 1 },
+    { kind: 'gold',  title: "Dragon's Hoard",    need: 1200 + depth * 220,snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  gold: R(1.9), mat: C(1.6), ilvl: depth + 3 },
   ];
 }
 function rollBounties() {
