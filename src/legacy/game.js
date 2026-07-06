@@ -82,7 +82,7 @@ import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/in
 import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKILL_ICON_ATLAS } from '../assets/skillIconsAtlas.js';
 import { BOSS_ATLAS_URL } from '../assets/bossAtlas.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
-import { planReconcile, freshDelMeta, sanitizeDelMeta, isTombstoned, addTombstone,
+import { planReconcile, planSlotPush, freshDelMeta, sanitizeDelMeta, isTombstoned, addTombstone,
   mergeDelMeta, delCloudHasAll, sanitizeHcMeta, mergeHcMeta, hcMetaCloudHasAll } from '../persistence/saveSync.js';
 import { freshStash, sanitizeStash, mergeStash, depositGold, withdrawGold, depositMaterial, withdrawMaterial, materialsValue, foldHeroMaterials } from '../persistence/stashSync.js';
 import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
@@ -7299,6 +7299,12 @@ window.gameGuide = function gameGuide(topic) {
       `In menus (every overlay, shop, craft screen, the Bag): D-pad or LEFT STICK move the selection — the selected control's tooltip pops. ✕/A selects (activates a button, cycles a dropdown, or opens the on-screen keyboard on a text field). ○/B backs out / closes. L1 / R1 switch tabs (settings tabs, leaderboard tabs, bag tabs). Left/right on a focused dropdown cycles its option; the right stick scrolls long lists.`,
       `Anywhere: Options/Menu pauses to Settings. R3 (right-stick click) toggles a VIRTUAL CURSOR — a mouse driven by the right stick, ✕/A = click — that works over the map and any menu, the universal fallback for anything else. View/Share opens an on-screen controller cheat-sheet. Text entry (hero name, cloud-save login) uses an on-screen keyboard with a Random-name key. See docs/CONTROLLER.md for the full map.`,
     ],
+    cloud: [
+      `Saves live in your browser's local storage by default. Sign in (Settings ▸ Account) with an email + password to also mirror every save slot, your shared Stash, and your settings to the cloud, so the same heroes follow you across devices — it's optional and free, and signed out the game behaves exactly as before.`,
+      `Cross-device saves are conflict-safe: whichever copy of a hero has been PLAYED longer wins a merge (measured by real active play-time, not the wall clock, so a device with a fast/slow clock can't cheat the merge), and a copy is never overwritten by an older one. Deleting or losing a hero (Hardcore permadeath) is recorded account-wide and can't be undone by an old copy on another device.`,
+      `A window you leave OPEN but stop playing goes idle after a minute (or the moment its tab is hidden): while idle it stops writing and stops mirroring saves, so it can't overwrite newer progress. The instant you return and play again — or switch back to its tab — it re-checks the account first and pulls down anything a second device advanced, reloading into that newer copy if needed. So it's safe to leave the game open on one machine and keep playing on another; come back and it catches up instead of clobbering.`,
+      `Use Settings ▸ Account ▸ Sync Now to force an immediate reconcile. Because a stale tab defers to the account, the safe habit across devices is simply: play, then let the other device catch up on its own when you return to it.`,
+    ],
   };
   if (topic == null) return Object.assign({ topics: Object.keys(G) }, G);
   const t = String(topic).toLowerCase().replace(/[^a-z]/g, '');
@@ -7324,6 +7330,7 @@ window.gameGuide = function gameGuide(topic) {
     heal: 'healing', healing: 'healing', recovery: 'healing', regen: 'healing', regeneration: 'healing', potion: 'healing', potions: 'healing', mana: 'healing', mp: 'healing', leech: 'healing', lifesteal: 'healing', overtime: 'healing', pending: 'healing', hp: 'healing', hitpoints: 'healing', sustain: 'healing',
     veil: 'veil', spiritveil: 'veil', manaveil: 'veil', shield: 'veil', shields: 'veil', ward: 'veil', energyshield: 'veil', overshield: 'veil', spiritshield: 'veil', defense: 'veil', defence: 'veil',
     drive: 'driving', driving: 'driving', api: 'driving', act: 'driving', acting: 'driving', input: 'driving',
+    cloud: 'cloud', cloudsave: 'cloud', cloudsaves: 'cloud', save: 'cloud', saves: 'cloud', saving: 'cloud', sync: 'cloud', syncing: 'cloud', account: 'cloud', login: 'cloud', signin: 'cloud', crossdevice: 'cloud', device: 'cloud', devices: 'cloud', backup: 'cloud', idle: 'cloud', afk: 'cloud',
     tip: 'tips', strategy: 'tips', help: 'overview', start: 'overview', intro: 'overview', goal: 'overview',
   };
   const sel = G[t] || G[alias[t]];
@@ -20147,8 +20154,10 @@ function updatePlayer(dt) {
   // Touch joystick / gamepad left-stick override the keyboard vector while engaged.
   // Both read as "manual input" below, so they cancel any click-to-move the same way
   // a key does. Touch wins if somehow both are live (a pad plugged into a phone).
-  if (touchStick.active && touchStick.mag > 0) { ix = touchStick.ix; iy = touchStick.iy; }
-  else if (padStick.active && padStick.mag > 0) { ix = padStick.ix; iy = padStick.iy; }
+  // A stick HELD steady fires no DOM events, so stamp activity here too — otherwise a
+  // player steering only by joystick/stick would be misread as idle mid-play.
+  if (touchStick.active && touchStick.mag > 0) { ix = touchStick.ix; iy = touchStick.iy; markActivity(); }
+  else if (padStick.active && padStick.mag > 0) { ix = padStick.ix; iy = padStick.iy; markActivity(); }
   // Click-to-move: with no keyboard input, steer toward the click target.
   // Any manual input cancels it (you take back the wheel). While the button is held
   // the target tracks the cursor, so the hero keeps walking toward it; a plain click
@@ -27394,6 +27403,10 @@ function pollGamepads(ts, dt) {
   for (let i = 0; i < btns.length; i++) { const b = btns[i]; pressed[i] = !!(b && (b.pressed || b.value > 0.5)); }
   const anyInput = pressed.some(Boolean) || axes.some(a => Math.abs(a) > 0.35);
   if (!_padOn) { if (!anyInput) return; _padGlyphs = padDetectGlyphs(gp.id); setPadMode(true); }
+  // Gamepad input is poll-based and fires NO DOM events, so stamp activity here or a
+  // gamepad-only player would be misread as idle mid-play — freezing play-time billing
+  // and cloud sync (and letting an older keyboard copy win a cross-device merge).
+  if (anyInput) markActivity();
   const prev = _padPrev[gp.index] || [];
   const down = edgePressed(prev, pressed);
   const up = edgeReleased(prev, pressed);
@@ -28120,13 +28133,9 @@ function loadStash() {
   healStashItems(stashStd); healStashItems(stashHc);
 }
 
-// Bookkeeping from the last successful local save: when it happened (lets the
-// play-time heartbeat skip saves the world-tick autosave already covered), plus
-// the exact serialized string written and its embedded ts (lets cloudPushSlot
-// reuse those bytes instead of re-parsing + re-stringifying the whole save).
+// When the last successful local save happened — lets the play-time heartbeat skip
+// saves the world-tick autosave already covered.
 let _lastSaveAt = 0;
-let _lastSavePayload = null;
-let _lastSavePayloadTs = 0;
 
 function saveGame() {
   if (_wipingSave || _switchingSlot) return; // a slot switch / wipe is mid-flight — don't clobber the target slot
@@ -28148,10 +28157,8 @@ function saveGame() {
     };
     const payload = JSON.stringify(data);
     localStorage.setItem(slotKey(activeSlot), payload);
-    // Cache only after the write succeeds so the fast paths never trust a save
+    // Stamp only after the write succeeds so the heartbeat never trusts a save
     // that didn't actually land.
-    _lastSavePayload = payload;
-    _lastSavePayloadTs = data.ts;
     _lastSaveAt = Date.now();
   } catch (e) {
     // localStorage unavailable (e.g. inside artifact preview) — fail silently
@@ -28754,20 +28761,58 @@ async function wipeSave() {
   location.reload();
 }
 
+// ── Idle detection (drives save/sync safety) ─────────────────────────────────
+// A window left open but NOT being played must not keep MIRRORING saves to the cloud —
+// re-pushing an unchanged (and, if another device took over, now-STALE) hero is exactly
+// how a long-open tab clobbers progress made elsewhere. So we track real player activity
+// (from EVERY input path — keyboard/mouse/touch DOM events, plus the gamepad poll and
+// the touch joystick, which fire no DOM events) and treat the session as "idle" once the
+// tab is hidden or no input has arrived for a while. While idle we stop mirroring to the
+// cloud and stop billing play-time (local autosaves still run, so nothing is lost to a
+// crash); the moment activity resumes we reconcile with the account first (see
+// scheduleWakeReconcile) so we adopt any newer copy before trusting our own.
+const IDLE_SAVE_MS = 60000; // no player input for this long ⇒ idle (stop saving/billing until active again)
+let _lastActivityAt = Date.now();
+// True when the hero isn't actively being played: tab backgrounded, or no input for
+// IDLE_SAVE_MS. Nothing meaningful changes while idle, so suppressing saves is safe.
+function isIdleForSaves() {
+  if (typeof document !== 'undefined' && document.hidden) return true;
+  return (Date.now() - _lastActivityAt) > IDLE_SAVE_MS;
+}
+// Stamp on every real player input. If we were idle and are now waking up, the hero
+// may have moved forward on another device while we sat here — reconcile before we
+// resume saving so we can't overwrite that progress.
+function markActivity() {
+  const wasIdle = isIdleForSaves();
+  _lastActivityAt = Date.now();
+  if (wasIdle) { _slotSyncStale = true; scheduleWakeReconcile(); }
+}
+if (typeof document !== 'undefined') {
+  // Passive, capture-phase listeners — they only stamp a timestamp, so keyboard/mouse
+  // behaviour stays byte-identical. Key REPEAT events fire while a movement key is held,
+  // so walking counts as continuous activity.
+  const _act = () => markActivity();
+  for (const ev of ['keydown', 'pointerdown', 'pointermove', 'wheel', 'touchstart']) {
+    document.addEventListener(ev, _act, { capture: true, passive: true });
+  }
+}
+
 // ── Play-time heartbeat ─────────────────────────────────────────────────────
-// Accumulate wall-clock time the active hero is actually being played into
-// player.playMs. We tick once a second, only counting time while the tab is
-// visible, and clamp the delta so a throttled/backgrounded tab can't dump a
-// huge catch-up chunk. The total rides along in the normal save (it's a field
-// on `player`); we also nudge a save every ~20s so idle time still persists,
-// and flush on tab-hide / unload to capture the tail end of a session.
+// Accumulate wall-clock time the active hero is actually being PLAYED into
+// player.playMs. We tick once a second, counting time only while active (not hidden
+// and not idle), and clamp the delta so a throttled/backgrounded tab can't dump a
+// huge catch-up chunk. Counting only active time keeps playMs a faithful, monotonic
+// measure of real play — which is what makes it a trustworthy, clock-skew-proof
+// conflict signal (an idle tab can't inflate its play-time and out-rank the device
+// you actually played on). The total rides along in the normal save; we also nudge a
+// save every ~20s so genuine play still persists even when nothing else saved.
 let _ptLastBeat = Date.now();
 let _ptSinceSave = 0;
 function playTimeBeat() {
   const now = Date.now();
   let dt = now - _ptLastBeat;
   _ptLastBeat = now;
-  if (typeof document !== 'undefined' && document.hidden) return;
+  if (isIdleForSaves()) return;   // hidden or AFK — not really playing; don't bill time or save
   if (dt < 0) dt = 0;
   if (dt > 5000) dt = 1000; // background throttle / sleep — count a nominal tick
   if (typeof player === 'object' && player) player.playMs = (player.playMs || 0) + dt;
@@ -28781,16 +28826,28 @@ function playTimeBeat() {
   }
 }
 setInterval(playTimeBeat, 1000);
-// Reset the beat clock when the tab regains focus so the hidden gap isn't billed,
-// and flush the accumulated time before the page goes away.
+// Leaving the foreground: persist locally and try one GUARDED cloud push while the
+// page is still alive (cloudFlush reads the cloud first, so it can't regress a newer
+// copy), then mark the session possibly-stale so the next wake reconciles. Coming
+// BACK: reconcile with the account before resuming saves, so a hero advanced on
+// another device is adopted rather than clobbered by our stale in-memory copy.
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { try { saveGame(); } catch (e) {} try { cloudFlush(); } catch (e) {} }
+    if (document.hidden) {
+      try { saveGame(); } catch (e) {}
+      try { cloudFlush(); } catch (e) {}
+      _slotSyncStale = true;
+    } else {
+      scheduleWakeReconcile();
+    }
     _ptLastBeat = Date.now();
   });
 }
 if (typeof window !== 'undefined') {
-  window.addEventListener('pagehide', () => { try { saveGame(); } catch (e) {} try { cloudFlush(); } catch (e) {} });
+  // The page is being torn down — persist LOCALLY only. A blind keepalive cloud write
+  // could clobber a newer copy from another device, and a guarded (read-first) write
+  // can't complete during unload; the tail reaches the cloud on the next boot reconcile.
+  window.addEventListener('pagehide', () => { try { saveGame(); } catch (e) {} });
 }
 
 // Format a millisecond span as a compact human play-time string: "3h 12m",
@@ -29637,53 +29694,144 @@ async function ensureToken() {
 
 // ── Per-slot cloud read/write ───────────────────────────────────────────────
 let cloudSaveTimers = {}; // slot → pending debounced push timer
+// The exact localStorage bytes we last CONFIRMED the cloud holds for a slot (after a
+// successful guarded push, or a 'skip' because the cloud already had them). Lets an
+// unchanged debounced push short-circuit with zero network — the common idle/no-op
+// case — and can never cause a stale write: it's cleared whenever we detect the cloud
+// moved ahead of us (a 'pull') or a reconcile rewrites the layout.
+let _lastCloudSlotPayload = {};
+// Possibly-stale flag: set when this tab may have missed a newer copy pushed by
+// another device (it went to the background, sat idle, or a guarded push just found
+// the cloud ahead of us). While set, the blind keepalive flush stands down, and the
+// next wake reconcile clears it once we're verified against the account again.
+let _slotSyncStale = false;
+// Slots with a push currently in flight — serialises per-slot pushes so a scheduled
+// push, a tab-hide flush and a reconcile upload can't race each other into a spurious
+// compare-and-swap conflict on the SAME slot.
+let _cloudPushInFlight = {};
 // Debounced mirror of one slot to the cloud (coalesces a flurry of saves).
 function cloudScheduleSave(slot) {
   if (!cloudEnabled() || !authState.user) return;
+  // Don't mirror to the cloud while idle. A window left open but not being played has
+  // nothing new worth pushing, and re-uploading its (possibly now-stale) hero is what
+  // let a long-open tab clobber progress made on another device. The compare-and-swap
+  // push is the backstop if one slips through; this simply stops the pointless idle
+  // traffic. Any already-scheduled push still fires, so the last active save is never
+  // stranded, and the wake reconcile pulls down anything a second device advanced.
+  if (isIdleForSaves()) return;
   if (cloudSaveTimers[slot]) return;
-  cloudSaveTimers[slot] = setTimeout(() => { cloudSaveTimers[slot] = null; cloudPushSlot(slot); }, 3500);
+  // Hold the timer slot until the push RESOLVES (not just until it fires), so a burst of
+  // saves can't launch overlapping pushes for the same slot.
+  cloudSaveTimers[slot] = setTimeout(async () => {
+    try { await cloudPushSlot(slot); } catch (e) {}
+    cloudSaveTimers[slot] = null;
+  }, 3500);
 }
-// Upsert a slot's stored JSON into the cloud, keyed by (user_id, slot). Reads the
-// current localStorage copy so it always ships the latest. Best-effort.
-async function cloudPushSlot(slot, opts) {
-  opts = opts || {};
+// Read the account's row for one slot → { data, updatedAt } (data object or null),
+// null (NO row), or undefined (couldn't read — the caller must NOT then write, or it
+// could clobber blindly). `updated_at` is the version token the compare-and-swap write
+// checks, so we always read it alongside the data.
+async function cloudFetchSlot(slot) {
+  const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?select=data,updated_at&user_id=eq.' + authState.user.id + '&slot=eq.' + slot, { headers: cloudRestHeaders() });
+  if (!res.ok) return undefined;
+  const rows = await res.json();
+  if (!rows || !rows[0]) return null;
+  const r = rows[0];
+  return { data: (r.data && typeof r.data === 'object') ? r.data : null, updatedAt: r.updated_at || null };
+}
+// Compare-and-swap UPDATE: write raw bytes into a slot's row ONLY while its updated_at
+// still equals `prevUpdatedAt` (the value we read just before deciding to write). If
+// another device wrote (or deleted) the row in between, its updated_at changed, zero
+// rows match, and we report 'conflict' instead of overwriting a save we never judged —
+// this is what makes the merge deterministic (most-played always wins) rather than
+// last-writer-wins. `select=slot` keeps the echoed body a single tiny field.
+// Returns 'ok' | 'conflict' | 'fail'.
+async function cloudCasUpdateSlot(slot, raw, ts, prevUpdatedAt) {
+  const body = '{"data":' + raw + ',"updated_at":' + JSON.stringify(new Date(ts || Date.now()).toISOString()) + '}';
+  try {
+    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?user_id=eq.' + authState.user.id + '&slot=eq.' + slot + '&updated_at=eq.' + encodeURIComponent(prevUpdatedAt) + '&select=slot', {
+      method: 'PATCH',
+      headers: cloudRestHeaders({ 'Prefer': 'return=representation' }),
+      body: body,
+    });
+    if (!res.ok) return 'fail';
+    let rows; try { rows = await res.json(); } catch (e) { return 'fail'; }
+    return (Array.isArray(rows) && rows.length > 0) ? 'ok' : 'conflict';
+  } catch (e) { return 'fail'; }
+}
+// INSERT a brand-new row for a slot that had none. A 409 (primary-key/unique violation)
+// means another device inserted first — report 'conflict' so the caller defers to a
+// reconcile instead of blindly overwriting the row that appeared. Returns 'ok' |
+// 'conflict' | 'fail'.
+async function cloudInsertSlot(slot, raw, ts) {
+  const body = '{"user_id":' + JSON.stringify(authState.user.id) + ',"slot":' + JSON.stringify(slot) +
+    ',"data":' + raw + ',"updated_at":' + JSON.stringify(new Date(ts || Date.now()).toISOString()) + '}';
+  try {
+    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves', {
+      method: 'POST',
+      headers: cloudRestHeaders({ 'Prefer': 'return=minimal' }),
+      body: body,
+    });
+    if (res.ok) return 'ok';
+    if (res.status === 409) return 'conflict';
+    return 'fail';
+  } catch (e) { return 'fail'; }
+}
+// GUARDED, COMPARE-AND-SWAP mirror of a slot to the cloud. It reads the account's CURRENT
+// row FIRST and only writes when doing so won't regress it — the change that makes a
+// stale tab unable to overwrite a newer copy another device pushed. The pure
+// planSlotPush() gives the verdict: 'write' mirrors up, 'skip' is a no-op, 'pull' means
+// the cloud is AHEAD of us (stand down, reconcile to adopt it). The write itself is a
+// compare-and-swap on the row's updated_at, so even two devices playing the SAME hero at
+// once can't invert on write-timing: a write only lands if the row is unchanged since we
+// judged it, and a conflict defers to a reconcile that re-judges. If the cloud can't be
+// read we do NOT write (fail-closed on the cloud side; localStorage still holds the save,
+// and the next push / boot reconcile ships it).
+async function cloudPushSlot(slot) {
   if (!cloudEnabled() || !authState.user) return false;
+  if (_cloudPushInFlight[slot]) return false;   // one push per slot at a time (no self-race CAS conflicts)
   let raw; try { raw = localStorage.getItem(slotKey(slot)); } catch (e) {}
   if (!raw) return false;
-  let body;
-  if (raw === _lastSavePayload) {
-    // Fast path: saveGame() just wrote this exact string for the active hero, so
-    // it's already known to be a started save and its ts is cached. Never re-upload
-    // a hero that's been deleted (tombstoned) — a stray debounced/keepalive push
-    // firing right after a delete could otherwise resurrect it in the cloud.
-    if (delIsDeleted({ player })) return false;
-    // Splice the bytes straight into the request body instead of JSON.parse-ing and
-    // re-stringifying the whole save — the keys below match the object literal in
-    // the slow path, so the uploaded payload is byte-identical.
-    body = '{"user_id":' + JSON.stringify(authState.user.id) + ',"slot":' + JSON.stringify(slot) +
-      ',"data":' + raw + ',"updated_at":' + JSON.stringify(new Date(_lastSavePayloadTs || Date.now()).toISOString()) + '}';
-  } else {
-    let data; try { data = JSON.parse(raw); } catch (e) { return false; }
-    // Never upload a blank, not-yet-started hero — it would overwrite whatever real
-    // save already lives in this slot on the account.
-    if (!saveStarted(data)) return false;
-    // Never re-upload a deleted hero (see the fast-path note above).
-    if (delIsDeleted(data)) return false;
-    body = JSON.stringify({
-      user_id: authState.user.id, slot: slot, data: data,
-      updated_at: new Date(data.ts || Date.now()).toISOString(),
-    });
-  }
-  if (!opts.keepalive) await ensureToken();
+  // Nothing changed since we last confirmed the cloud holds these exact bytes → no-op,
+  // no network. Collapses redundant/idle autosaves to zero requests.
+  if (raw === _lastCloudSlotPayload[slot]) return true;
+  let data; try { data = JSON.parse(raw); } catch (e) { return false; }
+  if (!saveStarted(data)) return false;   // never push a blank, not-yet-started hero
+  if (delIsDeleted(data)) return false;   // never re-upload a deleted (tombstoned) hero
+  _cloudPushInFlight[slot] = true;
   try {
-    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?on_conflict=user_id,slot', {
-      method: 'POST',
-      headers: cloudRestHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
-      body: body,
-      keepalive: !!opts.keepalive,
-    });
-    return res.ok;
-  } catch (e) { return false; }
+    if (!await ensureToken()) return false;
+    let cloud;
+    try { cloud = await cloudFetchSlot(slot); } catch (e) { return false; }
+    if (cloud === undefined) return false;  // couldn't read the cloud — don't risk a blind write
+    const cloudData = cloud ? cloud.data : null;
+    const verdict = planSlotPush({ local: data, cloud: cloudData, isStarted: saveStarted, cidOf: saveCid, saveOrder });
+    if (verdict === 'skip') { _lastCloudSlotPayload[slot] = raw; return true; }
+    if (verdict === 'pull') {
+      // Another device advanced (or replaced) this hero. Adopt it via a reconcile rather
+      // than clobber it — and forget our confirmed-bytes cache so we re-check next time.
+      delete _lastCloudSlotPayload[slot];
+      _slotSyncStale = true;
+      scheduleWakeReconcile();
+      return false;
+    }
+    // verdict === 'write': commit under optimistic concurrency (CAS on updated_at for an
+    // existing row, INSERT for a fresh one). A conflict means the row changed under us —
+    // don't force our copy over it; defer to a reconcile that re-judges the new state.
+    const outcome = (cloud && cloud.updatedAt)
+      ? await cloudCasUpdateSlot(slot, raw, data.ts, cloud.updatedAt)
+      : await cloudInsertSlot(slot, raw, data.ts);
+    if (outcome === 'ok') { _lastCloudSlotPayload[slot] = raw; return true; }
+    if (outcome === 'conflict') {
+      delete _lastCloudSlotPayload[slot];
+      _slotSyncStale = true;
+      scheduleWakeReconcile();
+      return false;
+    }
+    return false; // transient failure — retry on the next push
+  } finally {
+    _cloudPushInFlight[slot] = false;
+  }
 }
 // Remove a slot's cloud row. Awaited by the wipe/new-game paths so a row can't
 // resurrect itself on the next boot reconcile. Returns true only when the row is
@@ -29694,6 +29842,7 @@ async function cloudPushSlot(slot, opts) {
 async function cloudDeleteSlot(slot) {
   if (!cloudEnabled() || !authState.user) return false;
   if (!await ensureToken()) return false; // no usable token — don't fire a doomed 401 DELETE
+  delete _lastCloudSlotPayload[slot]; // the row is going away — forget any confirmed-bytes cache for it
   try {
     const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?user_id=eq.' + authState.user.id + '&slot=eq.' + slot, {
       method: 'DELETE', headers: cloudRestHeaders({ 'Prefer': 'return=minimal' }),
@@ -29719,18 +29868,20 @@ async function cloudDeleteCid(cid) {
     await Promise.all(targets.map(s => cloudDeleteSlot(s)));
   } catch (e) {}
 }
-// Synchronous best-effort flush of the active slot (and the shared stash) on
-// tab-hide / unload.
+// Best-effort GUARDED flush of the active slot when leaving the FOREGROUND (a
+// tab-switch, where the page keeps living long enough for the async read-then-write to
+// land). It routes through cloudPushSlot, so it reads the cloud first and can never
+// regress a newer copy — the old blind keepalive write is gone, which is what let a
+// stale tab clobber another device on hide. If we're already flagged stale we don't
+// even try: the wake reconcile will sort it out. Not called on real unload (pagehide) —
+// a read-then-write can't finish there, so the tail syncs on the next boot instead.
 function cloudFlush() {
-  if (cloudEnabled() && authState.user) {
-    try { cloudPushSlot(activeSlot, { keepalive: true }); } catch (e) {}
-    // NOTE: neither the shared stash nor the hardcore ledger is flushed here. A
-    // flush is a blind keepalive write that can't read-then-merge first, so it would
-    // regress a union/CRDT row — clobbering a concurrent stash deposit from another
-    // device, or erasing a death recorded elsewhere. Both reach the cloud via their
-    // union-first pushes (cloudPushStash / cloudPushHcMeta, debounced on change) and
-    // re-sync on the next boot — never through a flush.
-  }
+  if (!cloudEnabled() || !authState.user) return;
+  if (_slotSyncStale) return; // possibly behind the account — let the wake reconcile lead, don't push
+  try { cloudPushSlot(activeSlot); } catch (e) {}
+  // NOTE: neither the shared stash nor the hardcore ledger is flushed here — both reach
+  // the cloud via their own union-first pushes (cloudPushStash / cloudPushHcMeta,
+  // debounced on change) and re-sync on the next boot, never through a flush.
 }
 
 // ── Hardcore-meta cloud sync ────────────────────────────────────────────────
@@ -30162,7 +30313,10 @@ async function cloudReconcile() {
   // pulled save. The caller reloads to re-read it; until then, no save may land.
   if (plan.activeChanged) _switchingSlot = true;
 
-  // Apply the plan — the only side effects live here.
+  // Apply the plan — the only side effects live here. The reconcile rewrites the slot
+  // layout, so drop the confirmed-cloud-bytes cache and let the guarded pushes below
+  // re-establish it from the fresh truth.
+  _lastCloudSlotPayload = {};
   plan.localRemovals.forEach(s => { try { localStorage.removeItem(slotKey(s)); } catch (e) {} });
   plan.localWrites.forEach(w => { try { localStorage.setItem(slotKey(w.slot), JSON.stringify(w.data)); } catch (e) {} });
   if (plan.newActiveSlot != null) {
@@ -30221,6 +30375,58 @@ async function cloudBootSync() {
   try { sessionStorage.setItem(CLOUD_BOOT_RELOADS, String(reloads + 1)); } catch (e) {}
   _switchingSlot = true;
   location.reload();
+}
+
+// ── Wake-on-focus reconcile ──────────────────────────────────────────────────
+// The full cross-device reconcile sequence, shared by the manual "Sync Now" button
+// and the automatic wake-on-focus reconcile. Pulls the append-only ledgers FIRST (so a
+// death or deletion recorded elsewhere is enforced before the per-slot merge), then
+// the per-slot saves, the shared stash and settings. Returns what changed so the
+// caller can reload; leaves the session verified against the account (clears the
+// possibly-stale flag) unless a death lockout took over first.
+async function syncAll() {
+  const out = { activeChanged: false, settingsPulled: false, lockedOut: false };
+  if (!cloudEnabled() || !authState.user) { _slotSyncStale = false; return out; }
+  const learnedDeath = await hcReconcile();
+  if (learnedDeath && hcEnforceActiveLockout(true)) { out.lockedOut = true; return out; }
+  await delReconcile();
+  const r = await cloudReconcile(); // freezes saves itself the moment it changes the active slot
+  await stashReconcile();
+  out.settingsPulled = await settingsReconcile();
+  out.activeChanged = r.activeChanged;
+  _slotSyncStale = false; // verified against the account — the flush/push guards can trust us again
+  return out;
+}
+
+// Debounced trigger for the wake reconcile — coalesces a burst of focus/visibility/
+// first-input events into one, and stands down while a reconcile is already running.
+let _wakeReconcileTimer = null;
+let _wakeReconcileInFlight = false;
+function scheduleWakeReconcile() {
+  // A first-input event can fire before the cloud layer's bindings are initialised at
+  // boot, so probe readiness defensively (as cloudScheduleSettings does) and bail quietly.
+  try { if (!cloudEnabled() || !authState.user) return; } catch (e) { return; }
+  if (_wakeReconcileInFlight || _wakeReconcileTimer) return;
+  _wakeReconcileTimer = setTimeout(() => { _wakeReconcileTimer = null; wakeReconcile(); }, 300);
+}
+// Coming back to a tab that may have gone stale while another device was played:
+// reconcile with the account and, if a newer copy of the active hero arrived, reload
+// into it — exactly what boot / sign-in / Sync-Now do. This is the safety net that
+// makes a long-open window pick up the progress you made elsewhere instead of
+// overwriting it. Best-effort and self-guarded so rapid tab-switching can't pile up.
+async function wakeReconcile() {
+  if (_wakeReconcileInFlight) return;
+  if (!cloudEnabled() || !authState.user) { _slotSyncStale = false; return; }
+  _wakeReconcileInFlight = true;
+  try {
+    const r = await syncAll();
+    if (r.lockedOut) return; // a death elsewhere already handled its own reload/lockout
+    if (r.activeChanged || r.settingsPulled) { _switchingSlot = true; location.reload(); }
+  } catch (e) {
+    // Network hiccup — leave the session flagged stale so a later wake retries.
+  } finally {
+    _wakeReconcileInFlight = false;
+  }
 }
 
 // ── Account overlay UI ──────────────────────────────────────────────────────
@@ -30382,14 +30588,12 @@ function doLogout() {
 async function doSyncNow() {
   acctStatus('Syncing…', 'busy');
   try { saveGame(); } catch (e) {}
-  const learnedDeath = await hcReconcile();
-  if (learnedDeath && hcEnforceActiveLockout(true)) return;
-  await delReconcile();  // pull the deletion ledger so cloudReconcile scrubs deleted heroes
-  const r = await cloudReconcile();
-  await stashReconcile();
-  const settingsPulled = await settingsReconcile();
-  if (r.activeChanged || settingsPulled) { _switchingSlot = true; location.reload(); return; }
-  acctStatus('Synced ✓ Everything is up to date.', 'ok');
+  try {
+    const r = await syncAll(); // same sequence the boot / wake reconcile use
+    if (r.lockedOut) return;   // a death elsewhere handled its own lockout/reload
+    if (r.activeChanged || r.settingsPulled) { _switchingSlot = true; location.reload(); return; }
+    acctStatus('Synced ✓ Everything is up to date.', 'ok');
+  } catch (e) { acctStatus('Network error — please try again.', 'err'); }
 }
 
 // New-game name entry — shown before the class pick on a fresh game.

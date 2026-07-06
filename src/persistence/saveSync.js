@@ -322,3 +322,40 @@ export function planReconcile({
 
   return plan;
 }
+
+// ── Per-slot push guard ──────────────────────────────────────────────────────
+// Decide whether this device may safely mirror its local per-slot save OVER the
+// account's CURRENT cloud row for that slot. PURE: the caller passes the parsed
+// local save and the already-fetched cloud row and acts on the verdict, so every
+// side effect (fetch/localStorage) stays at the edge.
+//
+// This is the integrity backstop that makes a blind last-writer-wins upload
+// impossible. Before this, a debounced/periodic push blind-upserted the cloud row,
+// so a STALE tab — one left open while the same hero was advanced on another device —
+// would clobber the newer cloud save purely by writing last. Reading the cloud FIRST
+// and deferring to it when it is ahead closes that hole; the pushing device can only
+// ever move a hero FORWARD, never backward.
+//
+// Verdict:
+//   'write' — safe to upsert: the cloud has nothing real in this slot, or it holds
+//             the SAME hero and our copy is strictly newer (by the injected order).
+//   'skip'  — nothing to do: our copy is blank/unstarted, or the same version the
+//             cloud already holds (no needless write).
+//   'pull'  — DO NOT write: the cloud holds a NEWER copy of this hero, or a DIFFERENT
+//             live hero at this slot. Our copy is stale — the caller must reconcile
+//             (adopt the newer copy / relocate) instead of overwriting.
+//
+// `saveOrder` is the SAME clock-skew-proof comparator planReconcile uses (monotonic
+// play-time first, wall-clock ts only as a tiebreak), so the push path and the merge
+// path agree on which copy of a hero is newer.
+export function planSlotPush({ local, cloud, isStarted, cidOf, saveOrder }) {
+  if (!local || !isStarted(local)) return 'skip';    // never push a not-yet-begun hero
+  if (!cloud || !isStarted(cloud)) return 'write';   // the cloud slot is empty/blank — claim it
+  const lid = cidOf(local);
+  const cid = cidOf(cloud);
+  if (lid && cid && lid !== cid) return 'pull';      // a DIFFERENT character sits at this slot on the account
+  const ord = saveOrder(local, cloud);
+  if (ord > 0) return 'write';                        // ours is strictly newer — mirror it up
+  if (ord < 0) return 'pull';                         // the cloud copy is newer — adopt it, don't clobber
+  return 'skip';                                      // identical version — leave the cloud as-is
+}
