@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Stat abbreviations key explains everything on a loot row", by: "Jeff Louie", notes: [
+    "The collapsible \"Stat abbreviations\" key under the Loot tab now gives each stat a one-line blurb of what it does, not just its full name — so you can decode a loot row without hunting for tooltips.",
+    "The ✦ item powers on legendary and unique gear — Vampiric, Duelist's, Warmage and all the rest — get their own section in the key, each in its loot-row color with what it does.",
+    "The whole key prints in finer type so the much bigger reference stays compact.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Dropped food refuels mana & stamina too", by: "Claude", notes: [
     "Snacks picked up off the floor now restore MP and Stamina alongside HP — the same amount to all three, so a bite is a quick top-up for casters and sprinters, not just wounded fighters.",
   ] },
