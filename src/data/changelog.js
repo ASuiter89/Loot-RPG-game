@@ -1004,7 +1004,7 @@ export const CHANGELOG = [
   { date: "2026-06-27", size: "small", v: "Goblin fumble", by: "Jeff Louie", notes: ["Treasure Goblins trip or bolt the wrong way about half the time."] },
   { date: "2026-06-27", size: "medium", v: "Giant bosses", by: "Jeff Louie", notes: ["Some bosses are huge 2–3 tile behemoths with footprint-wide health bars."] },
   { date: "2026-06-27", size: "medium", v: "Living water & lava", by: "Jeff Louie", notes: ["Liquids merge into cohesive pools with organic edges, shores and flowing animation."] },
-  { date: "2026-06-27", size: "big", v: "Pixel-asset rework", by: "ASuiter89", notes: ["DawnLike sprites for heroes, NPCs, objects and procedural terrain."] },
+  { date: "2026-06-27", size: "big", v: "Pixel-asset rework", by: "ASuiter89", notes: ["New pixel-art sprites for heroes, NPCs, objects and procedural terrain."] },
   { date: "2026-06-27", size: "medium", v: "Salvage & save slots", by: "ASuiter89", notes: ["Salvage gear into materials at the Craftsman; up to 10 save slots."] },
   { date: "2026-06-27", size: "small", v: "Potion cooldown", by: "ASuiter89", notes: ["Potions are a cooldown-gated skill — one per turn, 3-turn cooldown."] },
   { date: "2026-06-27", size: "medium", v: "Names & leaderboards", by: "ASuiter89", notes: ["Name your character; global leaderboards."] },

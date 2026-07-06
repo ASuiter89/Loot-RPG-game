@@ -390,7 +390,7 @@
   #power-hud { color: var(--gold-350); }
   #pact-hud { color: var(--teal-200); }
   #food-hud { color: var(--orange-250); }
-  /* Active buff / debuff chips: a little DawnLike status icon ringed green (buff)
+  /* Active buff / debuff chips: a little status icon ringed green (buff)
      or red (debuff), badged with how long it has left. Translucent so the map
      reads through, mirroring the floating skill bar / d-pad. Laid out by the
      on-map #buff-overlay (positioned below, near #map-info). */
@@ -797,7 +797,7 @@
     transition: background 0.12s ease, border-color 0.12s ease;
   }
   .settings-item:active { background: var(--panel-raised); border-color: var(--frame); }
-  /* Fixed-width icon cell so every label starts at the same x — emoji, DawnLike
+  /* Fixed-width icon cell so every label starts at the same x — emoji, atlas
      sprite and the live dot all sit in an identical box, no ragged edges. */
   .settings-item .action-icon {
     flex: 0 0 auto; width: 2rem; height: 2rem;
@@ -2073,7 +2073,7 @@
     border-color: var(--orange-650);
     box-shadow: 0 0 5px color-mix(in srgb, var(--warn) 40%, transparent);
   }
-  /* Dim the DawnLike key when unlocked; full-bright (gold-glow button) when locked. */
+  /* Dim the key icon when unlocked; full-bright (gold-glow button) when locked. */
   .lock-toggle-btn .dl-ic { opacity: 0.6; }
   .lock-toggle-btn.on .dl-ic { opacity: 1; }
   /* Subtle gold edge on a locked loot row so it reads at a glance. */
@@ -3721,7 +3721,7 @@
   }
   .title-set-btn:active { background: var(--orange-850); }
   /* Fixed-height icon row keeps every tile's label on the same baseline whether
-     the icon is an emoji or a DawnLike sprite. */
+     the icon is an emoji or an atlas sprite. */
   .title-set-btn .tsb-ic {
     font-size: 2.2rem; line-height: 1; height: calc(24px * var(--ui-scale,1));
     display: flex; align-items: center; justify-content: center;
@@ -3735,7 +3735,7 @@
      `font-variant-emoji: text` asks for the monochrome text glyph where the
      browser supports it; the grayscale filter is the fallback that desaturates a
      colour glyph. They inherit the surrounding text colour. The colourful
-     DawnLike pixel-art game icons are unaffected — they're sprites, not emoji. */
+     atlas pixel-art game icons are unaffected — they're sprites, not emoji. */
   .ui-emoji, .keep-emoji, .tsb-ic { font-variant-emoji: text; }
   /* Fallback for engines without font-variant-emoji: desaturate the colour glyph
      so it still reads as a monochrome symbol. */
