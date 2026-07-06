@@ -9,6 +9,11 @@
 export const CHANGELOG = [
   { date: "2026-07-06", size: "small", v: "Hero card depth reads as a gate icon", by: "Andrew Suiter", notes: ["Title-screen and pause-menu hero card swaps the word \"Deepest\" for the red dungeon-gate icon, so the depth and gold both fit on the card without crowding."] },
   { date: "2026-07-06", size: "small", v: "Hero card shows your gold again", by: "Andrew Suiter", notes: ["Title-screen and pause-menu hero card now show your real gold — it read 0 for any hero carrying 1,000 or more."] },
+  { date: "2026-07-06", size: "small", v: "Self-Found leaderboard splits by Standard & Hardcore", by: "Andrew Suiter", notes: [
+    "The Leaderboard now picks a board with three button rows: Standard or Hardcore first, Non-SSF or SSF second, then Furthest / Level / Gold / Power.",
+    "Self-found heroes are now ranked only against other self-found heroes of the same mode — Standard and Hardcore each get their own Self-Found board, instead of one shared self-found list.",
+    "Opens on Standard + Non-SSF, as before.",
+  ] },
   { date: "2026-07-05", size: "large", v: "All-new hand-generated icon art", by: "Andrew Suiter", notes: [
     "Every shared game icon — loot, gear slots, weapons, world features, materials, HUD and status icons, potions, cooking ingredients, pets and quest markers — is redrawn as fresh, higher-detail art in one consistent style.",
     "Icons now size to their actual artwork instead of a fixed tile, so each reads at its true shape and fills its space in menus, the HUD and on the map.",

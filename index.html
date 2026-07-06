@@ -812,9 +812,12 @@
     </div>
     <div class="ov-sub">The deepest, strongest, and richest heroes across everyone who plays.</div>
     <div class="lb-modes">
-      <button class="lb-mode on" id="lb-mode-std" onclick="setLbMode('std')">Standard</button>
-      <button class="lb-mode hc" id="lb-mode-hc" onclick="setLbMode('hc')"><span data-spr="ic_cursed"></span> Hardcore</button>
-      <button class="lb-mode ssf" id="lb-mode-ssf" onclick="setLbMode('ssf')"><span data-spr="ui_bag"></span> Self-Found</button>
+      <button class="lb-mode on" id="lb-hc-std" onclick="setLbHc(false)" title="Ordinary heroes">Standard</button>
+      <button class="lb-mode hc" id="lb-hc-hc" onclick="setLbHc(true)" title="One-life permadeath heroes"><span data-spr="ic_cursed"></span> Hardcore</button>
+    </div>
+    <div class="lb-modes">
+      <button class="lb-mode on" id="lb-ssf-non" onclick="setLbSsf(false)" title="Heroes who use the shared Vault &amp; materials">Non&#8209;SSF</button>
+      <button class="lb-mode ssf" id="lb-ssf-ssf" onclick="setLbSsf(true)" title="Solo Self-Found — heroes who never touched the shared Vault or materials"><span data-spr="ui_bag"></span> SSF</button>
     </div>
     <div class="lb-tabs">
       <button class="lb-tab on" id="lb-tab-floor" onclick="setLbTab('floor')"><span data-spr=ic_down></span> Furthest</button>

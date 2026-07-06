@@ -4,14 +4,16 @@ Dungeon Loot has a global leaderboard shared across **everyone who plays** —
 ranking heroes by **furthest floor**, **highest level**, **most gold**, and
 **highest Power**.
 
-Each board comes in three ladders, chosen with the **Standard / Hardcore /
-Self-Found** switch at the top of the leaderboard: **Standard** ranks ordinary
-heroes, **Hardcore** ranks only one-life permadeath heroes against each other,
-and **Solo Self-Found** ranks heroes who never touched the shared Vault or
-materials. All three share the same table — rows are flagged with `hardcore` and
-`ssf` columns and filtered. Standard and Hardcore partition on `hardcore`; the
-Self-Found board is a **cross-cut** (`ssf = true`, either `hardcore` value), so a
-self-found hero also appears on their Standard or Hardcore board, tagged SSF.
+Each board is one cell of a **2×2 grid**, chosen with two selector rows at the
+top of the leaderboard: **Standard / Hardcore** (first row) and **Non-SSF / SSF**
+(second row). **Standard** ranks ordinary heroes and **Hardcore** ranks only
+one-life permadeath heroes; **SSF** (Solo Self-Found) ranks heroes who never
+touched the shared Vault or materials, and **Non-SSF** ranks everyone else. Both
+dimensions are independent, so the four boards are Standard·Non-SSF (the default),
+Standard·SSF, Hardcore·Non-SSF and Hardcore·SSF. All four share the same table —
+rows carry `hardcore` and `ssf` boolean columns and each board filters on **both**
+(`hardcore = eq.X AND ssf = eq.Y`). A self-found hero therefore appears only on
+their own SSF board, not cross-cut onto the general one.
 
 The game is still a single self-contained `index.html`. The leaderboard talks
 directly to a free [Supabase](https://supabase.com) project over its REST API.
@@ -89,8 +91,10 @@ create policy "public update" on public.leaderboard for update using (true) with
 ```
 
 That's all the backend needs. Each character upserts a single row; the boards
-are just that table filtered by `hardcore` (or `ssf` for the Self-Found board)
-and sorted by `max_floor`, `level`, `gold`, or `power`.
+are just that table filtered by **both** `hardcore` and `ssf` and sorted by
+`max_floor`, `level`, `gold`, or `power`. **No schema change is needed to split
+the SSF board by hardcore** — both flag columns already exist, so the split is
+purely a client-side change to how the existing rows are filtered.
 
 ### Already have a leaderboard table? (Hardcore migration)
 

@@ -6,6 +6,7 @@ import {
   buildLoadoutUrl,
   buildRangeHeaders,
   ladderFilter,
+  normalizeLadder,
   createLeaderboardRepo,
 } from '../../src/persistence/leaderboardRepo.js';
 
@@ -37,42 +38,72 @@ describe('buildSubmitRequest', () => {
   });
 });
 
+describe('normalizeLadder', () => {
+  it('reads both partition flags off a grid-cell object', () => {
+    expect(normalizeLadder({ hardcore: true, ssf: true })).toEqual({ hardcore: true, ssf: true });
+    expect(normalizeLadder({ hardcore: false, ssf: false })).toEqual({ hardcore: false, ssf: false });
+  });
+  it('keeps a null ssf as null (the "do not constrain ssf" fallback)', () => {
+    expect(normalizeLadder({ hardcore: true, ssf: null })).toEqual({ hardcore: true, ssf: null });
+    expect(normalizeLadder({ hardcore: false })).toEqual({ hardcore: false, ssf: null });
+  });
+  it('still maps the legacy scalar selectors', () => {
+    expect(normalizeLadder('std')).toEqual({ hardcore: false, ssf: false });
+    expect(normalizeLadder('hc')).toEqual({ hardcore: true, ssf: false });
+    expect(normalizeLadder('ssf')).toEqual({ hardcore: false, ssf: true });
+    expect(normalizeLadder(true)).toEqual({ hardcore: true, ssf: false });
+    expect(normalizeLadder(false)).toEqual({ hardcore: false, ssf: false });
+    expect(normalizeLadder(undefined)).toEqual({ hardcore: false, ssf: false });
+  });
+});
+
 describe('ladderFilter', () => {
-  it('partitions Standard/Hardcore on the hardcore flag and cross-cuts SSF', () => {
-    expect(ladderFilter('std')).toBe('hardcore=eq.false');
-    expect(ladderFilter('hc')).toBe('hardcore=eq.true');
-    expect(ladderFilter('ssf')).toBe('ssf=eq.true');
+  it('partitions on BOTH the hardcore and ssf flags (the 2×2 grid)', () => {
+    expect(ladderFilter({ hardcore: false, ssf: false })).toBe('hardcore=eq.false&ssf=eq.false');
+    expect(ladderFilter({ hardcore: true, ssf: false })).toBe('hardcore=eq.true&ssf=eq.false');
+    expect(ladderFilter({ hardcore: false, ssf: true })).toBe('hardcore=eq.false&ssf=eq.true');
+    expect(ladderFilter({ hardcore: true, ssf: true })).toBe('hardcore=eq.true&ssf=eq.true');
   });
-  it('accepts the legacy boolean hcOnly (false→Standard, true→Hardcore)', () => {
-    expect(ladderFilter(false)).toBe('hardcore=eq.false');
-    expect(ladderFilter(true)).toBe('hardcore=eq.true');
+  it('omits the ssf predicate when ssf is null (pre-ssf-column fallback)', () => {
+    expect(ladderFilter({ hardcore: false, ssf: null })).toBe('hardcore=eq.false');
+    expect(ladderFilter({ hardcore: true, ssf: null })).toBe('hardcore=eq.true');
   });
-  it('falls back to Standard for anything unknown', () => {
-    expect(ladderFilter(undefined)).toBe('hardcore=eq.false');
+  it('still accepts the legacy scalar selectors', () => {
+    expect(ladderFilter('std')).toBe('hardcore=eq.false&ssf=eq.false');
+    expect(ladderFilter('hc')).toBe('hardcore=eq.true&ssf=eq.false');
+    expect(ladderFilter('ssf')).toBe('hardcore=eq.false&ssf=eq.true');
+    expect(ladderFilter(false)).toBe('hardcore=eq.false&ssf=eq.false');
+    expect(ladderFilter(undefined)).toBe('hardcore=eq.false&ssf=eq.false');
   });
 });
 
 describe('buildFetchUrl', () => {
-  it('encodes the sort column and the ladder filter', () => {
-    expect(buildFetchUrl(CONFIG, 'max_floor', 'std')).toBe(
-      'https://proj.supabase.co/rest/v1/leaderboard?select=name,player_class,max_floor,level,gold,power,hardcore,ascension,ssf&hardcore=eq.false&order=max_floor.desc',
+  it('encodes the sort column and BOTH grid-partition filters', () => {
+    expect(buildFetchUrl(CONFIG, 'max_floor', { hardcore: false, ssf: false })).toBe(
+      'https://proj.supabase.co/rest/v1/leaderboard?select=name,player_class,max_floor,level,gold,power,hardcore,ascension,ssf&hardcore=eq.false&ssf=eq.false&order=max_floor.desc',
     );
-    expect(buildFetchUrl(CONFIG, 'power', 'hc')).toContain('hardcore=eq.true');
-    expect(buildFetchUrl(CONFIG, 'power', 'hc')).toContain('order=power.desc');
+    expect(buildFetchUrl(CONFIG, 'power', { hardcore: true, ssf: false })).toContain('hardcore=eq.true&ssf=eq.false');
+    expect(buildFetchUrl(CONFIG, 'power', { hardcore: true, ssf: false })).toContain('order=power.desc');
   });
-  it('builds the cross-cutting SSF board with an ssf filter', () => {
-    expect(buildFetchUrl(CONFIG, 'level', 'ssf')).toContain('&ssf=eq.true&');
+  it('builds each cell of the Standard/Hardcore × Non-SSF/SSF grid', () => {
+    expect(buildFetchUrl(CONFIG, 'level', { hardcore: false, ssf: true })).toContain('&hardcore=eq.false&ssf=eq.true&');
+    expect(buildFetchUrl(CONFIG, 'level', { hardcore: true, ssf: true })).toContain('&hardcore=eq.true&ssf=eq.true&');
   });
-  it('still accepts the legacy boolean ladder arg', () => {
-    expect(buildFetchUrl(CONFIG, 'max_floor', false)).toContain('hardcore=eq.false');
-    expect(buildFetchUrl(CONFIG, 'max_floor', true)).toContain('hardcore=eq.true');
+  it('omits the ssf predicate when ssf is null (degraded pre-ssf-column query)', () => {
+    const u = buildFetchUrl(CONFIG, 'level', { hardcore: true, ssf: null });
+    expect(u).toContain('&hardcore=eq.true&');
+    expect(u).not.toContain('ssf=eq');
+  });
+  it('still accepts the legacy scalar ladder arg', () => {
+    expect(buildFetchUrl(CONFIG, 'max_floor', false)).toContain('hardcore=eq.false&ssf=eq.false');
+    expect(buildFetchUrl(CONFIG, 'max_floor', true)).toContain('hardcore=eq.true&ssf=eq.false');
   });
   it('selects the optional ascension + ssf columns by default, but NOT the heavy loadout', () => {
-    expect(buildFetchUrl(CONFIG, 'level', 'std')).toContain(',ascension,ssf&');
-    expect(buildFetchUrl(CONFIG, 'level', 'std')).not.toContain('loadout');
+    expect(buildFetchUrl(CONFIG, 'level', { hardcore: false, ssf: false })).toContain(',ascension,ssf&');
+    expect(buildFetchUrl(CONFIG, 'level', { hardcore: false, ssf: false })).not.toContain('loadout');
   });
   it('accepts a custom column list (the pre-migration fallback set)', () => {
-    expect(buildFetchUrl(CONFIG, 'level', 'std', 'name,level')).toContain('select=name,level&');
+    expect(buildFetchUrl(CONFIG, 'level', { hardcore: false, ssf: false }, 'name,level')).toContain('select=name,level&');
   });
 });
 
@@ -208,6 +239,34 @@ describe('createLeaderboardRepo (mocked fetch — never hits the backend)', () =
     expect(fetchImpl.mock.calls[0][0]).toContain(',ssf&');          // richest select first
     expect(fetchImpl.mock.calls[1][0]).toContain(',ascension&');    // retry keeps ascension
     expect(fetchImpl.mock.calls[1][0]).not.toContain(',ssf&');      // but drops ssf
+  });
+
+  it('fetchBoard() Non-SSF board drops the ssf FILTER (not just the column) on a 400', async () => {
+    // A pre-ssf table 400s any query that mentions the ssf column — in the select
+    // OR the filter. The default Non-SSF board must still load: dropping to the
+    // next tier removes the ssf predicate too (hardcore=eq.false alone is correct,
+    // since a table without the column has no self-found rows).
+    const page = [{ name: 'A' }];
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 400 })                          // full: select+filter ssf
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(page) });    // retry: no ssf at all
+    const repo = createLeaderboardRepo({ fetchImpl, ...CONFIG });
+    const rows = await repo.fetchBoard('level', { hardcore: false, ssf: false }, { pageSize: 1000 });
+    expect(rows).toEqual(page);
+    expect(fetchImpl.mock.calls[0][0]).toContain('&ssf=eq.false&');   // full filter first
+    expect(fetchImpl.mock.calls[1][0]).toContain('&hardcore=eq.false&');
+    expect(fetchImpl.mock.calls[1][0]).not.toContain('ssf=eq');       // ssf predicate gone
+  });
+
+  it('fetchBoard() SSF board returns empty (no request) on a pre-ssf table', async () => {
+    // The self-found board can't exist without the ssf column, so once the richest
+    // tier 400s there's nothing left to query — it returns [] rather than falling
+    // back to hardcore-only (which would wrongly show non-self-found heroes).
+    const fetchImpl = vi.fn().mockResolvedValueOnce({ ok: false, status: 400 });
+    const repo = createLeaderboardRepo({ fetchImpl, ...CONFIG });
+    const rows = await repo.fetchBoard('level', { hardcore: false, ssf: true }, { pageSize: 1000 });
+    expect(rows).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1); // only the richest tier was tried
   });
 
   it('fetchBoard() degrades all the way to the base columns on repeated 400s', async () => {

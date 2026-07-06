@@ -29016,7 +29016,15 @@ const LB_SORTS = {
   power: { col: 'power',     fmt: v => PWR_GLYPH + abbreviateNumber(v) },
 };
 let lbTab = 'floor';
-let lbMode = 'std';       // which ladder is shown: 'std' (non-hardcore), 'hc' (hardcore only), or 'ssf' (solo self-found, cross-cutting)
+// The board is one cell of a 2×2 grid, split on two independent flags:
+//   lbHardcore — false = Standard, true = Hardcore  (the `hardcore` flag)
+//   lbSsf      — false = Non-Self-Found, true = Self-Found  (the `ssf` flag)
+// Starts on Standard + Non-Self-Found. A self-found hero lives ONLY on their own
+// self-found board now (no longer cross-cut onto the general one).
+let lbHardcore = false;
+let lbSsf = false;
+// The grid-cell selector handed to the repository / local mirror.
+function lbLadder() { return { hardcore: lbHardcore, ssf: lbSsf }; }
 let lbLastSig = '';       // last-submitted stat signature — skips no-op writes
 let lbSubmitTimer = null; // pending debounced submit, if any
 let lbRows = [];          // the currently-rendered board rows (so a click can open a hero's snapshot)
@@ -29148,17 +29156,19 @@ function lbSubmitLocal(entry) {
     localStorage.setItem(LB_LOCAL_KEY, JSON.stringify(all));
   } catch (e) {}
 }
-// Local mirror, filtered to one ladder. Standard/Hardcore partition on the
-// hardcore flag; SSF is a cross-cut (every self-found hero) — mirroring the
-// server's ladderFilter, so an SSF hero shows on both their Standard/Hardcore
-// board and the SSF board.
+// Local mirror, filtered to one grid cell. Both dimensions partition — the
+// hardcore flag AND the ssf flag — mirroring the server's ladderFilter, so a
+// self-found hero shows ONLY on their own self-found board, never cross-cut onto
+// the general one. `ladder` is a { hardcore, ssf } selector (legacy scalars are
+// coerced for safety).
 function lbFetchLocal(col, ladder) {
   let all = [];
   try { all = JSON.parse(localStorage.getItem(LB_LOCAL_KEY) || '[]'); } catch (e) {}
-  const keep = ladder === 'ssf' ? (e => !!e.ssf)
-    : ladder === 'hc' || ladder === true ? (e => !!e.hardcore)
-    : (e => !e.hardcore);
-  return all.filter(e => e && keep(e)).sort((a, b) => (b[col] || 0) - (a[col] || 0));
+  const wantHc = !!(ladder && typeof ladder === 'object' ? ladder.hardcore : (ladder === 'hc' || ladder === true));
+  const wantSsf = !!(ladder && typeof ladder === 'object' ? ladder.ssf : (ladder === 'ssf'));
+  return all
+    .filter(e => e && !!e.hardcore === wantHc && !!e.ssf === wantSsf)
+    .sort((a, b) => (b[col] || 0) - (a[col] || 0));
 }
 
 // Fetch a board's full ranking. Returns { rows, local } — local is true when no
@@ -29168,9 +29178,10 @@ function lbFetchLocal(col, ladder) {
 // over to the local mirror instead of leaving the board stuck on "Loading…".
 async function lbFetch(tab) {
   const sort = LB_SORTS[tab] || LB_SORTS.floor;
-  if (!lbEnabled()) return { rows: lbFetchLocal(sort.col, lbMode), local: true };
+  const ladder = lbLadder();
+  if (!lbEnabled()) return { rows: lbFetchLocal(sort.col, ladder), local: true };
   // Paging + Range headers + abort-timeout live in the repository.
-  const rows = await _lbRepo.fetchBoard(sort.col, lbMode);
+  const rows = await _lbRepo.fetchBoard(sort.col, ladder);
   return { rows, local: false };
 }
 
@@ -29188,41 +29199,53 @@ function closeLeaderboard() {
   const ov = document.getElementById('lb-overlay');
   if (ov) ov.classList.remove('open');
 }
-// Light up the active sort tab and ladder button, and tint the modal to match the
-// selected ladder — crimson for Hardcore, gold for Solo Self-Found.
+// Light up the active sort tab plus BOTH grid selectors (Standard/Hardcore and
+// Non-SSF/SSF), and tint the modal to match the selected cell — crimson for
+// Hardcore, gold for a Self-Found (non-hardcore) board. Hardcore red wins when a
+// board is both, mirroring the hero-snapshot framing.
 function syncLbButtons() {
   ['floor', 'level', 'gold', 'power'].forEach(t => {
     const el = document.getElementById('lb-tab-' + t);
     if (el) el.classList.toggle('on', t === lbTab);
   });
-  ['std', 'hc', 'ssf'].forEach(m => {
-    const el = document.getElementById('lb-mode-' + m);
-    if (el) el.classList.toggle('on', m === lbMode);
-  });
+  const hcEl = document.getElementById('lb-hc-hc'), stdEl = document.getElementById('lb-hc-std');
+  if (stdEl) stdEl.classList.toggle('on', !lbHardcore);
+  if (hcEl) hcEl.classList.toggle('on', lbHardcore);
+  const ssfEl = document.getElementById('lb-ssf-ssf'), nonEl = document.getElementById('lb-ssf-non');
+  if (nonEl) nonEl.classList.toggle('on', !lbSsf);
+  if (ssfEl) ssfEl.classList.toggle('on', lbSsf);
   const modal = document.getElementById('lb-modal');
-  if (modal) { modal.classList.toggle('hc', lbMode === 'hc'); modal.classList.toggle('ssf', lbMode === 'ssf'); }
+  if (modal) { modal.classList.toggle('hc', lbHardcore); modal.classList.toggle('ssf', lbSsf && !lbHardcore); }
 }
 function setLbTab(tab) {
   lbTab = LB_SORTS[tab] ? tab : 'floor';
   syncLbButtons();
   renderLeaderboard();
 }
-function setLbMode(mode) {
-  lbMode = (mode === 'hc' || mode === 'ssf') ? mode : 'std';
+// Pick the Standard/Hardcore dimension (accepts a bool or the 'std'/'hc' token).
+function setLbHc(hc) {
+  lbHardcore = (hc === true || hc === 'hc');
+  syncLbButtons();
+  renderLeaderboard();
+}
+// Pick the Non-SSF/SSF dimension (accepts a bool or the 'ssf' token).
+function setLbSsf(ssf) {
+  lbSsf = (ssf === true || ssf === 'ssf');
   syncLbButtons();
   renderLeaderboard();
 }
 // A row's specialization label: the ascension (subclass) name in its signature
 // colour once the hero has ascended, otherwise the plain base-class name. Older
 // rows with an unknown/missing class read as "Wanderer".
-// Small ladder chips on a board row: mark a hero for any mode flag they carry
-// that ISN'T already implied by the board you're viewing. So the Standard board
-// flags self-found heroes with a gold SSF chip, the Hardcore board flags the
-// SSF ones too, and the SSF board flags the hardcore ones with a crimson HC chip.
+// Small ladder chips on a board row: mark a hero for any flag they carry that
+// isn't already implied by the board you're viewing. Each board cell is now
+// homogeneous in BOTH flags (Standard/Hardcore × Non-SSF/SSF), so on a correctly
+// filtered board these never fire — the check stays as a defensive tag for a
+// stray local-mirror row that slipped the wrong partition.
 function lbModeChips(r) {
   let s = '';
-  if (r.hardcore && lbMode !== 'hc') s += ` <span class="hc-tag">${hcIcon(9)} HC</span>`;
-  if (r.ssf && lbMode !== 'ssf') s += ` <span class="hc-tag ssf">${ssfIcon(9)} SSF</span>`;
+  if (r.hardcore && !lbHardcore) s += ` <span class="hc-tag">${hcIcon(9)} HC</span>`;
+  if (r.ssf && !lbSsf) s += ` <span class="hc-tag ssf">${ssfIcon(9)} SSF</span>`;
   return s;
 }
 function lbSubclassLabel(r) {
@@ -29256,14 +29279,14 @@ async function renderLeaderboard() {
     data = await lbFetch(lbTab);
   } catch (e) {
     // Couldn't reach the global board — fall back to the local mirror.
-    data = { rows: lbFetchLocal(sort.col, lbMode), local: true, errored: true };
+    data = { rows: lbFetchLocal(sort.col, lbLadder()), local: true, errored: true };
   }
   // A slow fetch could resolve after the player switched tabs; ignore if so.
   if (!document.getElementById('lb-overlay').classList.contains('open')) return;
   const rows = data.rows || [];
   if (data.errored) status.textContent = '⚠️ Could not reach the global board — showing scores from this device.';
   else if (data.local) status.textContent = 'Local leaderboard (no backend configured yet).';
-  else { const scope = lbMode === 'hc' ? 'Hardcore' : lbMode === 'ssf' ? 'Solo Self-Found' : 'Standard'; status.textContent = rows.length ? 'Global · ' + scope + ' · ' + rows.length + ' hero' + (rows.length === 1 ? '' : 'es') : 'Global ' + scope + ' leaderboard'; }
+  else { const scope = (lbHardcore ? 'Hardcore' : 'Standard') + (lbSsf ? ' · Self-Found' : ''); status.textContent = rows.length ? 'Global · ' + scope + ' · ' + rows.length + ' hero' + (rows.length === 1 ? '' : 'es') : 'Global ' + scope + ' leaderboard'; }
   if (!rows.length) {
     list.innerHTML = '<div class="lb-row"><span class="lb-name">No heroes yet — be the first!</span></div>';
     return;
@@ -32835,7 +32858,8 @@ const __DL_FN_BRIDGE = {
   closeLeaderboard,
   syncLbButtons,
   setLbTab,
-  setLbMode,
+  setLbHc,
+  setLbSsf,
   renderLeaderboard,
   openLbHero,
   closeLbHero,
@@ -32957,7 +32981,8 @@ __dlLive("gateDiff", () => gateDiff, (v) => { gateDiff = v; });
 __dlLive("inventory", () => inventory, (v) => { inventory = v; });
 __dlLive("keybindCapture", () => keybindCapture, (v) => { keybindCapture = v; });
 __dlLive("lastCam", () => lastCam, undefined);   // read-only handle — lets tests map a screen point to a map tile (see clientToTile)
-__dlLive("lbMode", () => lbMode, (v) => { lbMode = v; });
+__dlLive("lbHardcore", () => lbHardcore, (v) => { lbHardcore = v; });   // board's Standard(false)/Hardcore(true) dimension
+__dlLive("lbSsf", () => lbSsf, (v) => { lbSsf = v; });                  // board's Non-SSF(false)/SSF(true) dimension
 __dlLive("lbRows", () => lbRows, (v) => { lbRows = v; });   // the rendered board rows a click opens (also lets tests drive openLbHero)
 __dlLive("lbTab", () => lbTab, (v) => { lbTab = v; });
 __dlLive("stashHc", () => stashHc, (v) => { stashHc = v; });   // Hardcore ladder pool (Standard is `stash` when active)

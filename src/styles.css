@@ -3744,7 +3744,8 @@
   }
   #title-credit { color: var(--orange-650); font-size: 1.2rem; margin-top: 16px; line-height: 1.5; }
   /* Leaderboard tabs + rows */
-  /* Standard vs Hardcore board selector — a segmented toggle above the sort tabs. */
+  /* Two segmented selector rows above the sort tabs: Standard/Hardcore, then
+     Non-SSF/SSF — together they pick one cell of the 2×2 board grid. */
   .lb-modes { display: flex; gap: 6px; margin-bottom: 8px; }
   .lb-mode {
     flex: 1; padding: 7px 4px; border: 1px solid var(--border); border-radius: 6px;
