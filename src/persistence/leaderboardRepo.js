@@ -16,10 +16,27 @@ const REST_PATH = '/rest/v1/leaderboard';
 // newest optional column on each 400, so the board still loads on any table version.
 const BASE_COLS = 'name,player_class,max_floor,level,gold,power,hardcore';
 const COL_TIERS = [
+  BASE_COLS + ',ascension,ssf',
   BASE_COLS + ',ascension',
   BASE_COLS,
 ];
 const SELECT_COLS = COL_TIERS[0];
+
+// Optional row fields a pre-migration table may lack, NEWEST FIRST. On a 400 the
+// submit strips the newest field the entry actually carries and retries, so a
+// score still records on an older table (missing `ssf`, or missing both `ssf`
+// and `loadout`). Mirrors the read-side COL_TIERS degradation.
+const SUBMIT_OPTIONAL = ['ssf', 'loadout'];
+
+// The PostgREST filter selecting one ladder. Standard and Hardcore partition on
+// the `hardcore` flag; SSF is a CROSS-CUT — every self-found hero regardless of
+// hardcore — so an SSF hero also appears on their Standard/Hardcore board. A
+// legacy boolean (the old hcOnly arg) still maps: false→Standard, true→Hardcore.
+export function ladderFilter(ladder) {
+  if (ladder === 'ssf') return 'ssf=eq.true';
+  if (ladder === 'hc' || ladder === true) return 'hardcore=eq.true';
+  return 'hardcore=eq.false'; // 'std' | false | anything unknown
+}
 
 /** Supabase REST headers for the publishable anon key (+ any extras). */
 export function restHeaders(key, extra) {
@@ -41,10 +58,11 @@ export function buildSubmitRequest({ url, key }, entry) {
   };
 }
 
-/** The board URL for a sort column + ladder (Standard vs Hardcore is a param). */
-export function buildFetchUrl({ url }, sortCol, hcOnly, cols = SELECT_COLS) {
+/** The board URL for a sort column + ladder ('std' | 'hc' | 'ssf'; a legacy
+ *  boolean hcOnly still works). */
+export function buildFetchUrl({ url }, sortCol, ladder, cols = SELECT_COLS) {
   return url + REST_PATH +
-    '?select=' + cols + '&hardcore=eq.' + hcOnly + '&order=' + sortCol + '.desc';
+    '?select=' + cols + '&' + ladderFilter(ladder) + '&order=' + sortCol + '.desc';
 }
 
 /** The URL for ONE hero's stored loadout snapshot (keyed by name + ladder). */
@@ -88,25 +106,35 @@ export function createLeaderboardRepo({
   return {
     submit(entry) {
       try {
-        return fireSubmit(entry).then((res) => {
-          // A table that predates the `loadout` column 400s the full row; retry once
-          // without loadout so the score still records globally pre-migration.
-          if (res && res.ok === false && res.status === 400 && entry && entry.loadout !== undefined) {
-            const rest = Object.assign({}, entry);
-            delete rest.loadout;
-            return fireSubmit(rest).catch(() => {});
+        // Progressive degradation: a pre-migration table missing an optional column
+        // (`ssf`, then `loadout`) 400s the full row. Each 400 strips the newest
+        // optional field the entry actually carries and retries, so the score still
+        // records on any table version. `present` lists only fields to drop, so an
+        // entry with no optional fields never retries (matches the old behavior).
+        const present = SUBMIT_OPTIONAL.filter((k) => entry && entry[k] !== undefined);
+        const attempt = (dropN) => {
+          let e = entry;
+          if (dropN > 0) {
+            e = Object.assign({}, entry);
+            for (let i = 0; i < dropN; i++) delete e[present[i]];
           }
-          return res;
-        }).catch(() => {});
+          return fireSubmit(e).then((res) => {
+            if (res && res.ok === false && res.status === 400 && dropN < present.length) {
+              return attempt(dropN + 1);
+            }
+            return res;
+          });
+        };
+        return attempt(0).catch(() => {});
       } catch (_e) { /* never let a submit throw into gameplay */ }
     },
-    async fetchBoard(sortCol, hcOnly, { pageSize = 1000, timeoutMs = 12000 } = {}) {
+    async fetchBoard(sortCol, ladder, { pageSize = 1000, timeoutMs = 12000 } = {}) {
       const ctrl = new AbortControllerImpl();
       const timer = setTimeoutImpl(() => ctrl.abort(), timeoutMs);
       // Page the full ladder for a given column set. The thrown Error carries the
       // HTTP status so the caller can tell a missing-column 400 from a real outage.
       const pageAll = async (cols) => {
-        const fetchUrl = buildFetchUrl(config, sortCol, hcOnly, cols);
+        const fetchUrl = buildFetchUrl(config, sortCol, ladder, cols);
         let rows = [];
         for (let from = 0; ; from += pageSize) {
           const res = await fetchImpl(fetchUrl, {

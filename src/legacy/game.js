@@ -7286,7 +7286,7 @@ window.gameGuide = function gameGuide(topic) {
       `Create a hero in TWO steps from the title's ENTER THE DUNGEON button: first PICK A CLASS (Warrior/Rogue/Mage/Templar), then on the next screen ENTER A NAME and choose a body type — Female or Male. Both screens have a ◀ Back button (Esc does the same): the class pick backs out to the title, the name screen back to the class pick — a typed name and toggles are kept.`,
       `Body type is cosmetic — it only sets which hero sprite is drawn. Every class (Warrior, Rogue, Mage, Templar) has its own female and male hero art, shown in-world and anywhere the hero appears (paperdoll, save slots, graveyard, leaderboard, title card). gameState().player.sex reports it ('male'|'female') and .name reports the chosen name.`,
       `Hardcore mode (one life, permadeath) is also chosen on the name screen and locks in for that hero. Class can be retrained later at the town Trainer, but name, body type and Hardcore are fixed once you begin. While the class screen is open gameState().mode is 'classSelect'; on the name screen it's 'nameSelect'.`,
-      `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet.`,
+      `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
     ],
     town: [
       `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Death does not re-lock any floors: instead Warp to Dungeon only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Dungeon Gate flags the tier holding that grave (with the exact floor beside the tier's grave badge; gameState().graveSite.where), so you can dive straight back to it.`,
@@ -29000,7 +29000,7 @@ const LB_SORTS = {
   power: { col: 'power',     fmt: v => PWR_GLYPH + abbreviateNumber(v) },
 };
 let lbTab = 'floor';
-let lbMode = 'std';       // which ladder is shown: 'std' (non-hardcore) or 'hc' (hardcore only)
+let lbMode = 'std';       // which ladder is shown: 'std' (non-hardcore), 'hc' (hardcore only), or 'ssf' (solo self-found, cross-cutting)
 let lbLastSig = '';       // last-submitted stat signature — skips no-op writes
 let lbSubmitTimer = null; // pending debounced submit, if any
 let lbRows = [];          // the currently-rendered board rows (so a click can open a hero's snapshot)
@@ -29079,6 +29079,7 @@ function lbEntryFromPlayer() {
     gold: lbInt(player.maxGold || player.gold || 0, 0),
     power: lbInt(player.maxPower || playerPower() || 1, 1),
     hardcore: !!player.hardcore,
+    ssf: !!player.ssf,                // Solo Self-Found — its own cross-cutting ladder
     loadout: lbLoadoutFromPlayer(),   // full build snapshot, shown when the row is clicked
   };
 }
@@ -29089,7 +29090,7 @@ function lbScheduleSubmit() {
   if (!player || !player.name) return;
   player.maxGold = Math.max(player.maxGold || 0, player.gold || 0);
   player.maxPower = Math.max(player.maxPower || 0, playerPower() || 0);
-  const sig = [player.name, player.maxFloor || 1, player.level || 1, player.maxGold || 0, player.maxPower || 0, player.class || '', player.ascension || '', player.hardcore ? 'hc' : ''].join('|');
+  const sig = [player.name, player.maxFloor || 1, player.level || 1, player.maxGold || 0, player.maxPower || 0, player.class || '', player.ascension || '', player.hardcore ? 'hc' : '', player.ssf ? 'ssf' : ''].join('|');
   if (sig === lbLastSig) return;
   lbLastSig = sig;
   if (lbSubmitTimer) return; // a write is already queued; it'll pick up the latest stats
@@ -29122,6 +29123,7 @@ function lbSubmitLocal(entry) {
         gold: Math.max(all[i].gold || 0, entry.gold),
         power: Math.max(all[i].power || 1, entry.power),
         hardcore: !!entry.hardcore,
+        ssf: !!entry.ssf,     // whichever hero currently holds this name+ladder slot
         loadout: entry.loadout || all[i].loadout || null, // freshest build snapshot
       };
     } else {
@@ -29130,10 +29132,17 @@ function lbSubmitLocal(entry) {
     localStorage.setItem(LB_LOCAL_KEY, JSON.stringify(all));
   } catch (e) {}
 }
-function lbFetchLocal(col, hcOnly) {
+// Local mirror, filtered to one ladder. Standard/Hardcore partition on the
+// hardcore flag; SSF is a cross-cut (every self-found hero) — mirroring the
+// server's ladderFilter, so an SSF hero shows on both their Standard/Hardcore
+// board and the SSF board.
+function lbFetchLocal(col, ladder) {
   let all = [];
   try { all = JSON.parse(localStorage.getItem(LB_LOCAL_KEY) || '[]'); } catch (e) {}
-  return all.filter(e => e && !!e.hardcore === !!hcOnly).sort((a, b) => (b[col] || 0) - (a[col] || 0));
+  const keep = ladder === 'ssf' ? (e => !!e.ssf)
+    : ladder === 'hc' || ladder === true ? (e => !!e.hardcore)
+    : (e => !e.hardcore);
+  return all.filter(e => e && keep(e)).sort((a, b) => (b[col] || 0) - (a[col] || 0));
 }
 
 // Fetch a board's full ranking. Returns { rows, local } — local is true when no
@@ -29143,10 +29152,9 @@ function lbFetchLocal(col, hcOnly) {
 // over to the local mirror instead of leaving the board stuck on "Loading…".
 async function lbFetch(tab) {
   const sort = LB_SORTS[tab] || LB_SORTS.floor;
-  const hcOnly = lbMode === 'hc';
-  if (!lbEnabled()) return { rows: lbFetchLocal(sort.col, hcOnly), local: true };
+  if (!lbEnabled()) return { rows: lbFetchLocal(sort.col, lbMode), local: true };
   // Paging + Range headers + abort-timeout live in the repository.
-  const rows = await _lbRepo.fetchBoard(sort.col, hcOnly);
+  const rows = await _lbRepo.fetchBoard(sort.col, lbMode);
   return { rows, local: false };
 }
 
@@ -29164,19 +29172,19 @@ function closeLeaderboard() {
   const ov = document.getElementById('lb-overlay');
   if (ov) ov.classList.remove('open');
 }
-// Light up the active sort tab and Standard/Hardcore mode button, and tint the
-// modal crimson while the Hardcore ladder is shown.
+// Light up the active sort tab and ladder button, and tint the modal to match the
+// selected ladder — crimson for Hardcore, gold for Solo Self-Found.
 function syncLbButtons() {
   ['floor', 'level', 'gold', 'power'].forEach(t => {
     const el = document.getElementById('lb-tab-' + t);
     if (el) el.classList.toggle('on', t === lbTab);
   });
-  ['std', 'hc'].forEach(m => {
+  ['std', 'hc', 'ssf'].forEach(m => {
     const el = document.getElementById('lb-mode-' + m);
     if (el) el.classList.toggle('on', m === lbMode);
   });
   const modal = document.getElementById('lb-modal');
-  if (modal) modal.classList.toggle('hc', lbMode === 'hc');
+  if (modal) { modal.classList.toggle('hc', lbMode === 'hc'); modal.classList.toggle('ssf', lbMode === 'ssf'); }
 }
 function setLbTab(tab) {
   lbTab = LB_SORTS[tab] ? tab : 'floor';
@@ -29184,13 +29192,23 @@ function setLbTab(tab) {
   renderLeaderboard();
 }
 function setLbMode(mode) {
-  lbMode = (mode === 'hc') ? 'hc' : 'std';
+  lbMode = (mode === 'hc' || mode === 'ssf') ? mode : 'std';
   syncLbButtons();
   renderLeaderboard();
 }
 // A row's specialization label: the ascension (subclass) name in its signature
 // colour once the hero has ascended, otherwise the plain base-class name. Older
 // rows with an unknown/missing class read as "Wanderer".
+// Small ladder chips on a board row: mark a hero for any mode flag they carry
+// that ISN'T already implied by the board you're viewing. So the Standard board
+// flags self-found heroes with a gold SSF chip, the Hardcore board flags the
+// SSF ones too, and the SSF board flags the hardcore ones with a crimson HC chip.
+function lbModeChips(r) {
+  let s = '';
+  if (r.hardcore && lbMode !== 'hc') s += ` <span class="hc-tag">${hcIcon(9)} HC</span>`;
+  if (r.ssf && lbMode !== 'ssf') s += ` <span class="hc-tag ssf">${ssfIcon(9)} SSF</span>`;
+  return s;
+}
 function lbSubclassLabel(r) {
   const asc = r.ascension && typeof ASCENSIONS === 'object' && ASCENSIONS[r.ascension];
   if (asc) return `<span class="lb-asc" style="color:${asc.color}">${dlIcon(asc.icon, 14) || ''}${escapeHtml(asc.name)}</span>`;
@@ -29222,14 +29240,14 @@ async function renderLeaderboard() {
     data = await lbFetch(lbTab);
   } catch (e) {
     // Couldn't reach the global board — fall back to the local mirror.
-    data = { rows: lbFetchLocal(sort.col, lbMode === 'hc'), local: true, errored: true };
+    data = { rows: lbFetchLocal(sort.col, lbMode), local: true, errored: true };
   }
   // A slow fetch could resolve after the player switched tabs; ignore if so.
   if (!document.getElementById('lb-overlay').classList.contains('open')) return;
   const rows = data.rows || [];
   if (data.errored) status.textContent = '⚠️ Could not reach the global board — showing scores from this device.';
   else if (data.local) status.textContent = 'Local leaderboard (no backend configured yet).';
-  else { const scope = lbMode === 'hc' ? 'Hardcore' : 'Standard'; status.textContent = rows.length ? 'Global · ' + scope + ' · ' + rows.length + ' hero' + (rows.length === 1 ? '' : 'es') : 'Global ' + scope + ' leaderboard'; }
+  else { const scope = lbMode === 'hc' ? 'Hardcore' : lbMode === 'ssf' ? 'Solo Self-Found' : 'Standard'; status.textContent = rows.length ? 'Global · ' + scope + ' · ' + rows.length + ' hero' + (rows.length === 1 ? '' : 'es') : 'Global ' + scope + ' leaderboard'; }
   if (!rows.length) {
     list.innerHTML = '<div class="lb-row"><span class="lb-name">No heroes yet — be the first!</span></div>';
     return;
@@ -29252,7 +29270,7 @@ async function renderLeaderboard() {
       <div class="lb-row-main">
         <span class="lb-rank">${i + 1}</span>
         <span class="lb-class">${cls}</span>
-        <span class="lb-name">${escapeHtml(r.name)}</span>
+        <span class="lb-name">${escapeHtml(r.name)}${lbModeChips(r)}</span>
         <span class="lb-val">${sort.fmt(r[sort.col] || 0)}</span>
         <span class="lb-row-chevron" aria-hidden="true">›</span>
       </div>
@@ -29276,6 +29294,7 @@ function openLbHero(i) {
   const body = document.getElementById('lb-hero-body');
   ov.classList.add('open');
   ov.classList.toggle('hc', !!r.hardcore);
+  ov.classList.toggle('ssf', !!r.ssf && !r.hardcore); // gold frame for a self-found (non-hardcore) hero; HC red wins if both
   // Header first (always available from the row); body shows the build once loaded.
   const head = document.getElementById('lb-hero-head');
   if (head) head.innerHTML = lbHeroHeadHTML(r);
@@ -29304,11 +29323,12 @@ function lbHeroHeadHTML(r) {
   const sex = (r.loadout && r.loadout.sex) || 'male';
   const face = heroFaceIcon(r.player_class, sex, 56) || dlIcon(r.player_class && CLASSES[r.player_class] ? CLASSES[r.player_class].icon : 'npc_mage', 56);
   const hcTag = r.hardcore ? `<span class="lb-hero-hc">${hcIcon(13)} Hardcore</span>` : '';
+  const ssfTag = r.ssf ? `<span class="lb-hero-hc ssf">${ssfIcon(13)} Solo Self-Found</span>` : '';
   const stat = (label, val) => `<div class="lb-hero-stat"><span class="lhs-k">${label}</span><span class="lhs-v">${val}</span></div>`;
   return `
     <div class="lb-hero-face">${face}</div>
     <div class="lb-hero-id">
-      <div class="lb-hero-name">${escapeHtml(r.name)}${hcTag}</div>
+      <div class="lb-hero-name">${escapeHtml(r.name)}${hcTag}${ssfTag}</div>
       <div class="lb-hero-sub">${lbSubclassLabel(r)}</div>
       <div class="lb-hero-stats">
         ${stat(`${dlIcon('ic_down', 13) || ''} Depth`, lbFloorLabel(r.max_floor || 1))}

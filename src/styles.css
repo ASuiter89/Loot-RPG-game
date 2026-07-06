@@ -3753,9 +3753,13 @@
   .lb-mode.on { border-color: var(--gold); color: var(--gold); background: var(--orange-850); }
   /* The Hardcore board glows crimson when selected, matching the rest of the HC theming. */
   .lb-mode.hc.on { border-color: var(--red-350); color: var(--red-200); background: var(--magenta-750); }
+  /* The Solo Self-Found board glows gold — the mode's treasure palette. */
+  .lb-mode.ssf.on { border-color: var(--gold-350); color: var(--gold-200); background: var(--gold-850); }
   .lb-mode .dl-ic { vertical-align: -2px; }
   #lb-modal.hc .ov-title { color: var(--red-200); }
   #lb-modal.hc .lb-row.me { border-color: var(--red-350); background: var(--magenta-750); }
+  #lb-modal.ssf .ov-title { color: var(--gold-200); }
+  #lb-modal.ssf .lb-row.me { border-color: var(--gold-350); background: var(--gold-850); }
   .lb-tabs { display: flex; gap: 6px; margin-bottom: 9px; }
   .lb-tab {
     flex: 1; padding: 8px 4px; border: 1px solid var(--border); border-radius: 6px;
@@ -3821,6 +3825,10 @@
     border-color: var(--red-350);
     box-shadow: 0 0 30px color-mix(in srgb, var(--red-350) 30%, transparent);
   }
+  #lb-hero-overlay.ssf #lb-hero-modal {
+    border-color: var(--gold-350);
+    box-shadow: 0 0 30px color-mix(in srgb, var(--gold-350) 30%, transparent);
+  }
   @media (min-width: 760px) and (hover: hover) and (pointer: fine) { #lb-hero-modal { max-width: 620px; } }
 
   .lb-hero-head { display: flex; gap: 12px; align-items: center; margin: 6px 0 12px; }
@@ -3834,6 +3842,8 @@
     font-size: 1.1rem; color: var(--red-250); display: inline-flex; align-items: center; gap: 3px;
     border: 1px solid color-mix(in srgb, var(--red-350) 50%, transparent); border-radius: 5px; padding: 1px 5px;
   }
+  /* Its gold Solo Self-Found twin. */
+  .lb-hero-hc.ssf { color: var(--gold-200); border-color: color-mix(in srgb, var(--gold-350) 50%, transparent); }
   .lb-hero-sub { font-size: 1.2rem; font-weight: bold; color: var(--orange-300); margin-top: 2px; }
   .lb-hero-stats { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 6px; }
   .lb-hero-stat { display: flex; align-items: center; gap: 4px; font-size: 1.2rem; }
