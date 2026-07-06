@@ -11,6 +11,13 @@ export const CHANGELOG = [
     "Gear can now roll Area of Effect % (AOE) — it widens the radius of every burst skill (a nova around you, a lobbed blast), so one cast sweeps up more of a pack. It helps all classes and does nothing for single-target casts.",
     "Rolls on weapons, helms, gloves, rings, amulets and off-hands, and the new \"Sweeping\" item power grants a big chunk of it. The widened radius rounds to whole tiles, so it steps a skill up a tile once you've stacked enough.",
   ] },
+  { date: "2026-07-06", size: "small", v: "More compact \"Stat abbreviations\" key", by: "Jeff Louie", notes: [
+    "Tightened the line spacing and padding in the \"Stat abbreviations\" key so the whole reference fits in less space without shrinking the text below its readable size.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Merchant wares open sorted by Power; leaner town stock", by: "Jeff Louie", notes: [
+    "The Merchant's wares now open sorted by Power, highest first — matching the loot drawer — so the strongest pieces sit up top instead of grouped by rarity.",
+    "The town Merchant now lays out 3–5 pieces (was 4–6); the wandering merchant carries a wider 5–8, so the detour stays the bigger haul.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Merchant restock costs more each time you buy it", by: "Jeff Louie", notes: [
     "Paying the town Merchant to restock now surcharges every restock you buy in a visit — the second costs more than the first, and so on — so re-rolling for a lucky ware is a real gold sink, not a spammable pull. The surcharge resets the next time you return to town.",
   ] },

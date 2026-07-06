@@ -6404,7 +6404,7 @@ let shopMode = 'buy';  // merchant tab: 'buy' | 'sell'
 // Merchant Sort / Filter — mirrors the LOOT drawer's controls but keeps its own
 // independent state, so ordering/narrowing the wares never disturbs the bag's
 // view. Shared across the BUY (wares) and SELL (bag) tabs.
-let shopSort = 'rarity';        // 'rarity' | 'power' | 'slot' | 'value'
+let shopSort = 'power';         // 'rarity' | 'power' | 'slot' | 'value' — default matches the loot drawer
 let shopStatFilter = [];        // stat/attr keys to narrow to (empty = no filter)
 let shopSortOpen = false, shopFilterOpen = false;
 // The town Merchant's wares persist for the whole town visit (so closing and
@@ -11121,13 +11121,13 @@ function spawnMerchant(footReach) {
   } while ((mapData[my][mx] !== 0 || (mx === player.x && my === player.y) || getEnemyAt(mx,my)
             || isChokePoint(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
   if (tries >= 100) return;
-  // A full randomized stock of gamble-priced gear pieces — at least six, so the
-  // wanderer is always worth the detour. (Potions are no longer sold — they're a
-  // built-in skill now.) ilvl/range stored so a paid restock re-rolls the same
-  // kind of wares.
+  // A full randomized stock of gamble-priced gear pieces — at least five, so the
+  // wanderer is always worth the detour (a wider table than the town shop's).
+  // (Potions are no longer sold — they're a built-in skill now.) ilvl/range stored
+  // so a paid restock re-rolls the same kind of wares.
   const ilvl = dungeonLevel + 1;
   const sale = Math.random() < 0.25 ? 0.7 : 1; // sometimes a 30%-off flash sale
-  merchant = { x: mx, y: my, stock: rollShopStock(ilvl, 6, 8), sale, ilvl, stockLo: 6, stockHi: 8 };
+  merchant = { x: mx, y: my, stock: rollShopStock(ilvl, 5, 8), sale, ilvl, stockLo: 5, stockHi: 8 };
   log('<span data-spr=mat_glimmer></span> A robed merchant has wandered onto this floor...', 'important');
   if (sale < 1) log('<span data-spr=scroll></span> The merchant is holding a flash sale — 30% off everything!', 'important');
 }
@@ -12326,8 +12326,8 @@ function openTownService(kind) {
     const ilvl = Math.max(dungeonReturn, player.maxFloor || 1) + 1;
     // The town wares persist for the whole visit — generated once, then reused
     // when you close and reopen the shop (a paid Restock re-rolls them).
-    if (!townShopStock) townShopStock = rollShopStock(ilvl, 4, 6);
-    merchant = { x: 0, y: 0, stock: townShopStock, sale: 1, town: true, ilvl, stockLo: 4, stockHi: 6, restocks: townRestocks };
+    if (!townShopStock) townShopStock = rollShopStock(ilvl, 3, 5);
+    merchant = { x: 0, y: 0, stock: townShopStock, sale: 1, town: true, ilvl, stockLo: 3, stockHi: 5, restocks: townRestocks };
     openShop();
     return;
   }
