@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Bestiary opens on top of the menu; long names fit", by: "Claude", notes: [
+    "Opening the Bestiary (or Achievements) from the pause menu now shows it on top of the menu instead of hidden behind it — no need to close settings first.",
+    "Long single-word foe names like Constrictor and Bloodhound now wrap inside their card instead of spilling past its right edge.",
+  ] },
   { date: "2026-07-05", size: "medium", v: "Maxed passives surge into a brand-new stat at rank 10", by: "Claude", notes: [
     "Taking a base-tree passive to rank 10 now unlocks a NEW stat it never gave before — not just a bigger version of what it already scaled.",
     "Each surge stat is thematic to its passive: a crit node gains crit damage, an HP node gains regen, a spell node gains crit, and so on.",
