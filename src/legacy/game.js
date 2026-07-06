@@ -28191,6 +28191,7 @@ function renderSlots() {
     const badge = isActive ? '<span class="slot-badge">PLAYING</span>' : '';
     const icon = heroFaceIcon(s.cls, s.sex, 24) || dlIcon(s.cls ? CLASSES[s.cls].icon : 'npc_mage', 24);
     const who = escapeHtml(s.name || 'Adventurer');
+    const clsTag = s.cls ? ` <span class="slot-cls">· ${CLASSES[s.cls].name}</span>` : '';
     const where = s.inTown ? 'In Town' : lbFloorLabel(s.floor);
     const time = slotTimeAgo(s.ts);
     const playBtn = isActive
@@ -28203,7 +28204,7 @@ function renderSlots() {
       <div class="slot-head">
         <span class="slot-num">SLOT ${i + 1}</span>${badge}
         <span class="slot-class">${icon}</span>
-        <span class="slot-name">${who}</span>${hcMark}
+        <span class="slot-name">${who}${clsTag}</span>${hcMark}
       </div>
       <div class="slot-stats">Lv ${s.level} · ${where} · <span data-spr=ic_money></span>${fmtGold(s.gold)} · <span class="slot-time">⏱️ ${formatPlayTime(s.playMs)}</span>${time ? ` · <span class="slot-time">saved ${time}</span>` : ''}</div>
       <div class="slot-actions">${playBtn}${delBtn}</div>
