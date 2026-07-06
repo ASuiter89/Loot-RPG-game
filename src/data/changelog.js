@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "New gear stat: Area of Effect widens your radius skills", by: "Jeff Louie", notes: [
+    "Gear can now roll Area of Effect % (AOE) — it widens the radius of every burst skill (a nova around you, a lobbed blast), so one cast sweeps up more of a pack. It helps all classes and does nothing for single-target casts.",
+    "Rolls on weapons, helms, gloves, rings, amulets and off-hands, and the new \"Sweeping\" item power grants a big chunk of it. The widened radius rounds to whole tiles, so it steps a skill up a tile once you've stacked enough.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Gear screen: fainter hero, red pulse on unusable worn gear", by: "Jeff Louie", notes: [
     "The hero backdrop behind the GEAR paper doll is now fainter, so the equipment slots read cleaner against it.",
     "A worn piece you no longer meet the requirement for now throbs a red glow on its slot, drawing the eye straight to the gear that's stopped helping until you re-qualify.",

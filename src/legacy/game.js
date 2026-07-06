@@ -192,18 +192,18 @@ const SLOT_AFFIX_POOLS = {
   // A weapon slot lists BOTH power/speed families; itemStatPool() then hard-gates
   // them by the weapon's category — a martial weapon keeps only SKILLPWR/ATKSPD, a
   // caster weapon (Staff/Wand) only SPELLPWR/CASTSPD — so the two never mix.
-  weapon: { stats: ['ATK','ACC','CRIT','CRITDMG','IDMG','DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','MAGICPEN','LEECH','MPLEECH','SPELLPWR','SKILLPWR','BLEED','STUNPWR','ATKSPD','CASTSPD'], attrs: ['might','agility','spirit'] },
-  head:   { stats: ['HP','MP','REGEN','CRIT','CRITDMG','SPD','MAGICFIND','XPGAIN','SPELLPWR','SKILLPWR','CDR','MCR','CASTSPD','MAGICPEN','DODGE','MPKILL','MATFIND'], attrs: ['vitality','spirit','luck'] },
+  weapon: { stats: ['ATK','ACC','CRIT','CRITDMG','IDMG','AREA','DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','MAGICPEN','LEECH','MPLEECH','SPELLPWR','SKILLPWR','BLEED','STUNPWR','ATKSPD','CASTSPD'], attrs: ['might','agility','spirit'] },
+  head:   { stats: ['HP','MP','REGEN','CRIT','CRITDMG','SPD','MAGICFIND','XPGAIN','AREA','SPELLPWR','SKILLPWR','CDR','MCR','CASTSPD','MAGICPEN','DODGE','MPKILL','MATFIND'], attrs: ['vitality','spirit','luck'] },
   chest:  { stats: ['HP','REGEN','MP','DR','BLOCK','THORNS','HPKILL','DODGE','MAGICFIND','TENAC','STAM','STAMREG'], attrs: ['vitality','spirit','luck'] },
-  hands:  { stats: ['CRIT','ACC','CRITDMG','IDMG','DBLSTRIKE','SPD','PEN','LEECH','EXEC','CDR','CLEAVE','BLOCK','THORNS','ATKSPD','SKILLPWR'], attrs: ['might','agility','spirit'] },
+  hands:  { stats: ['CRIT','ACC','CRITDMG','IDMG','AREA','DBLSTRIKE','SPD','PEN','LEECH','EXEC','CDR','CLEAVE','BLOCK','THORNS','ATKSPD','SKILLPWR'], attrs: ['might','agility','spirit'] },
   legs:   { stats: ['SPD','HP','REGEN','DODGE','DR','BLOCK','MP','GOLDFIND','XPGAIN','HPKILL','TENAC','STAM','STAMREG'], attrs: ['agility','vitality','luck'] },
-  ring:   { stats: ['CRIT','ACC','CRITDMG','ATK','IDMG','SKILLPWR','LEECH','MPLEECH','GOLDFIND','MAGICFIND','MATFIND','HP','MP','DEF','DBLSTRIKE','BOSSDMG','EXEC','PEN','MAGICPEN','MCR','MPKILL','CLEAVE'], attrs: ['might','agility','luck','spirit','vitality'] },
-  amulet: { stats: ['MP','HP','REGEN','SPELLPWR','CASTSPD','MAGICPEN','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC','STAM','STAMREG'], attrs: ['spirit','luck','vitality','might','agility'] },
+  ring:   { stats: ['CRIT','ACC','CRITDMG','ATK','IDMG','AREA','SKILLPWR','LEECH','MPLEECH','GOLDFIND','MAGICFIND','MATFIND','HP','MP','DEF','DBLSTRIKE','BOSSDMG','EXEC','PEN','MAGICPEN','MCR','MPKILL','CLEAVE'], attrs: ['might','agility','luck','spirit','vitality'] },
+  amulet: { stats: ['MP','HP','REGEN','SPELLPWR','CASTSPD','AREA','MAGICPEN','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC','STAM','STAMREG'], attrs: ['spirit','luck','vitality','might','agility'] },
   // Off-hands: defensive layers + caster utility. A shield's BLOCK headline already
   // flows through totalStat('BLOCK') into combat, so it needs no special-casing.
   // Like weapons, the power/speed stats here are gated by family in itemStatPool()
   // (caster Tome/Focus → SPELLPWR/CASTSPD; shields & martial off-hands → SKILLPWR).
-  offhand:{ stats: ['BLOCK','DR','THORNS','HP','REGEN','MP','SPELLPWR','CASTSPD','MAGICPEN','SKILLPWR','CDR','MCR','CRIT','DODGE','TENAC'], attrs: ['vitality','spirit','luck'] },
+  offhand:{ stats: ['BLOCK','DR','THORNS','HP','REGEN','MP','SPELLPWR','CASTSPD','AREA','MAGICPEN','SKILLPWR','CDR','MCR','CRIT','DODGE','TENAC'], attrs: ['vitality','spirit','luck'] },
 };
 // Skill/Spell power & their speed levers are mutually exclusive by gear type. The
 // two families below are the ones itemStatPool() drops from the "wrong" gear so a
@@ -2942,6 +2942,10 @@ const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', H
   // Spell Power amps spells; Cast Speed shortens the recharge of spell actives the
   // way Attack Speed quickens auto-attacks. Both are gated to matching gear.
   SKILLPWR:'Skill Power %', CASTSPD:'Cast Speed %',
+  // Area of Effect % widens every radius skill (a nova around you, a lobbed blast) so
+  // one cast catches more of a pack — see resolveCast. Helps all classes; single-
+  // target casts (bolts, melee) have no radius, so it does nothing for them.
+  AREA:'Area of Effect %',
   CDR:'Cooldown Rating', MCR:'Mana Cost Reduc %',
   // ── weapon-flavour stats ── BLEED chance to open a bleeding wound (a DoT);
   // STUNPWR raises crushing weapons' stun chance & duration.
@@ -2954,7 +2958,7 @@ const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', VEIL:'
   CRITDMG:'CDMG', REGEN:'REG', LEECH:'LCH', MPLEECH:'MLC', HPKILL:'HoK', MPKILL:'MoK',
   THORNS:'THN', DR:'DR', BLOCK:'BLK', DODGE:'DGE', IDMG:'IDMG', DBLSTRIKE:'2X', CLEAVE:'CLV',
   BOSSDMG:'vsB', EXEC:'EXE', PEN:'PEN', MAGICPEN:'MPN', GOLDFIND:'GF', XPGAIN:'XP', MAGICFIND:'MF', MATFIND:'MTF',
-  SPELLPWR:'SP', SKILLPWR:'SKP', CASTSPD:'CSP', CDR:'CDR', MCR:'MCR', BLEED:'BLD', STUNPWR:'STN', ATKSPD:'ASP', TENAC:'TEN' };
+  SPELLPWR:'SP', SKILLPWR:'SKP', CASTSPD:'CSP', AREA:'AOE', CDR:'CDR', MCR:'MCR', BLEED:'BLD', STUNPWR:'STN', ATKSPD:'ASP', TENAC:'TEN' };
 // Stats whose value is a percentage — shown with a trailing % and consumed as /100
 // throughout combat. (CRIT/CRITDMG were always percentages; they're listed too so
 // the compact line shows their unit.)
@@ -2963,7 +2967,7 @@ const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', VEIL:'
 // effective % they currently produce. CRITDMG stays a % (it's a damage multiplier).
 const PCT_STATS = new Set(['CRITDMG','LEECH','MPLEECH','IDMG',
   'DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','MAGICPEN','GOLDFIND','XPGAIN','MAGICFIND','MATFIND',
-  'SPELLPWR','SKILLPWR','CASTSPD','MCR','BLEED','STUNPWR','ATKSPD','TENAC']);
+  'SPELLPWR','SKILLPWR','CASTSPD','AREA','MCR','BLEED','STUNPWR','ATKSPD','TENAC']);
 // One-line "what this stat does" blurbs, surfaced by hovering a stat name (see
 // statMeaningTip) in the Enchanter, hero sheet and item cards.
 const STAT_DESC = {
@@ -3009,6 +3013,7 @@ const STAT_DESC = {
   STUNPWR: 'More stun chance and duration.',
   ATKSPD: 'Auto-attack more often.',
   TENAC: 'Shortens stuns, freezes and slows (diminishing returns).',
+  AREA: 'Widens area-of-effect skills (nova / blast).',
 };
 // Tooltip body (full name + what it does) for a hoverable stat/attribute name.
 function statMeaningTip(kind, key) {
@@ -3326,7 +3331,7 @@ const POWER_STAT_AXIS = {
   ATK: 'atkFlat', IDMG: 'idmgPct', CRIT: 'critRating', LCK: 'critRating',
   SKILLPWR: 'skillPwrPct', SPELLPWR: 'spellPwrPct', ATKSPD: 'atkSpdPct', CASTSPD: 'castSpdPct',
   CDR: 'cdrRating', PEN: 'penPct', MAGICPEN: 'magicPenPct', DBLSTRIKE: 'dblStrikePct', CLEAVE: 'cleavePct',
-  BOSSDMG: 'bossDmgPct', EXEC: 'execPct', BLEED: 'bleedPct', STUNPWR: 'stunPct',
+  BOSSDMG: 'bossDmgPct', EXEC: 'execPct', BLEED: 'bleedPct', STUNPWR: 'stunPct', AREA: 'areaPct',
   ACC: 'accRating', SPD: 'dodgeRating', DODGE: 'dodgeRating', DEF: 'def', DR: 'drRating',
   BLOCK: 'blockRating', THORNS: 'thornsPct', TENAC: 'tenacPct', LEECH: 'leechPct',
   HPKILL: 'hpKill', REGEN: 'regen',
@@ -3383,7 +3388,7 @@ function buildPowerContext() {
     magicPenPct: totalStat('MAGICPEN') + 100 * skillBonus('mpen'),
     dblStrikePct: Math.round(rated(totalStat('DBLSTRIKE'), DBLSTRIKE_SCALE) * 100), // effective chance, eased
     cleavePct: totalStat('CLEAVE'), bossDmgPct: totalStat('BOSSDMG'), execPct: totalStat('EXEC'),
-    bleedPct: totalStat('BLEED'), stunPct: totalStat('STUNPWR'),
+    bleedPct: totalStat('BLEED'), stunPct: totalStat('STUNPWR'), areaPct: totalStat('AREA'),
     accRating: playerAccuracyRating(),
     // Defense aggregates.
     maxHp,
@@ -6847,7 +6852,7 @@ window.gameState = function gameState(radius) {
       // rating/(rating+100) that nears but never reaches 1.0.
       offense: (typeof totalStat === 'function') ? {
         skillPower: totalStat('SKILLPWR'), spellPower: totalStat('SPELLPWR'),
-        increasedDmg: totalStat('IDMG'),
+        increasedDmg: totalStat('IDMG'), area: totalStat('AREA'),
         attackSpeed: totalStat('ATKSPD'), castSpeed: totalStat('CASTSPD'),
         cooldownRating: totalStat('CDR'),
         cooldownReduction: (typeof cooldownReductionFrac === 'function') ? Math.round(cooldownReductionFrac() * 1000) / 1000 : 0,
@@ -7184,10 +7189,11 @@ window.gameGuide = function gameGuide(topic) {
       `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
       `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
       `HYBRID (a weapon strike that also channels magic — the Templar's holy strikes, the Rogue's shadow/toxic strikes): lands a physical part AND a magic part in one cast. The physical part scales like a SKILL (weapon + Skill Power, leeches, meets armor); the magic part scales like a SPELL (Spirit + Spell Power, no leech, meets magic resist). Only the physical half leeches. Recharged by CDR + Cast Speed. Its tooltip shows the exact split ("40 physical + 30 magic"), so build BOTH power stats to max it — or lean one and accept the other half stays modest.`,
+      `AREA OF EFFECT: any active with a RADIUS — a nova bursting around you, a lobbed blast — strikes every foe inside that radius. Gear Area of Effect % (AREA) widens that radius (rounded to whole tiles, so it steps up a tile once you've stacked enough), catching more of a pack per cast. It helps EVERY class's radius skills but does nothing for single-target casts (bolts, melee, a bolt that hits one foe). Read your total in gameState().player.offense.area.`,
       `TYPED MITIGATION: a foe shrugs off a slice of each blow, and the slice depends on the SCHOOL. Physical armor blunts auto-attacks + martial skills (Armor Pen % pierces it); magic resistance blunts spells (Magic Pen % pierces it). Enemies differ — a stone golem is armored but soft to magic, a wraith resists magic but not steel. gameState().enemies[i] reports each foe's armor and magicResist (whole %); the bestiary card shows both. Hit a foe with the school it's SOFT to; a HYBRID splits across both, so it's never fully walled.`,
       `So NO — Attack does not feed everything: ATK + weapon Damage power auto-attacks and martial skills only; spells ignore them and live on Spirit + Spell Power. The three % amps (IDMG / Skill Power / Spell Power) are one-per-source and never cross over — and a HYBRID's two halves each ride their own lane.`,
       `RANGES & ROLLS: weapons and spells both deal a RANGE, not one fixed number. A weapon rolls its printed min–max; a SPELL now rolls too — around its base by a per-spell spread (a focused magic missile rolls tight, a chaotic meteor rolls wild), so no two spells feel the same. Each roll is taken at fine (fractional) precision BEFORE your multipliers apply, so even a small weapon produces organic, varied hits instead of two or three repeating numbers — the damage finally dealt is still a whole number. Every range is symmetric about the old value, so averages (and balance) are unchanged; only the texture is new.`,
-      `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). CDR is a RATING, not a flat %: the fraction it actually cuts off a cooldown is CDR/(CDR+100), so it climbs toward but never reaches 100% (no cap — the math just can't get there), and the hero sheet / tooltips show that real % — a cooldown drops by exactly the amount shown. gameState().player.offense reports skillPower / spellPower / increasedDmg / attackSpeed / castSpeed, the raw cooldownRating, and cooldownReduction as the 0..1 fraction it yields.`,
+      `Speed levers: Attack Speed (autos), Cast Speed (spell recharge), Cooldown Reduction (every active's recharge). CDR is a RATING, not a flat %: the fraction it actually cuts off a cooldown is CDR/(CDR+100), so it climbs toward but never reaches 100% (no cap — the math just can't get there), and the hero sheet / tooltips show that real % — a cooldown drops by exactly the amount shown. gameState().player.offense reports skillPower / spellPower / increasedDmg / area / attackSpeed / castSpeed, the raw cooldownRating, and cooldownReduction as the 0..1 fraction it yields.`,
       `TOOLTIP READOUT: each damage skill's description reads "deals X to Y damage" — its ABSOLUTE base per-hit range (the ability's own damage: rank, coefficient and your caster power — weapon roll/ATK/attributes for a skill, Spirit for a spell — before ANY situational buff, depth armour or crit). Below it sit two pills versus a typical foe at your current depth. "Damage lo–hi per hit" is that base after everything PERSISTENT except crit and cast rate — class %, gear IDMG/Skill/Spell Power, the difficulty scar and the foe's armour — the honest number that pops over a foe on ONE strike. A multi-strike cast shows a "×N" badge instead of inflating the range; status/elemental procs and transient buffs (shrines, food, war-cries) stay out. "DPS" is the effective sustained damage per second: that per-hit range's midpoint, lifted by crit chance × crit damage, times hits-per-cast, times how often the skill can be cast (cooldown after Cooldown Reduction / Cast Speed). Crit and cast rate live ONLY in DPS — never in the Damage pill. On rank-up the preview shows the new base range, not a bare %. Big numbers abbreviate (1.2k, 3.4M). gameState() skills carry { damage:{min,max,hits,base:{min,max}}, dps, cooldownFull }.`,
       `Gear gating is thoughtful: a MELEE/RANGED weapon can only roll Skill Power & Attack Speed; a WAND/STAFF only Spell Power & Cast Speed. Gloves & rings lean martial (Skill Power); amulets & caster off-hands lean arcane (Spell/Cast). So the weapon you wield already points your build at one lane.`,
     ],
@@ -15196,6 +15202,10 @@ const AFFIX_CURVES = {
   SKILLPWR:{pct:0.3}, CASTSPD:{pct:0.3},
   CDR:{pct:0.12}, MCR:{pct:0.16},
   BLEED:{pct:0.3}, STUNPWR:{pct:0.5}, ATKSPD:{pct:0.3},
+  // Area of Effect: a per-roll growth like the other pack-scaling offense %s. Grows
+  // with depth/rarity (uncapped); resolveCast rounds the widened radius to whole tiles,
+  // so it only steps a cast up a tile once enough is stacked — gentle by design.
+  AREA:{pct:0.45},
   TENAC:{pct:0.35},
 };
 function affixStatRange(stat, lvl, mult) {
@@ -19182,6 +19192,7 @@ const ITEM_POWERS = {
   prospector:  { name: 'Prospector',   color: '#ffd24b', desc: 'Foes drop +30% more gold.',             stats: { GOLDFIND: 30 } },
   scholar:     { name: 'Scholar',      color: '#a9e08a', desc: 'Earn +20% experience.',                 stats: { XPGAIN: 20 } },
   salvager:    { name: 'Salvager',     color: '#c0a06a', desc: 'Find +30% more crafting materials.',    stats: { MATFIND: 30 } },
+  sweeping:    { name: 'Sweeping',     color: '#ffbe6a', desc: 'Area skills reach noticeably wider.',   stats: { AREA: 22 } },
 };
 function rollItemPower() { const ks = Object.keys(ITEM_POWERS); return ks[Math.floor(Math.random() * ks.length)]; }
 // How many active worn pieces carry a given power (so two Vampiric pieces stack).
@@ -21772,6 +21783,18 @@ function resolveCast(node, rank) {
     if (c.chain)  c.chain  += 1;
     if (c.count)  c.count  += 1;
     if (c.repeat) c.repeat += 1;
+  }
+  // Gear Area of Effect %: widen every radius skill (nova / blast) so a +AoE build
+  // catches more of a pack per cast. Rounded to whole tiles (targeting steps by tile)
+  // and clamped to never shrink the base, so it only ever grows a cast. Copies c
+  // first, so the shared node.cast is never mutated; single-target casts have no
+  // radius, so they no-op here.
+  if (c.radius) {
+    const areaPct = (typeof totalStat === 'function') ? totalStat('AREA') / 100 : 0;
+    if (areaPct > 0) {
+      c = Object.assign({}, c);
+      c.radius = Math.max(c.radius, Math.round(c.radius * (1 + areaPct)));
+    }
   }
   // D2 synergy: this ability's damage scales with hard points in related skills.
   const synM = synergyMult(node);
@@ -24824,7 +24847,7 @@ function lootGlossaryHTML() {
   // so the long list stays scannable (and flows into two columns on desktop).
   // Keyed by internal stat key so it can never drift from STAT_SHORT/STAT_LABELS.
   const STAT_GROUPS = [
-    ['Offense', ['ATK','ACC','CRIT','CRITDMG','IDMG','PEN','MAGICPEN','DBLSTRIKE','CLEAVE','EXEC','BOSSDMG','ATKSPD','BLEED','STUNPWR']],
+    ['Offense', ['ATK','ACC','CRIT','CRITDMG','IDMG','PEN','MAGICPEN','DBLSTRIKE','CLEAVE','AREA','EXEC','BOSSDMG','ATKSPD','BLEED','STUNPWR']],
     ['Defense', ['DEF','HP','VEIL','DR','BLOCK','DODGE','TENAC','THORNS']],
     ['Sustain', ['REGEN','LEECH','MPLEECH','HPKILL','MPKILL']],
     ['Caster',  ['MP','SPELLPWR','SKILLPWR','CASTSPD','CDR','MCR']],
@@ -25036,7 +25059,7 @@ function renderPanel() {
 // rows but kept so a future iconified row needs no data change.
 const HERO_EXT_STATS = [
   ['IDMG','ic_stun','Increased dmg'], ['BOSSDMG','ui_level','Dmg vs bosses'], ['EXEC','w_dagger','Execute'],
-  ['PEN','w_spear','Armor pen'], ['MAGICPEN','ic_orb','Magic pen'], ['CLEAVE','w_axe','Cleave'],
+  ['PEN','w_spear','Armor pen'], ['MAGICPEN','ic_orb','Magic pen'], ['CLEAVE','w_axe','Cleave'], ['AREA','sk_wa_slam','Area of effect'],
   ['LEECH','ic_heart','Life leech'], ['MPLEECH','ic_orb','Mana leech'], ['HPKILL','ic_heart','Life on kill'],
   ['MPKILL','ic_orb','Mana on kill'], ['THORNS','spikes_up','Thorns'],
   ['SKILLPWR','w_scythe','Skill power'], ['SPELLPWR','ic_orb','Spell power'],

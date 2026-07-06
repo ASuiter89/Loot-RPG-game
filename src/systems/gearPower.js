@@ -60,9 +60,12 @@ export function offenseScore(c, T = GEAR_POWER) {
   // Each lane meets its OWN mitigation: martial → physical armor (Armor Pen),
   // spell → magic resistance (Magic Pen).
   let dps = (c.skillReliance * martialDps * armorFrac + c.spellReliance * spellDps * resFrac) * c.offMult * critAvg;
-  // Situational amps count at a discount (only fire in some fights).
+  // Situational amps count at a discount (only fire in some fights). Area of Effect
+  // is credited like Cleave — extra reach only pays off against a pack. (areaW may be
+  // absent on a hand-built tuning object, so it's read defensively.)
   dps *= 1 + T.bossW * pos(c.bossDmgPct) / 100 + T.execW * pos(c.execPct) / 100
-    + T.cleaveW * pos(c.cleavePct) / 100 + T.bleedW * pos(c.bleedPct) / 100 + T.stunW * pos(c.stunPct) / 100;
+    + T.cleaveW * pos(c.cleavePct) / 100 + T.bleedW * pos(c.bleedPct) / 100 + T.stunW * pos(c.stunPct) / 100
+    + (T.areaW || 0) * pos(c.areaPct) / 100;
   return Math.max(T.eps, dps);
 }
 
