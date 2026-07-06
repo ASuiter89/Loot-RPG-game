@@ -8658,9 +8658,15 @@ function setClFilter(kind, val) {
   else if (kind === 'cat') clCat = val; else if (kind === 'text') clText = val;
   renderChangelogList();
 }
-// Both the per-entry badge and the creator filter collapse authors to two
-// initials — Jeff Louie → JL, everyone else (ASuiter89 and Claude's sessions) → AS.
-function clInitials(by) { return by === 'Jeff Louie' ? 'JL' : 'AS'; }
+// Both the per-entry badge and the creator filter collapse authors to the two
+// people who ship this game: Jeff Louie (JL) and Andrew Suiter / ASuiter89 (AS).
+// Each ships Claude-assisted work under their OWN name — an entry is credited to
+// whoever directed it (in practice, the committing git identity), never to the
+// tool — so `by` is one of the two humans, not "Claude". Jeff → JL; anyone else
+// (Andrew, or a legacy entry that predates per-person crediting) → AS.
+function clInitials(by) {
+  return (by === 'Jeff Louie' || by === 'JeffCLouie') ? 'JL' : 'AS';
+}
 function clEntryHtml(c) {
   const sizeBadge = (s) => s ? ` <span class="version-size sz-${s}">${s}</span>` : '';
   const ini = clInitials(c.by);

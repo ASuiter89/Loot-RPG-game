@@ -10,18 +10,18 @@ export const CHANGELOG = [
   { date: "2026-07-05", size: "small", v: "Cave passages open up", by: "Jeff Louie", notes: [
     "Most cave corridors between rooms now carve two tiles wide — cramped single-tile squeezes drop to roughly 1 hall in 3, kept as occasional chokepoints instead of the default.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Gear-set swap won't strip you naked mid-fight", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Gear-set swap won't strip you naked mid-fight", by: "Jeff Louie", notes: [
     "Swapping to an empty or much-weaker gear set is now blocked while enemies are near — no more accidental deaths from a stray Set 2 tap or G press.",
     "Still swap freely when it's safe (to build a second set), and gearing UP to a stronger set always works, even mid-fight.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Deep-floor gold piles pay far more", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Deep-floor gold piles pay far more", by: "Jeff Louie", notes: [
     "Loose coin piles on the ground now scale up hard with depth — shallow floors are unchanged, but deep-floor piles pay hundreds of gold, a real reward for pushing further down.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Gear can now boost Max Stamina & Stamina Regen", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Gear can now boost Max Stamina & Stamina Regen", by: "Jeff Louie", notes: [
     "Two new item stats: Max Stamina (STM) deepens your sprint/dash reserve, Stamina Regen (SRG) refills it faster after you exert. Both roll on chest, legs and amulets.",
     "So classes that don't pump the pool's attribute can still sprint and dash freely — buy your Stamina on gear instead.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Treasure Goblin hands over rarer loot", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Treasure Goblin hands over rarer loot", by: "Jeff Louie", notes: [
     "Catch a fleeing Treasure Goblin and its jackpot chest now skews harder toward the top tiers — a much better shot at epic, legendary and unique gear.",
     "Its gold burst and Chaos Orb are unchanged; the chase just pays out rarer.",
   ] },
@@ -35,7 +35,7 @@ export const CHANGELOG = [
   { date: "2026-07-05", size: "small", v: "Wandering merchant & mystic show up less often", by: "Jeff Louie", notes: [
     "The roaming merchant now wanders in on roughly 1 floor in 8 (was 1 in 5), and the hooded mystic on roughly 1 in 10 (was 1 in 6) — each stays a treat to stumble on rather than a near-guarantee.",
   ] },
-  { date: "2026-07-05", size: "big", v: "Full controller support", by: "Claude", notes: [
+  { date: "2026-07-05", size: "big", v: "Full controller support", by: "ASuiter89", notes: [
     "Plug in a PlayStation, Xbox or Steam Deck / generic gamepad — everything in the game is now playable on a controller, revealed the moment you touch it. Keyboard and mouse stay live.",
     "In the dungeon: left stick moves, R2 sprints, R1 dashes. ✕ interacts/uses, ○ opens the Bag, □ toggles the log, △ opens a town portal. Hold L1 and press ✕○□△ to cast your four skills.",
     "D-pad: health & mana potions (left/right), swap weapon set (up), cycle auto-attack focus (down). Right stick inspects foes; L3 collapses the minimap.",
@@ -48,17 +48,17 @@ export const CHANGELOG = [
     "The Vault Keeper turns SSF heroes away — no banking or withdrawing gold or gear, and town shops charge carried coin only. Crafting materials fill a private per-hero wallet instead of the shared one.",
     "SSF heroes wear a gold SOLO SELF-FOUND tag on the title card, save slots and graveyard, matching Hardcore's crimson one.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Bag's frozen header no longer leaks the list above the gold & materials card", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Bag's frozen header no longer leaks the list above the gold & materials card", by: "ASuiter89", notes: [
     "The LOOT drawer's pinned header (gold & materials pill, slot tabs, sort/filter) now hugs the very top as the list scrolls — closing a thin strip where scrolling items used to peek through just above the gold & materials card.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Save slots name each hero's class", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Save slots name each hero's class", by: "Jeff Louie", notes: [
     "Each save slot now shows the hero's class (Warrior, Rogue, Mage, Templar) beside their name, so lookalike heroes are easy to tell apart.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Foe attacks launch from the foe, not the tile next to it", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Foe attacks launch from the foe, not the tile next to it", by: "ASuiter89", notes: [
     "Enemy sprites now stay locked to the tile the foe actually occupies, drawn and moved the same way the hero is — the sprite no longer drifts up to a tile off its cell while chasing you.",
     "Because of that drift, ranged bolts and strike lunges used to fly out of a neighbouring tile, or from across a wall from where the foe showed on the map. Every foe attack now originates from where its sprite stands.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Melee reaches a half tile further", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Melee reaches a half tile further", by: "ASuiter89", notes: [
     "Auto-attacks and melee-range skills now connect from a half tile away instead of demanding you stand right on top of a foe — the hit gate follows where the sprites actually are, not the tiles they snap to.",
     "Weapon reach numbers and tooltips are unchanged; this only softens the exact distance at which a swing lands.",
   ] },
