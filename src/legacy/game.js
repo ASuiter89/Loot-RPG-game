@@ -95,6 +95,7 @@ import { setPieceCount, setComplete as setIsComplete, setStatContribution,
 import { isBestiaryFieldKnown, speciesDiscovered, bestiaryRevealRatio, emptyDex, sanitizeDex, foldLegacyBestiary, recordKill } from '../systems/bestiary.js';
 import { buildCollectionCatalog, collectionFacets, groupStoredArtifacts, acquiredKeySet,
   filterCatalog, collectionProgress, itemCatalogKey } from '../systems/uniqueCollection.js';
+import { blockGearSwap, GEARSET_DANGER_RADIUS } from '../systems/gearSetSwap.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -7170,7 +7171,7 @@ window.gameGuide = function gameGuide(topic) {
       `BASE ATTACK SPEED is set by the weapon's style, so weapon type alone changes how fast you swing (before any Attack Speed % or Agility haste): light flurry weapons (Dagger, Shortsword, Hatchet) are the fastest, the 1H melee & ranged middle (Sword, Spear, Bow, Wand) is Normal, and the heavy two-handers + casters (Maul, Greatsword, Greataxe, Staff, Scythe) are the slowest. The weapon tooltip and the Forge preview print a base "attacks/sec · Slow/Normal/Fast" beside the reach grid, so you can compare speed WITHOUT equipping; gameState().player.weaponBaseSpeed reports the equipped weapon's base atkPerSec + tier, and player.offense.attackSpeed is the % that speeds it up from there.`,
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
       `Defense / block / damage-reduction come from gear, the Might attribute, and your class passive. On TOP of HP sits the Spirit Veil — a Spirit-fuelled blue shield that soaks damage before your health and recharges after a few unhit seconds (see the "veil" topic). Healing is OVER TIME (a pending pool that fills the bar on a slope, shown as a translucent zone) — sip ${key('healthPotion')} EARLY rather than at zero; see the "healing" topic.`,
-      `Swap loadouts with ${key('swapWeapon')} to switch between, say, a ranged kite set and a melee finisher.`,
+      `Swap loadouts with ${key('swapWeapon')} to switch between, say, a ranged kite set and a melee finisher. A safety net blocks swapping onto an empty/much-weaker set while foes are near, so a stray keypress can't strip you naked mid-fight.`,
     ],
     healing: [
       `RECOVERY IS OVER TIME, not instant. Most healing no longer snaps HP up — it fills a PENDING pool that pays into HP at a capped rate (~12%/s of max HP per source), so the bar climbs on a visible slope. gameState().player.pendingHeal is the HP still owed; the HP/MP bars show it as a translucent zone ahead of the solid fill.`,
@@ -7235,7 +7236,7 @@ window.gameGuide = function gameGuide(topic) {
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
       `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
-      `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. Off-class weapons can be carried and sold but not equipped.`,
+      `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. SAFEGUARD: while enemies are near you can't swap onto an EMPTY or much-weaker set (it would strip your armor mid-fight) — break away first, or swap where it's safe; gearing UP to a stronger set is always allowed. Off-class weapons can be carried and sold but not equipped.`,
       `Bosses spill the MOST loot of any foe, and the FIRST time you clear a given boss FLOOR its guardian pays a jackpot — ~3x the drops at noticeably better quality (a one-time windfall per boss floor). In Endless, where boss species recur, this tracks by floor, so every new or deeper boss floor keeps paying; farming a floor you've already cleared drops at the normal boss rate. gameState().enemies[i].firstKill flags a boss whose floor windfall is still unclaimed. See gameGuide("enemies") for the boss rules.`,
       `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them.`,
       `Crafting materials (Scrap → Glimmer → Core → Chaos, common→rare) come mainly two ways. Foes DROP them, gated by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four). SALVAGING gear sheds them by the item's rarity regardless of difficulty — so a lucky high-rarity find is your main early route to a material your tier can't yet drop. Bounty rewards and Treasure Goblins are bonus exceptions that ignore the gate — they can hand you a rarer material early. Materials are deliberately scarce; see gameGuide("autoloot") for the salvage bands.`,
@@ -26370,6 +26371,16 @@ function gearSetBarHTML() {
     </button>`;
   }).join('')}</div>`;
 }
+// Is the hero in real danger right now? Town is always safe; in the dungeon it is
+// danger if combat is hot, a foe is actively hunting, or any live foe sits within a
+// few tiles. Feeds the gear-set swap guard (blockGearSwap) so a risky swap is only
+// refused when it could actually get you killed.
+function gearSwapInDanger() {
+  if (inTown) return false;
+  if ((player._combatSecs || 0) > 0) return true;
+  if (enemies.some(o => !o.dead && o.aggro)) return true;
+  return enemiesNear(GEARSET_DANGER_RADIUS).length > 0;
+}
 // Swap which loadout is worn. Called with no/invalid index from the G hotkey to
 // flip to the other set; with 0/1 from the on-screen buttons to pick one.
 function toggleGearSet(idx) {
@@ -26377,6 +26388,17 @@ function toggleGearSet(idx) {
   const target = (idx === 0 || idx === 1) ? idx : (activeGearSet === 0 ? 1 : 0);
   hideTooltip();
   if (target === activeGearSet) return;
+  // SAFEGUARD: refuse a swap onto an EMPTY or much-weaker loadout while foes are near —
+  // stripping your armor mid-fight (a fat-fingered Set button or the G hotkey) is a
+  // common accidental death. You can still swap freely when safe (to assemble Set 2),
+  // and gearing UP to a stronger set is never blocked, so bailing to real gear works.
+  if (blockGearSwap({ inDanger: gearSwapInDanger(),
+                      curPower: gearSetPower(gearSets[activeGearSet], activeGearSet),
+                      tgtPower: gearSetPower(gearSets[target], target) })) {
+    sfx('denied');
+    log(`Set ${target + 1} would leave you exposed — no swapping to it with enemies near. Break away first.`, 'important');
+    return;
+  }
   activeGearSet = target;
   // Swapping sets re-wears a loadout you already assembled — it is NOT a fresh equip
   // event, so it is intentionally exempt from the equip BLOCK: pieces stay worn even

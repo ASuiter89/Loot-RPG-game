@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Gear-set swap won't strip you naked mid-fight", by: "Claude", notes: [
+    "Swapping to an empty or much-weaker gear set is now blocked while enemies are near — no more accidental deaths from a stray Set 2 tap or G press.",
+    "Still swap freely when it's safe (to build a second set), and gearing UP to a stronger set always works, even mid-fight.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Deeper floors, bigger gold piles on the ground", by: "Claude", notes: [
     "Loose coin piles now visibly swell with their value — a shallow-floor handful stays tile-sized, a deep-floor hoard mounds up to roughly double, glow and all.",
   ] },
