@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Map no longer stretches when the loot drawer opens or folds", by: "Claude", notes: [
+    "Fixed the map stretching or squishing out of shape when the loot drawer folds, unfolds, or the bag opens — the play area now re-fits itself to whatever width it's given and stays crisp, no page refresh needed.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Quest-giver arrow floats above the head, not over the face", by: "Jeff Louie", notes: [
     "Fixed the \"follow me\" / \"quest here\" arrow over a quest-giver so it now floats clear above their head instead of covering their face.",
   ] },

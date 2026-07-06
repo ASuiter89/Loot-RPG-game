@@ -8895,6 +8895,31 @@ window.addEventListener('resize', onViewportResize);
 // those too so the full-screen canvas always matches the visible area.
 window.addEventListener('orientationchange', onViewportResize);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
+// ── MAP BOX OBSERVER ──
+// The map canvas fills whatever the side panels leave it, and that box changes
+// from MANY places: a window drag, the log/loot drawer folding, the bag drawer
+// un-collapsing (toggleBag), a UI-SIZE change. Making every one of those remember
+// to re-fit the backing buffer is fragile — a raw class toggle silently skips the
+// re-fit and leaves the map stretched/squished (see the note in padOpenBag), and
+// the timed per-frame slide re-fit only covers its own short window, so a change
+// that settles outside it stays distorted until the next window resize. Observing
+// the canvas box directly is the robust backstop: whenever its size actually
+// changes — for any reason, including every intermediate size as a column slides —
+// re-fit the buffer to match and redraw. Setting the buffer never changes the
+// element's box (its size is CSS-driven), so this can't feed back into a loop.
+if (typeof ResizeObserver === 'function') {
+  let _roW = canvas.width, _roH = canvas.height;   // last buffer size we fit to
+  const mapBoxObserver = new ResizeObserver(() => {
+    resizeCanvas();
+    // Only redraw when the fit actually changed the buffer, so idle ticks (and the
+    // per-frame slide re-fit having already synced it) cost nothing.
+    if (canvas.width !== _roW || canvas.height !== _roH) {
+      _roW = canvas.width; _roH = canvas.height;
+      try { draw(); } catch (e) {}
+    }
+  });
+  mapBoxObserver.observe(canvas);
+}
 
 // The loot drawer is a permanent column — always open; tapping the map never closes it.
 
