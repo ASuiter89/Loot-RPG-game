@@ -122,6 +122,9 @@ export const GEAR_POWER = {
   utilityFlat: {
     GOLDFIND: 1, XPGAIN: 1, MAGICFIND: 2, MATFIND: 1,
     MCR: 1.5, MPLEECH: 1.2, MPKILL: 0.8, MP: 0.15,
+    // Stamina (sprint/dash fuel): a deep pool is worth a hair per point like MP;
+    // faster refill is worth a bit more per point but rolls small.
+    STAM: 0.15, STAMREG: 1,
   },
   // A small flat nudge per rarity — kept low so Power is driven by real stat
   // impact, letting a deep common eventually out-power an early legendary.

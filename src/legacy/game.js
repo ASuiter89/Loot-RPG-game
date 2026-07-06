@@ -189,11 +189,11 @@ const SLOT_AFFIX_POOLS = {
   // caster weapon (Staff/Wand) only SPELLPWR/CASTSPD — so the two never mix.
   weapon: { stats: ['ATK','ACC','CRIT','CRITDMG','IDMG','DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','MAGICPEN','LEECH','MPLEECH','SPELLPWR','SKILLPWR','BLEED','STUNPWR','ATKSPD','CASTSPD'], attrs: ['might','agility','spirit'] },
   head:   { stats: ['HP','MP','REGEN','CRIT','CRITDMG','SPD','MAGICFIND','XPGAIN','SPELLPWR','SKILLPWR','CDR','MCR','CASTSPD','MAGICPEN','DODGE','MPKILL','MATFIND'], attrs: ['vitality','spirit','luck'] },
-  chest:  { stats: ['HP','REGEN','MP','DR','BLOCK','THORNS','HPKILL','DODGE','MAGICFIND','TENAC'], attrs: ['vitality','spirit','luck'] },
+  chest:  { stats: ['HP','REGEN','MP','DR','BLOCK','THORNS','HPKILL','DODGE','MAGICFIND','TENAC','STAM','STAMREG'], attrs: ['vitality','spirit','luck'] },
   hands:  { stats: ['CRIT','ACC','CRITDMG','IDMG','DBLSTRIKE','SPD','PEN','LEECH','EXEC','CDR','CLEAVE','BLOCK','THORNS','ATKSPD','SKILLPWR'], attrs: ['might','agility','spirit'] },
-  legs:   { stats: ['SPD','HP','REGEN','DODGE','DR','BLOCK','MP','GOLDFIND','XPGAIN','HPKILL','TENAC'], attrs: ['agility','vitality','luck'] },
+  legs:   { stats: ['SPD','HP','REGEN','DODGE','DR','BLOCK','MP','GOLDFIND','XPGAIN','HPKILL','TENAC','STAM','STAMREG'], attrs: ['agility','vitality','luck'] },
   ring:   { stats: ['CRIT','ACC','CRITDMG','ATK','IDMG','SKILLPWR','LEECH','MPLEECH','GOLDFIND','MAGICFIND','MATFIND','HP','MP','DEF','DBLSTRIKE','BOSSDMG','EXEC','PEN','MAGICPEN','MCR','MPKILL','CLEAVE'], attrs: ['might','agility','luck','spirit','vitality'] },
-  amulet: { stats: ['MP','HP','REGEN','SPELLPWR','CASTSPD','MAGICPEN','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC'], attrs: ['spirit','luck','vitality','might','agility'] },
+  amulet: { stats: ['MP','HP','REGEN','SPELLPWR','CASTSPD','MAGICPEN','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC','STAM','STAMREG'], attrs: ['spirit','luck','vitality','might','agility'] },
   // Off-hands: defensive layers + caster utility. A shield's BLOCK headline already
   // flows through totalStat('BLOCK') into combat, so it needs no special-casing.
   // Like weapons, the power/speed stats here are gated by family in itemStatPool()
@@ -2965,6 +2965,9 @@ const STAT_NAMES = ['ATK','DEF','SPD','LCK','HP','MP','CRIT','CRITDMG','REGEN'];
 // new gear and survives only on older items.
 const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', HP:'Max HP',
   VEIL:'Spirit Veil',
+  // Stamina fuels sprint/dash. STAM deepens the pool, STAMREG speeds its refill —
+  // so a class that never invests in Vitality can still sprint on gear alone.
+  STAM:'Max Stamina', STAMREG:'Stamina Regen',
   MP:'Max MP', CRIT:'Crit Rating', CRITDMG:'Crit Dmg %', REGEN:'Regen', DMG:'Damage', ACC:'Accuracy',
   // ── new stats ── leech & on-kill sustain, defensive layers, offensive %s,
   // utility/economy %s, and caster %s. Percent stats carry a "%" in their label
@@ -2986,7 +2989,7 @@ const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', H
   TENAC:'Tenacity %' };
 // Short codes for the compact one-line item summary (the tooltip/enchanter use the
 // full STAT_LABELS above). Anything missing falls back to its raw key.
-const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', VEIL:'VEIL', MP:'MP', CRIT:'CRIT', ACC:'ACC',
+const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', VEIL:'VEIL', STAM:'STM', STAMREG:'SRG', MP:'MP', CRIT:'CRIT', ACC:'ACC',
   CRITDMG:'CDMG', REGEN:'REG', LEECH:'LCH', MPLEECH:'MLC', HPKILL:'HoK', MPKILL:'MoK',
   THORNS:'THN', DR:'DR', BLOCK:'BLK', DODGE:'DGE', IDMG:'IDMG', DBLSTRIKE:'2X', CLEAVE:'CLV',
   BOSSDMG:'vsB', EXEC:'EXE', PEN:'PEN', MAGICPEN:'MPN', GOLDFIND:'GF', XPGAIN:'XP', MAGICFIND:'MF', MATFIND:'MTF',
@@ -3009,6 +3012,8 @@ const STAT_DESC = {
   LCK: 'Fortune — better crit chance and richer loot.',
   HP: 'Your maximum health.',
   VEIL: 'Flat bonus to your maximum Spirit Veil — the blue shield that soaks damage before your health.',
+  STAM: 'Deepens your Stamina pool — the reserve that fuels sprinting and dashing — with no attribute investment needed.',
+  STAMREG: 'Refills your Stamina faster after you sprint or dash — no attribute investment needed.',
   MP: 'Your maximum mana for casting skills.',
   CRIT: 'Chance to land critical hits (contested vs the foe\'s level).',
   CRITDMG: 'Bonus damage your critical hits deal.',
@@ -3673,12 +3678,14 @@ function baseMaxMp() {
 // hero carries a deeper sprint/dash reserve. Measured from Vitality above base so
 // a fresh hero stays at the tuned 100. (Class-scaled: Warriors sprint longest.)
 function baseMaxStamina() {
-  return Math.round(MAX_STAMINA + vitalityAboveBase() * attrCoef('staminaMax'));
+  return Math.round(MAX_STAMINA + vitalityAboveBase() * attrCoef('staminaMax') + totalStat('STAM'));
 }
 // How fast Stamina refills (per second) once you stop exerting: the STAM_REGEN
 // baseline plus a Vitality bonus, so Vitality shortens the downtime between sprints.
+// Gear STAMREG adds flat /sec on top, so a class that skips Vitality can still recover
+// quickly. (Both gear stats let non-Vitality builds buy Stamina without the attribute.)
 function staminaRegenPerSec() {
-  return STAM_REGEN + vitalityAboveBase() * attrCoef('staminaRegen');
+  return STAM_REGEN + vitalityAboveBase() * attrCoef('staminaRegen') + totalStat('STAMREG');
 }
 
 // Total Defense: gear DEF plus a contribution from Might (class-scaled — Warriors
@@ -7150,7 +7157,7 @@ window.gameGuide = function gameGuide(topic) {
       `The hero faces and animates in the direction it walks — down/up/left/right — cycling a walk animation while moving and resting on a standing frame when still. It's purely cosmetic; gameState().player.faceDir reports the current 4-way facing.`,
       `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~34/sec). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch auto-sprint).`,
       `DASH (${key('dash')}) is a quick burst (costs 35 Stamina, ~0.55s cooldown). It only repositions fast — there are no i-frames and enemies are solid, so you can't dash THROUGH a foe to escape.`,
-      `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec) — including while you rest in town, alongside HP/MP. The Vitality attribute deepens the pool and speeds its recharge. Check player.dashReady before dashing.`,
+      `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec) — including while you rest in town, alongside HP/MP. The Vitality attribute deepens the pool and speeds its recharge; gear Max Stamina (STM) and Stamina Regen (SRG) do the same, so a class that never invests in Vitality can still sprint on gear alone. Check player.dashReady before dashing.`,
       `Being Slowed (a debuff) halves speed; being Stunned roots you entirely (see gameState().effects).`,
       `Foes are solid, so a single one body-blocks you — slide along it and step around. But a MOB can't pin you forever: when bodies plug your heading AND the lanes you'd slide into to go around them, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall, and a lone foe with any real gap beside it stays solid).`,
     ],
@@ -15146,6 +15153,9 @@ const AFFIX_CURVES = {
   // VEIL (flat +max Spirit Veil) rolls a touch under HP — the Veil is the lighter,
   // "slower overall" defensive layer and only appears on dedicated Spirit gear.
   ATK:{flat:1}, DEF:{flat:1}, SPD:{flat:1}, HP:{flat:6}, VEIL:{flat:4}, MP:{flat:3.4}, REGEN:{flat:0.2},
+  // Stamina gear: STAM adds a chunk of the ~100 pool (near an MP roll); STAMREG adds a
+  // few /sec of refill (the /sec baseline is 22, so a small flat mult is plenty).
+  STAM:{flat:1.5}, STAMREG:{flat:0.3},
   THORNS:{flat:0.7}, HPKILL:{flat:0.7}, MPKILL:{flat:0.35},
   // Chance/avoidance stats are flat RATINGS (scale with item level, no cap): they feed
   // the rating-vs-level curves in combat instead of being a flat %.
@@ -24750,7 +24760,7 @@ function lootGlossaryHTML() {
     ['Defense', ['DEF','HP','VEIL','DR','BLOCK','DODGE','TENAC','THORNS']],
     ['Sustain', ['REGEN','LEECH','MPLEECH','HPKILL','MPKILL']],
     ['Caster',  ['MP','SPELLPWR','SKILLPWR','CASTSPD','CDR','MCR']],
-    ['Utility / Find', ['SPD','LCK','GOLDFIND','XPGAIN','MAGICFIND','MATFIND']],
+    ['Utility / Find', ['SPD','STAM','STAMREG','LCK','GOLDFIND','XPGAIN','MAGICFIND','MATFIND']],
   ];
   // Safety net: any stat not placed in a bucket above still appears under "Other",
   // so a newly added stat can never silently vanish from the key.
