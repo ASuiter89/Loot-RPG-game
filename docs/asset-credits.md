@@ -3,8 +3,7 @@
 Outdoor scenery and indoor props (furniture, containers, lighting, decoration) are
 drawn from the CC-BY-SA "[LPC]" collections on OpenGameArt / the ElizaWy LPC
 project. CC-BY-SA requires reproducing the full attribution below and linking back
-to each source page. (Terrain tiles are credited separately; DawnLike sprites
-in-game.)
+to each source page. (Terrain tiles are credited separately.)
 
 ## [LPC] Flowers, Plants, Fungi, Wood
 

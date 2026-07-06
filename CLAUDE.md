@@ -67,8 +67,7 @@ lives in `src/legacy/game.js` and shrinks as code is extracted.)
   px)` or a bespoke sprite, never a raw emoji standing in for the asset. Emoji are
   fine only as plain section-header punctuation and as the brief pre-load fallback
   (`drawEmoji`/`dlIcon`). Procedural terrain (walls, floors, water, lava) stays
-  procedural. We generate our own bespoke pixel art now (the DawnLike CC-BY 4.0
-  atlas is still bundled and fine to extend); ensure we can ship any new art.
+  procedural. We generate our own bespoke pixel art; ensure we can ship any new art.
 
 ## Architecture
 

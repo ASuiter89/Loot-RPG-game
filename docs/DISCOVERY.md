@@ -47,8 +47,8 @@ live in [`DECISIONS.md`](./DECISIONS.md)._
   endpoints (see §7).
 - **Fonts** are embedded as base64 `woff2` `@font-face` blocks (11 faces:
   Bangers, Cinzel + 9 player-selectable UI faces).
-- **Art** is embedded base64 PNG atlases (DawnLike CC-BY 4.0 subset + bespoke
-  monster/boss/hero/town art) indexed by JS lookup tables.
+- **Art** is embedded base64 PNG atlases (bespoke hand-generated sprite,
+  monster, boss, hero and town art) indexed by JS lookup tables.
 - The only "dependency" is the hardcoded Supabase project URL + publishable anon
   key (lines 27483–27484), which is safe to ship (RLS-gated).
 
