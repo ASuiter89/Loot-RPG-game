@@ -2183,7 +2183,7 @@
   }
   .loot-glossary > summary {
     cursor: pointer;
-    padding: 7px 10px;
+    padding: 5px 10px;
     color: var(--warn);
     font-weight: bold;
     list-style: none;
@@ -2193,7 +2193,7 @@
   .loot-glossary > summary::before { content: '▸ '; }
   .loot-glossary[open] > summary::before { content: '▾ '; }
   .loot-glossary > summary:hover { color: var(--gold); }
-  .gl-body { padding: 0 10px 8px; }
+  .gl-body { padding: 0 10px 6px; }
   /* On desktop the long stat key flows into two balanced columns; each themed
      group is a single unit so a header never splits from its rows. */
   @media (min-width: 760px) {
@@ -2205,14 +2205,14 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     font-size: var(--fs-fine);
-    margin: 8px 0 3px;
+    margin: 5px 0 2px;
   }
   /* First header in a group hugs the top of its column (the group already spaces
      itself); rely on the group wrapper for inter-group rhythm instead. */
   .gl-group:first-child > .gl-sect { margin-top: 0; }
-  /* Rows now carry a full description and wrap over 2–3 lines, so give adjacent
-     rows a little more breathing room than the old one-liner key had. */
-  .gl-row { display: flex; gap: 8px; padding: 2px 0; line-height: 1.35; }
+  /* Rows carry a terse description that may wrap to a 2nd line; keep the vertical
+     rhythm tight so the full key stays a compact reference. */
+  .gl-row { display: flex; gap: 8px; padding: 1px 0; line-height: 1.22; }
   .gl-code {
     flex: 0 0 42px;
     color: var(--warn);
