@@ -10,6 +10,10 @@ export const CHANGELOG = [
   { date: "2026-07-05", size: "large", v: "All-new hand-generated icon art", by: "Claude", notes: [
     "Every shared game icon — loot, gear slots, weapons, world features, materials, HUD and status icons, potions, cooking ingredients, pets and quest markers — is redrawn as fresh, higher-detail art in one consistent style.",
     "Icons now size to their actual artwork instead of a fixed tile, so each reads at its true shape and fills its space in menus, the HUD and on the map.",
+    "Health and Mana potions now share a matched flask — red for health, blue for mana — on the HUD buttons and in your bag.",
+    "Every weapon and blade mouse-cursor option points up-left, so it reads as a pointer with the tip as the click point.",
+    "The warrior's Spirit Veil skill gets the framed skill-badge look the other skills already had.",
+    "Quest-givers and lost pets on the map are drawn at full character size, matching the hero and foes instead of a tiny marker.",
   ] },
   { date: "2026-07-05", size: "small", v: "Account-wide bestiary, no more codex freeze", by: "Claude", notes: [
     "The Bestiary is now account-wide: kills carry across every hero and save slot, so slaying a species on one hero fills in its card for all of them. Your codex survives death, a Reset Run, and switching slots — like the shared town stash.",
