@@ -3833,6 +3833,7 @@
   .lb-attr-ic { flex: 0 0 auto; display: flex; }
   .lb-attr-name { flex: 1 1 auto; font-size: 1.2rem; color: var(--orange-300); }
   .lb-attr-val { flex: 0 0 auto; font-size: 1.3rem; font-weight: bold; color: var(--gold); }
+  .lb-attr-gear { font-size: 1.2rem; color: var(--green-400); }  /* +bonus from worn gear */
 
   /* Gear — a fluid paperdoll grid; each tile hovers its full item card. */
   .lb-gears { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 6px; }

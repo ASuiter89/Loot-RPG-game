@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Leaderboard hero snapshot shows gear's attribute bonus", by: "Claude", notes: [
+    "A hero's Attributes on the leaderboard snapshot now show the bonus their worn gear adds (e.g. 40 +13 in green), not just the base you spent — matching your own hero sheet.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Crafted gear forges at full depth — Craftsman & Enchanter now agree", by: "Claude", notes: [
     "The Craftsman now forges blanks at your full depth item level (deepest floor + 1) — the level a fresh drop there would carry, matching the Merchant, Gambler and the Enchanter's Empower cap. Forged gear starts one item level higher than before.",
     "Fixes the two disagreeing: a piece you just forged used to arrive one level short, so the Enchanter would immediately offer a free +1 Empower to max. Now a fresh forge is already at your depth, so there's nothing left to Empower.",
