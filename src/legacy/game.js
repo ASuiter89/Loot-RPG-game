@@ -1579,10 +1579,27 @@ function _iconTrimBox(key) {
 // Height of an inline icon relative to the text it sits beside (a multiple of the
 // computed font-size); ~1 keeps the trimmed art about as tall as the line.
 const TEXT_ICON_H = 1.08;
+// PLACEHOLDER art bridge: the endgame systems reference sprite keys that don't
+// exist in the atlas yet (see ASSETS_TODO.md). Until real pixel art ships, map each
+// by prefix to a themed EXISTING atlas tile so panels/HUD show a stand-in rather
+// than a blank — one rule covers every current and future endgame key. Returns the
+// stand-in's atlas index, or undefined (→ blank) if even the fallback is missing.
+function _egPlaceholderSprite(name) {
+  if (typeof name !== 'string') return undefined;
+  let src = null;
+  if (name.startsWith('cov_')) src = 'ic_cursed';
+  else if (name.startsWith('weave') || name.startsWith('glyph')) src = 'mat_glimmer';
+  else if (name === 'mat_aether' || name.startsWith('mf_')) src = 'mat_chaos';
+  else if (name.startsWith('pin_')) src = 'feat_gate_red';
+  else if (name.startsWith('cycle')) src = 'feat_gate_red';
+  else if (name.startsWith('deed')) src = 'q_relic';
+  return (src && SPRITE_IDX[src] !== undefined) ? SPRITE_IDX[src] : undefined;
+}
 function dlIconAt(name, px) {
   const sk = skillIconAt(name, px);   // generated skill badge wins over the atlas tile
   if (sk) return sk;
-  const i = SPRITE_IDX[name];
+  let i = SPRITE_IDX[name];
+  if (i === undefined) i = _egPlaceholderSprite(name);   // themed stand-in for un-arted endgame keys
   if (i === undefined || !spriteReady) return '';
   // Scale every DOM atlas icon by the UI SIZE setting so menu/HUD/panel icons
   // grow in lockstep with the rem-based text around them (the game map/canvas is

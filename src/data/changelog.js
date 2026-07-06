@@ -7,6 +7,15 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "large", v: "Endgame update — six late-game systems", by: "Claude", notes: [
+    "Ascendant Weave: spend Boss Points on a constellation board of real choices — opportunity-cost nodes, attribute-threshold keystones, and socketed Glyphs that drop deep in Endless — plus a cosmetic Weave Depth rank. Opens after your first boss floor.",
+    "Dread Covenants: swear stackable afflictions at a town altar before a descent; more Dread means deadlier floors AND richer loot, materials and boss rewards, tracked on a per-class “how hard did you beat it” checklist. Opens with Hardened.",
+    "Mirrorforge: a deep-crafting bench — spend a bounded Forging Potential on Attune, Exalt, Divine and a one-shot Corrupt, then Mirror an item to lock a perfect copy. Deep Endless now drops “radiant” greater rolls and the Aether material. Opens at Brutal.",
+    "Pantheon of the Deep: gather Effigy shards from Endless bosses, summon apex gods at the Altar, and fight them for exclusive Mythic gear — a Base→Uber ladder gated by how deep you’ve pushed Endless. Opens in Endless.",
+    "Cycles: opt into a seasonal ladder under a rotating headline rule and race a milestone Journey; enroll a hero for the current season from the Cycles panel.",
+    "Hall of Deeds: an account-wide Renown ladder that turns your Collection, Bestiary, Conquest, depth records and bounties into deeds paying titles, frames, badges and trophies — status only, never power.",
+    "For console play: gameGuide(“covenants”/“weave”/“mirrorforge”/“pantheon”/“cycles”/“deeds”) explains each, and gameState().endgame reports their live state.",
+  ] },
   { date: "2026-07-05", size: "large", v: "All-new hand-generated icon art", by: "Andrew Suiter", notes: [
     "Every shared game icon — loot, gear slots, weapons, world features, materials, HUD and status icons, potions, cooking ingredients, pets and quest markers — is redrawn as fresh, higher-detail art in one consistent style.",
     "Icons now size to their actual artwork instead of a fixed tile, so each reads at its true shape and fills its space in menus, the HUD and on the map.",
