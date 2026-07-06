@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Leaderboard gets a Self-Found ladder", by: "Jeff Louie", notes: [
+    "The global Leaderboard now has a third SELF-FOUND ladder beside Standard and Hardcore, ranking self-found heroes against each other.",
+    "Self-found heroes also still show on their Standard or Hardcore board with a gold SSF tag, and a hero's snapshot card names the mode.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Bosses no longer drop double or triple their loot", by: "Jeff Louie", notes: [
     "Fixed a bug where a foe killed by several simultaneous hits (a multi-projectile burst, a cleaving crit that arcs, or burning and poison finishing it the same instant) rolled its whole loot table once per hit — so a boss could spill 2–3× its intended gear. Every kill now pays out exactly once.",
   ] },

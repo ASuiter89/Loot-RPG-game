@@ -4,11 +4,14 @@ Dungeon Loot has a global leaderboard shared across **everyone who plays** —
 ranking heroes by **furthest floor**, **highest level**, **most gold**, and
 **highest Power**.
 
-Each board comes in two ladders, chosen with the **Standard / Hardcore** switch
-at the top of the leaderboard: **Standard** ranks ordinary heroes, **Hardcore**
-ranks only one-life permadeath heroes against each other. Both ladders share the
-same table — Hardcore rows are just flagged with a `hardcore` column and
-filtered.
+Each board comes in three ladders, chosen with the **Standard / Hardcore /
+Self-Found** switch at the top of the leaderboard: **Standard** ranks ordinary
+heroes, **Hardcore** ranks only one-life permadeath heroes against each other,
+and **Solo Self-Found** ranks heroes who never touched the shared Vault or
+materials. All three share the same table — rows are flagged with `hardcore` and
+`ssf` columns and filtered. Standard and Hardcore partition on `hardcore`; the
+Self-Found board is a **cross-cut** (`ssf = true`, either `hardcore` value), so a
+self-found hero also appears on their Standard or Hardcore board, tagged SSF.
 
 The game is still a single self-contained `index.html`. The leaderboard talks
 directly to a free [Supabase](https://supabase.com) project over its REST API.
@@ -50,6 +53,7 @@ create table if not exists public.leaderboard (
   gold         int  not null default 0,
   power        int  not null default 1,
   hardcore     boolean not null default false,
+  ssf          boolean not null default false,
   loadout      jsonb,
   updated_at   timestamptz not null default now(),
   primary key (name, hardcore)
@@ -70,6 +74,13 @@ alter table public.leaderboard add column if not exists ascension text;
 -- record) and the hero-detail panel simply reports "no snapshot".
 alter table public.leaderboard add column if not exists loadout jsonb;
 
+-- If you created the table before the Solo Self-Found ladder existed, add the
+-- `ssf` flag. Until it exists the Standard/Hardcore boards still load — the client
+-- selects `ssf` optionally and falls back to the base columns, and submissions
+-- automatically retry without it — so this is safe to run anytime. The Self-Found
+-- board only lights up once the column is present.
+alter table public.leaderboard add column if not exists ssf boolean not null default false;
+
 alter table public.leaderboard enable row level security;
 
 create policy "public read"   on public.leaderboard for select using (true);
@@ -78,8 +89,8 @@ create policy "public update" on public.leaderboard for update using (true) with
 ```
 
 That's all the backend needs. Each character upserts a single row; the boards
-are just that table filtered by `hardcore` and sorted by `max_floor`, `level`,
-`gold`, or `power`.
+are just that table filtered by `hardcore` (or `ssf` for the Self-Found board)
+and sorted by `max_floor`, `level`, `gold`, or `power`.
 
 ### Already have a leaderboard table? (Hardcore migration)
 
@@ -96,6 +107,21 @@ alter table public.leaderboard add primary key (name, hardcore);
 
 The existing read / insert / update policies already cover the new column, so
 there is nothing else to change.
+
+### Already have a leaderboard table? (Solo Self-Found migration)
+
+If your table predates the Self-Found ladder, add the `ssf` flag once — existing
+rows default to `false` (not self-found):
+
+```sql
+alter table public.leaderboard add column if not exists ssf boolean not null default false;
+```
+
+This is safe to run anytime and needs no policy or primary-key change. Until the
+column exists everything still works: the Standard and Hardcore boards select
+`ssf` optionally and fall back, and score submissions automatically retry without
+it — only the Self-Found board stays empty until you run this. The primary key
+stays `(name, hardcore)`; SSF is a filter column, not part of the key.
 
 ### Already have a leaderboard table? (Hero-snapshot migration)
 
