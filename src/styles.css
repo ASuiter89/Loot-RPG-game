@@ -2468,8 +2468,14 @@
   .pd-slot.filled { background: color-mix(in srgb, var(--ink) 75%, transparent); }
   /* A worn piece whose attribute requirement is no longer met: greyed & desaturated
      so the gear panel shows at a glance it's being ignored until you re-qualify. */
-  .pd-slot.pd-inactive { background: color-mix(in srgb, var(--magenta-800) 60%, transparent); }
+  .pd-slot.pd-inactive { background: color-mix(in srgb, var(--magenta-800) 60%, transparent); animation: pd-req-pulse 1.3s ease-in-out infinite; }
   .pd-slot.pd-inactive .dl-ic, .pd-slot.pd-inactive .pd-emoji { opacity: 0.45; filter: grayscale(0.7); }
+  /* A no-longer-usable worn piece throbs a red glow so the eye lands on the exact
+     slot to re-qualify (overrides the inline red box-shadow while it animates). */
+  @keyframes pd-req-pulse {
+    0%, 100% { box-shadow: 0 0 5px color-mix(in srgb, var(--red-350) 45%, transparent); }
+    50%      { box-shadow: 0 0 16px 2px color-mix(in srgb, var(--red-350) 95%, transparent); }
+  }
   .pd-emoji { font-size: 3rem; line-height: 1; filter: grayscale(0.1); }
   .pd-pwr { position: absolute; bottom: 1px; right: 3px; font-size: 1.2rem; }
 
@@ -2503,7 +2509,7 @@
     transform: translate(-50%, -50%);
     height: 125%; width: auto;
     z-index: 0; pointer-events: none;
-    opacity: 0.38;
+    opacity: 0.2;
     filter: drop-shadow(0 3px 8px rgba(0,0,0,0.4));
   }
   .pda-body img, .pda-body .dl-ic { display: block; height: 100%; width: auto; image-rendering: pixelated; }
