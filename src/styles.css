@@ -236,6 +236,9 @@
 
     /* ---- Z-index layers ---- */
     --z-hud: 50; --z-touch: 120; --z-overlay: 200; --z-modal: 210; --z-top: 300;
+    /* Controller layer sits above EVERY overlay (some use raw z up to ~620), so the
+       focus ring, virtual cursor and on-screen keyboard are never occluded. */
+    --z-pad: 700;
 
     /* ── UI FONT ── one knob for the whole interface. The player picks a face in
        <span data-spr=ic_mallet></span> Settings → Visuals → UI FONT; setUiFont() overrides this custom property at
@@ -4982,3 +4985,98 @@
     top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
     max-width: 82vw;
   }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     CONTROLLER (gamepad) layer — shown only under body.pad, revealed on the first
+     real gamepad input (see the GAMEPAD section in game.js). Additive: it never
+     alters the keyboard/mouse layout, only adds a focus ring, a virtual cursor, a
+     context hint bar, an on-screen keyboard and a help card. All token-driven.
+     ══════════════════════════════════════════════════════════════════════════ */
+
+  /* Focus ring — a floating box tracked over the selected menu element each frame,
+     so it follows re-renders and scrolling without touching the element's styles. */
+  #pad-ring { display: none; }
+  body.pad #pad-ring.on {
+    display: block; position: fixed; z-index: calc(var(--z-pad) + 10); pointer-events: none;
+    border: 2px solid var(--interactive); border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-glow), inset 0 0 0 1px color-mix(in srgb, var(--paper) 35%, transparent);
+    background: color-mix(in srgb, var(--interactive) 12%, transparent);
+    transition: left .06s linear, top .06s linear, width .06s linear, height .06s linear;
+  }
+
+  /* Virtual cursor — the right-stick mouse (R3). A small blade-tip pointer. */
+  #pad-cursor { display: none; }
+  body.pad #pad-cursor.on {
+    display: block; position: fixed; z-index: calc(var(--z-pad) + 20); pointer-events: none;
+    width: 16px; height: 16px; margin: -2px 0 0 -2px;
+    border-radius: 50% 50% 50% 2px;
+    background: radial-gradient(circle at 40% 35%, color-mix(in srgb, var(--paper) 90%, var(--interactive)), var(--interactive));
+    border: 1.5px solid var(--ink); box-shadow: var(--shadow-sm);
+  }
+
+  /* Context hint bar — a compact, unobtrusive strip of the current bindings, pinned
+     bottom-centre. Pointer-transparent so it never eats a click. */
+  #pad-hintbar { display: none; }
+  body.pad #pad-hintbar.on {
+    display: flex; position: fixed; z-index: var(--z-pad); pointer-events: none;
+    left: 50%; transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 2px);
+    gap: var(--space-4); flex-wrap: wrap; justify-content: center; max-width: 96vw;
+    padding: var(--space-2) var(--space-5);
+    background: color-mix(in srgb, var(--panel) 82%, transparent);
+    border: 1px solid var(--border); border-radius: var(--radius-pill);
+    font-size: var(--fs-fine); color: var(--text-muted);
+    box-shadow: var(--shadow-sm);
+  }
+  #pad-hintbar .pad-hint { white-space: nowrap; }
+  #pad-hintbar .pad-hint b {
+    display: inline-block; min-width: 1.5em; margin-right: 3px; padding: 0 4px;
+    text-align: center; color: var(--text);
+    background: var(--panel-raised); border: 1px solid var(--border);
+    border-radius: var(--radius-xs); font-weight: 700;
+  }
+
+  /* Shared scrim for the pad help + keyboard overlays. */
+  #pad-help, #pad-kbd { display: none; }
+  #pad-help.open, #pad-kbd.open {
+    display: flex; position: fixed; inset: 0; z-index: var(--z-pad);
+    align-items: center; justify-content: center;
+    background: var(--scrim); padding: var(--space-5);
+  }
+
+  /* Controller help card. */
+  .pad-help-card {
+    width: min(94vw, 460px); max-height: 88dvh; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-modal);
+    padding: var(--space-6); color: var(--text);
+  }
+  .pad-help-title { font-size: var(--fs-head); color: var(--gold); text-align: center; margin-bottom: var(--space-4); }
+  .pad-help-sec { font-size: var(--fs-sub); color: var(--interactive); text-transform: uppercase; letter-spacing: .04em; margin: var(--space-5) 0 var(--space-2); }
+  .pad-help-row { display: flex; align-items: baseline; gap: var(--space-4); padding: var(--space-2) 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent); }
+  .pad-help-keys { flex: 0 0 42%; text-align: right; font-weight: 700; color: var(--text); font-size: var(--fs-body); }
+  .pad-help-act { flex: 1; color: var(--text-muted); font-size: var(--fs-body); }
+
+  /* On-screen keyboard (text entry). Fluid: keys size off the viewport so it fits a
+     narrow phone through a wide screen, never a fixed column count. */
+  .pad-kb-card {
+    width: min(96vw, 560px);
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-modal);
+    padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3);
+  }
+  .pad-kb-preview {
+    min-height: 1.6em; padding: var(--space-3) var(--space-4); margin-bottom: var(--space-2);
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-size: var(--fs-strong); word-break: break-all;
+  }
+  .pad-kb-row { display: flex; gap: var(--space-2); justify-content: center; flex-wrap: wrap; }
+  .pad-kb-key {
+    flex: 1 1 auto; min-width: min(9vw, 40px); min-height: 40px; padding: var(--space-2);
+    background: var(--panel-raised); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: var(--fs-body); cursor: pointer;
+  }
+  .pad-kb-key.wide { flex-grow: 2; } .pad-kb-key.wide2 { flex-grow: 3; }
+  .pad-kb-key.done { background: color-mix(in srgb, var(--success) 40%, var(--panel-raised)); }
+  body.pad .pad-kb-key.pad-focused, body.pad .pad-help-card .pad-focused { border-color: var(--interactive); }
