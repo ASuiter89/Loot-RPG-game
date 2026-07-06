@@ -24823,8 +24823,13 @@ function lootGlossaryHTML() {
   const placed = new Set(STAT_GROUPS.flatMap(([, keys]) => keys));
   const leftover = Object.keys(STAT_SHORT).filter(k => !placed.has(k));
   if (leftover.length) STAT_GROUPS.push(['Other', leftover]);
-  const statRow = k =>
-    `<div class="gl-row"><span class="gl-code">${STAT_SHORT[k]}</span><span class="gl-mean">${STAT_LABELS[k] || k}</span></div>`;
+  // One glossary row: short code, full name (emphasised), then a plain-language
+  // blurb of what it does. Same shape for item stats and attributes so the whole
+  // key reads uniformly — every entry explains itself, not just names itself.
+  const glRow = (code, name, desc) =>
+    `<div class="gl-row"><span class="gl-code">${code}</span>` +
+    `<span class="gl-mean"><b class="gl-name">${name}</b>${desc ? ' — ' + desc : ''}</span></div>`;
+  const statRow = k => glRow(STAT_SHORT[k], STAT_LABELS[k] || k, STAT_DESC[k]);
   const group = (name, inner) => `<div class="gl-group"><div class="gl-sect">${name}</div>${inner}</div>`;
   const statSects = STAT_GROUPS.map(([name, keys]) =>
     group(name, keys.slice()
@@ -24833,7 +24838,7 @@ function lootGlossaryHTML() {
   ).join('');
   const attrRows = ATTR_KEYS.map(k => {
     const a = ATTRIBUTES[k];
-    return `<div class="gl-row"><span class="gl-code">${a.short}</span><span class="gl-mean">${a.label} — ${a.desc}</span></div>`;
+    return glRow(a.short, a.label, a.desc);
   }).join('');
   return _lootGlossaryHTML = `<details class="loot-glossary"><summary>Stat abbreviations</summary>` +
     `<div class="gl-body">` +

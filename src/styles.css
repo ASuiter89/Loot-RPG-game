@@ -2208,7 +2208,9 @@
   /* First header in a group hugs the top of its column (the group already spaces
      itself); rely on the group wrapper for inter-group rhythm instead. */
   .gl-group:first-child > .gl-sect { margin-top: 0; }
-  .gl-row { display: flex; gap: 8px; padding: 1px 0; line-height: 1.35; }
+  /* Rows now carry a full description and wrap over 2–3 lines, so give adjacent
+     rows a little more breathing room than the old one-liner key had. */
+  .gl-row { display: flex; gap: 8px; padding: 3px 0; line-height: 1.35; }
   .gl-code {
     flex: 0 0 42px;
     color: var(--warn);
@@ -2216,6 +2218,9 @@
     text-align: right;
   }
   .gl-mean { flex: 1; color: var(--neutral-250); min-width: 0; }
+  /* The stat/attribute name leads each blurb — brighter and bolder than its
+     description so the key stays scannable by name. */
+  .gl-name { color: var(--text); font-weight: 600; }
 
   .item-junk      { color: var(--junk); }
   .item-normal    { color: var(--normal); }
