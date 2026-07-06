@@ -26,6 +26,8 @@ import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/p
 import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.js';
 import { footprintSealsPath, footprintInsideRoom } from '../systems/decorPlacement.js';
 import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach.js';
+import { footprintReach } from '../systems/meleeReach.js';
+import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
@@ -20100,7 +20102,7 @@ function updatePlayer(dt) {
         moveTarget.wx = Math.max(0.5, Math.min(MAP_W - 0.5, f.fx == null ? f.x + fs / 2 : f.fx));
         moveTarget.wy = Math.max(0.5, Math.min(MAP_H - 0.5, f.fy == null ? f.y + fs / 2 : f.fy));
         const rng = weaponRangeOf((equipped || {}).weapon) || STYLE_RANGE[weaponStyle()] || 1;
-        if (footChebyshev(f) <= rng && (rng < 2 || hasLineToPlayer(f))) {
+        if (inWeaponReachOf(f, rng) && (rng < 2 || hasLineToPlayer(f))) {
           moveTarget.active = false; moveTarget.path = null; moveTarget.foe = null;
         }
       }
@@ -21302,9 +21304,10 @@ function tickAutoCast(dt) {
   castSkillById(id, { silent: true });
 }
 
-// Foes orthogonally/diagonally adjacent to the player.
+// Foes within the hero's melee reach — adjacent, plus the half-tile forgiveness the
+// auto-attack uses (so a cleave connects at the same distance a normal swing does).
 function adjacentToPlayer() {
-  return enemies.filter(o => !o.dead && Math.abs(o.x - player.x) <= 1 && Math.abs(o.y - player.y) <= 1);
+  return enemies.filter(o => !o.dead && inWeaponReachOf(o, 1));
 }
 
 // ── SKILL-TREE ACTIVES ──
@@ -21674,7 +21677,7 @@ function resolveCast(node, rank) {
       // order on an hp tie, matching the stable sort it replaces).
       let weakest = null;
       for (const o of enemies) {
-        if (o.dead || Math.abs(o.x - player.x) > 1 || Math.abs(o.y - player.y) > 1) continue;
+        if (o.dead || !inWeaponReachOf(o, 1)) continue;
         if (!weakest || o.hp < weakest.hp) weakest = o;
       }
       if (!weakest) { castMsg(`No foe within reach.`); return false; }
@@ -22360,14 +22363,23 @@ function enemyAct(e) {
   if (dist <= ENEMY_WANDER_RADIUS) wanderStep(e);
 }
 
-// Footprint-aware Chebyshev distance from the hero to the nearest cell of a foe
-// (multi-tile bosses included) — used to decide whether the hero's auto-attack
-// can reach it.
-function footChebyshev(e) {
-  const s = e.size || 1; let best = Infinity;
-  for (let dx = 0; dx < s; dx++) for (let dy = 0; dy < s; dy++)
-    best = Math.min(best, Math.max(Math.abs(e.x + dx - player.x), Math.abs(e.y + dy - player.y)));
-  return best;
+// Footprint-aware reach distance from the hero to a foe (multi-tile bosses included) —
+// used to decide whether the hero's auto-attack / weapon can reach it. Measured between
+// the SMOOTH sprite centres both sides are drawn at (via actorRenderCX/CY), so reach
+// tracks what you SEE: a foe mid-glide between tiles engages as its sprite arrives,
+// matching where its own bolts and lunges launch from. A half-tile MELEE_REACH_BONUS is
+// added at the call sites for the forgiveness. See systems/meleeReach.js.
+function footReachDist(e) {
+  // Read both sprite centres through the same accessor foe-emitted visuals use
+  // (actorRenderCX/CY), so reach launches from exactly where each sprite is drawn.
+  return footprintReach(actorRenderCX(player), actorRenderCY(player),
+                        actorRenderCX(e), actorRenderCY(e), e.size || 1);
+}
+// Whether a foe is within a weapon of `range` tiles of the hero, INCLUDING the half-tile
+// reach forgiveness — the single gate shared by auto-attack, the chase-stop, and the
+// melee-range skills so they all connect at the same distance.
+function inWeaponReachOf(e, range) {
+  return footReachDist(e) <= range + MELEE_REACH_BONUS;
 }
 
 // Back away from the player — ranged foes maintaining their distance.
@@ -30601,8 +30613,8 @@ function pickAutoTarget() {
   let best = null, bestScore = Infinity, bestD = Infinity;
   for (const e of enemies) {
     if (e.dead) continue;
-    const d = footChebyshev(e);
-    if (d > range) continue;
+    const d = footReachDist(e);                    // fractional reach from the body centre
+    if (d > range + MELEE_REACH_BONUS) continue;   // …plus a half-tile of forgiveness
     if (ranged && !hasLineToPlayer(e)) continue;  // can't shoot through walls
     const score = autoTargetScore(e, d, mode);    // pick by the player's target priority
     if (score < bestScore || (score === bestScore && d < bestD)) { bestScore = score; bestD = d; best = e; }
@@ -31834,7 +31846,8 @@ const __DL_FN_BRIDGE = {
   enemyWander,
   wanderStep,
   enemyAct,
-  footChebyshev,
+  footReachDist,
+  inWeaponReachOf,
   stepAwayFromPlayer,
   goblinEscape,
   goblinFlee,
