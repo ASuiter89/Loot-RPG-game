@@ -24824,11 +24824,12 @@ function lootGlossaryHTML() {
   const leftover = Object.keys(STAT_SHORT).filter(k => !placed.has(k));
   if (leftover.length) STAT_GROUPS.push(['Other', leftover]);
   // One glossary row: short code, full name (emphasised), then a plain-language
-  // blurb of what it does. Same shape for item stats and attributes so the whole
-  // key reads uniformly — every entry explains itself, not just names itself.
-  const glRow = (code, name, desc) =>
-    `<div class="gl-row"><span class="gl-code">${code}</span>` +
-    `<span class="gl-mean"><b class="gl-name">${name}</b>${desc ? ' — ' + desc : ''}</span></div>`;
+  // blurb of what it does. Same shape for item stats, attributes and item powers
+  // so the whole key reads uniformly — every entry explains itself, not just
+  // names itself. `color` tints code + name (item powers keep their loot-row hue).
+  const glRow = (code, name, desc, color) =>
+    `<div class="gl-row"><span class="gl-code"${color ? ` style="color:${color}"` : ''}>${code}</span>` +
+    `<span class="gl-mean"><b class="gl-name"${color ? ` style="color:${color}"` : ''}>${name}</b>${desc ? ' — ' + desc : ''}</span></div>`;
   const statRow = k => glRow(STAT_SHORT[k], STAT_LABELS[k] || k, STAT_DESC[k]);
   const group = (name, inner) => `<div class="gl-group"><div class="gl-sect">${name}</div>${inner}</div>`;
   const statSects = STAT_GROUPS.map(([name, keys]) =>
@@ -24840,10 +24841,17 @@ function lootGlossaryHTML() {
     const a = ATTRIBUTES[k];
     return glRow(a.short, a.label, a.desc);
   }).join('');
+  // The build-defining "✦ Name" powers on legendary and unique gear, straight from
+  // ITEM_POWERS so the key can never drift from what actually rolls. Alphabetical
+  // by display name; each keeps its loot-row color so the tag is recognisable.
+  const powerRows = Object.values(ITEM_POWERS)
+    .slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map(p => glRow('✦', p.name, p.desc, p.color)).join('');
   return _lootGlossaryHTML = `<details class="loot-glossary"><summary>Stat abbreviations</summary>` +
     `<div class="gl-body">` +
     statSects +
     group('Attributes', attrRows) +
+    group('Item powers — legendary &amp; unique gear', powerRows) +
     `</div></details>`;
 }
 

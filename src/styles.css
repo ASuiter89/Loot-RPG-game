@@ -2171,13 +2171,15 @@
   .loot-ctrl-pop .lc-hint { flex: 1 1 100%; color: var(--junk); font-size: 1.2rem; padding: 2px; }
   .loot-ctrl-clear { flex: 1 1 100%; color: var(--danger); }
 
-  /* ── LOOT GLOSSARY ── collapsible key to the short stat codes on loot rows. */
+  /* ── LOOT GLOSSARY ── collapsible key to the short stat codes on loot rows.
+     Fine-print tier: the key is a dense reference (every stat, attribute and
+     item power), so it uses the smallest size on the type scale. */
   .loot-glossary {
     margin: 10px 4px 4px;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--bg);
-    font-size: 1.2rem;
+    font-size: var(--fs-fine);
   }
   .loot-glossary > summary {
     cursor: pointer;
@@ -2202,7 +2204,7 @@
     color: var(--junk);
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    font-size: 1.2rem;
+    font-size: var(--fs-fine);
     margin: 8px 0 3px;
   }
   /* First header in a group hugs the top of its column (the group already spaces
@@ -2210,7 +2212,7 @@
   .gl-group:first-child > .gl-sect { margin-top: 0; }
   /* Rows now carry a full description and wrap over 2–3 lines, so give adjacent
      rows a little more breathing room than the old one-liner key had. */
-  .gl-row { display: flex; gap: 8px; padding: 3px 0; line-height: 1.35; }
+  .gl-row { display: flex; gap: 8px; padding: 2px 0; line-height: 1.35; }
   .gl-code {
     flex: 0 0 42px;
     color: var(--warn);
