@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Treasure Goblin hands over rarer loot", by: "Claude", notes: [
+    "Catch a fleeing Treasure Goblin and its jackpot chest now skews harder toward the top tiers — a much better shot at epic, legendary and unique gear.",
+    "Its gold burst and Chaos Orb are unchanged; the chase just pays out rarer.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Leaderboard gets a Self-Found ladder", by: "Jeff Louie", notes: [
     "The global Leaderboard now has a third SELF-FOUND ladder beside Standard and Hardcore, ranking self-found heroes against each other.",
     "Self-found heroes also still show on their Standard or Hardcore board with a gold SSF tag, and a hero's snapshot card names the mode.",
