@@ -28,14 +28,35 @@ const SELECT_COLS = COL_TIERS[0];
 // and `loadout`). Mirrors the read-side COL_TIERS degradation.
 const SUBMIT_OPTIONAL = ['ssf', 'loadout'];
 
-// The PostgREST filter selecting one ladder. Standard and Hardcore partition on
-// the `hardcore` flag; SSF is a CROSS-CUT — every self-found hero regardless of
-// hardcore — so an SSF hero also appears on their Standard/Hardcore board. A
-// legacy boolean (the old hcOnly arg) still maps: false→Standard, true→Hardcore.
+// Normalise a board selector into the two independent partition flags. A board
+// is now one cell of a 2×2 grid: Standard/Hardcore (the `hardcore` flag) ×
+// Non-SSF/SSF (the `ssf` flag), so a self-found hero lives ONLY on their own
+// self-found board, not cross-cut onto the general one. The canonical form is an
+// object `{ hardcore, ssf }`. Legacy scalars still map (false/'std'→Standard,
+// true/'hc'→Hardcore, 'ssf'→self-found Standard). A caller may pass `ssf: null`
+// to mean "don't constrain ssf" — the degraded query for a table that predates
+// the ssf column, where only the hardcore partition is expressible.
+export function normalizeLadder(ladder) {
+  if (ladder && typeof ladder === 'object') {
+    return {
+      hardcore: !!ladder.hardcore,
+      ssf: ladder.ssf == null ? null : !!ladder.ssf,
+    };
+  }
+  if (ladder === 'ssf') return { hardcore: false, ssf: true };
+  if (ladder === 'hc' || ladder === true) return { hardcore: true, ssf: false };
+  return { hardcore: false, ssf: false }; // 'std' | false | anything unknown
+}
+
+// The PostgREST filter selecting one board cell. Both dimensions partition:
+// `hardcore` splits Standard/Hardcore, `ssf` splits Non-SSF/SSF. When the ssf
+// flag is null the ssf predicate is OMITTED (the pre-ssf-column fallback), so
+// only the hardcore partition applies.
 export function ladderFilter(ladder) {
-  if (ladder === 'ssf') return 'ssf=eq.true';
-  if (ladder === 'hc' || ladder === true) return 'hardcore=eq.true';
-  return 'hardcore=eq.false'; // 'std' | false | anything unknown
+  const l = normalizeLadder(ladder);
+  let f = 'hardcore=eq.' + l.hardcore;
+  if (l.ssf !== null) f += '&ssf=eq.' + l.ssf;
+  return f;
 }
 
 /** Supabase REST headers for the publishable anon key (+ any extras). */
@@ -58,8 +79,9 @@ export function buildSubmitRequest({ url, key }, entry) {
   };
 }
 
-/** The board URL for a sort column + ladder ('std' | 'hc' | 'ssf'; a legacy
- *  boolean hcOnly still works). */
+/** The board URL for a sort column + ladder selector. `ladder` is a
+ *  `{ hardcore, ssf }` grid cell (see normalizeLadder); legacy scalars still
+ *  work. */
 export function buildFetchUrl({ url }, sortCol, ladder, cols = SELECT_COLS) {
   return url + REST_PATH +
     '?select=' + cols + '&' + ladderFilter(ladder) + '&order=' + sortCol + '.desc';
@@ -131,10 +153,12 @@ export function createLeaderboardRepo({
     async fetchBoard(sortCol, ladder, { pageSize = 1000, timeoutMs = 12000 } = {}) {
       const ctrl = new AbortControllerImpl();
       const timer = setTimeoutImpl(() => ctrl.abort(), timeoutMs);
-      // Page the full ladder for a given column set. The thrown Error carries the
-      // HTTP status so the caller can tell a missing-column 400 from a real outage.
-      const pageAll = async (cols) => {
-        const fetchUrl = buildFetchUrl(config, sortCol, ladder, cols);
+      const want = normalizeLadder(ladder);
+      // Page the full board for a given column set + filter. The thrown Error
+      // carries the HTTP status so the caller can tell a missing-column 400 from
+      // a real outage.
+      const pageAll = async (cols, filterLadder) => {
+        const fetchUrl = buildFetchUrl(config, sortCol, filterLadder, cols);
         let rows = [];
         for (let from = 0; ; from += pageSize) {
           const res = await fetchImpl(fetchUrl, {
@@ -152,9 +176,17 @@ export function createLeaderboardRepo({
         // Walk the column tiers richest-first. A 400 means a selected column is
         // missing on this (older) table, so drop the newest optional column and try
         // the next tier; the base tier always exists, so it rethrows a real outage.
+        // The `ssf` column lives ONLY in tier 0 (COL_TIERS[0]) — on any lower tier
+        // it's known-absent, so the ssf predicate can't be used: a Non-SSF board
+        // then filters on hardcore alone (correct — no ssf rows exist without the
+        // column), and an SSF board is necessarily empty.
         for (let t = 0; t < COL_TIERS.length; t++) {
+          const filterLadder = t === 0
+            ? want
+            : { hardcore: want.hardcore, ssf: null };
+          if (t > 0 && want.ssf === true) return []; // no self-found heroes on a pre-ssf table
           try {
-            return await pageAll(COL_TIERS[t]);
+            return await pageAll(COL_TIERS[t], filterLadder);
           } catch (e) {
             if (e && e.status === 400 && t < COL_TIERS.length - 1) continue;
             throw e;

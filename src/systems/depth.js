@@ -33,3 +33,29 @@ export function foldReached(maxFloor, gateFloor, dl) {
     advanced: floor > prevMax,
   };
 }
+
+// The deepest floor a set of already-cleared floors implies is re-enterable.
+// Clearing floor N unseals its down-stairs to floor N+1 (see floorUnlockedByClear),
+// so the frontier a clear-set earns is the max over cleared floors of that unlock —
+// EXCEPT a tier's last finite floor (25/50/75), which opens the next DIFFICULTY (not
+// a floor N+1 in the same tier), so it never bumps the continuous frontier past the
+// tier boundary. `clearedFloors` is a map keyed by continuous floor number → truthy.
+//
+// Used to migrate saves whose floors were cleared BEFORE a clear advanced the
+// deepest tracker: those banked the clear in `clearedFloors` without advancing
+// maxFloor/gateFloor, and re-entering an already-cleared floor never re-fires the
+// unlock — so without this backfill an existing hero can't warp to the checkpoint
+// their boss kills already opened. Returns 0 for an empty/absent set.
+export function clearedFrontier(clearedFloors, floorsPerDiff, finiteDepth) {
+  if (!clearedFloors || typeof clearedFloors !== 'object') return 0;
+  let best = 0;
+  for (const k in clearedFloors) {
+    if (!clearedFloors[k]) continue;
+    const f = Math.floor(Number(k));
+    if (!(f >= 1)) continue;
+    const isLastFinite = f <= finiteDepth && f % floorsPerDiff === 0;
+    const unlocked = isLastFinite ? f : f + 1;
+    if (unlocked > best) best = unlocked;
+  }
+  return best;
+}

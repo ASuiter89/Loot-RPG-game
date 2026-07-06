@@ -16,6 +16,38 @@ export const CHANGELOG = [
     "Hall of Deeds: an account-wide Renown ladder that turns your Collection, Bestiary, Conquest, depth records and bounties into deeds paying titles, frames, badges and trophies — status only, never power.",
     "For console play: gameGuide(“covenants”/“weave”/“mirrorforge”/“pantheon”/“cycles”/“deeds”) explains each, and gameState().endgame reports their live state.",
   ] },
+  { date: "2026-07-06", size: "small", v: "Dropped food refuels mana & stamina too", by: "Claude", notes: [
+    "Snacks picked up off the floor now restore MP and Stamina alongside HP — the same amount to all three, so a bite is a quick top-up for casters and sprinters, not just wounded fighters.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "On touch, opening any menu pauses the game", by: "Jeff Louie", notes: [
+    "On phones and tablets, opening the bag or any pop-up menu now freezes the dungeon — no more taking hits while you rearrange gear or read the codex. Close it and play resumes exactly where it left off.",
+    "Desktop is unchanged: its loot drawer is a permanent sidebar, so play continues beside it.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Mana bar pulses when you're short to cast", by: "Claude", notes: [
+    "Trying to cast a skill without enough mana now gives the mana bar a brief, faint blue pulse — a quick nudge toward why nothing fired.",
+    "Skill buttons already grey out while recharging or when you can't afford them; this points the eye at the mana pool as the reason.",
+  ] },
+  { date: "2026-07-06", size: "medium", v: "Cloud saves survive playing on two devices", by: "Claude", notes: [
+    "A game window left open no longer overwrites progress you made on another device — leave it open on one machine, keep playing on another, and the first window catches up instead of clobbering your newer save.",
+    "A window that's open but not being played now goes idle after a minute (or when its tab is hidden) and stops writing and mirroring saves; the moment you return it re-checks your account and pulls down anything a second device advanced.",
+    "Cloud saves now defer to your account before uploading, so an out-of-date copy can never overwrite a newer one; whichever copy has been played longer always wins.",
+    "Play-time is now counted only while you're actually playing, so an idle window can't inflate its time and win a merge it shouldn't.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Sealed stairs marked with a padlock", by: "Andrew Suiter", notes: ["The down-stairs now show a brass padlock while the floor is sealed, instead of the old door marker — the locked exit reads at a glance. The \"stairs are sealed\" messages carry the same padlock."] },
+  { date: "2026-07-06", size: "small", v: "Beaten boss floors unlock the next warp checkpoint", by: "Andrew Suiter", notes: ["Heroes who cleared a boss floor before clears began opening the next checkpoint early now get that checkpoint at the Dungeon Gate on load — no need to physically descend to it first. A clear already unlocks the next floor going forward; this heals older saves whose progress predated that."] },
+  { date: "2026-07-06", size: "small", v: "Cursor options fixed up", by: "Claude", notes: [
+    "Settings cursor picker shows its style swatches again — they'd gone blank.",
+    "Cursor options are blade, sword, dagger, spear and staff; the dagger pointer now aims up-left instead of down-right.",
+    "Bow art (skeleton archers, the quiver, ranged combat log) no longer shows a grey patch between the bow and its string.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "First dungeon floor seals its stairs again", by: "Andrew Suiter", notes: ["The real first floor after the beach now keeps its stairs down sealed until you clear the foes, like every other floor — the beach tutorial was wrongly marking floor 1 pre-cleared, so its stairs opened on arrival."] },
+  { date: "2026-07-06", size: "small", v: "Hero card depth reads as a gate icon", by: "Andrew Suiter", notes: ["Title-screen and pause-menu hero card swaps the word \"Deepest\" for the red dungeon-gate icon, so the depth and gold both fit on the card without crowding."] },
+  { date: "2026-07-06", size: "small", v: "Hero card shows your gold again", by: "Andrew Suiter", notes: ["Title-screen and pause-menu hero card now show your real gold — it read 0 for any hero carrying 1,000 or more."] },
+  { date: "2026-07-06", size: "small", v: "Self-Found leaderboard splits by Standard & Hardcore", by: "Andrew Suiter", notes: [
+    "The Leaderboard now picks a board with three button rows: Standard or Hardcore first, Non-SSF or SSF second, then Furthest / Level / Gold / Power.",
+    "Self-found heroes are now ranked only against other self-found heroes of the same mode — Standard and Hardcore each get their own Self-Found board, instead of one shared self-found list.",
+    "Opens on Standard + Non-SSF, as before.",
+  ] },
   { date: "2026-07-05", size: "large", v: "All-new hand-generated icon art", by: "Andrew Suiter", notes: [
     "Every shared game icon — loot, gear slots, weapons, world features, materials, HUD and status icons, potions, cooking ingredients, pets and quest markers — is redrawn as fresh, higher-detail art in one consistent style.",
     "Icons now size to their actual artwork instead of a fixed tile, so each reads at its true shape and fills its space in menus, the HUD and on the map.",
