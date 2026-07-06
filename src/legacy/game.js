@@ -28624,14 +28624,36 @@ function lbSkillNode(classKey, ascKey, id) {
   return null;
 }
 
+// The per-attribute bonus a snapshot's worn gear grants, mirroring totalAttr's gear
+// loop: each piece's +attr, scaled by its boss-point slot multiplier. Derived from
+// the already-stored gear/slotLevels so the card shows base + gear like the live
+// hero sheet — no extra field on the saved blob, and old rows work too.
+function lbGearAttrBonus(lo) {
+  const out = {};
+  const gear = (lo && lo.gear) || {};
+  const lv = (lo && lo.slotLevels) || {};
+  for (const slot of SLOT_KEYS) {
+    const it = gear[slot];
+    if (!it || !it.attrs) continue;
+    const m = lv[slot] ? slotMultiplier(lv[slot]) : 1;
+    for (const k in it.attrs) {
+      if (typeof it.attrs[k] === 'number') out[k] = (out[k] || 0) + it.attrs[k] * m;
+    }
+  }
+  return out;
+}
 // The body: attributes, worn gear and learned skills read from the loadout blob.
 function lbHeroBuildHTML(r, lo) {
   lo = lo || {};
   const attrs = lo.attributes || {};
-  // Attributes — every key in canonical order, icon + name + value.
+  const gearAttr = lbGearAttrBonus(lo);
+  // Attributes — every key in canonical order, icon + name + the base (spent) value
+  // plus any gear bonus in green, so the total the hero fights with is visible.
   const attrRow = ATTR_KEYS.map(k => {
     const a = ATTRIBUTES[k] || {};
-    return `<div class="lb-attr"><span class="lb-attr-ic">${dlIcon(a.sprite, 18) || ''}</span><span class="lb-attr-name">${a.label || k}</span><span class="lb-attr-val">${abbreviateNumber(attrs[k] || 0)}</span></div>`;
+    const gb = Math.round(gearAttr[k] || 0);
+    const gearStr = gb ? ` <span class="lb-attr-gear">+${abbreviateNumber(gb)}</span>` : '';
+    return `<div class="lb-attr"><span class="lb-attr-ic">${dlIcon(a.sprite, 18) || ''}</span><span class="lb-attr-name">${a.label || k}</span><span class="lb-attr-val">${abbreviateNumber(attrs[k] || 0)}${gearStr}</span></div>`;
   }).join('');
   // Gear — one tile per slot; empty slots read as such so the paperdoll is complete.
   const gear = lo.gear || {};
