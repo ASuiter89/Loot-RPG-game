@@ -17079,8 +17079,13 @@ function draw() {
       drawMark(nfx, nfy, GREEN, npcSprite, true);
       const dx0 = offX + nfx * tw, dy0 = offY + nfy * th;
       const following = quest.type === 'escort' && quest.npc.following;
-      // A pixel arrow marks "follow me" (up) vs "quest here" (down).
-      if (spriteReady) drawSpriteC(following ? 'ic_up' : 'ic_down', dx0 + tw/2, dy0 - th*0.04, Math.round(tw*0.34));
+      // A pixel arrow marks "follow me" (up) vs "quest here" (down). Float it
+      // clear ABOVE the giver's head, not over the face: the giver draws big
+      // (side tw*1.4, centred at dy0 + th*0.34 — see drawMark), so its top sits
+      // ~0.36·th above dy0; park the arrow just over that top with a small gap.
+      const npcSz = Math.round(tw * 1.4), arrowSz = Math.round(tw * 0.34);
+      const npcTop = dy0 + th*0.34 - npcSz/2;
+      if (spriteReady) drawSpriteC(following ? 'ic_up' : 'ic_down', dx0 + tw/2, npcTop - arrowSz/2 - th*0.04, arrowSz);
     }
     if (quest.item && !quest.hasItem) drawMark(quest.item.x, quest.item.y, GOLD, 'q_relic');
     if (quest.spot) drawMark(quest.spot.x, quest.spot.y, GOLD, quest.spot.sprite);
