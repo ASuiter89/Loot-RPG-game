@@ -11,8 +11,8 @@ export const CHANGELOG = [
     "Swapping to an empty or much-weaker gear set is now blocked while enemies are near — no more accidental deaths from a stray Set 2 tap or G press.",
     "Still swap freely when it's safe (to build a second set), and gearing UP to a stronger set always works, even mid-fight.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Deeper floors, bigger gold piles on the ground", by: "Claude", notes: [
-    "Loose coin piles now visibly swell with their value — a shallow-floor handful stays tile-sized, a deep-floor hoard mounds up to roughly double, glow and all.",
+  { date: "2026-07-05", size: "small", v: "Deep-floor gold piles pay far more", by: "Claude", notes: [
+    "Loose coin piles on the ground now scale up hard with depth — shallow floors are unchanged, but deep-floor piles pay hundreds of gold, a real reward for pushing further down.",
   ] },
   { date: "2026-07-05", size: "small", v: "Gear can now boost Max Stamina & Stamina Regen", by: "Claude", notes: [
     "Two new item stats: Max Stamina (STM) deepens your sprint/dash reserve, Stamina Regen (SRG) refills it faster after you exert. Both roll on chest, legs and amulets.",
