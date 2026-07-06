@@ -30,6 +30,7 @@ import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
+import { favouredBases, armorWeight, rollFavouredBase } from '../systems/classLoot.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
 import { rollDamage, spreadRange } from '../systems/damageRoll.js';
@@ -4368,28 +4369,30 @@ const CLASSES = {
     blurb: 'A frontline bruiser — hits hardest of the melee, lightly armoured.',
     passive: '+10% damage dealt · −10% damage taken',
     dmgAttrs: { primary: 'might', secondary: 'vitality' },
-    weapons: ['Sword','Axe','Mace','Spear','Scythe'],
+    // Loot lean (offhands = off-hand families, armor = light/heavy) tilts drops,
+    // the merchant and the gambler toward build-relevant bases. See rollBaseName.
+    weapons: ['Sword','Axe','Mace','Spear','Scythe'], offhands: ['shield'], armor: 'heavy',
   },
   rogue: {
     name: 'Rogue', icon: 'w_dagger', color: '#5ec27a',
     blurb: 'A nimble striker — the deadliest weapon hits, but fragile.',
     passive: '+12% damage · crits & dodge that scale with level',
     dmgAttrs: { primary: 'agility', secondary: 'might' },
-    weapons: ['Dagger','Sword','Bow'],
+    weapons: ['Dagger','Sword','Bow'], offhands: ['ranged','dual'], armor: 'light',
   },
   mage: {
     name: 'Mage', icon: 'ic_orb', color: '#7d9bff',
     blurb: 'A glass-cannon caster — a deep mana pool and ranged fire.',
     passive: '+30% max MP · +15% spell power · −10% damage taken',
     dmgAttrs: { primary: 'spirit', secondary: 'luck' },
-    weapons: ['Staff','Dagger'],
+    weapons: ['Staff','Dagger'], offhands: ['caster'], armor: 'light',
   },
   templar: {
     name: 'Templar', icon: 'a_shield', color: '#e8c95a',
     blurb: 'A holy veil — the sturdiest hero, and mends its own wounds.',
     passive: '+20% max HP · −15% damage taken · stronger regen',
     dmgAttrs: { primary: 'vitality', secondary: 'spirit' },
-    weapons: ['Sword','Mace','Spear'],
+    weapons: ['Sword','Mace','Spear'], offhands: ['shield'], armor: 'heavy',
   },
 };
 const CLASS_KEYS = Object.keys(CLASSES);
@@ -7200,6 +7203,7 @@ window.gameGuide = function gameGuide(topic) {
       `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — a curse hits ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
       `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
+      `Loot LEANS to your class: drops, the merchant and the gambler favour build-relevant bases (~60%, the rest random) — a Mage sees more staves/wands, robes and tomes; a Warrior/Templar more of their melee weapons, plate and shields; a Rogue more daggers/bows, light armour and quivers. Off-favoured bases still turn up, and picking a slot at the gambler still leans the base within it.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
       `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
@@ -15473,22 +15477,22 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   return item;
 }
 
-// Pick the base item type for a slot. Every class can now wield every weapon, but
-// drops still lean toward the categories your class FAVOURS (CLASSES[*].weapons) so
-// most loot stays build-relevant — yet a healthy ~40% still rolls fully at random,
-// so off-favoured weapons you've invested the stat for turn up too. Other slots
-// (armour, jewelry) are wearable by everyone, so they just roll uniformly.
+// Pick the base item type for a slot. Every class can wield/wear every base, but
+// drops (and the merchant + gambler, which roll through here) lean toward the bases
+// your class FAVOURS so most loot stays build-relevant — while ~40% still rolls
+// fully at random, so off-favoured pieces you've invested a stat for turn up too.
+// The lean covers each build axis: weapons by CATEGORY (CLASSES[*].weapons), off-
+// hands by FAMILY (offhands → shield/caster/ranged/dual), and armour by WEIGHT
+// (armor → light robes vs heavy plate). Jewellery has no lean, so it rolls uniform.
+// The favoured-subset logic + biased pick live in systems/classLoot.js (tested).
 function rollBaseName(slot) {
   const names = SLOTS[slot].names;
-  if (slot === 'weapon') {
-    const cls = playerClass();
-    if (cls && cls.weapons && cls.weapons.length) {
-      // names are sub-types; the class affinity is by category, so resolve first.
-      const favoured = names.filter(n => cls.weapons.includes(weaponCategoryOf(n)));
-      if (favoured.length) return Math.random() < 0.6 ? pick(favoured) : pick(names);
-    }
-  }
-  return pick(names);
+  const favoured = favouredBases(slot, names, playerClass(), {
+    categoryOf: weaponCategoryOf,               // weapon sub-type → category
+    familyOf: n => (BASE_STATS[n] || {}).off,   // off-hand base → family
+    weightOf: n => armorWeight((BASE_STATS[n] || {}).def), // armour base → weight
+  });
+  return rollFavouredBase(names, favoured, Math.random);
 }
 
 function weighted(obj) {

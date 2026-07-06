@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Loot leans to your class — merchant, gambler & drops", by: "Jeff Louie", notes: [
+    "Gear now favours your class across every slot: the merchant, the gambler and floor drops lean toward build-relevant bases (~60%, the rest still random).",
+    "A Mage sees far more staves, wands, robes and tomes — and far fewer quivers, plate and two-handed swords; a Warrior/Templar more melee weapons, plate and shields; a Rogue more daggers, bows, light armour and quivers.",
+    "Off-favoured bases still appear, so an off-build piece you've invested in can still turn up.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Terser stat-abbreviation blurbs", by: "Jeff Louie", notes: [
     "Trimmed every stat blurb in the \"Stat abbreviations\" key to a few words — same meaning, far less to read.",
   ] },
