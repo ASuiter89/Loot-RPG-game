@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Dropped food refuels mana & stamina too", by: "Claude", notes: [
+    "Snacks picked up off the floor now restore MP and Stamina alongside HP — the same amount to all three, so a bite is a quick top-up for casters and sprinters, not just wounded fighters.",
+  ] },
   { date: "2026-07-06", size: "small", v: "On touch, opening any menu pauses the game", by: "Jeff Louie", notes: [
     "On phones and tablets, opening the bag or any pop-up menu now freezes the dungeon — no more taking hits while you rearrange gear or read the codex. Close it and play resumes exactly where it left off.",
     "Desktop is unchanged: its loot drawer is a permanent sidebar, so play continues beside it.",

@@ -54,6 +54,7 @@ import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMa
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
 import { isSsf, walletGain, walletSpend } from '../systems/ssf.js';
+import { foodGains } from '../systems/foodRestore.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
 import { moatCells, seaMargin } from '../systems/islandFloor.js';
 import { emptyMealSlots, sanitizeMealSlots, assignMealToSlot, assignMealToSlotAt, groupPantry, removePantryStack, takeFromMealSlot, returnSlotToPantry, filledSlotCount, mealSignature } from '../systems/meals.js';
@@ -7204,7 +7205,7 @@ window.gameGuide = function gameGuide(topic) {
       `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. SAFEGUARD: while enemies are near you can't swap onto an EMPTY or much-weaker set (it would strip your armor mid-fight) — break away first, or swap where it's safe; gearing UP to a stronger set is always allowed. Off-class weapons can be carried and sold but not equipped.`,
       `Bosses spill the MOST loot of any foe, and the FIRST time you clear a given boss FLOOR its guardian pays a jackpot — ~3x the drops at noticeably better quality (a one-time windfall per boss floor). In Endless, where boss species recur, this tracks by floor, so every new or deeper boss floor keeps paying; farming a floor you've already cleared drops at the normal boss rate. gameState().enemies[i].firstKill flags a boss whose floor windfall is still unclaimed. See gameGuide("enemies") for the boss rules.`,
-      `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them.`,
+      `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them; each snack instantly restores a little HP, MP AND Stamina (the same amount to all three).`,
       `Crafting materials (Scrap → Glimmer → Core → Chaos, common→rare) come mainly two ways. Foes DROP them, gated by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four). SALVAGING gear sheds them by the item's rarity regardless of difficulty — so a lucky high-rarity find is your main early route to a material your tier can't yet drop. Bounty rewards and Treasure Goblins are bonus exceptions that ignore the gate — they can hand you a rarer material early. Materials are deliberately scarce; see gameGuide("autoloot") for the salvage bands.`,
     ],
     autoloot: [
@@ -20306,10 +20307,15 @@ function onEnterCell(nx, ny) {
   const fi = groundFood.findIndex(f => f.x === nx && f.y === ny);
   if (fi !== -1) {
     const f = groundFood.splice(fi, 1)[0];
-    const healed = Math.min(f.heal, player.maxHp - player.hp);
-    player.hp = Math.min(player.maxHp, player.hp + f.heal);
-    if (healed > 0) spawnFloatingText(player.x, player.y, `+${healed}`, '#44dd44');
-    log(`${dlIcon(f.sprite || 'food', 16)} Ate ${f.name}! +${healed} HP`, 'loot');
+    // A snack refuels the whole hero — the same bite tops up HP, MP and Stamina.
+    const g = foodGains(player, f.heal);
+    player.hp += g.hp; player.mp += g.mp; player.stamina += g.stamina;
+    // One rising floater per pool that actually gained (spawnFloatingText stacks
+    // them into a clean column), plus a matching combat-log line.
+    const pops = [[g.hp, '#44dd44', 'HP'], [g.mp, PALETTE.mp, 'MP'], [g.stamina, '#ffcf52', 'STA']]
+      .map(([n, c, l]) => [Math.round(n), c, l]).filter(([n]) => n > 0);
+    pops.forEach(([n, c]) => spawnFloatingText(player.x, player.y, `+${n}`, c));
+    log(`${dlIcon(f.sprite || 'food', 16)} Ate ${f.name}!${pops.length ? ' ' + pops.map(([n, , l]) => `+${n} ${l}`).join(', ') : ''}`, 'loot');
     updateBars();
   }
   // Auto-pickup coin piles
