@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Crafted gear forges at full depth — Craftsman & Enchanter now agree", by: "Claude", notes: [
+    "The Craftsman now forges blanks at your full depth item level (deepest floor + 1) — the level a fresh drop there would carry, matching the Merchant, Gambler and the Enchanter's Empower cap. Forged gear starts one item level higher than before.",
+    "Fixes the two disagreeing: a piece you just forged used to arrive one level short, so the Enchanter would immediately offer a free +1 Empower to max. Now a fresh forge is already at your depth, so there's nothing left to Empower.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Sort & filter the merchant like your bag", by: "Claude", notes: [
     "The merchant's Buy and Sell tabs now carry the same Sort (rarity, power, slot, value) and stat Filter controls as the LOOT drawer.",
     "Sell all / Scrap all at the merchant honor the filter — they only touch what's shown.",

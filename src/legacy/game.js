@@ -12802,9 +12802,19 @@ let forgeTier = 'normal';
 // back down into materials moved onto the bag itself — you scrap straight from
 // the LOOT drawer now — so there's no longer a Salvage bench here.
 
-// Crafted gear is geared to your deepest reached / current return depth, like
-// the town merchant's stock — so the Forge stays relevant as you descend.
+// Your deepest reached / current return depth as a FLOOR NUMBER. The game treats
+// "gear for floor N" as item level N+1 (see depthItemLevel), so this floor number
+// is one below a fresh drop's item level — used for cost curves and as the base
+// for depthItemLevel.
 function craftIlvl() { return Math.max(1, Math.max(dungeonReturn || 1, player.maxFloor || 1)); }
+
+// The item level of a FRESH drop on your deepest floor — the game's single "gear
+// for your current depth" level. Dungeon drops (dungeonLevel+1), the Merchant,
+// the Gambler, bounty rewards and the Enchanter's empower cap all use floor+1, so
+// the Craftsman forges to this too: a crafted blank matches a fresh drop on the
+// same floor instead of arriving one item level short (which is why the Enchanter
+// used to hand you a free +1 rank on a piece you'd just forged).
+function depthItemLevel() { return craftIlvl() + 1; }
 
 // ── PER-BASE CRAFT CHARACTER ──
 // Two items of the same rarity shouldn't cost the same to forge: a Maul is a
@@ -12873,7 +12883,7 @@ function craftCharacterNote(slot, baseName) {
 // Higher rarities pull in higher-tier materials: Scrap always, Core at rare+,
 // and a Chaos Orb at legendary.
 function craftCost(tier, slot = forgeSlot, baseName = forgeBase) {
-  const ilvl = craftIlvl();
+  const ilvl = depthItemLevel();
   const rank = CRAFT_TIERS.indexOf(tier);            // 0 (normal) .. 4 (legendary)
   const f = 1 + ilvl * 0.12;
   const { mat, labor } = craftBaseFactors(slot, baseName);
@@ -13033,7 +13043,7 @@ function renderForge() {
   }
 
   setTownContent(`
-    <div class="town-blurb">The Craftsman forges a <b>blank</b> piece at your current depth (ilvl ${craftIlvl()}) — its base damage or defense set by the base you pick, with empty modifier slots. Take it to the <span data-spr=ic_wand></span> Enchanter to fill them in. Rarity sets how many modifiers it can hold. Heftier bases drink more materials; finer ones bill more for the delicate&nbsp;labour.</div>
+    <div class="town-blurb">The Craftsman forges a <b>blank</b> piece at your current depth (ilvl ${depthItemLevel()}) — its base damage or defense set by the base you pick, with empty modifier slots. Take it to the <span data-spr=ic_wand></span> Enchanter to fill them in. Rarity sets how many modifiers it can hold. Heftier bases drink more materials; finer ones bill more for the delicate&nbsp;labour.</div>
     <div class="forge-label">Item type</div>
     <div class="forge-grid forge-slots">${slotBtns}</div>
     ${baseSection}
@@ -13043,7 +13053,7 @@ function renderForge() {
 // Build a blank item: headline stat only (weapon DMG / armor DEF, gloves +ATK),
 // no bonus affixes. Deterministic so the Forge preview matches what you'll get.
 function craftBlankItem(slot, tier, baseName) {
-  const lvl = craftIlvl();
+  const lvl = depthItemLevel();
   const mult = tierMult(tier);
   const dmgMult = { junk: 0.55, normal: 0.8, uncommon: 1, rare: 1.3, epic: 1.65, legendary: 2.1, unique: 2.6 }[tier];
   const baseValue = { junk: 1, normal: 5, uncommon: 20, rare: 80, epic: 300, legendary: 1200, unique: 5000 }[tier];
@@ -13964,9 +13974,10 @@ function replaceObjKey(obj, oldKey, newKey, newVal) {
 // changes WHICH modifiers a piece holds, so it doesn't reforge a locked piece.
 
 // The cap: the highest item level that could naturally drop for you right now — a
-// fresh drop on your deepest floor is craftIlvl()+1. You can never push a piece
-// past what the dungeon itself would hand you.
-function maxUpgradeIlvl() { return craftIlvl() + 1; }
+// fresh drop on your deepest floor. Shares depthItemLevel() with the Craftsman, so
+// a freshly forged blank is already at the cap (no free rank). You can never push a
+// piece past what the dungeon itself would hand you.
+function maxUpgradeIlvl() { return depthItemLevel(); }
 
 function empowerCost(item, toIlvl) {
   return calcIlvlUpgradeCost({ rank: enchRank(item), fromIlvl: item.ilvl || 1, toIlvl });
