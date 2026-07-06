@@ -370,6 +370,22 @@
     0%, 100% { box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 60%, transparent); }
     50%      { box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 60%, transparent), 0 0 9px 2px var(--unique); }
   }
+  /* Mana-short pulse — a brief, FAINT blue flash the mana bar gives when a cast is
+     attempted without enough mana (JS toggles the classes in pulseManaShort()). A
+     couple of gentle iterations, then it clears — an acknowledgment, not an ongoing
+     state like hp-low above. The glow rides on the bar's own `filter` (not
+     box-shadow), so one keyframe reads right on BOTH HUD tracks without cutting
+     their differing resting shadows, and their `overflow:hidden` never clips it. */
+  .mp-fill.mp-short, .dh-vital-fill.mp.mp-short { animation: mp-short-fill 0.5s ease-in-out 2; }
+  .bar-track.mp-short-track, .dh-vital-track.mp-short-track { animation: mp-short-glow 0.5s ease-in-out 2; }
+  @keyframes mp-short-fill {
+    0%, 100% { filter: brightness(1); }
+    50%      { filter: brightness(1.3); }
+  }
+  @keyframes mp-short-glow {
+    0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+    50%      { filter: drop-shadow(0 0 5px color-mix(in srgb, var(--mp) 80%, transparent)); }
+  }
   #gold-display { color: var(--gold); font-size: 1.3rem; }
 
   /* "Watch" settings button → spectator stream page (watch.html). Row keeps the

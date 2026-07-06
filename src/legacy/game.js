@@ -7148,7 +7148,7 @@ window.gameGuide = function gameGuide(topic) {
       `Because it soaks before HP and comes back free between fights, Spirit is now a defensive investment as much as an offensive one — and both +Spirit and +Spirit Veil gear are valued for the shield they grant (see the "power" topic).`,
     ],
     skills: [
-      `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready.`,
+      `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready and grey out while recharging or when you can't afford the MP. Trying to cast one without enough mana faintly pulses the mana bar (and logs why).`,
       `The bar has ${SKILL_SLOTS} MANUAL slots (cast by hand with ${key('skill1')}-${key('skill' + SKILL_SLOTS)}) plus ONE dedicated auto-cast slot. You choose what goes where — drag a learned active onto a slot, or use the SKILLS-tab slot buttons; a freshly-learned active auto-fills the first open manual slot.`,
       `gameState().skills lists each filled manual slot's number key, MP cost (already reduced by your Mana Cost Reduction), cooldown remaining, ready flag, and what the skill DOES — its shape, range/radius and the damages/heals/buffs/summons flags — so you can pick one without inspecting it. The auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
       `Every active has a SCHOOL — SKILL, SPELL, or HYBRID — shown as a badge on its tree node and in gameState().skills[i].school. A SKILL is martial: weapon-based, scales with weapon damage + Skill Power, leeches life, meets a foe's physical ARMOR (pierced by Armor Pen), recharged by CDR only. A SPELL is magic: scales with Spirit + Spell Power, never leeches, meets a foe's MAGIC RESIST (pierced by Magic Pen), recharged by CDR + Cast Speed. A HYBRID lands BOTH — a physical part (leeches, meets armor, Skill Power) AND a magic part (meets magic resist, Spell Power); its tooltip spells out the split, and it recharges with CDR + Cast Speed. Classes lean differently: Warrior is all SKILL, Mage all SPELL, Rogue mostly skill with shadow/toxic hybrids, Templar mostly holy spells with holy-strike hybrids. Gear the stats that match the actives you lean on.`,
@@ -21312,7 +21312,7 @@ function castSkillById(id, opts) {
   const bloodPact = keystoneFlag('bloodpact');
   if (bloodPact) {
     if (player.hp <= cost) { castMsg(`🩸 Not enough life for a blood-cast of ${sk.name} — need ${cost} HP.`); _muteCastLog = false; return false; }
-  } else if (player.mp < cost) { castMsg(`💧 Not enough mana for ${sk.name} — need ${cost} MP.`); _muteCastLog = false; return false; }
+  } else if (player.mp < cost) { castMsg(`💧 Not enough mana for ${sk.name} — need ${cost} MP.`); if (!_muteCastLog) pulseManaShort(); _muteCastLog = false; return false; }
 
   const fired = runActiveSkill(id); // false = no valid target / nothing to do
   _muteCastLog = false;
@@ -24208,6 +24208,28 @@ function mpRecoveryRate() {
   let rate = Math.max(0, _mpRegenRate) * gate;
   if ((player.pendingMana || 0) > 0) rate += player.maxMp * MANA_DRAIN_PCT;
   return rate;
+}
+// A brief, faint blue flash of the mana bar to acknowledge a cast that couldn't
+// fire for want of mana (see castSkillById). Purely visual — no state change. The
+// skill button already greys out when unaffordable; this points the eye at WHY.
+// Retriggerable: strip the classes, force one reflow to rewind the CSS animation,
+// then re-add so a second failed cast pulses again; a timeout clears them after
+// the short run so the bar rests clean. Pulses both HUD fills + their tracks (only
+// the visible layout shows; the hidden one animates harmlessly).
+let _mpPulseT = 0;
+function pulseManaShort() {
+  const pairs = [];
+  for (const fill of [hudEl('mp-bar'), hudEl('dh-mp-fill')]) {
+    if (!fill) continue;
+    pairs.push([fill, 'mp-short']);
+    if (fill.parentElement) pairs.push([fill.parentElement, 'mp-short-track']);
+  }
+  if (!pairs.length) return;
+  for (const [el, cls] of pairs) el.classList.remove(cls);
+  void pairs[0][0].offsetWidth;                 // reflow → the re-added animation restarts
+  for (const [el, cls] of pairs) el.classList.add(cls);
+  clearTimeout(_mpPulseT);
+  _mpPulseT = setTimeout(() => { for (const [el, cls] of pairs) el.classList.remove(cls); }, 1100);
 }
 function updateVitalFills(dt) {
   if (typeof player !== 'object' || !player || !(player.maxHp > 0)) return;
