@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Town Merchant description no longer mentions potions", by: "Claude", notes: [
+    "The town Merchant's tile now reads \"Buy & sell fresh gear\" — potions became a built-in skill a while back, so he only deals in gear.",
+  ] },
   { date: "2026-07-06", size: "small", v: "On touch, opening any menu pauses the game", by: "Jeff Louie", notes: [
     "On phones and tablets, opening the bag or any pop-up menu now freezes the dungeon — no more taking hits while you rearrange gear or read the codex. Close it and play resumes exactly where it left off.",
     "Desktop is unchanged: its loot drawer is a permanent sidebar, so play continues beside it.",
