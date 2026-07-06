@@ -52,7 +52,7 @@ import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
-import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
+import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
 import { isSsf, walletGain, walletSpend } from '../systems/ssf.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
 import { moatCells, seaMargin } from '../systems/islandFloor.js';
@@ -28305,6 +28305,17 @@ function loadGame() {
     // the deepest reached so existing heroes don't re-collect milestones already
     // earned (and, harmlessly, so a mid-run reload doesn't re-award the current one).
     if (player.milestoneFloor == null) player.milestoneFloor = player.maxFloor || 1;
+    // Backfill the frontier that cleared floors have already earned. Clearing a
+    // floor unlocks the NEXT one at the Gate (maxFloor/gateFloor run a floor ahead),
+    // but saves whose floors were cleared BEFORE that rule shipped banked the clear
+    // in clearedFloors WITHOUT advancing these trackers — and re-entering an
+    // already-cleared floor never re-fires the unlock. So an existing hero who beat,
+    // say, the floor-5 boss couldn't warp to floor 6 without physically descending.
+    // Seed maxFloor/gateFloor up to the checkpoint those clears opened. Milestone is
+    // seeded ABOVE off the physically-reached floor first, so this never mis-pays a
+    // depth milestone. A no-op for fresh/post-feature saves (frontier ≤ maxFloor).
+    const _clearedFront = clearedFrontier(player.clearedFloors, FLOORS_PER_DIFF, FINITE_DEPTH);
+    if (_clearedFront > (player.maxFloor || 1)) player.maxFloor = _clearedFront;
     // Migrate saves that predate the re-enterable-floor tracker. Seed it to the
     // deepest reached; deaths no longer shove it back, so it now simply tracks
     // maxFloor. Any old save that was mid-re-lock is healed straight back to full.
