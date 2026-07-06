@@ -30772,7 +30772,7 @@ function heroCardHtml() {
   return `<div class="th-info">`
     + `<div class="th-name" style="color:${cls.color || 'var(--xp)'}">${nm}</div>`
     + `<div class="th-sub">Level ${lvl} ${cls.name || 'Hero'}</div>`
-    + `<div class="th-stats"><span>Deepest <b>${floorTag(deepest)}</b></span><span><span data-spr=ic_money></span><b>${gold}</b></span></div>`
+    + `<div class="th-stats"><span><span data-spr=feat_gate_red></span><b>${floorTag(deepest)}</b></span><span><span data-spr=ic_money></span><b>${gold}</b></span></div>`
     + hcTag
     + `</div>`
     + (heroPic ? `<div class="th-portrait">${heroPic}</div>` : '');
