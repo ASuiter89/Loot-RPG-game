@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Bag's frozen header no longer leaks the list above the gold & materials card", by: "Claude", notes: [
+    "The LOOT drawer's pinned header (gold & materials pill, slot tabs, sort/filter) now hugs the very top as the list scrolls — closing a thin strip where scrolling items used to peek through just above the gold & materials card.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Save slots name each hero's class", by: "Claude", notes: [
     "Each save slot now shows the hero's class (Warrior, Rogue, Mage, Templar) beside their name, so lookalike heroes are easy to tell apart.",
   ] },

@@ -11,6 +11,10 @@
 //   C) real phone in landscape (780x360): the rotate notice DOES fire and play is
 //      frozen (rtPaused) — the portrait-only guard is intact.
 //   D) wide portrait (820x900): the town menu fans out to multiple columns.
+//   E) phone (390x780): the LOOT drawer's frozen header (wallet + subtabs +
+//      controls) stays flush with the top of the scroll container while the list
+//      scrolls under it — no strip where rows peek through above the gold/materials
+//      card (the sticky top offset must track the header's negative top margin).
 // The mouse-only smoke.mjs never enters the touch layer, so this is the guard
 // that the mobile menus keep resizing to any screen.
 //
@@ -117,6 +121,33 @@ async function main(){
     const d = await page.evaluate(()=>{ const tm=document.querySelector('.town-menu'); return { cols: tm?getComputedStyle(tm).gridTemplateColumns.trim().split(/\s+/).length:0, docOverflow: document.documentElement.scrollWidth-window.innerWidth }; });
     ok(d.cols>=2, `town-menu fans out (>=2 columns, got ${d.cols})`);
     ok(d.docOverflow<=1, `no overflow on wide screen (${d.docOverflow}px)`);
+    await page.close();
+
+    // ── E) LOOT sticky header hugs the scroll container top while scrolling ──
+    // The frozen header bleeds up into #panel-content's top padding with a negative
+    // top margin. Sticky pins the MARGIN box, so a bare top:0 drops the opaque
+    // (background) box a padding's worth below the container edge — leaving a strip
+    // where scrolling rows show through above the gold/materials card. Its `top`
+    // offset must match the negative top margin; guard the box stays flush.
+    console.log('E) phone 390x780 (touch) — LOOT frozen header flush over the list while scrolling');
+    page = await browser.newPage({ viewport:{width:390,height:780}, hasTouch:true, isMobile:true }); page._url=url;
+    await boot(page,{toTown:false});
+    const e = await page.evaluate(()=>{
+      // Fill the bag so the list overflows and the header actually sticks.
+      const tiers=['junk','normal','uncommon','rare','epic','legendary'];
+      const slots=['weapon','head','chest','hands','legs','feet','ring','amulet'];
+      for(let i=0;i<40;i++) window.inventory.push(window.generateItem(3,6,tiers[i%tiers.length],slots[i%slots.length]));
+      if(!document.body.classList.contains('bag-open')) window.toggleBag();
+      window.switchTab('inv');
+      const pc=document.getElementById('panel-content'); pc.scrollTop=140;
+      const head=document.querySelector('.loot-head');
+      if(!pc||!head) return { hasHead:false, scrolled:false, gap:999 };
+      const pcR=pc.getBoundingClientRect(), hR=head.getBoundingClientRect();
+      return { hasHead:true, scrolled: pc.scrollTop>0, gap: hR.top-pcR.top };
+    });
+    ok(e.hasHead, 'LOOT frozen header present');
+    ok(e.scrolled, 'panel scrolled (list overflows the drawer)');
+    ok(Math.abs(e.gap)<=1, `sticky header flush with panel top while scrolled (gap ${Math.round(e.gap*100)/100}px, want ~0)`);
     await page.close();
   } finally {
     await browser.close(); server.close();
