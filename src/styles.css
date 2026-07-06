@@ -1877,11 +1877,21 @@
      collapsible instead of selecting the item. The padding gives the header a
      solid bottom edge that clears the first row (and its upgrade glow). */
   .loot-head {
+    /* Top gutter this header bleeds up into — keep equal to #panel-content's
+       padding-top (base 6px; the desktop drawer overrides to 8px below). Both the
+       negative top margin AND `top` derive from it so they can never drift apart. */
+    --loot-head-top-bleed: 6px;
     position: sticky;
-    top: 0;
+    /* NOT `top: 0`: while stuck, sticky pins the element's MARGIN box, and the
+       negative top margin lifts that margin box above the visible (background) box
+       — so a bare `top: 0` would drop the opaque header its own margin's worth below
+       the scroll container's top edge, leaving a strip where scrolling rows show
+       through above the wallet card. Offsetting `top` by the same amount as the top
+       margin keeps the header's box flush with the container top at any scroll. */
+    top: calc(-1 * var(--loot-head-top-bleed));
     z-index: 5;
     background: var(--panel);
-    margin: -6px -6px 0;
+    margin: calc(-1 * var(--loot-head-top-bleed)) -6px 0;
     padding: 6px 6px 10px;
     box-shadow: 0 4px 8px -4px color-mix(in srgb, var(--ink) 70%, transparent);
   }
@@ -4212,7 +4222,7 @@
     /* Match the frozen header's gutter-cover to the wider desktop padding. The
        bottom padding (see the base .loot-head rule) keeps the stat-key
        collapsible from overlapping — and stealing clicks from — the top row. */
-    #panel-content .loot-head { margin: -8px -12px 0 -8px; padding: 8px 12px 10px 8px; }
+    #panel-content .loot-head { --loot-head-top-bleed: 8px; margin: calc(-1 * var(--loot-head-top-bleed)) -12px 0 -8px; padding: 8px 12px 10px 8px; }
     /* Skill-tree node names: on desktop there's ample room around the web, so let
        full names ("Warstomp", "Unbreakable") wrap/extend instead of truncating to
        "Warsto…". The #id selector wins over the .sk-tree.web / .sk-tnode rules. */
