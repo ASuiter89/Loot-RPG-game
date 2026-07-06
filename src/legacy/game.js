@@ -21040,7 +21040,7 @@ function onEnemyDefeated(e) {
     spawnFloatingText(e.x, e.y, `+${bonus}`, '#ffd24b', 1, true);
     log(`<span data-spr=ic_money></span> The Treasure Goblin bursts — +<span data-spr=ic_money></span>${bonus}, a <span data-spr=feat_portal></span> Chaos Orb, and a glittering chest!`, 'loot');
     updateBars();
-    collectChestLoot(6, e.level || dungeonLevel, e.x, e.y);
+    collectChestLoot(GOBLIN_LOOT_LUCK, e.level || dungeonLevel, e.x, e.y);
   }
   // Vanishingly rare super-drop: the air shimmers and a fabled chest appears.
   if (Math.random() < 0.02) {
@@ -22448,6 +22448,11 @@ function stepAwayFromPlayer(e) {
 // Once wounded, a Treasure Goblin has this many real seconds to live before it
 // escapes with its loot — so the chase has real urgency.
 const GOBLIN_ESCAPE_SECS = 6;
+// Quality (luck) of the Treasure Goblin's jackpot chest, fed to collectChestLoot →
+// rollTier as a Magic-Find-like bonus (+15 effective MF per step above 1). Pitched
+// well above a rich chest (6) so the goblin's haul skews toward the rarer tiers —
+// still bounded by the per-tier caps, so it's a better shot, never a guarantee.
+const GOBLIN_LOOT_LUCK = 14;
 // The goblin gives up and vanishes (no loot) when its getaway timer expires.
 function goblinEscape(e) {
   e.dead = true; bumpEnemyPos();   // its tile is free — refresh the occupancy index
