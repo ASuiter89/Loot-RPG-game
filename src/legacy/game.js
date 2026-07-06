@@ -9954,6 +9954,16 @@ function spawnProjectile(x, y, dx, dy, dmg, color, speed) {
   projectiles.push({ x, y, vx: dx / m * (speed || 7), vy: dy / m * (speed || 7), dmg, color: color || '#ffd24b', life: 3 });
 }
 
+// The live on-screen CENTRE of an actor's footprint: its smooth render position
+// (fx/fy, advanced each frame by the glide) when it has one, else its logic-tile
+// centre. EVERY visual an actor emits — a ranged bolt, a strike lunge — launches
+// from HERE, from exactly where the player sees it standing, the same way the hero
+// fires from player.fx/fy. Sourcing an attack from the logic tile instead let a
+// bolt leap out of the tile the sprite had glided away from — "an animation from
+// the next tile over, or across a wall from where the foe shows on the map."
+function actorRenderCX(a) { const s = a.size || 1; return a.fx == null ? a.x + s / 2 : a.fx; }
+function actorRenderCY(a) { const s = a.size || 1; return a.fy == null ? a.y + s / 2 : a.fy; }
+
 // A real, DODGEABLE bolt a ranged foe looses at the hero. It flies in a straight
 // line toward where the hero was when fired, is stopped by walls (see
 // updateProjectiles), and only deals damage if it actually reaches the hero — so
@@ -9961,8 +9971,7 @@ function spawnProjectile(x, y, dx, dy, dmg, color, speed) {
 // the firing foe `e` and its pre-rolled base damage so the hit resolves with that
 // foe's mitigation and on-hit procs when (and if) it lands.
 function spawnEnemyBolt(e, raw, color, kind) {
-  const s = e.size || 1;
-  const ox = e.x + s / 2, oy = e.y + s / 2;          // origin: centre of the foe's footprint
+  const ox = actorRenderCX(e), oy = actorRenderCY(e);  // origin: where the foe's sprite actually is
   const dx = player.fx - ox, dy = player.fy - oy, d = Math.hypot(dx, dy) || 1;
   const SP = 8;                                        // fast enough to threaten, slow enough to sidestep
   const life = (d + 1.5) / SP;                         // reaches the hero, overshoots a touch, then dies
@@ -17560,7 +17569,10 @@ function shakeOffset() {
 const ATK_LUNGE_MS = 200;   // total lunge duration
 function triggerAttackAnim(actor, tx, ty) {
   if (!actor) return;
-  const dx = tx - actor.x, dy = ty - actor.y;
+  // Lunge FROM where the sprite is drawn (its render centre), not its logic tile —
+  // so the nudge points true from the visible foe toward its target, matching where
+  // the hero lunges from (player.fx/fy).
+  const dx = tx - actorRenderCX(actor), dy = ty - actorRenderCY(actor);
   const len = Math.hypot(dx, dy) || 1;
   actor.atkAnimDir = { x: dx / len, y: dy / len };
   actor.atkAnimAt = Date.now();
@@ -22011,7 +22023,7 @@ function runMinionTurn() {
 const MINION_BOLT_KIND = { skelarcher: 'arrow', elemental: 'fire', spirit: 'holy', totem: 'spark' };
 function spawnMinionBolt(m, e, onArrive) {
   const kind = MINION_BOLT_KIND[m.kind] || 'magic';
-  projectiles.push({ x: m.x + 0.5, y: m.y + 0.5, tx: e.x + 0.5, ty: e.y + 0.5, vx: 0, vy: 0, dmg: 0,
+  projectiles.push({ x: m.x + 0.5, y: m.y + 0.5, tx: actorRenderCX(e), ty: actorRenderCY(e), vx: 0, vy: 0, dmg: 0,
     color: m.color, life: 0.55, cosmetic: true, orb: kind === 'magic', kind, element: projectileElement(kind),
     onArrive: onArrive || null, _seed: Math.random() * PI2 });
 }
@@ -30691,59 +30703,23 @@ function glideActor(a, tx, ty, dt) {
     a.faceDx = dx; a.faceDy = dy;                       // remember heading (for facing)
   }
 }
-// A foe's continuous move speed (tiles/sec), derived from its archetype so a swift
-// vermin flows fast and a brute lumbers — chilled/slowed foes drag.
-function enemyRenderSpeed(e) {
-  const beh = BEHAVIORS[e.behavior] || BEHAVIORS.chaser;
-  let s = 2.7 * (beh.speed || 1);                 // chaser 2.7 t/s · swift ~5.4
-  if (beh.slow || e.slow) s *= 0.6;
-  if (isChilled(e)) s *= 0.5;
-  return s;
-}
-// Terrain-only solidity for a foe's smooth movement (walls, deep water, boss walls,
-// solid furniture) — foes don't block each other here, so they never gridlock.
-function enemyTerrainSolid(x, y) {
-  if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return true;
-  if (!isFloorPassable(mapData[y][x])) return true;
-  if (bossWallAt(x, y)) return true;
-  if (furnitureMap[y + ',' + x] !== undefined) return true;
-  return false;
-}
-function enemyBoxBlocked(fx, fy) {
-  const r = 0.34, e = 1e-4;                        // a little smaller than a tile so it hugs corners
-  const x0 = Math.floor(fx - r), x1 = Math.floor(fx + r - e);
-  const y0 = Math.floor(fy - r), y1 = Math.floor(fy + r - e);
-  return enemyTerrainSolid(x0, y0) || enemyTerrainSolid(x1, y0) ||
-         enemyTerrainSolid(x0, y1) || enemyTerrainSolid(x1, y1);
-}
 function updateActorRender(dt) {
   for (const e of enemies) {
     if (e.atkCd > 0) e.atkCd -= dt;               // real-time attack cooldown
     const s = e.size || 1;
-    const cx = e.x + s / 2, cy = e.y + s / 2;     // logic-tile centre
-    // Aggro single-tile foes CONTINUOUSLY pursue the hero's live position every
-    // frame — so they flow with you instead of stepping to a stale tile then
-    // pausing. The sprite is kept within ~1 tile of its (always-walkable) logic
-    // cell, which advances on the world tick, so collision/attacks (keyed off
-    // e.x/e.y) stay honest and it never drifts through a wall. Non-aggro foes,
-    // foes mid-teleport, and multi-tile bosses use the plain tile glide.
-    const _ms = (s === 1 && e.aggro && !e.dead) ? enemyMoveStatus(e) : null;
-    if (s === 1 && e.aggro && !e.dead && !(_ms && _ms.stun)) {
-      if (e.fx == null || Math.abs(e.fx - cx) > 2.0 || Math.abs(e.fy - cy) > 2.0) { e.fx = cx; e.fy = cy; }
-      const spd = enemyRenderSpeed(e);
-      const dx = player.fx - e.fx, dy = player.fy - e.fy, d = Math.hypot(dx, dy) || 1;
-      if (d > 0.72) {                              // don't pile onto the hero
-        const step = Math.min(d - 0.72, spd * dt);
-        const CL = 0.85;                           // max lead/lag from the logic cell
-        let nfx = Math.max(cx - CL, Math.min(cx + CL, e.fx + dx / d * step));
-        let nfy = Math.max(cy - CL, Math.min(cy + CL, e.fy + dy / d * step));
-        if (!enemyBoxBlocked(nfx, e.fy)) e.fx = nfx;   // axis-separated → slides along walls
-        if (!enemyBoxBlocked(e.fx, nfy)) e.fy = nfy;
-        e.faceDx = dx; e.faceDy = dy;
-      }
-    } else {
-      glideActor(e, cx, cy, dt);                  // footprint centre
-    }
+    // Every foe — aggro vermin, lumbering brute, or multi-tile boss — glides its
+    // sprite toward its OWN logic cell (e.x/e.y), the tile the AI, collision and
+    // attacks all key off. This is the hero's model, inverted: the hero derives its
+    // cell from its smooth position; a foe derives its smooth position from its
+    // cell. Either way the sprite and the logic tile stay locked together, so the
+    // sprite never drifts a tile away from — or across a wall from — where the foe
+    // actually is, and a bolt or lunge launched from the sprite lands true. (Foes
+    // used to beeline the sprite at the hero's live sub-tile position, letting it
+    // lead its cell by up to ~0.85 tiles — the source of "the animation came from
+    // the tile next to the enemy.") glideActor covers each cell-to-cell step in one
+    // world beat at constant velocity, so a pursuit still reads as smooth, unbroken
+    // motion; a real teleport (blink, floor rebuild) snaps instead of sliding.
+    glideActor(e, e.x + s / 2, e.y + s / 2, dt);  // footprint centre
   }
   // The quest NPC (an escorted follower, or a wandering lost pet) glides toward its
   // logic cell in the same top-left convention as npc.x/npc.y (the draw code adds
