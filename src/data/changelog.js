@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Quest-giver arrow floats above the head, not over the face", by: "Jeff Louie", notes: [
+    "Fixed the \"follow me\" / \"quest here\" arrow over a quest-giver so it now floats clear above their head instead of covering their face.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Belt BOUNTY / MEALS modules jump to their town service", by: "Jeff Louie", notes: [
     "In town, clicking the belt's BOUNTY module now opens the Bounty Board (even with no active contract), and clicking the MEALS module opens the Ramen House — a one-tap shortcut to each.",
   ] },
