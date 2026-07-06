@@ -20855,6 +20855,10 @@ function bossFarmMult(e) {
 
 // Everything that happens when a foe falls: XP, gold, and the loot rolls.
 function onEnemyDefeated(e) {
+  if (e.dead) return;              // pay out ONCE — several lethal hits (multi-projectile
+                                   // burst, cleave+arcing, burn+poison ticking together) can
+                                   // all call this in one tick; without this guard the whole
+                                   // loot routine re-ran per hit, so a boss dumped 2–3× its gear.
   e.dead = true; bumpEnemyPos();   // its tile is free — refresh the occupancy index
   // Summoned minions are pure threat — they drop NO XP, gold or loot, so a
   // summoner boss can't be farmed by killing the fodder it spawns endlessly.
