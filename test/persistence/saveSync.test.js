@@ -11,6 +11,7 @@ import {
   mergeHcMeta,
   hcMetaCloudHasAll,
   planReconcile,
+  planSlotPush,
 } from '../../src/persistence/saveSync.js';
 
 // ── Test doubles: minimal stand-ins for the legacy shell's own predicates ─────
@@ -473,5 +474,78 @@ describe('planReconcile — duplicate-cid cloud rows are de-duplicated', () => {
     const localRows = [];
     const p = plan(cloudRows, localRows, { activeSlot: 9 });
     expect(p.cloudDeletes).toHaveLength(0);                     // both kept
+  });
+});
+
+// ═══════════════════════ per-slot push guard ═════════════════════════════════
+// planSlotPush is the read-before-write gate that stops a stale tab from clobbering
+// a newer cloud save. Verdicts: 'write' (mirror up), 'skip' (nothing to do), 'pull'
+// (cloud is ahead — reconcile instead of overwriting).
+
+describe('planSlotPush', () => {
+  const push = (local, cloud) => planSlotPush({ local, cloud, isStarted, cidOf, saveOrder: playOrder });
+
+  it("skips a blank / not-yet-started local hero (never overwrites a real cloud save)", () => {
+    expect(push(blank(), hero('A', 500, { playMs: 100 }))).toBe('skip');
+    expect(push(null, hero('A', 500))).toBe('skip');
+    expect(push(undefined, null)).toBe('skip');
+  });
+
+  it("writes when the cloud slot is empty or holds only a blank", () => {
+    expect(push(hero('A', 500, { playMs: 100 }), null)).toBe('write');
+    expect(push(hero('A', 500, { playMs: 100 }), undefined)).toBe('write');
+    expect(push(hero('A', 500, { playMs: 100 }), blank())).toBe('write');
+  });
+
+  it("writes when it is the SAME hero and our copy is strictly newer (more play-time)", () => {
+    const local = hero('A', 900, { playMs: 200 });
+    const cloud = hero('A', 500, { playMs: 100 });
+    expect(push(local, cloud)).toBe('write');
+  });
+
+  it("PULLS (never clobbers) when the SAME hero is newer in the cloud", () => {
+    // The reported bug: this tab is stale, the cloud copy was advanced on another
+    // device. The stale push must defer, not overwrite.
+    const local = hero('A', 500, { playMs: 100 });
+    const cloud = hero('A', 900, { playMs: 300 });
+    expect(push(local, cloud)).toBe('pull');
+  });
+
+  it("skips when the two copies are the same version (no needless write)", () => {
+    const local = hero('A', 500, { playMs: 100 });
+    const cloud = hero('A', 500, { playMs: 100 });
+    expect(push(local, cloud)).toBe('skip');
+  });
+
+  it("PULLS when a DIFFERENT character occupies the slot on the account", () => {
+    // Another device relocated heroes; our slot now holds someone else's cloud hero.
+    // Blind-overwriting would nuke that innocent hero — defer to a reconcile.
+    const local = hero('A', 900, { playMs: 500 });
+    const cloud = hero('B', 100, { playMs: 10 });
+    expect(push(local, cloud)).toBe('pull');
+  });
+
+  it("clock-skew proof: a stale copy with a FUTURE ts still can't win on play-time", () => {
+    // Local has a wildly-future wall-clock ts but LESS play-time than the cloud copy —
+    // play-time is monotonic, so the cloud (more-played) copy must win.
+    const local = hero('A', 9e15, { playMs: 100 });   // skewed clock, future ts
+    const cloud = hero('A', 500, { playMs: 400 });      // genuinely more played
+    expect(push(local, cloud)).toBe('pull');
+  });
+
+  it("ts only breaks ties at EQUAL play-time", () => {
+    const newer = hero('A', 800, { playMs: 100 });
+    const older = hero('A', 500, { playMs: 100 });
+    expect(push(newer, older)).toBe('write');
+    expect(push(older, newer)).toBe('pull');
+  });
+
+  it("legacy id-less copies fall through to the order (not treated as different heroes)", () => {
+    // One side has a cid, the other is a pre-id legacy save of the same hero carried
+    // forward — the `different cid` guard must NOT fire, so the order decides.
+    expect(push(hero(null, 900, { playMs: 200 }), hero('A', 500, { playMs: 100 }))).toBe('write');
+    expect(push(hero('A', 900, { playMs: 200 }), hero(null, 500, { playMs: 100 }))).toBe('write');
+    // Both id-less: still ordered normally.
+    expect(push(hero(null, 500, { playMs: 100 }), hero(null, 900, { playMs: 300 }))).toBe('pull');
   });
 });

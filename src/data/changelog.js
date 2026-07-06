@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "medium", v: "Cloud saves survive playing on two devices", by: "Claude", notes: [
+    "A game window left open no longer overwrites progress you made on another device — leave it open on one machine, keep playing on another, and the first window catches up instead of clobbering your newer save.",
+    "A window that's open but not being played now goes idle after a minute (or when its tab is hidden) and stops writing and mirroring saves; the moment you return it re-checks your account and pulls down anything a second device advanced.",
+    "Cloud saves now defer to your account before uploading, so an out-of-date copy can never overwrite a newer one; whichever copy has been played longer always wins.",
+    "Play-time is now counted only while you're actually playing, so an idle window can't inflate its time and win a merge it shouldn't.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Sealed stairs marked with a padlock", by: "Andrew Suiter", notes: ["The down-stairs now show a brass padlock while the floor is sealed, instead of the old door marker — the locked exit reads at a glance. The \"stairs are sealed\" messages carry the same padlock."] },
   { date: "2026-07-06", size: "small", v: "Beaten boss floors unlock the next warp checkpoint", by: "Andrew Suiter", notes: ["Heroes who cleared a boss floor before clears began opening the next checkpoint early now get that checkpoint at the Dungeon Gate on load — no need to physically descend to it first. A clear already unlocks the next floor going forward; this heals older saves whose progress predated that."] },
   { date: "2026-07-06", size: "small", v: "Cursor options fixed up", by: "Claude", notes: [
