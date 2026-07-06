@@ -10,6 +10,9 @@ export const CHANGELOG = [
   { date: "2026-07-05", size: "small", v: "Bosses no longer drop double or triple their loot", by: "Jeff Louie", notes: [
     "Fixed a bug where a foe killed by several simultaneous hits (a multi-projectile burst, a cleaving crit that arcs, or burning and poison finishing it the same instant) rolled its whole loot table once per hit — so a boss could spill 2–3× its intended gear. Every kill now pays out exactly once.",
   ] },
+  { date: "2026-07-05", size: "small", v: "Wandering merchant & mystic show up less often", by: "Jeff Louie", notes: [
+    "The roaming merchant now wanders in on roughly 1 floor in 8 (was 1 in 5), and the hooded mystic on roughly 1 in 10 (was 1 in 6) — each stays a treat to stumble on rather than a near-guarantee.",
+  ] },
   { date: "2026-07-05", size: "big", v: "Full controller support", by: "Claude", notes: [
     "Plug in a PlayStation, Xbox or Steam Deck / generic gamepad — everything in the game is now playable on a controller, revealed the moment you touch it. Keyboard and mouse stay live.",
     "In the dungeon: left stick moves, R2 sprints, R1 dashes. ✕ interacts/uses, ○ opens the Bag, □ toggles the log, △ opens a town portal. Hold L1 and press ✕○□△ to cast your four skills.",

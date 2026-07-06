@@ -11082,8 +11082,8 @@ function refreshShop() {
 function spawnMerchant(footReach) {
   merchant = null;
   if (floorMod.noMerchant) return;
-  // The roaming merchant appears on roughly 1 in 5 floors.
-  if (Math.random() > 0.20) return;
+  // The roaming merchant appears on roughly 1 in 8 floors.
+  if (Math.random() > 0.12) return;
   let mx, my, tries = 0;
   do {
     mx = rnd(1, MAP_W-1); my = rnd(1, MAP_H-1); tries++;
@@ -11102,11 +11102,11 @@ function spawnMerchant(footReach) {
 }
 
 // The Wandering Mystic — a second wanderer who takes gold to bend the next
-// 1/10/30 floors to a pact of your choosing. Appears on roughly 1 in 6 floors,
+// 1/10/30 floors to a pact of your choosing. Appears on roughly 1 in 10 floors,
 // independent of the merchant (but never sharing a tile with one).
 function spawnMystic(footReach) {
   mystic = null;
-  if (Math.random() > 0.16) return;
+  if (Math.random() > 0.10) return;
   let mx, my, tries = 0;
   do {
     mx = rnd(1, MAP_W-1); my = rnd(1, MAP_H-1); tries++;
