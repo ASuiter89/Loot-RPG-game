@@ -7,7 +7,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
-  { date: "2026-07-06", size: "large", v: "Endgame update — six late-game systems", by: "Claude", notes: [
+  { date: "2026-07-06", size: "large", v: "Endgame update — six late-game systems", by: "Andrew Suiter", notes: [
     "Ascendant Weave: spend Boss Points on a constellation board of real choices — opportunity-cost nodes, attribute-threshold keystones, and socketed Glyphs that drop deep in Endless — plus a cosmetic Weave Depth rank. Opens after your first boss floor.",
     "Dread Covenants: swear stackable afflictions at a town altar before a descent; more Dread means deadlier floors AND richer loot, materials and boss rewards, tracked on a per-class “how hard did you beat it” checklist. Opens with Hardened.",
     "Mirrorforge: a deep-crafting bench — spend a bounded Forging Potential on Attune, Exalt, Divine and a one-shot Corrupt, then Mirror an item to lock a perfect copy. Deep Endless now drops “radiant” greater rolls and the Aether material. Opens at Brutal.",
