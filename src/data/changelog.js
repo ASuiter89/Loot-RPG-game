@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Sort & filter the merchant like your bag", by: "Claude", notes: [
+    "The merchant's Buy and Sell tabs now carry the same Sort (rarity, power, slot, value) and stat Filter controls as the LOOT drawer.",
+    "Sell all / Scrap all at the merchant honor the filter — they only touch what's shown.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Weapon type shows up top on the item card", by: "Jeff Louie", notes: [
     "A weapon's type and hand (e.g. Dagger · 1H) now sits right under its name instead of down among the stats, so you read what it is at a glance.",
   ] },
