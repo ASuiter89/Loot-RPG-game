@@ -63,7 +63,7 @@ import { cookableCount, cookBatchOptions } from '../systems/cooking.js';
 import { trimFillStyle } from '../utils/iconTrim.js';
 import { cursorHotspotPx } from '../systems/cursorMath.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
-import { bountyProgress as _bountyProgress, bountyDone as _bountyDone, bountyNewlyComplete, bountyCoreReward } from '../systems/bounty.js';
+import { bountyProgress as _bountyProgress, bountyDone as _bountyDone, bountyNewlyComplete, bountyMaterialReward, bountyXpReward } from '../systems/bounty.js';
 import { forgeSections } from '../systems/forgeFlow.js';
 import { weaponSpeedInfo } from '../systems/weaponSpeed.js';
 import { CURSE_TIER_MULT, curseTierMult, statCurseSwing, cursedStatCeiling } from '../systems/curseRoll.js';
@@ -7057,7 +7057,14 @@ window.gameState = function gameState(radius) {
       bounty: (player.bounty && typeof bountyProgress === 'function') ? {
         kind: player.bounty.kind, desc: player.bounty.desc,
         progress: Math.min(bountyProgress(player.bounty), player.bounty.need), need: player.bounty.need,
-        done: bountyDone(player.bounty), reward: { gold: player.bounty.gold, ilvl: player.bounty.ilvl },
+        done: bountyDone(player.bounty),
+        // A mix of 1–3 rewards: gold / a crafting material / XP / a gear piece (some
+        // gear pieces guarantee a rarity). See gameGuide("town").
+        rewards: bountyRewardList(player.bounty).map(r =>
+          r.t === 'gold' ? { type: 'gold', amount: r.amt }
+          : r.t === 'mat' ? { type: 'material', material: r.mat, amount: r.amt }
+          : r.t === 'xp' ? { type: 'xp', amount: r.amt }
+          : { type: 'gear', ilvl: r.ilvl, guaranteedTier: r.tier || null }),
       } : null,   // accepted Bounty Board contract + live progress
       // Meal slots — HUD stacks assigned at the Ramen House, eaten from the belt in the
       // dungeon (see systems/meals.js). Each is { name, floors, fx, qty } or null.
@@ -7286,7 +7293,7 @@ window.gameGuide = function gameGuide(topic) {
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
-      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + Core (the scarce mid-tier crafting material — every bounty pays it, and the amount scales up with your depth) + a gear piece scaled to your depth. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress (including menu.bounty.done once it's ready to claim).`,
+      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim its reward. Each contract pays a DIFFERENT MIX of 1–3 rewards — gold, a crafting material (any of scrap/glimmer/core/chaos, scaled by depth), a lump of XP, or a gear piece scaled to your depth (the toughest boss contracts guarantee a rarer piece) — and a contract paying fewer things pays more of each. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract, its live progress (including menu.bounty.done once it's ready to claim), and menu.bounty.rewards listing exactly what it pays.`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
     tips: [
@@ -12131,24 +12138,38 @@ function bountyPool() {
   const depth = player.maxFloor || 1, g = 60 + depth * 18, R = m => Math.round(g * m);
   const K = bountyKills(), CF = Object.keys(player.clearedFloors || {}).length;
   const BK = player.bossKills || 0, EK = player.eliteKills || 0, GE = player.goldEarned || 0;
-  // Every contract pays scarce Core, scaled by depth (deeper = more) and by the
-  // contract's own effort weight — see bountyCoreReward() in systems/bounty.js.
-  const C = w => ['core', bountyCoreReward(depth, w)];
+  // Reward builders. A contract no longer always pays the same gold + Core + gear
+  // trio — it hands out a MIX of 1–3 of these, and single-reward contracts use a
+  // heavier multiplier so a lone payout still feels worth it. Amounts scale by
+  // depth (and the per-reward weight) via systems/bounty.js; gear geared to depth.
+  //   GOLD(w)          — a gold purse                 MAT(key, w) — a crafting material
+  //   XP(w)            — a lump of experience         GEAR(bonus, tier?) — a gear piece,
+  //                                                    optionally of a GUARANTEED rarity
+  const GOLD = w => ({ t: 'gold', amt: R(w) });
+  const MAT = (mat, w = 1) => ({ t: 'mat', mat, amt: bountyMaterialReward(mat, depth, w) });
+  const XP = (w = 1) => ({ t: 'xp', amt: bountyXpReward(depth, w) });
+  const GEAR = (bonus = 1, tier = null) => ({ t: 'gear', ilvl: depth + bonus, tier });
   return [
-    { kind: 'slay',  title: 'Thin the Ranks',    need: 12 + depth,        snap: K,  desc: n => `Slay ${n} foes`,           gold: R(1.0), mat: C(1.0), ilvl: depth + 1 },
-    { kind: 'slay',  title: 'Cull the Horde',    need: 25 + depth,        snap: K,  desc: n => `Slay ${n} foes`,           gold: R(1.4), mat: C(1.2), ilvl: depth + 1 },
-    { kind: 'slay',  title: 'Slaughterhouse',    need: 45 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           gold: R(2.0), mat: C(1.5), ilvl: depth + 2 },
-    { kind: 'slay',  title: 'Exterminator',      need: 70 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           gold: R(2.6), mat: C(1.8), ilvl: depth + 3 },
-    { kind: 'clear', title: 'Sweep the Halls',   need: 3,                 snap: CF, desc: n => `Clear ${n} floors of foes`, gold: R(1.3), mat: C(1.2), ilvl: depth + 2 },
-    { kind: 'clear', title: 'Purge the Depths',  need: 5,                 snap: CF, desc: n => `Clear ${n} floors of foes`, gold: R(2.0), mat: C(1.6), ilvl: depth + 3 },
-    { kind: 'delve', title: 'Press Onward',      need: depth + 2,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     gold: R(1.4), mat: C(1.2), ilvl: depth + 2 },
-    { kind: 'delve', title: 'Into the Deep',     need: depth + 5,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     gold: R(2.2), mat: C(1.8), ilvl: depth + 4 },
-    { kind: 'boss',  title: 'Giant Slayer',      need: 2,                 snap: BK, desc: n => `Slay ${n} bosses`,         gold: R(1.6), mat: C(1.4), ilvl: depth + 3 },
-    { kind: 'boss',  title: 'Champion Hunter',   need: 4,                 snap: BK, desc: n => `Slay ${n} bosses`,         gold: R(2.4), mat: C(1.8), ilvl: depth + 4 },
-    { kind: 'elite', title: 'Elite Contract',    need: 5,                 snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(1.5), mat: C(1.2), ilvl: depth + 2 },
-    { kind: 'elite', title: 'Bane of Champions', need: 10,                snap: EK, desc: n => `Slay ${n} elite foes`,     gold: R(2.3), mat: C(1.6), ilvl: depth + 3 },
-    { kind: 'gold',  title: 'Treasure Hunter',   need: 400 + depth * 90,  snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  gold: R(1.2), mat: C(1.0), ilvl: depth + 1 },
-    { kind: 'gold',  title: "Dragon's Hoard",    need: 1200 + depth * 220,snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  gold: R(1.9), mat: C(1.6), ilvl: depth + 3 },
+    // Slay — escalating kill counts, escalating (and varied) payouts.
+    { kind: 'slay',  title: 'Thin the Ranks',    need: 12 + depth,        snap: K,  desc: n => `Slay ${n} foes`,           rewards: [GOLD(1.5)] },
+    { kind: 'slay',  title: 'Cull the Horde',    need: 25 + depth,        snap: K,  desc: n => `Slay ${n} foes`,           rewards: [GOLD(1.1), MAT('scrap', 1.2)] },
+    { kind: 'slay',  title: 'Slaughterhouse',    need: 45 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           rewards: [MAT('glimmer', 1.4), GEAR(2)] },
+    { kind: 'slay',  title: 'Exterminator',      need: 70 + depth * 2,    snap: K,  desc: n => `Slay ${n} foes`,           rewards: [GOLD(1.5), MAT('core', 1.4), GEAR(3)] },
+    // Clear floors.
+    { kind: 'clear', title: 'Sweep the Halls',   need: 3,                 snap: CF, desc: n => `Clear ${n} floors of foes`, rewards: [GOLD(1.2), XP(1.2)] },
+    { kind: 'clear', title: 'Purge the Depths',  need: 5,                 snap: CF, desc: n => `Clear ${n} floors of foes`, rewards: [MAT('core', 1.5), GEAR(3)] },
+    // Delve deep.
+    { kind: 'delve', title: 'Press Onward',      need: depth + 2,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     rewards: [GEAR(2)] },
+    { kind: 'delve', title: 'Into the Deep',     need: depth + 5,         snap: 0,  desc: n => `Reach ${floorTag(n)}`,     rewards: [GOLD(1.4), MAT('chaos', 1.3), GEAR(4)] },
+    // Bosses — the top-effort contracts, so they can pay a GUARANTEED rare piece.
+    { kind: 'boss',  title: 'Giant Slayer',      need: 2,                 snap: BK, desc: n => `Slay ${n} bosses`,         rewards: [GOLD(1.7), GEAR(3, 'epic')] },
+    { kind: 'boss',  title: 'Champion Hunter',   need: 4,                 snap: BK, desc: n => `Slay ${n} bosses`,         rewards: [MAT('chaos', 1.4), GEAR(4, 'legendary')] },
+    // Elites.
+    { kind: 'elite', title: 'Elite Contract',    need: 5,                 snap: EK, desc: n => `Slay ${n} elite foes`,     rewards: [GOLD(1.3), MAT('glimmer', 1.2)] },
+    { kind: 'elite', title: 'Bane of Champions', need: 10,                snap: EK, desc: n => `Slay ${n} elite foes`,     rewards: [GOLD(1.1), MAT('core', 1.4), XP(1.3)] },
+    // Plunder gold.
+    { kind: 'gold',  title: 'Treasure Hunter',   need: 400 + depth * 90,  snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  rewards: [GOLD(2.4)] },
+    { kind: 'gold',  title: "Dragon's Hoard",    need: 1200 + depth * 220,snap: GE, desc: n => `Plunder <span data-spr=ic_money></span>${fmtGold(n)} from foes`,  rewards: [GOLD(1.4), MAT('core', 1.6), GEAR(3)] },
   ];
 }
 function rollBounties() {
@@ -12160,6 +12181,42 @@ function rollBounties() {
   for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp; }
   return arr.slice(0, 10);
 }
+// Normalize a contract's rewards to the { t, … } list shape. New bounties carry a
+// `rewards` array; an older save's active bounty stored the flat gold/mat/ilvl trio,
+// so synthesize the list from those fields when `rewards` is absent.
+function bountyRewardList(b) {
+  if (b && Array.isArray(b.rewards) && b.rewards.length) return b.rewards;
+  const out = [];
+  if (b && b.gold) out.push({ t: 'gold', amt: b.gold });
+  if (b && b.mat) out.push({ t: 'mat', mat: b.mat[0], amt: b.mat[1] });
+  if (b && b.ilvl) out.push({ t: 'gear', ilvl: b.ilvl });
+  return out;
+}
+// One reward → inline "pixel-icon + amount" markup (a real atlas tile / vector
+// icon, never an emoji standing in for the reward). A guaranteed-rarity gear piece
+// tints its gear icon (and the word "gear") in that tier's colour — rarity is shown
+// by COLOUR only, never a text label.
+const BOUNTY_GEAR_TIER_VAR = { epic: 'var(--epic)', legendary: 'var(--legendary)', unique: 'var(--unique)' };
+function bountyRewardHtml(r) {
+  if (r.t === 'gold') return `<b style="color:var(--gold)"><span data-spr=ic_money></span>${fmtGold(r.amt)} gold</b>`;
+  if (r.t === 'mat') { const m = CRAFT_MATERIALS[r.mat] || {}; return `<span data-spr=mat_${r.mat}></span>${abbreviateNumber(r.amt)} ${m.name || r.mat}`; }
+  if (r.t === 'xp') return `<span data-spr=ui_level></span>${abbreviateNumber(r.amt)} XP`;
+  if (r.t === 'gear') {
+    const col = r.tier ? (BOUNTY_GEAR_TIER_VAR[r.tier] || 'var(--gold)') : null;
+    const ic = iconMarkup('chestplate', col || ICON_EMPTY_COLOR, true, 16);
+    const label = col ? `a guaranteed <b style="color:${col}">gear</b> piece` : 'a piece of gear';
+    return `${ic} ${label}`;
+  }
+  return '';
+}
+// Stacked reward rows — one reward per line — for a bounty (board offer or the
+// active contract), so a 1–3 reward payout reads clearly instead of a run-on line.
+function bountyRewardsHtml(b) {
+  return `<div class="bounty-rewards">` +
+    bountyRewardList(b).map(r => `<div class="bounty-reward">${bountyRewardHtml(r)}</div>`).join('') +
+    `</div>`;
+}
+
 function openBounty() { openTownModal('Bounty Board', 'scroll'); renderBounty(); }
 function renderBounty() {
   let html = '';
@@ -12171,20 +12228,21 @@ function renderBounty() {
     const cur = (b.kind === 'delve') ? `<br><span style="opacity:.85">You're currently on ${floorLabel(Math.max(1, dungeonLevel || player.maxFloor || 1))}.</span>` : '';
     html += `<div class="town-blurb"><b>Active bounty:</b> ${b.desc.replace('{n}', abbreviateNumber(b.need))}${cur}<br>
       <div class="bar-track" style="margin:6px 0"><div class="bar-fill" style="width:${pct}%;background:${done ? 'var(--uncommon)' : 'var(--gold)'}"></div></div>
-      ${abbreviateNumber(prog)} / ${abbreviateNumber(b.need)} — reward: <b style="color:var(--gold)"><span data-spr=ic_money></span>${fmtGold(b.gold)}</b> + ${b.mat[1]}<span data-spr=mat_${b.mat[0]}></span> + a piece of gear.</div>`;
+      ${abbreviateNumber(prog)} / ${abbreviateNumber(b.need)} — reward:${bountyRewardsHtml(b)}</div>`;
     html += `<div class="town-menu" style="gap:8px">
       <button class="act-btn" ${done ? '' : 'disabled'} style="width:100%;padding:10px" onclick="claimBounty()">${done ? '✅ Claim reward' : 'In progress…'}</button>
       <button class="slotpick-cancel" style="width:100%" onclick="abandonBounty()">Abandon bounty</button></div>`;
     setTownContent(html);
     return;
   }
-  html += `<div class="town-blurb">Take a contract from the board and complete it out in the dungeon, then return to claim gold, materials and a piece of gear geared to your depth. Fresh contracts are posted from time to time — one bounty at a time.</div>`;
+  html += `<div class="town-blurb">Take a contract from the board and complete it out in the dungeon, then return to claim its reward — every contract pays a different mix of gold, crafting materials, XP or gear geared to your depth. Fresh contracts are posted from time to time — one bounty at a time.</div>`;
   const offers = _bountyOffers = rollBounties();
   html += '<div class="shop-grid">' + offers.map((o, i) => {
     return `<div class="shop-row has-actions no-icon">
       <div class="shop-row-info">
         <div class="shop-row-name">${o.title}</div>
-        <div class="shop-row-stats">${o.desc(o.need)} · <span data-spr=ic_money></span>${fmtGold(o.gold)} + ${o.mat[1]}<span data-spr=mat_${o.mat[0]}></span> + gear</div>
+        <div class="shop-row-stats">${o.desc(o.need)}</div>
+        ${bountyRewardsHtml(o)}
       </div>
       <button class="act-btn" onclick="acceptBounty(${i})">ACCEPT</button>
     </div>`;
@@ -12197,25 +12255,37 @@ function acceptBounty(i) {
   // Store the fully-resolved description (a delve bounty's floorTag can't take a
   // placeholder); the display sites' harmless .replace('{n}', …) still handles
   // any older save whose desc was stored with a {n} token.
-  player.bounty = { kind: o.kind, need: o.need, snap: o.snap, gold: o.gold, mat: o.mat, ilvl: o.ilvl, desc: o.desc(o.need) };
+  player.bounty = { kind: o.kind, need: o.need, snap: o.snap, rewards: o.rewards, desc: o.desc(o.need) };
   sfx('click');
   log(`<span data-spr=scroll></span> Bounty accepted: ${o.desc(o.need)}.`, 'important');
   renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame();
 }
 function claimBounty() {
   const b = player.bounty; if (!b || !bountyDone(b)) return;
-  player.gold += b.gold;
-  // Curated-reward exception: a bounty pays its listed material ungated by
-  // difficulty — you earned the contract, so the payout ignores the drop gate.
-  if (b.mat) gainMaterial(b.mat[0], b.mat[1]);
-  const item = generateItem(2, b.ilvl || ((player.maxFloor || 1) + 1));
-  inventory.push(item);
+  const rewards = bountyRewardList(b);
+  const parts = [];             // combat-log fragments, one per reward paid
+  let bannerItem = null;        // best gear piece to celebrate with the drop banner
+  let gainedXp = false;
+  for (const r of rewards) {
+    if (r.t === 'gold') { player.gold += r.amt; parts.push(`+<span data-spr=ic_money></span>${fmtGold(r.amt)}`); }
+    // Curated-reward exception: a bounty pays its listed material ungated by
+    // difficulty — you earned the contract, so the payout ignores the drop gate.
+    else if (r.t === 'mat') { gainMaterial(r.mat, r.amt); parts.push(`+${abbreviateNumber(r.amt)}<span data-spr=mat_${r.mat}></span>`); }
+    else if (r.t === 'xp') { player.xp += r.amt; gainedXp = true; parts.push(`+${abbreviateNumber(r.amt)} XP`); }
+    else if (r.t === 'gear') {
+      const item = generateItem(2, r.ilvl || ((player.maxFloor || 1) + 1), r.tier || null);
+      inventory.push(item);
+      if (!bannerItem || TIER_ORDER.indexOf(item.tier) > TIER_ORDER.indexOf(bannerItem.tier)) bannerItem = item;
+      parts.push(logItem(item));
+    }
+  }
   player.bounty = null;
-  // A legendary/unique bounty payoff gets the full drop banner; lesser rewards keep
+  // A legendary/unique gear payoff gets the full drop banner; lesser rewards keep
   // the gold-flash fanfare.
-  if (isTopTierItem(item)) lootReveal(item);
+  if (bannerItem && isTopTierItem(bannerItem)) lootReveal(bannerItem);
   else { sfx('levelup'); screenFlash('#ffd24b'); }
-  log(`<span data-spr=scroll></span> Bounty complete! +<span data-spr=ic_money></span>${b.gold}, materials, and ${logItem(item)}.`, 'loot');
+  if (gainedXp) checkLevelUp();
+  log(`<span data-spr=scroll></span> Bounty complete! ${parts.join(', ')}.`, 'loot');
   // renderSkillBar() clears the belt's now-stale bounty module at once — otherwise
   // its green "ready to claim" pulse would linger until the next world-tick rebuild.
   updateBars(); renderPanel(); renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame();
