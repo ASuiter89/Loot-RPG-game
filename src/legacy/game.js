@@ -24211,7 +24211,7 @@ function useManaPotion() {
   if (player.mp >= player.maxMp) { log('Already at full mana.'); return; }
   const amt = queueMana(manaPotionAmount()); // over-time restore
   sfx('potion');
-  log(`<span data-spr=ui_mp></span> Quaffed a ${logPotion('Mana Potion')} — restoring ${amt} MP over a few seconds.`, 'loot');
+  log(`<span data-spr=potion_g></span> Quaffed a ${logPotion('Mana Potion')} — restoring ${amt} MP over a few seconds.`, 'loot');
   spendPotionTurn();
 }
 
@@ -25510,7 +25510,7 @@ function renderSkillBar() {
   const healHint = 'press ' + kbLabel('healthPotion');
   const manaHint = 'press ' + kbLabel('manaPotion');
   const healTip = `<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health Potion</div><div class='ht-line'>Mends health <b>over a few seconds</b> — a heavy direct hit spills the rest of the sip.</div><div class='ht-sub'>${healHint} · over time · ${effectivePotionCd()}-second cooldown</div>`;
-  const manaTip = `<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana Potion</div><div class='ht-line'>Restores mana <b>over a few seconds</b>.</div><div class='ht-sub'>${manaHint} · over time · ${effectivePotionCd()}-second cooldown</div>`;
+  const manaTip = `<div class='ht-name' style='color:var(--mp)'><span data-spr=potion_g></span> Mana Potion</div><div class='ht-line'>Restores mana <b>over a few seconds</b>.</div><div class='ht-sub'>${manaHint} · over time · ${effectivePotionCd()}-second cooldown</div>`;
   const cdDial = (key) => `<span class="sb-cd" data-cd="${key}"></span>`;
   // Each tile rides in a cell with its hotkey pill stacked above the button. `label`
   // is the hotkey (or "AUTO" for the auto-cast slot); `tone` tints the pill to match
@@ -29792,7 +29792,7 @@ if (hadSave) {
 }
 log('Progress auto-saves automatically as you play.');
 log('Open <span data-spr=chest></span> BAG to view your loot; press the pad\'s USE button to grab items.');
-log(`Tap the <span data-spr=ic_heart></span> or <span data-spr=ui_mp></span> flask to quaff a ${logPotion('Potion')} — free to use, but they share a short cooldown.`);
+log(`Tap the <span data-spr=potion_r></span> or <span data-spr=potion_g></span> flask to quaff a ${logPotion('Potion')} — free to use, but they share a short cooldown.`);
 log('⌨️ Keys: Q health potion · E mana potion · R primary skill · 3–9 skills · T town · B open bag · Space/F use.');
 log('<span data-spr=ic_stun></span> You start with a skill point — open <span data-spr=chest></span> BAG ▸ SKILLS to learn your first active, then tap <span data-spr=ic_stun></span> (or press ' + skillKeyLabel(1) + ') to cast it.');
 log(PWR_GLYPH + ' Each item has a Power value; your total Power blends level, gear, and attributes.');
