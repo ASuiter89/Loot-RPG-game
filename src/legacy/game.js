@@ -14,9 +14,10 @@
 
 // ── Extracted modules (see docs/CHANGELOG.md) ──
 import { shadeColor, hexA, _parseRGBA } from '../utils/color.js';
-import { milestonePower, rankScale, passiveRankScale, skillManaCost,
+import { milestonePower, rankScale, passiveRankScale, passiveSurgeLive, skillManaCost,
   earnedSkillPoints, earnedAscPoints,
   SKILL_POINTS_PER_LEVEL, SKILL_POINTS_AT_START, ASCEND_LEVEL, ASC_POINT_EVERY } from '../systems/skillMath.js';
+import { PASSIVE_SURGES } from '../data/passiveSurges.js';
 import { glideVitalFill, latchFillRate } from '../systems/vitalFill.js';
 import { telegraphPhase, telegraphFill, telegraphDanger, stepTelegraph,
   TELE_ACTIVE, TELE_DONE } from '../systems/telegraph.js';
@@ -25,6 +26,8 @@ import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/p
 import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.js';
 import { footprintSealsPath, footprintInsideRoom } from '../systems/decorPlacement.js';
 import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach.js';
+import { footprintReach } from '../systems/meleeReach.js';
+import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { isCritical } from '../systems/crit.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
@@ -48,11 +51,18 @@ import { resistFraction, penFraction, mitigate, physicalShare } from '../systems
 import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
+import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached } from '../systems/depth.js';
+import { isSsf, walletGain, walletSpend } from '../systems/ssf.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
-import { emptyMealSlots, sanitizeMealSlots, assignMealToSlot, takeFromMealSlot, returnSlotToPantry, filledSlotCount, mealSignature } from '../systems/meals.js';
+import { moatCells, seaMargin } from '../systems/islandFloor.js';
+import { emptyMealSlots, sanitizeMealSlots, assignMealToSlot, assignMealToSlotAt, groupPantry, removePantryStack, takeFromMealSlot, returnSlotToPantry, filledSlotCount, mealSignature } from '../systems/meals.js';
+import { cookableCount, cookBatchOptions } from '../systems/cooking.js';
+import { trimFillStyle } from '../utils/iconTrim.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
+import { bountyProgress as _bountyProgress, bountyDone as _bountyDone, bountyNewlyComplete } from '../systems/bounty.js';
 import { forgeSections } from '../systems/forgeFlow.js';
+import { weaponSpeedInfo } from '../systems/weaponSpeed.js';
 import { CURSE_TIER_MULT, curseTierMult, statCurseSwing, cursedStatCeiling } from '../systems/curseRoll.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
@@ -86,6 +96,7 @@ import { setPieceCount, setComplete as setIsComplete, setStatContribution,
 import { isBestiaryFieldKnown, speciesDiscovered, bestiaryRevealRatio, emptyDex, sanitizeDex, foldLegacyBestiary, recordKill } from '../systems/bestiary.js';
 import { buildCollectionCatalog, collectionFacets, groupStoredArtifacts, acquiredKeySet,
   filterCatalog, collectionProgress, itemCatalogKey } from '../systems/uniqueCollection.js';
+import { blockGearSwap, GEARSET_DANGER_RADIUS } from '../systems/gearSetSwap.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -180,11 +191,11 @@ const SLOT_AFFIX_POOLS = {
   // caster weapon (Staff/Wand) only SPELLPWR/CASTSPD — so the two never mix.
   weapon: { stats: ['ATK','ACC','CRIT','CRITDMG','IDMG','DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','MAGICPEN','LEECH','MPLEECH','SPELLPWR','SKILLPWR','BLEED','STUNPWR','ATKSPD','CASTSPD'], attrs: ['might','agility','spirit'] },
   head:   { stats: ['HP','MP','REGEN','CRIT','CRITDMG','SPD','MAGICFIND','XPGAIN','SPELLPWR','SKILLPWR','CDR','MCR','CASTSPD','MAGICPEN','DODGE','MPKILL','MATFIND'], attrs: ['vitality','spirit','luck'] },
-  chest:  { stats: ['HP','REGEN','MP','DR','BLOCK','THORNS','HPKILL','DODGE','MAGICFIND','TENAC'], attrs: ['vitality','spirit','luck'] },
+  chest:  { stats: ['HP','REGEN','MP','DR','BLOCK','THORNS','HPKILL','DODGE','MAGICFIND','TENAC','STAM','STAMREG'], attrs: ['vitality','spirit','luck'] },
   hands:  { stats: ['CRIT','ACC','CRITDMG','IDMG','DBLSTRIKE','SPD','PEN','LEECH','EXEC','CDR','CLEAVE','BLOCK','THORNS','ATKSPD','SKILLPWR'], attrs: ['might','agility','spirit'] },
-  legs:   { stats: ['SPD','HP','REGEN','DODGE','DR','BLOCK','MP','GOLDFIND','XPGAIN','HPKILL','TENAC'], attrs: ['agility','vitality','luck'] },
+  legs:   { stats: ['SPD','HP','REGEN','DODGE','DR','BLOCK','MP','GOLDFIND','XPGAIN','HPKILL','TENAC','STAM','STAMREG'], attrs: ['agility','vitality','luck'] },
   ring:   { stats: ['CRIT','ACC','CRITDMG','ATK','IDMG','SKILLPWR','LEECH','MPLEECH','GOLDFIND','MAGICFIND','MATFIND','HP','MP','DEF','DBLSTRIKE','BOSSDMG','EXEC','PEN','MAGICPEN','MCR','MPKILL','CLEAVE'], attrs: ['might','agility','luck','spirit','vitality'] },
-  amulet: { stats: ['MP','HP','REGEN','SPELLPWR','CASTSPD','MAGICPEN','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC'], attrs: ['spirit','luck','vitality','might','agility'] },
+  amulet: { stats: ['MP','HP','REGEN','SPELLPWR','CASTSPD','MAGICPEN','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC','STAM','STAMREG'], attrs: ['spirit','luck','vitality','might','agility'] },
   // Off-hands: defensive layers + caster utility. A shield's BLOCK headline already
   // flows through totalStat('BLOCK') into combat, so it needs no special-casing.
   // Like weapons, the power/speed stats here are gated by family in itemStatPool()
@@ -1567,6 +1578,25 @@ function dlIconFill(name) {
   return `<span class="dl-ic dl-fill" style="background-size:${cols*100}% ${rows*100}%;` +
     `background-position:${(col/(cols-1)*100).toFixed(3)}% ${(row/(rows-1)*100).toFixed(3)}%"></span>`;
 }
+// A sprite that FILLS its parent like dlIconFill, but positioned on its OPAQUE box
+// (alpha-trimmed) so the visible art — not the tile's transparent padding — fills the
+// element. The element's aspect ratio is stamped to the box aspect so the art fills
+// with no letterbox; CSS then sizes it (e.g. to a row's text height). Used where the
+// icon must match surrounding text height regardless of the layout's root font size.
+function dlIconTrimFill(name) {
+  const i = SPRITE_IDX[name];
+  if (i === undefined || !spriteReady) return '';
+  const box = _iconTrimBox(name);
+  if (!box) return dlIconFill(name);   // fall back to a whole-tile fill until the alpha box is measurable
+  const aw = spriteSheet.naturalWidth || 256, ah = spriteSheet.naturalHeight || 144;
+  const col = i % ATLAS_COLS, row = (i / ATLAS_COLS) | 0;
+  const s = trimFillStyle(col * ATLAS_TS + box.x0, row * ATLAS_TS + box.y0, box.w, box.h, aw, ah);
+  return `<span class="dl-ic dl-trimfill" style="aspect-ratio:${s.ar};` +
+    `background-size:${s.bgW.toFixed(3)}% ${s.bgH.toFixed(3)}%;` +
+    `background-position:${s.posX.toFixed(3)}% ${s.posY.toFixed(3)}%"></span>`;
+}
+// The pantry/meal-slot bowl icon, sized by CSS to fill its row's text height.
+function bowlIconFill() { return dlIconTrimFill(RAMEN_BOWL_SPRITE); }
 function enemySprite(e) {
   // Sprites are referenced directly: every enemy carries its own `sprite` (bosses,
   // mimics, scripted foes) or resolves it from its MONSTERS entry. No emoji lookup.
@@ -2787,6 +2817,12 @@ function canAfford(cost) {
 }
 function spendCost(cost) {
   if (cost.gold) spendGold(cost.gold);
+  // A Solo Self-Found hero pays materials from their private per-hero wallet;
+  // everyone else spends from the ladder's shared stash pool.
+  if (isSsf(player)) {
+    if (walletSpend(player.materials || (player.materials = freshMaterials()), cost, CRAFT_MAT_KEYS)) saveGameSoon();
+    return;
+  }
   let spentMat = false;
   for (const k of CRAFT_MAT_KEYS) if (cost[k]) { withdrawMaterial(stash, k, stashDeviceId(), cost[k]); spentMat = true; }
   if (spentMat) saveStash(); // materials live in the shared stash — persist the spend
@@ -2816,11 +2852,20 @@ function costLabelHi(cost) {
   return parts.join('  ');
 }
 function freshMaterials() { return { scrap: 0, glimmer: 0, core: 0, chaos: 0 }; }
-// The active ladder's shared material wallet (a plain { key: amount } snapshot).
-// Materials are pooled across every hero, so this reads the account-wide stash —
-// there is no per-hero material store any more.
-function heroMaterials() { return (stash && stash.materials) || {}; }
+// The active hero's material wallet (a plain { key: amount } snapshot). Normally
+// the account-wide shared stash pool — materials pool across every hero on the
+// ladder. The one exception is a SOLO SELF-FOUND hero (see systems/ssf.js), who
+// keeps a private wallet on their own save and never touches the shared pool.
+function heroMaterials() {
+  if (isSsf(player)) return player.materials || {};
+  return (stash && stash.materials) || {};
+}
 function gainMaterial(k, n) {
+  if (isSsf(player)) {
+    walletGain(player.materials || (player.materials = freshMaterials()), k, n); // private per-hero wallet
+    saveGameSoon();
+    return;
+  }
   depositMaterial(stash, k, stashDeviceId(), n); // shared pool — every hero gains into the same wallet
   saveStashSoon();                               // persist (debounced; gains can arrive in bursts on a kill/salvage)
 }
@@ -2866,6 +2911,9 @@ const STAT_NAMES = ['ATK','DEF','SPD','LCK','HP','MP','CRIT','CRITDMG','REGEN'];
 // new gear and survives only on older items.
 const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', HP:'Max HP',
   VEIL:'Spirit Veil',
+  // Stamina fuels sprint/dash. STAM deepens the pool, STAMREG speeds its refill —
+  // so a class that never invests in Vitality can still sprint on gear alone.
+  STAM:'Max Stamina', STAMREG:'Stamina Regen',
   MP:'Max MP', CRIT:'Crit Rating', CRITDMG:'Crit Dmg %', REGEN:'Regen', DMG:'Damage', ACC:'Accuracy',
   // ── new stats ── leech & on-kill sustain, defensive layers, offensive %s,
   // utility/economy %s, and caster %s. Percent stats carry a "%" in their label
@@ -2887,7 +2935,7 @@ const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', H
   TENAC:'Tenacity %' };
 // Short codes for the compact one-line item summary (the tooltip/enchanter use the
 // full STAT_LABELS above). Anything missing falls back to its raw key.
-const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', VEIL:'VEIL', MP:'MP', CRIT:'CRIT', ACC:'ACC',
+const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', VEIL:'VEIL', STAM:'STM', STAMREG:'SRG', MP:'MP', CRIT:'CRIT', ACC:'ACC',
   CRITDMG:'CDMG', REGEN:'REG', LEECH:'LCH', MPLEECH:'MLC', HPKILL:'HoK', MPKILL:'MoK',
   THORNS:'THN', DR:'DR', BLOCK:'BLK', DODGE:'DGE', IDMG:'IDMG', DBLSTRIKE:'2X', CLEAVE:'CLV',
   BOSSDMG:'vsB', EXEC:'EXE', PEN:'PEN', MAGICPEN:'MPN', GOLDFIND:'GF', XPGAIN:'XP', MAGICFIND:'MF', MATFIND:'MTF',
@@ -2910,6 +2958,8 @@ const STAT_DESC = {
   LCK: 'Fortune — better crit chance and richer loot.',
   HP: 'Your maximum health.',
   VEIL: 'Flat bonus to your maximum Spirit Veil — the blue shield that soaks damage before your health.',
+  STAM: 'Deepens your Stamina pool — the reserve that fuels sprinting and dashing — with no attribute investment needed.',
+  STAMREG: 'Refills your Stamina faster after you sprint or dash — no attribute investment needed.',
   MP: 'Your maximum mana for casting skills.',
   CRIT: 'Chance to land critical hits (contested vs the foe\'s level).',
   CRITDMG: 'Bonus damage your critical hits deal.',
@@ -3574,12 +3624,14 @@ function baseMaxMp() {
 // hero carries a deeper sprint/dash reserve. Measured from Vitality above base so
 // a fresh hero stays at the tuned 100. (Class-scaled: Warriors sprint longest.)
 function baseMaxStamina() {
-  return Math.round(MAX_STAMINA + vitalityAboveBase() * attrCoef('staminaMax'));
+  return Math.round(MAX_STAMINA + vitalityAboveBase() * attrCoef('staminaMax') + totalStat('STAM'));
 }
 // How fast Stamina refills (per second) once you stop exerting: the STAM_REGEN
 // baseline plus a Vitality bonus, so Vitality shortens the downtime between sprints.
+// Gear STAMREG adds flat /sec on top, so a class that skips Vitality can still recover
+// quickly. (Both gear stats let non-Vitality builds buy Stamina without the attribute.)
 function staminaRegenPerSec() {
-  return STAM_REGEN + vitalityAboveBase() * attrCoef('staminaRegen');
+  return STAM_REGEN + vitalityAboveBase() * attrCoef('staminaRegen') + totalStat('STAMREG');
 }
 
 // Total Defense: gear DEF plus a contribution from Might (class-scaled — Warriors
@@ -4274,6 +4326,16 @@ function weaponRangeGridHTML(base) {
     cells += `<span class="rg-cell" style="background:${bg};border-color:${bd}"></span>`;
   }
   return `<span class="range-grid">${cells}</span><span class="range-cap">reach ${range}</span>`;
+}
+// A little caption of a style's BASE swing rate — attacks/sec before any Attack
+// Speed or Agility haste — with a coarse Slow/Normal/Fast tier, so a weapon's
+// inherent speed reads in the tooltip and the Forge WITHOUT equipping it. It
+// derives from the same PLAYER_ATK_BASE × STYLE_ATK_MULT the hero actually swings
+// at (see playerAttackInterval), so what's shown is what you'll get. Reused by
+// the weapon tooltip and the Forge preview beside the reach grid.
+function weaponSpeedCapHTML(style) {
+  const info = weaponSpeedInfo(STYLE_ATK_MULT[style] || 1, PLAYER_ATK_BASE);
+  return `<span class="range-cap" title="Base swings per second, before Attack Speed & Agility">${info.aps.toFixed(2)}/s · ${info.tier}</span>`;
 }
 
 // ── CHARACTER CLASSES ──
@@ -5204,6 +5266,10 @@ function skillBonus(key) {
     const ms = passiveRankScale(r);
     if (n.fx && n.fx[key]) sum += n.fx[key] * r * ms;
     if (n.cfx && n.cfx[key] && condMet(n.cond)) sum += n.cfx[key] * r * ms;
+    // Rank-10 SURGE also unlocks ONE brand-new stat (see data/passiveSurges.js):
+    // a maxed passive gains a stat it never gave before, not just a bigger number.
+    const sg = PASSIVE_SURGES[n.id];
+    if (sg && sg[key] && passiveSurgeLive(r, n.max)) sum += sg[key];
   }
   // Active combat charges (Frenzy/Power/…) feed the SAME formulas: their per-stack
   // bonus × current stacks rides on top of the flat/conditional passives.
@@ -5707,7 +5773,12 @@ function buySkill(id) {
   // at the same ranks (3/7/10) — their always-on bonus spikes (keystones cap at rank
   // 1, so they never hit one).
   const ms = (node.type === 'active' || (node.type === 'passive' && !node.keystone)) && SKILL_MILESTONES.find(m => m.rank === newRank);
-  const msStr = ms ? ` ${ms.pips} ${ms.name} — ${node.type === 'passive' ? ms.passiveDesc : ms.activeDesc}!` : '';
+  // Rank 10 also unlocks a passive's SURGE stat — a brand-new stat (see
+  // data/passiveSurges.js), not just a bigger version of what it already gave.
+  const surge = node.type === 'passive' && newRank === node.max && PASSIVE_SURGES[node.id];
+  const msStr = ms
+    ? ` ${ms.pips} ${ms.name} — ${node.type === 'passive' ? ms.passiveDesc : ms.activeDesc}${surge ? `, unlocking ${fxOneLine(surge)}` : ''}!`
+    : '';
   if (ms) screenFlash('#ffd27a');
   log(`<span data-spr=mat_glimmer></span> Learned ${node.name}${(node.max || 1) > 1 ? ` (rank ${newRank}/${node.max})` : ''}${summary ? ` — now ${summary}.` : '.'}${gainStr}${msStr}`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); saveGame();
@@ -6086,6 +6157,8 @@ let player = { x: 5, y: 5,
   // Crafting materials are NOT stored on the hero — they're an account-wide shared
   // wallet in the stash (Standard and Hardcore keep separate wallets), so every
   // hero draws on the same pool. See heroMaterials() / gainMaterial() / spendCost().
+  // EXCEPTION: a Solo Self-Found hero (player.ssf) keeps a private `materials`
+  // wallet right here on the save and never touches the shared pool.
   // Auto-loot rules: per-rarity disposition for freshly-dropped gear ('keep' |
   // 'scrap' | 'sell'). Everything defaults to 'keep' so the feature is off until
   // the player opts in from the settings menu.
@@ -6302,6 +6375,12 @@ let graveMarker = null;
 let nextDiffPortal = null;
 let merchant = null;  // { x, y, stock: [...] } when present
 let shopMode = 'buy';  // merchant tab: 'buy' | 'sell'
+// Merchant Sort / Filter — mirrors the LOOT drawer's controls but keeps its own
+// independent state, so ordering/narrowing the wares never disturbs the bag's
+// view. Shared across the BUY (wares) and SELL (bag) tabs.
+let shopSort = 'rarity';        // 'rarity' | 'power' | 'slot' | 'value'
+let shopStatFilter = [];        // stat/attr keys to narrow to (empty = no filter)
+let shopSortOpen = false, shopFilterOpen = false;
 // The town Merchant's wares persist for the whole town visit (so closing and
 // reopening the shop shows the SAME stock); rebuilt on a new town visit or paid
 // restock. null until first opened. See openTownService / refreshShop.
@@ -6679,12 +6758,14 @@ window.gameState = function gameState(radius) {
     // 'touch' once the mobile layer is active (floating joystick + thumb buttons),
     // else 'mouse'. Purely informational — every action is still driveable from the
     // keyboard/console in both modes.
-    input: (typeof document !== 'undefined' && document.body && document.body.classList.contains('touch')) ? 'touch' : 'mouse',
+    input: (typeof document !== 'undefined' && document.body && document.body.classList.contains('touch')) ? 'touch'
+         : (typeof document !== 'undefined' && document.body && document.body.classList.contains('pad')) ? 'pad' : 'mouse',
     inTown: !!inTown,
     floor: dungeonLevel,                                                   // continuous depth (1, 2, 3, …)
     floorDisplay: (typeof displayFloor === 'function') ? displayFloor() : dungeonLevel, // 1–25 within a tier
     tier: (typeof diffOf === 'function' && typeof DIFFS !== 'undefined') ? ((DIFFS[diffOf(dungeonLevel) - 1] || {}).name || null) : null,
     isBossFloor: dungeonLevel % 5 === 0,                                   // a guardian holds this floor
+    island: (typeof floorIslandTheme !== 'undefined') && !!floorIslandTheme, // landmass ringed by impassable sea (~ tiles frame the map)
     floorCleared: (typeof floorCleared !== 'undefined') ? !!floorCleared : null,
     hostilesLeft: (typeof hostilesRemaining === 'function') ? hostilesRemaining() : live.length, // foes still sealing the stairs
     // Explicit exit coordinates + whether the down-stairs are still sealed.
@@ -6715,6 +6796,8 @@ window.gameState = function gameState(radius) {
       level: player.level, xp: player.xp,
       xpToNext: (typeof xpForLevel === 'function') ? xpForLevel(player.level) : null,
       gold: player.gold, class: player.class, ascension: player.ascension,
+      hardcore: !!player.hardcore,  // one life — death is permanent (see gameGuide("character"))
+      ssf: !!player.ssf,            // Solo Self-Found — vault sealed, private materials, carried gold only
       attributes: player.attributes ? Object.assign({}, player.attributes) : null, // might/vitality/agility/spirit/luck
       // Overall Power (the hero-sheet headline) and the slice of it your worn gear
       // contributes. Power is BUILD-AWARE: it's an effective combat score (offense ×
@@ -6738,6 +6821,12 @@ window.gameState = function gameState(radius) {
       // Auto-attack reach of the equipped weapon, resolved by SUB-TYPE (a Rapier
       // reaches 2, a Pike 3, a Longbow 5) — read this rather than guessing from category.
       weaponReach: (typeof weaponRangeOf === 'function') ? weaponRangeOf((equipped || {}).weapon) : null,
+      // Base swing rate of the equipped weapon's style — attacks/sec BEFORE the
+      // ATKSPD gear / Agility haste in `offense`, plus a coarse Slow/Normal/Fast
+      // tier — so speed reads without equipping (matches the weapon tooltip / Forge).
+      weaponBaseSpeed: (typeof weaponStyle === 'function' && typeof STYLE_ATK_MULT !== 'undefined')
+        ? (() => { const i = weaponSpeedInfo(STYLE_ATK_MULT[weaponStyle()] || 1, PLAYER_ATK_BASE); return { atkPerSec: Math.round(i.aps * 100) / 100, tier: i.tier }; })()
+        : null,
       // Survivability — the defensive counterpart to `offense`, mirroring the HERO sheet.
       // The chance fields are 0..1 fractions measured against the current floor's threat.
       defense: (typeof playerDefense === 'function') ? {
@@ -6901,8 +6990,8 @@ window.gameState = function gameState(radius) {
         ],
       },
       gold: player.gold,                 // coins in hand (what death loss is taken from)
-      vaultGold: (stash && stash.gold) || 0,   // banked in the town Vault — safe from death
-      spendableGold: spendableGold(),    // carried + vault: what a town shop can actually charge (shortfall auto-drawn from the vault)
+      vaultGold: isSsf(player) ? 0 : ((stash && stash.gold) || 0),   // banked in the town Vault — safe from death (always 0 for an SSF hero: their vault is sealed)
+      spendableGold: spendableGold(),    // carried + vault: what a town shop can actually charge (shortfall auto-drawn from the vault; carried only for SSF)
       // Unique/set Collection (the Vault's Collection tab): distinct authored
       // artifacts you have ≥1 stored copy of, out of the full roster. Storing a
       // unique/set piece files it here (account-wide, per ladder); withdraw returns it.
@@ -6917,7 +7006,7 @@ window.gameState = function gameState(radius) {
         const r = bestiaryRoster();
         return { discovered: r.filter(s => speciesDiscovered(bestiaryKills(s))).length, total: r.length };
       })(),
-      materials: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, heroMaterials()[k] || 0])),   // scrap/glimmer/core/chaos (commonest→rarest); ACCOUNT-SHARED across heroes (per ladder)
+      materials: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, heroMaterials()[k] || 0])),   // scrap/glimmer/core/chaos (commonest→rarest); ACCOUNT-SHARED across heroes (per ladder) — except an SSF hero, who sees their private wallet here
       materialsUnlocked: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, materialUnlocked(k)])),  // which mats the CURRENT tier can drop from kills (salvage ignores this)
       autoLoot: player.autoLoot ? Object.assign({}, player.autoLoot) : null,       // per-rarity keep/scrap/sell
       foodBuff: player.foodBuff ? { name: player.foodBuff.name, floors: player.foodBuff.floors } : null,
@@ -6973,7 +7062,7 @@ window.gameGuide = function gameGuide(topic) {
     overview: [
       `Dungeon Loot is a real-time, loot-driven pixel dungeon crawler. Delve floor by floor, kill foes, grab ever-better gear, and survive as deep as you can.`,
       `Depth is one continuous counter across four difficulty tiers of 25 floors each: Normal (1-25), Hardened (26-50), Brutal (51-75), Endless (76+, uncapped). gameState().floorDisplay and .tier show where you are.`,
-      `Core loop per floor: clear every hostile to unseal the down-stairs, loot, then descend. Every 5th floor is a boss floor. Death is NOT game over — it sends you to town weakened; your hero lives on.`,
+      `Core loop per floor: clear every hostile to unseal the down-stairs, loot, then descend. Every 5th floor is a boss floor. Death is NOT game over — it sends you back to town (you lose some gold/XP and drop your bag as a recoverable grave) but revives you at full HP/MP/Stamina; your hero lives on.`,
       `There is no single "win" — the goal is to push as deep as you can. Best objective on any normal floor: clear all foes, grab nearby loot, reach the down-stairs.`,
       `gameState() shows the live situation; gameGuide() explains the rules. Use them together.`,
     ],
@@ -7008,7 +7097,7 @@ window.gameGuide = function gameGuide(topic) {
       `The hero faces and animates in the direction it walks — down/up/left/right — cycling a walk animation while moving and resting on a standing frame when still. It's purely cosmetic; gameState().player.faceDir reports the current 4-way facing.`,
       `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~34/sec). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch auto-sprint).`,
       `DASH (${key('dash')}) is a quick burst (costs 35 Stamina, ~0.55s cooldown). It only repositions fast — there are no i-frames and enemies are solid, so you can't dash THROUGH a foe to escape.`,
-      `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec). The Vitality attribute deepens the pool and speeds its recharge. Check player.dashReady before dashing.`,
+      `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec) — including while you rest in town, alongside HP/MP. The Vitality attribute deepens the pool and speeds its recharge; gear Max Stamina (STM) and Stamina Regen (SRG) do the same, so a class that never invests in Vitality can still sprint on gear alone. Check player.dashReady before dashing.`,
       `Being Slowed (a debuff) halves speed; being Stunned roots you entirely (see gameState().effects).`,
       `Foes are solid, so a single one body-blocks you — slide along it and step around. But a MOB can't pin you forever: when bodies plug your heading AND the lanes you'd slide into to go around them, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall, and a lone foe with any real gap beside it stays solid).`,
     ],
@@ -7018,9 +7107,10 @@ window.gameGuide = function gameGuide(topic) {
       `THROWN & FIRED attacks land ON IMPACT: a Bow/Staff auto-attack, a ranged summon's shot, and a bolt or blast spell all loose a flying bolt whose damage is dealt the instant it REACHES the foe — not when it's cast — so a target won't drop until the bolt connects (a foe reading full HP for a beat after you fire is normal). Melee swings, novas, beams and chains still resolve on the spot.`,
       `There is NO per-hit damage cap — a big swing, skill or crit lands its full number, so burst and crits are fully rewarded. A foe's actual HP is the only limiter: bosses carry deep HP pools (and hit harder), so they're a genuine, tanky fight rather than a one-shot.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear), and EVERY damage source can crit — auto-attacks, martial skills and spells all roll critical hits, land the big crit number, and fire your on-crit passives (combo/zeal charges, primed crits, mana refunds). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
+      `BASE ATTACK SPEED is set by the weapon's style, so weapon type alone changes how fast you swing (before any Attack Speed % or Agility haste): light flurry weapons (Dagger, Shortsword, Hatchet) are the fastest, the 1H melee & ranged middle (Sword, Spear, Bow, Wand) is Normal, and the heavy two-handers + casters (Maul, Greatsword, Greataxe, Staff, Scythe) are the slowest. The weapon tooltip and the Forge preview print a base "attacks/sec · Slow/Normal/Fast" beside the reach grid, so you can compare speed WITHOUT equipping; gameState().player.weaponBaseSpeed reports the equipped weapon's base atkPerSec + tier, and player.offense.attackSpeed is the % that speeds it up from there.`,
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
       `Defense / block / damage-reduction come from gear, the Might attribute, and your class passive. On TOP of HP sits the Spirit Veil — a Spirit-fuelled blue shield that soaks damage before your health and recharges after a few unhit seconds (see the "veil" topic). Healing is OVER TIME (a pending pool that fills the bar on a slope, shown as a translucent zone) — sip ${key('healthPotion')} EARLY rather than at zero; see the "healing" topic.`,
-      `Swap loadouts with ${key('swapWeapon')} to switch between, say, a ranged kite set and a melee finisher.`,
+      `Swap loadouts with ${key('swapWeapon')} to switch between, say, a ranged kite set and a melee finisher. A safety net blocks swapping onto an empty/much-weaker set while foes are near, so a stray keypress can't strip you naked mid-fight.`,
     ],
     healing: [
       `RECOVERY IS OVER TIME, not instant. Most healing no longer snaps HP up — it fills a PENDING pool that pays into HP at a capped rate (~12%/s of max HP per source), so the bar climbs on a visible slope. gameState().player.pendingHeal is the HP still owed; the HP/MP bars show it as a translucent zone ahead of the solid fill.`,
@@ -7046,7 +7136,7 @@ window.gameGuide = function gameGuide(topic) {
       `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and a rank-7 skill adds an extra ×1.2. The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
       `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% power (Empowered), then +20% power and a 20%-faster recharge (Honed), then +30% power plus +1 radius/range/target/hit (Mastered) — so deepening a key skill outpaces its rising mana cost. Every skill's detail card shows a "Rank bonuses" ladder listing all three, each lit green with a ✓ once your rank has earned it.`,
-      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. Its detail card lists all three in the green-when-earned "Rank bonuses" ladder, shows milestone pips by the rank, and the surge is folded into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
+      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. AND at rank 10 a passive unlocks one BRAND-NEW stat it never gave before — thematic to the node (a crit passive gains crit damage, an HP passive gains regen, a spell passive gains crit, and so on) — folded straight into the same combat formulas. Its detail card lists all three spikes plus the rank-10 stat in the green-when-earned "Rank bonuses" ladder, shows milestone pips by the rank, and folds the surge into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
@@ -7085,7 +7175,7 @@ window.gameGuide = function gameGuide(topic) {
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
       `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
-      `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. Off-class weapons can be carried and sold but not equipped.`,
+      `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. SAFEGUARD: while enemies are near you can't swap onto an EMPTY or much-weaker set (it would strip your armor mid-fight) — break away first, or swap where it's safe; gearing UP to a stronger set is always allowed. Off-class weapons can be carried and sold but not equipped.`,
       `Bosses spill the MOST loot of any foe, and the FIRST time you clear a given boss FLOOR its guardian pays a jackpot — ~3x the drops at noticeably better quality (a one-time windfall per boss floor). In Endless, where boss species recur, this tracks by floor, so every new or deeper boss floor keeps paying; farming a floor you've already cleared drops at the normal boss rate. gameState().enemies[i].firstKill flags a boss whose floor windfall is still unclaimed. See gameGuide("enemies") for the boss rules.`,
       `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them.`,
       `Crafting materials (Scrap → Glimmer → Core → Chaos, common→rare) come mainly two ways. Foes DROP them, gated by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four). SALVAGING gear sheds them by the item's rarity regardless of difficulty — so a lucky high-rarity find is your main early route to a material your tier can't yet drop. Bounty rewards and Treasure Goblins are bonus exceptions that ignore the gate — they can hand you a rarer material early. Materials are deliberately scarce; see gameGuide("autoloot") for the salvage bands.`,
@@ -7106,6 +7196,7 @@ window.gameGuide = function gameGuide(topic) {
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `BOSS TELEGRAPHS (gameState().hazards.telegraphs) are a guardian's wind-up attacks — a floor indicator that fills, flashes, then detonates. Each carries its shape (disc = filled circle; ring = donut, lethal in the band between innerR and r but SAFE in the centre hole and beyond r; lane = beam between (x1,y1)-(x2,y2); cone = wedge of radius r opening ±halfAngle around facing), its centre (x,y)/geometry, seconds until it lands (secsToHit), and danger:true when it hurts. They are ALWAYS dodgeable by MOVING out of the zone before secsToHit hits 0 (for a ring, step past r or into the hole) — never an RNG dodge. Red = damage; cyan = a benign spawn marker. A tracking disc follows you early in its wind-up, then locks — keep moving and it lands where you were.`,
       `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, the exit is north, and four pillars give cover. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
+      `ISLAND FLOORS (gameState().island true) come up now and then on outdoor floors: the landmass is ringed by open SEA, so the whole map edge is deep water (~) instead of a rock wall. You can see and shoot across it but never walk off — the shore IS the boundary. Nothing reachable is lost; the sea only replaces the impassable frame, so play it like any other floor.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom restores 50% of max HP and refills MP to full, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one plays a short walk-through-portal animation — the portal swallows you, the camera pans across to the partner pad, and you step out there (~0.9s, world frozen, unhittable; gameState().transit reads 'warp'). It also clears any click-to-move route, so you won't auto-walk back toward the pad you clicked. Use it deliberately, not while fleeing.`,
@@ -7143,18 +7234,19 @@ window.gameGuide = function gameGuide(topic) {
       `Create a hero in TWO steps from the title's ENTER THE DUNGEON button: first PICK A CLASS (Warrior/Rogue/Mage/Templar), then on the next screen ENTER A NAME and choose a body type — Female or Male. Both screens have a ◀ Back button (Esc does the same): the class pick backs out to the title, the name screen back to the class pick — a typed name and toggles are kept.`,
       `Body type is cosmetic — it only sets which hero sprite is drawn. Every class (Warrior, Rogue, Mage, Templar) has its own female and male hero art, shown in-world and anywhere the hero appears (paperdoll, save slots, graveyard, leaderboard, title card). gameState().player.sex reports it ('male'|'female') and .name reports the chosen name.`,
       `Hardcore mode (one life, permadeath) is also chosen on the name screen and locks in for that hero. Class can be retrained later at the town Trainer, but name, body type and Hardcore are fixed once you begin. While the class screen is open gameState().mode is 'classSelect'; on the name screen it's 'nameSelect'.`,
+      `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
     ],
     town: [
-      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at 50% HP/MP, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Death does not re-lock any floors: instead Warp to Dungeon only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Dungeon Gate flags the tier holding that grave (with the exact floor beside the tier's grave badge; gameState().graveSite.where), so you can dive straight back to it.`,
+      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Death does not re-lock any floors: instead Warp to Dungeon only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Dungeon Gate flags the tier holding that grave (with the exact floor beside the tier's grave badge; gameState().graveSite.where), so you can dive straight back to it.`,
       `Town's top row has TWO gates. Warp to Dungeon opens the tier + floor picker, but you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. Return to Last Floor drops you straight back onto the EXACT floor you left through the Town Portal — same enemies, loot and layout, right where you stood — and lights up ONLY when you left by portal or conquest, never after a death (then it's darkened, so take Warp to Dungeon; gameState().menu.returnToLastFloor.available reports this, .where the floor it returns to). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
-      `Time flows in town just like the dungeon: HP/MP regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon.`,
+      `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon.`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
-      `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House (SLOT moves the bowl's whole stack) to eat it straight from the bottom-HUD belt mid-run without returning to cook; eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks.`,
+      `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
-      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
+      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
-      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress.`,
+      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim gold + materials + a gear piece scaled to your depth. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract and its live progress (including menu.bounty.done once it's ready to claim).`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
     tips: [
@@ -7182,6 +7274,12 @@ window.gameGuide = function gameGuide(topic) {
       `The Vault has a COLLECTION tab: one slot for every unique and set piece in the game. A slot is a darkened silhouette (hover to preview the fixed properties it can roll — labels only, since the values roll with drop depth) until you store a matching piece there; then it lights up with your best-rolled copy. Storing a unique/set piece always files it here instead of ordinary Storage; a slot can hold MULTIPLE copies (it shows the strongest with a ×N badge, and clicking lists them all to withdraw).`,
       `The Collection is account-wide and per-ladder, exactly like the rest of the Vault (Standard and Hardcore keep separate ones). Filter it by gear slot, unique vs set, a specific set, or acquired/missing. gameState().menu.collection reports distinct pieces collected out of the total.`,
     ],
+    controller: [
+      `A gamepad is a fully supported input layer alongside keyboard/mouse/touch — plug in a PlayStation, Xbox or Steam Deck / generic pad and it's revealed on the first input (gameState().input reads 'pad'; keyboard stays live too). Everything in the game is doable on the pad. Button names below give PlayStation then Xbox: ✕/A, ○/B, □/X, △/Y.`,
+      `In the dungeon: LEFT STICK moves (analog 8-way). R2 sprints (hold; taps to latch in Toggle mode). R1 dashes. ✕/A interacts / uses / opens a chest / talks to an NPC. ○/B opens the Bag. □/X toggles the combat log. △/Y opens a town portal. HOLD L1 and press ✕○□△ to cast skill slots 1–4 (the auto-cast slot still fires itself). D-pad: Left = health potion, Right = mana potion, Up = swap weapon set, Down = cycle auto-attack focus. RIGHT STICK aims a soft inspect reticle over foes (and scrolls the combat log while it's open). L3 (left-stick click) collapses/expands the minimap.`,
+      `In menus (every overlay, shop, craft screen, the Bag): D-pad or LEFT STICK move the selection — the selected control's tooltip pops. ✕/A selects (activates a button, cycles a dropdown, or opens the on-screen keyboard on a text field). ○/B backs out / closes. L1 / R1 switch tabs (settings tabs, leaderboard tabs, bag tabs). Left/right on a focused dropdown cycles its option; the right stick scrolls long lists.`,
+      `Anywhere: Options/Menu pauses to Settings. R3 (right-stick click) toggles a VIRTUAL CURSOR — a mouse driven by the right stick, ✕/A = click — that works over the map and any menu, the universal fallback for anything else. View/Share opens an on-screen controller cheat-sheet. Text entry (hero name, cloud-save login) uses an on-screen keyboard with a Random-name key. See docs/CONTROLLER.md for the full map.`,
+    ],
   };
   if (topic == null) return Object.assign({ topics: Object.keys(G) }, G);
   const t = String(topic).toLowerCase().replace(/[^a-z]/g, '');
@@ -7200,8 +7298,10 @@ window.gameGuide = function gameGuide(topic) {
     classs: 'progression', classes: 'progression', clas: 'progression', attribute: 'progression', attributes: 'progression', level: 'progression', leveling: 'progression', skilltree: 'progression', ascension: 'progression', ascend: 'progression', xp: 'progression',
     bosspoint: 'progression', bosspoints: 'progression', bossslot: 'progression', bossslots: 'progression', slotlevel: 'progression', slotlevels: 'progression', gearslot: 'progression', gearslots: 'progression',
     character: 'character', creation: 'character', create: 'character', sex: 'character', gender: 'character', male: 'character', female: 'character', name: 'character', naming: 'character', newgame: 'character', body: 'character',
+    ssf: 'character', solo: 'character', soloselffound: 'character', selffound: 'character', hardcore: 'character', permadeath: 'character',
     shop: 'town', merchant: 'town', craft: 'town', crafting: 'town', forge: 'town', ramen: 'town', mystic: 'town', stash: 'town', portal: 'town', gate: 'town', warp: 'town', lastfloor: 'town', transmuter: 'town', transmute: 'town', fuse: 'town', vault: 'town', gambler: 'town', gamble: 'town', sellsword: 'town', merc: 'town', mercenary: 'town', trainer: 'town', healer: 'town', enchanter: 'town', enchant: 'town',
     control: 'controls', key: 'controls', keys: 'controls', keybind: 'controls', keybinds: 'controls', keybinding: 'controls',
+    controller: 'controller', gamepad: 'controller', pad: 'controller', joypad: 'controller', joystick: 'controller', dualsense: 'controller', dualshock: 'controller', xbox: 'controller', playstation: 'controller', steamdeck: 'controller', button: 'controller', buttons: 'controller',
     heal: 'healing', healing: 'healing', recovery: 'healing', regen: 'healing', regeneration: 'healing', potion: 'healing', potions: 'healing', mana: 'healing', mp: 'healing', leech: 'healing', lifesteal: 'healing', overtime: 'healing', pending: 'healing', hp: 'healing', hitpoints: 'healing', sustain: 'healing',
     veil: 'veil', spiritveil: 'veil', manaveil: 'veil', shield: 'veil', shields: 'veil', ward: 'veil', energyshield: 'veil', overshield: 'veil', spiritshield: 'veil', defense: 'veil', defence: 'veil',
     drive: 'driving', driving: 'driving', api: 'driving', act: 'driving', acting: 'driving', input: 'driving',
@@ -8498,9 +8598,15 @@ function setClFilter(kind, val) {
   else if (kind === 'cat') clCat = val; else if (kind === 'text') clText = val;
   renderChangelogList();
 }
-// Both the per-entry badge and the creator filter collapse authors to two
-// initials — Jeff Louie → JL, everyone else (ASuiter89 and Claude's sessions) → AS.
-function clInitials(by) { return by === 'Jeff Louie' ? 'JL' : 'AS'; }
+// Both the per-entry badge and the creator filter collapse authors to the two
+// people who ship this game: Jeff Louie (JL) and Andrew Suiter / ASuiter89 (AS).
+// Each ships Claude-assisted work under their OWN name — an entry is credited to
+// whoever directed it (in practice, the committing git identity), never to the
+// tool — so `by` is one of the two humans, not "Claude". Jeff → JL; anyone else
+// (Andrew, or a legacy entry that predates per-person crediting) → AS.
+function clInitials(by) {
+  return (by === 'Jeff Louie' || by === 'JeffCLouie') ? 'JL' : 'AS';
+}
 function clEntryHtml(c) {
   const sizeBadge = (s) => s ? ` <span class="version-size sz-${s}">${s}</span>` : '';
   const ini = clInitials(c.by);
@@ -8644,10 +8750,11 @@ function showGraveyard() {
       const portrait = heroFaceIcon(su.cls, su.sex, 30) || dlIcon(su.cls ? CLASSES[su.cls].icon : 'npc_mage', 30);
       const clsName = su.cls ? CLASSES[su.cls].name : 'Wanderer';
       const hcMark = su.hardcore ? ` <span class="hc-tag">${hcIcon(10)} HC</span>` : '';
+      const ssfMark = su.ssf ? ` <span class="hc-tag ssf">${ssfIcon(10)} SSF</span>` : '';
       const cur = (i === activeSlot) ? ` <span style="color:var(--gold);font-size:9px">● NOW</span>` : '';
       return `<div class="gy-row${su.hardcore ? ' hc' : ''}">`
         + `<span class="gy-portrait">${portrait}</span>`
-        + `<span class="gy-info"><span class="gy-name">${escapeHtml(su.name || 'Adventurer')}${hcMark}${cur}</span>`
+        + `<span class="gy-info"><span class="gy-name">${escapeHtml(su.name || 'Adventurer')}${hcMark}${ssfMark}${cur}</span>`
         + `<span class="gy-sub">${escapeHtml(clsName)} · Lv ${su.level}</span></span>`
         + `<span class="gy-stats"><span class="gy-floor">${floorLabel(su.floor)}</span>`
         + `<span class="gy-meta"><span data-spr=ic_money></span>${fmtGold(su.gold)} · ${formatPlayTime(ms)}</span></span>`
@@ -8658,9 +8765,10 @@ function showGraveyard() {
       const clsName = r.asc ? ASCENSIONS[r.asc].name : (r.cls ? CLASSES[r.cls].name : 'Wanderer');
       const date = fmtGraveDate(r.ts);
       const hcMark = r.hardcore ? ` <span class="hc-tag">${hcIcon(10)} HC</span>` : '';
+      const ssfMark = r.ssf ? ` <span class="hc-tag ssf">${ssfIcon(10)} SSF</span>` : '';
       return `<div class="gy-row${r.hardcore ? ' hc' : ''}">`
         + `<span class="gy-portrait">${portrait}</span>`
-        + `<span class="gy-info"><span class="gy-name">${escapeHtml(r.name || 'Adventurer')}${hcMark}</span>`
+        + `<span class="gy-info"><span class="gy-name">${escapeHtml(r.name || 'Adventurer')}${hcMark}${ssfMark}</span>`
         + `<span class="gy-sub">${escapeHtml(clsName)} · Lv ${r.level}</span></span>`
         + `<span class="gy-stats"><span class="gy-floor">${floorLabel(r.floor)}</span>`
         + `<span class="gy-meta"><span data-spr=ic_money></span>${fmtGold(r.gold)} · ${formatPlayTime(r.playMs || 0)}${date ? ' · ' + date : ''}</span></span>`
@@ -9367,6 +9475,10 @@ const FLOOR_TINTS = [
 // 9 teleporter · 10 cracked wall (breakable) · 11 locked door · 12 stairs up.
 
 // Carve an L-shaped corridor of floor between two interior points.
+// Cave corridors roll this chance to carve 2-wide (indoor halls always widen),
+// so cramped single-tile squeezes are the exception rather than the default —
+// a minority stay narrow as deliberate chokepoints.
+const CAVE_WIDE_HALL_CHANCE = 0.7;
 function carveCorridor(x1, y1, x2, y2, wide) {
   let x = x1, y = y1;
   mapData[y][x] = mapData[y][x] === 1 ? 0 : mapData[y][x];
@@ -9835,6 +9947,16 @@ function spawnProjectile(x, y, dx, dy, dmg, color, speed) {
   projectiles.push({ x, y, vx: dx / m * (speed || 7), vy: dy / m * (speed || 7), dmg, color: color || '#ffd24b', life: 3 });
 }
 
+// The live on-screen CENTRE of an actor's footprint: its smooth render position
+// (fx/fy, advanced each frame by the glide) when it has one, else its logic-tile
+// centre. EVERY visual an actor emits — a ranged bolt, a strike lunge — launches
+// from HERE, from exactly where the player sees it standing, the same way the hero
+// fires from player.fx/fy. Sourcing an attack from the logic tile instead let a
+// bolt leap out of the tile the sprite had glided away from — "an animation from
+// the next tile over, or across a wall from where the foe shows on the map."
+function actorRenderCX(a) { const s = a.size || 1; return a.fx == null ? a.x + s / 2 : a.fx; }
+function actorRenderCY(a) { const s = a.size || 1; return a.fy == null ? a.y + s / 2 : a.fy; }
+
 // A real, DODGEABLE bolt a ranged foe looses at the hero. It flies in a straight
 // line toward where the hero was when fired, is stopped by walls (see
 // updateProjectiles), and only deals damage if it actually reaches the hero — so
@@ -9842,8 +9964,7 @@ function spawnProjectile(x, y, dx, dy, dmg, color, speed) {
 // the firing foe `e` and its pre-rolled base damage so the hit resolves with that
 // foe's mitigation and on-hit procs when (and if) it lands.
 function spawnEnemyBolt(e, raw, color, kind) {
-  const s = e.size || 1;
-  const ox = e.x + s / 2, oy = e.y + s / 2;          // origin: centre of the foe's footprint
+  const ox = actorRenderCX(e), oy = actorRenderCY(e);  // origin: where the foe's sprite actually is
   const dx = player.fx - ox, dy = player.fy - oy, d = Math.hypot(dx, dy) || 1;
   const SP = 8;                                        // fast enough to threaten, slow enough to sidestep
   const life = (d + 1.5) / SP;                         // reaches the hero, overshoots a touch, then dies
@@ -10060,7 +10181,8 @@ function generateMap() {
   // in after the rooms are carved. Set BEFORE anything reads currentTheme().
   furnitureMap = {}; decorMap = {};
   floorThemeOverride = previewForceIndoor != null ? INDOOR_THEMES[previewForceIndoor % INDOOR_THEMES.length]
-    : ((!tutorialActive && Math.random() < 0.28) ? pick(INDOOR_THEMES) : null);
+    : ((!tutorialActive && !previewForceIsland && Math.random() < 0.28) ? pick(INDOOR_THEMES) : null);
+  floorIslandTheme = null; // island roll happens below, after the boss-floor bailout
   rollFloorMod();
   // ~35% of floors get a subtle colour wash for atmosphere.
   floorTint = Math.random() < 0.35 ? pick(FLOOR_TINTS) : null;
@@ -10078,6 +10200,15 @@ function generateMap() {
   // (hero enters south, guardian holds the centre, exit at the north). Build it
   // and stop — none of the procedural rooms/loot/NPC/decor passes below run.
   if (dungeonLevel % 5 === 0) { buildBossArena(); return; }
+
+  // ── ISLAND FLOOR? ── now and then an outdoor floor is a landmass ringed by open
+  // sea instead of the usual rock frame (the moat pass near the end floods the
+  // border rock to water). Never on indoor floors (they'd have no shore) or boss
+  // floors (their arena returned above). Set the coastal theme BEFORE anything
+  // reads currentTheme(), so the ground autotiles as sand from here on.
+  const islandFloor = !floorThemeOverride && !tutorialActive &&
+    (previewForceIsland || Math.random() < ISLAND_FLOOR_CHANCE);
+  if (islandFloor) floorIslandTheme = pick(ISLAND_THEMES);
 
   // ── ROOMS ── a handful of rectangles, occasionally one big grand hall.
   const rooms = [];
@@ -10116,9 +10247,11 @@ function generateMap() {
   }
 
   // ── CORRIDORS ── connect rooms in a chain, plus a couple of loops for choice.
-  for (let i = 1; i < rooms.length; i++) carveCorridor(rooms[i-1].cx, rooms[i-1].cy, rooms[i].cx, rooms[i].cy, indoor);
+  // Each cave corridor rolls its own width so most halls are 2-wide walkways.
+  const wideHall = () => indoor || Math.random() < CAVE_WIDE_HALL_CHANCE;
+  for (let i = 1; i < rooms.length; i++) carveCorridor(rooms[i-1].cx, rooms[i-1].cy, rooms[i].cx, rooms[i].cy, wideHall());
   const extraLoops = Math.max(2, Math.round(2 * areaRatio)); // more alternate routes on bigger floors
-  for (let k = 0; k < extraLoops; k++) { const a = pick(rooms), b = pick(rooms); if (a !== b) carveCorridor(a.cx, a.cy, b.cx, b.cy, indoor); }
+  for (let k = 0; k < extraLoops; k++) { const a = pick(rooms), b = pick(rooms); if (a !== b) carveCorridor(a.cx, a.cy, b.cx, b.cy, wideHall()); }
 
   // ── PLAYER START ── first room centre, cleared of obstacles.
   const start = rooms[0];
@@ -10146,6 +10279,9 @@ function generateMap() {
   // Indoor floors are built rooms — no open water or lava pools inside (spikes,
   // a trip-trap, still make sense). Keeps the LPC-skipping draw path liquid-free.
   if (floorThemeOverride) { floorHazards.delete('water'); floorHazards.delete('lava'); }
+  // Islands are already ringed by sea — no lava (it would clash with the shore),
+  // and no interior water pools either so the coastline stays the star.
+  if (floorIslandTheme) { floorHazards.delete('lava'); floorHazards.delete('water'); }
 
   // ── WATER POOLS (impassable) ── inside rooms, never on a room centre or start.
   if (floorHazards.has('water')) rooms.forEach(r => {
@@ -10263,6 +10399,15 @@ function generateMap() {
     const hor = mapData[y][x-1] === 0 && mapData[y][x+1] === 0;
     const ver = mapData[y-1][x] === 0 && mapData[y+1][x] === 0;
     if (hor || ver) { mapData[y][x] = 10; cracks--; }
+  }
+
+  // ── ISLAND MOAT ── ring the landmass with open sea. Runs AFTER every carve so
+  // it only ever converts leftover border ROCK to water (moatCells skips floor,
+  // stairs, cracked walls and hazards) — impassable stays impassable, so it can't
+  // strand a room or the exit. Just terrain paint; the floor caches key on
+  // floorSerial/mapEpoch already bumped up top, and this all precedes the first draw.
+  if (floorIslandTheme) {
+    for (const c of moatCells(mapData, MAP_W, MAP_H, seaMargin(MAP_W, MAP_H))) mapData[c.y][c.x] = 6;
   }
 
   // ── FOUNTAIN ── (~8%, or forced by a floor modifier).
@@ -10919,8 +11064,8 @@ function refreshShop() {
 function spawnMerchant(footReach) {
   merchant = null;
   if (floorMod.noMerchant) return;
-  // The roaming merchant appears on roughly 1 in 5 floors.
-  if (Math.random() > 0.20) return;
+  // The roaming merchant appears on roughly 1 in 8 floors.
+  if (Math.random() > 0.12) return;
   let mx, my, tries = 0;
   do {
     mx = rnd(1, MAP_W-1); my = rnd(1, MAP_H-1); tries++;
@@ -10939,11 +11084,11 @@ function spawnMerchant(footReach) {
 }
 
 // The Wandering Mystic — a second wanderer who takes gold to bend the next
-// 1/10/30 floors to a pact of your choosing. Appears on roughly 1 in 6 floors,
+// 1/10/30 floors to a pact of your choosing. Appears on roughly 1 in 10 floors,
 // independent of the merchant (but never sharing a tile with one).
 function spawnMystic(footReach) {
   mystic = null;
-  if (Math.random() > 0.16) return;
+  if (Math.random() > 0.10) return;
   let mx, my, tries = 0;
   do {
     mx = rnd(1, MAP_W-1); my = rnd(1, MAP_H-1); tries++;
@@ -11068,6 +11213,30 @@ function shopClose() {
   closeShop();
 }
 
+// Merchant Sort / Filter handlers — mirror the LOOT drawer's, driving the shop's
+// own state (shopSort / shopStatFilter) so the wares view is independent of the bag.
+function setShopSort(k) { shopSort = k; renderShop(); }
+function toggleShopSortMenu() { shopSortOpen = !shopSortOpen; if (shopSortOpen) shopFilterOpen = false; renderShop(); }
+function toggleShopFilterMenu() { shopFilterOpen = !shopFilterOpen; if (shopFilterOpen) shopSortOpen = false; renderShop(); }
+function toggleShopStat(k) {
+  const i = shopStatFilter.indexOf(k);
+  if (i < 0) shopStatFilter.push(k); else shopStatFilter.splice(i, 1);
+  renderShop();
+}
+function clearShopStats() { shopStatFilter = []; renderShop(); }
+// The Sort/Filter control cluster for the merchant, over `items` (the wares on
+// the BUY tab, the bag on the SELL tab — the source for the stat-filter options).
+function shopSortFilterHTML(items) {
+  return sortFilterCtrlsHTML({
+    sort: shopSort, sortOpen: shopSortOpen,
+    statFilter: shopStatFilter, filterOpen: shopFilterOpen,
+    items,
+    fns: { sort: 'setShopSort', sortMenu: 'toggleShopSortMenu', filterMenu: 'toggleShopFilterMenu', stat: 'toggleShopStat', clear: 'clearShopStats' },
+    sortHint: 'Order the wares by rarity, power, slot or value.',
+    emptyHint: 'No stats to filter.',
+  });
+}
+
 function renderShop() {
   setGoldPill('shop-gold-count', 'shop-gold-vault');
   setMatStrip('shop-mats'); // materials show at the merchant too, so scrapping here has visible feedback
@@ -11086,7 +11255,26 @@ function renderShop() {
     el.innerHTML = '<div class="shop-empty">Sold out! Pay to restock for fresh wares.</div>' + refreshBtn;
     return;
   }
-  el.innerHTML = '<div class="shop-grid">' + merchant.stock.map((s, i) => {
+  // Sort + filter the wares like the bag — keep each entry's original stock index
+  // so Buy / tooltip still target the right ware after reordering.
+  const ctrls = shopSortFilterHTML(merchant.stock);
+  const slotOrder = {};
+  SLOT_KEYS.forEach((sk, idx) => { slotOrder[sk] = idx; });
+  const tierKeys = Object.keys(TIERS);
+  const stockRows = merchant.stock.map((s, i) => ({
+    s, i, item: s.item,
+    pow: s.item.slot ? itemPower(s.item) : -1,
+    tr: tierKeys.indexOf(s.item.tier),
+    so: s.item.slot in slotOrder ? slotOrder[s.item.slot] : 99,
+  })).filter(r => itemRowVisible(r.item, 'all', shopStatFilter));
+  stockRows.sort(makeRowCompare(shopSort));
+  if (stockRows.length === 0) {
+    // Stock isn't empty — the stat filter just hid everything. Keep the controls
+    // on screen so the filter can be cleared.
+    el.innerHTML = ctrls + '<div class="shop-empty">No wares match the filter.</div>' + refreshBtn;
+    return;
+  }
+  el.innerHTML = ctrls + '<div class="shop-grid">' + stockRows.map(({ s, i }) => {
     const price = stockPrice(s);
     const afford = spendableGold() >= price;
     let name, sub, cls = '', stats = '', isUpgrade = false;
@@ -11130,22 +11318,37 @@ function shopTab(mode) { shopMode = mode; renderShop(); }
 function shopSell(i) { sellFromBag(i); if (merchant) renderShop(); }
 function shopScrap(i) { scrapFromBag(i); if (merchant) renderShop(); }
 function shopBulk(which) {
-  // Sell / scrap the whole bag (ignore the LOOT-tab filter), sparing locked pieces.
-  const prev = lootFilter; lootFilter = 'all';
-  bagBulk(which);
-  lootFilter = prev;
+  // Sell / scrap everything the shop's stat filter currently shows (ignore the
+  // slot dimension — the shop has no slot subtabs), sparing locked pieces.
+  bagBulk(which, it => itemRowVisible(it, 'all', shopStatFilter));
   if (merchant) renderShop();
 }
 function renderShopSellHTML() {
   if (!inventory.length) return '<div class="shop-empty">Your bag is empty — nothing to sell.</div>';
-  const unlocked = inventory.filter(it => !it.locked);
+  const ctrls = shopSortFilterHTML(inventory);
+  // Which bag pieces the stat filter shows — bulk actions + their totals honor it.
+  const visible = it => itemRowVisible(it, 'all', shopStatFilter);
+  const unlocked = inventory.filter(it => visible(it) && !it.locked);
   const bulkGold = unlocked.reduce((a, it) => a + Math.max(1, Math.round(it.value * 0.5)), 0);
   const scrapN = unlocked.filter(it => it.slot && TIERS[it.tier]).length;
   const bulk = `<div class="shop-sell-bulk">`
     + `<button class="loot-bulk-btn" ${unlocked.length ? '' : 'disabled'} onclick="shopBulk('sell')"><span data-spr=ic_money></span> Sell all · <span data-spr=ic_money></span>${fmtGold(bulkGold)}</button>`
     + (scrapN ? `<button class="loot-bulk-btn" onclick="shopBulk('scrap')"><span data-spr=mat_scrap></span> Scrap all · ${scrapN}</button>` : '')
     + `</div>`;
-  const rows = inventory.map((it, i) => {
+  // Sort + filter the shown rows, keeping each item's real inventory index so
+  // sell/scrap still target the right piece.
+  const slotOrder = {};
+  SLOT_KEYS.forEach((sk, idx) => { slotOrder[sk] = idx; });
+  const tierKeys = Object.keys(TIERS);
+  const decorated = inventory.map((it, i) => ({
+    it, i, item: it,
+    pow: it.slot ? itemPower(it) : -1,
+    tr: tierKeys.indexOf(it.tier),
+    so: it.slot in slotOrder ? slotOrder[it.slot] : 99,
+  })).filter(r => visible(r.it));
+  decorated.sort(makeRowCompare(shopSort));
+  if (decorated.length === 0) return ctrls + '<div class="shop-empty">No items match the stat filter.</div>';
+  const rows = decorated.map(({ it, i }) => {
     const price = Math.max(1, Math.round(it.value * 0.5));
     const sub = it.slot ? SLOTS[it.slot].label : 'item';
     const locked = it.locked;
@@ -11158,7 +11361,7 @@ function renderShopSellHTML() {
       + `<div class="shop-row-info ${rarityClass(it)}"><div class="shop-row-name">${curseMark(it)}${it.name}</div><div class="shop-row-sub">${sub}</div></div>`
       + `${lock}${scrapBtn}${sellBtn}</div>`;
   }).join('');
-  return bulk + rows;
+  return ctrls + bulk + rows;
 }
 
 function buyItem(i) {
@@ -11546,7 +11749,7 @@ function buildTown() {
   enemies = []; merchant = null; mystic = null; minions = []; combatBuffs = {};
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null; nextDiffPortal = null;
   quest = null; teleporters = {}; shrineData = {};
-  floorThemeOverride = null; furnitureMap = {}; decorMap = {}; // town is never an indoor-themed floor
+  floorThemeOverride = null; floorIslandTheme = null; furnitureMap = {}; decorMap = {}; // town is never an indoor/island floor
   townShopStock = null;        // fresh merchant wares each town visit
   traps = []; projectiles = []; bossHazards = []; bossTelegraphs = []; clearAttackFx(); // real-time hazards / fx never linger into town
   hasFountain = false; groundKey = null; hasKey = false;
@@ -11830,17 +12033,45 @@ function transmute(tier, ids) {
 // player.bounty = { kind, need, snap, gold, mat, ilvl, desc }. Progress is read
 // live from the hero's running totals, so no per-tick tracking is needed.
 function bountyKills() { return Object.values(bestiaryDex.kills).reduce((a, b) => a + (+b || 0), 0); }
-function bountyProgress(b) {
-  if (!b) return 0;
-  if (b.kind === 'slay')  return Math.max(0, bountyKills() - b.snap);
-  if (b.kind === 'delve')  return Math.max(0, (player.maxFloor || 1));
-  if (b.kind === 'clear')  return Math.max(0, Object.keys(player.clearedFloors || {}).length - b.snap);
-  if (b.kind === 'boss')  return Math.max(0, (player.bossKills || 0) - b.snap);
-  if (b.kind === 'elite')  return Math.max(0, (player.eliteKills || 0) - b.snap);
-  if (b.kind === 'gold')  return Math.max(0, (player.goldEarned || 0) - b.snap);
-  return 0;
+// Snapshot the hero's live running totals the pure bounty math (systems/bounty.js)
+// reads from. Kept tiny — it's rebuilt per progress check, which only fires on
+// gameplay events (kills, floor clears, gold gains), never per frame.
+function bountyTotals() {
+  return {
+    kills: bountyKills(),
+    maxFloor: player.maxFloor || 1,
+    clearedFloors: Object.keys(player.clearedFloors || {}).length,
+    bossKills: player.bossKills || 0,
+    eliteKills: player.eliteKills || 0,
+    goldEarned: player.goldEarned || 0,
+  };
 }
-function bountyDone(b) { return b && bountyProgress(b) >= b.need; }
+function bountyProgress(b) { return _bountyProgress(b, bountyTotals()); }
+function bountyDone(b) { return _bountyDone(b, bountyTotals()); }
+// Fire a one-shot "bounty complete" cue the instant live progress first reaches
+// the contract's goal. Progress is read live from running totals, so there is no
+// natural completion moment otherwise — this pops a centre-screen banner, a chime
+// and a green flash (plus a log line) telling the player to head back to town and
+// claim. The latch lives on player.bounty so it fires once, not on every later kill.
+function checkBountyComplete() {
+  const b = (typeof player === 'object' && player) ? player.bounty : null;
+  if (!b) return;
+  // Latch on the not-done → done edge first, so the cue is consumed exactly once…
+  if (!bountyNewlyComplete(b, bountyTotals())) return;
+  // …but only celebrate during live dungeon play. A bounty is only ever completed
+  // out in the dungeon, so an in-town / title-screen edge means a prior session
+  // finished it and we're merely resuming — popping a "return to town" banner over
+  // the title (or while already in town) would be a stray. Either way the belt and
+  // objective tracker still show the green "ready to claim" state.
+  const titleOv = document.getElementById('title-overlay');
+  const titleOpen = !!(titleOv && titleOv.classList.contains('open'));
+  if (inTown || titleOpen) return;
+  if (typeof showLootBanner === 'function') {
+    showLootBanner('Bounty complete!', 'RETURN TO TOWN TO CLAIM', 'var(--uncommon)',
+      () => { sfx('milestone'); screenFlash('var(--uncommon)'); });
+  }
+  log('<span data-spr=scroll></span> <b style="color:var(--uncommon)">Bounty complete!</b> Return to town to claim your reward.', 'important');
+}
 
 // The board draws from a big pool of contract templates and shows a rotating
 // selection of 10. The shown set is seeded on a slowly-advancing time window so
@@ -11917,7 +12148,7 @@ function acceptBounty(i) {
   player.bounty = { kind: o.kind, need: o.need, snap: o.snap, gold: o.gold, mat: o.mat, ilvl: o.ilvl, desc: o.desc(o.need) };
   sfx('click');
   log(`<span data-spr=scroll></span> Bounty accepted: ${o.desc(o.need)}.`, 'important');
-  renderBounty(); updateObjectiveChip(); saveGame();
+  renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame();
 }
 function claimBounty() {
   const b = player.bounty; if (!b || !bountyDone(b)) return;
@@ -11933,9 +12164,11 @@ function claimBounty() {
   if (isTopTierItem(item)) lootReveal(item);
   else { sfx('levelup'); screenFlash('#ffd24b'); }
   log(`<span data-spr=scroll></span> Bounty complete! +<span data-spr=ic_money></span>${b.gold}, materials, and ${logItem(item)}.`, 'loot');
-  updateBars(); renderPanel(); renderBounty(); updateObjectiveChip(); saveGame();
+  // renderSkillBar() clears the belt's now-stale bounty module at once — otherwise
+  // its green "ready to claim" pulse would linger until the next world-tick rebuild.
+  updateBars(); renderPanel(); renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame();
 }
-function abandonBounty() { player.bounty = null; sfx('click'); log('<span data-spr=scroll></span> You abandon the bounty.'); renderBounty(); updateObjectiveChip(); saveGame(); }
+function abandonBounty() { player.bounty = null; sfx('click'); log('<span data-spr=scroll></span> You abandon the bounty.'); renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame(); }
 
 // ── OBJECTIVE CHIP / DAILY STREAK / COMBO + GREED RESETS ─────────────────────
 // The objective chip (a compact "what am I working toward" banner near the top),
@@ -11970,6 +12203,7 @@ function loadDaily() {
 // the last-written state is remembered and unchanged repaints skip the DOM writes.
 let _objChipLast = null;
 function updateObjectiveChip() {
+  checkBountyComplete();   // one-shot "bounty complete" cue on the not-done → done edge
   const chip = document.getElementById('objective-chip');
   if (!chip) return;
   const p = (typeof player === 'object' && player) || null;
@@ -12092,7 +12326,10 @@ const TOWN_MENU = [
     req: { ok: () => diffClearedCount() >= 1,           need: 'Unlock Hardened' } },
   { kind: 'sellsword',   name: 'Sellsword',   desc: 'Hire a companion',
     req: { ok: () => diffOf(player.maxFloor || 1) >= 3, need: 'Reach Brutal' } },
-  { kind: 'stash',     name: 'Vault',       desc: 'Store gold & gear safe' },
+  // The Vault is open from the start — except to a Solo Self-Found hero, whose
+  // vault is sealed for life (they never touch the shared pools).
+  { kind: 'stash',     name: 'Vault',       desc: 'Store gold & gear safe',
+    req: { ok: () => !isSsf(player),                  need: 'Sealed — Solo Self-Found' } },
 ];
 // ── TOWN AMBIENT BACKGROUND ── a different living scene drifts behind the town
 // menu each visit, so the safe haven feels alive rather than a static list. Every
@@ -12333,11 +12570,15 @@ function potRemove(k) {
 }
 function potClear() { cookPot = {}; refreshCooking(); }
 
-// Cook the pot into a bowl: stack every topping's buff, add any secret-recipe
-// bonus, consume the toppings, and stock the finished bowl in the pantry.
-function cookPotNow() {
+// Cook the pot into bowls: stack every topping's buff, add any secret-recipe bonus,
+// consume the toppings, and stock the finished bowl(s) in the pantry. `n` cooks a
+// BATCH of that many identical bowls at once (Cook ×N) — clamped to what your toppings
+// can afford — so you don't tap Cook over and over. Defaults to one bowl.
+function cookPotNow(n) {
   const total = Object.values(cookPot).reduce((a, c) => a + c, 0);
   if (total !== RAMEN_INGREDIENT_COUNT) { log(`<span data-spr=ramen_bowl></span> A bowl of ramen takes exactly ${RAMEN_INGREDIENT_COUNT} toppings — you have ${total}.`); return; }
+  const affordable = cookableCount(cookPot, player.ingredients || {});
+  const count = Math.max(1, Math.min(Math.floor(n) || 1, affordable));
   const bowl = bowlFromPot(cookPot);
   if (bowl.match && !isDiscovered(bowl.match.id)) {
     if (!Array.isArray(player.discoveredRecipes)) player.discoveredRecipes = [];
@@ -12345,11 +12586,12 @@ function cookPotNow() {
     log(`${bowlIcon(14)} Secret recipe discovered: ${bowl.name}! It carries a bonus on top of its toppings.`, 'important');
     screenFlash('#ffd24b');
   }
-  for (const [k, c] of Object.entries(cookPot)) player.ingredients[k] = Math.max(0, ingCount(k) - c);
+  for (const [k, c] of Object.entries(cookPot)) player.ingredients[k] = Math.max(0, ingCount(k) - c * count);
   cookPot = {};
   if (!Array.isArray(player.pantry)) player.pantry = [];
-  player.pantry.push({ name: bowl.name, fx: bowl.fx, floors: bowl.floors, recipe: bowl.recipe });
-  log(`${bowlIcon(14)} You cook up ${bowl.name}${fxDesc(bowl.fx) ? ' — ' + fxDesc(bowl.fx) : ''}.`, 'loot');
+  for (let j = 0; j < count; j++) player.pantry.push({ name: bowl.name, fx: bowl.fx, floors: bowl.floors, recipe: bowl.recipe });
+  const label = count > 1 ? `${count}× ${bowl.name}` : bowl.name;
+  log(`${bowlIcon(14)} You cook up ${label}${fxDesc(bowl.fx) ? ' — ' + fxDesc(bowl.fx) : ''}.`, 'loot');
   sfx('shrine');
   updateBars(); saveGame(); refreshCooking();
 }
@@ -12394,6 +12636,67 @@ function unassignMeal(slotIndex) {
   player.pantry = r.pantry; player.mealSlots = r.mealSlots;
   sfx('click');
   updateBars(); renderSkillBar(); saveGame(); refreshCooking();
+}
+
+// Trash a whole pantry stack (a bowl you'll never eat). Two-tap confirm: the first
+// tap arms this stack (button flips to "Sure?"), a second tap within a few seconds
+// dumps every matching bowl. Keyed by meal signature so it survives the re-render and
+// disarms on its own. `pantryTrashArmed` holds the armed stack's signature, or null.
+let pantryTrashArmed = null;
+function trashBowlStack(pantryIndex) {
+  const bowl = (player.pantry || [])[pantryIndex];
+  if (!bowl) { pantryTrashArmed = null; return; }
+  const sig = mealSignature(bowl);
+  if (pantryTrashArmed !== sig) {
+    pantryTrashArmed = sig;
+    sfx('click');
+    refreshCooking();
+    setTimeout(() => { if (pantryTrashArmed === sig) { pantryTrashArmed = null; refreshCooking(); } }, 3000);
+    return;
+  }
+  pantryTrashArmed = null;
+  const r = removePantryStack(player.pantry, pantryIndex);
+  player.pantry = r.pantry;
+  sfx('error');
+  log(`${bowlIcon(14)} Tossed ${r.removed}× ${bowl.name}.`);
+  saveGame(); refreshCooking();
+}
+
+// ── Pantry → meal-slot drag & drop ──────────────────────────────────────────
+// Drag a cooked bowl from the pantry onto a meal slot to assign it there (the mouse
+// counterpart of the SLOT button; touch keeps using SLOT). `mealDrag` holds the
+// dragged bowl's pantry index while a drag is in flight.
+let mealDrag = null;
+function mealDragStart(e, pantryIndex) {
+  mealDrag = { pantryIndex };
+  if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'copy'; try { e.dataTransfer.setData('text/plain', 'meal:' + pantryIndex); } catch (_) {} }
+}
+function mealDragEnd() {
+  mealDrag = null;
+  const hot = document.querySelectorAll('.meal-drop-hot');
+  for (let i = 0; i < hot.length; i++) hot[i].classList.remove('meal-drop-hot');
+}
+function mealSlotDragOver(e) { if (!mealDrag) return; e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; }
+function mealSlotDragEnter(e, el) { if (mealDrag && el) el.classList.add('meal-drop-hot'); }
+function mealSlotDragLeave(e, el) { if (el) el.classList.remove('meal-drop-hot'); }
+// Drop a dragged pantry bowl onto slot `slotIndex`: fill that exact slot (or merge if
+// it already holds the same meal); if it holds a DIFFERENT meal, fall back to the
+// auto-placing assign so the drop still lands somewhere sensible.
+function mealSlotDrop(e, slotIndex) {
+  e.preventDefault();
+  if (!mealDrag) return;
+  const d = mealDrag; mealDragEnd();
+  const idx = d.pantryIndex;
+  const bowl = (player.pantry || [])[idx];
+  if (!bowl) return;
+  const name = bowl.name || 'meal';
+  let r = assignMealToSlotAt(player.pantry, player.mealSlots, idx, slotIndex, MEAL_SLOT_COUNT);
+  if (!r.assigned) r = assignMealToSlot(player.pantry, player.mealSlots, idx, MEAL_SLOT_COUNT);
+  if (!r.assigned) { log(`${bowlIcon(14)} No free meal slot — clear one first.`); sfx('error'); return; }
+  player.pantry = r.pantry; player.mealSlots = r.mealSlots;
+  sfx('click');
+  updateBars(); renderSkillBar(); saveGame(); refreshCooking();
+  log(`${bowlIcon(14)} Slotted ${r.assigned}× ${name} — eat it from the belt anytime.`);
 }
 
 // Eat one bowl straight from a HUD meal slot (works anywhere — this is the whole point
@@ -12451,16 +12754,25 @@ function renderCookingHTML() {
       : '';
     html += `<div class="pot-preview">Bowl: <b>${fxDesc(preview.fx) || 'no effect'}</b> · ${preview.floors} floors${secret}</div>`;
     const ready = potTotal === RAMEN_INGREDIENT_COUNT;
-    const cookBtn = ready
-      ? `<button class="cook-btn" onclick="cookPotNow()"><span data-spr=ic_fire></span> Cook</button>`
-      : `<button class="cook-btn" disabled>Add ${RAMEN_INGREDIENT_COUNT - potTotal} more</button>`;
-    html += `<div class="cook-actions">${cookBtn}<button class="cook-btn ghost" onclick="potClear()">Clear</button></div>`;
+    let cookBtns;
+    if (!ready) {
+      cookBtns = `<button class="cook-btn" disabled>Add ${RAMEN_INGREDIENT_COUNT - potTotal} more</button>`;
+    } else {
+      // Cook one bowl, or a whole batch at once (Cook ×N) — up to what your toppings
+      // can afford, so you're not tapping Cook over and over for a stack.
+      const opts = cookBatchOptions(cookableCount(cookPot, player.ingredients || {}));
+      cookBtns = opts.map(n =>
+        `<button class="cook-btn" onclick="cookPotNow(${n})"><span data-spr=ic_fire></span> ${n === 1 ? 'Cook' : 'Cook ×' + n}</button>`
+      ).join('');
+    }
+    html += `<div class="cook-actions">${cookBtns}<button class="cook-btn ghost" onclick="potClear()">Clear</button></div>`;
   }
 
-  // Pantry — cooked bowls waiting to be eaten or slotted. Each row can be eaten now
-  // (EAT) or SLOTted: SLOT sends the bowl's WHOLE matching stack to a meal slot so it
-  // can be eaten from the belt mid-run. SLOT is disabled only when the slots are full
-  // and none already holds this meal.
+  // Pantry — cooked bowls waiting to be eaten or slotted. Identical bowls STACK into
+  // one row with an ×N count. Each row can be eaten one at a time (EAT), SLOTted (sends
+  // the WHOLE matching stack to a meal slot — also draggable onto a slot below), or
+  // TRASHed (two-tap confirm dumps the whole stack). SLOT is disabled only when the
+  // slots are full and none already holds this meal.
   html += `<div class="cook-sec">Pantry</div>`;
   const pantry = player.pantry || [];
   if (!pantry.length) {
@@ -12468,13 +12780,17 @@ function renderCookingHTML() {
   } else {
     const slots = player.mealSlots || [];
     const slotsFull = filledSlotCount(slots) >= MEAL_SLOT_COUNT;
-    html += pantry.map((b, i) => {
-      const canSlot = !slotsFull || slots.some(s => s && mealSignature(s.bowl) === mealSignature(b));
-      return `<div class="food-row has-actions"><span class="food-emoji">${bowlIcon(20)}</span>
-        <div class="food-info"><div class="food-name">${b.name}</div><div class="food-fx">${fxDesc(b.fx) || 'no effect'} · ${b.floors} floors</div></div>
+    html += groupPantry(pantry).map(g => {
+      const b = g.bowl, i = g.index;
+      const canSlot = !slotsFull || slots.some(s => s && mealSignature(s.bowl) === g.sig);
+      const armed = pantryTrashArmed === g.sig;
+      const count = g.qty > 1 ? ` <span class="meal-qty">×${g.qty}</span>` : '';
+      return `<div class="food-row has-actions" draggable="true" ondragstart="mealDragStart(event,${i})" ondragend="mealDragEnd()" title="Drag onto a meal slot or the HUD belt to slot this stack"><span class="food-emoji">${bowlIconFill()}</span>
+        <div class="food-info"><div class="food-name">${b.name}${count}</div><div class="food-fx">${fxDesc(b.fx) || 'no effect'} · ${b.floors} floors</div></div>
         <div class="food-row-btns">
           <button class="row-btn eat-btn" onclick="eatBowl(${i})">EAT</button>
           <button class="row-btn slot-btn" onclick="assignMeal(${i})"${canSlot ? '' : ' disabled'} title="Send this bowl's whole stack to a meal slot">SLOT</button>
+          <button class="row-btn trash-btn${armed ? ' armed' : ''}" onclick="trashBowlStack(${i})" title="Discard this whole stack">${armed ? 'SURE?' : 'TRASH'}</button>
         </div></div>`;
     }).join('');
   }
@@ -12482,12 +12798,13 @@ function renderCookingHTML() {
   // Meal Slots — assigned here at the Ramen House only; each holds a whole stack of one
   // meal so it can be eaten from the belt in the dungeon without recooking or returning.
   html += `<div class="cook-sec">Meal Slots (${filledSlotCount(player.mealSlots)}/${MEAL_SLOT_COUNT})</div>`;
-  html += `<div class="cook-empty cook-hint">Slot a cooked bowl above to carry its whole stack into the dungeon — eat it straight from the belt, no need to return here.</div>`;
+  html += `<div class="cook-empty cook-hint">Drag a cooked bowl onto a slot below or the HUD belt (on touch, tap SLOT) to carry its whole stack into the dungeon — eat it straight from the belt, no need to return here.</div>`;
+  const dropAttrs = (i) => `ondragover="mealSlotDragOver(event)" ondrop="mealSlotDrop(event,${i})" ondragenter="mealSlotDragEnter(event,this)" ondragleave="mealSlotDragLeave(event,this)"`;
   html += (player.mealSlots || []).map((s, i) => s
-    ? `<div class="food-row has-actions meal-slot-row"><span class="food-emoji">${bowlIcon(20)}</span>
+    ? `<div class="food-row has-actions meal-slot-row" ${dropAttrs(i)}><span class="food-emoji">${bowlIconFill()}</span>
         <div class="food-info"><div class="food-name">${s.bowl.name} <span class="meal-qty">×${s.qty}</span></div><div class="food-fx">${fxDesc(s.bowl.fx) || 'no effect'} · ${s.bowl.floors} floors each</div></div>
         <button class="row-btn clear-btn" onclick="unassignMeal(${i})" title="Return this stack to the pantry">CLEAR</button></div>`
-    : `<div class="food-row meal-slot-empty"><span class="food-emoji">${bowlIcon(20)}</span><div class="food-info"><div class="food-fx">Empty slot</div></div></div>`
+    : `<div class="food-row meal-slot-empty" ${dropAttrs(i)}><span class="food-emoji dl-drop-plus">＋</span><div class="food-info"><div class="food-fx">Empty slot — drop a bowl here</div></div></div>`
   ).join('');
 
   // Secret recipe book — discovered recipes shown in full; the rest collapsed into
@@ -12532,9 +12849,19 @@ let forgeTier = 'normal';
 // back down into materials moved onto the bag itself — you scrap straight from
 // the LOOT drawer now — so there's no longer a Salvage bench here.
 
-// Crafted gear is geared to your deepest reached / current return depth, like
-// the town merchant's stock — so the Forge stays relevant as you descend.
+// Your deepest reached / current return depth as a FLOOR NUMBER. The game treats
+// "gear for floor N" as item level N+1 (see depthItemLevel), so this floor number
+// is one below a fresh drop's item level — used for cost curves and as the base
+// for depthItemLevel.
 function craftIlvl() { return Math.max(1, Math.max(dungeonReturn || 1, player.maxFloor || 1)); }
+
+// The item level of a FRESH drop on your deepest floor — the game's single "gear
+// for your current depth" level. Dungeon drops (dungeonLevel+1), the Merchant,
+// the Gambler, bounty rewards and the Enchanter's empower cap all use floor+1, so
+// the Craftsman forges to this too: a crafted blank matches a fresh drop on the
+// same floor instead of arriving one item level short (which is why the Enchanter
+// used to hand you a free +1 rank on a piece you'd just forged).
+function depthItemLevel() { return craftIlvl() + 1; }
 
 // ── PER-BASE CRAFT CHARACTER ──
 // Two items of the same rarity shouldn't cost the same to forge: a Maul is a
@@ -12603,7 +12930,7 @@ function craftCharacterNote(slot, baseName) {
 // Higher rarities pull in higher-tier materials: Scrap always, Core at rare+,
 // and a Chaos Orb at legendary.
 function craftCost(tier, slot = forgeSlot, baseName = forgeBase) {
-  const ilvl = craftIlvl();
+  const ilvl = depthItemLevel();
   const rank = CRAFT_TIERS.indexOf(tier);            // 0 (normal) .. 4 (legendary)
   const f = 1 + ilvl * 0.12;
   const { mat, labor } = craftBaseFactors(slot, baseName);
@@ -12714,7 +13041,7 @@ function renderForge() {
     let baseHint = '';
     if (isWeapon) {
       const style = WEAPON_SUBTYPES[forgeBase] ? WEAPON_SUBTYPES[forgeBase].style : WEAPON_STYLES[forgeBase];
-      baseHint = `<div style="padding:1px 2px 3px">${weaponRangeGridHTML(forgeBase)}` +
+      baseHint = `<div style="padding:1px 2px 3px">${weaponRangeGridHTML(forgeBase)}${style ? weaponSpeedCapHTML(style) : ''}` +
         (WEAPON_STYLE_DESC[style] ? `<div style="color:var(--orange-500);font-size:1.2rem;margin-top:3px;font-style:italic">${WEAPON_STYLE_DESC[style]}</div>` : '') +
         `</div>`;
     } else {
@@ -12763,7 +13090,7 @@ function renderForge() {
   }
 
   setTownContent(`
-    <div class="town-blurb">The Craftsman forges a <b>blank</b> piece at your current depth (ilvl ${craftIlvl()}) — its base damage or defense set by the base you pick, with empty modifier slots. Take it to the <span data-spr=ic_wand></span> Enchanter to fill them in. Rarity sets how many modifiers it can hold. Heftier bases drink more materials; finer ones bill more for the delicate&nbsp;labour.</div>
+    <div class="town-blurb">The Craftsman forges a <b>blank</b> piece at your current depth (ilvl ${depthItemLevel()}) — its base damage or defense set by the base you pick, with empty modifier slots. Take it to the <span data-spr=ic_wand></span> Enchanter to fill them in. Rarity sets how many modifiers it can hold. Heftier bases drink more materials; finer ones bill more for the delicate&nbsp;labour.</div>
     <div class="forge-label">Item type</div>
     <div class="forge-grid forge-slots">${slotBtns}</div>
     ${baseSection}
@@ -12773,7 +13100,7 @@ function renderForge() {
 // Build a blank item: headline stat only (weapon DMG / armor DEF, gloves +ATK),
 // no bonus affixes. Deterministic so the Forge preview matches what you'll get.
 function craftBlankItem(slot, tier, baseName) {
-  const lvl = craftIlvl();
+  const lvl = depthItemLevel();
   const mult = tierMult(tier);
   const dmgMult = { junk: 0.55, normal: 0.8, uncommon: 1, rare: 1.3, epic: 1.65, legendary: 2.1, unique: 2.6 }[tier];
   const baseValue = { junk: 1, normal: 5, uncommon: 20, rare: 80, epic: 300, legendary: 1200, unique: 5000 }[tier];
@@ -12956,11 +13283,13 @@ function scrapFromBag(i) {
   updateBars(); renderPanel(); saveGame();
 }
 
-// Bulk sell / scrap everything currently visible under the LOOT filter, always
-// sparing locked pieces. `which` is 'sell' or 'scrap' (scrap skips non-gear).
-function bagBulk(which) {
+// Bulk sell / scrap every unlocked bag item the `visible` predicate accepts,
+// always sparing locked pieces. `which` is 'sell' or 'scrap' (scrap skips
+// non-gear). Defaults to the LOOT filter; the merchant passes its own so a
+// "Sell all" there only ever hits what the shop's filter shows.
+function bagBulk(which, visible = lootRowVisible) {
   const targets = inventory.filter(it =>
-    lootRowVisible(it) && !it.locked &&
+    visible(it) && !it.locked &&
     (which === 'sell' || (it.slot && TIERS[it.tier])));
   if (!targets.length) return;
   let gold = 0; const mats = {};
@@ -13096,6 +13425,13 @@ function stashItemRow(item, action, btnLabel, btnClass) {
 let stashTab = 'storage'; // 'storage' | 'collection'
 function stashTabTo(tab) { stashTab = tab; _collOpenKey = null; renderStash(); }
 function renderStash() {
+  // A Solo Self-Found hero is turned away at the door: no banked gold, no stored
+  // gear, no Collection filing. (The hub tile is already locked for SSF — this
+  // guards every other path into the panel.)
+  if (isSsf(player)) {
+    setTownContent(`<div class="town-blurb">${ssfIcon(14)} <b>Solo Self-Found.</b> The Vault Keeper turns you away — this hero walks alone. No banked gold, no stored gear, no shared materials: only what you find on your own run.</div>`);
+    return;
+  }
   const tabs = `<div class="stash-tabs">
     <button class="stash-tab${stashTab === 'storage' ? ' active' : ''}" onclick="stashTabTo('storage')"><span data-spr=ic_coffer></span> Storage</button>
     <button class="stash-tab${stashTab === 'collection' ? ' active' : ''}" onclick="stashTabTo('collection')"><span data-spr=q_relic></span> Collection</button>
@@ -13166,8 +13502,10 @@ function stashWithdrawGold(amt) {
 // pays from carried coins first, then auto-withdraws any shortfall from the
 // vault. The vault still shields that gold from death loss — it's just no longer
 // walled off from the shops. (Dungeon costs like altar offerings stay
-// carried-only; the vault lives in town.)
-function spendableGold() { return (player.gold || 0) + ((stash && stash.gold) || 0); }
+// carried-only; the vault lives in town.) A Solo Self-Found hero's vault is
+// sealed, so for them "can afford" means carried coin only — which also makes
+// spendGold's vault-draw branch unreachable for SSF.
+function spendableGold() { return isSsf(player) ? (player.gold || 0) : (player.gold || 0) + ((stash && stash.gold) || 0); }
 function spendGold(amt) {
   amt = Math.floor(amt) || 0;
   if (amt <= 0) return true;
@@ -13189,7 +13527,7 @@ const _walletVaultHtml = {}; // element id -> last vault-note innerHTML we wrote
 function refreshVaultNote(id) {
   const el = document.getElementById(id);
   if (!el) return;
-  const v = (stash && stash.gold) || 0;
+  const v = isSsf(player) ? 0 : ((stash && stash.gold) || 0); // an SSF hero can't dip into the vault — never tease its balance
   const html = v > 0 ? ` <span class="gold-vault-note">+ <span data-spr=ic_money></span>${fmtGold(v)} in vault</span>` : '';
   if (_walletVaultHtml[id] === html) return; // unchanged — don't rewrite (keeps the painted coin sprite)
   _walletVaultHtml[id] = html;
@@ -13692,9 +14030,10 @@ function replaceObjKey(obj, oldKey, newKey, newVal) {
 // changes WHICH modifiers a piece holds, so it doesn't reforge a locked piece.
 
 // The cap: the highest item level that could naturally drop for you right now — a
-// fresh drop on your deepest floor is craftIlvl()+1. You can never push a piece
-// past what the dungeon itself would hand you.
-function maxUpgradeIlvl() { return craftIlvl() + 1; }
+// fresh drop on your deepest floor. Shares depthItemLevel() with the Craftsman, so
+// a freshly forged blank is already at the cap (no free rank). You can never push a
+// piece past what the dungeon itself would hand you.
+function maxUpgradeIlvl() { return depthItemLevel(); }
 
 function empowerCost(item, toIlvl) {
   return calcIlvlUpgradeCost({ rank: enchRank(item), fromIlvl: item.ilvl || 1, toIlvl });
@@ -14590,6 +14929,14 @@ function spawnEnemies() {
 // room list and give anything still barren a reason to exist: a foe if the room has
 // a tile safely outside the hero's entry aggro bubble, otherwise (the entry room and
 // its neighbours) a small coin pile so arriving still feels rewarding rather than
+// Gold in one loose floor pile. Deliberately super-linear in depth so the reward
+// snowballs the deeper you push: a shallow-floor pile is a handful, but the term
+// squared in `dungeonLevel` makes deep-floor piles pay hundreds — a real lure to
+// descend. Shared by both spawn sites so the curve stays in one place.
+function coinPileAmount() {
+  return rnd(3, 10) + dungeonLevel * 3 + Math.round(dungeonLevel * dungeonLevel * 0.4);
+}
+
 // landing you in an empty hall. Rooms that already hold a foe, chest, food, coins,
 // the grave, or a feature (shrine/fountain/teleporter/stairs/vault) are left alone,
 // and boss floors are skipped (their arena is the whole point).
@@ -14617,7 +14964,7 @@ function populateEmptyRooms() {
       else if (!near) near = { x: sx, y: sy };
     }
     if (far) spawnFloorMob(far.x, far.y);
-    else if (near) groundGold.push({ x: near.x, y: near.y, amount: rnd(3, 10) + dungeonLevel * 2 });
+    else if (near) groundGold.push({ x: near.x, y: near.y, amount: coinPileAmount() });
   }
 }
 
@@ -14682,7 +15029,7 @@ function spawnGroundLoot() {
     do {
       cx = rnd(1, MAP_W-1); cy = rnd(1, MAP_H-1); tries++;
     } while ((mapData[cy][cx] !== 0 || (cx === player.x && cy === player.y)) && tries < 100);
-    if (tries < 100) groundGold.push({ x: cx, y: cy, amount: rnd(3, 10) + dungeonLevel * 2 });
+    if (tries < 100) groundGold.push({ x: cx, y: cy, amount: coinPileAmount() });
   }
 }
 
@@ -14789,6 +15136,9 @@ const AFFIX_CURVES = {
   // VEIL (flat +max Spirit Veil) rolls a touch under HP — the Veil is the lighter,
   // "slower overall" defensive layer and only appears on dedicated Spirit gear.
   ATK:{flat:1}, DEF:{flat:1}, SPD:{flat:1}, HP:{flat:6}, VEIL:{flat:4}, MP:{flat:3.4}, REGEN:{flat:0.2},
+  // Stamina gear: STAM adds a chunk of the ~100 pool (near an MP roll); STAMREG adds a
+  // few /sec of refill (the /sec baseline is 22, so a small flat mult is plenty).
+  STAM:{flat:1.5}, STAMREG:{flat:0.3},
   THORNS:{flat:0.7}, HPKILL:{flat:0.7}, MPKILL:{flat:0.35},
   // Chance/avoidance stats are flat RATINGS (scale with item level, no cap): they feed
   // the rating-vs-level curves in combat instead of being a flat %.
@@ -15271,15 +15621,31 @@ const INDOOR_THEMES = [
     mortar:'#2e3824', seam:'#3a462e', speckle:'#c8c0ae', accent:'rgba(150,230,140,0.20)', stairsGlow:'#dfffc8',
     furniture:[70,71,73,74,76,80,72,75,21,54] },
 ];
+// ── ISLAND THEMES ── occasional OUTDOOR floors that come up as a landmass ringed
+// by open sea (generateMap's moat pass floods the border rock to water). Both are
+// sandy shores that read as land meeting water; their names match LPC_BIOME
+// entries so the autotiler grounds them in Sand. Reuse the existing theme objects
+// (no colour duplication to drift) — the island is a STRUCTURAL change, not a new
+// palette.
+const ISLAND_THEMES = [
+  TUTORIAL_THEME,                                      // 'the Sunlit Shore' — pale beach sand, rocky coast
+  THEMES.find((t) => t.name === 'the Coral Lagoon'),  // teal-and-coral tropical shore, leafy inland walls
+];
+// Share of eligible (outdoor, non-boss) floors that come up as an island.
+const ISLAND_FLOOR_CHANCE = 0.12;
 // When a floor rolls indoor, this holds that floor's chosen indoor theme; null on
 // ordinary outdoor floors. Set in generateMap, cleared in town.
 let floorThemeOverride = null;
+// When a floor rolls as an island, this holds its coastal theme; null otherwise.
+let floorIslandTheme = null;
 let previewForceIndoor = null; // preview only: force a specific INDOOR_THEMES index
+let previewForceIsland = false; // preview only: force an island floor
 let previewDrawSolids = false; // preview only: paint solid tiles red to verify collision
 // Themed by the DISPLAYED floor, so each difficulty replays the same visual
 // progression (floor 1 always looks like floor 1) — only the red wash deepens.
-// An indoor floor (floorThemeOverride) and the tutorial beach override this.
-function currentTheme() { return floorThemeOverride || (tutorialActive ? TUTORIAL_THEME : THEMES[(displayFloor() - 1) % THEMES.length]); }
+// An indoor floor (floorThemeOverride), an island floor (floorIslandTheme) and the
+// tutorial beach override this.
+function currentTheme() { return floorThemeOverride || floorIslandTheme || (tutorialActive ? TUTORIAL_THEME : THEMES[(displayFloor() - 1) % THEMES.length]); }
 
 // Rounded-rect helper (older canvases lack ctx.roundRect).
 function roundRectPath(x, y, w, h, r) {
@@ -17253,7 +17619,10 @@ function shakeOffset() {
 const ATK_LUNGE_MS = 200;   // total lunge duration
 function triggerAttackAnim(actor, tx, ty) {
   if (!actor) return;
-  const dx = tx - actor.x, dy = ty - actor.y;
+  // Lunge FROM where the sprite is drawn (its render centre), not its logic tile —
+  // so the nudge points true from the visible foe toward its target, matching where
+  // the hero lunges from (player.fx/fy).
+  const dx = tx - actorRenderCX(actor), dy = ty - actorRenderCY(actor);
   const len = Math.hypot(dx, dy) || 1;
   actor.atkAnimDir = { x: dx / len, y: dy / len };
   actor.atkAnimAt = Date.now();
@@ -19704,8 +20073,10 @@ function doDash() {
   let dx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let dy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
   // Touch: dash in the joystick's current push direction (a double-tap-drag on the
-  // stick triggers this — see the pointer handlers).
+  // stick triggers this — see the pointer handlers). Gamepad: dash in the left
+  // stick's current push (R1 with the stick held).
   if (dx === 0 && dy === 0 && touchStick.active && touchStick.mag > 0) { dx = touchStick.ix; dy = touchStick.iy; }
+  if (dx === 0 && dy === 0 && padStick.active && padStick.mag > 0) { dx = padStick.ix; dy = padStick.iy; }
   // Click-to-move: with no manual direction, dash toward the target — or, when a
   // route around a wall is planned, toward the next waypoint so we don't dash into it.
   if (dx === 0 && dy === 0 && moveTarget.active) {
@@ -19755,9 +20126,11 @@ function updatePlayer(dt) {
   // Input vector — keyboard (WASD / arrows).
   let ix = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let iy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
-  // Touch joystick overrides the keyboard vector while it's engaged. It reads as
-  // "manual input" below, so it cancels any click-to-move the same way a key does.
+  // Touch joystick / gamepad left-stick override the keyboard vector while engaged.
+  // Both read as "manual input" below, so they cancel any click-to-move the same way
+  // a key does. Touch wins if somehow both are live (a pad plugged into a phone).
   if (touchStick.active && touchStick.mag > 0) { ix = touchStick.ix; iy = touchStick.iy; }
+  else if (padStick.active && padStick.mag > 0) { ix = padStick.ix; iy = padStick.iy; }
   // Click-to-move: with no keyboard input, steer toward the click target.
   // Any manual input cancels it (you take back the wheel). While the button is held
   // the target tracks the cursor, so the hero keeps walking toward it; a plain click
@@ -19781,7 +20154,7 @@ function updatePlayer(dt) {
         moveTarget.wx = Math.max(0.5, Math.min(MAP_W - 0.5, f.fx == null ? f.x + fs / 2 : f.fx));
         moveTarget.wy = Math.max(0.5, Math.min(MAP_H - 0.5, f.fy == null ? f.y + fs / 2 : f.fy));
         const rng = weaponRangeOf((equipped || {}).weapon) || STYLE_RANGE[weaponStyle()] || 1;
-        if (footChebyshev(f) <= rng && (rng < 2 || hasLineToPlayer(f))) {
+        if (inWeaponReachOf(f, rng) && (rng < 2 || hasLineToPlayer(f))) {
           moveTarget.active = false; moveTarget.path = null; moveTarget.foe = null;
         }
       }
@@ -20485,6 +20858,10 @@ function bossFarmMult(e) {
 
 // Everything that happens when a foe falls: XP, gold, and the loot rolls.
 function onEnemyDefeated(e) {
+  if (e.dead) return;              // pay out ONCE — several lethal hits (multi-projectile
+                                   // burst, cleave+arcing, burn+poison ticking together) can
+                                   // all call this in one tick; without this guard the whole
+                                   // loot routine re-ran per hit, so a boss dumped 2–3× its gear.
   e.dead = true; bumpEnemyPos();   // its tile is free — refresh the occupancy index
   // Summoned minions are pure threat — they drop NO XP, gold or loot, so a
   // summoner boss can't be farmed by killing the fodder it spawns endlessly.
@@ -20666,7 +21043,7 @@ function onEnemyDefeated(e) {
     spawnFloatingText(e.x, e.y, `+${bonus}`, '#ffd24b', 1, true);
     log(`<span data-spr=ic_money></span> The Treasure Goblin bursts — +<span data-spr=ic_money></span>${bonus}, a <span data-spr=feat_portal></span> Chaos Orb, and a glittering chest!`, 'loot');
     updateBars();
-    collectChestLoot(6, e.level || dungeonLevel, e.x, e.y);
+    collectChestLoot(GOBLIN_LOOT_LUCK, e.level || dungeonLevel, e.x, e.y);
   }
   // Vanishingly rare super-drop: the air shimmers and a fabled chest appears.
   if (Math.random() < 0.02) {
@@ -20983,9 +21360,10 @@ function tickAutoCast(dt) {
   castSkillById(id, { silent: true });
 }
 
-// Foes orthogonally/diagonally adjacent to the player.
+// Foes within the hero's melee reach — adjacent, plus the half-tile forgiveness the
+// auto-attack uses (so a cleave connects at the same distance a normal swing does).
 function adjacentToPlayer() {
-  return enemies.filter(o => !o.dead && Math.abs(o.x - player.x) <= 1 && Math.abs(o.y - player.y) <= 1);
+  return enemies.filter(o => !o.dead && inWeaponReachOf(o, 1));
 }
 
 // ── SKILL-TREE ACTIVES ──
@@ -21355,7 +21733,7 @@ function resolveCast(node, rank) {
       // order on an hp tie, matching the stable sort it replaces).
       let weakest = null;
       for (const o of enemies) {
-        if (o.dead || Math.abs(o.x - player.x) > 1 || Math.abs(o.y - player.y) > 1) continue;
+        if (o.dead || !inWeaponReachOf(o, 1)) continue;
         if (!weakest || o.hp < weakest.hp) weakest = o;
       }
       if (!weakest) { castMsg(`No foe within reach.`); return false; }
@@ -21704,7 +22082,7 @@ function runMinionTurn() {
 const MINION_BOLT_KIND = { skelarcher: 'arrow', elemental: 'fire', spirit: 'holy', totem: 'spark' };
 function spawnMinionBolt(m, e, onArrive) {
   const kind = MINION_BOLT_KIND[m.kind] || 'magic';
-  projectiles.push({ x: m.x + 0.5, y: m.y + 0.5, tx: e.x + 0.5, ty: e.y + 0.5, vx: 0, vy: 0, dmg: 0,
+  projectiles.push({ x: m.x + 0.5, y: m.y + 0.5, tx: actorRenderCX(e), ty: actorRenderCY(e), vx: 0, vy: 0, dmg: 0,
     color: m.color, life: 0.55, cosmetic: true, orb: kind === 'magic', kind, element: projectileElement(kind),
     onArrive: onArrive || null, _seed: Math.random() * PI2 });
 }
@@ -22041,14 +22419,23 @@ function enemyAct(e) {
   if (dist <= ENEMY_WANDER_RADIUS) wanderStep(e);
 }
 
-// Footprint-aware Chebyshev distance from the hero to the nearest cell of a foe
-// (multi-tile bosses included) — used to decide whether the hero's auto-attack
-// can reach it.
-function footChebyshev(e) {
-  const s = e.size || 1; let best = Infinity;
-  for (let dx = 0; dx < s; dx++) for (let dy = 0; dy < s; dy++)
-    best = Math.min(best, Math.max(Math.abs(e.x + dx - player.x), Math.abs(e.y + dy - player.y)));
-  return best;
+// Footprint-aware reach distance from the hero to a foe (multi-tile bosses included) —
+// used to decide whether the hero's auto-attack / weapon can reach it. Measured between
+// the SMOOTH sprite centres both sides are drawn at (via actorRenderCX/CY), so reach
+// tracks what you SEE: a foe mid-glide between tiles engages as its sprite arrives,
+// matching where its own bolts and lunges launch from. A half-tile MELEE_REACH_BONUS is
+// added at the call sites for the forgiveness. See systems/meleeReach.js.
+function footReachDist(e) {
+  // Read both sprite centres through the same accessor foe-emitted visuals use
+  // (actorRenderCX/CY), so reach launches from exactly where each sprite is drawn.
+  return footprintReach(actorRenderCX(player), actorRenderCY(player),
+                        actorRenderCX(e), actorRenderCY(e), e.size || 1);
+}
+// Whether a foe is within a weapon of `range` tiles of the hero, INCLUDING the half-tile
+// reach forgiveness — the single gate shared by auto-attack, the chase-stop, and the
+// melee-range skills so they all connect at the same distance.
+function inWeaponReachOf(e, range) {
+  return footReachDist(e) <= range + MELEE_REACH_BONUS;
 }
 
 // Back away from the player — ranged foes maintaining their distance.
@@ -22064,6 +22451,11 @@ function stepAwayFromPlayer(e) {
 // Once wounded, a Treasure Goblin has this many real seconds to live before it
 // escapes with its loot — so the chase has real urgency.
 const GOBLIN_ESCAPE_SECS = 6;
+// Quality (luck) of the Treasure Goblin's jackpot chest, fed to collectChestLoot →
+// rollTier as a Magic-Find-like bonus (+15 effective MF per step above 1). Pitched
+// well above a rich chest (6) so the goblin's haul skews toward the rarer tiers —
+// still bounded by the per-tier caps, so it's a better shot, never a guarantee.
+const GOBLIN_LOOT_LUCK = 14;
 // The goblin gives up and vanishes (no loot) when its getaway timer expires.
 function goblinEscape(e) {
   e.dead = true; bumpEnemyPos();   // its tile is free — refresh the occupancy index
@@ -23184,9 +23576,9 @@ function footDist(e) {
   return best;
 }
 
-// Death drags you back to the safe TOWN, revived at half HP/MP with every ailment
-// cleansed. It still stings — half your purse goes to the healer and you lose a
-// little XP — but it no longer erases your build over a stray hazard step: you
+// Death drags you back to the safe TOWN, revived at FULL HP/MP/Stamina with every
+// ailment cleansed. It still stings — half your purse goes to the healer and you
+// lose a little XP — but it no longer erases your build over a stray hazard step: you
 // KEEP every equipped piece, and your whole bag is left behind as a recoverable
 // grave on the floor where you fell. Walk back to the grave to reclaim it all.
 // Class-flavoured cry for the Last Stand survival, so the clutch save reads as
@@ -23308,14 +23700,16 @@ function handleDeath() {
   buildTown();     // clears inTown=false → true and resets town state
   revivedInTown = true;  // flag so the town hub spells out how to get back to questing
   openTownHub();   // drop the player into the town menu
-  // Revived in town but WEAKENED — only half health and mana, not a full heal.
-  player.hp = Math.max(1, Math.round(player.maxHp * 0.5));
-  player.mp = Math.round(player.maxMp * 0.5);
+  // Revived in town at FULL strength — a killing blow costs you gold, XP and your
+  // bag (dropped as a recoverable grave), but you wake rested: full HP and MP.
+  player.hp = player.maxHp;
+  player.mp = player.maxMp;
   showDeathScreen(lostGold, lostXp, lostBag, (graveSite ? fellOn : 0));
   dmgTaken = [];
-  log(`<span data-spr=b_deathknight></span> ${player.name || HERO} was SLAIN on ${floorLabel(fellOn)}! Lost <span data-spr=ic_money></span>${lostGold}${lostXp ? ` and ${lostXp} XP` : ''}${lostBag ? `, and dropped your bag (${lostBag}) — reclaim it on ${floorLabel(fellOn)}` : ''} — revived weakened in town. The dungeon eases up while you find your feet.`, 'important');
+  log(`<span data-spr=b_deathknight></span> ${player.name || HERO} was SLAIN on ${floorLabel(fellOn)}! Lost <span data-spr=ic_money></span>${lostGold}${lostXp ? ` and ${lostXp} XP` : ''}${lostBag ? `, and dropped your bag (${lostBag}) — reclaim it on ${floorLabel(fellOn)}` : ''} — revived at full strength in town. The dungeon eases up while you find your feet.`, 'important');
   recomputeMaxStats();
   player.shield = player.maxShield; player._noDmgSecs = 0;   // revive in town with a full Spirit Veil
+  player.stamina = player.maxStamina; player._stamDelay = 0;   // …and a full, ready Stamina bar (no post-death exertion delay)
   updateBars();
   renderPanel();
   saveGame();
@@ -24251,8 +24645,8 @@ function setLootFilter(slot) {
   renderPanel();
 }
 
-// The LOOT-tab sort options, in menu order. Each supplies a comparator over
-// {item} rows (see lootRowCompare).
+// The sort options shared by the LOOT drawer and the merchant, in menu order.
+// Each key selects a comparator over decorated rows (see makeRowCompare).
 const LOOT_SORTS = [
   { key: 'rarity', label: 'Rarity' },
   { key: 'power',  label: 'Power'  },
@@ -24262,6 +24656,53 @@ const LOOT_SORTS = [
 function setLootSort(k) { lootSort = k; renderPanel(); }
 function toggleLootSortMenu() { lootSortOpen = !lootSortOpen; if (lootSortOpen) lootFilterOpen = false; renderPanel(); }
 function toggleLootFilterMenu() { lootFilterOpen = !lootFilterOpen; if (lootFilterOpen) lootSortOpen = false; renderPanel(); }
+
+// A comparator over decorated sort rows ({ item, pow, tr, so }) for the given
+// sort key — shared by the LOOT drawer and the merchant so both order gear
+// identically (pieces this class can't wield mix in rather than sinking).
+function makeRowCompare(sort) {
+  return (a, b) => {
+    switch (sort) {
+      case 'power': return b.pow - a.pow || b.tr - a.tr || a.so - b.so;
+      case 'slot':  return a.so - b.so || b.tr - a.tr || b.pow - a.pow;
+      case 'value': return (b.item.value || 0) - (a.item.value || 0) || b.tr - a.tr || b.pow - a.pow;
+      // Highest rarity first (unique → junk); Power breaks ties, then slot.
+      case 'rarity':
+      default:      return b.tr - a.tr || b.pow - a.pow || a.so - b.so;
+    }
+  };
+}
+
+// Shared Sort + Filter (stat) control cluster used by the LOOT drawer and the
+// merchant. `m` carries each surface's own state plus the global handler names
+// that drive it, so the two render identically yet stay independent:
+//   { sort, sortOpen, statFilter, filterOpen, items, fns, sortHint, emptyHint }
+// fns = { sort, sortMenu, filterMenu, stat, clear } — window handler names.
+function sortFilterCtrlsHTML(m) {
+  const sortLabel = (LOOT_SORTS.find(s => s.key === m.sort) || LOOT_SORTS[0]).label;
+  const controls = `<div class="loot-controls">
+      <button class="loot-ctrl-btn ${m.sortOpen ? 'open' : ''}" onclick="${m.fns.sortMenu}()" ${hoverTip(`<div class='ht-name'>⇅ Sort</div><div class='ht-line'>${m.sortHint}</div>`)}>⇅ Sort <span class="lc-val">${sortLabel}</span><span class="lc-caret">${m.sortOpen ? '▾' : '▸'}</span></button>
+      <button class="loot-ctrl-btn ${m.filterOpen ? 'open' : ''} ${m.statFilter.length ? 'on' : ''}" onclick="${m.fns.filterMenu}()" ${hoverTip(`<div class='ht-name'>⚑ Filter</div><div class='ht-line'>Show only gear that carries the stats you pick.</div>`)}>⚑ Filter${m.statFilter.length ? ` <span class="lc-val">${m.statFilter.length}</span>` : ''}<span class="lc-caret">${m.filterOpen ? '▾' : '▸'}</span></button>
+    </div>`;
+  const sortPop = m.sortOpen ? '<div class="loot-ctrl-pop">' + LOOT_SORTS.map(s =>
+    `<button class="loot-ctrl-opt ${m.sort === s.key ? 'active' : ''}" onclick="${m.fns.sort}('${s.key}')">${s.label}</button>`
+  ).join('') + '</div>' : '';
+  // Stat-filter options = the stat/attribute codes actually present in `items`,
+  // in glossary order, so you only ever see stats you can filter by.
+  let filterPop = '';
+  if (m.filterOpen) {
+    const present = new Set();
+    m.items.forEach(it => itemStatKeys(it).forEach(k => present.add(k)));
+    const order = [...Object.keys(STAT_SHORT), ...ATTR_KEYS];
+    const opts = order.filter(k => present.has(k));
+    present.forEach(k => { if (!opts.includes(k)) opts.push(k); });
+    filterPop = '<div class="loot-ctrl-pop">' + (opts.length
+      ? opts.map(k => `<button class="loot-ctrl-opt loot-stat-chip ${m.statFilter.includes(k) ? 'active' : ''}" onclick="${m.fns.stat}('${k}')" ${hoverTip(`<div class='ht-name'>${lootStatCode(k)}</div><div class='ht-line'>${lootStatName(k)}</div>`)}>${lootStatCode(k)}</button>`).join('')
+          + (m.statFilter.length ? `<button class="loot-ctrl-opt loot-ctrl-clear" onclick="${m.fns.clear}()">Clear filter</button>` : '')
+      : `<span class="lc-hint">${m.emptyHint}</span>`) + '</div>';
+  }
+  return controls + sortPop + filterPop;
+}
 // Toggle one stat/attribute in the LOOT stat filter (keeps the panel open so you
 // can pick several in a row).
 function toggleLootStat(k) {
@@ -24284,14 +24725,18 @@ function lootStatCode(k) { return STAT_SHORT[k] || (ATTRIBUTES[k] && ATTRIBUTES[
 function lootStatName(k) {
   return STAT_LABELS[k] || (ATTRIBUTES[k] && ATTRIBUTES[k].label) || k;
 }
-// Does an item pass the LOOT tab's slot subtab AND stat filter? Shared by the
-// list render and the bulk sell/scrap so "Sell all" only ever hits visible rows.
-function lootRowVisible(item) {
+// Does an item pass a slot filter ('all', a SLOT_KEYS value, or 'other') AND a
+// stat filter (empty = no narrowing; else the item must carry ANY chosen stat)?
+// Shared by the LOOT drawer and the merchant so both surfaces filter identically.
+function itemRowVisible(item, filter, statFilter) {
   const c = item.slot || 'other';
-  if (!(lootFilter === 'all' || c === lootFilter)) return false;
-  if (lootStatFilter.length && !itemStatKeys(item).some(k => lootStatFilter.includes(k))) return false;
+  if (!(filter === 'all' || c === filter)) return false;
+  if (statFilter.length && !itemStatKeys(item).some(k => statFilter.includes(k))) return false;
   return true;
 }
+// The LOOT tab's own visibility (its slot subtab + stat filter). Used by the list
+// render and the bulk sell/scrap so "Sell all" only ever hits visible rows.
+function lootRowVisible(item) { return itemRowVisible(item, lootFilter, lootStatFilter); }
 
 // Collapsible key to the short stat/attribute codes that show on compact loot
 // rows (e.g. "+3 ATK · THN · +5 MIG"), so a new player can decode them without
@@ -24308,7 +24753,7 @@ function lootGlossaryHTML() {
     ['Defense', ['DEF','HP','VEIL','DR','BLOCK','DODGE','TENAC','THORNS']],
     ['Sustain', ['REGEN','LEECH','MPLEECH','HPKILL','MPKILL']],
     ['Caster',  ['MP','SPELLPWR','SKILLPWR','CASTSPD','CDR','MCR']],
-    ['Utility / Find', ['SPD','LCK','GOLDFIND','XPGAIN','MAGICFIND','MATFIND']],
+    ['Utility / Find', ['SPD','STAM','STAMREG','LCK','GOLDFIND','XPGAIN','MAGICFIND','MATFIND']],
   ];
   // Safety net: any stat not placed in a bucket above still appears under "Other",
   // so a newly added stat can never silently vanish from the key.
@@ -24404,29 +24849,14 @@ function renderPanel() {
     ).join('') + '</div>';
     // Sort + stat-filter controls: two dropdown buttons, each opening an inline
     // options panel below the row (so nothing floats over the list on mobile).
-    const sortLabel = (LOOT_SORTS.find(s => s.key === lootSort) || LOOT_SORTS[0]).label;
-    const controls = `<div class="loot-controls">
-      <button class="loot-ctrl-btn ${lootSortOpen ? 'open' : ''}" onclick="toggleLootSortMenu()" ${hoverTip(`<div class='ht-name'>⇅ Sort</div><div class='ht-line'>Order the bag by rarity, power, slot or value.</div>`)}>⇅ Sort <span class="lc-val">${sortLabel}</span><span class="lc-caret">${lootSortOpen ? '▾' : '▸'}</span></button>
-      <button class="loot-ctrl-btn ${lootFilterOpen ? 'open' : ''} ${lootStatFilter.length ? 'on' : ''}" onclick="toggleLootFilterMenu()" ${hoverTip(`<div class='ht-name'>⚑ Filter</div><div class='ht-line'>Show only gear that carries the stats you pick.</div>`)}>⚑ Filter${lootStatFilter.length ? ` <span class="lc-val">${lootStatFilter.length}</span>` : ''}<span class="lc-caret">${lootFilterOpen ? '▾' : '▸'}</span></button>
-    </div>`;
-    const sortPop = lootSortOpen ? '<div class="loot-ctrl-pop">' + LOOT_SORTS.map(s =>
-      `<button class="loot-ctrl-opt ${lootSort === s.key ? 'active' : ''}" onclick="setLootSort('${s.key}')">${s.label}</button>`
-    ).join('') + '</div>' : '';
-    // Stat-filter options = the stat/attribute codes actually present in the bag,
-    // in glossary order, so you only ever see stats you can filter by.
-    let filterPop = '';
-    if (lootFilterOpen) {
-      const present = new Set();
-      inventory.forEach(it => itemStatKeys(it).forEach(k => present.add(k)));
-      const order = [...Object.keys(STAT_SHORT), ...ATTR_KEYS];
-      const opts = order.filter(k => present.has(k));
-      present.forEach(k => { if (!opts.includes(k)) opts.push(k); });
-      filterPop = '<div class="loot-ctrl-pop">' + (opts.length
-        ? opts.map(k => `<button class="loot-ctrl-opt loot-stat-chip ${lootStatFilter.includes(k) ? 'active' : ''}" onclick="toggleLootStat('${k}')" ${hoverTip(`<div class='ht-name'>${lootStatCode(k)}</div><div class='ht-line'>${lootStatName(k)}</div>`)}>${lootStatCode(k)}</button>`).join('')
-            + (lootStatFilter.length ? `<button class="loot-ctrl-opt loot-ctrl-clear" onclick="clearLootStats()">Clear filter</button>` : '')
-        : `<span class="lc-hint">No stats to filter yet — pick up some gear first.</span>`) + '</div>';
-    }
-    const lootCtrls = controls + sortPop + filterPop;
+    const lootCtrls = sortFilterCtrlsHTML({
+      sort: lootSort, sortOpen: lootSortOpen,
+      statFilter: lootStatFilter, filterOpen: lootFilterOpen,
+      items: inventory,
+      fns: { sort: 'setLootSort', sortMenu: 'toggleLootSortMenu', filterMenu: 'toggleLootFilterMenu', stat: 'toggleLootStat', clear: 'clearLootStats' },
+      sortHint: 'Order the bag by rarity, power, slot or value.',
+      emptyHint: 'No stats to filter yet — pick up some gear first.',
+    });
     // Rarity rank for sorting: junk 0 → unique 6 (higher = rarer).
     const TIER_KEYS = Object.keys(TIERS);
     // One pass over the bag: build the visible rows, decorating each with its sort
@@ -24449,23 +24879,8 @@ function renderPanel() {
         bulkGold += Math.max(1, Math.round(item.value * 0.5));
       }
     });
-    // Sort comparator over the decorated rows — the chosen key orders everything
-    // alike (pieces this class can't wield mix in rather than sinking).
-    const lootRowCompare = (a, b) => {
-      switch (lootSort) {
-        case 'power':
-          return b.pow - a.pow || b.tr - a.tr || a.so - b.so;
-        case 'slot':
-          return a.so - b.so || b.tr - a.tr || b.pow - a.pow;
-        case 'value':
-          return (b.item.value || 0) - (a.item.value || 0) || b.tr - a.tr || b.pow - a.pow;
-        case 'rarity':
-        default:
-          // Highest rarity first (unique → junk); Power breaks ties, then slot.
-          return b.tr - a.tr || b.pow - a.pow || a.so - b.so;
-      }
-    };
-    rows.sort(lootRowCompare);
+    // Order the decorated rows by the chosen sort key (shared with the merchant).
+    rows.sort(makeRowCompare(lootSort));
     const mMoney = '<span data-spr=ic_money></span>', mScrap = '<span data-spr=mat_scrap></span>';
     const bulkBar = bulkN ? `<div class="loot-bulk-bar">
       <button class="loot-bulk-btn" onclick="bagBulk('sell')">${mMoney} Sell all · <span data-spr=ic_money></span>${fmtGold(bulkGold)}</button>
@@ -24992,7 +25407,7 @@ function skillLoadoutTrayHtml() {
     const isAuto = i === AUTO_SLOT;
     const s = id ? byId[id] : null;
     const key = isAuto ? '' : skillKeyLabel(i + 1);
-    const pill = isAuto ? 'AUTO' : kbShort(key);
+    const pill = isAuto ? 'AUTO' : sbPill('skill' + (i + 1));
     const dropIdx = isAuto ? `'${AUTO_SLOT}'` : i;
     const drag = s ? `draggable="true" ondragstart="skillDragStart(event,'${s.id}',${dropIdx})" ondragend="skillDragEnd()"` : '';
     const label = isAuto ? 'auto-cast slot' : 'slot ' + (i + 1);
@@ -25208,7 +25623,8 @@ function skillMechList(n, rank) {
     }
   }
   // Passive milestone surges (the +8/+10/+12% spikes at ranks 3/7/10) now get their
-  // own specific "Rank bonuses" ladder in the card, so no vague Surge chip here.
+  // own specific "Rank bonuses" ladder in the card, so no vague Surge chip here. The
+  // rank-10 SURGE stat is surfaced in that same ladder (see skillMilestonesHtml).
   // Cross-cutting keystone rule that a stat line can't show.
   if (n.kflag === 'bloodpact') add('Keystone', '#e8c267', 'Active skills cost life instead of mana.');
   return rows;
@@ -25300,9 +25716,13 @@ function skillMilestonesHtml(node, rank) {
   if (!skillHasMilestones(node)) return '';
   const passive = node.type === 'passive';
   const r = rank || 0;
+  // A maxed passive ALSO unlocks one brand-new stat at its rank-10 milestone (see
+  // data/passiveSurges.js) — surfaced on that row, not just a bigger existing stat.
+  const surge = passive ? PASSIVE_SURGES[node.id] : null;
   const rows = SKILL_MILESTONES.map(m => {
     const met = r >= m.rank;
-    const desc = passive ? m.passiveDesc : m.activeDesc;
+    let desc = passive ? m.passiveDesc : m.activeDesc;
+    if (surge && m.rank === node.max) desc += `, and unlocks ${fxOneLine(surge)} — a brand-new stat`;
     return `<div class="ms-row${met ? ' met' : ''}">`
       + `<span class="ms-k">${met ? '✓ ' : ''}${m.pips} Rank ${m.rank}</span>`
       + `<span class="ms-v"><b>${m.name}</b> — ${desc}</span></div>`;
@@ -25428,12 +25848,16 @@ function beltLoadoutHtml() {
 function beltMealsHtml() {
   const slots = player.mealSlots || [];
   const anyFilled = slots.some(s => s && s.qty > 0);
+  // Each belt tile is also a drop target: drag a cooked bowl from the Ramen House
+  // pantry straight onto it to slot it (desktop — the town menu leaves the belt
+  // visible below it). Same handlers as the in-menu Meal Slots rows.
+  const drop = (i) => `ondragover="mealSlotDragOver(event)" ondrop="mealSlotDrop(event,${i})" ondragenter="mealSlotDragEnter(event,this)" ondragleave="mealSlotDragLeave(event,this)"`;
   let tiles = '';
   for (let i = 0; i < MEAL_SLOT_COUNT; i++) {
     const s = slots[i];
     tiles += (s && s.qty > 0)
-      ? `<button class="skillbar-btn sb-meal" onclick="eatMealSlot(${i})" ${hoverTip(`<div class='ht-name'>${bowlIcon(14)} ${escapeHtml(s.bowl.name)}</div><div class='ht-line'>${escapeHtml(fxDesc(s.bowl.fx) || 'no effect')} · ${s.bowl.floors} floors</div><div class='ht-sub'>tap to eat · ${s.qty} left</div>`)}><span class="sb-icon">${bowlIcon(24)}</span><span class="sb-meal-qty">${s.qty}</span></button>`
-      : `<div class="skillbar-btn sb-meal sb-meal-slot-empty"></div>`;
+      ? `<button class="skillbar-btn sb-meal" onclick="eatMealSlot(${i})" ${drop(i)} ${hoverTip(`<div class='ht-name'>${bowlIcon(14)} ${escapeHtml(s.bowl.name)}</div><div class='ht-line'>${escapeHtml(fxDesc(s.bowl.fx) || 'no effect')} · ${s.bowl.floors} floors</div><div class='ht-sub'>tap to eat · ${s.qty} left</div>`)}><span class="sb-icon">${bowlIcon(24)}</span><span class="sb-meal-qty">${s.qty}</span></button>`
+      : `<div class="skillbar-btn sb-meal sb-meal-slot-empty" ${drop(i)}></div>`;
   }
   const overlay = anyFilled ? '' : `<div class="sb-mod-overlay">Go cook something!</div>`;
   const tip = anyFilled ? '' : hoverTip(`<div class='ht-name'>${bowlIcon(14)} Meals</div><div class='ht-line'>Cook a bowl at the Ramen House and slot it here to eat it mid-run.</div>`);
@@ -25521,10 +25945,10 @@ function renderSkillBar() {
   // the _lastSkillBarHtml cache, forcing a full bar rebuild each tick. The
   // .sb-cd-text placeholders stay empty in the cached string and are filled via
   // textContent in syncSkillBarCountdowns() on every render call instead.
-  const healBtn = cell(kbShort(kbLabel('healthPotion')), 'hp', `<button class="skillbar-btn potion ${potReady && !hpFull ? 'ready' : 'empty'} ${urgent ? 'urgent' : ''} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} onclick="useHealthPotion()">
+  const healBtn = cell(sbPill('healthPotion'), 'hp', `<button class="skillbar-btn potion ${potReady && !hpFull ? 'ready' : 'empty'} ${urgent ? 'urgent' : ''} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} onclick="useHealthPotion()">
       <span class="sb-icon">${dlIconFill('potion_r')}</span><span class="sb-info sb-cd-text" data-cdt="pot" id="heal-label"></span>${cdDial('pot')}
     </button>`);
-  const manaBtn = cell(kbShort(kbLabel('manaPotion')), 'mp', `<button class="skillbar-btn potion mana ${potReady && !mpFull ? 'ready' : 'empty'} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} onclick="useManaPotion()">
+  const manaBtn = cell(sbPill('manaPotion'), 'mp', `<button class="skillbar-btn potion mana ${potReady && !mpFull ? 'ready' : 'empty'} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} onclick="useManaPotion()">
       <span class="sb-icon">${dlIconFill('potion_g')}</span><span class="sb-info sb-cd-text" data-cdt="pot"></span>${cdDial('pot')}
     </button>`);
   // The four manual slots are rendered filled or empty (keys 1–4, all styled alike).
@@ -25540,7 +25964,7 @@ function renderSkillBar() {
     const s = id ? byId[id] : null;
     if (!s) {
       const tip = `<div class='ht-name'>Empty slot ${i + 1}</div><div class='ht-line'>Drag a learned skill here, or tap to assign one.</div>${key ? `<div class='ht-sub'>casts with ${key}</div>` : ''}`;
-      return cell(kbShort(key), '', `<button class="skillbar-btn slot-empty" ${dropAttrs(i)} ${hoverTip(tip)} onclick="openSlotPicker(${i})">
+      return cell(sbPill('skill' + (i + 1)), '', `<button class="skillbar-btn slot-empty" ${dropAttrs(i)} ${hoverTip(tip)} onclick="openSlotPicker(${i})">
       <span class="sb-icon big slot-plus">＋</span>
     </button>`);
     }
@@ -25550,7 +25974,7 @@ function renderSkillBar() {
     const castHint = key ? ` · press ${key}` : '';
     const moveHint = 'drag to rearrange · drag a tree skill to swap';
     const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
-    return cell(kbShort(key), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
+    return cell(sbPill('skill' + (i + 1)), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}',${i})" ondragend="skillDragEnd()" ${dropAttrs(i)} ${hoverTip(tip)} onclick="castSkillById('${s.id}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
     </button>`);
@@ -25595,7 +26019,7 @@ function renderSkillBar() {
       : ch
       ? `<div class='ht-name'><span data-spr=feat_gate_red></span> Town Portal</div><div class='ht-line'>Opening… ${Math.ceil(portalCharge)} second${Math.ceil(portalCharge) === 1 ? '' : 's'} left. A foe's hit shatters it.</div><div class='ht-sub'>press ${kbLabel('portal')} or move to cancel</div>`
       : `<div class='ht-name'><span data-spr=feat_gate_red></span> Town Portal</div><div class='ht-line'>Open a portal to the safe hub. It channels for a few seconds — you can't act while it does — moving or a foe's hit cancels it.</div><div class='ht-sub'>press ${kbLabel('portal')}</div>`;
-    townBtn = cell(kbShort(kbLabel('portal')), 'town', `<button class="skillbar-btn town${here ? ' town-locked' : ''}${ch ? ' channeling' : ''}" ${hoverTip(townTip)} ${here ? '' : 'onclick="enterTown()"'}>
+    townBtn = cell(sbPill('portal'), 'town', `<button class="skillbar-btn town${here ? ' town-locked' : ''}${ch ? ' channeling' : ''}" ${hoverTip(townTip)} ${here ? '' : 'onclick="enterTown()"'}>
       <span class="sb-icon">${dlIconFill('feat_gate_red')}</span><span class="sb-info sb-cd-text" data-cdt="portal"></span>
     </button>`);
   }
@@ -25619,7 +26043,11 @@ function renderSkillBar() {
     _lastSkillBarHtml = html;
     bar.innerHTML = html;
     _sbCdEls = _sbCdTextEls = null;   // the dials/placeholders were just rebuilt
-    _beltBountyEl = null;             // the belt bounty module (if any) was just rebuilt
+    // Drop BOTH belt-bounty caches: the fresh module starts with an empty (0-width)
+    // fill and blank count, so the memo key must reset too — otherwise syncBeltBounty
+    // sees an unchanged key and skips painting, stranding a completed bounty's bar
+    // empty after any rebuild (e.g. walking into town).
+    _beltBountyEl = null; _beltBountyKey = null;
     syncTownBarReserve();
   }
   // Runs on EVERY call (rebuilt or not) so the countdown text and the belt bounty
@@ -25918,6 +26346,16 @@ function gearSetBarHTML() {
     </button>`;
   }).join('')}</div>`;
 }
+// Is the hero in real danger right now? Town is always safe; in the dungeon it is
+// danger if combat is hot, a foe is actively hunting, or any live foe sits within a
+// few tiles. Feeds the gear-set swap guard (blockGearSwap) so a risky swap is only
+// refused when it could actually get you killed.
+function gearSwapInDanger() {
+  if (inTown) return false;
+  if ((player._combatSecs || 0) > 0) return true;
+  if (enemies.some(o => !o.dead && o.aggro)) return true;
+  return enemiesNear(GEARSET_DANGER_RADIUS).length > 0;
+}
 // Swap which loadout is worn. Called with no/invalid index from the G hotkey to
 // flip to the other set; with 0/1 from the on-screen buttons to pick one.
 function toggleGearSet(idx) {
@@ -25925,6 +26363,17 @@ function toggleGearSet(idx) {
   const target = (idx === 0 || idx === 1) ? idx : (activeGearSet === 0 ? 1 : 0);
   hideTooltip();
   if (target === activeGearSet) return;
+  // SAFEGUARD: refuse a swap onto an EMPTY or much-weaker loadout while foes are near —
+  // stripping your armor mid-fight (a fat-fingered Set button or the G hotkey) is a
+  // common accidental death. You can still swap freely when safe (to assemble Set 2),
+  // and gearing UP to a stronger set is never blocked, so bailing to real gear works.
+  if (blockGearSwap({ inDanger: gearSwapInDanger(),
+                      curPower: gearSetPower(gearSets[activeGearSet], activeGearSet),
+                      tgtPower: gearSetPower(gearSets[target], target) })) {
+    sfx('denied');
+    log(`Set ${target + 1} would leave you exposed — no swapping to it with enemies near. Break away first.`, 'important');
+    return;
+  }
   activeGearSet = target;
   // Swapping sets re-wears a loadout you already assembled — it is NOT a fresh equip
   // event, so it is intentionally exempt from the equip BLOCK: pieces stay worn even
@@ -26239,6 +26688,9 @@ function itemCardHTML(item, opts = {}) {
   // Weapons show their sub-type, hand requirement, reach (a little tile grid) and
   // how they swing. Sub-types carry their own style/reach (a Pike reaches 3, a
   // Rapier thrusts) while still reading as their category for the class lock.
+  // The weapon sub-type + hand (e.g. "Dagger · 1H") reads up top under the name;
+  // the range grid and swing description stay down with the flavour detail.
+  let weaponTypeLine = '';
   let weaponLine = '';
   if (item.slot === 'weapon') {
     const sub = weaponSubType(item);
@@ -26248,8 +26700,8 @@ function itemCardHTML(item, opts = {}) {
     const style = sub ? WEAPON_SUBTYPES[sub].style : (base ? WEAPON_STYLES[base] : null);
     if (styleKey) {
       const hands = weaponHandsOf(item) === 2 ? '2H' : '1H';
-      const subTag = sub ? `<div style="color:var(--orange-400);font-size:1.2rem;margin-top:4px"><b>${sub}</b> · <span style="color:var(--orange-500)">${hands}${base && base !== sub ? ' ' + base : ''}</span></div>` : '';
-      weaponLine = subTag + `<div style="margin-top:4px">${weaponRangeGridHTML(styleKey)}</div>` +
+      weaponTypeLine = sub ? `<div style="color:var(--orange-400);font-size:1.2rem;margin:2px 0"><b>${sub}</b> · <span style="color:var(--orange-500)">${hands}${base && base !== sub ? ' ' + base : ''}</span></div>` : '';
+      weaponLine = `<div style="margin-top:4px">${weaponRangeGridHTML(styleKey)}${style ? weaponSpeedCapHTML(style) : ''}</div>` +
         (WEAPON_STYLE_DESC[style] ? `<div style="color:var(--orange-500);font-size:1.2rem;margin-top:2px;font-style:italic">${WEAPON_STYLE_DESC[style]}</div>` : '');
     }
   }
@@ -26285,6 +26737,7 @@ function itemCardHTML(item, opts = {}) {
     ${label}
     <div class="tt-name" style="color:${tierColor(item)}">${curseMark(item)}${item.name}</div>
     <div class="tt-tier" style="color:${tierColor(item)}">${item.slot ? `<span data-spr=${SLOTS[item.slot].sprite}></span> ${SLOTS[item.slot].label}` : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</div>
+    ${weaponTypeLine}
     ${item.slot ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${abbreviateNumber(power)}</div>` : ''}
     ${powerLine}
     ${uniqueLine}
@@ -26818,6 +27271,607 @@ document.addEventListener('keydown', e => {
 });
 
 // ══════════════════════════════════════════
+// GAMEPAD (CONTROLLER) SUPPORT
+// ══════════════════════════════════════════
+// An ADDITIVE input layer, built like the touch layer and reusing the same
+// window-bridged handlers (doDash, pickup, castSkillById, enterTown, togglePanel…).
+// Keyed off body.pad (revealed on the first real gamepad input, dropped when the
+// last pad disconnects); it NEVER disables keyboard/mouse, so a machine with no pad
+// is byte-identical to before. Pure math (stick vectors, edge detection, spatial
+// menu navigation) lives in src/systems/gamepadMath.js; the polling + DOM wiring is
+// here, next to the touch wiring it mirrors. See docs/CONTROLLER.md for the full map.
+
+// Standard Gamepad button indices (the browser normalises PlayStation / Xbox /
+// Steam Deck onto this layout; only the glyph labels differ). Face indices are
+// position-based: 0 bottom, 1 right, 2 left, 3 top — so ✕○□△ line up with A B X Y.
+const PAD_BTN = { CROSS:0, CIRCLE:1, SQUARE:2, TRIANGLE:3, L1:4, R1:5, L2:6, R2:7,
+                  SELECT:8, START:9, L3:10, R3:11, DUP:12, DDOWN:13, DLEFT:14, DRIGHT:15 };
+// Left-stick movement vector, injected into updatePlayer exactly like touchStick.
+const padStick = { active: false, ix: 0, iy: 0, mag: 0 };
+let _padPrev = {};            // gamepad.index -> previous poll's pressed[] (for edges)
+let _padOn = false;           // body.pad revealed?
+let _padGlyphs = 'xbox';      // which glyph set the connected pad uses ('ps' | 'xbox')
+// Menu focus state.
+let _padContainer = null;     // the DOM container currently being navigated
+let padFocusEl = null;        // the focused element within it
+let _padFocusIdx = 0;         // its index in the container's reading-order focusables
+let _padBagFocus = false;     // desktop: is the (always-present) Bag column being navigated?
+let _padNavDir = null, _padNavT = 0;   // hold-to-repeat gate for menu navigation
+const PAD_NAV_DELAY = 0.38, PAD_NAV_RATE = 0.11;   // seconds: first repeat, then each step
+// Virtual cursor (universal fallback — a mouse on a stick).
+const padCursor = { on: false, x: 0, y: 0 };
+const PAD_CURSOR_SPEED = 900;   // px/sec at full stick
+// Virtual keyboard target (the <input> being typed into), or null.
+let _padKbTarget = null, _padKbShift = false;
+
+function isPadMode() { return _padOn; }
+function setPadMode(on) {
+  if (_padOn === on) return;
+  _padOn = on;
+  document.body.classList.toggle('pad', on);
+  if (!on) {
+    // Pad unplugged — drop ALL transient pad state so a reconnect starts clean (in
+    // play, stick centred), not stuck sprinting / in cursor mode / mid-keyboard.
+    padStick.active = false; padStick.mag = 0;
+    sprintHeld = false; padCursor.on = false; _padBagFocus = false; _padKbTarget = null;
+    const kb = document.getElementById('pad-kbd'); if (kb) kb.classList.remove('open');
+    const hp = document.getElementById('pad-help'); if (hp) hp.classList.remove('open');
+    padClearFocus(); padHideCursor();
+  }
+  try { updatePadHintbar(); } catch (_) {}
+  try { if (typeof renderSkillBar === 'function') renderSkillBar(); } catch (_) {}   // pills flip to/from pad glyphs
+}
+// Pick a glyph set from the pad's id string. Sony pads (vendor 054c / DualSense /
+// DualShock) show ✕○□△; everything else (Xbox, Steam Deck, generic XInput) shows
+// A/B/X/Y. Steam Deck reports as an Xbox-style pad, which is what we want.
+function padDetectGlyphs(id) {
+  return /054c|09cc|sony|dualshock|dualsense|playstation|wireless controller/i.test(id || '') ? 'ps' : 'xbox';
+}
+const PAD_GLYPHS = {
+  ps:   { cross:'✕', circle:'○', square:'□', triangle:'△', l1:'L1', r1:'R1', l2:'L2', r2:'R2', l3:'L3', r3:'R3', options:'Options', view:'Create', lstick:'L-Stick', rstick:'R-Stick', dpad:'D-Pad' },
+  xbox: { cross:'A', circle:'B', square:'X', triangle:'Y', l1:'LB', r1:'RB', l2:'LT', r2:'RT', l3:'L3', r3:'R3', options:'☰',      view:'⧉',      lstick:'L-Stick', rstick:'R-Stick', dpad:'D-Pad' },
+};
+function padGlyph(name) { return (PAD_GLYPHS[_padGlyphs] || PAD_GLYPHS.xbox)[name] || ''; }
+// The controller glyph for a keybound action — shown in the skill-bar hotkey pills
+// (and cast hints) INSTEAD of the keyboard key while a pad is in use, so the pills
+// read "L1✕" not "1". Skills are the L1 + face layer; potions/swap ride the D-pad.
+function padActionGlyph(id) {
+  const g = padGlyph;
+  switch (id) {
+    case 'skill1': return g('l1') + g('cross');
+    case 'skill2': return g('l1') + g('circle');
+    case 'skill3': return g('l1') + g('square');
+    case 'skill4': return g('l1') + g('triangle');
+    case 'healthPotion': return '◀';   // D-pad left
+    case 'manaPotion':   return '▶';   // D-pad right
+    case 'swapWeapon':   return '▲';   // D-pad up
+    case 'portal':   return g('triangle');
+    case 'bag':      return g('circle');
+    case 'dash':     return g('r1');
+    case 'interact': return g('cross');
+    default: return '';
+  }
+}
+// Skill-bar pill label: the pad glyph under body.pad, else the (short) keyboard key.
+function sbPill(id) { return isPadMode() ? padActionGlyph(id) : kbShort(kbLabel(id)); }
+
+// The first connected gamepad, or null. getGamepads() returns a live snapshot each
+// call (entries can be null for empty slots).
+function firstGamepad() {
+  let list; try { list = navigator.getGamepads ? navigator.getGamepads() : []; } catch (_) { return null; }
+  if (!list) return null;
+  for (const gp of list) if (gp && gp.connected) return gp;
+  return null;
+}
+
+// The frame entry point (called from gameLoop). Reads the pad, computes button
+// edges, and routes to the play / menu / cursor / keyboard handler for the context.
+function pollGamepads(ts, dt) {
+  const gp = firstGamepad();
+  if (!gp) { if (padStick.active) { padStick.active = false; padStick.mag = 0; } return; }
+  const btns = gp.buttons || [];
+  const axes = gp.axes || [];
+  // pressed[] as plain booleans (triggers count as pressed past a light threshold).
+  const pressed = [];
+  for (let i = 0; i < btns.length; i++) { const b = btns[i]; pressed[i] = !!(b && (b.pressed || b.value > 0.5)); }
+  const anyInput = pressed.some(Boolean) || axes.some(a => Math.abs(a) > 0.35);
+  if (!_padOn) { if (!anyInput) return; _padGlyphs = padDetectGlyphs(gp.id); setPadMode(true); }
+  const prev = _padPrev[gp.index] || [];
+  const down = edgePressed(prev, pressed);
+  const up = edgeReleased(prev, pressed);
+  _padPrev[gp.index] = pressed;
+
+  // ── Global buttons (work in every context) ──
+  if (down.includes(PAD_BTN.START)) toggleSettingsMenu();           // pause / settings
+  if (down.includes(PAD_BTN.SELECT)) togglePadHelp();               // controller cheat-sheet
+  if (down.includes(PAD_BTN.R3)) padToggleCursor();                 // virtual mouse on/off
+  // Releasing R2 clears the sprint hold in EVERY context. Only padDrivePlay reads
+  // `up`, so a release while a menu / cursor is up would otherwise never be seen and
+  // sprint would stay latched on when play resumes.
+  if (up.includes(PAD_BTN.R2)) sprintHeld = false;
+
+  // While the help card is up it captures the pad — ✕/○ dismiss it, everything else
+  // is swallowed so nothing fires on the screen behind it. Neutralise the stick too,
+  // or a stick held when help opened keeps walking the (un-paused) hero behind it.
+  const help = document.getElementById('pad-help');
+  if (help && help.classList.contains('open')) {
+    padStick.active = false; padStick.mag = 0;
+    if (down.includes(PAD_BTN.CROSS) || down.includes(PAD_BTN.CIRCLE)) togglePadHelp();
+    return;
+  }
+
+  if (padCursor.on) { padDriveCursor(down, axes, dt); return; }
+  if (padMenuOpen()) { padDriveMenu(down, axes, pressed, dt, ts); return; }
+  padDrivePlay(down, up, axes, pressed, dt);
+}
+
+// ── PLAY CONTEXT (dungeon) ───────────────────────────────────────────────────
+function padCastSlot(i) { const sk = (typeof slotSkill === 'function') ? slotSkill(i) : null; if (sk) castSkillById(sk.id); }
+function padOpenBag() {
+  if (isTouchMode()) { if (!document.body.classList.contains('bag-open')) toggleBag(); }
+  // Desktop: expand the drawer THROUGH setPanelCollapsed so the map backing buffer
+  // re-fits to the new (narrower) column — a raw class toggle skips that re-fit and
+  // leaves the map horizontally squished.
+  else { togglePanel(); if (typeof setPanelCollapsed === 'function') setPanelCollapsed(false); }
+  _padBagFocus = true; _padContainer = null;   // force focus (re)init onto the drawer
+}
+function padDrivePlay(down, up, axes, pressed, dt) {
+  // Leaving a menu → drop the focus ring so it never lingers over the map.
+  if (_padContainer || padFocusEl) { _padContainer = null; padClearFocus(); }
+  // Left stick → hero movement (injected into updatePlayer like the touch stick).
+  const v = padStickVector(axes[0] || 0, axes[1] || 0);
+  padStick.active = v.mag > 0; padStick.ix = v.ix; padStick.iy = v.iy; padStick.mag = v.mag;
+  // R2 sprint — hold, or (in Toggle mode) tap to latch, mirroring Shift.
+  if (down.includes(PAD_BTN.R2)) {
+    if (sprintMode === 'toggle') { sprintLatched = !sprintLatched; if (typeof sfx === 'function') sfx('click'); if (typeof renderSkillBar === 'function') renderSkillBar(); }
+    else sprintHeld = true;
+  }
+  // (R2 release is cleared globally in pollGamepads so it fires in every context.)
+  // Face buttons: plain = actions, with L1 held = the four skill slots.
+  if (pressed[PAD_BTN.L1]) {
+    if (down.includes(PAD_BTN.CROSS))    padCastSlot(0);
+    if (down.includes(PAD_BTN.CIRCLE))   padCastSlot(1);
+    if (down.includes(PAD_BTN.SQUARE))   padCastSlot(2);
+    if (down.includes(PAD_BTN.TRIANGLE)) padCastSlot(3);
+  } else {
+    if (down.includes(PAD_BTN.CROSS))    pickup();
+    if (down.includes(PAD_BTN.CIRCLE))   padOpenBag();
+    if (down.includes(PAD_BTN.SQUARE))   toggleLog();
+    if (down.includes(PAD_BTN.TRIANGLE)) enterTown();
+  }
+  if (down.includes(PAD_BTN.R1)) doDash();
+  if (down.includes(PAD_BTN.L3) && typeof toggleMinimap === 'function') toggleMinimap();   // collapse/expand the minimap
+  // D-pad quick items / toggles (HP left · MP right, mirroring the skill bar).
+  if (down.includes(PAD_BTN.DLEFT))  useHealthPotion();
+  if (down.includes(PAD_BTN.DRIGHT)) useManaPotion();
+  if (down.includes(PAD_BTN.DUP))    toggleGearSet();
+  if (down.includes(PAD_BTN.DDOWN))  cycleTargetMode();
+  // Right stick → a soft inspect reticle over the map (pops a foe's codex card, like
+  // mouse hover). Doesn't intercept any button; promote to a full cursor with R3.
+  padPlayInspect(axes);
+}
+function padPlayInspect(axes) {
+  const rx = axes[2] || 0, ry = axes[3] || 0;
+  // While the combat log is expanded (Square toggles it), the right stick scrolls its
+  // history instead of aiming the reticle — the only controller path to read old lines.
+  const row = document.getElementById('bottom-row');
+  if (row && !row.classList.contains('log-collapsed') && Math.abs(ry) > 0.3) {
+    const logEl = document.getElementById('log');
+    if (logEl) { logEl.scrollTop += ry * 16; padHideCursor(); return; }
+  }
+  if (Math.hypot(rx, ry) < 0.35) { padHideCursor(); return; }
+  const cv = document.getElementById('canvas'); if (!cv) return;
+  const r = cv.getBoundingClientRect();
+  if (!padCursor.x && !padCursor.y) { padCursor.x = r.left + r.width / 2; padCursor.y = r.top + r.height / 2; }
+  padCursor.x = Math.max(r.left, Math.min(r.right, padCursor.x + rx * 12));
+  padCursor.y = Math.max(r.top, Math.min(r.bottom, padCursor.y + ry * 12));
+  padShowCursor();
+  try { if (typeof updateHoverCard === 'function') updateHoverCard(padCursor.x, padCursor.y); } catch (_) {}
+}
+
+// ── MENU CONTEXT (any overlay, shop, craft screen, the Bag) ──────────────────
+// Ordered set of modal containers to consider (a superset of the RT-blocking list
+// plus the non-pausing popups). The topmost open one is what we navigate.
+// The full set of modal containers to consider (kept in sync with RT_BLOCKING_OVERLAYS
+// plus the non-pausing popups). Spelled out rather than spread from
+// RT_BLOCKING_OVERLAYS because that const is declared LATER in this module — reading
+// it here (even via typeof) would hit its temporal dead zone and throw at load.
+const PAD_MODAL_IDS = [
+  'title-overlay','name-overlay','class-overlay','hc-death-overlay','death-overlay',
+  'shop-overlay','mystic-overlay','town-overlay','settings-menu','version-overlay','howto-overlay',
+  'autoloot-overlay','newrun-overlay','keybind-overlay','conquest-overlay','slots-overlay',
+  'account-overlay','lb-overlay','lb-hero-overlay','graveyard-overlay','slotpick-overlay',
+  'greed-overlay','boss-gate-overlay','bestiary-overlay','achievements-overlay','pad-kbd',
+];
+function padTopModal() {
+  let best = null, bestZ = -Infinity;
+  for (const id of PAD_MODAL_IDS) {
+    const el = document.getElementById(id);
+    if (!el || !el.classList.contains('open')) continue;
+    if (!el.getClientRects().length) continue;
+    const z = parseInt(getComputedStyle(el).zIndex, 10) || 0;
+    // Later DOM order breaks a z tie (paints on top).
+    if (z > bestZ || (z === bestZ && best && (best.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING))) { bestZ = z; best = el; }
+  }
+  return best;
+}
+function padActiveContainer() {
+  let base = padTopModal();
+  if (!base && _padBagFocus) {
+    if (isTouchMode()) { if (document.body.classList.contains('bag-open')) base = document.getElementById('side-panel'); }
+    else { const sp = document.getElementById('side-panel'); if (sp && sp.getClientRects().length) base = sp; }
+    if (!base) _padBagFocus = false;   // drawer was closed elsewhere — drop back to play
+  }
+  if (!base) return null;
+  // If an actionable DETAIL POPOVER is open inside the base container, confine focus
+  // to it. The skill-tree Learn/Auto/Hide card is absolutely positioned OVER the
+  // nodes, so navigating the whole tree would let focus slip onto a node hidden
+  // behind the card — instead, selecting a node drops focus straight onto Learn.
+  const pop = base.querySelector && base.querySelector('#sk-pop');
+  if (pop && pop.getClientRects().length && pop.querySelector('button, [onclick]')) return pop;
+  return base;
+}
+function padMenuOpen() { return !!padActiveContainer(); }
+
+// Native + role-based interactive tags. `summary` matters (the "Stat abbreviations"
+// collapsible etc.); `label` toggles its checkbox on click.
+const PAD_FOCUS_SEL = 'button, [role="button"], [role="tab"], [role="menuitem"], a[href], input:not([type="hidden"]), select, textarea, summary, label, [tabindex]:not([tabindex="-1"])';
+// Game-specific clickable rows/tiles wired via DELEGATED listeners (no inline onclick)
+// — inspect rows in the merchant / loot / gear lists. The game replaces EVERY cursor
+// with a custom blade image (!important), so a `cursor:pointer` heuristic can't find
+// these; naming the classes is the reliable path.
+const PAD_CLICK_CLASS_SEL = '.shop-row-info, .shop-row, .loot-info, .slot-info, .loot-row, .sk-tnode, .lt-slot, .pd-slot';
+function padIsBackdrop(e) { return /event\.target/.test(e.getAttribute('onclick') || ''); }
+// Every visible, enabled, clickable element inside a container, in reading order.
+// Detection is deliberately broad so NOTHING the mouse can click is unreachable:
+// native / role interactive tags, inline onclick (minus modal backdrops), and the
+// delegated-listener row classes above. Cached for a beat (see padCurrentEls).
+function padFocusablesIn(c) {
+  if (!c) return [];
+  const prime = new Set();
+  c.querySelectorAll(PAD_FOCUS_SEL).forEach(e => prime.add(e));
+  c.querySelectorAll(PAD_CLICK_CLASS_SEL).forEach(e => prime.add(e));
+  c.querySelectorAll('[onclick]').forEach(e => { if (!padIsBackdrop(e)) prime.add(e); });
+  const vw = window.innerWidth, vh = window.innerHeight, maxArea = 0.85 * vw * vh;
+  const out = [];
+  prime.forEach(e => {
+    if (e.disabled || e.getAttribute('aria-disabled') === 'true') return;
+    if (e.closest('[hidden]')) return;
+    if (!e.getClientRects().length) return;                     // display:none / not laid out
+    const r = e.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return;
+    if (r.width * r.height > maxArea) return;                   // full-screen backdrop / wrapper
+    out.push(e);
+  });
+  const rects = out.map(e => e.getBoundingClientRect());
+  return readingOrder(rects).map(i => out[i]);
+}
+// Cache the focusable set for a short window so the (heavier) cursor-style scan runs
+// a few times a second, not every frame. Invalidated on container change, on a timer
+// (catches re-renders / popovers), and explicitly after an activation opens new UI.
+let _padEls = [], _padElsAt = 0, _padElsContainer = null;
+function padCurrentEls(container, ts) {
+  const now = ts || 0;
+  if (container !== _padElsContainer || _padElsAt === 0 || (now - _padElsAt) > 140) {
+    _padEls = padFocusablesIn(container);
+    _padElsContainer = container; _padElsAt = now;
+  }
+  return _padEls;
+}
+function padInvalidateEls() { _padElsAt = 0; }
+function padClearFocus() {
+  if (padFocusEl) {
+    padFocusEl.classList.remove('pad-focused');
+    try { padFocusEl.dispatchEvent(new MouseEvent('mouseleave')); } catch (_) {}
+  }
+  padFocusEl = null;
+  if (typeof hideHoverTip === 'function') hideHoverTip();
+  padUpdateRing(null);
+}
+// Focus an element: ring + reading it into view + (when fireTip) firing its hover
+// handlers so the gear/foe/skill card or control tip pops on selection.
+function padApplyFocus(el, fireTip) {
+  if (padFocusEl && padFocusEl !== el) { padFocusEl.classList.remove('pad-focused'); try { padFocusEl.dispatchEvent(new MouseEvent('mouseleave')); } catch (_) {} }
+  padFocusEl = el;
+  if (!el) { padUpdateRing(null); return; }
+  el.classList.add('pad-focused');
+  try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (_) {}
+  if (fireTip) {
+    try {
+      const r = el.getBoundingClientRect();
+      const p = { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+      el.dispatchEvent(new MouseEvent('mouseenter', p));
+      el.dispatchEvent(new MouseEvent('mousemove', p));
+    } catch (_) {}
+  }
+  padUpdateRing(el);
+}
+// Called each frame while a menu is up: keep padFocusEl resolved against the live
+// DOM (menus re-render), re-initialising to the first element when the container
+// changes and clamping the index otherwise.
+function padSyncFocus(container, ts) {
+  const changed = container !== _padContainer;
+  if (changed) { _padContainer = container; _padFocusIdx = 0; padClearFocus(); padInvalidateEls(); }
+  const els = padCurrentEls(container, ts);
+  if (!els.length) { if (padFocusEl) padClearFocus(); return els; }
+  _padFocusIdx = Math.max(0, Math.min(_padFocusIdx, els.length - 1));
+  const el = els[_padFocusIdx];
+  if (el !== padFocusEl) padApplyFocus(el, changed || !padFocusEl);   // fire tip on first focus only
+  else padUpdateRing(el);
+  return els;
+}
+function padMoveFocus(dir, els) {
+  if (!els.length) return;
+  const i = els.indexOf(padFocusEl);
+  if (i < 0) { _padFocusIdx = 0; padApplyFocus(els[0], true); return; }
+  const rects = els.map(e => e.getBoundingClientRect());
+  const pick = pickInDirection(rects[i], rects, dir);
+  if (pick >= 0) { _padFocusIdx = pick; padApplyFocus(els[pick], true); if (typeof sfx === 'function') sfx('click'); }
+}
+// Edge + hold-to-repeat gate: a fresh direction steps immediately, a held one
+// repeats after PAD_NAV_DELAY then every PAD_NAV_RATE.
+function padNavPulse(dir, dt) {
+  if (dir !== _padNavDir) { _padNavDir = dir; _padNavT = PAD_NAV_DELAY; return dir; }
+  if (!dir) return null;
+  _padNavT -= dt;
+  if (_padNavT <= 0) { _padNavT = PAD_NAV_RATE; return dir; }
+  return null;
+}
+function padActivateFocused() {
+  const el = padFocusEl; if (!el) return;
+  const tag = el.tagName;
+  if (tag === 'INPUT' && /^(|text|email|password|search|tel|url|number)$/i.test(el.type || 'text')) { padKbOpen(el); return; }
+  if (tag === 'SELECT') { padCycleSelect(el, 1); return; }
+  el.click();
+  padInvalidateEls();   // the click may have opened a popover / sub-panel — refresh reachables now
+}
+function padCycleSelect(sel, step) {
+  const n = sel.options.length; if (!n) return;
+  sel.selectedIndex = (sel.selectedIndex + step + n) % n;
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+}
+function padBack() {
+  const c = padActiveContainer();
+  if (c && c.id === 'pad-kbd') { padKbDone(); return; }   // ○ closes the on-screen keyboard (keeps what's typed)
+  if (c && c.id === 'sk-pop') {   // ○ closes the skill-detail card back to the tree
+    selectedSkillId = null; if (typeof renderPanel === 'function') renderPanel();
+    _padContainer = null; padClearFocus(); padInvalidateEls();
+    if (typeof sfx === 'function') sfx('click');
+    return;
+  }
+  if (c && c.id === 'side-panel') {   // the desktop Bag column isn't an Esc target — exit its focus to play
+    _padBagFocus = false; _padContainer = null; padClearFocus();
+    if (!isTouchMode()) setPanelCollapsed(true); else if (document.body.classList.contains('bag-open')) toggleBag();
+    if (typeof sfx === 'function') sfx('click');
+    return;
+  }
+  if (typeof handleEscape === 'function') handleEscape();
+}
+// The nearest actually-scrollable ancestor of the focused element (up to the menu
+// container), so the right stick scrolls whatever list/panel focus sits in.
+function padScrollableAncestor(el, container) {
+  for (let n = el; n; n = n.parentElement) {
+    if (n.scrollHeight - n.clientHeight > 4) {
+      const oy = getComputedStyle(n).overflowY;
+      if (oy === 'auto' || oy === 'scroll') return n;
+    }
+    if (n === container || n === document.body) break;
+  }
+  if (container && container.scrollHeight - container.clientHeight > 4) return container;
+  return null;
+}
+// Tab strips (settings tabs, leaderboard tabs/modes, bag HERO/SKILLS/LOOT…) hop with
+// the bumpers. Generic: find the tab-like buttons, step from the active one.
+const PAD_TAB_SEL = '.settings-tab-btn, .lb-tab, .lb-mode, [role="tab"], .panel-tab, .bag-tab, .tab-btn, .modal-nav-btn';
+function padSwitchTab(container, step) {
+  if (!container) return;
+  const tabs = [...container.querySelectorAll(PAD_TAB_SEL)].filter(t => t.getClientRects().length && !t.disabled);
+  if (tabs.length < 2) return;
+  let cur = tabs.findIndex(t => /(^|\s)(active|on|sel|selected)(\s|$)/.test(t.className) || t.getAttribute('aria-selected') === 'true');
+  if (cur < 0) cur = 0;
+  const next = tabs[(cur + step + tabs.length) % tabs.length];
+  if (next) { next.click(); _padFocusIdx = 0; padClearFocus(); padInvalidateEls(); }
+}
+function padDriveMenu(down, axes, pressed, dt, ts) {
+  padStick.active = false; padStick.mag = 0;   // no hero walking while navigating a menu
+  const container = padActiveContainer();
+  const els = padSyncFocus(container, ts);
+  // Navigation from the D-pad or the left stick, with hold-to-repeat.
+  let raw = null;
+  if (pressed[PAD_BTN.DUP]) raw = 'up'; else if (pressed[PAD_BTN.DDOWN]) raw = 'down';
+  else if (pressed[PAD_BTN.DLEFT]) raw = 'left'; else if (pressed[PAD_BTN.DRIGHT]) raw = 'right';
+  if (!raw) raw = stickToDir(axes[0] || 0, axes[1] || 0);
+  const navDir = padNavPulse(raw, dt);
+  // Left/right on a focused <select> cycles its option instead of moving focus, so a
+  // long native dropdown (e.g. the music-vibe picker) is fully drivable.
+  if (navDir && (navDir === 'left' || navDir === 'right') && padFocusEl && padFocusEl.tagName === 'SELECT') {
+    padCycleSelect(padFocusEl, navDir === 'right' ? 1 : -1);
+  } else if (navDir) padMoveFocus(navDir, els);
+  if (down.includes(PAD_BTN.CROSS)) padActivateFocused();
+  if (down.includes(PAD_BTN.CIRCLE)) padBack();
+  if (down.includes(PAD_BTN.SQUARE)) padActivateFocused();   // secondary confirm (some rows split action off)
+  if (down.includes(PAD_BTN.L1)) padSwitchTab(container, -1);
+  if (down.includes(PAD_BTN.R1)) padSwitchTab(container, 1);
+  // Right stick free-scrolls whatever scrollable region the focus sits in, so long
+  // lists / tooltips stay reachable without walking focus through every item.
+  const ry = axes[3] || 0;
+  if (Math.abs(ry) > 0.25 && padFocusEl) {
+    const sc = padScrollableAncestor(padFocusEl, container);
+    if (sc) sc.scrollTop += ry * 24;
+  }
+}
+
+// ── VIRTUAL CURSOR (universal fallback: a real mouse driven by the right stick) ──
+function padToggleCursor() {
+  padCursor.on = !padCursor.on;
+  if (padCursor.on) {
+    if (!padCursor.x && !padCursor.y) { padCursor.x = window.innerWidth / 2; padCursor.y = window.innerHeight / 2; }
+    padClearFocus(); padShowCursor();
+  } else { padHideCursor(); }
+  try { updatePadHintbar(); } catch (_) {}
+  if (typeof sfx === 'function') sfx('click');
+}
+function padDriveCursor(down, axes, dt) {
+  padStick.active = false; padStick.mag = 0;
+  const sx = axes[2] || 0, sy = axes[3] || 0;
+  const spd = PAD_CURSOR_SPEED * dt;
+  padCursor.x = Math.max(0, Math.min(window.innerWidth, padCursor.x + sx * spd));
+  padCursor.y = Math.max(0, Math.min(window.innerHeight, padCursor.y + sy * spd));
+  padShowCursor();
+  // Left stick can also nudge it (either thumb works).
+  padCursor.x = Math.max(0, Math.min(window.innerWidth, padCursor.x + (axes[0] || 0) * spd));
+  padCursor.y = Math.max(0, Math.min(window.innerHeight, padCursor.y + (axes[1] || 0) * spd));
+  if (down.includes(PAD_BTN.CROSS)) padCursorClick();
+  if (down.includes(PAD_BTN.CIRCLE)) padToggleCursor();   // ○ exits cursor mode
+}
+// Left-click at the cursor by dispatching the real pointer + mouse + click sequence
+// at that point — so it drives the canvas (click-to-move / chase / inspect) AND any
+// DOM control, reusing every existing mouse handler.
+function padCursorClick() {
+  const x = padCursor.x, y = padCursor.y;
+  const t = document.elementFromPoint(x, y);
+  if (!t) return;
+  const base = { clientX: x, clientY: y, button: 0, buttons: 1, bubbles: true, cancelable: true };
+  const pbase = Object.assign({ pointerId: 1, pointerType: 'mouse', isPrimary: true }, base);
+  try { t.dispatchEvent(new PointerEvent('pointerdown', pbase)); } catch (_) {}
+  try { t.dispatchEvent(new MouseEvent('mousedown', base)); } catch (_) {}
+  try { t.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, pbase, { buttons: 0 }))); } catch (_) {}
+  try { t.dispatchEvent(new MouseEvent('mouseup', Object.assign({}, base, { buttons: 0 }))); } catch (_) {}
+  try { t.dispatchEvent(new MouseEvent('click', Object.assign({}, base, { buttons: 0 }))); } catch (_) {}
+}
+function padCursorEl() { return document.getElementById('pad-cursor'); }
+function padShowCursor() { const c = padCursorEl(); if (!c) return; c.style.left = padCursor.x + 'px'; c.style.top = padCursor.y + 'px'; c.classList.add('on'); }
+function padHideCursor() { const c = padCursorEl(); if (c) c.classList.remove('on'); }
+
+// ── FOCUS RING ── a floating box tracked over the focused element each frame, so it
+// follows re-renders and scrolling without touching the element's own styles.
+function padUpdateRing(el) {
+  const ring = document.getElementById('pad-ring'); if (!ring) return;
+  if (!el) { ring.classList.remove('on'); return; }
+  const r = el.getBoundingClientRect();
+  if (r.width < 1 && r.height < 1) { ring.classList.remove('on'); return; }
+  ring.style.left = r.left + 'px'; ring.style.top = r.top + 'px';
+  ring.style.width = r.width + 'px'; ring.style.height = r.height + 'px';
+  ring.classList.add('on');
+}
+
+// ── VIRTUAL KEYBOARD ── text entry (hero name, cloud-save login). It's just another
+// menu container full of buttons, so the generic focus navigator drives it; these
+// helpers open it over a target <input> and type into it.
+const PAD_KB_ROWS = [
+  ['1','2','3','4','5','6','7','8','9','0'],
+  ['q','w','e','r','t','y','u','i','o','p'],
+  ['a','s','d','f','g','h','j','k','l'],
+  ['z','x','c','v','b','n','m'],
+  ['@','.','_','-'],
+];
+function padKbOpen(input) {
+  _padKbTarget = input; _padKbShift = false;
+  const ov = document.getElementById('pad-kbd'); if (!ov) return;
+  padKbRender();
+  ov.classList.add('open');
+  _padContainer = null;   // force focus onto the keyboard
+}
+function padKbRender() {
+  const ov = document.getElementById('pad-kbd'); if (!ov) return;
+  const cap = _padKbShift;
+  const keyBtn = (ch) => `<button class="pad-kb-key" onclick="padKbType('${ch === "'" ? "\\'" : ch}')">${cap && /[a-z]/.test(ch) ? ch.toUpperCase() : ch}</button>`;
+  const rows = PAD_KB_ROWS.map(r => `<div class="pad-kb-row">${r.map(keyBtn).join('')}</div>`).join('');
+  const nameField = _padKbTarget && _padKbTarget.id === 'name-input';
+  ov.innerHTML =
+    `<div class="pad-kb-card">
+       <div class="pad-kb-preview" id="pad-kb-preview">${(_padKbTarget && _padKbTarget.value) || ''}</div>
+       ${rows}
+       <div class="pad-kb-row">
+         <button class="pad-kb-key wide" onclick="padKbShift()">⇧ ${cap ? 'ABC' : 'abc'}</button>
+         <button class="pad-kb-key wide2" onclick="padKbSpace()">␣ Space</button>
+         <button class="pad-kb-key wide" onclick="padKbBack()">⌫</button>
+         ${nameField ? '<button class="pad-kb-key wide" onclick="padKbRandom()">🎲</button>' : ''}
+         <button class="pad-kb-key wide done" onclick="padKbDone()">✓ Done</button>
+       </div>
+     </div>`;
+}
+function padKbSyncPreview() { const p = document.getElementById('pad-kb-preview'); if (p && _padKbTarget) p.textContent = _padKbTarget.value || ''; }
+function padKbType(ch) {
+  if (!_padKbTarget) return;
+  if (_padKbShift && /[a-z]/.test(ch)) ch = ch.toUpperCase();
+  const max = parseInt(_padKbTarget.getAttribute('maxlength'), 10);
+  if (!(max > 0) || _padKbTarget.value.length < max) {
+    _padKbTarget.value += ch;
+    _padKbTarget.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  if (_padKbShift) { _padKbShift = false; padKbRender(); } else padKbSyncPreview();
+}
+function padKbSpace() { padKbType(' '); }
+function padKbBack() { if (!_padKbTarget) return; _padKbTarget.value = _padKbTarget.value.slice(0, -1); _padKbTarget.dispatchEvent(new Event('input', { bubbles: true })); padKbSyncPreview(); }
+function padKbShift() { _padKbShift = !_padKbShift; padKbRender(); }
+// A self-contained hero-name pool so a pad player can roll a name instead of typing
+// one out key-by-key (the game has no name generator otherwise).
+const PAD_KB_NAMES = ['Aldric','Bryn','Cassia','Doran','Elara','Fenwick','Grimm','Halric','Isolde','Jorah','Kaelen','Lyra','Morgane','Nyx','Orin','Perrin','Quinn','Rowan','Sable','Thane','Ulric','Vesper','Wyn','Xara','Ysolde','Zephyr'];
+function padKbRandom() {
+  if (!_padKbTarget) return;
+  const i = Math.floor(Math.random() * PAD_KB_NAMES.length);
+  _padKbTarget.value = PAD_KB_NAMES[i];
+  _padKbTarget.dispatchEvent(new Event('input', { bubbles: true }));
+  padKbSyncPreview();
+}
+function padKbDone() {
+  const ov = document.getElementById('pad-kbd'); if (ov) ov.classList.remove('open');
+  const t = _padKbTarget; _padKbTarget = null; _padContainer = null;
+  if (t) { try { t.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {} }
+}
+
+// ── HINT BAR & HELP ── discoverability. The hint bar shows the current context's
+// key bindings; View opens a full cheat-sheet of the whole scheme.
+function padHint(glyph, label) { return `<span class="pad-hint"><b>${glyph}</b>${label}</span>`; }
+function updatePadHintbar() {
+  const bar = document.getElementById('pad-hintbar'); if (!bar) return;
+  if (!_padOn) { bar.classList.remove('on'); return; }
+  let html;
+  if (padCursor.on) html = padHint(padGlyph('rstick'), 'Move') + padHint(padGlyph('cross'), 'Click') + padHint(padGlyph('circle'), 'Exit cursor');
+  else if (padMenuOpen()) html = padHint(padGlyph('dpad'), 'Navigate') + padHint(padGlyph('cross'), 'Select') + padHint(padGlyph('circle'), 'Back') + padHint(padGlyph('l1') + '/' + padGlyph('r1'), 'Tabs');
+  else html = padHint(padGlyph('lstick'), 'Move') + padHint(padGlyph('cross'), 'Use') + padHint(padGlyph('l1') + '+' + padGlyph('cross') + padGlyph('circle') + padGlyph('square') + padGlyph('triangle'), 'Skills') + padHint(padGlyph('r2'), 'Sprint') + padHint(padGlyph('options'), 'Menu') + padHint(padGlyph('view'), 'Help');
+  bar.innerHTML = html; bar.classList.add('on');
+}
+function padHelpRow(keys, action) { return `<div class="pad-help-row"><span class="pad-help-keys">${keys}</span><span class="pad-help-act">${action}</span></div>`; }
+function togglePadHelp() {
+  const ov = document.getElementById('pad-help'); if (!ov) return;
+  if (ov.classList.contains('open')) { ov.classList.remove('open'); return; }
+  const g = padGlyph;
+  ov.innerHTML =
+    `<div class="pad-help-card">
+       <div class="pad-help-title">Controller</div>
+       <div class="pad-help-sec">In the dungeon</div>
+       ${padHelpRow(g('lstick'), 'Move')}
+       ${padHelpRow(g('r2'), 'Sprint (hold)')}
+       ${padHelpRow(g('r1'), 'Dash')}
+       ${padHelpRow(g('cross'), 'Interact / use / open chest')}
+       ${padHelpRow(g('circle'), 'Open Bag')}
+       ${padHelpRow(g('square'), 'Toggle log')}
+       ${padHelpRow(g('triangle'), 'Town portal')}
+       ${padHelpRow(g('l1') + ' + ' + g('cross') + g('circle') + g('square') + g('triangle'), 'Cast skills 1–4')}
+       ${padHelpRow(g('dpad') + ' ←/→', 'Health / Mana potion')}
+       ${padHelpRow(g('dpad') + ' ↑/↓', 'Swap weapon / target focus')}
+       ${padHelpRow(g('rstick'), 'Inspect a foe')}
+       <div class="pad-help-sec">In menus</div>
+       ${padHelpRow(g('dpad') + ' / ' + g('lstick'), 'Move selection (tooltip shows)')}
+       ${padHelpRow(g('cross'), 'Select')}
+       ${padHelpRow(g('circle'), 'Back')}
+       ${padHelpRow(g('l1') + ' / ' + g('r1'), 'Switch tabs')}
+       <div class="pad-help-sec">Anywhere</div>
+       ${padHelpRow(g('options'), 'Pause / settings')}
+       ${padHelpRow(g('r3'), 'Virtual cursor (a mouse on the stick)')}
+       ${padHelpRow(g('view'), 'This help')}
+       <button class="pad-kb-key wide done" onclick="togglePadHelp()" style="margin-top:8px">Close</button>
+     </div>`;
+  ov.classList.add('open');
+}
+
+// ── connect / disconnect ──
+window.addEventListener('gamepadconnected', (e) => { _padGlyphs = padDetectGlyphs(e.gamepad && e.gamepad.id); });
+window.addEventListener('gamepaddisconnected', () => { if (!firstGamepad()) { _padPrev = {}; setPadMode(false); } });
+
+// ══════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════
 
@@ -27020,6 +28074,7 @@ function migrateHeroMaterials() {
       const d = JSON.parse(raw);
       const p = d && d.player;
       if (!p || !p.materials || typeof p.materials !== 'object') continue;
+      if (isSsf(p)) continue; // an SSF hero's wallet is private BY DESIGN — never fold it into the shared pool
       foldHeroMaterials(stashFor(!!p.hardcore), heroMatKey(p, i), p.materials);
     } catch (e) {}
   }
@@ -27039,7 +28094,7 @@ function loadStash() {
   // If the sweep already ran on a prior boot, the ACTIVE hero may be one that synced
   // down from the cloud since — fold its legacy wallet too (same per-hero key, so an
   // already-swept hero re-folds idempotently and a new one is captured).
-  if (alreadySwept && player && player.materials && typeof player.materials === 'object') {
+  if (alreadySwept && player && !isSsf(player) && player.materials && typeof player.materials === 'object') {
     foldHeroMaterials(stashFor(!!player.hardcore), heroMatKey(player, activeSlot), player.materials);
   }
   stash = stashFor(!!(player && player.hardcore)); // active ladder for this session
@@ -27143,6 +28198,8 @@ function loadGame() {
     // (see loadStash → migrateHeroMaterials). Any legacy `player.materials` on an
     // older save is left untouched here and folded into the shared pool once, on
     // load, by that migration — so no wallet is lost and nothing double-counts.
+    // (A Solo Self-Found hero's `player.materials` is their LIVE private wallet —
+    // the migration skips them, and it must stay on the save untouched.)
     // Migrate saves that predate auto-loot: seed the per-rarity rule map (all
     // 'keep', i.e. the feature off) and repair any invalid/missing entries.
     autoLootConfig();
@@ -27402,6 +28459,7 @@ function recordFallenHero() {
     gold: player.maxGold || player.gold || 0,
     playMs: player.playMs || 0,
     hardcore: !!player.hardcore,
+    ssf: !!player.ssf,
     ts: Date.now(),
   });
   saveGraveyard(filtered);
@@ -27486,6 +28544,9 @@ function nAchGrant(id) {
 // The pixel skull/cursed tile that brands everything hardcore (toggle, tags,
 // graveyard, death screen), referenced directly by its atlas key.
 function hcIcon(px) { return (typeof dlIcon === 'function' && dlIcon('ic_cursed', px)) || ''; }
+// The pixel bag that brands everything Solo Self-Found (toggle, tags) — the
+// hero's own bag is all they ever have.
+function ssfIcon(px) { return (typeof dlIcon === 'function' && dlIcon('ui_bag', px)) || ''; }
 
 // ── DELETION TOMBSTONE LEDGER (cross-device delete propagation) ──────────────
 // The mirror image of the hardcore death ledger, but for ordinary user-initiated
@@ -27740,6 +28801,7 @@ function slotSummary(i) {
       gold: p.gold || 0,
       inTown: !!d.inTown,
       hardcore: !!p.hardcore,
+      ssf: !!p.ssf,
       ts: d.ts || 0,
       playMs: p.playMs || 0,
     };
@@ -27809,6 +28871,7 @@ function renderSlots() {
     const badge = isActive ? '<span class="slot-badge">PLAYING</span>' : '';
     const icon = heroFaceIcon(s.cls, s.sex, 24) || dlIcon(s.cls ? CLASSES[s.cls].icon : 'npc_mage', 24);
     const who = escapeHtml(s.name || 'Adventurer');
+    const clsTag = s.cls ? ` <span class="slot-cls">· ${CLASSES[s.cls].name}</span>` : '';
     const where = s.inTown ? 'In Town' : lbFloorLabel(s.floor);
     const time = slotTimeAgo(s.ts);
     const playBtn = isActive
@@ -27817,11 +28880,12 @@ function renderSlots() {
     const armed = slotDeleteArmed === i;
     const delBtn = `<button class="slot-btn danger${armed ? ' armed' : ''}" onclick="deleteSlot(${i})">${armed ? 'Sure?' : 'Del'}</button>`;
     const hcMark = s.hardcore ? `<span class="hc-tag">${hcIcon(10)} HC</span>` : '';
+    const ssfMark = s.ssf ? `<span class="hc-tag ssf">${ssfIcon(10)} SSF</span>` : '';
     html += `<div class="slot-row${isActive ? ' active' : ''}">
       <div class="slot-head">
         <span class="slot-num">SLOT ${i + 1}</span>${badge}
         <span class="slot-class">${icon}</span>
-        <span class="slot-name">${who}</span>${hcMark}
+        <span class="slot-name">${who}${clsTag}</span>${hcMark}${ssfMark}
       </div>
       <div class="slot-stats">Lv ${s.level} · ${where} · <span data-spr=ic_money></span>${fmtGold(s.gold)} · <span class="slot-time">⏱️ ${formatPlayTime(s.playMs)}</span>${time ? ` · <span class="slot-time">saved ${time}</span>` : ''}</div>
       <div class="slot-actions">${playBtn}${delBtn}</div>
@@ -27954,7 +29018,7 @@ const LB_SORTS = {
   power: { col: 'power',     fmt: v => PWR_GLYPH + abbreviateNumber(v) },
 };
 let lbTab = 'floor';
-let lbMode = 'std';       // which ladder is shown: 'std' (non-hardcore) or 'hc' (hardcore only)
+let lbMode = 'std';       // which ladder is shown: 'std' (non-hardcore), 'hc' (hardcore only), or 'ssf' (solo self-found, cross-cutting)
 let lbLastSig = '';       // last-submitted stat signature — skips no-op writes
 let lbSubmitTimer = null; // pending debounced submit, if any
 let lbRows = [];          // the currently-rendered board rows (so a click can open a hero's snapshot)
@@ -28033,6 +29097,7 @@ function lbEntryFromPlayer() {
     gold: lbInt(player.maxGold || player.gold || 0, 0),
     power: lbInt(player.maxPower || playerPower() || 1, 1),
     hardcore: !!player.hardcore,
+    ssf: !!player.ssf,                // Solo Self-Found — its own cross-cutting ladder
     loadout: lbLoadoutFromPlayer(),   // full build snapshot, shown when the row is clicked
   };
 }
@@ -28043,7 +29108,7 @@ function lbScheduleSubmit() {
   if (!player || !player.name) return;
   player.maxGold = Math.max(player.maxGold || 0, player.gold || 0);
   player.maxPower = Math.max(player.maxPower || 0, playerPower() || 0);
-  const sig = [player.name, player.maxFloor || 1, player.level || 1, player.maxGold || 0, player.maxPower || 0, player.class || '', player.ascension || '', player.hardcore ? 'hc' : ''].join('|');
+  const sig = [player.name, player.maxFloor || 1, player.level || 1, player.maxGold || 0, player.maxPower || 0, player.class || '', player.ascension || '', player.hardcore ? 'hc' : '', player.ssf ? 'ssf' : ''].join('|');
   if (sig === lbLastSig) return;
   lbLastSig = sig;
   if (lbSubmitTimer) return; // a write is already queued; it'll pick up the latest stats
@@ -28076,6 +29141,7 @@ function lbSubmitLocal(entry) {
         gold: Math.max(all[i].gold || 0, entry.gold),
         power: Math.max(all[i].power || 1, entry.power),
         hardcore: !!entry.hardcore,
+        ssf: !!entry.ssf,     // whichever hero currently holds this name+ladder slot
         loadout: entry.loadout || all[i].loadout || null, // freshest build snapshot
       };
     } else {
@@ -28084,10 +29150,17 @@ function lbSubmitLocal(entry) {
     localStorage.setItem(LB_LOCAL_KEY, JSON.stringify(all));
   } catch (e) {}
 }
-function lbFetchLocal(col, hcOnly) {
+// Local mirror, filtered to one ladder. Standard/Hardcore partition on the
+// hardcore flag; SSF is a cross-cut (every self-found hero) — mirroring the
+// server's ladderFilter, so an SSF hero shows on both their Standard/Hardcore
+// board and the SSF board.
+function lbFetchLocal(col, ladder) {
   let all = [];
   try { all = JSON.parse(localStorage.getItem(LB_LOCAL_KEY) || '[]'); } catch (e) {}
-  return all.filter(e => e && !!e.hardcore === !!hcOnly).sort((a, b) => (b[col] || 0) - (a[col] || 0));
+  const keep = ladder === 'ssf' ? (e => !!e.ssf)
+    : ladder === 'hc' || ladder === true ? (e => !!e.hardcore)
+    : (e => !e.hardcore);
+  return all.filter(e => e && keep(e)).sort((a, b) => (b[col] || 0) - (a[col] || 0));
 }
 
 // Fetch a board's full ranking. Returns { rows, local } — local is true when no
@@ -28097,10 +29170,9 @@ function lbFetchLocal(col, hcOnly) {
 // over to the local mirror instead of leaving the board stuck on "Loading…".
 async function lbFetch(tab) {
   const sort = LB_SORTS[tab] || LB_SORTS.floor;
-  const hcOnly = lbMode === 'hc';
-  if (!lbEnabled()) return { rows: lbFetchLocal(sort.col, hcOnly), local: true };
+  if (!lbEnabled()) return { rows: lbFetchLocal(sort.col, lbMode), local: true };
   // Paging + Range headers + abort-timeout live in the repository.
-  const rows = await _lbRepo.fetchBoard(sort.col, hcOnly);
+  const rows = await _lbRepo.fetchBoard(sort.col, lbMode);
   return { rows, local: false };
 }
 
@@ -28118,19 +29190,19 @@ function closeLeaderboard() {
   const ov = document.getElementById('lb-overlay');
   if (ov) ov.classList.remove('open');
 }
-// Light up the active sort tab and Standard/Hardcore mode button, and tint the
-// modal crimson while the Hardcore ladder is shown.
+// Light up the active sort tab and ladder button, and tint the modal to match the
+// selected ladder — crimson for Hardcore, gold for Solo Self-Found.
 function syncLbButtons() {
   ['floor', 'level', 'gold', 'power'].forEach(t => {
     const el = document.getElementById('lb-tab-' + t);
     if (el) el.classList.toggle('on', t === lbTab);
   });
-  ['std', 'hc'].forEach(m => {
+  ['std', 'hc', 'ssf'].forEach(m => {
     const el = document.getElementById('lb-mode-' + m);
     if (el) el.classList.toggle('on', m === lbMode);
   });
   const modal = document.getElementById('lb-modal');
-  if (modal) modal.classList.toggle('hc', lbMode === 'hc');
+  if (modal) { modal.classList.toggle('hc', lbMode === 'hc'); modal.classList.toggle('ssf', lbMode === 'ssf'); }
 }
 function setLbTab(tab) {
   lbTab = LB_SORTS[tab] ? tab : 'floor';
@@ -28138,13 +29210,23 @@ function setLbTab(tab) {
   renderLeaderboard();
 }
 function setLbMode(mode) {
-  lbMode = (mode === 'hc') ? 'hc' : 'std';
+  lbMode = (mode === 'hc' || mode === 'ssf') ? mode : 'std';
   syncLbButtons();
   renderLeaderboard();
 }
 // A row's specialization label: the ascension (subclass) name in its signature
 // colour once the hero has ascended, otherwise the plain base-class name. Older
 // rows with an unknown/missing class read as "Wanderer".
+// Small ladder chips on a board row: mark a hero for any mode flag they carry
+// that ISN'T already implied by the board you're viewing. So the Standard board
+// flags self-found heroes with a gold SSF chip, the Hardcore board flags the
+// SSF ones too, and the SSF board flags the hardcore ones with a crimson HC chip.
+function lbModeChips(r) {
+  let s = '';
+  if (r.hardcore && lbMode !== 'hc') s += ` <span class="hc-tag">${hcIcon(9)} HC</span>`;
+  if (r.ssf && lbMode !== 'ssf') s += ` <span class="hc-tag ssf">${ssfIcon(9)} SSF</span>`;
+  return s;
+}
 function lbSubclassLabel(r) {
   const asc = r.ascension && typeof ASCENSIONS === 'object' && ASCENSIONS[r.ascension];
   if (asc) return `<span class="lb-asc" style="color:${asc.color}">${dlIcon(asc.icon, 14) || ''}${escapeHtml(asc.name)}</span>`;
@@ -28176,14 +29258,14 @@ async function renderLeaderboard() {
     data = await lbFetch(lbTab);
   } catch (e) {
     // Couldn't reach the global board — fall back to the local mirror.
-    data = { rows: lbFetchLocal(sort.col, lbMode === 'hc'), local: true, errored: true };
+    data = { rows: lbFetchLocal(sort.col, lbMode), local: true, errored: true };
   }
   // A slow fetch could resolve after the player switched tabs; ignore if so.
   if (!document.getElementById('lb-overlay').classList.contains('open')) return;
   const rows = data.rows || [];
   if (data.errored) status.textContent = '⚠️ Could not reach the global board — showing scores from this device.';
   else if (data.local) status.textContent = 'Local leaderboard (no backend configured yet).';
-  else { const scope = lbMode === 'hc' ? 'Hardcore' : 'Standard'; status.textContent = rows.length ? 'Global · ' + scope + ' · ' + rows.length + ' hero' + (rows.length === 1 ? '' : 'es') : 'Global ' + scope + ' leaderboard'; }
+  else { const scope = lbMode === 'hc' ? 'Hardcore' : lbMode === 'ssf' ? 'Solo Self-Found' : 'Standard'; status.textContent = rows.length ? 'Global · ' + scope + ' · ' + rows.length + ' hero' + (rows.length === 1 ? '' : 'es') : 'Global ' + scope + ' leaderboard'; }
   if (!rows.length) {
     list.innerHTML = '<div class="lb-row"><span class="lb-name">No heroes yet — be the first!</span></div>';
     return;
@@ -28206,7 +29288,7 @@ async function renderLeaderboard() {
       <div class="lb-row-main">
         <span class="lb-rank">${i + 1}</span>
         <span class="lb-class">${cls}</span>
-        <span class="lb-name">${escapeHtml(r.name)}</span>
+        <span class="lb-name">${escapeHtml(r.name)}${lbModeChips(r)}</span>
         <span class="lb-val">${sort.fmt(r[sort.col] || 0)}</span>
         <span class="lb-row-chevron" aria-hidden="true">›</span>
       </div>
@@ -28230,6 +29312,7 @@ function openLbHero(i) {
   const body = document.getElementById('lb-hero-body');
   ov.classList.add('open');
   ov.classList.toggle('hc', !!r.hardcore);
+  ov.classList.toggle('ssf', !!r.ssf && !r.hardcore); // gold frame for a self-found (non-hardcore) hero; HC red wins if both
   // Header first (always available from the row); body shows the build once loaded.
   const head = document.getElementById('lb-hero-head');
   if (head) head.innerHTML = lbHeroHeadHTML(r);
@@ -28258,11 +29341,12 @@ function lbHeroHeadHTML(r) {
   const sex = (r.loadout && r.loadout.sex) || 'male';
   const face = heroFaceIcon(r.player_class, sex, 56) || dlIcon(r.player_class && CLASSES[r.player_class] ? CLASSES[r.player_class].icon : 'npc_mage', 56);
   const hcTag = r.hardcore ? `<span class="lb-hero-hc">${hcIcon(13)} Hardcore</span>` : '';
+  const ssfTag = r.ssf ? `<span class="lb-hero-hc ssf">${ssfIcon(13)} Solo Self-Found</span>` : '';
   const stat = (label, val) => `<div class="lb-hero-stat"><span class="lhs-k">${label}</span><span class="lhs-v">${val}</span></div>`;
   return `
     <div class="lb-hero-face">${face}</div>
     <div class="lb-hero-id">
-      <div class="lb-hero-name">${escapeHtml(r.name)}${hcTag}</div>
+      <div class="lb-hero-name">${escapeHtml(r.name)}${hcTag}${ssfTag}</div>
       <div class="lb-hero-sub">${lbSubclassLabel(r)}</div>
       <div class="lb-hero-stats">
         ${stat(`${dlIcon('ic_down', 13) || ''} Depth`, lbFloorLabel(r.max_floor || 1))}
@@ -28284,14 +29368,36 @@ function lbSkillNode(classKey, ascKey, id) {
   return null;
 }
 
+// The per-attribute bonus a snapshot's worn gear grants, mirroring totalAttr's gear
+// loop: each piece's +attr, scaled by its boss-point slot multiplier. Derived from
+// the already-stored gear/slotLevels so the card shows base + gear like the live
+// hero sheet — no extra field on the saved blob, and old rows work too.
+function lbGearAttrBonus(lo) {
+  const out = {};
+  const gear = (lo && lo.gear) || {};
+  const lv = (lo && lo.slotLevels) || {};
+  for (const slot of SLOT_KEYS) {
+    const it = gear[slot];
+    if (!it || !it.attrs) continue;
+    const m = lv[slot] ? slotMultiplier(lv[slot]) : 1;
+    for (const k in it.attrs) {
+      if (typeof it.attrs[k] === 'number') out[k] = (out[k] || 0) + it.attrs[k] * m;
+    }
+  }
+  return out;
+}
 // The body: attributes, worn gear and learned skills read from the loadout blob.
 function lbHeroBuildHTML(r, lo) {
   lo = lo || {};
   const attrs = lo.attributes || {};
-  // Attributes — every key in canonical order, icon + name + value.
+  const gearAttr = lbGearAttrBonus(lo);
+  // Attributes — every key in canonical order, icon + name + the base (spent) value
+  // plus any gear bonus in green, so the total the hero fights with is visible.
   const attrRow = ATTR_KEYS.map(k => {
     const a = ATTRIBUTES[k] || {};
-    return `<div class="lb-attr"><span class="lb-attr-ic">${dlIcon(a.sprite, 18) || ''}</span><span class="lb-attr-name">${a.label || k}</span><span class="lb-attr-val">${abbreviateNumber(attrs[k] || 0)}</span></div>`;
+    const gb = Math.round(gearAttr[k] || 0);
+    const gearStr = gb ? ` <span class="lb-attr-gear">+${abbreviateNumber(gb)}</span>` : '';
+    return `<div class="lb-attr"><span class="lb-attr-ic">${dlIcon(a.sprite, 18) || ''}</span><span class="lb-attr-name">${a.label || k}</span><span class="lb-attr-val">${abbreviateNumber(attrs[k] || 0)}${gearStr}</span></div>`;
   }).join('');
   // Gear — one tile per slot; empty slots read as such so the paperdoll is complete.
   const gear = lo.gear || {};
@@ -29248,6 +30354,13 @@ function showNameEntry() {
   const lbl = document.getElementById('hc-tog-label');
   if (lbl) lbl.innerHTML = `${hcIcon(14)} HARDCORE`;
   syncHardcoreToggle();
+  // Solo Self-Found rides the same pattern: an armed toggle survives backing out,
+  // the label wears the pixel bag, and the row styling tracks the checkbox.
+  const scb = document.getElementById('ssf-checkbox');
+  if (scb) scb.checked = !!(player.ssf || scb.checked);
+  const slbl = document.getElementById('ssf-tog-label');
+  if (slbl) slbl.innerHTML = `${ssfIcon(14)} SOLO SELF-FOUND`;
+  syncSsfToggle();
   // Body-type picker: default to any previous/in-progress choice, else male.
   // Classes with bespoke male/female art show the sprite previews; the rest hide
   // the thumbnails but still record a choice.
@@ -29273,6 +30386,12 @@ function nameBack() {
 function syncHardcoreToggle() {
   const cb = document.getElementById('hc-checkbox');
   const row = document.getElementById('hc-toggle');
+  if (row) row.classList.toggle('on', !!(cb && cb.checked));
+}
+// Same for the Solo Self-Found row (gold when armed).
+function syncSsfToggle() {
+  const cb = document.getElementById('ssf-checkbox');
+  const row = document.getElementById('ssf-toggle');
   if (row) row.classList.toggle('on', !!(cb && cb.checked));
 }
 // Body-type (sex) picker state for the name screen. pendingSex holds the choice
@@ -29316,6 +30435,10 @@ function submitName() {
   // fresh hero, so there's no path to un-hardcore an existing one.
   const cb = document.getElementById('hc-checkbox');
   if (cb && cb.checked) player.hardcore = true;
+  // Solo Self-Found locks in the same way — the name screen only shows for a
+  // fresh hero, so there's never a path to un-SSF an existing one.
+  const scb = document.getElementById('ssf-checkbox');
+  if (scb && scb.checked) player.ssf = true;
   const ov = document.getElementById('name-overlay');
   if (ov) ov.classList.remove('open');
   namePaused = false; // resume — naming is done
@@ -29637,7 +30760,13 @@ function heroCardHtml() {
   const lvl = player.level || 1;
   const deepest = player.maxFloor || 1;
   const gold = fmtGold ? fmtGold(player.gold || 0) : (player.gold || 0);
-  const hcTag = player.hardcore ? `<div><span class="hc-tag">${hcIcon(11)} HARDCORE · ONE LIFE</span></div>` : '';
+  // Mode tags under the stats line — crimson HARDCORE, gold SOLO SELF-FOUND
+  // (a hero can wear both).
+  const modeTags = [
+    player.hardcore ? `<span class="hc-tag">${hcIcon(11)} HARDCORE · ONE LIFE</span>` : '',
+    player.ssf ? `<span class="hc-tag ssf">${ssfIcon(11)} SOLO SELF-FOUND</span>` : '',
+  ].filter(Boolean).join(' ');
+  const hcTag = modeTags ? `<div>${modeTags}</div>` : '';
   // An animated walking hero sprite sits to the RIGHT of the left-aligned text,
   // standing a bit taller than the stacked name/class/stats block so it reads big.
   // Falls back to the static face (then atlas tile) until the walk sheet has loaded.
@@ -29832,7 +30961,7 @@ try {
       try {
         dungeonLevel = Math.max(1, lvl | 0);
         try { tutorialActive = false; } catch (e) {}
-        try { floorThemeOverride = null; } catch (e) {}
+        try { floorThemeOverride = null; floorIslandTheme = null; previewForceIndoor = null; previewForceIsland = false; } catch (e) {}
         revivedInTown = false; closeTown(); recordDepth();
         statusEffects = []; setPlayerCell(5, 5); arrivalDir = 'down';
         generateMap();
@@ -29844,8 +30973,28 @@ try {
         let w = 0, l = 0, trees = 0, decor = 0;
         for (const k in decorMap) { decor++; if (DECOR_INDEX[decorMap[k]].ht >= 2.4) trees++; }
         for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) { const t = mapData[y][x]; if (t === 6) w++; else if (t === 7) l++; }
-        return { level: lvl, biome: (currentTheme().name || ''), indoor: !!currentTheme().indoor, water: w, lava: l, trees, decor };
+        return { level: lvl, biome: (currentTheme().name || ''), indoor: !!currentTheme().indoor, island: !!floorIslandTheme, water: w, lava: l, trees, decor };
       } catch (e) { return { err: String(e) }; }
+    };
+    // Force an ISLAND floor and regenerate, so the sea-ringed layout can be
+    // previewed deterministically (normally ~12% of outdoor floors, at random).
+    window.__previewIsland = function (lvl) {
+      try {
+        dungeonLevel = Math.max(1, (lvl == null ? dungeonLevel : lvl) | 0);
+        if (dungeonLevel % 5 === 0) dungeonLevel++;   // dodge boss floors (fixed arenas, no island)
+        tutorialActive = false; floorThemeOverride = null; previewForceIndoor = null;
+        previewForceIsland = true;
+        revivedInTown = false; closeTown(); recordDepth();
+        statusEffects = []; setPlayerCell(5, 5); arrivalDir = 'down';
+        generateMap();
+        previewForceIsland = false;
+        player.hp = player.maxHp = 9999999; player.mp = player.maxMp = 9999999;
+        if (typeof closeTitle === 'function') closeTitle();
+        updateBars(); draw();
+        let sea = 0;
+        for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (mapData[y][x] === 6) sea++;
+        return { level: dungeonLevel, biome: (currentTheme().name || ''), island: !!floorIslandTheme, sea };
+      } catch (e) { previewForceIsland = false; return { err: String(e) }; }
     };
     // Preview helper: stage a cracked wall (tile 10) on screen at a chosen hit
     // count, optionally pre-mask (raw full-tile fracture), park the hero a few
@@ -30209,8 +31358,8 @@ function pickAutoTarget() {
   let best = null, bestScore = Infinity, bestD = Infinity;
   for (const e of enemies) {
     if (e.dead) continue;
-    const d = footChebyshev(e);
-    if (d > range) continue;
+    const d = footReachDist(e);                    // fractional reach from the body centre
+    if (d > range + MELEE_REACH_BONUS) continue;   // …plus a half-tile of forgiveness
     if (ranged && !hasLineToPlayer(e)) continue;  // can't shoot through walls
     const score = autoTargetScore(e, d, mode);    // pick by the player's target priority
     if (score < bestScore || (score === bestScore && d < bestD)) { bestScore = score; bestD = d; best = e; }
@@ -30311,59 +31460,23 @@ function glideActor(a, tx, ty, dt) {
     a.faceDx = dx; a.faceDy = dy;                       // remember heading (for facing)
   }
 }
-// A foe's continuous move speed (tiles/sec), derived from its archetype so a swift
-// vermin flows fast and a brute lumbers — chilled/slowed foes drag.
-function enemyRenderSpeed(e) {
-  const beh = BEHAVIORS[e.behavior] || BEHAVIORS.chaser;
-  let s = 2.7 * (beh.speed || 1);                 // chaser 2.7 t/s · swift ~5.4
-  if (beh.slow || e.slow) s *= 0.6;
-  if (isChilled(e)) s *= 0.5;
-  return s;
-}
-// Terrain-only solidity for a foe's smooth movement (walls, deep water, boss walls,
-// solid furniture) — foes don't block each other here, so they never gridlock.
-function enemyTerrainSolid(x, y) {
-  if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return true;
-  if (!isFloorPassable(mapData[y][x])) return true;
-  if (bossWallAt(x, y)) return true;
-  if (furnitureMap[y + ',' + x] !== undefined) return true;
-  return false;
-}
-function enemyBoxBlocked(fx, fy) {
-  const r = 0.34, e = 1e-4;                        // a little smaller than a tile so it hugs corners
-  const x0 = Math.floor(fx - r), x1 = Math.floor(fx + r - e);
-  const y0 = Math.floor(fy - r), y1 = Math.floor(fy + r - e);
-  return enemyTerrainSolid(x0, y0) || enemyTerrainSolid(x1, y0) ||
-         enemyTerrainSolid(x0, y1) || enemyTerrainSolid(x1, y1);
-}
 function updateActorRender(dt) {
   for (const e of enemies) {
     if (e.atkCd > 0) e.atkCd -= dt;               // real-time attack cooldown
     const s = e.size || 1;
-    const cx = e.x + s / 2, cy = e.y + s / 2;     // logic-tile centre
-    // Aggro single-tile foes CONTINUOUSLY pursue the hero's live position every
-    // frame — so they flow with you instead of stepping to a stale tile then
-    // pausing. The sprite is kept within ~1 tile of its (always-walkable) logic
-    // cell, which advances on the world tick, so collision/attacks (keyed off
-    // e.x/e.y) stay honest and it never drifts through a wall. Non-aggro foes,
-    // foes mid-teleport, and multi-tile bosses use the plain tile glide.
-    const _ms = (s === 1 && e.aggro && !e.dead) ? enemyMoveStatus(e) : null;
-    if (s === 1 && e.aggro && !e.dead && !(_ms && _ms.stun)) {
-      if (e.fx == null || Math.abs(e.fx - cx) > 2.0 || Math.abs(e.fy - cy) > 2.0) { e.fx = cx; e.fy = cy; }
-      const spd = enemyRenderSpeed(e);
-      const dx = player.fx - e.fx, dy = player.fy - e.fy, d = Math.hypot(dx, dy) || 1;
-      if (d > 0.72) {                              // don't pile onto the hero
-        const step = Math.min(d - 0.72, spd * dt);
-        const CL = 0.85;                           // max lead/lag from the logic cell
-        let nfx = Math.max(cx - CL, Math.min(cx + CL, e.fx + dx / d * step));
-        let nfy = Math.max(cy - CL, Math.min(cy + CL, e.fy + dy / d * step));
-        if (!enemyBoxBlocked(nfx, e.fy)) e.fx = nfx;   // axis-separated → slides along walls
-        if (!enemyBoxBlocked(e.fx, nfy)) e.fy = nfy;
-        e.faceDx = dx; e.faceDy = dy;
-      }
-    } else {
-      glideActor(e, cx, cy, dt);                  // footprint centre
-    }
+    // Every foe — aggro vermin, lumbering brute, or multi-tile boss — glides its
+    // sprite toward its OWN logic cell (e.x/e.y), the tile the AI, collision and
+    // attacks all key off. This is the hero's model, inverted: the hero derives its
+    // cell from its smooth position; a foe derives its smooth position from its
+    // cell. Either way the sprite and the logic tile stay locked together, so the
+    // sprite never drifts a tile away from — or across a wall from — where the foe
+    // actually is, and a bolt or lunge launched from the sprite lands true. (Foes
+    // used to beeline the sprite at the hero's live sub-tile position, letting it
+    // lead its cell by up to ~0.85 tiles — the source of "the animation came from
+    // the tile next to the enemy.") glideActor covers each cell-to-cell step in one
+    // world beat at constant velocity, so a pursuit still reads as smooth, unbroken
+    // motion; a real teleport (blink, floor rebuild) snaps instead of sliding.
+    glideActor(e, e.x + s / 2, e.y + s / 2, dt);  // footprint centre
   }
   // The quest NPC (an escorted follower, or a wandering lost pet) glides toward its
   // logic cell in the same top-left convention as npc.x/npc.y (the draw code adds
@@ -30508,6 +31621,7 @@ function gameLoop(ts) {
   _lastTs = ts;
   if (dt > 0.1) dt = 0.1;          // clamp after a stall so nothing teleports
   perfFrameSample(ts, dt);         // dev perf HUD sampling — a single boolean check while hidden
+  safeStep('pad', () => pollGamepads(ts, dt));   // controller: poll + route (menus work while paused)
   tickAnimClock(ts);               // advance the looping-animation clock (frozen while paused)
   // The teleport fade/beam animation runs on its own even while the world is paused
   // by it (rtPaused → true during transit) — it must keep playing to reach the warp.
@@ -30525,10 +31639,13 @@ function gameLoop(ts) {
     if (!rtPaused()) safeStep('hazards', () => { updateTraps(dt); updateProjectiles(dt); stepBossTelegraphs(dt); });
   } else if (inTown && !clockPaused()) {
     // In town the hero can't move or fight, but time still flows just like standing
-    // still in the dungeon: HP/MP regen, skill & potion cooldowns, and status/buff
-    // timers all keep ticking. Movement, combat and hazards stay paused.
+    // still in the dungeon: HP/MP AND Stamina regen, skill & potion cooldowns, and
+    // status/buff timers all keep ticking. Movement, combat and hazards stay paused.
+    // Stamina regen normally rides in updatePlayer(), which is gated out in town
+    // (rtPaused), so refill it here or it would sit frozen while HP/MP recover.
     safeStep('cooldowns', () => tickCooldowns(dt));
     safeStep('world', () => stepWorldClock(dt));
+    safeStep('stamRegen', () => regenStamina(dt));
   }
   safeStep('actorRender', () => updateActorRender(dt));
   safeStep('hudFlush', () => flushHudDirty());     // damage events mark the HUD dirty; one updateBars() lands here same-frame
@@ -30561,6 +31678,10 @@ requestAnimationFrame(gameLoop);
 // This shrinks as handlers move to delegated listeners during extraction.
 // ===================================================================
 const __DL_FN_BRIDGE = {
+  // Controller layer — the keyboard/help overlays render inline onclick= handlers,
+  // and a few are handy to reach from tests.
+  togglePadHelp, padKbType, padKbSpace, padKbBack, padKbShift, padKbRandom, padKbDone, padKbOpen,
+  pollGamepads, setPadMode, padToggleCursor,
   slotLabelIcon,
   isCasterGear,
   itemStatPool,
@@ -31019,6 +32140,11 @@ const __DL_FN_BRIDGE = {
   shopBack,
   shopClose,
   renderShop,
+  setShopSort,
+  toggleShopSortMenu,
+  toggleShopFilterMenu,
+  toggleShopStat,
+  clearShopStats,
   shopTab,
   shopSell,
   shopScrap,
@@ -31112,6 +32238,13 @@ const __DL_FN_BRIDGE = {
   eatBowl,
   assignMeal,
   unassignMeal,
+  trashBowlStack,
+  mealDragStart,
+  mealDragEnd,
+  mealSlotDragOver,
+  mealSlotDragEnter,
+  mealSlotDragLeave,
+  mealSlotDrop,
   eatMealSlot,
   renderCookingHTML,
   craftIlvl,
@@ -31462,7 +32595,8 @@ const __DL_FN_BRIDGE = {
   enemyWander,
   wanderStep,
   enemyAct,
-  footChebyshev,
+  footReachDist,
+  inWeaponReachOf,
   stepAwayFromPlayer,
   goblinEscape,
   goblinFlee,
@@ -31754,6 +32888,7 @@ const __DL_FN_BRIDGE = {
   showNameEntry,
   nameBack,
   syncHardcoreToggle,
+  syncSsfToggle,
   pickSex,
   refreshSexPreviews,
   submitName,

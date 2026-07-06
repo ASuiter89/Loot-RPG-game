@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   mealSignature, emptyMealSlots, sanitizeMealSlots, filledSlotCount,
-  assignMealToSlot, takeFromMealSlot, returnSlotToPantry,
+  assignMealToSlot, assignMealToSlotAt, groupPantry, removePantryStack,
+  takeFromMealSlot, returnSlotToPantry,
 } from '../../src/systems/meals.js';
 
 const bowl = (name, fx = { hp: 10 }, floors = 3, recipe) => ({ name, fx, floors, recipe });
@@ -108,6 +109,80 @@ describe('assignMealToSlot', () => {
     assignMealToSlot(pantry, slots, 0, 2);
     expect(pantry).toEqual([bowl('Spicy')]);
     expect(slots).toEqual([null, null]);
+  });
+});
+
+describe('assignMealToSlotAt', () => {
+  it('fills the exact empty slot the bowl was dropped on', () => {
+    const pantry = [bowl('Spicy'), bowl('Mild'), bowl('Spicy')];
+    const r = assignMealToSlotAt(pantry, emptyMealSlots(3), 0, 2, 3);
+    expect(r.assigned).toBe(2);
+    expect(r.mealSlots[2]).toEqual({ bowl: bowl('Spicy'), qty: 2 });
+    expect(r.mealSlots[0]).toBeNull();
+    expect(r.pantry).toEqual([bowl('Mild')]);
+  });
+  it('merges into the target slot when it already holds the same meal', () => {
+    const slots = sanitizeMealSlots([null, { bowl: bowl('Spicy'), qty: 1 }, null], 3);
+    const r = assignMealToSlotAt([bowl('Spicy'), bowl('Spicy')], slots, 0, 1, 3);
+    expect(r.assigned).toBe(2);
+    expect(r.mealSlots[1].qty).toBe(3);
+  });
+  it('refuses a slot already holding a different meal (assigned 0, nothing moved)', () => {
+    const slots = [{ bowl: bowl('Other'), qty: 1 }, null];
+    const r = assignMealToSlotAt([bowl('Spicy')], slots, 0, 0, 2);
+    expect(r.assigned).toBe(0);
+    expect(r.pantry).toEqual([bowl('Spicy')]);
+    expect(r.mealSlots[0]).toEqual({ bowl: bowl('Other'), qty: 1 });
+  });
+  it('no-ops for an out-of-range slot or missing pantry bowl', () => {
+    expect(assignMealToSlotAt([bowl('Spicy')], emptyMealSlots(2), 0, 5, 2).assigned).toBe(0);
+    expect(assignMealToSlotAt([bowl('Spicy')], emptyMealSlots(2), 9, 0, 2).assigned).toBe(0);
+  });
+  it('does not mutate the inputs', () => {
+    const pantry = [bowl('Spicy')];
+    const slots = emptyMealSlots(2);
+    assignMealToSlotAt(pantry, slots, 0, 0, 2);
+    expect(pantry).toEqual([bowl('Spicy')]);
+    expect(slots).toEqual([null, null]);
+  });
+});
+
+describe('groupPantry', () => {
+  it('is empty for an empty / non-array pantry', () => {
+    expect(groupPantry([])).toEqual([]);
+    expect(groupPantry(null)).toEqual([]);
+  });
+  it('collapses same-meal bowls into one entry with a count and the first index', () => {
+    const pantry = [bowl('Spicy'), bowl('Mild'), bowl('Spicy'), bowl('Spicy')];
+    const groups = groupPantry(pantry);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toMatchObject({ qty: 3, index: 0 });
+    expect(groups[0].bowl.name).toBe('Spicy');
+    expect(groups[1]).toMatchObject({ qty: 1, index: 1 });
+    expect(groups[1].bowl.name).toBe('Mild');
+  });
+  it('keeps first-seen order', () => {
+    const groups = groupPantry([bowl('C'), bowl('A'), bowl('C'), bowl('B')]);
+    expect(groups.map(g => g.bowl.name)).toEqual(['C', 'A', 'B']);
+  });
+});
+
+describe('removePantryStack', () => {
+  it('drops every bowl matching the one at the index', () => {
+    const pantry = [bowl('Spicy'), bowl('Mild'), bowl('Spicy'), bowl('Spicy')];
+    const r = removePantryStack(pantry, 0);
+    expect(r.removed).toBe(3);
+    expect(r.pantry).toEqual([bowl('Mild')]);
+  });
+  it('no-ops for an out-of-range index', () => {
+    const r = removePantryStack([bowl('Spicy')], 9);
+    expect(r.removed).toBe(0);
+    expect(r.pantry).toEqual([bowl('Spicy')]);
+  });
+  it('does not mutate the input pantry', () => {
+    const pantry = [bowl('Spicy'), bowl('Spicy')];
+    removePantryStack(pantry, 0);
+    expect(pantry).toHaveLength(2);
   });
 });
 

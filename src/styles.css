@@ -236,6 +236,9 @@
 
     /* ---- Z-index layers ---- */
     --z-hud: 50; --z-touch: 120; --z-overlay: 200; --z-modal: 210; --z-top: 300;
+    /* Controller layer sits above EVERY overlay (some use raw z up to ~620), so the
+       focus ring, virtual cursor and on-screen keyboard are never occluded. */
+    --z-pad: 700;
 
     /* ── UI FONT ── one knob for the whole interface. The player picks a face in
        <span data-spr=ic_mallet></span> Settings → Visuals → UI FONT; setUiFont() overrides this custom property at
@@ -570,7 +573,8 @@
   #objective-chip .obj-ic { font-size: 1.5rem; line-height: 1; }
   #objective-chip .obj-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #objective-chip .obj-text b { color: var(--gold); }
-  #objective-chip .obj-text .obj-done { color: var(--green-500); }
+  #objective-chip .obj-text .obj-done { color: var(--green-500); font-weight: bold; animation: objDonePulse 1.6s ease-in-out infinite; }
+  @keyframes objDonePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
   #objective-chip .obj-streak { color: var(--orange-800); font-weight: bold; }
 
   /* Greed gate — the risk/reward "cursed floor" choice modal. */
@@ -939,12 +943,23 @@
   .hc-tog-text { font-size: 1.3rem; color: var(--red-150); line-height: 1.45; }
   .hc-tog-text b { color: var(--red-350); letter-spacing: .5px; }
   .hc-tog-text .hc-tog-sub { display: block; color: var(--junk); font-size: 1.2rem; margin-top: 3px; }
+  /* Solo Self-Found toggle — the same component recolored gold-amber: SSF is a
+     self-reliance vow, not a death sentence, so it wears the treasure palette. */
+  .hc-toggle.ssf { border-color: var(--orange-650); }
+  .hc-toggle.ssf.on { border-color: var(--orange-550); background: var(--gold-850); box-shadow: 0 0 14px color-mix(in srgb, var(--gold-350) 25%, transparent); }
+  .hc-toggle.ssf .hc-tog-box { border-color: var(--orange-550); }
+  .hc-toggle.ssf.on .hc-tog-box { border-color: var(--gold-350); background: var(--orange-550); }
+  .hc-toggle.ssf .hc-tog-text { color: var(--gold-200); }
+  .hc-toggle.ssf .hc-tog-text b { color: var(--gold-350); }
 
   /* Small crimson "HARDCORE" tag reused on the title card, slots list and graveyard. */
   .hc-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 1.2rem; font-weight: bold;
     letter-spacing: 1px; color: var(--red-200); border: 1px solid var(--red-550); background: color-mix(in srgb, var(--red-800) 25%, transparent);
     border-radius: 4px; padding: 1px 5px; }
   .hc-tag .dl-ic { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--red-800) 50%, transparent)); }
+  /* …and its gold "SSF" twin. */
+  .hc-tag.ssf { color: var(--gold-200); border-color: var(--orange-550); background: color-mix(in srgb, var(--gold-850) 60%, transparent); }
+  .hc-tag.ssf .dl-ic { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--gold-350) 40%, transparent)); }
   .hero-card .hc-tag { margin-top: 8px; }
   .gy-row.hc { background: linear-gradient(90deg, color-mix(in srgb, var(--red-700) 16%, transparent), transparent); }
   .gy-row.hc .gy-name { color: var(--red-200); }
@@ -972,6 +987,13 @@
   /* ── VERSION HISTORY POPUP ── */
   #version-overlay, #howto-overlay, #achievements-overlay, #bestiary-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 60%, transparent); z-index: 400; display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 16px; }
   #version-overlay.open, #howto-overlay.open, #achievements-overlay.open, #bestiary-overlay.open { display: flex; }
+  /* Achievements + Bestiary pop FROM the settings/pause menu WITHOUT closing it —
+     unlike Version History / How-to (which are RT-blocking and remove the settings
+     menu on open), these two are not RT-blocking and lean on the still-open pause
+     menu to keep the world frozen behind them. So they must stack ABOVE the pause
+     menu (z 600) or they render behind its scrim. Kept below the slot picker (620)
+     and the hover tooltip (630). */
+  #achievements-overlay, #bestiary-overlay { z-index: 610; }
   #version-card, #howto-card, #achievements-card, #bestiary-card { margin: auto; background: linear-gradient(180deg, var(--panel), var(--panel)); border: 2px solid var(--frame); border-radius: 10px; max-width: 360px; width: 100%; max-height: 80vh; max-height: 80dvh; overflow-y: auto; padding: 14px; box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 60%, transparent); }
   /* Desktop has room — widen the Version History box so it's easier to skim, and
      the Achievements grid so its badges fill several across instead of a skinny
@@ -1719,6 +1741,8 @@
   .sb-meal:hover { border-color: var(--green-650); filter: brightness(1.12); }
   .sb-meal:active { background: var(--green-650); }
   .sb-meal.sb-meal-slot-empty { background: var(--panel); border: 1px dashed var(--border); opacity: 0.72; cursor: default; }
+  /* Belt meal tile lit up while a pantry bowl is dragged over it (drag-to-slot). */
+  .sb-meal.meal-drop-hot { border-color: var(--gold); box-shadow: 0 0 6px color-mix(in srgb, var(--gold) 55%, transparent); filter: brightness(1.15); opacity: 1; }
   .sb-meal-qty {
     position: absolute; right: 1px; bottom: 0; z-index: 4; padding: 0 4px; border-radius: 6px;
     background: color-mix(in srgb, var(--ink) 78%, transparent); color: var(--paper);
@@ -1739,8 +1763,18 @@
   .sb-bounty-meter { display: flex; align-items: center; gap: 6px; }
   .sb-bounty-track { flex: 1 1 auto; height: 6px; }
   .sb-bounty-fill { background: linear-gradient(90deg, var(--xp), var(--gold)); }
-  .sb-mod-bounty.done .sb-bounty-fill { background: var(--uncommon); }
   .sb-bounty-prog { flex: 0 0 auto; font-family: var(--font-ui); font-weight: bold; font-size: 1.2rem; color: var(--gold); white-space: nowrap; }
+  /* A completed contract announces itself so "ready to claim" reads at a glance: a
+     full green bar, a green ✓ count, and a gentle glow pulse on the whole module. */
+  .sb-mod-bounty.done .sb-bounty-fill { background: var(--uncommon); }
+  .sb-mod-bounty.done .sb-bounty-prog { color: var(--uncommon); }
+  .sb-mod-bounty.done .sb-bounty-body { border-color: var(--uncommon); animation: bountyReadyPulse 1.6s ease-in-out infinite; }
+  /* Inset glow (not an outer box-shadow) so the belt's overflow:auto never clips the
+     halo — it pulses inside the module's own border box. */
+  @keyframes bountyReadyPulse {
+    0%, 100% { box-shadow: inset 0 0 5px color-mix(in srgb, var(--uncommon) 35%, transparent); }
+    50%      { box-shadow: inset 0 0 12px color-mix(in srgb, var(--uncommon) 80%, transparent); }
+  }
 
   /* Gear body: the two Set buttons filling the cell height, EQUAL width via a 2-track
      grid (each 1fr sizes to the wider button). */
@@ -1857,11 +1891,21 @@
      collapsible instead of selecting the item. The padding gives the header a
      solid bottom edge that clears the first row (and its upgrade glow). */
   .loot-head {
+    /* Top gutter this header bleeds up into — keep equal to #panel-content's
+       padding-top (base 6px; the desktop drawer overrides to 8px below). Both the
+       negative top margin AND `top` derive from it so they can never drift apart. */
+    --loot-head-top-bleed: 6px;
     position: sticky;
-    top: 0;
+    /* NOT `top: 0`: while stuck, sticky pins the element's MARGIN box, and the
+       negative top margin lifts that margin box above the visible (background) box
+       — so a bare `top: 0` would drop the opaque header its own margin's worth below
+       the scroll container's top edge, leaving a strip where scrolling rows show
+       through above the wallet card. Offsetting `top` by the same amount as the top
+       margin keeps the header's box flush with the container top at any scroll. */
+    top: calc(-1 * var(--loot-head-top-bleed));
     z-index: 5;
     background: var(--panel);
-    margin: -6px -6px 0;
+    margin: calc(-1 * var(--loot-head-top-bleed)) -6px 0;
     padding: 6px 6px 10px;
     box-shadow: 0 4px 8px -4px color-mix(in srgb, var(--ink) 70%, transparent);
   }
@@ -2324,10 +2368,14 @@
   #bestiary-body .bst-card.locked { opacity: 0.85; }
   #bestiary-body .bst-head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
   #bestiary-body .bst-ic { width: 34px; height: 34px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+  /* Let the name column shrink below its content width so a long single-word name
+     (Constrictor, Bloodhound) can wrap instead of spilling past the card edge —
+     a flex child defaults to min-width:auto and won't shrink below min-content. */
+  #bestiary-body .bst-htext { min-width: 0; }
   #bestiary-body .bst-sprite { display: block; image-rendering: pixelated; object-fit: contain; }
   #bestiary-body .bst-blank { display: inline-block; width: 26px; height: 26px; border-radius: var(--radius-xs); border: 1px solid var(--tint-black); }
   #bestiary-body .bst-card.locked .bst-ic { filter: brightness(0) contrast(0.2); opacity: 0.5; }
-  #bestiary-body .bst-name { font-weight: bold; font-size: var(--fs-body); color: var(--gold-350); line-height: 1.15; }
+  #bestiary-body .bst-name { font-weight: bold; font-size: var(--fs-body); color: var(--gold-350); line-height: 1.15; overflow-wrap: break-word; }
   #bestiary-body .bst-card.locked .bst-name { color: var(--junk); letter-spacing: 2px; }
   #bestiary-body .bst-sub { font-size: var(--fs-fine); color: var(--orange-500); letter-spacing: 0.5px; }
   #bestiary-body .bst-card.boss .bst-sub { color: var(--danger); }
@@ -3322,6 +3370,7 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .slot-name.muted { color: var(--orange-500); font-weight: normal; font-style: italic; }
+  .slot-name .slot-cls { color: var(--orange-400); font-weight: normal; font-size: 1.3rem; }
   .slot-stats { font-size: 1.3rem; color: var(--orange-400); margin-bottom: 8px; line-height: 1.4; }
   .slot-stats .slot-time { color: var(--orange-500); }
   .slot-actions { display: flex; gap: 6px; }
@@ -3706,9 +3755,13 @@
   .lb-mode.on { border-color: var(--gold); color: var(--gold); background: var(--orange-850); }
   /* The Hardcore board glows crimson when selected, matching the rest of the HC theming. */
   .lb-mode.hc.on { border-color: var(--red-350); color: var(--red-200); background: var(--magenta-750); }
+  /* The Solo Self-Found board glows gold — the mode's treasure palette. */
+  .lb-mode.ssf.on { border-color: var(--gold-350); color: var(--gold-200); background: var(--gold-850); }
   .lb-mode .dl-ic { vertical-align: -2px; }
   #lb-modal.hc .ov-title { color: var(--red-200); }
   #lb-modal.hc .lb-row.me { border-color: var(--red-350); background: var(--magenta-750); }
+  #lb-modal.ssf .ov-title { color: var(--gold-200); }
+  #lb-modal.ssf .lb-row.me { border-color: var(--gold-350); background: var(--gold-850); }
   .lb-tabs { display: flex; gap: 6px; margin-bottom: 9px; }
   .lb-tab {
     flex: 1; padding: 8px 4px; border: 1px solid var(--border); border-radius: 6px;
@@ -3774,6 +3827,10 @@
     border-color: var(--red-350);
     box-shadow: 0 0 30px color-mix(in srgb, var(--red-350) 30%, transparent);
   }
+  #lb-hero-overlay.ssf #lb-hero-modal {
+    border-color: var(--gold-350);
+    box-shadow: 0 0 30px color-mix(in srgb, var(--gold-350) 30%, transparent);
+  }
   @media (min-width: 760px) and (hover: hover) and (pointer: fine) { #lb-hero-modal { max-width: 620px; } }
 
   .lb-hero-head { display: flex; gap: 12px; align-items: center; margin: 6px 0 12px; }
@@ -3787,6 +3844,8 @@
     font-size: 1.1rem; color: var(--red-250); display: inline-flex; align-items: center; gap: 3px;
     border: 1px solid color-mix(in srgb, var(--red-350) 50%, transparent); border-radius: 5px; padding: 1px 5px;
   }
+  /* Its gold Solo Self-Found twin. */
+  .lb-hero-hc.ssf { color: var(--gold-200); border-color: color-mix(in srgb, var(--gold-350) 50%, transparent); }
   .lb-hero-sub { font-size: 1.2rem; font-weight: bold; color: var(--orange-300); margin-top: 2px; }
   .lb-hero-stats { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 6px; }
   .lb-hero-stat { display: flex; align-items: center; gap: 4px; font-size: 1.2rem; }
@@ -3811,6 +3870,7 @@
   .lb-attr-ic { flex: 0 0 auto; display: flex; }
   .lb-attr-name { flex: 1 1 auto; font-size: 1.2rem; color: var(--orange-300); }
   .lb-attr-val { flex: 0 0 auto; font-size: 1.3rem; font-weight: bold; color: var(--gold); }
+  .lb-attr-gear { font-size: 1.2rem; color: var(--green-400); }  /* +bonus from worn gear */
 
   /* Gear — a fluid paperdoll grid; each tile hovers its full item card. */
   .lb-gears { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 6px; }
@@ -4188,7 +4248,7 @@
     /* Match the frozen header's gutter-cover to the wider desktop padding. The
        bottom padding (see the base .loot-head rule) keeps the stat-key
        collapsible from overlapping — and stealing clicks from — the top row. */
-    #panel-content .loot-head { margin: -8px -12px 0 -8px; padding: 8px 12px 10px 8px; }
+    #panel-content .loot-head { --loot-head-top-bleed: 8px; margin: calc(-1 * var(--loot-head-top-bleed)) -12px 0 -8px; padding: 8px 12px 10px 8px; }
     /* Skill-tree node names: on desktop there's ample room around the web, so let
        full names ("Warstomp", "Unbreakable") wrap/extend instead of truncating to
        "Warsto…". The #id selector wins over the .sk-tree.web / .sk-tnode rules. */
@@ -4530,8 +4590,13 @@
   .cook-active-name { color: var(--orange-250); font-weight: bold; font-size: 1.5rem; }
   .cook-active-fx { color: var(--text); font-size: 1.2rem; margin-top: 1px; }
   .cook-active-floors { color: var(--orange-400); font-size: 1.2rem; margin-top: 1px; }
-  .ing-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-  .ing-chip { display: flex; flex-direction: row; align-items: center; gap: 10px; flex: 0 0 240px; max-width: 100%; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 32px 8px 10px; cursor: pointer; text-align: left; position: relative; color: var(--text); }
+  /* Grid (not flex-wrap) so EVERY topping card is the same height: grid-auto-rows:1fr
+     sizes all rows to the tallest card's content, and each card stretches to fill —
+     its icon+text then centre in the uniform box. auto-fit keeps the fixed-width
+     centred columns; the min(100%,…) floor lets a lone column shrink on a narrow
+     screen instead of overflowing. */
+  .ing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(240px * var(--ui-scale,1))), calc(240px * var(--ui-scale,1)))); grid-auto-rows: 1fr; justify-content: center; gap: 6px; }
+  .ing-chip { display: flex; flex-direction: row; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 32px 8px 10px; cursor: pointer; text-align: left; position: relative; color: var(--text); }
   .ing-chip:active { background: var(--panel-raised); }
   .ing-chip:disabled { opacity: 0.4; cursor: default; }
   .ing-emoji { font-size: 2.6rem; flex: 0 0 auto; line-height: 1; display: flex; align-items: center; }
@@ -4545,16 +4610,28 @@
   .pot-preview { font-size: 1.2rem; color: var(--orange-400); margin: 6px 2px 2px; }
   .pot-preview b { color: var(--xp); }
   .pot-secret { color: var(--gold-350); font-size: 1.2rem; margin-top: 2px; }
-  .cook-actions { display: flex; gap: 6px; margin: 8px 2px 2px; }
+  .cook-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 2px 2px; }
   .cook-btn { flex: 1; background: linear-gradient(180deg, var(--orange-700), var(--orange-600)); border: 1px solid var(--orange-250); color: var(--paper); font-family: var(--font-ui); font-weight: bold; font-size: 1.4rem; letter-spacing: 1px; padding: 8px 0; border-radius: 6px; cursor: pointer; }
   .cook-btn:active { filter: brightness(0.9); }
   .cook-btn.ghost { background: var(--panel-raised); border-color: var(--border); color: var(--orange-400); flex: 0 0 70px; }
   .food-row, .recipe-row { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 4px 2px; }
   .recipe-row.locked { opacity: 0.7; }
-  .food-emoji { font-size: 2.2rem; width: calc(24px * var(--ui-scale,1)); text-align: center; }
+  /* Icon column is exactly the two text lines tall (their summed line-heights), so a
+     fill icon (dl-trimfill) matches the name+fx block beside it at ANY root font size.
+     A FIXED height (not align-self:stretch) is deliberate: the trim-fill icon's width
+     tracks its height via aspect-ratio, so a stretch-to-row height would feed back
+     (tall row -> wide icon -> narrower text -> taller row) and balloon on a cramped
+     width. Fixed-px icons (recipe rows) just centre in the box. */
+  .food-emoji { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; height: calc((1.3rem + 1.2rem) * 1.35); min-width: calc(24px * var(--ui-scale,1)); font-size: 2.2rem; text-align: center; }
+  .food-emoji .dl-trimfill { height: 100%; width: auto; }
+  .dl-drop-plus { color: var(--gold); font-weight: bold; opacity: 0.7; }
   .food-info { flex: 1; min-width: 0; }
-  .food-name { font-size: 1.3rem; color: var(--text); font-weight: bold; }
-  .food-fx { font-size: 1.2rem; color: var(--green-350); }
+  .food-name { font-size: 1.3rem; line-height: 1.35; color: var(--text); font-weight: bold; }
+  .food-fx { font-size: 1.2rem; line-height: 1.35; color: var(--green-350); }
+  /* Pantry rows are draggable onto a meal slot below (the mouse path for SLOT). */
+  .food-row[draggable="true"] { cursor: grab; }
+  .food-row[draggable="true"]:active { cursor: grabbing; }
+  .meal-slot-row.meal-drop-hot, .meal-slot-empty.meal-drop-hot { border-color: var(--gold); background: var(--orange-850); box-shadow: 0 0 6px color-mix(in srgb, var(--gold) 50%, transparent); }
   .recipe-need { font-size: 1.2rem; margin-top: 2px; }
   .recipe-need .need.ok { color: var(--green-350); }
   .recipe-need .need.no { color: var(--red-400); }
@@ -4564,12 +4641,23 @@
   .food-row.eatable:hover { border-color: var(--uncommon); background: var(--green-800); }
   .food-row.eatable:hover .eat-btn { background: var(--green-550); }
   .food-row.eatable:active { background: var(--green-800); }
-  /* Ramen-House meal-slot controls: EAT + SLOT on each pantry row, and the assigned
-     slot rows (with their stack count + CLEAR). */
-  .food-row-btns { display: flex; gap: 5px; flex: 0 0 auto; }
+  /* Ramen-House meal-slot controls: EAT + SLOT + TRASH on each pantry row, and the
+     assigned slot rows (with their stack count + CLEAR). The base .row-btn carries no
+     size, so give the food-row buttons a legible size + tap padding here (scoped to
+     .food-row so the save-slot .slot-btn is untouched). Wrap when a narrow sheet can't
+     fit all three side by side. */
+  .food-row .row-btn { box-sizing: border-box; font-size: 1.3rem; padding: 8px 11px; letter-spacing: 0.5px; line-height: 1; }
+  .food-row-btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; flex: 0 1 auto; }
+  /* On desktop, slotting a bowl is a DRAG action (drag the pantry row onto a meal
+     slot below, or onto the HUD belt's MEALS tiles) — so the SLOT button is hidden
+     here and only reappears on touch (body.touch), where drag isn't available. */
+  .food-row-btns .slot-btn { display: none; }
   .slot-btn { background: var(--panel-raised); border-color: var(--gold); color: var(--gold); }
   .slot-btn:active { background: var(--orange-850); }
   .slot-btn:disabled { opacity: 0.45; cursor: default; border-color: var(--border); color: var(--btn-off); }
+  .trash-btn { background: var(--panel-raised); border-color: var(--red-650); color: var(--red-300); }
+  .trash-btn:active { background: var(--orange-850); }
+  .trash-btn.armed { background: var(--hp); color: var(--paper); border-color: var(--paper); }
   .clear-btn { background: var(--panel-raised); border-color: var(--border); color: var(--text); }
   .meal-slot-row { border-color: var(--gold); }
   .meal-qty { color: var(--gold); font-size: 1.2rem; }
@@ -4830,6 +4918,13 @@
   }
   body.touch .shop-row.has-actions > .row-actions .ench-tipwrap { display: flex; }
   body.touch .shop-row.has-actions > .row-actions .act-btn { flex: 1; width: 100%; }
+  /* Ramen pantry rows on touch: drag isn't available, so SLOT comes back — and the
+     three actions (EAT / SLOT / TRASH) stack in a vertical column on the right,
+     each a bit shorter, instead of a horizontal row that crushes the bowl name on a
+     narrow screen. */
+  body.touch .food-row-btns { flex-direction: column; align-items: stretch; flex: 0 0 auto; gap: 4px; }
+  body.touch .food-row-btns .slot-btn { display: block; }
+  body.touch .food-row .row-btn { padding: 5px 10px; font-size: 1.2rem; }
   /* Dungeon Gate pickers reflow fluidly on touch (desktop keeps its fixed 5-up /
      4-up tracks). Pack as many tiles as fit, wrapping to a new row instead of
      clipping the 5th floor column / a long difficulty label on a narrow or foldable
@@ -4902,3 +4997,101 @@
     top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
     max-width: 82vw;
   }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     CONTROLLER (gamepad) layer — shown only under body.pad, revealed on the first
+     real gamepad input (see the GAMEPAD section in game.js). Additive: it never
+     alters the keyboard/mouse layout, only adds a focus ring, a virtual cursor, a
+     context hint bar, an on-screen keyboard and a help card. All token-driven.
+     ══════════════════════════════════════════════════════════════════════════ */
+
+  /* Focus ring — a floating box tracked over the selected menu element each frame,
+     so it follows re-renders and scrolling without touching the element's styles. */
+  #pad-ring { display: none; }
+  body.pad #pad-ring.on {
+    display: block; position: fixed; z-index: calc(var(--z-pad) + 10); pointer-events: none;
+    border: 2px solid var(--interactive); border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-glow), inset 0 0 0 1px color-mix(in srgb, var(--paper) 35%, transparent);
+    background: color-mix(in srgb, var(--interactive) 12%, transparent);
+    transition: left .06s linear, top .06s linear, width .06s linear, height .06s linear;
+  }
+
+  /* Virtual cursor — the right-stick mouse (R3). A small blade-tip pointer. */
+  #pad-cursor { display: none; }
+  body.pad #pad-cursor.on {
+    display: block; position: fixed; z-index: calc(var(--z-pad) + 20); pointer-events: none;
+    width: 16px; height: 16px; margin: -2px 0 0 -2px;
+    border-radius: 50% 50% 50% 2px;
+    background: radial-gradient(circle at 40% 35%, color-mix(in srgb, var(--paper) 90%, var(--interactive)), var(--interactive));
+    border: 1.5px solid var(--ink); box-shadow: var(--shadow-sm);
+  }
+
+  /* Context hint bar — a compact, unobtrusive strip of the current bindings, pinned
+     bottom-centre. Pointer-transparent so it never eats a click. */
+  #pad-hintbar { display: none; }
+  body.pad #pad-hintbar.on {
+    display: flex; position: fixed; z-index: var(--z-pad); pointer-events: none;
+    left: 50%; transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 2px);
+    gap: var(--space-4); flex-wrap: wrap; justify-content: center; max-width: 96vw;
+    padding: var(--space-2) var(--space-5);
+    background: color-mix(in srgb, var(--panel) 82%, transparent);
+    border: 1px solid var(--border); border-radius: var(--radius-pill);
+    font-size: var(--fs-fine); color: var(--text-muted);
+    box-shadow: var(--shadow-sm);
+  }
+  #pad-hintbar .pad-hint { white-space: nowrap; }
+  #pad-hintbar .pad-hint b {
+    display: inline-block; min-width: 1.5em; margin-right: 3px; padding: 0 4px;
+    text-align: center; color: var(--text);
+    background: var(--panel-raised); border: 1px solid var(--border);
+    border-radius: var(--radius-xs); font-weight: 700;
+  }
+
+  /* Shared scrim for the pad help + keyboard overlays. */
+  #pad-help, #pad-kbd { display: none; }
+  #pad-help.open, #pad-kbd.open {
+    display: flex; position: fixed; inset: 0; z-index: var(--z-pad);
+    align-items: center; justify-content: center;
+    background: var(--scrim); padding: var(--space-5);
+  }
+
+  /* Controller help card. */
+  .pad-help-card {
+    width: min(94vw, 460px); max-height: 88dvh; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-modal);
+    padding: var(--space-6); color: var(--text);
+  }
+  .pad-help-title { font-size: var(--fs-head); color: var(--gold); text-align: center; margin-bottom: var(--space-4); }
+  .pad-help-sec { font-size: var(--fs-sub); color: var(--interactive); text-transform: uppercase; letter-spacing: .04em; margin: var(--space-5) 0 var(--space-2); }
+  .pad-help-row { display: flex; align-items: baseline; gap: var(--space-4); padding: var(--space-2) 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent); }
+  .pad-help-keys { flex: 0 0 42%; text-align: right; font-weight: 700; color: var(--text); font-size: var(--fs-body); }
+  .pad-help-act { flex: 1; color: var(--text-muted); font-size: var(--fs-body); }
+
+  /* On-screen keyboard (text entry). Fluid: keys size off the viewport so it fits a
+     narrow phone through a wide screen, never a fixed column count. */
+  .pad-kb-card {
+    width: min(96vw, 560px);
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-modal);
+    padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3);
+  }
+  .pad-kb-preview {
+    min-height: 1.6em; padding: var(--space-3) var(--space-4); margin-bottom: var(--space-2);
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-size: var(--fs-strong); word-break: break-all;
+  }
+  /* A fixed 10-column grid so every key sits in an aligned COLUMN across rows —
+     that alignment is what lets D-pad up/down/left/right land predictably (the
+     spatial focus nav strictly prefers the aligned neighbour). Wide keys span cols. */
+  .pad-kb-row { display: grid; grid-template-columns: repeat(10, 1fr); gap: var(--space-2); }
+  .pad-kb-key {
+    min-height: 40px; padding: var(--space-2);
+    background: var(--panel-raised); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: var(--fs-body); cursor: pointer;
+  }
+  .pad-kb-key.wide { grid-column: span 2; } .pad-kb-key.wide2 { grid-column: span 3; }
+  .pad-kb-key.done { background: color-mix(in srgb, var(--success) 40%, var(--panel-raised)); }
+  body.pad .pad-kb-key.pad-focused, body.pad .pad-help-card .pad-focused { border-color: var(--interactive); }

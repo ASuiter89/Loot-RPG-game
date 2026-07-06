@@ -7,13 +7,116 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
-  { date: "2026-07-05", size: "large", v: "All-new hand-generated icon art", by: "Claude", notes: [
+  { date: "2026-07-05", size: "large", v: "All-new hand-generated icon art", by: "Andrew Suiter", notes: [
     "Every shared game icon — loot, gear slots, weapons, world features, materials, HUD and status icons, potions, cooking ingredients, pets and quest markers — is redrawn as fresh, higher-detail art in one consistent style.",
     "Icons now size to their actual artwork instead of a fixed tile, so each reads at its true shape and fills its space in menus, the HUD and on the map.",
     "Health and Mana potions now share a matched flask — red for health, blue for mana — on the HUD buttons and in your bag.",
     "Every weapon and blade mouse-cursor option points up-left, so it reads as a pointer with the tip as the click point.",
     "The warrior's Spirit Veil skill gets the framed skill-badge look the other skills already had.",
     "Quest-givers and lost pets on the map are drawn at full character size, matching the hero and foes instead of a tiny marker.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Island floors ringed by the sea", by: "Claude", notes: [
+    "Some outdoor floors now come up as an island — the whole map edge is open water instead of a rock wall, so you fight on a sandy shore surrounded by sea.",
+    "The water is the boundary: you can see and shoot across it but can't walk off. Everything reachable stays reachable — the sea only replaces the impassable frame.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Cave passages open up", by: "Jeff Louie", notes: [
+    "Most cave corridors between rooms now carve two tiles wide — cramped single-tile squeezes drop to roughly 1 hall in 3, kept as occasional chokepoints instead of the default.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Gear-set swap won't strip you naked mid-fight", by: "Jeff Louie", notes: [
+    "Swapping to an empty or much-weaker gear set is now blocked while enemies are near — no more accidental deaths from a stray Set 2 tap or G press.",
+    "Still swap freely when it's safe (to build a second set), and gearing UP to a stronger set always works, even mid-fight.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Deep-floor gold piles pay far more", by: "Jeff Louie", notes: [
+    "Loose coin piles on the ground now scale up hard with depth — shallow floors are unchanged, but deep-floor piles pay hundreds of gold, a real reward for pushing further down.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Gear can now boost Max Stamina & Stamina Regen", by: "Jeff Louie", notes: [
+    "Two new item stats: Max Stamina (STM) deepens your sprint/dash reserve, Stamina Regen (SRG) refills it faster after you exert. Both roll on chest, legs and amulets.",
+    "So classes that don't pump the pool's attribute can still sprint and dash freely — buy your Stamina on gear instead.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Treasure Goblin hands over rarer loot", by: "Jeff Louie", notes: [
+    "Catch a fleeing Treasure Goblin and its jackpot chest now skews harder toward the top tiers — a much better shot at epic, legendary and unique gear.",
+    "Its gold burst and Chaos Orb are unchanged; the chase just pays out rarer.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Leaderboard gets a Self-Found ladder", by: "Jeff Louie", notes: [
+    "The global Leaderboard now has a third SELF-FOUND ladder beside Standard and Hardcore, ranking self-found heroes against each other.",
+    "Self-found heroes also still show on their Standard or Hardcore board with a gold SSF tag, and a hero's snapshot card names the mode.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Bosses no longer drop double or triple their loot", by: "Jeff Louie", notes: [
+    "Fixed a bug where a foe killed by several simultaneous hits (a multi-projectile burst, a cleaving crit that arcs, or burning and poison finishing it the same instant) rolled its whole loot table once per hit — so a boss could spill 2–3× its intended gear. Every kill now pays out exactly once.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Wandering merchant & mystic show up less often", by: "Jeff Louie", notes: [
+    "The roaming merchant now wanders in on roughly 1 floor in 8 (was 1 in 5), and the hooded mystic on roughly 1 in 10 (was 1 in 6) — each stays a treat to stumble on rather than a near-guarantee.",
+  ] },
+  { date: "2026-07-05", size: "big", v: "Full controller support", by: "ASuiter89", notes: [
+    "Plug in a PlayStation, Xbox or Steam Deck / generic gamepad — everything in the game is now playable on a controller, revealed the moment you touch it. Keyboard and mouse stay live.",
+    "In the dungeon: left stick moves, R2 sprints, R1 dashes. ✕ interacts/uses, ○ opens the Bag, □ toggles the log, △ opens a town portal. Hold L1 and press ✕○□△ to cast your four skills.",
+    "D-pad: health & mana potions (left/right), swap weapon set (up), cycle auto-attack focus (down). Right stick inspects foes; L3 collapses the minimap.",
+    "In every menu, shop and craft screen: D-pad or left stick move the selection (its tooltip pops), ✕ selects, ○ backs out, L1/R1 switch tabs.",
+    "On-screen keyboard for naming a hero and cloud-save sign-in; a virtual cursor (R3) reaches anything else, and View opens a full button-map cheat-sheet.",
+    "Button glyphs auto-match your pad — ✕○□△ for PlayStation, A/B/X/Y for Xbox.",
+  ] },
+  { date: "2026-07-05", size: "medium", v: "Solo Self-Found mode — a hero who walks alone", by: "Jeff Louie", notes: [
+    "New SOLO SELF-FOUND toggle on the name screen, beside Hardcore — arm either or both. An SSF hero never touches the shared account pools: only what they find on their own run can be used.",
+    "The Vault Keeper turns SSF heroes away — no banking or withdrawing gold or gear, and town shops charge carried coin only. Crafting materials fill a private per-hero wallet instead of the shared one.",
+    "SSF heroes wear a gold SOLO SELF-FOUND tag on the title card, save slots and graveyard, matching Hardcore's crimson one.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Bag's frozen header no longer leaks the list above the gold & materials card", by: "ASuiter89", notes: [
+    "The LOOT drawer's pinned header (gold & materials pill, slot tabs, sort/filter) now hugs the very top as the list scrolls — closing a thin strip where scrolling items used to peek through just above the gold & materials card.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Save slots name each hero's class", by: "Jeff Louie", notes: [
+    "Each save slot now shows the hero's class (Warrior, Rogue, Mage, Templar) beside their name, so lookalike heroes are easy to tell apart.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Foe attacks launch from the foe, not the tile next to it", by: "ASuiter89", notes: [
+    "Enemy sprites now stay locked to the tile the foe actually occupies, drawn and moved the same way the hero is — the sprite no longer drifts up to a tile off its cell while chasing you.",
+    "Because of that drift, ranged bolts and strike lunges used to fly out of a neighbouring tile, or from across a wall from where the foe showed on the map. Every foe attack now originates from where its sprite stands.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Melee reaches a half tile further", by: "ASuiter89", notes: [
+    "Auto-attacks and melee-range skills now connect from a half tile away instead of demanding you stand right on top of a foe — the hit gate follows where the sprites actually are, not the tiles they snap to.",
+    "Weapon reach numbers and tooltips are unchanged; this only softens the exact distance at which a swing lands.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "See a weapon's swing speed before you equip it", by: "Claude", notes: [
+    "Weapon tooltips and the Forge preview now show a base swing rate — attacks/sec plus a Slow / Normal / Fast tag — beside the reach grid, so you know how fast a weapon hits without equipping it first.",
+    "The rate is the weapon type's base speed before Attack Speed and Agility: light daggers swing fastest, heavy two-handers and staves slowest.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Leaderboard hero snapshot shows gear's attribute bonus", by: "Claude", notes: [
+    "A hero's Attributes on the leaderboard snapshot now show the bonus their worn gear adds (e.g. 40 +13 in green), not just the base you spent — matching your own hero sheet.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Crafted gear forges at full depth — Craftsman & Enchanter now agree", by: "Claude", notes: [
+    "The Craftsman now forges blanks at your full depth item level (deepest floor + 1) — the level a fresh drop there would carry, matching the Merchant, Gambler and the Enchanter's Empower cap. Forged gear starts one item level higher than before.",
+    "Fixes the two disagreeing: a piece you just forged used to arrive one level short, so the Enchanter would immediately offer a free +1 Empower to max. Now a fresh forge is already at your depth, so there's nothing left to Empower.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Sort & filter the merchant like your bag", by: "Claude", notes: [
+    "The merchant's Buy and Sell tabs now carry the same Sort (rarity, power, slot, value) and stat Filter controls as the LOOT drawer.",
+    "Sell all / Scrap all at the merchant honor the filter — they only touch what's shown.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Weapon type shows up top on the item card", by: "Jeff Louie", notes: [
+    "A weapon's type and hand (e.g. Dagger · 1H) now sits right under its name instead of down among the stats, so you read what it is at a glance.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Stamina recharges in town; death revives you at full strength", by: "Claude", notes: [
+    "Stamina now refills while you rest in town, alongside HP and MP — it used to sit frozen there, so a drained bar (and a save made in town) stayed empty until you dived back in.",
+    "Dying and waking in town now restores you to FULL HP, MP and Stamina — no more reviving weakened. The gold/XP loss and dropped-bag grave still stand.",
+  ] },
+  { date: "2026-07-05", size: "medium", v: "Ramen House pantry overhaul", by: "Claude", notes: [
+    "Pantry rows are bigger and clearer: readable EAT button and a larger ramen-bowl icon sized to the row (its transparent padding no longer shrinks the art).",
+    "Identical bowls now stack into a single row with an ×N count instead of one line per bowl.",
+    "New TRASH button (tap twice to confirm) dumps a whole stack you'll never eat.",
+    "Cook a batch at once — Cook ×3 / ×5 / ×10 (up to what your toppings afford) — instead of tapping Cook over and over.",
+    "Assign a bowl to a meal slot by dragging it onto a slot or the HUD belt (desktop); on touch the SLOT button stays and the row's buttons stack vertically.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Bestiary opens on top of the menu; long names fit", by: "Claude", notes: [
+    "Opening the Bestiary (or Achievements) from the pause menu now shows it on top of the menu instead of hidden behind it — no need to close settings first.",
+    "Long single-word foe names like Constrictor and Bloodhound now wrap inside their card instead of spilling past its right edge.",
+  ] },
+  { date: "2026-07-05", size: "medium", v: "Maxed passives surge into a brand-new stat at rank 10", by: "Claude", notes: [
+    "Taking a base-tree passive to rank 10 now unlocks a NEW stat it never gave before — not just a bigger version of what it already scaled.",
+    "Each surge stat is thematic to its passive: a crit node gains crit damage, an HP node gains regen, a spell node gains crit, and so on.",
+    "The new stat stacks on top of the existing rank-3/7/10 bonus spikes and folds straight into the same combat math.",
+    "A passive's detail card names its rank-10 stat in the Rank bonuses ladder, and maxing one calls it out in the log.",
+    "Keystones are unchanged — single-rank build-definers, so they never surge.",
+  ] },
+  { date: "2026-07-05", size: "small", v: "Bounty completion is unmissable", by: "Claude", notes: [
+    "Finishing a contract now pops a centre-screen \"Bounty complete!\" banner with a chime and flash, so you know to head back to town and claim.",
+    "The belt's bounty tracker no longer strands a finished contract's bar empty — a done bounty shows a full green bar, a green ✓, and a gentle glow so \"ready to claim\" reads at a glance.",
   ] },
   { date: "2026-07-05", size: "small", v: "Account-wide bestiary, no more codex freeze", by: "Claude", notes: [
     "The Bestiary is now account-wide: kills carry across every hero and save slot, so slaying a species on one hero fills in its card for all of them. Your codex survives death, a Reset Run, and switching slots — like the shared town stash.",
