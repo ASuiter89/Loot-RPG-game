@@ -9529,6 +9529,10 @@ const FLOOR_TINTS = [
 // 9 teleporter · 10 cracked wall (breakable) · 11 locked door · 12 stairs up.
 
 // Carve an L-shaped corridor of floor between two interior points.
+// Cave corridors roll this chance to carve 2-wide (indoor halls always widen),
+// so cramped single-tile squeezes are the exception rather than the default —
+// a minority stay narrow as deliberate chokepoints.
+const CAVE_WIDE_HALL_CHANCE = 0.7;
 function carveCorridor(x1, y1, x2, y2, wide) {
   let x = x1, y = y1;
   mapData[y][x] = mapData[y][x] === 1 ? 0 : mapData[y][x];
@@ -10287,9 +10291,11 @@ function generateMap() {
   }
 
   // ── CORRIDORS ── connect rooms in a chain, plus a couple of loops for choice.
-  for (let i = 1; i < rooms.length; i++) carveCorridor(rooms[i-1].cx, rooms[i-1].cy, rooms[i].cx, rooms[i].cy, indoor);
+  // Each cave corridor rolls its own width so most halls are 2-wide walkways.
+  const wideHall = () => indoor || Math.random() < CAVE_WIDE_HALL_CHANCE;
+  for (let i = 1; i < rooms.length; i++) carveCorridor(rooms[i-1].cx, rooms[i-1].cy, rooms[i].cx, rooms[i].cy, wideHall());
   const extraLoops = Math.max(2, Math.round(2 * areaRatio)); // more alternate routes on bigger floors
-  for (let k = 0; k < extraLoops; k++) { const a = pick(rooms), b = pick(rooms); if (a !== b) carveCorridor(a.cx, a.cy, b.cx, b.cy, indoor); }
+  for (let k = 0; k < extraLoops; k++) { const a = pick(rooms), b = pick(rooms); if (a !== b) carveCorridor(a.cx, a.cy, b.cx, b.cy, wideHall()); }
 
   // ── PLAYER START ── first room centre, cleared of obstacles.
   const start = rooms[0];
