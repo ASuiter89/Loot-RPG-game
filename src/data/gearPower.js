@@ -87,8 +87,9 @@ export const GEAR_POWER = {
   penScale: 0.5,
   // Situational offense stats are real but only fire in some fights, so they
   // count at a discount (fraction of their raw %). Boss damage only vs bosses,
-  // Execute only on low-HP foes, Cleave only in packs, Bleed is a slow DoT.
-  bossW: 0.2, execW: 0.25, cleaveW: 0.2, bleedW: 0.3, stunW: 0.15,
+  // Execute only on low-HP foes, Cleave only in packs, Bleed is a slow DoT, and
+  // Area of Effect only pays off when a radius skill catches more than one foe.
+  bossW: 0.2, execW: 0.25, cleaveW: 0.2, bleedW: 0.3, stunW: 0.15, areaW: 0.18,
 
   // ── Survivability channel ──
   // Effective HP = maxHP / mitigation, where mitigation multiplies the class
