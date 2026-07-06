@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "Gear can now boost Max Stamina & Stamina Regen", by: "Claude", notes: [
+    "Two new item stats: Max Stamina (STM) deepens your sprint/dash reserve, Stamina Regen (SRG) refills it faster after you exert. Both roll on chest, legs and amulets.",
+    "So classes that don't pump the pool's attribute can still sprint and dash freely — buy your Stamina on gear instead.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Treasure Goblin hands over rarer loot", by: "Claude", notes: [
     "Catch a fleeing Treasure Goblin and its jackpot chest now skews harder toward the top tiers — a much better shot at epic, legendary and unique gear.",
     "Its gold burst and Chaos Orb are unchanged; the chase just pays out rarer.",
