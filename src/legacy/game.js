@@ -57,6 +57,7 @@ import { trimFillStyle } from '../utils/iconTrim.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
 import { bountyProgress as _bountyProgress, bountyDone as _bountyDone, bountyNewlyComplete } from '../systems/bounty.js';
 import { forgeSections } from '../systems/forgeFlow.js';
+import { weaponSpeedInfo } from '../systems/weaponSpeed.js';
 import { CURSE_TIER_MULT, curseTierMult, statCurseSwing, cursedStatCeiling } from '../systems/curseRoll.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
@@ -4361,6 +4362,16 @@ function weaponRangeGridHTML(base) {
   }
   return `<span class="range-grid">${cells}</span><span class="range-cap">reach ${range}</span>`;
 }
+// A little caption of a style's BASE swing rate — attacks/sec before any Attack
+// Speed or Agility haste — with a coarse Slow/Normal/Fast tier, so a weapon's
+// inherent speed reads in the tooltip and the Forge WITHOUT equipping it. It
+// derives from the same PLAYER_ATK_BASE × STYLE_ATK_MULT the hero actually swings
+// at (see playerAttackInterval), so what's shown is what you'll get. Reused by
+// the weapon tooltip and the Forge preview beside the reach grid.
+function weaponSpeedCapHTML(style) {
+  const info = weaponSpeedInfo(STYLE_ATK_MULT[style] || 1, PLAYER_ATK_BASE);
+  return `<span class="range-cap" title="Base swings per second, before Attack Speed & Agility">${info.aps.toFixed(2)}/s · ${info.tier}</span>`;
+}
 
 // ── CHARACTER CLASSES ──
 // Every class now starts with the SAME attributes (ATTR_BASE in each). A class's
@@ -6839,6 +6850,12 @@ window.gameState = function gameState(radius) {
       // Auto-attack reach of the equipped weapon, resolved by SUB-TYPE (a Rapier
       // reaches 2, a Pike 3, a Longbow 5) — read this rather than guessing from category.
       weaponReach: (typeof weaponRangeOf === 'function') ? weaponRangeOf((equipped || {}).weapon) : null,
+      // Base swing rate of the equipped weapon's style — attacks/sec BEFORE the
+      // ATKSPD gear / Agility haste in `offense`, plus a coarse Slow/Normal/Fast
+      // tier — so speed reads without equipping (matches the weapon tooltip / Forge).
+      weaponBaseSpeed: (typeof weaponStyle === 'function' && typeof STYLE_ATK_MULT !== 'undefined')
+        ? (() => { const i = weaponSpeedInfo(STYLE_ATK_MULT[weaponStyle()] || 1, PLAYER_ATK_BASE); return { atkPerSec: Math.round(i.aps * 100) / 100, tier: i.tier }; })()
+        : null,
       // Survivability — the defensive counterpart to `offense`, mirroring the HERO sheet.
       // The chance fields are 0..1 fractions measured against the current floor's threat.
       defense: (typeof playerDefense === 'function') ? {
@@ -7119,6 +7136,7 @@ window.gameGuide = function gameGuide(topic) {
       `THROWN & FIRED attacks land ON IMPACT: a Bow/Staff auto-attack, a ranged summon's shot, and a bolt or blast spell all loose a flying bolt whose damage is dealt the instant it REACHES the foe — not when it's cast — so a target won't drop until the bolt connects (a foe reading full HP for a beat after you fire is normal). Melee swings, novas, beams and chains still resolve on the spot.`,
       `There is NO per-hit damage cap — a big swing, skill or crit lands its full number, so burst and crits are fully rewarded. A foe's actual HP is the only limiter: bosses carry deep HP pools (and hit harder), so they're a genuine, tanky fight rather than a one-shot.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear), and EVERY damage source can crit — auto-attacks, martial skills and spells all roll critical hits, land the big crit number, and fire your on-crit passives (combo/zeal charges, primed crits, mana refunds). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
+      `BASE ATTACK SPEED is set by the weapon's style, so weapon type alone changes how fast you swing (before any Attack Speed % or Agility haste): light flurry weapons (Dagger, Shortsword, Hatchet) are the fastest, the 1H melee & ranged middle (Sword, Spear, Bow, Wand) is Normal, and the heavy two-handers + casters (Maul, Greatsword, Greataxe, Staff, Scythe) are the slowest. The weapon tooltip and the Forge preview print a base "attacks/sec · Slow/Normal/Fast" beside the reach grid, so you can compare speed WITHOUT equipping; gameState().player.weaponBaseSpeed reports the equipped weapon's base atkPerSec + tier, and player.offense.attackSpeed is the % that speeds it up from there.`,
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
       `Defense / block / damage-reduction come from gear, the Might attribute, and your class passive. On TOP of HP sits the Spirit Veil — a Spirit-fuelled blue shield that soaks damage before your health and recharges after a few unhit seconds (see the "veil" topic). Healing is OVER TIME (a pending pool that fills the bar on a slope, shown as a translucent zone) — sip ${key('healthPotion')} EARLY rather than at zero; see the "healing" topic.`,
       `Swap loadouts with ${key('swapWeapon')} to switch between, say, a ranged kite set and a melee finisher.`,
@@ -12994,7 +13012,7 @@ function renderForge() {
     let baseHint = '';
     if (isWeapon) {
       const style = WEAPON_SUBTYPES[forgeBase] ? WEAPON_SUBTYPES[forgeBase].style : WEAPON_STYLES[forgeBase];
-      baseHint = `<div style="padding:1px 2px 3px">${weaponRangeGridHTML(forgeBase)}` +
+      baseHint = `<div style="padding:1px 2px 3px">${weaponRangeGridHTML(forgeBase)}${style ? weaponSpeedCapHTML(style) : ''}` +
         (WEAPON_STYLE_DESC[style] ? `<div style="color:var(--orange-500);font-size:1.2rem;margin-top:3px;font-style:italic">${WEAPON_STYLE_DESC[style]}</div>` : '') +
         `</div>`;
     } else {
@@ -26590,7 +26608,7 @@ function itemCardHTML(item, opts = {}) {
     if (styleKey) {
       const hands = weaponHandsOf(item) === 2 ? '2H' : '1H';
       weaponTypeLine = sub ? `<div style="color:var(--orange-400);font-size:1.2rem;margin:2px 0"><b>${sub}</b> · <span style="color:var(--orange-500)">${hands}${base && base !== sub ? ' ' + base : ''}</span></div>` : '';
-      weaponLine = `<div style="margin-top:4px">${weaponRangeGridHTML(styleKey)}</div>` +
+      weaponLine = `<div style="margin-top:4px">${weaponRangeGridHTML(styleKey)}${style ? weaponSpeedCapHTML(style) : ''}</div>` +
         (WEAPON_STYLE_DESC[style] ? `<div style="color:var(--orange-500);font-size:1.2rem;margin-top:2px;font-style:italic">${WEAPON_STYLE_DESC[style]}</div>` : '');
     }
   }

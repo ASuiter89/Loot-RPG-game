@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-05", size: "small", v: "See a weapon's swing speed before you equip it", by: "Claude", notes: [
+    "Weapon tooltips and the Forge preview now show a base swing rate — attacks/sec plus a Slow / Normal / Fast tag — beside the reach grid, so you know how fast a weapon hits without equipping it first.",
+    "The rate is the weapon type's base speed before Attack Speed and Agility: light daggers swing fastest, heavy two-handers and staves slowest.",
+  ] },
   { date: "2026-07-05", size: "small", v: "Leaderboard hero snapshot shows gear's attribute bonus", by: "Claude", notes: [
     "A hero's Attributes on the leaderboard snapshot now show the bonus their worn gear adds (e.g. 40 +13 in green), not just the base you spent — matching your own hero sheet.",
   ] },
