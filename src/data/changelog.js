@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "medium", v: "Bounties pay a varied mix of rewards", by: "Jeff Louie", notes: [
+    "Bounties no longer always hand out the same gold + material + gear trio. Each contract now pays a different MIX of 1–3 rewards, and one paying fewer things pays more of each.",
+    "New reward types join the pool: any of the four crafting materials (not just Core), a lump of XP, and — on the toughest boss contracts — a gear piece of a guaranteed rarity.",
+    "The board and active-bounty panel now list each reward on its own line, with its pixel icon, so what a contract pays reads at a glance.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Gear screen: fainter hero, red pulse on unusable worn gear", by: "Jeff Louie", notes: [
     "The hero backdrop behind the GEAR paper doll is now fainter, so the equipment slots read cleaner against it.",
     "A worn piece you no longer meet the requirement for now throbs a red glow on its slot, drawing the eye straight to the gear that's stopped helping until you re-qualify.",
