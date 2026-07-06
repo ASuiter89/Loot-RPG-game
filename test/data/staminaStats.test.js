@@ -36,8 +36,8 @@ describe('Stamina gear stats — wired through the legacy stat system', () => {
   });
 
   it('has a hover blurb explaining what each does', () => {
-    expect(game).toMatch(/STAM:\s*'Deepens your Stamina pool/);
-    expect(game).toMatch(/STAMREG:\s*'Refills your Stamina faster/);
+    expect(game).toMatch(/STAM:\s*'Bigger Stamina pool/);
+    expect(game).toMatch(/STAMREG:\s*'Stamina refills faster/);
   });
 
   it('rolls with a flat curve — Max Stamina a large pool add, Regen a small /sec add', () => {
