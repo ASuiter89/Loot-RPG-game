@@ -100,6 +100,22 @@ async function main() {
     if (!revealed.touch) failures.push('body.touch not set after a touch pointerdown');
     if (!revealed.hudShown) failures.push('#touch-hud still display:none after touch reveal');
 
+    // 1b) On touch, opening the Bag (or any pop-up menu) PAUSES play: gameState
+    //     reports mode 'bag' with canMove false, and closing it resumes. Guard for
+    //     the mobile "menus pause the game" rule (desktop is unaffected — its bag is
+    //     a permanent sidebar, gated out of the pause path by isTouchMode()).
+    const bagPause = await page.evaluate(() => {
+      const before = window.gameState().canMove;
+      if (!document.body.classList.contains('bag-open')) window.toggleBag();   // open the bag sheet
+      const open = window.gameState();
+      if (document.body.classList.contains('bag-open')) window.toggleBag();    // close it again
+      return { before, openCanMove: open.canMove, openMode: open.mode, after: window.gameState().canMove };
+    });
+    if (bagPause.before !== true) failures.push('bag-pause: canMove was not true before opening the bag');
+    if (bagPause.openCanMove !== false) failures.push('bag-pause: opening the bag on touch did not pause play (canMove still true)');
+    if (bagPause.openMode !== 'bag') failures.push(`bag-pause: gameState().mode is '${bagPause.openMode}' with the bag open, expected 'bag'`);
+    if (bagPause.after !== true) failures.push('bag-pause: closing the bag on touch did not resume play (canMove still false)');
+
     // 2) The joystick drives the hero. Floors are randomly generated, so the hero
     // can be walled on any given side — try all four directions and require it to
     // move in at least one, with the stick engaged and click-to-move suppressed.
@@ -271,7 +287,7 @@ async function main() {
 
     if (pageErrors.length) failures.push(`uncaught page errors:\n  - ${pageErrors.join('\n  - ')}`);
 
-    console.log('touch: reveal', revealed, '| moved', moved, '| joyCleared', !rest.joyOn, '| tap', tapped,
+    console.log('touch: reveal', revealed, '| bagPause', bagPause, '| moved', moved, '| joyCleared', !rest.joyOn, '| tap', tapped,
       '| enchPicked', enchPicked,
       '| tapCast', tapCast, 'tapTip', tapTip, '| holdTip', holdTip, 'holdCast', holdCast,
       '| multiTip', multiTip, 'multiCast', multiCast, '| bagStack', bagStack);

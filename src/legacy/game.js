@@ -6649,6 +6649,14 @@ window.gameState = function gameState(radius) {
   if (mode === 'dungeon') {
     if (inTown) mode = 'town';
   }
+  // Touch-only: the bag drawer / achievements / bestiary freeze play (see
+  // touchMenuOpen / rtPaused) without being in MODALS, so surface them here too —
+  // otherwise canMove would read false with no .mode/.blockingOverlay cause to act on.
+  if (mode === 'dungeon' && touchMenuOpen()) {
+    if (document.body.classList.contains('bag-open')) { mode = 'bag'; blockingOverlay = 'side-panel'; }
+    else if (ovOpen('achievements-overlay')) { mode = 'achievements'; blockingOverlay = 'achievements-overlay'; }
+    else if (ovOpen('bestiary-overlay')) { mode = 'bestiary'; blockingOverlay = 'bestiary-overlay'; }
+  }
   // Movement only does something in the live dungeon with no menu/overlay up — and
   // never mid-teleport, when the hero is off the map and can't move, act or be hit.
   // 'out' (→town) | 'in' (→dungeon) for the town gate, 'warp' while walking through
@@ -31556,6 +31564,34 @@ function rtOverlayEls() {
   }
   return _rtOverlayEls;
 }
+// ── Touch-only pause: bag drawer + pop-up menus ──
+// On the touch layout, opening the bag/loot drawer or a menu that isn't already a
+// world-freezing modal (the achievements popup, the bestiary/codex) should still
+// freeze play — a phone player can't watch the field behind a full-screen sheet.
+// Desktop is deliberately untouched: its loot drawer is a permanent sidebar
+// (panelOpen always true) that must never pause, and every check here is gated on
+// isTouchMode(), so a mouse machine is byte-identical. These menus pause ONLY here,
+// never via RT_BLOCKING_OVERLAYS, so desktop keeps playing behind them as before.
+const TOUCH_ONLY_OVERLAYS = ['achievements-overlay', 'bestiary-overlay'];
+let _touchOverlayEls = null;
+function touchOnlyOverlayEls() {
+  if (!_touchOverlayEls) {
+    _touchOverlayEls = [];
+    for (const id of TOUCH_ONLY_OVERLAYS) {
+      const el = document.getElementById(id);
+      if (el) _touchOverlayEls.push(el);
+    }
+  }
+  return _touchOverlayEls;
+}
+function touchMenuOpen() {
+  if (!isTouchMode()) return false;
+  if (document.body.classList.contains('bag-open')) return true;   // the touch loot/bag drawer sheet
+  for (const el of touchOnlyOverlayEls()) {
+    if (el.classList.contains('open')) return true;
+  }
+  return false;
+}
 function rtPaused() {
   if (gameHalted || inTown || player.hp <= 0) return true;
   if (touchLandscapeBlock) return true;  // portrait-only on touch — frozen while the rotate notice is up
@@ -31564,6 +31600,7 @@ function rtPaused() {
   for (const o of rtOverlayEls()) {
     if (o.el.classList.contains('open')) return true;
   }
+  if (touchMenuOpen()) return true;      // touch only: bag drawer / pop-up menu freezes play (desktop sidebar never does)
   return false;
 }
 
@@ -31583,6 +31620,7 @@ function clockPaused() {
     if (inTown && o.townRest) continue;   // resting in town → clock runs
     if (o.el.classList.contains('open')) return true;
   }
+  if (touchMenuOpen()) return true;       // touch only: an open bag/menu holds the clock too
   return false;
 }
 

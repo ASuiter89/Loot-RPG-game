@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "On touch, opening any menu pauses the game", by: "Jeff Louie", notes: [
+    "On phones and tablets, opening the bag or any pop-up menu now freezes the dungeon — no more taking hits while you rearrange gear or read the codex. Close it and play resumes exactly where it left off.",
+    "Desktop is unchanged: its loot drawer is a permanent sidebar, so play continues beside it.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Mana bar pulses when you're short to cast", by: "Claude", notes: [
     "Trying to cast a skill without enough mana now gives the mana bar a brief, faint blue pulse — a quick nudge toward why nothing fired.",
     "Skill buttons already grey out while recharging or when you can't afford them; this points the eye at the mana pool as the reason.",
