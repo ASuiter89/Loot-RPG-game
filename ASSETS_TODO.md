@@ -1,72 +1,54 @@
-# ASSETS TODO — endgame art to draw
+# ASSETS TODO — endgame art
 
-The endgame update ships with **placeholder art**: every new sprite key below is
-currently aliased (via `_egPlaceholderSprite()` in `src/legacy/game.js`) to a
-themed *existing* atlas tile so nothing renders blank. Replace each with real
-pixel art in the icon atlas (`SPRITE_IDX` + the sprite sheet), then the placeholder
-bridge auto-falls-through to the real tile (it only fires when a key is missing).
+**Status: the endgame art set is complete and shipped.** All 72 icons live as
+real pixel art in `src/assets/endgameArt.js` (`ENDGAME_ART`), rendered through
+`egArtSpan()` → `dlIconAt()` in `src/legacy/game.js`, and the six town-service
+keepers are real 4-frame walk strips in `TOWN_NPC_ART` (same 192×48 format as the
+built-in townsfolk). Nothing below renders a placeholder anymore.
 
-**House rule:** all on-screen art must be real pixel art — never an emoji as the
-thing itself. These are all shippable pixel-art tiles.
+**House rule:** all on-screen art is real pixel art — never an emoji as the thing
+itself. Everything here is a shippable pixel-art tile.
 
-## How the placeholder currently resolves
-`src/legacy/game.js → _egPlaceholderSprite(name)` maps by prefix:
-| prefix | stand-in tile |
-|---|---|
-| `cov_*` | `ic_cursed` |
-| `weave*`, `glyph*` | `mat_glimmer` |
-| `mf_*`, `mat_aether` | `mat_chaos` |
-| `pin_*` | `feat_gate_red` |
-| `cycle*` | `feat_gate_red` |
-| `deed*` | `q_relic` |
+## What shipped (all real art)
 
-Also: town-hub tile icons for the six services fall back in `townWalkIcon()`
-(same file) to `ic_cursed` / `mat_glimmer` / `mat_chaos` / `feat_gate_red` /
-`q_relic`. A proper **town walk-sprite sheet** per service (like other NPCs in
-`TOWN_NPC_ART`) would replace those.
+- **Dread Covenants (16):** `cov_altar` header + 15 affliction sigils
+  (`cov_frenzy`, `cov_horde`, `cov_teeming`, `cov_legion`, `cov_warband`,
+  `cov_bloodlust`, `cov_relentless`, `cov_apex`, `cov_annihilation`, `cov_famine`,
+  `cov_scarcity`, `cov_carapace`, `cov_juggernaut`, `cov_haste`, `cov_swelling`).
+- **Ascendant Weave (7):** `weave_star` header + glyph tiles `glyph` and
+  `glyph_1`…`glyph_5` (one per tier, so each rarity reads differently).
+- **Mirrorforge (5):** `mf_anvil` header, `mat_aether` (deep material — wallet chip
+  + floor pickup), and the item markers `mf_radiant`, `mf_mirrored`, `mf_corrupt`.
+- **Pantheon of the Deep (21):** `pin_altar`, `pin_locked`, generic `pin_shard`,
+  the six gods `pin_thallor`/`pin_nyxara`/`pin_vorgrim`/`pin_sylvaine`/`pin_kaethon`/
+  `pin_umbriel` each **plus** its `_uber` ascended variant, and the six per-lineage
+  shard icons `pin_shard_tide|void|ember|thorn|storm|hollow` (wired via
+  `egShardIcon()`).
+- **Cycles (3):** `cycle_banner` header/season banner, `cycle_milestone` tick,
+  `cycle_legacy` realm marker.
+- **Hall of Deeds (20):** `deed_trophy` header, 9 category tiles (`deed_collection`,
+  `deed_bestiary`, `deed_conquest`, `deed_depth`, `deed_endless`, `deed_bounty`,
+  `deed_breadth`, `deed_set`, `deed_mastery`), 5 Renown frames
+  (`deed_frame_iron|bronze|silver|gold|radiant`) and 5 badges
+  (`deed_badge_firstdeed|hunter|hoarder|champion|eternal`).
+- **Town-service keepers (6 walk strips):** `covenants` (ritual priest), `weave`
+  (astromancer), `mirrorforge` (arcane forgemaster), `pantheon` (deep oracle),
+  `cycles` (herald), `deeds` (loremaster curator) — animated in the town hub and
+  on the canvas exactly like the built-in NPCs.
 
-## Keys to draw
+## Optional polish (nice-to-have, not blocking)
 
-### Dread Covenants (altar + 15 affliction sigils)
-`cov_altar` (town/panel header), and one sigil each:
-`cov_frenzy`, `cov_horde`, `cov_teeming`, `cov_legion`, `cov_warband`,
-`cov_bloodlust`, `cov_relentless`, `cov_apex`, `cov_annihilation`, `cov_famine`,
-`cov_scarcity`, `cov_carapace`, `cov_juggernaut`, `cov_haste`, `cov_swelling`.
+- **Weave node art:** the constellation/keystone nodes reuse the glyph/tier tiles;
+  bespoke per-constellation and per-keystone icons would sell the board further.
+- **Mythic unique tint/frame:** the 8 Mythic uniques in `src/data/pinnacleUniques.js`
+  reuse their base gear icon via `iconForBase` (acceptable); a distinct Mythic
+  tint/frame would set them apart.
 
-### Ascendant Weave
-`weave_star` (header). Glyph tiles by tier: `glyph`, plus a distinct tile per
-tier (the roll sets `glyph.tier`; a `glyph_<tier>` set would let each rarity read
-differently). Optional: per-constellation and per-keystone node icons.
+## Non-art follow-ups (small)
 
-### Mirrorforge
-`mf_anvil` (header), `mat_aether` (the new deep material — also wants a wallet
-chip icon and a floor pickup sprite), plus optional markers for a Radiant item
-(`radiant star`), a Mirrored/perfected frame, and a corruption glyph.
-
-### Pantheon of the Deep (6 gods × base+uber, shards, altar)
-`pin_altar`, `pin_shard`, `pin_locked`, and boss portraits:
-`pin_thallor`(+`_uber`), `pin_nyxara`(+`_uber`), `pin_vorgrim`(+`_uber`),
-`pin_sylvaine`(+`_uber`), `pin_kaethon`(+`_uber`), `pin_umbriel`(+`_uber`).
-Also: item icons for the 8 Mythic uniques in `src/data/pinnacleUniques.js` (they
-currently use their base gear icon via `iconForBase`, which is fine, but a bespoke
-Mythic tint/frame would sell them). Shard currency icons per god type.
-
-### Cycles
-`cycle_banner` (header + season banner). Optional per-cycle emblem + a
-milestone-complete tick + a Legacy-realm marker.
-
-### Hall of Deeds
-`deed_trophy` (header), plus deed tile icons (one per deed in `src/data/deeds.js`,
-keys `deed_col_*`, `deed_bes_*`, `deed_conq_*`, `deed_dep_*`, `deed_end_*`,
-`deed_bnt_*`, `deed_brd_*`, `deed_set_*`, `deed_mir_*`), reward **frames**
-(`deed_frame_iron|bronze|silver|gold|radiant`) and **badges**
-(`deed_badge_firstdeed|hunter|hoarder|champion|eternal`). These render around the
-hero portrait / on leaderboard rows once real.
-
-## Non-art follow-ups (small, optional)
-- `addStashTab()` does not exist yet, so the Renown "stash tab" reward is a
-  guarded no-op (titles/frames/badges work). Add it to make that reward live.
+- `addStashTab()` does not exist yet, so the Renown "stash tab" reward is a guarded
+  no-op (titles/frames/badges all work). Add it to make that reward live.
 - Cycles enrollment tags the *current* hero; a true fresh-start character +
   Legacy-realm fork is a larger persistence feature left for later.
-- Malaise ramps enemy *damage* over floor-time (in `takePlayerDamage`); it does
-  not re-scale already-spawned enemy HP.
+- Malaise ramps enemy *damage* over floor-time (in `takePlayerDamage`); it does not
+  re-scale already-spawned enemy HP.

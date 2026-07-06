@@ -14,6 +14,7 @@ export const CHANGELOG = [
     "Pantheon of the Deep: gather Effigy shards from Endless bosses, summon apex gods at the Altar, and fight them for exclusive Mythic gear — a Base→Uber ladder gated by how deep you’ve pushed Endless. Opens in Endless.",
     "Cycles: opt into a seasonal ladder under a rotating headline rule and race a milestone Journey; enroll a hero for the current season from the Cycles panel.",
     "Hall of Deeds: an account-wide Renown ladder that turns your Collection, Bestiary, Conquest, depth records and bounties into deeds paying titles, frames, badges and trophies — status only, never power.",
+    "Every system ships with bespoke pixel art — panel crests, affliction sigils, tiered glyphs, the six deep gods with ascended Uber variants, per-lineage Effigy shards, and deed trophies, frames and badges — plus six animated town keepers who run the new services.",
     "For console play: gameGuide(“covenants”/“weave”/“mirrorforge”/“pantheon”/“cycles”/“deeds”) explains each, and gameState().endgame reports their live state.",
   ] },
   { date: "2026-07-06", size: "small", v: "Belt BOUNTY / MEALS modules jump to their town service", by: "Jeff Louie", notes: [
