@@ -133,6 +133,31 @@ describe('pickInDirection — 2×3 grid prefers aligned cells', () => {
   });
 });
 
+describe('pickInDirection — alignment strictly beats proximity (the diagonal bug)', () => {
+  // A horizontal tab strip: [Active][Passive], with a class option "Duelist" one row
+  // down and only slightly to the right of Active. "→" from Active must land on
+  // Passive (aligned, same row) — NOT Duelist, even though Duelist is nearer in x.
+  const active = box(0, 0, 60, 20);
+  const passive = box(80, 0, 60, 20);       // same row, far to the right
+  const duelist = box(10, 30, 60, 20);      // next row, only slightly right
+  it('→ from a tab picks the aligned tab beside it, not the closer item below', () => {
+    const cands = [active, passive, duelist];
+    expect(pickInDirection(active, cands, 'right')).toBe(1);   // passive, not duelist
+  });
+  it('↓ from the tab still reaches the row below', () => {
+    const cands = [active, passive, duelist];
+    expect(pickInDirection(active, cands, 'down')).toBe(2);    // duelist
+  });
+  it('a slightly-misaligned same-row neighbour still beats a far aligned one', () => {
+    // near neighbour overlaps the row (cross 0) though its top differs by a few px;
+    // a far element in perfect alignment must not steal focus from the near one.
+    const cur = box(0, 0, 40, 20);
+    const near = box(50, 3, 40, 20);     // overlaps rows (cross 0), close
+    const far = box(300, 0, 40, 20);     // perfectly aligned but far
+    expect(pickInDirection(cur, [cur, near, far], 'right')).toBe(1);
+  });
+});
+
 describe('pickInDirection — edge cases', () => {
   it('ignores holes (null candidates) from filtered-out elements', () => {
     const list = [box(0, 0), null, box(0, 60)];

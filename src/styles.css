@@ -5070,13 +5070,16 @@
     background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
     color: var(--text); font-size: var(--fs-strong); word-break: break-all;
   }
-  .pad-kb-row { display: flex; gap: var(--space-2); justify-content: center; flex-wrap: wrap; }
+  /* A fixed 10-column grid so every key sits in an aligned COLUMN across rows —
+     that alignment is what lets D-pad up/down/left/right land predictably (the
+     spatial focus nav strictly prefers the aligned neighbour). Wide keys span cols. */
+  .pad-kb-row { display: grid; grid-template-columns: repeat(10, 1fr); gap: var(--space-2); }
   .pad-kb-key {
-    flex: 1 1 auto; min-width: min(9vw, 40px); min-height: 40px; padding: var(--space-2);
+    min-height: 40px; padding: var(--space-2);
     background: var(--panel-raised); color: var(--text);
     border: 1px solid var(--border); border-radius: var(--radius-sm);
     font-size: var(--fs-body); cursor: pointer;
   }
-  .pad-kb-key.wide { flex-grow: 2; } .pad-kb-key.wide2 { flex-grow: 3; }
+  .pad-kb-key.wide { grid-column: span 2; } .pad-kb-key.wide2 { grid-column: span 3; }
   .pad-kb-key.done { background: color-mix(in srgb, var(--success) 40%, var(--panel-raised)); }
   body.pad .pad-kb-key.pad-focused, body.pad .pad-help-card .pad-focused { border-color: var(--interactive); }

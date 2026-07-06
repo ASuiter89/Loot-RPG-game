@@ -105,8 +105,13 @@ function spanGap(a0, a1, b0, b1) {
  *
  * A candidate qualifies only if its centre is genuinely on the correct side of the
  * current element's centre. Among those, the score is the primary-axis distance
- * plus a heavy penalty for cross-axis misalignment, so focus prefers the element in
- * the same row/column and only travels diagonally when nothing is aligned. This
+ * Alignment strictly dominates: a candidate whose CROSS-axis span overlaps the
+ * current element (a true same-row neighbour for a horizontal move, or same-column
+ * for a vertical one) is ALWAYS preferred over any non-overlapping one, no matter how
+ * much nearer the latter sits. Only when nothing overlaps do we fall back to a
+ * distance-plus-misalignment score. Without this, "→" from a tab could jump to a
+ * slightly-right item one row DOWN (small primary distance) instead of the aligned
+ * tab beside it (larger primary distance) — the exact "it goes diagonally" bug. This
  * single rule drives every menu — vertical lists, horizontal tab strips, and the
  * loot/skill grids alike — with no per-menu wiring.
  *
@@ -119,7 +124,10 @@ export function pickInDirection(current, candidates, dir) {
   const horizontal = dir === 'left' || dir === 'right';
   const sign = (dir === 'right' || dir === 'down') ? 1 : -1;
   const curX = cx(current), curY = cy(current);
-  let best = -1, bestScore = Infinity;
+  // Two tiers: an aligned neighbour (cross-span overlaps → same row/column) wins on
+  // primary distance alone; everything else competes on the weighted score.
+  let aligned = -1, alignedPrimary = Infinity;
+  let any = -1, anyScore = Infinity;
   for (let i = 0; i < candidates.length; i++) {
     const r = candidates[i];
     if (!r) continue;
@@ -127,15 +135,16 @@ export function pickInDirection(current, candidates, dir) {
     // Primary = displacement along the travel axis; must be in the chosen direction.
     const primary = horizontal ? (rx - curX) * sign : (ry - curY) * sign;
     if (primary <= 1) continue;   // not far enough on the correct side (>1px guards ties)
-    // Cross = perpendicular misalignment. Use the gap between the perpendicular
-    // spans so anything overlapping the current element's row/column scores 0 there.
+    // Cross = perpendicular misalignment: the gap between the perpendicular spans,
+    // 0 when they overlap (same row for a horizontal move, same column for vertical).
     const cross = horizontal
       ? spanGap(current.top, current.bottom, r.top, r.bottom)
       : spanGap(current.left, current.right, r.left, r.right);
+    if (cross === 0 && primary < alignedPrimary) { alignedPrimary = primary; aligned = i; }
     const score = primary + CROSS_PENALTY * cross;
-    if (score < bestScore) { bestScore = score; best = i; }
+    if (score < anyScore) { anyScore = score; any = i; }
   }
-  return best;
+  return aligned >= 0 ? aligned : any;
 }
 
 /**
