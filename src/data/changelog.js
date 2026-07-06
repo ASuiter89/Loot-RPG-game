@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Gear screen: fainter hero, red pulse on unusable worn gear", by: "Jeff Louie", notes: [
+    "The hero backdrop behind the GEAR paper doll is now fainter, so the equipment slots read cleaner against it.",
+    "A worn piece you no longer meet the requirement for now throbs a red glow on its slot, drawing the eye straight to the gear that's stopped helping until you re-qualify.",
+  ] },
   { date: "2026-07-06", size: "small", v: "More compact \"Stat abbreviations\" key", by: "Jeff Louie", notes: [
     "Tightened the line spacing and padding in the \"Stat abbreviations\" key so the whole reference fits in less space without shrinking the text below its readable size.",
   ] },
