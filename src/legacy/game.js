@@ -5893,7 +5893,13 @@ function hostilesRemaining() {
 function updateFloorClear() {
   if (!floorCleared && hostilesRemaining() === 0) {
     floorCleared = true;
-    if (player.clearedFloors) player.clearedFloors[dungeonLevel] = true;
+    // Persist the clear — but NOT for the beach tutorial. The tutorial map runs at
+    // dungeonLevel 1 (the SAME key as the real Normal floor 1), so banking it here
+    // would leave clearedFloors[1] set, and the real floor 1 would then load
+    // pre-cleared (generateMap opens any floor already in clearedFloors) — its
+    // stairs down unsealed on arrival with nothing to fight. The tutorial cave opens
+    // off the local `floorCleared` flag above, so it needs no persistent record.
+    if (player.clearedFloors && !tutorialActive) player.clearedFloors[dungeonLevel] = true;
     updateObjectiveChip();   // a cleared floor may complete/advance the active bounty
     if (isLastFiniteFloor()) {
       // The end of a finite difficulty — there are no stairs down. Conquering it

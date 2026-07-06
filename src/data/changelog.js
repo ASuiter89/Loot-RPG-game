@@ -7,6 +7,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "First dungeon floor seals its stairs again", by: "Andrew Suiter", notes: ["The real first floor after the beach now keeps its stairs down sealed until you clear the foes, like every other floor — the beach tutorial was wrongly marking floor 1 pre-cleared, so its stairs opened on arrival."] },
   { date: "2026-07-06", size: "small", v: "Hero card depth reads as a gate icon", by: "Andrew Suiter", notes: ["Title-screen and pause-menu hero card swaps the word \"Deepest\" for the red dungeon-gate icon, so the depth and gold both fit on the card without crowding."] },
   { date: "2026-07-06", size: "small", v: "Hero card shows your gold again", by: "Andrew Suiter", notes: ["Title-screen and pause-menu hero card now show your real gold — it read 0 for any hero carrying 1,000 or more."] },
   { date: "2026-07-05", size: "large", v: "All-new hand-generated icon art", by: "Andrew Suiter", notes: [
