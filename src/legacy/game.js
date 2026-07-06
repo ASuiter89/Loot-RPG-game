@@ -3556,7 +3556,7 @@ function totalAttr(key) {
       sum += m === 1 ? it.attrs[key] : it.attrs[key] * m;
     }
   }
-  return sum;
+  return sum + egWeaveFlat(key);   // + Ascendant Weave attribute pips (0 for an empty board)
 }
 
 // The primary/secondary attributes a class deals damage with. Classless heroes
@@ -7102,6 +7102,17 @@ window.gameState = function gameState(radius) {
         };
       }) : null,
     },
+    // ── ENDGAME live state (the loot-driven late game). Each block is null/empty
+    // until you engage that system; see gameGuide("covenants"/"weave"/"mirrorforge"/
+    // "pantheon"/"cycles"/"deeds"). ──
+    endgame: {
+      covenants: egSafe(egCovGameStateBlock),   // sworn afflictions + total Dread + reward mults + per-class marks
+      weave: egSafe(egWeaveGameStateBlock),     // Ascendant Weave board points, active keystones, glyphs, cosmetic depth
+      mirrorforge: egSafe(egMfGameStateBlock),  // Aether, Attunement pity + target, Perfected (Mirrored) count
+      pantheon: egSafe(egPinnacleGameStateBlock), // active apex fight (phase/hp/telegraphs) or shard wallet + gods cleared
+      cycle: egSafe(egCycleGameStateBlock),     // seasonal phase, enrollment, journey checklist, countdown
+      deeds: egSafe(egDeedsGameStateBlock),     // Renown rank + total, deeds completed/total, equipped title
+    },
     legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
@@ -7336,6 +7347,13 @@ window.gameGuide = function gameGuide(topic) {
       `The Vault has a COLLECTION tab: one slot for every unique and set piece in the game. A slot is a darkened silhouette (hover to preview the fixed properties it can roll — labels only, since the values roll with drop depth) until you store a matching piece there; then it lights up with your best-rolled copy. Storing a unique/set piece always files it here instead of ordinary Storage; a slot can hold MULTIPLE copies (it shows the strongest with a ×N badge, and clicking lists them all to withdraw).`,
       `The Collection is account-wide and per-ladder, exactly like the rest of the Vault (Standard and Hardcore keep separate ones). Filter it by gear slot, unique vs set, a specific set, or acquired/missing. gameState().menu.collection reports distinct pieces collected out of the total.`,
     ],
+    // ── ENDGAME topics ──
+    covenants: egGuide(egCovGuideTopic),
+    weave: egGuide(egWeaveGuideTopic),
+    mirrorforge: egGuide(egMfGuideTopic),
+    pantheon: egGuide(egPinnacleGuideTopic),
+    cycles: egGuide(egCycleGuideTopic),
+    deeds: egGuide(egDeedsGuideTopic),
     controller: [
       `A gamepad is a fully supported input layer alongside keyboard/mouse/touch — plug in a PlayStation, Xbox or Steam Deck / generic pad and it's revealed on the first input (gameState().input reads 'pad'; keyboard stays live too). Everything in the game is doable on the pad. Button names below give PlayStation then Xbox: ✕/A, ○/B, □/X, △/Y.`,
       `In the dungeon: LEFT STICK moves (analog 8-way). R2 sprints (hold; taps to latch in Toggle mode). R1 dashes. ✕/A interacts / uses / opens a chest / talks to an NPC. ○/B opens the Bag. □/X toggles the combat log. △/Y opens a town portal. HOLD L1 and press ✕○□△ to cast skill slots 1–4 (the auto-cast slot still fires itself). D-pad: Left = health potion, Right = mana potion, Up = swap weapon set, Down = cycle auto-attack focus. RIGHT STICK aims a soft inspect reticle over foes (and scrolls the combat log while it's open). L3 (left-stick click) collapses/expands the minimap.`,
@@ -7346,6 +7364,13 @@ window.gameGuide = function gameGuide(topic) {
   if (topic == null) return Object.assign({ topics: Object.keys(G) }, G);
   const t = String(topic).toLowerCase().replace(/[^a-z]/g, '');
   const alias = {
+    // ── Endgame aliases ──
+    covenant: 'covenants', dread: 'covenants', affliction: 'covenants', afflictions: 'covenants', covenantaltar: 'covenants', malaise: 'covenants',
+    weave: 'weave', ascendant: 'weave', ascendantweave: 'weave', constellation: 'weave', keystone: 'weave', keystones: 'weave', glyph: 'weave', glyphs: 'weave', weavedepth: 'weave',
+    mirrorforge: 'mirrorforge', mirror: 'mirrorforge', mirrored: 'mirrorforge', perfect: 'mirrorforge', perfected: 'mirrorforge', aether: 'mirrorforge', attune: 'mirrorforge', attunement: 'mirrorforge', exalt: 'mirrorforge', divine: 'mirrorforge', corrupt: 'mirrorforge', radiant: 'mirrorforge', forgingpotential: 'mirrorforge',
+    pantheon: 'pantheon', god: 'pantheon', gods: 'pantheon', effigy: 'pantheon', shard: 'pantheon', shards: 'pantheon', mythic: 'pantheon', mythics: 'pantheon', uber: 'pantheon', apex: 'pantheon', summit: 'pantheon',
+    cycle: 'cycles', season: 'cycles', seasonal: 'cycles', league: 'cycles', ladder: 'cycles', journey: 'cycles', legacyrealm: 'cycles',
+    deed: 'deeds', renown: 'deeds', hallofdeeds: 'deeds', trophy: 'deeds', trophies: 'deeds', badge: 'deeds', frame: 'deeds', completionist: 'deeds',
     move: 'movement', moving: 'movement', sprint: 'movement', dash: 'movement', stamina: 'movement', stamina: 'movement', walk: 'movement', walking: 'movement', facing: 'movement', face: 'movement', direction: 'movement', animation: 'movement', animate: 'movement',
     skill: 'skills', cast: 'skills', autocast: 'autocast', autocasting: 'autocast', hybrid: 'skills', school: 'skills', schools: 'skills',
     damage: 'damage', dmg: 'damage', spell: 'damage', spells: 'damage', spellpower: 'damage', skillpower: 'damage', attackspeed: 'damage', castspeed: 'damage', cooldown: 'damage', cdr: 'damage', scaling: 'damage', attack: 'damage', autoattack: 'damage', armor: 'damage', magicpen: 'damage', magicresist: 'damage', magicresistance: 'damage', resist: 'damage', resistance: 'damage', mitigation: 'damage', pen: 'damage', penetration: 'damage',
@@ -10224,6 +10249,7 @@ function placeFurniture(theme) {
 
 function generateMap() {
   inTown = false;
+  egOnFloorEnter();   // stamp the floor-enter clock (malaise ramp) + refresh the per-descent Dread Covenant caches
   clearHeldFloor();   // a freshly-built floor supersedes any snapshotted stage (Gate re-entry, stairs, conquest) — the sole chokepoint that keeps "Return to Last Floor" honest
   mapEpoch++;         // new layout → rebuild the wall-shadow cache on next draw
   stopTownAmbient();  // leave the town's chatter behind at the dungeon door
@@ -12119,6 +12145,7 @@ function checkBountyComplete() {
   if (!b) return;
   // Latch on the not-done → done edge first, so the cue is consumed exactly once…
   if (!bountyNewlyComplete(b, bountyTotals())) return;
+  try { egHallBumpBounty(); egDeedsEvaluate(); } catch (e) {}   // account-wide bounty tally + Deed re-check (Hall of Deeds)
   // …but only celebrate during live dungeon play. A bounty is only ever completed
   // out in the dungeon, so an in-town / title-screen edge means a prior session
   // finished it and we're merely resuming — popping a "return to town" banner over
@@ -14829,6 +14856,9 @@ function spawnEnemies() {
   // Floors 2-3 pack one extra foe so the opening isn't a total faceroll — but
   // floor 1 is left alone so a fresh, gearless hero gets a fair first dive.
   if (!isBossFloor && dungeonLevel >= 2 && dungeonLevel <= 3) count += 1;
+  // Endgame density: Dread Covenants (Frenzied Horde etc.) and the active seasonal
+  // Cycle can crowd the floor with more foes. Both are no-ops when inactive.
+  if (!isBossFloor) { count = Math.max(1, Math.round(egCovDensity(count))); count = Math.max(1, Math.round(egCycleDensity(count))); }
   // Final safety ceiling (after modifiers): no floor, however large or heavily
   // modified, spawns an unplayable swarm.
   if (!isBossFloor) count = Math.min(count, 48);
@@ -14843,7 +14873,7 @@ function spawnEnemies() {
 
   // ~20% of non-boss floors feature a single glowing "elite" with better loot;
   // certain floor modifiers raise that chance.
-  const eliteChance = 0.2 + (floorMod.eliteBonus || 0) + pfx('elite', 0);
+  const eliteChance = 0.2 + (floorMod.eliteBonus || 0) + pfx('elite', 0) + egCovEliteAdd();  // + Dread Covenant elite pressure
   const eliteIndex = (!isBossFloor && Math.random() < eliteChance) ? rnd(0, count - 1) : -1;
 
   // Difficulty tracks the hero, not just the floor: once you out-level the depth
@@ -14881,8 +14911,12 @@ function spawnEnemies() {
   // and the no-empty-rooms pass (populateEmptyRooms).
   const mobLevel = dungeonLevel;
   const threat = depthThreat(mobLevel);   // compounds with depth — deep is deadly
-  const baseHp = Math.max(1, Math.round((14 + mobLevel * BALANCE.enemyHpPerFloor) * threat * (floorMod.hpMult || 1) * pfx('hp', 1) * threatScale * reliefEase * BALANCE.enemyHpMult));
-  const baseDmg = Math.max(1, Math.round((3.5 + mobLevel * BALANCE.enemyDmgPerFloor + bandIdx) * threat * (floorMod.dmgMult || 1) * pfx('dmg', 1) * threatScale * earlyBite * reliefEase * BALANCE.enemyDmgMult));
+  // Dread Covenant enemy scaling wraps the vanilla curve (×1 when no covenant is
+  // sworn, so an un-covenanted descent is byte-identical). Malaise is applied to
+  // damage over time in takePlayerDamage(); here elapsed≈0 at build, so it's neutral.
+  const _fe = (Date.now() - (_egFloorEnterMs || Date.now())) / 1000;
+  const baseHp = Math.max(1, Math.round(egCovSpawnHp((14 + mobLevel * BALANCE.enemyHpPerFloor) * threat * (floorMod.hpMult || 1) * pfx('hp', 1) * threatScale * reliefEase * BALANCE.enemyHpMult, _fe)));
+  const baseDmg = Math.max(1, Math.round(egCovSpawnDmg((3.5 + mobLevel * BALANCE.enemyDmgPerFloor + bandIdx) * threat * (floorMod.dmgMult || 1) * pfx('dmg', 1) * threatScale * earlyBite * reliefEase * BALANCE.enemyDmgMult, _fe)));
   floorMobSpec = { types: floorTypes, hp: baseHp, dmg: baseDmg, level: mobLevel };
 
   for (let i = 0; i < count; i++) {
@@ -15514,6 +15548,19 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
     // ever lives in saved item data.
     item.flavor = 'Cursed: great power at a price.';
     item.value = Math.round(value * 1.5);
+  }
+  // Mirrorforge "radiant" greater-roll: deep in Endless a rare drop rolls hot — mark
+  // it (egMfRadiantOnAffix) and lift its non-locked positive stats into the greater
+  // band so the marker means real power. No-op in town / the finite tiers.
+  if (!inTown && item && item.stats) {
+    const edepth = endlessDepthNow();
+    if (edepth > 0) { try {
+      if (egMfRadiantOnAffix(item, edepth)) {
+        const locked = lockedStats(item);
+        for (const k in item.stats) if (!locked.includes(k) && item.stats[k] > 0) item.stats[k] = Math.round(item.stats[k] * 1.4);
+        item.value = Math.round((item.value || 0) * 1.5);
+      }
+    } catch (_e) {} }
   }
   return item;
 }
@@ -20616,7 +20663,11 @@ function totalStat(name) {
       sum += m === 1 ? v : v * m;
     }
   }
-  return memo[name] = sum + setStatBonus(name) + itemPowerStatBonus(name);   // set thresholds + special-power stat bonuses
+  // + Ascendant Weave board/glyph contribution: flat adds into the sum, mult scales
+  // the whole stat. Both are no-ops (0 / ×1) for an un-invested board, so an
+  // un-woven hero is byte-identical. Cached behind loadoutEpoch + the weave signature.
+  const wBase = sum + setStatBonus(name) + itemPowerStatBonus(name) + egWeaveFlat(name);
+  return memo[name] = wBase * egWeaveMult(name);
 }
 
 // Armor reduces incoming damage by a *percentage* with diminishing returns,
@@ -20695,6 +20746,7 @@ function absorbWithVeil(dmg) {
 function takePlayerDamage(dmg, label, { lethal = true, isDoT = false } = {}) {
   dmg = Math.max(0, Math.round(dmg || 0));
   if (dmg <= 0) return 0;
+  if (_egCovMalaiseRate) dmg = Math.max(1, Math.round(dmg * egMalaiseNow()));   // Dread malaise: the floor grows deadlier the longer you linger
   player._noDmgSecs = 0;                 // any damage restarts the calm-before-recharge
   let rem = absorbWithShield(dmg);       // transient buff shield first
   rem = absorbWithVeil(rem);          // then the persistent Spirit Veil
@@ -20979,6 +21031,16 @@ function onEnemyDefeated(e) {
     sfx('levelup');
     log(`<span data-spr=q_relic></span> First clear of this boss floor — <b>+1 Boss Point</b>! Spend it on the GEAR tab to level a gear slot (+${Math.round(BOSS_SLOTS.perLevel * 100)}% to its gear). ${avail} to spend.`, 'important');
   }
+  // ── Endgame boss-kill hooks ──
+  if (e.isBoss) {
+    // Dread Covenants: record this kill into the per-class "highest Dread cleared"
+    // checklist (no-op when no covenant is sworn), keyed by the boss's identity.
+    try { egCovRecordBossClear(player.class || 'any', e.type || e.name || String(bfk)); } catch (_e) {}
+    // Pantheon: a share of Endless boss kills faucet an Effigy shard toward a summon.
+    if (typeof isEndless === 'function' && isEndless()) { try { egPinnacleShardDrop(endlessDepthNow()); } catch (_e) {} }
+  }
+  // Pantheon apex-god kill: roll the exclusive Mythic + first-clear reward + advance pity.
+  if (e.pinnacle) { try { egPinnacleOnBossKill(e); } catch (_e) {} }
   if (e.isBoss && farm < 1 && !firstBossKill) log(`⚠️ ${label} has been slain here recently — its spoils are thinner (${Math.round(farm * 100)}%). Rest or move on to reset.`, 'important');
   const xpMult = e.isBoss ? 5 : (e.isElite ? 2 : 1);
   const goldMult = e.isBoss ? 3 : (e.isElite ? 2 : 1);
@@ -21011,7 +21073,7 @@ function onEnemyDefeated(e) {
   updateBars();
   // The floor modifier, an active Fortune buff, gear Magic Find, and any pact all
   // sweeten every drop roll.
-  const lootMult = (floorMod.lootMult || 1) * greedLootMult() * (buffs.fortune ? 1.5 : 1) * pfx('loot', 1) * (1 + (totalStat('MAGICFIND') + skillBonus('magicFind')) / 100 + foodFx('magicPct')) * (1 + foodFx('dropPct'));
+  const lootMult = (floorMod.lootMult || 1) * greedLootMult() * (buffs.fortune ? 1.5 : 1) * pfx('loot', 1) * (1 + (totalStat('MAGICFIND') + skillBonus('magicFind')) / 100 + foodFx('magicPct')) * (1 + foodFx('dropPct')) * egCovLootQtyMult();   // × Dread Covenant loot quantity (×1 when un-sworn)
   // ── Gear drops (Diablo-2-style "picks") ──
   // Instead of one super-lucky roll, each kill makes a number of independent
   // PICKS; every pick either finds nothing (NoDrop) or yields one item whose
@@ -21077,7 +21139,7 @@ function onEnemyDefeated(e) {
     const add = (k, n) => { if (n > 0 && materialUnlocked(k)) gained[k] = (gained[k] || 0) + n; };
     const big = e.isBoss ? 3 : (e.isElite ? 2 : 1);
     // Material Find % (gear) boosts the odds of every crafting-material drop.
-    const matMult = lootMult * (1 + totalStat('MATFIND') / 100);
+    const matMult = lootMult * (1 + totalStat('MATFIND') / 100) * egCovMaterialMult();   // × Dread Covenant material find
     if (Math.random() < 0.34 * matMult || e.isElite || e.isBoss)  add('scrap', rnd(1, 2) * big + Math.min(4, Math.floor(dungeonLevel / 12)));
     if (Math.random() < 0.09 * matMult || e.isBoss)               add('glimmer', e.isBoss ? rnd(1, 2) : 1);
     if (Math.random() < (0.018 + dungeonLevel * 0.0012) * matMult || (e.isBoss && Math.random() < 0.5)) add('core', e.isBoss ? rnd(1, 2) : 1);
@@ -21090,6 +21152,22 @@ function onEnemyDefeated(e) {
       log(`<span data-spr=chest></span> ${label} dropped ${keys.map(k => `${gained[k]} ${CRAFT_MATERIALS[k].name}`).join(', ')}.`, 'loot');
       updateBars();
     }
+  }
+  // ── Endgame faucets (deep Endless only) ──
+  // Ascendant Weave glyphs, Mirrorforge Aether, and (on boss kills) a Deed re-check.
+  {
+    const edepth = endlessDepthNow();
+    if (edepth > 0) {
+      // Glyphs: rarer, board-empowering drops gated to deeper Endless (bosses & elites
+      // are the reliable source; ordinary foes a rare trickle).
+      const glyphChance = (e.isBoss ? 0.5 : e.isElite ? 0.18 : 0.02) * lootMult;
+      if (Math.random() < glyphChance) { try { egWeaveDropGlyph(edepth); } catch (_e) {} }
+      // Aether: the Mirrorforge's deep material (gate handled inside egMfAetherDrop).
+      let aeth = 0; try { aeth = egMfAetherDrop(edepth); } catch (_e) { aeth = 0; }
+      if (aeth > 0) { player.aether = (player.aether || 0) + aeth; log(`<span data-spr=mat_chaos></span> ${label} dropped ${aeth} Aether.`, 'loot'); }
+    }
+    // Hall of Deeds re-evaluates on a boss kill (a depth/conquest deed may cross).
+    if (e.isBoss) { try { egDeedsEvaluate(); } catch (_e) {} }
   }
   // ── Cooking ingredients ── ramen toppings to cook into buff bowls at the Ramen
   // House in town. Elites and bosses cough up a few; ordinary foes share now and
@@ -26203,6 +26281,7 @@ function chooseClass(key) {
   const cls = CLASSES[key];
   if (!cls) return;
   player.class = key;
+  try { egHallAddClass(key); } catch (e) {}   // account-wide class-breadth ledger (Hall of Deeds)
   player.skillCd = 0; player.ascension = null;
   player.skills = {}; player.skillCds = {}; player.skillSlots = []; player.autoSkill = null; player.autoCast = {}; combatBuffs = {};
   // A fresh hero owns its full lifetime pools of points (the starting skill point
@@ -30972,6 +31051,7 @@ loadHcMeta();
 // slay feats read the ledger) and before loadGame() (so the active hero's save is already
 // stripped of its legacy fields and its kills aren't double-counted).
 loadBestiaryDex();
+loadHallDeeds();   // account-wide Hall of Deeds / Renown ledger (mirrors the bestiary key)
 // Seed the account-wide (Kitten) feat set from every existing save on this device, so
 // achievements earned before this feature — or on a slot not yet replayed — are
 // unified into one account tally instead of appearing to differ between slots.
@@ -31633,6 +31713,10 @@ function worldTick() {
   tickPortalChannel(hpBeforeEnemies);
   renderSkillBar();
   updateBars();
+  // Endgame per-tick drivers: advance an active Pantheon fight (phases/adds/enrage)
+  // and tick the seasonal Cycle journey. Both guard themselves when inactive.
+  if (_egPinnacleFight) { try { egPinnacleTick(); } catch (e) {} }
+  try { egCycleTick(); } catch (e) {}
   if ((++_saveTick % 8) === 0) saveGame();   // persist every ~8 ticks instead of every action
 }
 // Advance the world clock by dt seconds, running whole ticks. Capped at 2 catch-up
@@ -31795,6 +31879,19 @@ function endlessDepthNow() { return (typeof isEndless === 'function' && isEndles
 // Called from generateMap() when a floor is (re)built: stamp the floor-enter clock
 // (malaise ramp) and refresh the per-descent covenant caches.
 function egOnFloorEnter() { _egFloorEnterMs = Date.now(); try { egDeriveCovenantRun(); } catch (e) {} }
+// Live malaise multiplier for the CURRENT floor age — the "Ashen Tide" tempo
+// covenant ramps enemy damage the longer you dawdle. 1 (no-op) when no malaise
+// covenant is sworn. Applied to real incoming damage in takePlayerDamage().
+function egMalaiseNow() {
+  try {
+    if (!_egCovMalaiseRate) return 1;
+    return malaiseMult(Math.max(0, (Date.now() - (_egFloorEnterMs || Date.now())) / 1000), _egCovMalaiseRate);
+  } catch (e) { return 1; }
+}
+// Safe wrappers so a bug in an endgame block can never make gameState()/gameGuide()
+// throw (they are the AI-play contract the smoke test pins).
+function egSafe(fn) { try { return fn(); } catch (e) { return null; } }
+function egGuide(fn) { try { const a = fn(); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 
 
 // ── COVENANTS ──
