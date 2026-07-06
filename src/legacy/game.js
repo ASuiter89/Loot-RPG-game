@@ -26477,6 +26477,9 @@ function itemCardHTML(item, opts = {}) {
   // Weapons show their sub-type, hand requirement, reach (a little tile grid) and
   // how they swing. Sub-types carry their own style/reach (a Pike reaches 3, a
   // Rapier thrusts) while still reading as their category for the class lock.
+  // The weapon sub-type + hand (e.g. "Dagger · 1H") reads up top under the name;
+  // the range grid and swing description stay down with the flavour detail.
+  let weaponTypeLine = '';
   let weaponLine = '';
   if (item.slot === 'weapon') {
     const sub = weaponSubType(item);
@@ -26486,8 +26489,8 @@ function itemCardHTML(item, opts = {}) {
     const style = sub ? WEAPON_SUBTYPES[sub].style : (base ? WEAPON_STYLES[base] : null);
     if (styleKey) {
       const hands = weaponHandsOf(item) === 2 ? '2H' : '1H';
-      const subTag = sub ? `<div style="color:var(--orange-400);font-size:1.2rem;margin-top:4px"><b>${sub}</b> · <span style="color:var(--orange-500)">${hands}${base && base !== sub ? ' ' + base : ''}</span></div>` : '';
-      weaponLine = subTag + `<div style="margin-top:4px">${weaponRangeGridHTML(styleKey)}</div>` +
+      weaponTypeLine = sub ? `<div style="color:var(--orange-400);font-size:1.2rem;margin:2px 0"><b>${sub}</b> · <span style="color:var(--orange-500)">${hands}${base && base !== sub ? ' ' + base : ''}</span></div>` : '';
+      weaponLine = `<div style="margin-top:4px">${weaponRangeGridHTML(styleKey)}</div>` +
         (WEAPON_STYLE_DESC[style] ? `<div style="color:var(--orange-500);font-size:1.2rem;margin-top:2px;font-style:italic">${WEAPON_STYLE_DESC[style]}</div>` : '');
     }
   }
@@ -26523,6 +26526,7 @@ function itemCardHTML(item, opts = {}) {
     ${label}
     <div class="tt-name" style="color:${tierColor(item)}">${curseMark(item)}${item.name}</div>
     <div class="tt-tier" style="color:${tierColor(item)}">${item.slot ? `<span data-spr=${SLOTS[item.slot].sprite}></span> ${SLOTS[item.slot].label}` : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</div>
+    ${weaponTypeLine}
     ${item.slot ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${abbreviateNumber(power)}</div>` : ''}
     ${powerLine}
     ${uniqueLine}
