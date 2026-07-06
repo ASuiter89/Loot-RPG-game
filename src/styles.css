@@ -1753,6 +1753,9 @@
   /* Meal quick-slots: MEAL_SLOT_COUNT skill-sized tiles. Filled = food-green bowls with a
      stack badge; empty = dashed placeholders (matching unassigned skill slots). */
   .sb-meals-body { gap: calc(4px * var(--ui-scale,1)); }
+  /* In town the whole MEALS module is a shortcut to the Ramen House, so it reads as
+     clickable; in the dungeon only the filled tiles act, so no module-wide pointer. */
+  #skill-bar.in-town .sb-mod-meals, #skill-bar.in-town .sb-mod-meals .sb-meal-slot-empty { cursor: pointer; }
   .sb-meal { border-color: var(--green-600); background: var(--green-800); color: var(--green-50); }
   .sb-meal:hover { border-color: var(--green-650); filter: brightness(1.12); }
   .sb-meal:active { background: var(--green-650); }

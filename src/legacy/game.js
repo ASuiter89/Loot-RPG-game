@@ -7289,11 +7289,11 @@ window.gameGuide = function gameGuide(topic) {
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon.`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
-      `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks.`,
+      `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
-      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim its reward. Each contract pays a DIFFERENT MIX of 1–3 rewards — gold, a crafting material (any of scrap/glimmer/core/chaos, scaled by depth), a lump of XP, or a gear piece scaled to your depth (the toughest boss contracts guarantee a rarer piece) — and a contract paying fewer things pays more of each. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract, its live progress (including menu.bounty.done once it's ready to claim), and menu.bounty.rewards listing exactly what it pays.`,
+      `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim its reward. Each contract pays a DIFFERENT MIX of 1–3 rewards — gold, a crafting material (any of scrap/glimmer/core/chaos, scaled by depth), a lump of XP, or a gear piece scaled to your depth (the toughest boss contracts guarantee a rarer piece) — and a contract paying fewer things pays more of each. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract, its live progress (including menu.bounty.done once it's ready to claim), and menu.bounty.rewards listing exactly what it pays. In town, clicking the belt's BOUNTY module opens the board (even with no active contract).`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
     tips: [
@@ -12364,12 +12364,13 @@ function updateObjectiveChip() {
   }
   chip.style.display = '';
 }
-// Tap the chip: open the Bounty Board in town, or log the live progress in the
-// dungeon (where the board isn't reachable).
+// Tap the chip / belt module: open the Bounty Board in town (whether or not a
+// contract is active — you may want to go accept one), or log the live progress in
+// the dungeon (where the board isn't reachable).
 function objectiveChipClick() {
+  if (inTown) { openBounty(); return; }
   const b = (typeof player === 'object' && player) ? player.bounty : null;
   if (!b) return;
-  if (inTown) { openBounty(); return; }
   const prog = Math.min(bountyProgress(b), b.need);
   log(`<span data-spr=scroll></span> Bounty: ${b.desc.replace('{n}', b.need)} — ${prog}/${b.need}.`);
 }
@@ -26036,13 +26037,22 @@ function beltMealsHtml() {
   let tiles = '';
   for (let i = 0; i < MEAL_SLOT_COUNT; i++) {
     const s = slots[i];
+    // A filled tile taps-to-eat; stopPropagation keeps that from ALSO firing the
+    // module's town shortcut (beltMealsClick → Ramen House) underneath it.
     tiles += (s && s.qty > 0)
-      ? `<button class="skillbar-btn sb-meal" onclick="eatMealSlot(${i})" ${drop(i)} ${hoverTip(`<div class='ht-name'>${bowlIcon(14)} ${escapeHtml(s.bowl.name)}</div><div class='ht-line'>${escapeHtml(fxDesc(s.bowl.fx) || 'no effect')} · ${s.bowl.floors} floors</div><div class='ht-sub'>tap to eat · ${s.qty} left</div>`)}><span class="sb-icon">${bowlIcon(24)}</span><span class="sb-meal-qty">${s.qty}</span></button>`
+      ? `<button class="skillbar-btn sb-meal" onclick="event.stopPropagation(); eatMealSlot(${i})" ${drop(i)} ${hoverTip(`<div class='ht-name'>${bowlIcon(14)} ${escapeHtml(s.bowl.name)}</div><div class='ht-line'>${escapeHtml(fxDesc(s.bowl.fx) || 'no effect')} · ${s.bowl.floors} floors</div><div class='ht-sub'>tap to eat · ${s.qty} left</div>`)}><span class="sb-icon">${bowlIcon(24)}</span><span class="sb-meal-qty">${s.qty}</span></button>`
       : `<div class="skillbar-btn sb-meal sb-meal-slot-empty" ${drop(i)}></div>`;
   }
   const overlay = anyFilled ? '' : `<div class="sb-mod-overlay">Go cook something!</div>`;
   const tip = anyFilled ? '' : hoverTip(`<div class='ht-name'>${bowlIcon(14)} Meals</div><div class='ht-line'>Cook a bowl at the Ramen House and slot it here to eat it mid-run.</div>`);
-  return `<div class="sb-mod sb-mod-meals${anyFilled ? '' : ' sb-mod-idle'}" ${tip}><span class="sb-pill sb-mod-pill">MEALS</span><div class="sb-mod-body sb-meals-body">${tiles}${overlay}</div></div>`;
+  // In town the whole module is a shortcut to the Ramen House (see beltMealsClick).
+  return `<div class="sb-mod sb-mod-meals${anyFilled ? '' : ' sb-mod-idle'}" onclick="beltMealsClick()" ${tip}><span class="sb-pill sb-mod-pill">MEALS</span><div class="sb-mod-body sb-meals-body">${tiles}${overlay}</div></div>`;
+}
+// Clicking the belt MEALS module while in town opens the Ramen House (where you
+// cook bowls and slot them); in the dungeon it's inert — only the filled tiles act
+// (tap-to-eat), and their onclick stops propagation so eating never also fires this.
+function beltMealsClick() {
+  if (inTown) openRamen();
 }
 // Bounty tracker — body shows the active contract's objective + a live progress bar,
 // or a "No bounty yet" OVERLAY on the same-size body. The objective LABEL is stable per
@@ -26061,7 +26071,10 @@ function beltBountyHtml() {
   const tip = b
     ? hoverTip(`<div class='ht-name'>${ic} Bounty</div><div class='ht-line'>${escapeHtml(b.desc.replace('{n}', b.need))}</div>`)
     : hoverTip(`<div class='ht-name'>${ic} Bounty</div><div class='ht-line'>No active bounty — accept one at the town Bounty Board.</div>`);
-  return `<div class="sb-mod sb-mod-bounty${b ? '' : ' sb-mod-idle'}" ${b ? 'onclick="objectiveChipClick()"' : ''} ${tip}><span class="sb-pill sb-mod-pill">BOUNTY</span><div class="sb-mod-body sb-bounty-body">${inner}</div></div>`;
+  // Always clickable: in town it's a shortcut to the Bounty Board even with no
+  // active contract (so you can go accept one); in the dungeon a click logs live
+  // progress on the active contract (and is inert when there's none).
+  return `<div class="sb-mod sb-mod-bounty${b ? '' : ' sb-mod-idle'}" onclick="objectiveChipClick()" ${tip}><span class="sb-pill sb-mod-pill">BOUNTY</span><div class="sb-mod-body sb-bounty-body">${inner}</div></div>`;
 }
 // Refresh the volatile bits of the belt bounty module — the progress count and bar
 // width — memoized so unchanged repaints skip the DOM writes (runs per skill-bar sync,
@@ -32685,6 +32698,7 @@ const __DL_FN_BRIDGE = {
   mealSlotDragLeave,
   mealSlotDrop,
   eatMealSlot,
+  beltMealsClick,
   renderCookingHTML,
   craftIlvl,
   craftBaseFactors,

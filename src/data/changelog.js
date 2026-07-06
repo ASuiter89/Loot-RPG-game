@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Belt BOUNTY / MEALS modules jump to their town service", by: "Jeff Louie", notes: [
+    "In town, clicking the belt's BOUNTY module now opens the Bounty Board (even with no active contract), and clicking the MEALS module opens the Ramen House — a one-tap shortcut to each.",
+  ] },
   { date: "2026-07-06", size: "medium", v: "Bounties pay a varied mix of rewards", by: "Jeff Louie", notes: [
     "Bounties no longer always hand out the same gold + material + gear trio. Each contract now pays a different MIX of 1–3 rewards, and one paying fewer things pays more of each.",
     "New reward types join the pool: any of the four crafting materials (not just Core), a lump of XP, and — on the toughest boss contracts — a gear piece of a guaranteed rarity.",
