@@ -2629,7 +2629,16 @@
   }
   #log::-webkit-scrollbar { width: 3px; }
   #log::-webkit-scrollbar-thumb { background: var(--border); }
-  .log-line { color: var(--neutral-250); line-height: 1.55; }
+  /* Off-screen log lines skip layout & paint (content-visibility), so appending a
+     line and pinning the log to bottom only re-lays-out the ~20 VISIBLE lines, not
+     all 200 — the atlas-backed icons make each line costly to lay out, and the log
+     is a long scrollback. contain-intrinsic-size:auto makes the browser REMEMBER
+     each line's real rendered height (every line is rendered when it first appears
+     at the bottom), so the container's scrollHeight the auto-scroll reads stays
+     exact — no bottom-pin drift. The px is only a fallback for never-yet-rendered
+     lines. Skipped lines are off-screen, so their paint-containment clips nothing
+     visible (and log-line icons carry no glow/drop-shadow anyway). */
+  .log-line { color: var(--neutral-250); line-height: 1.55; content-visibility: auto; contain-intrinsic-size: auto 24px; }
   .log-line.important { color: var(--paper); }
   .log-line.loot { color: var(--green-500); }
 

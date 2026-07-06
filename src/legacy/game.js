@@ -12324,6 +12324,14 @@ function loadDaily() {
 // The chip repaints on every kill (and gold gain) but its strings rarely move, so
 // the last-written state is remembered and unchanged repaints skip the DOM writes.
 let _objChipLast = null;
+// Whether the desktop belt is currently HOSTING the bounty readout is decided by a
+// CSS container query on the belt's width, so JS can only learn it by reading
+// offsetParent — a forced synchronous layout. That state changes only when the HUD
+// is re-laid-out (resize / ui-scale / touch toggle), never mid-fight, yet
+// updateObjectiveChip runs on every kill. So throttle the read: a burst of kills
+// reuses the last result instead of reflowing per kill, and it self-corrects within
+// a few hundred ms of any real layout change.
+let _beltVisAt = -1e9, _beltShowsBounty = false, _beltBountyPresent = false;
 function updateObjectiveChip() {
   checkBountyComplete();   // one-shot "bounty complete" cue on the not-done → done edge
   const chip = document.getElementById('objective-chip');
@@ -12337,10 +12345,15 @@ function updateObjectiveChip() {
   // readout; when the belt is too tight the module hides (container query) and the
   // chip falls back here. offsetParent is null when the module is display:none or the
   // whole desktop HUD is hidden (touch/mobile), so the chip keeps showing there.
-  const beltBounty = document.querySelector('#hud-belt .sb-mod-bounty');
-  const beltShowsBounty = !!(beltBounty && beltBounty.offsetParent !== null);
-  if (beltBounty) syncBeltBounty();   // keep the relocated readout current on every kill
-  if (!b || inTown || titleOpen || beltShowsBounty) {
+  const nowMs = performance.now();
+  if (nowMs - _beltVisAt > 400) {      // re-measure belt hosting at most ~2-3×/sec
+    const beltBounty = document.querySelector('#hud-belt .sb-mod-bounty');
+    _beltBountyPresent = !!beltBounty;
+    _beltShowsBounty = !!(beltBounty && beltBounty.offsetParent !== null);   // forced reflow — now throttled
+    _beltVisAt = nowMs;
+  }
+  if (_beltBountyPresent) syncBeltBounty();   // keep the relocated readout current on every kill (cheap: cached el + guarded writes)
+  if (!b || inTown || titleOpen || _beltShowsBounty) {
     if (_objChipLast !== 'off') { chip.style.display = 'none'; _objChipLast = 'off'; }
     return;
   }
@@ -15837,8 +15850,13 @@ function _ctxFontPx(parent) {
 // transparent padding and scaled so its HEIGHT ≈ the font-size, so every icon
 // reads at the same height as the text — and as each other, regardless of how
 // much empty margin its own tile happened to carry.
-function _dlTextSpan(name, parent) {
-  const fs = _ctxFontPx(parent);
+function _dlTextSpan(name, parent) { return _dlTextSpanPx(name, _ctxFontPx(parent)); }
+// The icon-html builder, given an already-resolved context font-size (px). Split
+// out of _dlTextSpan so the [data-spr] painter can hoist ALL its getComputedStyle
+// reads ahead of its innerHTML writes (and dedupe them per parent). A parent's
+// font-size never changes when a child span's innerHTML is written, so a batched
+// read yields byte-identical html to the old per-icon interleaved read.
+function _dlTextSpanPx(name, fs) {
   const sk = skillIconAt(name, Math.round(fs * TEXT_ICON_H / (uiScale || 1)));
   if (sk) return sk;
   const i = SPRITE_IDX[name];
@@ -15859,16 +15877,37 @@ function _dlTextSpan(name, parent) {
 }
 // Fill any [data-spr] element with its pixel atlas icon, trimmed and sized to the
 // text around it (see _dlTextSpan).
+function _collectDataSpr(root, out) {
+  if (!root || root.nodeType !== 1) return;
+  if (root.hasAttribute && root.hasAttribute('data-spr')) out.push(root);
+  if (root.querySelectorAll) root.querySelectorAll('[data-spr]').forEach(e => out.push(e));
+}
+// READ-ALL then WRITE-ALL, in one pass: build every icon's html FIRST (all the
+// getComputedStyle font-size reads hit one already-flushed layout, deduped per
+// parent), THEN write all the innerHTML. The old loop read-then-wrote per icon, so
+// each write dirtied layout and the next icon's read re-flushed it — O(n) forced
+// reflows per paint, and #520's 960×960 resampled atlas made each flush ~3× costlier.
+// One flush per pass now; the html bytes are identical, so icons render pixel-for-pixel
+// unchanged.
+function _paintSprList(list) {
+  if (!spriteReady) return;
+  const writes = [];
+  const fsByParent = new Map();
+  for (const el of list) {
+    if (el.dataset.sprDone) continue;
+    const parent = el.parentNode || el;
+    let fs = fsByParent.get(parent);
+    if (fs === undefined) { fs = _ctxFontPx(parent); fsByParent.set(parent, fs); }
+    const html = _dlTextSpanPx(el.getAttribute('data-spr'), fs);
+    if (html) writes.push(el, html);
+  }
+  for (let i = 0; i < writes.length; i += 2) { writes[i].innerHTML = writes[i + 1]; writes[i].dataset.sprDone = '1'; }
+}
 function paintDataSpr(root) {
   if (!spriteReady || !root || root.nodeType !== 1) return;
   const list = [];
-  if (root.hasAttribute && root.hasAttribute('data-spr')) list.push(root);
-  if (root.querySelectorAll) root.querySelectorAll('[data-spr]').forEach(e => list.push(e));
-  for (const el of list) {
-    if (el.dataset.sprDone) continue;
-    const html = _dlTextSpan(el.getAttribute('data-spr'), el.parentNode || el);
-    if (html) { el.innerHTML = html; el.dataset.sprDone = '1'; }
-  }
+  _collectDataSpr(root, list);
+  _paintSprList(list);
 }
 // Boot the [data-spr] painter: paint the static markup once, then watch for any
 // later-inserted placeholders (logs, panels, tooltips, HUD) and paint those too.
@@ -15877,9 +15916,15 @@ function startSprPainter() {
   if (_sprObserver || !document.body) return;
   paintDataSpr(document.body);
   _sprObserver = new MutationObserver(muts => {
+    if (!spriteReady) return;
+    // Collect every newly-inserted placeholder across the WHOLE microtask, then
+    // paint them in ONE read-all/write-all pass (a single kill inserts ~6 log-line
+    // divs; batching pays one layout flush for the lot, not one per div).
+    const list = [];
     for (const mu of muts) {
-      mu.addedNodes.forEach(node => { if (node.nodeType === 1) paintDataSpr(node); });
+      mu.addedNodes.forEach(node => { if (node.nodeType === 1) _collectDataSpr(node, list); });
     }
+    if (list.length) _paintSprList(list);
   });
   _sprObserver.observe(document.body, { childList: true, subtree: true });
 }
@@ -27123,6 +27168,13 @@ document.addEventListener('click', (e) => {
 // long sessions crawl. Scrollback is capped so the DOM stays bounded.
 const LOG_MAX_LINES = 200;
 let _logEl = null;   // #log is static in the markup — resolve once, lazily
+let _logScrollPending = false;   // coalesce the auto-scroll-to-newest into one rAF
+// Pin the log to its newest line. Reading scrollHeight forces a synchronous reflow,
+// so rather than doing it inside every log() call (a kill emits several back-to-back),
+// schedule ONE scroll for the next frame. The browser never paints between the
+// synchronous appends and that frame, so the rested position (bottom) is identical —
+// at zero forced reflows on the action's own frame.
+function _scrollLogToNewest() { _logScrollPending = false; if (_logEl) _logEl.scrollTop = _logEl.scrollHeight; }
 function log(msg, cls='') {
   const el = _logEl || (_logEl = document.getElementById('log'));
   // Every combat-log line goes through one abbreviator so damage, gold, heals and
@@ -27131,7 +27183,7 @@ function log(msg, cls='') {
   msg = abbreviateNumbersIn(msg);
   el.insertAdjacentHTML('beforeend', `<div class="log-line ${cls}">${msg}</div>`);
   while (el.childElementCount > LOG_MAX_LINES) el.removeChild(el.firstElementChild);
-  el.scrollTop = el.scrollHeight;
+  if (!_logScrollPending) { _logScrollPending = true; requestAnimationFrame(_scrollLogToNewest); }
 }
 
 // ── PANEL SLIDE RE-FIT ──
