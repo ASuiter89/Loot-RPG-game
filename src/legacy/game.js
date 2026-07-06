@@ -83,6 +83,7 @@ import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
 import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
 import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKILL_ICON_ATLAS } from '../assets/skillIconsAtlas.js';
 import { BOSS_ATLAS_URL } from '../assets/bossAtlas.js';
+import { ENDGAME_ART } from '../assets/endgameArt.js';
 // ── ENDGAME SYSTEMS (pure cores; wired into the shell below) ──
 import { COVENANTS } from '../data/covenants.js';
 import { DREAD_REWARDS, MARK_MILESTONES } from '../data/dreadRewards.js';
@@ -1600,6 +1601,18 @@ const TEXT_ICON_H = 1.08;
 // by prefix to a themed EXISTING atlas tile so panels/HUD show a stand-in rather
 // than a blank — one rule covers every current and future endgame key. Returns the
 // stand-in's atlas index, or undefined (→ blank) if even the fallback is missing.
+// Real endgame icon art (background-removed base64 PNGs in src/assets/endgameArt.js)
+// takes precedence over the atlas + the placeholder fallback. Returns a sized
+// background-image span (scaled by the UI size setting like the atlas icons), or ''
+// when this key has no bespoke art yet.
+function egArtSpan(name, px) {
+  const url = (typeof ENDGAME_ART === 'object' && ENDGAME_ART) ? ENDGAME_ART[name] : null;
+  if (!url) return '';
+  const s = Math.round((px || 32) * (uiScale || 1));
+  return `<span class="dl-ic" style="width:${s}px;height:${s}px;background-image:url(${url});` +
+    `background-size:contain;background-repeat:no-repeat;background-position:center;image-rendering:pixelated;` +
+    `display:inline-block;vertical-align:middle"></span>`;
+}
 function _egPlaceholderSprite(name) {
   if (typeof name !== 'string') return undefined;
   let src = null;
@@ -1612,6 +1625,8 @@ function _egPlaceholderSprite(name) {
   return (src && SPRITE_IDX[src] !== undefined) ? SPRITE_IDX[src] : undefined;
 }
 function dlIconAt(name, px) {
+  const eg = egArtSpan(name, px);     // bespoke background-removed endgame art wins over the atlas + placeholder
+  if (eg) return eg;
   const sk = skillIconAt(name, px);   // generated skill badge wins over the atlas tile
   if (sk) return sk;
   let i = SPRITE_IDX[name];
