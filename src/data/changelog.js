@@ -10,6 +10,23 @@ export const CHANGELOG = [
   { date: "2026-07-06", size: "small", v: "Map no longer blanks out while the bag or log slides", by: "Andrew Suiter", notes: [
     "Fixed the play area going blank for a moment when you open or close the bag or combat log — the map now stays drawn and eases smoothly through the whole slide instead of vanishing and snapping back once it settles.",
   ] },
+  { date: "2026-07-06", size: "medium", v: "Boss Points now feed only the Ascendant Weave", by: "Jeff Louie", notes: [
+    "Removed spending Boss Points to level gear slots per set. Every Boss Point now goes into the Ascendant Weave — the board of nodes, keystones and Glyphs — and any points you'd sunk into gear slots are back in your pool to spend there.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Cleaner, pinker skill tooltips", by: "Jeff Louie", notes: [
+    "Trimmed the Skill / Spell / Hybrid school blurb on a skill's detail card to one tight line — same info, far less text.",
+    "Rank-bonus surges on that card now light PINK once earned instead of green, so they stand apart from the card's other green readouts.",
+    "When your next rank in a skill crosses a rank-3/7/10 surge, its Learn button glows pink with circling wisps to flag the coming power spike.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Some floors open into big airy caverns", by: "Jeff Louie", notes: [
+    "Now and then a non-boss floor opens up: a larger map of a few sprawling, overlapping rooms with wide halls — a breather from the cramped early warrens.",
+    "Foes, hazards and loot scale with the bigger space, so an open floor stays just as lively, only roomier.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Cleaner, easier-to-read item-compare card", by: "Jeff Louie", notes: [
+    "Every stat now reads in the same bright colour — base stats keep a small \"base\" tag but no longer differ in colour.",
+    "The Equipped side's label pops in gold, so a glance tells which piece you're already wearing.",
+    "Widened the compare cards so item names and requirement lines stop wrapping onto extra rows.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Gear drops less often, so finds feel earned", by: "Jeff Louie", notes: [
     "Trimmed how much gear foes drop across the board — ordinary kills now yield an item about a third less often, and elites and bosses spill a little less extra too (they still always leave at least one). Your bag fills slower and each find matters more; gold, materials, food and toppings are untouched.",
   ] },
