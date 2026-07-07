@@ -10,6 +10,9 @@ export const CHANGELOG = [
   { date: "2026-07-06", size: "small", v: "Smoother combat — no more hitch when things die", by: "Andrew Suiter", notes: [
     "Killing enemies, grabbing loot and other quick actions no longer cause a brief stutter. The combat log and its icons now repaint far more efficiently, so busy fights stay smooth — with no change to how anything looks.",
   ] },
+  { date: "2026-07-06", size: "small", v: "Reclaim your grave on a boss floor", by: "Claude", notes: [
+    "Fixed lost bags being unrecoverable when you fell on a boss floor — the grave had nowhere to spawn in the arena. It now rests right beside the entrance stair, so you step onto it and reclaim everything the moment you return.",
+  ] },
   { date: "2026-07-06", size: "large", v: "Endgame update — six late-game systems", by: "Andrew Suiter", notes: [
     "Ascendant Weave: spend Boss Points on a constellation board of real choices — opportunity-cost nodes, attribute-threshold keystones, and socketed Glyphs that drop deep in Endless — plus a cosmetic Weave Depth rank. Opens after your first boss floor.",
     "Dread Covenants: swear stackable afflictions at a town altar before a descent; more Dread means deadlier floors AND richer loot, materials and boss rewards, tracked on a per-class “how hard did you beat it” checklist. Opens with Hardened.",
