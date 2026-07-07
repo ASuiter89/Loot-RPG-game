@@ -82,6 +82,9 @@ import { terrainPacksInUse } from '../data/terrainPacks.js';
 import { TRAP_THEME } from '../data/trapThemes.js';
 import { renderProcMap } from '../render/procTerrain.js';
 import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
+import { TOWN_W, TOWN_H, TOWN_SPAWN, TOWN_GATE, TOWN_PORTAL,
+  TOWN_PATHS, TOWN_NPCS, TOWN_DECOR, TOWN_DECOR_FAMILIES } from '../data/townLayout.js';
+import { townObjects, nearestInteractable, pickDecorVariant } from '../systems/townLayout.js';
 import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
 import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKILL_ICON_ATLAS } from '../assets/skillIconsAtlas.js';
 import { BOSS_ATLAS_URL } from '../assets/bossAtlas.js';
@@ -1779,6 +1782,16 @@ function indoorRoles(C) {
   const f = INDOOR_ROLES[C.floorStyle] || INDOOR_ROLES.stone;
   return { floor: f.floor, floor2: f.floor2, floor3: f.floor3, wall: INDOOR_WALL[C.wallStyle] || 'Rock_Gray', water: 'Water' };
 }
+// The walkable town's ground: lush grass with worn DIRT trails. The trail tiles are
+// marked variant-2 in floorVariantMap (buildTown), so the floor3 role autotiles Dirt
+// over them; a light scatter of variant-1 blends Grass_Light patches for texture.
+const TOWN_TERRAIN = { floor: 'Grass', floor2: 'Grass_Light', floor3: 'Dirt_Tan', wall: 'Rock_Gray', water: 'Water' };
+// The autotiler's floor/wall/water roles for the current context. Town uses its own
+// grass-and-dirt set; interiors and outdoor biomes are unchanged.
+function terrainRoles(C) {
+  if (inTown) return TOWN_TERRAIN;
+  return C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor: 'Grass', wall: 'Rock_Gray', water: 'Water' });
+}
 // Guard against the hard-seam bug class: a terrain used as an autotiled layer
 // MUST ship a full 16-variant blob AND have transparent edges. `Soil` was
 // exported with a baked-in background (100% opaque, no alpha); `Ice`,
@@ -1975,7 +1988,7 @@ function lpcCrackOverlayMasked(px, py, tw, th, sev, seed, x, y) {
   // autotiles the floor over a solid wall base and must be masked with the SAME
   // floor role the terrain used.
   if (C.indoor && intReady) { lpcCrackOverlay(px, py, tw, th, sev, seed); return; }
-  const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor: 'Grass', wall: 'Rock_Gray', water: 'Water' });
+  const B = terrainRoles(C);
   if (!B || !B.floor || !LPC_TABLE.table[B.floor]) { lpcCrackOverlay(px, py, tw, th, sev, seed); return; }
   const W = Math.max(1, Math.round(tw)), H = Math.max(1, Math.round(th));
   const cv = _crackMaskCv || (_crackMaskCv = document.createElement('canvas'));
@@ -2025,7 +2038,7 @@ function paintLPCTerrain(C, B, ox, oy, tw, x0, y0, x1, y1) {
   const isWater = (x, y) => inb(x, y) && mapData[y][x] === 6;
   const isLava  = (x, y) => inb(x, y) && mapData[y][x] === 7;
   ctx.imageSmoothingEnabled = false;
-  if (C.indoor && intReady) {
+  if (C.indoor && intReady && !inTown) {   // town is an outdoor clearing — always autotile grass, never indoor materials
     // Built interiors get real laid materials — wood/stone/marble/brick/adobe wall
     // and floor field tiles, a uniform tile per room (walls on wall cells, floor on
     // the rest), instead of borrowing the outdoor ground terrains.
@@ -2047,7 +2060,7 @@ function paintLPCTerrain(C, B, ox, oy, tw, x0, y0, x1, y1) {
 }
 function bakeLPCTerrain(tw) {
   const C = currentTheme();
-  const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' });
+  const B = terrainRoles(C);
   const cv = document.createElement('canvas');
   cv.width = (MAP_W + 2) * tw; cv.height = (MAP_H + 2) * tw;
   const realCtx = ctx;
@@ -2071,7 +2084,7 @@ function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
   if ((MAP_W + 2) * tw > 4096) {
     if (_lpcCache.cv) _lpcCache = { key: null, baseKey: null, tw: 0, cv: null };  // release the big canvas
     const C = currentTheme();
-    const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' });
+    const B = terrainRoles(C);
     const cx0 = Math.max(0, x0 - 1), cy0 = Math.max(0, y0 - 1);
     const cx1 = Math.min(MAP_W, x1 + 1), cy1 = Math.min(MAP_H, y1 + 1);
     paintLPCTerrain(C, B, ox, oy, tw, cx0, cy0, cx1, cy1);
@@ -2183,7 +2196,7 @@ function drawInteriorTerrain(C, ox, oy, tw, x0, y0, x1, y1) {
   ctx.imageSmoothingEnabled = sm;
 }
 function drawFloorBase(px, py, tw, th, seed, C) {
-  if ((lpcReady || PROC_TERRAIN) && !inTown) return; // terrain pass already painted the ground (indoor + outdoor)
+  if (lpcReady || PROC_TERRAIN) return; // terrain pass already painted the ground (indoor + outdoor + town)
   // Procedural floor that matches the surrounding tiles (the base terrain is no
   // longer drawn from the sprite atlas).
   ctx.fillStyle = (Math.abs(seed) % 5 === 0) ? C.floorAlt : C.floor;
@@ -2437,6 +2450,13 @@ function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
     actors.push({ footY: py + th * 0.82, l: px - tw * 0.5, t: py - th * 1.2, r: px + tw * 1.5, b: py + th * 1.15,
       tint: heroSilhouetteTint(player.class), draw: () => drawHeroSprite(px, py, tw, th, scale) });
   }
+  // Town keepers occlude like any actor: a keeper standing behind a tree is drawn
+  // BEHIND it (silhouetted), not on top. Their body matches drawTownWorld's.
+  if (inTown) for (const n of townNpcs) {
+    const cx = offX + n.x * tw + tw / 2, footY = offY + n.y * th + th * 0.92, sz = Math.round(th * 1.5);
+    actors.push({ footY, l: cx - sz * 0.5, t: footY - sz * 0.92, r: cx + sz * 0.5, b: footY + sz * 0.08,
+      tint: ENEMY_SILHOUETTE_TINT, draw: () => drawTownWalk(n.kind, cx, footY, sz) });
+  }
   enemies.forEach((e) => {
     if (e.dead) return;
     const S = e.size || 1;
@@ -2629,7 +2649,7 @@ function drawFurnitureAt(x, y, px, py, tw, th) {
 // and the sandy/grass or molten shore is painted only on sides facing land —
 // never on the edge between two liquid tiles.
 function drawLiquid(px, py, tw, th, x, y, seed, C, kind) {
-  if (lpcReady && !inTown) return; // LPC terrain pass draws water/lava
+  if (lpcReady) return; // LPC terrain pass draws water/lava
   const t = kind === 'lava' ? 7 : 6;
   const now = animNow();
   const h = Math.abs(seed);
@@ -6648,8 +6668,24 @@ function animNow() { return _animMs; }
 // (`townNpcs`/`townBuildings` linger only so the old plaza still draws as a
 // harmless backdrop behind the menu and so old saves load cleanly.)
 let inTown = false;
-let townNpcs = [];
+let townNpcs = [];                 // walkable-town service keepers: {x,y,kind,name}
 let townBuildings = []; // decorative shop buildings drawn behind the NPCs
+// The walkable town is a hand-authored static map (src/data/townLayout.js). These
+// hold its live pieces once buildTown() stamps it: the cobble-path tile set (for
+// the ground painter), and the Dungeon Gate / Town Portal / statue object positions.
+let townPathSet = new Set();       // "y,x" cobble/dirt trail tiles (ground painter + terrain paths)
+let townGatePos = null;            // {x,y,name} — walk into it / interact to descend
+let townPortalPos = null;          // {x,y,name} — return to the held floor (see townPortalActive)
+// Small pixel badge shown above each service keeper (and in its interaction prompt).
+// The keeper's BODY is the animated walk sprite drawTownWalk(kind); this is just the
+// role glyph. All are real atlas keys (no emoji), per the pixel-art rule.
+const TOWN_SVC_TAG = {
+  merchant: 'ic_money', forge: 'ic_mallet', healer: 'ic_heart', mystic: 'ic_orb',
+  trainer: 'ic_wand', gambler: 'ic_coffer', enchanter: 'ic_wand', stash: 'ic_coffer',
+  ramen: 'ramen_bowl', transmuter: 'mat_chaos', mirrorforge: 'mat_core', sellsword: 'w_sword',
+  bounty: 'ic_target', covenants: 'ic_cursed', weave: 'ui_spirit', pantheon: 'ui_power',
+  cycles: 'ic_up', deeds: 'ui_trophy', gate: 'feat_gate_red', portal: 'feat_portal',
+};
 let dungeonReturn = 1;
 // Which town screen is showing: 'hub' (the service menu) or 'service' (one shop).
 let townView = 'hub';
@@ -6742,6 +6778,15 @@ window.gameState = function gameState(radius) {
   }
   // Rainbow conquest gate: step on it to dive into the next difficulty (floor 1).
   if (typeof nextDiffPortal !== 'undefined' && nextDiffPortal) put(nextDiffPortal.x, nextDiffPortal.y, 'R');
+  // Walkable-town objects (gated on inTown so they never collide with dungeon
+  // glyphs): each service keeper 'n' (solid — you interact from beside it), the
+  // Dungeon Gate 'G', the Town Portal 'P' (only when a floor is held). Kinds/
+  // positions are in gameState().menu.town.objects for exact reads.
+  if (inTown) {
+    (townNpcs || []).forEach(n => put(n.x, n.y, 'n'));
+    if (townGatePos) put(townGatePos.x, townGatePos.y, 'G');
+    if (townPortalActive()) put(townPortalPos.x, townPortalPos.y, 'P');
+  }
   // Bolts in flight last (just under the player) — the most urgent thing to dodge.
   (typeof projectiles !== 'undefined' ? projectiles || [] : []).forEach(p => put(Math.floor(p.x), Math.floor(p.y), '!'));
   put(player.x, player.y, '@');
@@ -6790,7 +6835,10 @@ window.gameState = function gameState(radius) {
   // 'out' (→town) | 'in' (→dungeon) for the town gate, 'warp' while walking through
   // an in-level teleporter pad, else null. Any of them roots the hero for its window.
   const transit = portalTransiting() ? portalFx.dir : (mapWarping() ? 'warp' : null);
-  const canMove = (mode === 'dungeon') && !transit;
+  // The hero walks in the live dungeon AND in the walkable town — but not while a
+  // service overlay (shop/mystic/town) is up (mode is then that overlay's name, not
+  // 'town'/'dungeon', and blockingOverlay is set) or mid-teleport.
+  const canMove = (mode === 'dungeon' || (mode === 'town' && !blockingOverlay)) && !transit;
 
   // ── Derived context the agent needs but can't read off the screen ──
   // Explicit stair coordinates (scan once) so the exit is locatable even when it
@@ -7114,6 +7162,28 @@ window.gameState = function gameState(radius) {
       bagOpen: !!panelOpen,
       tab: currentTab,
       townView: inTown ? townView : null,
+      // Walkable-town live state (null outside town). The hero roams a fixed map
+      // (position in player.x/player.y) and walks up to a keeper to use it. `objects`
+      // are every interactable with tile position + lock state; `nearby` is the one
+      // in reach right now (Chebyshev ≤1 — what pressing interact would open, or the
+      // Dungeon Gate / Town Portal); `portal` is present only when a floor is held.
+      town: inTown ? (() => {
+        const list = townInteractables();
+        const near = nearestInteractable(player.x, player.y, list);
+        const decorate = (o) => {
+          const req = o.type === 'npc' ? townServiceReq(o.kind) : null;
+          const locked = !!(req && !req.ok());
+          return { kind: o.kind, name: o.name, type: o.type, x: o.x, y: o.y, locked, need: locked ? req.need : null };
+        };
+        return {
+          walkable: canMove,
+          spawn: { x: TOWN_SPAWN.x, y: TOWN_SPAWN.y },
+          gate: townGatePos ? { x: townGatePos.x, y: townGatePos.y } : null,
+          portal: townPortalActive() ? { x: townPortalPos.x, y: townPortalPos.y } : null,
+          nearby: near ? decorate(near) : null,
+          objects: list.map(decorate),
+        };
+      })() : null,
       // Town hub services in on-screen order, each with whether it's unlocked and,
       // if not, the requirement to open it (level / depth / difficulty milestone).
       townServices: (inTown && typeof TOWN_MENU !== 'undefined') ? TOWN_MENU.map(s => {
@@ -7203,7 +7273,7 @@ window.gameState = function gameState(radius) {
       cycle: egSafe(egCycleGameStateBlock),     // seasonal phase, enrollment, journey checklist, countdown
       deeds: egSafe(egDeedsGameStateBlock),     // Renown rank + total, deeds completed/total, equipped title
     },
-    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · » vault express stair (drops 2 floors) · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
+    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · » vault express stair (drops 2 floors) · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain · (town) n service keeper (walk up + interact) · G Dungeon Gate (step in to descend) · P Town Portal (return to held floor)',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
     map: rows.join('\n'),
@@ -7241,11 +7311,11 @@ window.gameGuide = function gameGuide(topic) {
     controls: [
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A quick key-tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
-      `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
+      `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. IN THE WALKABLE TOWN, clicking a keeper (or the Town Portal) walks the hero over and OPENS its menu on arrival, and clicking the Dungeon Gate walks straight into it — no separate interact press. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
       `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right — a quick TAP on a footer button fires it (cast the skill, quaff the potion); HOLD one for ~0.5s to read its tooltip instead of firing. The header holds the minimap, vitals, and the settings + bag buttons (top-right). On touch the game runs fullscreen so it fills the whole screen with no browser chrome — any tap re-enters fullscreen whenever you've left it, and you exit with the phone's native back/swipe gesture. The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
-      `Interact / pick up / talk: ${key('interact')} (use it on a chest, NPC or stairs you're standing on).`,
+      `Interact / pick up / talk / use: ${key('interact')} — open a chest you're standing on, talk to an adjacent NPC, and IN TOWN open a keeper's service when you're beside them (or the Dungeon Gate / Town Portal). A floating prompt shows who's in reach; gameState().menu.town.nearby reports it.`,
       `Health potion: ${key('healthPotion')} · Mana potion: ${key('manaPotion')} — always available (not a hoarded consumable); they share a cooldown and both now restore OVER TIME (see the "healing" topic).`,
       `Town Portal: ${key('portal')} — channel a portal to town (needs 3 clean turns; any enemy hit — or moving — cancels it). A blue aura charges over the hero for the count; when it opens the hero fades out up a beam of light (~1s, unhittable) before you land in town — gameState().transit reads 'out' then, and 'in' when you materialize back below.`,
       `Swap weapon / gear set: ${key('swapWeapon')} — flip between loadout 1 and 2.`,
@@ -7261,6 +7331,7 @@ window.gameGuide = function gameGuide(topic) {
       `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~34/sec). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch auto-sprint).`,
       `DASH (${key('dash')}) is a quick burst (costs 35 Stamina, ~0.55s cooldown). It only repositions fast — there are no i-frames and enemies are solid, so you can't dash THROUGH a foe to escape.`,
       `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec) — including while you rest in town, alongside HP/MP. The Vitality attribute deepens the pool and speeds its recharge; gear Max Stamina (STM) and Stamina Regen (SRG) do the same, so a class that never invests in Vitality can still sprint on gear alone. Check player.dashReady before dashing.`,
+      `In TOWN sprint is FREE — the safe camp never drains Stamina, so you can run everywhere at full 1.7x speed and the pool keeps refilling as if you were resting. Only in the dungeon does sprinting/dashing spend Stamina.`,
       `Being Slowed (a debuff) halves speed; being Stunned roots you entirely (see gameState().effects).`,
       `Foes are solid, so a single one body-blocks you — slide along it and step around. But a MOB can't pin you forever: when bodies plug your heading AND the lanes you'd slide into to go around them, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall, and a lone foe with any real gap beside it stays solid).`,
     ],
@@ -7404,15 +7475,15 @@ window.gameGuide = function gameGuide(topic) {
       `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
     ],
     town: [
-      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Death does not re-lock any floors: instead Warp to Dungeon only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Dungeon Gate flags the tier holding that grave (with the exact floor beside the tier's grave badge; gameState().graveSite.where), so you can dive straight back to it.`,
-      `Town's top row has TWO gates. Warp to Dungeon opens the tier + floor picker, but you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. Return to Last Floor drops you straight back onto the EXACT floor you left through the Town Portal — same enemies, loot and layout, right where you stood — and lights up ONLY when you left by portal or conquest, never after a death (then it's darkened, so take Warp to Dungeon; gameState().menu.returnToLastFloor.available reports this, .where the floor it returns to). Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending (no need to re-clear the floor you just cleared). Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
-      `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you idle at the hub (a foodBuff is per-floor, so it is untouched). It pauses only if you open the bag or a modal (settings, version…) on top, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon.`,
+      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the service keepers making camp in trade clusters around the fire and a treeline framing the clearing (same layout every visit). WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town lists every keeper/object with its tile position + lock state; .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
+      `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
+      `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
-      `Services unlock as you progress and show in a fixed order (the two gate buttons — Return to Last Floor and Warp to Dungeon — on top): Healer, Merchant, Ramen House and Vault are open from the start; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked tile still shows with its unlock requirement; gameState().menu.townServices lists each service's locked flag + need.`,
+      `Every keeper stands in the town from the start, but a service unlocks as you progress: Healer, Merchant, Ramen House and Vault are open immediately; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked keeper stands GREYED with a padlock badge and, on interact, announces its unlock requirement instead of opening. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim its reward. Each contract pays a DIFFERENT MIX of 1–3 rewards — gold, a crafting material (any of scrap/glimmer/core/chaos, scaled by depth), a lump of XP, or a gear piece scaled to your depth (the toughest boss contracts guarantee a rarer piece) — and a contract paying fewer things pays more of each. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract, its live progress (including menu.bounty.done once it's ready to claim), and menu.bounty.rewards listing exactly what it pays. In town, clicking the belt's BOUNTY module opens the board (even with no active contract).`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
@@ -9144,6 +9215,16 @@ function setMoveTargetFromClient(cx, cy) {
   moveTarget.wy = wy;
   moveTarget.active = true;
   moveTarget.foe = null;   // a plain ground point isn't a chase (a foe tap re-sets this)
+  // Town click-to-interact: a click that lands ON a keeper or the portal arms
+  // interact-on-arrive, so the hero walks up (to the tile's edge, above) and opens
+  // that service's menu on arrival. The gate is skipped — stepping onto it already
+  // opens the dungeon prompt via onEnterCell, and arming it too would re-open that
+  // prompt after you close it and finish the last half-step onto the tile. A
+  // plain-ground town click clears it. On touch this is set unconditionally by the
+  // tap path (endJoy), so this is a no-op there; outside town desktop clicks never
+  // interact, matching prior behaviour.
+  const townObj = townObjectAtTile(tx, ty);
+  moveTarget.interactOnArrive = townObj != null && townObj.type !== 'gate';
   if (fresh) { moveTarget._stallT = 0; moveTarget._px = player.fx; moveTarget._py = player.fy; }
   // Work out whether we need to route around a wall to reach the new point.
   updateMoveTargetPath(false);
@@ -11703,7 +11784,7 @@ function closeShop() {
 // ← returns to the town hub. In town there's no ✕ (the Dungeon Gate is the only
 // way back down), so dismissing a town shop just returns to the hub — that's what
 // Esc does. A dungeon merchant has no hub, so its ✕ / Esc simply closes the shop.
-function shopBack() { closeShop(); openTownHub(); }
+function shopBack() { closeShop(); if (inTown && document.getElementById('town-overlay').classList.contains('open')) openTownHub(); }   // reveal the town map (or the directory hub, if it's open underneath)
 function shopClose() {
   if (merchant && merchant.town) { shopBack(); return; }
   closeShop();
@@ -11903,7 +11984,7 @@ function closeMystic() {
 // Match the other town service panels: ← returns to the hub. In town there's no ✕
 // (only the Dungeon Gate leads back down), so dismissing a town mystic returns to
 // the hub. As a dungeon wanderer the ✕ / Esc simply closes the mystic.
-function mysticBack() { closeMystic(); openTownHub(); }
+function mysticBack() { closeMystic(); if (inTown && document.getElementById('town-overlay').classList.contains('open')) openTownHub(); }   // reveal the town map (or the directory hub, if it's open underneath)
 function mysticClose() {
   if (mystic && mystic.town) { mysticBack(); return; }
   closeMystic();
@@ -12136,7 +12217,7 @@ function captureHeldFloor() {
   // persistent object and buildTown moves it to the town entry tile.
   heldFloor = {
     MAP_W, MAP_H,
-    mapData, wallCracks, furnitureMap, decorMap, teleporters, shrineData,
+    mapData, wallCracks, furnitureMap, decorMap, teleporters, shrineData, floorVariantMap,
     floorThemeOverride, floorTint, floorMod, floorRooms, floorMobSpec,
     hasFountain, groundKey, hasKey, deepStair, vaultInfo, startPos,
     dungeonLevel, floorCleared, floorGreed,
@@ -12167,7 +12248,7 @@ function returnToHeldFloor() {
   // corrupt both rendering and occupancy.
   MAP_W = h.MAP_W; MAP_H = h.MAP_H;
   mapData = h.mapData; wallCracks = h.wallCracks;
-  furnitureMap = h.furnitureMap; decorMap = h.decorMap;
+  furnitureMap = h.furnitureMap; decorMap = h.decorMap; floorVariantMap = h.floorVariantMap;
   teleporters = h.teleporters; shrineData = h.shrineData;
   floorThemeOverride = h.floorThemeOverride; floorTint = h.floorTint;
   floorMod = h.floorMod; floorRooms = h.floorRooms; floorMobSpec = h.floorMobSpec;
@@ -12224,10 +12305,10 @@ function warpToTown() {
   bossHazards = []; bossTelegraphs = [];
   buildTown();
   sfx('stairs');
+  beginPortalArrival();   // blue-pillar materialise, like any arrival
   log('<span data-spr=feat_gate_red></span> The portal opens and you step through into the safety of town.', 'important');
-  log('Pick a service from the menu. <span data-spr=feat_gate_red></span> Warp to Dungeon takes you back below, or Return to Last Floor drops you right where you left.');
-  updateBars();
-  openTownHub();
+  log('Roam the town and walk up to a keeper to use their service. Step into the <span data-spr=feat_gate_red></span> Dungeon Gate to descend, or the <span data-spr=feat_portal></span> Town Portal to drop back onto the floor you left.');
+  updateBars(); renderSkillBar();
   draw();
   saveGame();
 }
@@ -12237,10 +12318,11 @@ function buildTown() {
   inTown = true;
   clearGreed(); updateObjectiveChip();   // town is a safe hub — no streak/greed/chip
   startTownAmbient();  // the town comes alive with anvils, clucks, laughter…
-  // The town's buildings, NPCs and entry point are hand-placed for the base 20×20
-  // plaza, so always rebuild it at the base size — a dungeon floor may have grown
-  // MAP_W/MAP_H for a harder tier.
-  MAP_W = BASE_MAP_W; MAP_H = BASE_MAP_H;
+  // The walkable town is a hand-authored STATIC map (src/data/townLayout.js) — the
+  // same organic village-green layout every visit, sized to TOWN_W×TOWN_H (not the
+  // base 20×20). A dungeon floor may have grown MAP_W/MAP_H for a harder tier, so
+  // reset the dims to the town's here.
+  MAP_W = TOWN_W; MAP_H = TOWN_H;
   floorSerial++;
   // Clear every dungeon-only entity so nothing lingers into the safe hub.
   enemies = []; merchant = null; mystic = null; minions = []; combatBuffs = {};
@@ -12253,7 +12335,8 @@ function buildTown() {
   floorMod = FLOOR_MODS[0]; floorTint = 'rgba(120,90,40,0.10)';
   statusEffects = statusEffects.filter(s => s.target === 'player');
 
-  // Solid border wall, open plaza within.
+  // Solid border wall (rock, framed by the treeline), open grass within — every
+  // interior tile is walkable floor (tile 0); the trail LOOK comes from floorVariantMap.
   mapData = []; wallCracks = {};
   for (let y = 0; y < MAP_H; y++) {
     mapData[y] = [];
@@ -12261,55 +12344,70 @@ function buildTown() {
       mapData[y][x] = (x === 0 || y === 0 || x === MAP_W - 1 || y === MAP_H - 1) ? 1 : 0;
     }
   }
+  townBuildings = [];                  // no buildings in the walkable town (kept empty for old code/saves)
+  townPathSet = new Set(TOWN_PATHS.map((p) => p.y + ',' + p.x));
+  townGatePos = { x: TOWN_GATE.x, y: TOWN_GATE.y, name: TOWN_GATE.name };
+  townPortalPos = { x: TOWN_PORTAL.x, y: TOWN_PORTAL.y, name: TOWN_PORTAL.name };
 
-  // The shops, laid out as 3×2-tile buildings around the plaza. Each building's
-  // footprint is solid (so you can't walk through it) and its keeper stands at
-  // the doorway, one tile below the building. `sign` is the icon on the shingle,
-  // `roof` the shingle colour. The Dungeon Gate is a stone archway, not a shop.
-  townBuildings = [
-    { x: 2,  y: 2,  w: 3, h: 2, kind: 'merchant', roof: '#7a4a8a' },
-    { x: 8,  y: 2,  w: 3, h: 2, kind: 'forge',    roof: '#9a5a2a' },
-    { x: 14, y: 2,  w: 3, h: 2, kind: 'healer',   roof: '#b04545' },
-    { x: 2,  y: 10, w: 3, h: 2, kind: 'mystic',   roof: '#3a5a9a' },
-    { x: 8,  y: 10, w: 3, h: 2, kind: 'trainer',  roof: '#3a7a4a' },
-    { x: 14, y: 10, w: 3, h: 2, kind: 'gate',     roof: '#5a4a7a' },
-    { x: 8,  y: 6,  w: 3, h: 2, kind: 'gambler',  roof: '#b88a2a' },
-    { x: 2,  y: 6,  w: 3, h: 2, kind: 'enchanter',roof: '#6a3a8a' },
-    { x: 14, y: 6,  w: 3, h: 2, kind: 'stash',    roof: '#3a6a7a' },
-  ];
-
-  // Stamp each building footprint into the map as solid tiles.
-  townBuildings.forEach(b => {
-    for (let y = b.y; y < b.y + b.h; y++) {
-      for (let x = b.x; x < b.x + b.w; x++) mapData[y][x] = 1;
+  // Real autotiled ground: mark the trail tiles variant-2 (→ floor3 Dirt) and
+  // scatter a light variant-1 (→ floor2 Grass_Light) for texture; the rest is Grass.
+  floorVariantMap = [];
+  for (let y = 0; y < MAP_H; y++) {
+    const row = [];
+    for (let x = 0; x < MAP_W; x++) {
+      row.push(townPathSet.has(y + ',' + x) ? 2 : ((((x * 7 + y * 13) >>> 0) % 9 === 0) ? 1 : 0));
     }
-  });
+    floorVariantMap.push(row);
+  }
 
-  // The townsfolk, each standing at their building's door (centre, one row below).
-  // `tag` is the pixel icon shown as a badge above them (an atlas key, referenced
-  // directly); the townsperson's body sprite comes from TOWN_SPRITE[kind].
-  const npcMeta = {
-    merchant: { name: 'Merchant',     tag: 'ic_money' },
-    forge:    { name: 'Craftsman',    tag: 'ic_mallet' },
-    healer:   { name: 'Healer',       tag: 'ic_heart' },
-    mystic:   { name: 'Mystic',       tag: 'ic_orb' },
-    trainer:  { name: 'Trainer',      tag: 'ic_wand' },
-    gate:     { name: 'Dungeon Gate', tag: 'ic_down' },
-    gambler:  { name: 'Gambler',      tag: 'ic_money' },
-    enchanter:{ name: 'Enchanter',    tag: 'ic_wand' },
-    stash:    { name: 'Vault Keeper', tag: 'ic_coffer' },
-  };
-  townNpcs = townBuildings.map(b => ({
-    x: b.x + Math.floor(b.w / 2),
-    y: b.y + b.h,
-    kind: b.kind,
-    ...npcMeta[b.kind],
-  }));
+  // Stamp the authored scenery. Each entry is an EXACT atlas piece (`id`: the
+  // campfire, well, signpost, logs & stumps) or a FAMILY (`c`) resolved to a
+  // curated piece deterministically (same camp every visit). Solid pieces block
+  // their whole footprint (furnitureMap) so you path around a tree/log, not through it.
+  for (const d of TOWN_DECOR) {
+    let id, solid;
+    if (d.id != null) { id = d.id; solid = DECOR_SOLID[id]; }
+    else { const fam = TOWN_DECOR_FAMILIES[d.c]; if (!fam) continue; id = pickDecorVariant(fam.ids, d.x, d.y); solid = fam.solid; }
+    if (id == null) continue;
+    decorMap[d.y + ',' + d.x] = id;
+    if (solid) for (const [fx, fy] of decorFootprint(id, d.x, d.y)) furnitureMap[fy + ',' + fx] = 1;
+  }
 
-  // Enter near the bottom-centre of the plaza.
-  setPlayerCell(10, MAP_H - 3);
+  // The service keepers, hand-placed among the districts. `kind` maps 1:1 to
+  // openTownService(kind); `tag` is the small pixel badge above them (and in the
+  // interaction prompt). Their body is the animated walk sprite drawTownWalk(kind).
+  townNpcs = TOWN_NPCS.map((n) => ({ x: n.x, y: n.y, kind: n.kind, name: n.name, tag: TOWN_SVC_TAG[n.kind] || 'npc_quest' }));
+  // Keepers block their tile (like the dungeon merchant/mystic) so you stand
+  // ADJACENT and interact — furnitureMap is the solidity the collision/path checks
+  // already read (playerSolidCell/tileBlockedByObject). The Gate and Portal are NOT
+  // stamped: they stay walkable so you can step straight into them.
+  for (const n of townNpcs) furnitureMap[n.y + ',' + n.x] = 1;
+
+  // Materialise at the authored arrival tile (bottom-centre, by the gate avenue).
+  setPlayerCell(TOWN_SPAWN.x, TOWN_SPAWN.y);
+  player.faceDir = 'up'; player.faceDx = 0; player.faceDy = -1;  // face up the avenue toward the gate
   startPos = { x: player.x, y: player.y };
+  // Invalidate the static-floor caches now that mapData/decor/furniture are the
+  // town's (visuals + AI/path grid), per the hot-path invalidate-don't-recheck rule.
+  bumpMapEpoch(); pathGridDirty();
   recomputeMaxStats();
+}
+
+// The interactable town objects right now: every keeper + the Dungeon Gate, plus
+// the Town Portal only when a floor is held (you portaled/conquered in).
+function townInteractables() {
+  return townObjects(townNpcs, townGatePos || TOWN_GATE, townPortalPos || TOWN_PORTAL, heldFloor != null);
+}
+// The Town Portal is present (drawn + interactable) only when there is a held floor
+// to return to — never after a death or a fresh boot.
+function townPortalActive() { return inTown && heldFloor != null && townPortalPos != null; }
+// The interactable occupying an EXACT town tile (a keeper / the gate / the portal),
+// or null. Click-to-interact uses this: a click that lands on an interactable walks
+// the hero up to it and opens its menu on arrival (see setMoveTargetFromClient).
+function townObjectAtTile(tx, ty) {
+  if (!inTown) return null;
+  for (const o of townInteractables()) if (o.x === tx && o.y === ty) return o;
+  return null;
 }
 
 // ══════════════════════════════════════════
@@ -13067,12 +13165,12 @@ function openTownHub() {
   // gap the menu reserves for it, now that the town overlay is open.
   renderSkillBar();
 }
-// Return from a service panel to the hub menu (also used by the backdrop tap and
-// by Esc). Town has no "leave" button anymore — the Dungeon Gate service is the
-// only way back down — so stepping back from any town panel lands on the hub.
+// Return from a service panel (also used by the backdrop tap and by Esc). In the
+// walkable town, closing a service drops you back onto the town MAP — services open
+// directly from walking up to a keeper, so there's no hub to step back to. (The
+// optional directory hub, opened via the Town button, closes to the map the same way.)
 function townBack() {
-  if (!inTown) { closeTown(); return; }
-  openTownHub();
+  closeTown();
 }
 
 // One reusable overlay backs the craftsman / healer / trainer / gate panels.
@@ -15155,26 +15253,9 @@ function gambleRoll() {
   updateBars(); renderPanel(); renderGambler(); saveGame();
 }
 
-// Warm cobblestone plaza tile — clearly a town square, not a dungeon floor.
-function drawTownFloor(px, py, tw, th, x, y, seed) {
-  ctx.fillStyle = (x + y) % 2 === 0 ? '#8a7d63' : '#7e7158';
-  ctx.fillRect(px, py, tw, th);
-  // cobble seams
-  ctx.fillStyle = 'rgba(58,50,36,0.5)';
-  ctx.fillRect(px, py, tw, 1);
-  ctx.fillRect(px, py, 1, th);
-  // worn cobble highlight
-  if (seed % 7 === 0) {
-    ctx.fillStyle = 'rgba(255,240,205,0.12)';
-    ctx.fillRect(px + tw * 0.28, py + th * 0.28, tw * 0.32, th * 0.32);
-  }
-  // the odd tuft of grass between the stones
-  if (seed % 13 === 0) {
-    ctx.fillStyle = 'rgba(86,142,62,0.55)';
-    ctx.fillRect(px + tw * 0.55, py + th * 0.6, tw * 0.22, Math.max(1, th * 0.18));
-    ctx.fillRect(px + tw * 0.2, py + th * 0.68, tw * 0.14, Math.max(1, th * 0.12));
-  }
-}
+// (The walkable town's ground is the real autotiled LPC terrain now — grass with
+// worn dirt trails, painted by drawLPCTerrain via TOWN_TERRAIN — so the old
+// procedural drawTownFloor/cobble/grass painters were removed.)
 
 // Paint the town's shop buildings: a timbered plaster wall, door, lit windows,
 // a colour-coded gabled roof, and a hanging shingle. The Dungeon Gate renders as
@@ -15263,27 +15344,87 @@ function drawTownBuildings(offX, offY, tw, th) {
 }
 
 // Draw the friendly townsfolk on top of the plaza, with a glow + name label.
-function drawTownNpcs(offX, offY, tw, th, scale) {
-  townNpcs.forEach(n => {
-    const px = offX + n.x * tw, py = offY + n.y * th;
-    const t = (animNow() % 2400) / 2400;
-    const pulse = 0.18 + 0.12 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2));
+// Draw the walkable town's living props: the statue centrepiece, the Dungeon Gate,
+// the Town Portal (only when a floor is held), every service keeper (animated walk
+// sprite + role badge + name, greyed with a lock badge while its service is still
+// gated), and a bobbing prompt over whichever object the hero is standing next to.
+// Culled implicitly — the town is small and iterated once, like the roaming vendor.
+function drawTownWorld(offX, offY, tw, th, scale) {
+  const cxOf = (tx) => offX + tx * tw + tw / 2;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  // (The campfire, well, signpost and fire-ring logs render via the decor pass.)
+
+  // Dungeon Gate — the red gate sprite over a warm arch glow (walk into it to descend).
+  if (townGatePos) {
+    const gx = cxOf(townGatePos.x), gcy = offY + townGatePos.y * th + th / 2;
+    glowUnder(gx, gcy + th * 0.18, tw * 0.75, 'rgba(210,90,60,0.5)');
+    if (spriteReady) drawSpriteC('feat_gate_red', gx, gcy - th * 0.04, Math.round(tw * 1.35));
+  }
+
+  // Town Portal — a swirling blue portal home, present only when a floor is held.
+  if (townPortalActive()) {
+    drawPortal(cxOf(townPortalPos.x), offY + townPortalPos.y * th + th / 2, Math.round(tw * 1.2), 'town');
+  }
+
+  // The service keepers.
+  const t = (animNow() % 2400) / 2400;
+  const pulse = 0.14 + 0.1 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2));
+  townNpcs.forEach((n) => {
+    const cx = cxOf(n.x), footY = offY + n.y * th + th * 0.92;
+    const req = townServiceReq(n.kind);
+    const locked = !!(req && !req.ok());
+    drawActorShadow(cx, footY, tw * 0.78);
+    glowUnder(cx, footY - th * 0.28, tw * 0.5, locked ? `rgba(150,150,162,${pulse})` : `rgba(255,210,120,${pulse + 0.06})`);
     ctx.save();
-    ctx.fillStyle = n.kind === 'gate' ? `rgba(150,90,255,${pulse + 0.12})` : `rgba(255,210,120,${pulse})`;
-    ctx.beginPath();
-    ctx.arc(px + tw / 2, py + th / 2, tw * 0.5, 0, Math.PI * 2);
-    ctx.fill();
+    if (locked) ctx.globalAlpha = 0.55;   // greyed while the service is gated
+    // Body: the animated walk sprite; fall back to the static role sprite.
+    if (!drawTownWalk(n.kind, cx, footY, Math.round(th * 1.5))) {
+      const tSprite = TOWN_SPRITE[n.kind];
+      if (tSprite && spriteReady) drawSpriteC(tSprite, cx, footY - th * 0.42, charSpritePx(tw));
+    }
     ctx.restore();
-    // Pixel townsfolk sprite (keyed by role) + a small icon tag above them.
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const tSprite = TOWN_SPRITE[n.kind];
-    if (tSprite && spriteReady) drawSpriteC(tSprite, px + tw / 2, py + th / 2 + th * 0.02, charSpritePx(tw));
-    if (n.tag && spriteReady) drawSpriteC(n.tag, px + tw / 2, py - th * 0.04, Math.round(tw * 0.38));
+    // Badge above the head: a lock while gated, else the role glyph.
+    const badge = locked ? 'feat_lock' : n.tag;
+    if (badge && spriteReady) drawSpriteC(badge, cx, footY - th * 1.6, Math.round(tw * 0.42));
+    // Name label, outlined for legibility on grass or cobble.
     ctx.font = `bold ${Math.max(12, Math.round(tw * 0.2))}px monospace`;
-    ctx.fillStyle = '#ffe9b0';
-    ctx.fillText(n.name, px + tw / 2, py + th * 0.92);
+    ctx.lineWidth = Math.max(2, tw * 0.06); ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillStyle = locked ? '#c2c2cc' : '#ffe9b0';
+    ctx.strokeText(n.name, cx, footY + th * 0.18);
+    ctx.fillText(n.name, cx, footY + th * 0.18);
   });
+
+  drawTownPrompt(offX, offY, tw, th);
+}
+
+// A bobbing chevron + "<key> · <label>" prompt over the interactable the hero is
+// standing next to (Chebyshev ≤1), so walk-up-and-use is discoverable without a
+// menu. Drawn last so nothing overpaints it; literal world-marker colours.
+function drawTownPrompt(offX, offY, tw, th) {
+  const obj = nearestInteractable(player.x, player.y, townInteractables());
+  if (!obj) return;
+  const cx = offX + obj.x * tw + tw / 2;
+  const y = offY + obj.y * th - th * 0.55 + Math.sin(animNow() / 250) * th * 0.08;
+  ctx.save();
+  // downward chevron pointing at the object
+  const w = tw * 0.24;
+  ctx.fillStyle = 'rgba(255,236,150,0.95)'; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = Math.max(1.5, tw * 0.05);
+  ctx.beginPath();
+  ctx.moveTo(cx - w, y); ctx.lineTo(cx + w, y); ctx.lineTo(cx, y + w); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  // label
+  const req = obj.type === 'npc' ? townServiceReq(obj.kind) : null;
+  const locked = !!(req && !req.ok());
+  const what = obj.type === 'gate' ? 'Enter the dungeon' : obj.type === 'portal' ? 'Return to your floor' : obj.name;
+  const keyHint = (typeof document !== 'undefined' && document.body.classList.contains('touch')) ? 'Tap' : kbLabel('interact');
+  const txt = locked ? `Locked · ${what}` : `${keyHint} · ${what}`;
+  ctx.font = `bold ${Math.max(12, Math.round(tw * 0.22))}px monospace`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.lineWidth = Math.max(2, tw * 0.07); ctx.strokeStyle = 'rgba(0,0,0,0.78)';
+  ctx.fillStyle = locked ? '#d7d7de' : '#fff4cf';
+  ctx.strokeText(txt, cx, y - th * 0.14);
+  ctx.fillText(txt, cx, y - th * 0.14);
+  ctx.restore();
 }
 
 // Floor-scoped data shared with the no-empty-rooms pass (populateEmptyRooms): the
@@ -16590,7 +16731,7 @@ function isWallTile(x, y) {
 function drawWall(px, py, tw, th, x, y, seed, C, cracked) {
   // Indoor + outdoor both use the LPC autotiler now: drawLPCTerrain fills the
   // wall mass, so here we only add the crack overlay for damaged tiles.
-  if (lpcReady && !inTown) { if (cracked) lpcCrackOverlayMasked(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed, x, y); return; }
+  if (lpcReady) { if (cracked) lpcCrackOverlayMasked(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed, x, y); return; }
   if (C.wallStyle === 'forest') { drawForestWall(px, py, tw, th, x, y, seed, C, cracked); return; }
   if (C.wallStyle === 'pine') { drawPineWall(px, py, tw, th, x, y, seed, C, cracked); return; }
   if (C.wallStyle === 'mushroom') { drawMushroomWall(px, py, tw, th, x, y, seed, C, cracked); return; }
@@ -16880,7 +17021,7 @@ function draw() {
   // Indoor maps route through the same autotiler now (via indoorRoles), so both
   // outdoor biomes and built interiors get real tiled floors + clustered accents.
   if (PROC_TERRAIN && !inTown && !C.indoor) drawProcTerrain(offX, offY, tw); // preview: procedural terrain-pack ground
-  else if (lpcReady && !inTown) drawLPCTerrain(offX, offY, tw, x0, y0, x1, y1);
+  else if (lpcReady) drawLPCTerrain(offX, offY, tw, x0, y0, x1, y1);   // town uses the real autotiled terrain too (grass + dirt trails)
 
   // Draw tiles
   for (let y = y0; y < y1; y++) {
@@ -16889,23 +17030,9 @@ function draw() {
       const t = mapData[y][x];
       const seed = (x * 73856093) ^ (y * 19349663); // deterministic per-tile
 
-      // In town, every tile is either the plaza ground or a building footprint.
-      // Buildings are painted as whole structures later (drawTownBuildings), so
-      // here we just lay cobblestone everywhere and a warm stone perimeter wall.
-      if (inTown) {
-        const isBorder = (x === 0 || y === 0 || x === MAP_W - 1 || y === MAP_H - 1);
-        if (isBorder) {
-          ctx.fillStyle = '#5b5048';
-          ctx.fillRect(px, py, tw, th);
-          ctx.fillStyle = '#6b5f54';
-          ctx.fillRect(px, py, tw, Math.max(1, th * 0.5));
-          ctx.fillStyle = '#403832';
-          ctx.fillRect(px, py + th - Math.max(1, th * 0.12), tw, Math.max(1, th * 0.12));
-        } else {
-          drawTownFloor(px, py, tw, th, x, y, seed);
-        }
-        continue;
-      }
+      // The walkable town renders through the SAME real terrain path as an outdoor
+      // floor (grass + dirt trails, rock border) — see terrainRoles/TOWN_TERRAIN — so
+      // there's no town-special tile branch here anymore; it just falls through.
 
       // preview: the procedural terrain pass already painted walls/water/lava
       if (PROC_TERRAIN && (t === 1 || t === 10 || t === 6 || t === 7)) continue;
@@ -17118,7 +17245,7 @@ function draw() {
           ctx.arc(px+tw*0.66, py+th*0.5, tw*0.08, 0, Math.PI*2);
           ctx.fill();
         }
-      } else if (!(lpcReady && !inTown)) {
+      } else if (!lpcReady) {
         // Floor base — organic per-tile variation instead of a checkerboard:
         // most tiles use the base colour, a few the alt, and every tile gets a
         // faint lightness jitter so the ground reads as natural, worn stone.
@@ -17167,7 +17294,9 @@ function draw() {
   // edge can still show its crown or flanks. Over-scan the window by the tallest/
   // widest sprite (below + sideways; feet never rise above the anchor, so the top
   // needs only a small pad) and iterate top→bottom so nearer pieces paint over far.
-  if (!inTown) {
+  // Runs in both the dungeon and the walkable town — the town authors its greenery
+  // into decorMap the same way (buildTown), and it's culled to the visible window.
+  {
     const dx0 = Math.max(0, x0 - DECOR_MAX_HALF_W), dx1 = Math.min(MAP_W, x1 + DECOR_MAX_HALF_W);
     const dy0 = Math.max(0, y0 - 1), dy1 = Math.min(MAP_H, y1 + DECOR_MAX_H_TILES);
     for (let y = dy0; y < dy1; y++) for (let x = dx0; x < dx1; x++) {
@@ -17178,7 +17307,7 @@ function draw() {
   // Click-to-move destination marker (desktop): a small pulsing gold ring on the
   // ground where the hero is headed, so the click target reads at a glance. Drawn
   // on the floor, beneath actors. Procedural UI overlay, not a world asset.
-  if (moveTarget.active && !inTown) {
+  if (moveTarget.active) {
     // When routing around a wall, sketch faint gold breadcrumbs along the planned
     // route (from where the hero is now) so the path it will take reads at a glance.
     const path = moveTarget.path;
@@ -17371,7 +17500,7 @@ function draw() {
 
   // Town buildings + NPCs (only present in the safe hub). Buildings first so the
   // townsfolk and hero stand in front of them.
-  if (inTown) { drawTownBuildings(offX, offY, tw, th); drawTownNpcs(offX, offY, tw, th, scale); }
+  if (inTown) drawTownWorld(offX, offY, tw, th, scale);   // walkable town: statue, keepers, gate, portal + prompt (no buildings)
 
   // Group active status effects by their target once, so each actor below reads
   // its own ailments in O(1) instead of re-filtering the whole list per draw.
@@ -17814,7 +17943,7 @@ function draw() {
 
   // Tall decor (trees) occludes actors standing behind it, with a tinted
   // silhouette over the covered part so the hero/foes stay trackable.
-  if (!inTown) drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale);
+  drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale);   // hero + town keepers get proper depth behind trees (silhouetted), not drawn on top
   if (previewDrawSolids) { ctx.save(); ctx.globalAlpha = 0.38; ctx.fillStyle = '#ff2020'; for (const k in furnitureMap) { const c = k.split(','), sx = +c[1], sy = +c[0]; ctx.fillRect(offX + sx * tw, offY + sy * th, tw, th); } ctx.restore(); }
 
   // Player status effects are surfaced as full-screen coloured halos (see
@@ -20312,7 +20441,8 @@ function guardAction(fn) {
 // continuous updatePlayer() below. In town it still reopens the hub menu (the old
 // d-pad nicety); in the dungeon, movement is held-direction, so it does nothing.
 function move(dx, dy) {
-  if (inTown) { openTownHub(); return; }
+  // Legacy no-op shim: real movement is continuous (updatePlayer via keyHeld/
+  // click-to-move), in town and dungeon alike. Nothing to do here.
 }
 
 // ── REAL-TIME PLAYER MOVEMENT & COLLISION ──
@@ -20890,9 +21020,10 @@ function updatePlayer(dt) {
   if (moving) { ix /= mag; iy /= mag; entryGuard = false; } // first move ends arrival grace
 
   // Sprint: wanting it + moving + stamina. Held Shift or a latched auto-sprint
-  // toggle counts. Drains stamina; otherwise it refills.
-  const wantSprint = moving && player.stamina > 0 && (sprintHeld || sprintLatched);
-  if (wantSprint) { player.stamina = Math.max(0, player.stamina - SPRINT_DRAIN * dt); player._stamDelay = STAM_DELAY; }
+  // toggle counts. Drains stamina; otherwise it refills. Town is a safe hub —
+  // sprint there is free (no drain) and stamina keeps refilling as if at rest.
+  const wantSprint = moving && (inTown || player.stamina > 0) && (sprintHeld || sprintLatched);
+  if (wantSprint && !inTown) { player.stamina = Math.max(0, player.stamina - SPRINT_DRAIN * dt); player._stamDelay = STAM_DELAY; }
   else regenStamina(dt);
 
   // Agility quickens your stride on top of any MOVESPD gear.
@@ -20938,6 +21069,14 @@ function updatePlayer(dt) {
 // teleporter, quest progress and every ground pickup. No turn-passing here — the
 // world clock owns enemy/quest/save cadence.
 function onEnterCell(nx, ny) {
+  // In the walkable town: step INTO the Dungeon Gate to open the descent picker
+  // (like walking onto a down-stair). Everything else is walked up to + used via
+  // pickup(); the Town Portal is interact-only (a deliberate press) so you never
+  // consume the single-use held-floor snapshot by drifting onto it.
+  if (inTown) {
+    if (townGatePos && nx === townGatePos.x && ny === townGatePos.y) { openTownServiceRaw('gate'); }
+    return;
+  }
   // Rainbow conquest gate — step in to drop into the next difficulty at floor 1.
   if (nextDiffPortal && nextDiffPortal.x === nx && nextDiffPortal.y === ny) {
     const d = nextDiffPortal.diff;
@@ -24458,8 +24597,8 @@ function handleDeath() {
   player.reliefFloor = dungeonReturn;
   closeShop(); closeMystic(); closeTown();
   buildTown();     // clears inTown=false → true and resets town state
-  revivedInTown = true;  // flag so the town hub spells out how to get back to questing
-  openTownHub();   // drop the player into the town menu
+  revivedInTown = true;  // flag so we spell out how to get back to questing
+  renderSkillBar();   // town bar; the death screen sits on top until dismissed, then the walkable town shows
   // Revived in town at FULL strength — a killing blow costs you gold, XP and your
   // bag (dropped as a recoverable grave), but you wake rested: full HP and MP.
   player.hp = player.maxHp;
@@ -24773,8 +24912,33 @@ function pickupChestsAt(x, y) {
 // The USE button / key. Real-time: there's no "wait a turn" any more. Standing
 // next to a merchant/mystic opens their menu (you can't walk onto them); otherwise
 // it opens any chest already underfoot (most are auto-grabbed as you walk over).
+// The service req for a keeper kind (from TOWN_MENU) — its ok()/need unlock gate,
+// or null if the service is always open.
+function townServiceReq(kind) {
+  const e = (typeof TOWN_MENU !== 'undefined') ? TOWN_MENU.find((s) => s.kind === kind) : null;
+  return e ? e.req : null;
+}
+// Walk-up interaction in the walkable town: if a keeper / the Dungeon Gate / the
+// Town Portal sits within one tile (Chebyshev ≤1, like the dungeon merchant), act
+// on it. A locked service just announces its unlock hint instead of opening. Uses
+// the UNGUARDED openTownService/returnToHeldFloor (pickup itself is guardAction-
+// wrapped, and the guard would otherwise swallow a nested guarded call).
+function townInteract() {
+  const obj = nearestInteractable(player.x, player.y, townInteractables());
+  if (!obj) return;
+  if (obj.type === 'gate') { openTownServiceRaw('gate'); return; }
+  if (obj.type === 'portal') { returnToHeldFloorRaw(); return; }
+  const req = townServiceReq(obj.kind);
+  if (req && !req.ok()) {
+    log(`<span data-spr=feat_lock></span> ${obj.name} is not open yet — ${req.need}.`);
+    sfx('denied');
+    return;
+  }
+  openTownServiceRaw(obj.kind);
+}
 function pickup() {
-  if (inTown || portalChanneling() || portalTransiting() || mapWarping()) return;
+  if (inTown) { townInteract(); return; }
+  if (portalChanneling() || portalTransiting() || mapWarping()) return;
   if (merchant && Math.abs(merchant.x - player.x) <= 1 && Math.abs(merchant.y - player.y) <= 1) { openShop(); return; }
   if (mystic && Math.abs(mystic.x - player.x) <= 1 && Math.abs(mystic.y - player.y) <= 1) { openMystic(); return; }
   if (pickupChestsAt(player.x, player.y) > 0) { renderPanelSoon(); updateBars(); saveGameSoon(); }
@@ -24785,6 +24949,11 @@ function pickup() {
 // callers and inline onclick="…" handlers route through the guarded version.
 // (The floor-1 up-stair deliberately calls the unguarded startPortalChannel()
 // directly, since it fires from inside move()'s already-guarded turn.)
+// Unguarded refs, captured before the guards below, so the guarded pickup() (via
+// townInteract) can open a town service / return to the held floor without the
+// re-entrancy guard swallowing the nested guarded call.
+const openTownServiceRaw = openTownService;
+const returnToHeldFloorRaw = returnToHeldFloor;
 move           = guardAction(move);
 pickup         = guardAction(pickup);
 castSkillById  = guardAction(castSkillById);
@@ -27813,7 +27982,7 @@ function handleEscape() {
       if (townServiceKind === 'transmuter' && transmuteTier != null) { transmuteBack(); return true; }
       townBack(); return true;
     }
-    toggleSettingsMenu(); return true;
+    townBack(); return true;   // hub (directory) view: Esc closes it back to the walkable town map
   }
   // Nothing was open — in real-time play, Escape now opens the settings menu,
   // which pauses the game (settings-menu is an RT-blocking overlay). Skip this on
@@ -27977,8 +28146,7 @@ document.addEventListener('keydown', e => {
   const moveDir = moveKeyName(e.key);
   if (moveDir) {
     e.preventDefault(); // arrows would otherwise scroll the page
-    if (inTown) { openTownHub(); return; }   // town is a menu — a direction reopens the hub
-    keyHeld[moveDir] = true;                  // held → updatePlayer walks the hero each frame
+    keyHeld[moveDir] = true;                  // held → updatePlayer walks the hero (town or dungeon) each frame
     return;
   }
   if (e.key === 'Shift') {                                // sprint: hold, or tap to toggle
@@ -31876,7 +32044,7 @@ try {
   loadStash();
   // Resume in town if that's where the save left off; a brand-new hero who hasn't
   // done the beach tutorial gets it first; otherwise build the dungeon floor.
-  if (inTown) { buildTown(); openTownHub(); }
+  if (inTown) { buildTown(); }   // walkable town — no auto-opened hub menu; the map IS the town
   else if (!hadSave && !player.tutorialDone) buildTutorialMap();
   else generateMap();
   seedAmbientEmbers();
@@ -32051,7 +32219,7 @@ try {
     // inspect always matches what's on screen. Returns a labeled contact sheet.
     window.__previewTileset = function () {
       const C = currentTheme();
-      const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor: 'Grass', wall: 'Rock_Gray', water: 'Water' });
+      const B = terrainRoles(C);
       const roles = [];
       if (B.floor)  roles.push(['floor (primary)', B.floor]);
       if (B.floor2) roles.push(['floor accent 2', B.floor2]);
@@ -32348,7 +32516,11 @@ function touchMenuOpen() {
   return false;
 }
 function rtPaused() {
-  if (gameHalted || inTown || player.hp <= 0) return true;
+  if (gameHalted || player.hp <= 0) return true;
+  // The town is walkable now: movement runs while the hero roams the plaza, and
+  // pauses only when a service overlay (shop/mystic/town) is opened on top — those
+  // are in rtOverlayEls() below, so no explicit inTown freeze is needed. (Combat,
+  // skills and hazards stay inert in town via the gameLoop's !inTown gate.)
   if (touchLandscapeBlock) return true;  // portrait-only on touch — frozen while the rotate notice is up
   if (portalTransiting()) return true;   // hero is mid-teleport (off the map) — no moving/fighting/being hit
   if (mapWarping()) return true;         // walking through a teleporter pad — frozen mid-traversal
@@ -32706,17 +32878,26 @@ function gameLoop(ts) {
   safeStep('warpFx', () => updateWarpFx(dt));
   if (!rtPaused()) {
     safeStep('move', () => updatePlayer(dt));              // 8-dir movement may trigger stairs/town/death…
-    if (!rtPaused()) safeStep('combat', () => updatePlayerCombat(dt));
-    if (!rtPaused()) safeStep('cooldowns', () => tickCooldowns(dt));  // skill/potion cooldowns burn in seconds
-    if (!rtPaused()) safeStep('autocast', () => tickAutoCast(dt));    // fire any auto-cast skills that are ready
-    if (!rtPaused()) safeStep('world', () => stepWorldClock(dt));
-    if (!rtPaused()) safeStep('hazards', () => { updateTraps(dt); updateProjectiles(dt); stepBossTelegraphs(dt); });
+    // Town is a safe, walkable hub: the hero strolls (updatePlayer above) and time
+    // flows (cooldowns + world clock), but combat, auto-cast and hazards stay inert
+    // — there are no foes/traps here, and firing autocast would just spam the
+    // "save your skills for the dungeon" refusal. updatePlayer regens stamina itself.
+    if (!inTown) {
+      if (!rtPaused()) safeStep('combat', () => updatePlayerCombat(dt));
+      if (!rtPaused()) safeStep('cooldowns', () => tickCooldowns(dt));  // skill/potion cooldowns burn in seconds
+      if (!rtPaused()) safeStep('autocast', () => tickAutoCast(dt));    // fire any auto-cast skills that are ready
+      if (!rtPaused()) safeStep('world', () => stepWorldClock(dt));
+      if (!rtPaused()) safeStep('hazards', () => { updateTraps(dt); updateProjectiles(dt); stepBossTelegraphs(dt); });
+    } else {
+      safeStep('cooldowns', () => tickCooldowns(dt));
+      safeStep('world', () => stepWorldClock(dt));
+    }
   } else if (inTown && !clockPaused()) {
-    // In town the hero can't move or fight, but time still flows just like standing
-    // still in the dungeon: HP/MP AND Stamina regen, skill & potion cooldowns, and
-    // status/buff timers all keep ticking. Movement, combat and hazards stay paused.
-    // Stamina regen normally rides in updatePlayer(), which is gated out in town
-    // (rtPaused), so refill it here or it would sit frozen while HP/MP recover.
+    // A service overlay is open on top of the town (rtPaused → the hero is idling in
+    // it): movement/combat stay paused, but time still flows — HP/MP AND Stamina
+    // regen, skill & potion cooldowns, and status/buff timers all keep ticking, just
+    // like standing still down in the dungeon. Stamina regen normally rides in
+    // updatePlayer() (skipped here), so refill it or it would freeze while HP/MP recover.
     safeStep('cooldowns', () => tickCooldowns(dt));
     safeStep('world', () => stepWorldClock(dt));
     safeStep('stamRegen', () => regenStamina(dt));
@@ -35550,9 +35731,8 @@ const __DL_FN_BRIDGE = {
   openGambler,
   renderGambler,
   gambleRoll,
-  drawTownFloor,
   drawTownBuildings,
-  drawTownNpcs,
+  drawTownWorld,
   spawnFloorMob,
   spawnEnemies,
   populateEmptyRooms,
