@@ -411,6 +411,174 @@ export const MUSIC_SECTIONS = [
       kickPat: ['main', null, null, 'main', null, null, 'mid', null],
       hatPat:  [1,0,1,1,1,0,1,1] } },
 
+  // Melodic dubstep (Adventure Club-inspired) — emotional A minor at a half-time
+  // ~140 BPM. Big detuned super-saw chords swell over a growling wobble bass; the
+  // kick lands on 1, the snare on 3. Uplifting and heavy at once.
+  { name: 'Rift',    tempo: 0.214,
+    scale: [0, 2, 3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 24],
+    progs: [
+      [[0,3,7],[8,12,15],[3,7,10],[10,14,17]],    // Am  F   C   G
+      [[8,12,15],[3,7,10],[10,14,17],[0,3,7]],     // F   C   G   Am
+    ],
+    bass: { type: 'sawtooth', voice: 'reese',    cutoff: 520,  q: 4, detune: 10, vol: 0.32 },
+    pad:  { type: 'sawtooth', voice: 'supersaw', cutoff: 1900, q: 1, detune: 10, vol: 0.14 },
+    lead: { type: 'sawtooth', voice: 'supersaw', cutoff: 3400, q: 1, detune: 9,  vol: 0.18 },
+    leadDensity: 0.5, arpDensity: 0.4,
+    kickVol: 1.1, kickMidVol: 0.95, hatVol: 0.08,
+    groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 2, arpVel: 0.7, chordOct: 0,
+      leadLong: 0.45, leadRest: 0.18,
+      bassPat: [{d:'r',l:1.6,v:1.0}, null, {d:'8',l:0.6,v:0.72,p:0.8}, {d:'r',l:0.7,v:0.9,p:0.85}, {d:'r',l:1.4,v:1.0}, null, {d:'5',l:0.6,v:0.82,p:0.85}, {d:'n2',l:0.7,v:0.9,p:0.9}],
+      chordPat: [{l:1.8,v:1.0,voi:'wide'}, null, null, {l:0.7,v:0.8,voi:'inv1',p:0.7}, {l:1.6,v:0.95,voi:'open'}, null, {l:0.7,v:0.82,voi:'inv2',p:0.7}, {l:0.8,v:0.85,voi:'wide',p:0.75,next:true}],
+      kickPat: ['main', null, null, null, 'mid', null, null, null],
+      hatPat:  [0,1,1,1,0,1,1,1] } },
+
+  // Brostep (Skrillex-inspired) — gnarly, aggressive A Phrygian at ~140 BPM. A
+  // snarling detuned reese bass jabs in rapid syncopations under short mechanical
+  // stabs and a reedy square screech lead. Menace from the b2.
+  { name: 'Snarl',   tempo: 0.212,
+    scale: [0, 1, 3, 5, 7, 8, 10, 12, 13, 15, 17, 19, 24],
+    progs: [
+      [[0,3,7],[1,5,8],[0,3,7],[8,12,15]],        // Am  Bb  Am  F   (Phrygian bII)
+      [[0,3,7],[8,12,15],[1,5,8],[7,10,14]],       // Am  F   Bb  Em
+    ],
+    bass: { type: 'sawtooth', voice: 'reese',    cutoff: 620,  q: 5, detune: 12, vol: 0.33 },
+    pad:  { type: 'sawtooth', voice: 'supersaw', cutoff: 1500, q: 2, detune: 7,  vol: 0.11 },
+    lead: { type: 'square',   voice: 'square',   cutoff: 2800, q: 1, detune: 6,  vol: 0.16 },
+    leadDensity: 0.7, arpDensity: 0.3,
+    kickVol: 1.2, kickMidVol: 1.0, hatVol: 0.09,
+    groove: { swing: 0.0, leadOct: 0, arpOct: 12, arpEvery: 4, arpVel: 0.55, chordOct: 0,
+      leadLong: 0.18, leadRest: 0.1,
+      bassPat: [{d:'r',l:0.8,v:1.0}, {d:'r',l:0.5,v:0.8,p:0.85}, {d:'n2',l:0.6,v:0.9,p:0.9}, {d:'r',l:0.5,v:0.75,p:0.7}, {d:'r',l:0.8,v:1.0}, {d:'5h',l:0.5,v:0.85,p:0.8}, {d:'n1',l:0.6,v:0.88,p:0.85}, {d:'n2',l:0.6,v:0.92}],
+      chordPat: [{l:0.5,v:1.0,voi:'root'}, null, {l:0.4,v:0.85,voi:'inv1',p:0.85}, {l:0.4,v:0.8,voi:'root',p:0.75}, {l:0.5,v:0.95,voi:'open'}, null, {l:0.4,v:0.85,voi:'inv1',p:0.8}, {l:0.4,v:0.78,voi:'wide',p:0.7,next:true}],
+      kickPat: ['main', null, 'mid', null, 'main', 'mid', null, null],
+      hatPat:  [1,1,0,1,1,1,0,1] } },
+
+  // Big room / electro house (Calvin Harris-inspired) — a huge festival anthem in
+  // A minor at ~128 BPM. A resonant acid bass pumps against the four-on-the-floor
+  // kick while wide super-saw chords hammer the drop.
+  { name: 'Blaze',   tempo: 0.232,
+    scale: [0, 2, 3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 24],
+    progs: [
+      [[0,3,7],[8,12,15],[3,7,10],[10,14,17]],    // Am  F   C   G
+      [[0,3,7],[10,14,17],[8,12,15],[3,7,10]],     // Am  G   F   C
+    ],
+    bass: { type: 'sawtooth', voice: 'acid',     cutoff: 700,  q: 3, detune: 5, vol: 0.31 },
+    pad:  { type: 'sawtooth', voice: 'supersaw', cutoff: 2000, q: 1, detune: 8, vol: 0.13 },
+    lead: { type: 'sawtooth', voice: 'supersaw', cutoff: 3600, q: 1, detune: 8, vol: 0.18 },
+    leadDensity: 0.55, arpDensity: 0.4,
+    kickVol: 1.2, kickMidVol: 1.15, hatVol: 0.09,
+    groove: { swing: 0.0, leadOct: 12, arpOct: 12, arpEvery: 2, arpVel: 0.7, chordOct: 0,
+      leadLong: 0.4, leadRest: 0.14,
+      bassPat: [{d:'r',l:0.5,v:1.0}, {d:'8',l:0.6,v:0.85,p:0.9}, {d:'r',l:0.5,v:0.95}, {d:'8',l:0.6,v:0.82,p:0.85}, {d:'r',l:0.5,v:1.0}, {d:'8',l:0.6,v:0.85,p:0.9}, {d:'5',l:0.6,v:0.85,p:0.85}, {d:'n2',l:0.6,v:0.9,p:0.9}],
+      chordPat: [{l:1.4,v:1.0,voi:'wide'}, null, null, {l:0.5,v:0.75,voi:'inv1',p:0.6}, {l:1.4,v:0.95,voi:'open'}, null, {l:0.6,v:0.8,voi:'root',p:0.7}, {l:0.6,v:0.8,voi:'wide',p:0.65,next:true}],
+      kickPat: ['main', null, 'main', null, 'main', null, 'main', null],
+      hatPat:  [0,1,0,1,0,1,0,1] } },
+
+  // Future funk / nu-disco (Keljet-inspired) — bright, chopped D Dorian at ~118 BPM.
+  // A busy octave-hopping disco bass and glassy plucks bounce over a four-on-the-floor
+  // kick with off-beat open hats. Groovy and sun-soaked.
+  { name: 'Boogie',  tempo: 0.254,
+    scale: [5, 7, 8, 10, 12, 14, 15, 17, 19, 20, 22, 24, 26],
+    progs: [
+      [[5,8,12],[10,14,17],[5,8,12],[7,10,14]],    // Dm  G   Dm  Em
+      [[5,8,12],[12,15,19],[10,14,17],[3,7,10]],    // Dm  Am  G   C
+    ],
+    bass: { type: 'sawtooth', voice: 'saw',   cutoff: 900,  q: 2, detune: 5, vol: 0.29 },
+    pad:  { type: 'triangle', voice: 'pluck', cutoff: 2400, q: 1, detune: 4, vol: 0.12 },
+    lead: { type: 'triangle', voice: 'pluck', cutoff: 3400, q: 1, detune: 4, vol: 0.18 },
+    leadDensity: 0.6, arpDensity: 0.55,
+    kickVol: 0.95, kickMidVol: 0.85, hatVol: 0.07,
+    groove: { swing: 0.1, leadOct: 12, arpOct: 12, arpEvery: 1, arpVel: 0.8, chordOct: 12,
+      leadLong: 0.3, leadRest: 0.15,
+      bassPat: [{d:'r',l:0.5,v:1.0}, {d:'8',l:0.4,v:0.8,p:0.9}, {d:'r',l:0.4,v:0.85,p:0.85}, {d:'8',l:0.4,v:0.78,p:0.8}, {d:'5',l:0.5,v:0.85}, {d:'8',l:0.4,v:0.75,p:0.8}, {d:'3',l:0.4,v:0.72,p:0.7}, {d:'n2',l:0.5,v:0.85,p:0.85}],
+      chordPat: [null, {l:0.4,v:0.85,voi:'inv1',p:0.85}, {l:0.4,v:0.8,voi:'open',p:0.8}, null, {l:0.4,v:0.85,voi:'inv2',p:0.85}, {l:0.4,v:0.8,voi:'inv1',p:0.8}, null, {l:0.4,v:0.75,voi:'root',p:0.7,next:true}],
+      kickPat: ['main', null, 'main', null, 'main', null, 'main', null],
+      hatPat:  [0,1,0,1,0,1,1,1] } },
+
+  // Electro-funk (Chromeo-inspired) — a swung, laid-back A Dorian groove at ~108 BPM.
+  // A fat funk bass jabs syncopated 16ths under clav-style off-beat stabs and a reedy
+  // square "talkbox" lead. Backbeat snare, plenty of pocket.
+  { name: 'Velvet',  tempo: 0.278,
+    scale: [0, 2, 3, 5, 7, 9, 10, 12, 14, 15, 17, 19, 21],
+    progs: [
+      [[0,3,7],[5,9,12],[0,3,7],[7,10,14]],        // Am  D   Am  Em  (Dorian IV)
+      [[0,3,7],[3,7,10],[5,9,12],[0,3,7]],          // Am  C   D   Am
+    ],
+    bass: { type: 'sawtooth', voice: 'saw',    cutoff: 820,  q: 3, detune: 6, vol: 0.30 },
+    pad:  { type: 'triangle', voice: 'warm',   cutoff: 1600, q: 1, detune: 5, vol: 0.11 },
+    lead: { type: 'square',   voice: 'square', cutoff: 2600, q: 1, detune: 5, vol: 0.17 },
+    leadDensity: 0.55, arpDensity: 0.3,
+    kickVol: 0.9, kickMidVol: 0.75, hatVol: 0.06,
+    groove: { swing: 0.18, leadOct: 12, arpOct: 12, arpEvery: 2, arpVel: 0.6, chordOct: 12,
+      leadLong: 0.35, leadRest: 0.16,
+      bassPat: [{d:'r',l:0.9,v:1.0}, null, {d:'8',l:0.5,v:0.68,p:0.7}, {d:'r',l:0.6,v:0.9,p:0.85}, {d:'5',l:0.6,v:0.8,p:0.8}, {d:'3',l:0.5,v:0.66,p:0.6}, {d:'r',l:0.5,v:0.85,p:0.8}, {d:'n1',l:0.6,v:0.82,p:0.8}],
+      chordPat: [null, {l:0.45,v:0.8,voi:'open',p:0.85}, null, {l:0.45,v:0.78,voi:'inv1',p:0.8}, null, {l:0.45,v:0.8,voi:'open',p:0.85}, {l:0.4,v:0.72,voi:'inv2',p:0.7}, {l:0.4,v:0.7,voi:'root',p:0.6,next:true}],
+      kickPat: ['main', null, null, 'mid', 'mid', null, 'main', null],
+      hatPat:  [1,0,1,1,1,0,1,1] } },
+
+  // French house (Daft Punk-inspired) — a filtered disco loop in A minor at ~123 BPM.
+  // A funky off-beat bass pumps between the kicks while a repeating filtered pluck riff
+  // loops overhead. Four-on-the-floor, hypnotic and dancey.
+  { name: 'Vogue',   tempo: 0.244,
+    scale: [0, 2, 3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 24],
+    progs: [
+      [[0,3,7],[5,8,12],[10,14,17],[3,7,10]],      // Am  Dm  G   C
+      [[0,3,7],[3,7,10],[8,12,15],[10,14,17]],      // Am  C   F   G
+    ],
+    bass: { type: 'sawtooth', voice: 'saw',      cutoff: 760,  q: 3, detune: 5, vol: 0.30 },
+    pad:  { type: 'sawtooth', voice: 'supersaw', cutoff: 1700, q: 2, detune: 7, vol: 0.12 },
+    lead: { type: 'triangle', voice: 'pluck',    cutoff: 3000, q: 1, detune: 4, vol: 0.17 },
+    leadDensity: 0.45, arpDensity: 0.5,
+    kickVol: 1.05, kickMidVol: 1.0, hatVol: 0.08,
+    groove: { swing: 0.06, leadOct: 12, arpOct: 12, arpEvery: 1, arpVel: 0.75, chordOct: 12,
+      leadLong: 0.35, leadRest: 0.18,
+      bassPat: [null, {d:'8',l:0.55,v:0.9,p:0.95}, {d:'r',l:0.5,v:0.8,p:0.8}, {d:'8',l:0.55,v:0.85,p:0.9}, {d:'5',l:0.5,v:0.82}, {d:'8',l:0.5,v:0.8,p:0.85}, {d:'3',l:0.5,v:0.72,p:0.7}, {d:'n2',l:0.55,v:0.85,p:0.85}],
+      chordPat: [{l:0.5,v:0.85,voi:'root'}, null, {l:0.45,v:0.78,voi:'inv1',p:0.85}, {l:0.45,v:0.8,voi:'open',p:0.8}, {l:0.5,v:0.85,voi:'inv2'}, null, {l:0.45,v:0.78,voi:'inv1',p:0.85}, {l:0.45,v:0.75,voi:'open',p:0.75,next:true}],
+      kickPat: ['main', null, 'main', null, 'main', null, 'main', null],
+      hatPat:  [1,0,1,1,1,0,1,1] } },
+
+  // Organic future bass (Big Wild-inspired) — playful, bright D major at ~105 BPM.
+  // Warm marimba-like plucks skip over a bouncing sub and big tribal drums. Airy,
+  // percussive and full of life.
+  { name: 'Roam',    tempo: 0.286,
+    scale: [5, 7, 9, 10, 12, 14, 16, 17, 19, 21, 22, 24, 26],
+    progs: [
+      [[5,9,12],[14,17,21],[10,14,17],[12,16,19]],  // D   Bm  G   A
+      [[10,14,17],[5,9,12],[12,16,19],[14,17,21]],   // G   D   A   Bm
+    ],
+    bass: { type: 'triangle', voice: 'sub',   cutoff: 640,  q: 2, detune: 4, vol: 0.27 },
+    pad:  { type: 'triangle', voice: 'fm',    cutoff: 2200, q: 1, detune: 5, vol: 0.12 },
+    lead: { type: 'triangle', voice: 'pluck', cutoff: 3200, q: 1, detune: 3, vol: 0.18 },
+    leadDensity: 0.55, arpDensity: 0.6,
+    kickVol: 0.95, kickMidVol: 0.8, hatVol: 0.05,
+    groove: { swing: 0.08, leadOct: 12, arpOct: 12, arpEvery: 1, arpVel: 0.85, chordOct: 12,
+      leadLong: 0.3, leadRest: 0.16,
+      bassPat: [{d:'r',l:1.1,v:1.0}, null, {d:'8',l:0.6,v:0.72,p:0.8}, {d:'5',l:0.6,v:0.78,p:0.8}, {d:'r',l:0.9,v:0.9}, {d:'8',l:0.5,v:0.68,p:0.65}, null, {d:'n2',l:0.6,v:0.8,p:0.85}],
+      chordPat: [{l:0.6,v:0.85,voi:'root'}, {l:0.4,v:0.7,voi:'open',p:0.6}, null, {l:0.5,v:0.78,voi:'inv1',p:0.8}, {l:0.6,v:0.82,voi:'open'}, {l:0.4,v:0.7,voi:'inv2',p:0.6}, null, {l:0.5,v:0.75,voi:'root',p:0.7,next:true}],
+      kickPat: ['main', null, 'mid', null, 'main', 'mid', null, 'mid'],
+      hatPat:  [1,0,1,0,1,0,1,1] } },
+
+  // Tropical / piano house (Kygo-inspired) — sunny, uplifting C major at ~116 BPM.
+  // A soft sub and a warm FM piano/bell lead trade a bright melody over a gentle
+  // four-on-the-floor. Emotional, breezy and open.
+  { name: 'Palm',    tempo: 0.259,
+    scale: [3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 20, 22, 24],
+    progs: [
+      [[3,7,10],[10,14,17],[12,15,19],[8,12,15]],   // C   G   Am  F
+      [[12,15,19],[8,12,15],[3,7,10],[10,14,17]],    // Am  F   C   G
+    ],
+    bass: { type: 'triangle', voice: 'sub',  cutoff: 700,  q: 2, detune: 4, vol: 0.26 },
+    pad:  { type: 'triangle', voice: 'warm', cutoff: 2000, q: 1, detune: 5, vol: 0.12 },
+    lead: { type: 'sine',     voice: 'fm',   cutoff: 3600, q: 1, detune: 3, vol: 0.18 },
+    leadDensity: 0.55, arpDensity: 0.55,
+    kickVol: 0.8, kickMidVol: 0.7, hatVol: 0.06,
+    groove: { swing: 0.05, leadOct: 12, arpOct: 12, arpEvery: 1, arpVel: 0.8, chordOct: 12,
+      leadLong: 0.4, leadRest: 0.18,
+      bassPat: [{d:'r',l:1.2,v:1.0}, null, {d:'5',l:0.7,v:0.76,p:0.85}, null, {d:'8',l:0.6,v:0.7,p:0.7}, {d:'r',l:0.7,v:0.85,p:0.75}, null, {d:'n1',l:0.6,v:0.78,p:0.8}],
+      chordPat: [{l:0.7,v:0.82,voi:'open'}, null, {l:0.5,v:0.72,voi:'inv1',p:0.75}, {l:0.5,v:0.75,voi:'root',p:0.7}, {l:0.7,v:0.8,voi:'open'}, null, {l:0.5,v:0.72,voi:'inv2',p:0.75}, {l:0.5,v:0.7,voi:'inv1',p:0.65,next:true}],
+      kickPat: ['main', null, 'main', null, 'main', null, 'main', null],
+      hatPat:  [0,0,1,0,0,0,1,0] } },
+
   // BOSS — only plays during boss fights. Fast, menacing A Phrygian-dominant with a
   // pounding kick. Bass: a relentless pounding pedal with half-step chromatic pushes
   // (the b2 is the menace). Comp: dense, driving, aggressive stabs. Kept LAST so the

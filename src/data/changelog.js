@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Eight new electronic music styles + faster track changes", by: "Jeff Louie", notes: [
+    "Added eight new dance styles to the soundtrack — melodic dubstep, brostep, big room, future funk, electro-funk, French house, organic bass and piano house — roughly doubling the electronic vibes you can lock in from the music picker in Settings.",
+    "The soundtrack now drifts to a fresh style about every 90 seconds instead of every two minutes.",
+  ] },
   { date: "2026-07-06", size: "large", v: "Endgame update — six late-game systems", by: "Andrew Suiter", notes: [
     "Ascendant Weave: spend Boss Points on a constellation board of real choices — opportunity-cost nodes, attribute-threshold keystones, and socketed Glyphs that drop deep in Endless — plus a cosmetic Weave Depth rank. Opens after your first boss floor.",
     "Dread Covenants: swear stackable afflictions at a town altar before a descent; more Dread means deadlier floors AND richer loot, materials and boss rewards, tracked on a per-class “how hard did you beat it” checklist. Opens with Hardened.",
