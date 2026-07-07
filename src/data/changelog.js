@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Eight new electronic music styles + faster track changes", by: "Jeff Louie", notes: [
+    "Added eight new dance styles to the soundtrack — melodic dubstep, brostep, big room, future funk, electro-funk, French house, organic bass and piano house — roughly doubling the electronic vibes you can lock in from the music picker in Settings.",
+    "The soundtrack now drifts to a fresh style about every 90 seconds instead of every two minutes.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Reclaim your grave on a boss floor", by: "Claude", notes: [
     "Fixed lost bags being unrecoverable when you fell on a boss floor — the grave had nowhere to spawn in the arena. It now rests right beside the entrance stair, so you step onto it and reclaim everything the moment you return.",
   ] },
