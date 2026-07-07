@@ -8983,8 +8983,16 @@ function resizeCanvas() {
   // off the buffer size, so nothing else needs to change. Desktop stays 1:1.
   const touch = document.body.classList.contains('touch');
   const dpr = touch ? Math.min(2, window.devicePixelRatio || 1) : 1;
-  canvas.width  = Math.max(1, Math.round(cw * dpr));
-  canvas.height = Math.max(1, Math.round(ch * dpr));
+  // Assigning canvas.width/height CLEARS the backing buffer even when the value is
+  // unchanged. resizeCanvas() runs redundantly — the map-box ResizeObserver fires on
+  // every sub-pixel step of a panel slide, and near the end of the ease consecutive
+  // steps round to the SAME buffer size — so an unconditional assign there blanks the
+  // map (clear) while the observer, seeing no size change, skips its own redraw,
+  // leaving the map gone for the tail of the slide. Only assign (and thus only clear)
+  // when the size actually changes; the following draw() repaints when it does.
+  const nw = Math.max(1, Math.round(cw * dpr)), nh = Math.max(1, Math.round(ch * dpr));
+  if (canvas.width !== nw) canvas.width = nw;
+  if (canvas.height !== nh) canvas.height = nh;
   // The touch map lives in its own area between the solid header/footer bands, so
   // the hero just centres in the canvas — no camera bias needed (0 on desktop too).
   touchCamBiasPx = 0;
