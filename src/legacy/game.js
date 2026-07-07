@@ -9007,7 +9007,8 @@ function onViewportResize() {
   resizeCanvas(); if (inTown) syncTownBarReserve();
   // The belt width just changed, so the bounty module may have crossed its
   // container-query threshold — re-evaluate the map-corner chip's fallback visibility.
-  try { updateObjectiveChip(); } catch (_) {}
+  // force=true bypasses the per-kill throttle so this discrete change isn't dropped.
+  try { updateObjectiveChip(true); } catch (_) {}
   draw();
 }
 window.addEventListener('resize', onViewportResize);
@@ -12486,7 +12487,16 @@ function loadDaily() {
 // The chip repaints on every kill (and gold gain) but its strings rarely move, so
 // the last-written state is remembered and unchanged repaints skip the DOM writes.
 let _objChipLast = null;
-function updateObjectiveChip() {
+// Whether the desktop belt is currently HOSTING the bounty readout is decided by a
+// CSS container query on the belt's width, so JS can only learn it by reading
+// offsetParent — a forced synchronous layout. The belt width changes only on a
+// discrete event (window resize / log or panel collapse), never mid-fight, yet
+// updateObjectiveChip runs on every kill. So throttle the read on the hot path
+// (~2-3×/sec); the handful of handlers that actually change the belt width pass
+// updateObjectiveChip(true) to force an immediate fresh read, so a real layout
+// change is never left stale by the throttle.
+let _beltVisAt = -1e9, _beltShowsBounty = false, _beltBountyPresent = false;
+function updateObjectiveChip(force) {
   checkBountyComplete();   // one-shot "bounty complete" cue on the not-done → done edge
   const chip = document.getElementById('objective-chip');
   if (!chip) return;
@@ -12499,10 +12509,15 @@ function updateObjectiveChip() {
   // readout; when the belt is too tight the module hides (container query) and the
   // chip falls back here. offsetParent is null when the module is display:none or the
   // whole desktop HUD is hidden (touch/mobile), so the chip keeps showing there.
-  const beltBounty = document.querySelector('#hud-belt .sb-mod-bounty');
-  const beltShowsBounty = !!(beltBounty && beltBounty.offsetParent !== null);
-  if (beltBounty) syncBeltBounty();   // keep the relocated readout current on every kill
-  if (!b || inTown || titleOpen || beltShowsBounty) {
+  const nowMs = performance.now();
+  if (force || nowMs - _beltVisAt > 400) {   // re-measure belt hosting at most ~2-3×/sec, or now if a caller forced it
+    const beltBounty = document.querySelector('#hud-belt .sb-mod-bounty');
+    _beltBountyPresent = !!beltBounty;
+    _beltShowsBounty = !!(beltBounty && beltBounty.offsetParent !== null);   // forced reflow — now throttled
+    _beltVisAt = nowMs;
+  }
+  if (_beltBountyPresent) syncBeltBounty();   // keep the relocated readout current on every kill (cheap: cached el + guarded writes)
+  if (!b || inTown || titleOpen || _beltShowsBounty) {
     if (_objChipLast !== 'off') { chip.style.display = 'none'; _objChipLast = 'off'; }
     return;
   }
@@ -16037,8 +16052,13 @@ function _ctxFontPx(parent) {
 // transparent padding and scaled so its HEIGHT ≈ the font-size, so every icon
 // reads at the same height as the text — and as each other, regardless of how
 // much empty margin its own tile happened to carry.
-function _dlTextSpan(name, parent) {
-  const fs = _ctxFontPx(parent);
+function _dlTextSpan(name, parent) { return _dlTextSpanPx(name, _ctxFontPx(parent)); }
+// The icon-html builder, given an already-resolved context font-size (px). Split
+// out of _dlTextSpan so the [data-spr] painter can hoist ALL its getComputedStyle
+// reads ahead of its innerHTML writes (and dedupe them per parent). A parent's
+// font-size never changes when a child span's innerHTML is written, so a batched
+// read yields byte-identical html to the old per-icon interleaved read.
+function _dlTextSpanPx(name, fs) {
   const sk = skillIconAt(name, Math.round(fs * TEXT_ICON_H / (uiScale || 1)));
   if (sk) return sk;
   const i = SPRITE_IDX[name];
@@ -16059,16 +16079,37 @@ function _dlTextSpan(name, parent) {
 }
 // Fill any [data-spr] element with its pixel atlas icon, trimmed and sized to the
 // text around it (see _dlTextSpan).
+function _collectDataSpr(root, out) {
+  if (!root || root.nodeType !== 1) return;
+  if (root.hasAttribute && root.hasAttribute('data-spr')) out.push(root);
+  if (root.querySelectorAll) root.querySelectorAll('[data-spr]').forEach(e => out.push(e));
+}
+// READ-ALL then WRITE-ALL, in one pass: build every icon's html FIRST (all the
+// getComputedStyle font-size reads hit one already-flushed layout, deduped per
+// parent), THEN write all the innerHTML. The old loop read-then-wrote per icon, so
+// each write dirtied layout and the next icon's read re-flushed it — O(n) forced
+// reflows per paint, and #520's 960×960 resampled atlas made each flush ~3× costlier.
+// One flush per pass now; the html bytes are identical, so icons render pixel-for-pixel
+// unchanged.
+function _paintSprList(list) {
+  if (!spriteReady) return;
+  const writes = [];
+  const fsByParent = new Map();
+  for (const el of list) {
+    if (el.dataset.sprDone) continue;
+    const parent = el.parentNode || el;
+    let fs = fsByParent.get(parent);
+    if (fs === undefined) { fs = _ctxFontPx(parent); fsByParent.set(parent, fs); }
+    const html = _dlTextSpanPx(el.getAttribute('data-spr'), fs);
+    if (html) writes.push(el, html);
+  }
+  for (let i = 0; i < writes.length; i += 2) { writes[i].innerHTML = writes[i + 1]; writes[i].dataset.sprDone = '1'; }
+}
 function paintDataSpr(root) {
   if (!spriteReady || !root || root.nodeType !== 1) return;
   const list = [];
-  if (root.hasAttribute && root.hasAttribute('data-spr')) list.push(root);
-  if (root.querySelectorAll) root.querySelectorAll('[data-spr]').forEach(e => list.push(e));
-  for (const el of list) {
-    if (el.dataset.sprDone) continue;
-    const html = _dlTextSpan(el.getAttribute('data-spr'), el.parentNode || el);
-    if (html) { el.innerHTML = html; el.dataset.sprDone = '1'; }
-  }
+  _collectDataSpr(root, list);
+  _paintSprList(list);
 }
 // Boot the [data-spr] painter: paint the static markup once, then watch for any
 // later-inserted placeholders (logs, panels, tooltips, HUD) and paint those too.
@@ -16077,9 +16118,15 @@ function startSprPainter() {
   if (_sprObserver || !document.body) return;
   paintDataSpr(document.body);
   _sprObserver = new MutationObserver(muts => {
+    if (!spriteReady) return;
+    // Collect every newly-inserted placeholder across the WHOLE microtask, then
+    // paint them in ONE read-all/write-all pass (a single kill inserts ~6 log-line
+    // divs; batching pays one layout flush for the lot, not one per div).
+    const list = [];
     for (const mu of muts) {
-      mu.addedNodes.forEach(node => { if (node.nodeType === 1) paintDataSpr(node); });
+      mu.addedNodes.forEach(node => { if (node.nodeType === 1) _collectDataSpr(node, list); });
     }
+    if (list.length) _paintSprList(list);
   });
   _sprObserver.observe(document.body, { childList: true, subtree: true });
 }
@@ -27106,14 +27153,14 @@ function itemCardHTML(item, opts = {}) {
     // DMG is a range string like "8-12"; others are flat numbers (negative on a curse).
     const negative = (typeof v === 'number') && v < 0;
     const val = (typeof v === 'string') ? abbreviateNumbersIn(v) : (v < 0 ? '' : '+') + abbreviateNumber(v);
-    // Native (headline/innate) stats come from the base and can't be rerolled, so
-    // mark them apart from rollable affixes. A curse penalty (negative) is tagged too.
+    // Base (headline/innate) stats come from the item's base and can't be
+    // rerolled, so tag them apart from rollable affixes — but keep every stat the
+    // same colour so the list reads cleanly. A curse penalty (negative) is tagged.
     const isNative = head.includes(k);
-    const cls = 'tt-stat' + (isNative ? ' tt-native' : '');
     const style = negative ? ' style="color:var(--red-350)"' : '';
     const tag = negative ? ' <span class="tt-tag">cursed</span>'
-              : isNative ? ' <span class="tt-tag">native</span>' : '';
-    return `<div class="${cls}"${style}>${val} ${STAT_LABELS[k] || k}${tag}</div>`;
+              : isNative ? ' <span class="tt-tag">base</span>' : '';
+    return `<div class="tt-stat"${style}>${val} ${STAT_LABELS[k] || k}${tag}</div>`;
   });
   // Attribute affixes (+Might, +Luck, …) get their own coloured rows.
   if (item.attrs) for (const [k, v] of Object.entries(item.attrs)) {
@@ -27157,7 +27204,10 @@ function itemCardHTML(item, opts = {}) {
   // Item level: drives raw stat size, so it's worth surfacing alongside power.
   const ilvlLine = (item.slot && item.ilvl)
     ? `<span style="color:var(--blue-250);font-weight:bold">ilvl ${item.ilvl}</span>` : '';
-  const label = opts.label ? `<div class="tt-cardlabel">${opts.label}</div>` : '';
+  // The "Equipped" label reads in gold so a glance tells which card is the piece
+  // already worn, vs the dim "Hovered" candidate beside it.
+  const label = opts.label
+    ? `<div class="tt-cardlabel${opts.label === 'Equipped' ? ' tt-cardlabel-worn' : ''}">${opts.label}</div>` : '';
   // The attribute gate to equip this weapon / off-hand — green when met, red when
   // short — so a player reads at a glance why a piece is locked and what to raise.
   // Skipped for another hero's snapshot (opts.hideReq): the "you have" comparison is
@@ -27359,6 +27409,13 @@ document.addEventListener('click', (e) => {
 // long sessions crawl. Scrollback is capped so the DOM stays bounded.
 const LOG_MAX_LINES = 200;
 let _logEl = null;   // #log is static in the markup — resolve once, lazily
+let _logScrollPending = false;   // coalesce the auto-scroll-to-newest into one rAF
+// Pin the log to its newest line. Reading scrollHeight forces a synchronous reflow,
+// so rather than doing it inside every log() call (a kill emits several back-to-back),
+// schedule ONE scroll for the next frame. The browser never paints between the
+// synchronous appends and that frame, so the rested position (bottom) is identical —
+// at zero forced reflows on the action's own frame.
+function _scrollLogToNewest() { _logScrollPending = false; if (_logEl) _logEl.scrollTop = _logEl.scrollHeight; }
 function log(msg, cls='') {
   const el = _logEl || (_logEl = document.getElementById('log'));
   // Every combat-log line goes through one abbreviator so damage, gold, heals and
@@ -27367,7 +27424,7 @@ function log(msg, cls='') {
   msg = abbreviateNumbersIn(msg);
   el.insertAdjacentHTML('beforeend', `<div class="log-line ${cls}">${msg}</div>`);
   while (el.childElementCount > LOG_MAX_LINES) el.removeChild(el.firstElementChild);
-  el.scrollTop = el.scrollHeight;
+  if (!_logScrollPending) { _logScrollPending = true; requestAnimationFrame(_scrollLogToNewest); }
 }
 
 // ── PANEL SLIDE RE-FIT ──
@@ -27396,6 +27453,23 @@ function refitMapDuringSlide() {
 // preference it starts collapsed on mobile (where space is tight) and open on the
 // roomier desktop layout.
 const LOG_COLLAPSE_KEY = 'logCollapsed';
+// Pin the log to its TRUE bottom, robust to content-visibility height estimates.
+// While the log is collapsed (display:none on mobile) its lines never render, so
+// off-screen lines hold only the flat contain-intrinsic-size ESTIMATE, not a
+// remembered real height — and content-visibility won't grow scrollHeight to the
+// real total just by scrolling toward it, so a plain scrollTop=scrollHeight on
+// reopen lands well short of the newest line (dozens of lines with wrapped text).
+// Fix: the `.log-pinning` class momentarily overrides content-visibility to visible
+// so EVERY line lays out; reading scrollHeight then yields the exact total (and every
+// line now has a remembered real height). Drop the class right after so
+// content-visibility:auto resumes for the cheap per-combat reflows. This is a one-off
+// full layout, only on reopen (a deliberate tap) — never on the per-kill path.
+function _pinLogBottom(el) {
+  if (!el) return;
+  el.classList.add('log-pinning');
+  el.scrollTop = el.scrollHeight;   // scrollHeight is now exact (all lines rendered) → true bottom
+  el.classList.remove('log-pinning');
+}
 function setLogCollapsed(collapsed, persist = true) {
   const row = document.getElementById('bottom-row');
   if (row) row.classList.toggle('log-collapsed', collapsed);
@@ -27403,15 +27477,16 @@ function setLogCollapsed(collapsed, persist = true) {
   // log shrinks to a strip, the loot/bag drawer gets the reclaimed width).
   document.body.classList.toggle('log-collapsed', collapsed);
   const el = document.getElementById('log');
-  if (el && !collapsed) el.scrollTop = el.scrollHeight; // jump to newest on reopen
+  if (el && !collapsed) _pinLogBottom(el); // jump to newest on reopen (robust to content-visibility estimates)
   if (persist) { try { localStorage.setItem(LOG_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) {} settingsChanged(); }
   // Folding the log slides the map column open/closed on desktop — keep the canvas
   // backing buffer re-fit to the animating width so the map stays crisp, not
   // stretched, for the whole slide.
   refitMapDuringSlide();
   // The belt width slid, so the bounty module may have crossed its container-query
-  // threshold — re-check the map chip's fallback once the fold settles.
-  setTimeout(() => { try { updateObjectiveChip(); } catch (e) {} }, 360);
+  // threshold — re-check the map chip's fallback once the fold settles (force=true
+  // bypasses the per-kill throttle so this discrete change isn't dropped).
+  setTimeout(() => { try { updateObjectiveChip(true); } catch (e) {} }, 360);
 }
 function toggleLog() {
   const row = document.getElementById('bottom-row');
@@ -27440,8 +27515,9 @@ function setPanelCollapsed(collapsed, persist = true) {
   // re-fit the canvas backing buffer to the animating cell width each frame so the
   // map reveals MORE floor smoothly instead of stretching a stale buffer.
   refitMapDuringSlide();
-  // Belt width slid — re-check the bounty chip's fallback once the fold settles.
-  setTimeout(() => { try { updateObjectiveChip(); } catch (e) {} }, 360);
+  // Belt width slid — re-check the bounty chip's fallback once the fold settles
+  // (force=true bypasses the per-kill throttle so this discrete change isn't dropped).
+  setTimeout(() => { try { updateObjectiveChip(true); } catch (e) {} }, 360);
 }
 function togglePanelCollapse() {
   // On touch the drawer is a full-screen sheet, so the spine/close button just

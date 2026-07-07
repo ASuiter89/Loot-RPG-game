@@ -12,6 +12,17 @@ export const CHANGELOG = [
     "Rank-bonus surges on that card now light PINK once earned instead of green, so they stand apart from the card's other green readouts.",
     "When your next rank in a skill crosses a rank-3/7/10 surge, its Learn button glows pink with circling wisps to flag the coming power spike.",
   ] },
+  { date: "2026-07-06", size: "small", v: "Cleaner, easier-to-read item-compare card", by: "Jeff Louie", notes: [
+    "Every stat now reads in the same bright colour — base stats keep a small \"base\" tag but no longer differ in colour.",
+    "The Equipped side's label pops in gold, so a glance tells which piece you're already wearing.",
+    "Widened the compare cards so item names and requirement lines stop wrapping onto extra rows.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Gear drops less often, so finds feel earned", by: "Jeff Louie", notes: [
+    "Trimmed how much gear foes drop across the board — ordinary kills now yield an item about a third less often, and elites and bosses spill a little less extra too (they still always leave at least one). Your bag fills slower and each find matters more; gold, materials, food and toppings are untouched.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Smoother combat — no more hitch when things die", by: "Andrew Suiter", notes: [
+    "Killing enemies, grabbing loot and other quick actions no longer cause a brief stutter. The combat log and its icons now repaint far more efficiently, so busy fights stay smooth — with no change to how anything looks.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Eight new electronic music styles + faster track changes", by: "Jeff Louie", notes: [
     "Added eight new dance styles to the soundtrack — melodic dubstep, brostep, big room, future funk, electro-funk, French house, organic bass and piano house — roughly doubling the electronic vibes you can lock in from the music picker in Settings.",
     "The soundtrack now drifts to a fresh style about every 90 seconds instead of every two minutes.",
