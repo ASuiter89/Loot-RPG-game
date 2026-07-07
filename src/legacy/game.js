@@ -46,11 +46,11 @@ import { channelCoef, classDamageAttr, attrDamageFor, shieldMax, shieldRechargeP
 import { LUCK_FX } from '../data/attributeScaling.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { KILL_LOOT, killLootParams } from '../systems/bossLoot.js';
-import { BOSS_SLOTS } from '../data/bossSlots.js';
-import { slotMultiplier, pointsEarned, pointsSpent, pointsAvailable, totalLevelsInvested, respecCost as bossSlotRespecCost, sanitizeSlotLevels } from '../systems/bossSlots.js';
+import { pointsEarned } from '../systems/bossPoints.js';
 import { resistFraction, penFraction, mitigate, physicalShare } from '../systems/defense.js';
 import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
+import { pickVaultRoom, findSealedRoom } from '../systems/vaultRooms.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
@@ -199,10 +199,6 @@ const SLOTS = {
 // Icon + name for a slot, for the few places a slot label should show its art.
 function slotLabelIcon(slot) { const s = SLOTS[slot]; return s ? `${dlIcon(s.sprite, 16)} ${s.label}` : ''; }
 const SLOT_KEYS = Object.keys(SLOTS);
-
-// A fresh per-set boss-slot-level record: every gear slot at level 0. Boss points
-// raise these (see systems/bossSlots.js); the two gear sets keep their own record.
-function emptySlotLevels() { const o = {}; for (const k of SLOT_KEYS) o[k] = 0; return o; }
 
 // Roll weights for which slot a dropped item belongs to.
 const SLOT_WEIGHTS = { weapon:22, chest:15, head:13, hands:13, legs:13, ring:12, amulet:12, offhand:11 };
@@ -3312,6 +3308,14 @@ function endlessBite() {
 // never balloons into an unplayably huge, foe-choked map.
 //   Normal 20×20 · Hardened 24×24 · Brutal 28×28 · Endless 32×32 and growing
 const DIFF_SIZE_STEP = 4;  // tiles added to each side per finite tier above Normal
+// ── OPEN CAVERN FLOORS ── a slice of non-boss floors open up into a big, airy
+// cavern: a larger map carved from a few sprawling, overlapping chambers instead
+// of the usual tight warren — a breather from the cramped early halls. Density
+// (foes, hazards, loot) all scales with area (mapAreaRatio), so a bigger open
+// floor stays just as busy rather than sparse.
+const OPEN_FLOOR_CHANCE    = 0.14; // ~1 in 7 non-boss floors opens up
+const OPEN_FLOOR_SIZE_MULT = 1.4;  // its map runs ~40% wider/taller than the tier's usual
+const OPEN_FLOOR_MAX       = 44;   // …but never so vast it can't be crossed
 function mapSizeFor(dl) {
   const tier = diffOf(dl);                               // 1 Normal · 2 Hardened · 3 Brutal · 4 Endless
   const base = BASE_MAP_W + (tier - 1) * DIFF_SIZE_STEP; // 20 · 24 · 28 · 32
@@ -3396,18 +3400,6 @@ function materialUnlocked(k) { return activeDifficulty() >= (MATERIAL_MIN_DIFF[k
 // only how often they're recomputed.
 let loadoutEpoch = 0;
 function bumpLoadout() { loadoutEpoch++; }
-// Boss-point SLOT MULTIPLIER: everything the gear worn in `slot` contributes is
-// scaled by ×(1 + 5%·level) for that slot's level in the given gear set (the ACTIVE
-// set by default). A pure read — no mutation — so it's safe in the hot stat loops;
-// an un-invested slot returns 1, keeping those loops byte-identical to before. Any
-// change to a slot's level (raiseSlotLevel / respecSlots / set swap) bumps the
-// loadout epoch, so the memoized totalStat/totalAttr sums recompute.
-function slotMult(slot, setIdx) {
-  const idx = (setIdx === 0 || setIdx === 1) ? setIdx : activeGearSet;
-  const sl = player.slotLevels;
-  const lv = (sl && sl[idx] && sl[idx][slot]) || 0;
-  return lv ? slotMultiplier(lv) : 1;
-}
 let _loBucket = null;
 function loadoutCache() {
   if (!_loBucket || _loBucket.epoch !== loadoutEpoch || _loBucket.player !== player ||
@@ -3544,12 +3536,9 @@ function attrPowerAxes(key, v, ctx, add) {
 // An item's affixes expressed as a combat-context delta (the axes its stats/attrs
 // move). Weapon DMG is stored relative to bare fists so vacating the weapon slot
 // (below) leaves the fists baseline rather than zero damage.
-function itemPowerContribution(item, ctx, mult = 1) {
+function itemPowerContribution(item, ctx) {
   const d = {};
-  // `mult` is the item's boss-point slot multiplier (×(1+5%·level)); it scales every
-  // axis the piece moves, so the Power preview/decomposition tracks the same boost
-  // the live stats get. Default 1 leaves the delta byte-identical for un-invested slots.
-  const add = (axis, val) => { d[axis] = (d[axis] || 0) + (mult === 1 ? val : val * mult); };
+  const add = (axis, val) => { d[axis] = (d[axis] || 0) + val; };
   const stats = item.stats || {};
   for (const k in stats) {
     const v = stats[k];
@@ -3570,14 +3559,14 @@ function itemPowerContribution(item, ctx, mult = 1) {
 // Flat, build-independent Power an item carries: a small nudge per point of a
 // non-combat stat (find / XP / gold / mana) so a pure-utility piece never reads a
 // literal 0, plus the rarity-tier bonus.
-function itemFlatPower(item, mult = 1) {
+function itemFlatPower(item) {
   let f = GEAR_POWER.tierBonus[item.tier] || 0;
   const stats = item.stats || {};
   for (const k in stats) {
     const w = GEAR_POWER.utilityFlat[k];
     if (w && typeof stats[k] === 'number') f += stats[k] * w;
   }
-  return mult === 1 ? f : f * mult;   // boss-point slot multiplier scales flat utility Power too
+  return f;
 }
 
 // Raw (unrounded, un-clamped) Power an item is worth to the CURRENT build: the
@@ -3586,16 +3575,13 @@ function itemFlatPower(item, mult = 1) {
 // in a slot is valued against the build without it — plus its flat utility Power.
 function itemPowerRaw(item) {
   const ctx = buildPowerContext();
-  // The piece would sit in its own slot of the ACTIVE set, so its Power reflects that
-  // slot's boss-point investment (what you'd actually get if you equipped it there).
-  const m = slotMult(item.slot);
-  const contrib = itemPowerContribution(item, ctx, m);
+  const contrib = itemPowerContribution(item, ctx);
   let base = ctx;
   const occ = item.slot ? equipped[item.slot] : null;
   if (occ && activeSlots()[item.slot]) {
-    base = applyDelta(ctx, occ === item ? contrib : itemPowerContribution(occ, ctx, m), -1);
+    base = applyDelta(ctx, occ === item ? contrib : itemPowerContribution(occ, ctx), -1);
   }
-  return marginalPower(base, contrib) + itemFlatPower(item, m);
+  return marginalPower(base, contrib) + itemFlatPower(item);
 }
 
 // Cached per item object over (loadout epoch, class): the value is pure over the
@@ -3626,8 +3612,7 @@ function totalAttr(key) {
     if (!active[slot]) continue;          // red/ignored pieces lend nothing
     const it = equipped[slot];
     if (it && it.attrs && typeof it.attrs[key] === 'number') {
-      const m = slotMult(slot);           // boss-point slot investment scales the piece's grant
-      sum += m === 1 ? it.attrs[key] : it.attrs[key] * m;
+      sum += it.attrs[key];
     }
   }
   return sum + egWeaveFlat(key);   // + Ascendant Weave attribute pips (0 for an empty board)
@@ -3663,7 +3648,7 @@ function playerPower() {
   const ctx = buildPowerContext();
   let p = GEAR_POWER.K * powerScalar(ctx);
   const active = activeSlots();
-  for (const slot of SLOT_KEYS) if (active[slot] && equipped[slot]) p += itemFlatPower(equipped[slot], slotMult(slot));
+  for (const slot of SLOT_KEYS) if (active[slot] && equipped[slot]) p += itemFlatPower(equipped[slot]);
   return Math.round(p);
 }
 
@@ -3678,9 +3663,8 @@ function strippedPowerContext() {
   for (const slot of SLOT_KEYS) {
     const it = active[slot] && equipped[slot];
     if (!it) continue;
-    const m = slotMult(slot);           // strip the SCALED contribution so the baseline stays exact
-    bare = applyDelta(bare, itemPowerContribution(it, ctx, m), -1);
-    flat += itemFlatPower(it, m);
+    bare = applyDelta(bare, itemPowerContribution(it, ctx), -1);
+    flat += itemFlatPower(it);
   }
   return { ctx, bare, flat };
 }
@@ -5592,11 +5576,11 @@ function castKind(node) {
 // tells the same story. Hybrid pairs the sword + orb glyphs — weapon AND magic.
 function castSchoolMeta(kind) {
   if (kind === 'spell') return { label: 'SPELL', icons: '<span data-spr=ic_orb></span>', color: '#b08ad8',
-    desc: 'Magic — scales with Spell Power; meets a foe\'s magic resistance (pierced by Magic Pen); Cooldown Reduction &amp; Cast Speed shorten its recharge. Does not leech.' };
+    desc: 'Spell Power scales it; Cast Speed speeds it. Meets magic resistance (Magic Pen pierces). No leech.' };
   if (kind === 'hybrid') return { label: 'HYBRID', icons: '<span data-spr=w_sword></span><span data-spr=ic_orb></span>', color: '#c99cd6',
-    desc: 'Weapon + magic — lands a PHYSICAL part (meets armour, leeches, scales Skill Power) AND a MAGIC part (meets magic resistance, scales Spell Power). Cooldown Reduction &amp; Cast Speed shorten its recharge.' };
+    desc: 'Physical part (armour · leeches · Skill Power) + magic part (magic resistance · Spell Power).' };
   return { label: 'SKILL', icons: '<span data-spr=w_sword></span>', color: '#e0a24b',
-    desc: 'Martial — scales with your weapon damage &amp; Skill Power; meets a foe\'s physical armour (pierced by Armor Pen); leeches; Cooldown Reduction shortens its recharge.' };
+    desc: 'Weapon damage &amp; Skill Power scale it. Meets armour (Armor Pen pierces). Leeches.' };
 }
 // Prereqs satisfied? (high enough level, ascension matches, every prereq owned).
 function skillReqMet(node) {
@@ -6013,7 +5997,10 @@ let tutorialActive = false;
 // Fleeing treasure goblins don't block the exit — they're a bonus chase. Every
 // other living foe (mobs, elites, bosses, quest hordes, mimics) counts.
 function hostilesRemaining() {
-  return (enemies || []).filter(e => !e.dead && !e.isGoblin).length;
+  // Vault foes (sealed behind a locked door) are an optional side-fight — like
+  // fleeing goblins, they never seal the stairs, so opening a combat vault is
+  // always a choice and never a forced fight just to descend.
+  return (enemies || []).filter(e => !e.dead && !e.isGoblin && !e.vaultFoe).length;
 }
 // Re-check after any kill (or floor setup). Once clear, announce and unseal.
 function updateFloorClear() {
@@ -6265,11 +6252,6 @@ let player = { x: 5, y: 5,
   // the normal boss payout. Keyed by FLOOR, not species, so Endless — where bosses
   // recur — keeps paying a windfall for each new depth. Per-character.
   bossFirstKills: {},
-  // Boss-point gear-slot levels, one record per gear set: slot → level. A boss point
-  // (earned per NEW boss floor cleared — see bossFirstKills) raises a slot, and each
-  // level boosts everything the gear worn there contributes by 5% while equipped. The
-  // two sets invest independently from the same earned pool. See systems/bossSlots.js.
-  slotLevels: [emptySlotLevels(), emptySlotLevels()],
   // ── ENDGAME state (a fresh hero starts empty; loadGame() migrates old saves) ──
   covenantsActive: [],        // Dread Covenants sworn for the next descent
   dreadGrid: {},              // per-class "highest Dread cleared" checklist
@@ -6585,6 +6567,8 @@ let floorTint = null; // optional atmospheric colour overlay for the current flo
 let teleporters = {}; // "y,x" -> { x, y } partner pad for warp tiles
 let groundKey = null; // { x, y } of the vault key on this floor, if any
 let hasKey = false;   // whether the player is currently carrying a vault key
+let deepStair = null; // { x, y } of an express staircase inside a vault (drops 2 floors)
+let vaultInfo = null; // { kind, openMsg } of this floor's locked vault, for the reveal on unlock
 let startPos = { x: 5, y: 5 }; // this floor's safe entry tile (where death sends you)
 // How the player arrived on the floor about to be built: 'down' (descended, via
 // the gate, or a fresh load) or 'up' (climbed the stairs up from below). It
@@ -6741,6 +6725,7 @@ window.gameState = function gameState(radius) {
   // Real-time traps: arrow emitters ('A'); fire vents flaring NOW ('V') vs idle ('v').
   (typeof traps !== 'undefined' ? traps || [] : []).forEach(tr => put(tr.x, tr.y, tr.kind === 'arrow' ? 'A' : (tr.on ? 'V' : 'v')));
   if (typeof groundKey !== 'undefined' && groundKey) put(groundKey.x, groundKey.y, 'k');
+  if (typeof deepStair !== 'undefined' && deepStair) put(deepStair.x, deepStair.y, '»');
   (typeof groundFood !== 'undefined' ? groundFood || [] : []).forEach(f => put(f.x, f.y, '&'));
   if (typeof graveMarker !== 'undefined' && graveMarker) put(graveMarker.x, graveMarker.y, 'g');
   live.forEach(e => put(e.x, e.y, 'E'));
@@ -6952,7 +6937,9 @@ window.gameState = function gameState(radius) {
     floorCleared: (typeof floorCleared !== 'undefined') ? !!floorCleared : null,
     hostilesLeft: (typeof hostilesRemaining === 'function') ? hostilesRemaining() : live.length, // foes still sealing the stairs
     // Explicit exit coordinates + whether the down-stairs are still sealed.
-    stairs: { down: stairsDown, up: stairsUp, locked: (typeof floorCleared !== 'undefined') ? !floorCleared : null },
+    stairs: { down: stairsDown, up: stairsUp, locked: (typeof floorCleared !== 'undefined') ? !floorCleared : null,
+      express: (typeof deepStair !== 'undefined') ? deepStair : null }, // a vault's two-floor express stair, if opened
+
     player: {
       x: player.x, y: player.y, facing: player.facing, faceDir: player.faceDir, // facing: left/right (aim); faceDir: 4-way walk facing
       name: player.name, sex: player.sex,                                        // sex drives the hero sprite (Warrior has male/female art)
@@ -7178,22 +7165,9 @@ window.gameState = function gameState(radius) {
             : { available: false, floor: null, where: null })   // no held stage → no return target (don't report the default warp floor)
         : null,
       pointsToSpend: { attribute: player.attrPoints || 0, skill: player.skillPoints || 0, ascendancy: player.ascPoints || 0 },
-      // Boss Points: earned = distinct boss floors first-cleared; each spent to level a
-      // gear slot (+bonusPct% to that slot's gear, per level). The two gear sets invest
-      // independently from the same earned pool — available[i] & levels[i] are per set
-      // (index 0 = Set 1). Spend on the GEAR tab (raiseSlotLevel); reset at the Trainer.
-      bossSlots: {
-        earned: pointsEarned(player.bossFirstKills),
-        bonusPct: Math.round(BOSS_SLOTS.perLevel * 100),
-        available: [
-          pointsAvailable(player.bossFirstKills, (player.slotLevels && player.slotLevels[0]) || {}),
-          pointsAvailable(player.bossFirstKills, (player.slotLevels && player.slotLevels[1]) || {}),
-        ],
-        levels: [
-          (player.slotLevels && player.slotLevels[0]) ? Object.assign({}, player.slotLevels[0]) : {},
-          (player.slotLevels && player.slotLevels[1]) ? Object.assign({}, player.slotLevels[1]) : {},
-        ],
-      },
+      // Boss Points earned = distinct boss floors first-cleared; spent on the Ascendant
+      // Weave (gameState().endgame.weave reports the live board + points available).
+      bossPointsEarned: pointsEarned(player.bossFirstKills),
       gold: player.gold,                 // coins in hand (what death loss is taken from)
       vaultGold: isSsf(player) ? 0 : ((stash && stash.gold) || 0),   // banked in the town Vault — safe from death (always 0 for an SSF hero: their vault is sealed)
       spendableGold: spendableGold(),    // carried + vault: what a town shop can actually charge (shortfall auto-drawn from the vault; carried only for SSF)
@@ -7263,7 +7237,7 @@ window.gameState = function gameState(radius) {
       cycle: egSafe(egCycleGameStateBlock),     // seasonal phase, enrollment, journey checklist, countdown
       deeds: egSafe(egDeedsGameStateBlock),     // Renown rank + total, deeds completed/total, equipped title
     },
-    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain · (town) n service keeper (walk up + interact) · G Dungeon Gate (step in to descend) · P Town Portal (return to held floor)',
+    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · » vault express stair (drops 2 floors) · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain · (town) n service keeper (walk up + interact) · G Dungeon Gate (step in to descend) · P Town Portal (return to held floor)',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
     map: rows.join('\n'),
@@ -7358,8 +7332,8 @@ window.gameGuide = function gameGuide(topic) {
       `Every active has a SCHOOL — SKILL, SPELL, or HYBRID — shown as a badge on its tree node and in gameState().skills[i].school. A SKILL is martial: weapon-based, scales with weapon damage + Skill Power, leeches life, meets a foe's physical ARMOR (pierced by Armor Pen), recharged by CDR only. A SPELL is magic: scales with Spirit + Spell Power, never leeches, meets a foe's MAGIC RESIST (pierced by Magic Pen), recharged by CDR + Cast Speed. A HYBRID lands BOTH — a physical part (leeches, meets armor, Skill Power) AND a magic part (meets magic resist, Spell Power); its tooltip spells out the split, and it recharges with CDR + Cast Speed. Classes lean differently: Warrior is all SKILL, Mage all SPELL, Rogue mostly skill with shadow/toxic hybrids, Templar mostly holy spells with holy-strike hybrids. Gear the stats that match the actives you lean on.`,
       `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and a rank-7 skill adds an extra ×1.2. The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
-      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% power (Empowered), then +20% power and a 20%-faster recharge (Honed), then +30% power plus +1 radius/range/target/hit (Mastered) — so deepening a key skill outpaces its rising mana cost. Every skill's detail card shows a "Rank bonuses" ladder listing all three, each lit green with a ✓ once your rank has earned it.`,
-      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. AND at rank 10 a passive unlocks one BRAND-NEW stat it never gave before — thematic to the node (a crit passive gains crit damage, an HP passive gains regen, a spell passive gains crit, and so on) — folded straight into the same combat formulas. Its detail card lists all three spikes plus the rank-10 stat in the green-when-earned "Rank bonuses" ladder, shows milestone pips by the rank, and folds the surge into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
+      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% power (Empowered), then +20% power and a 20%-faster recharge (Honed), then +30% power plus +1 radius/range/target/hit (Mastered) — so deepening a key skill outpaces its rising mana cost. Every skill's detail card shows a "Rank bonuses" ladder listing all three, each lit pink with a ✓ once your rank has earned it.`,
+      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. AND at rank 10 a passive unlocks one BRAND-NEW stat it never gave before — thematic to the node (a crit passive gains crit damage, an HP passive gains regen, a spell passive gains crit, and so on) — folded straight into the same combat formulas. Its detail card lists all three spikes plus the rank-10 stat in the pink-when-earned "Rank bonuses" ladder, shows milestone pips by the rank, and folds the surge into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
@@ -7413,7 +7387,7 @@ window.gameGuide = function gameGuide(topic) {
       `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" (tier being any rarity or "set") then call saveGame().`,
     ],
     hazards: [
-      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (shove into it from any side; a few hits to break), o teleporter, * shrine, f fountain, > stairs down, < stairs up, N quest npc, Q quest objective, R rainbow conquest gate.`,
+      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (shove into it from any side; a few hits to break), o teleporter, * shrine, f fountain, > stairs down, » vault express stair (drops 2 floors), < stairs up, N quest npc, Q quest objective, R rainbow conquest gate.`,
       `Lava and spikes hurt but never kill outright (HP clamps to 1), and the generator never forces you across one — route around them.`,
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
@@ -7424,7 +7398,7 @@ window.gameGuide = function gameGuide(topic) {
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom restores 50% of max HP and refills MP to full, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one plays a short walk-through-portal animation — the portal swallows you, the camera pans across to the partner pad, and you step out there (~0.9s, world frozen, unhittable; gameState().transit reads 'warp'). It also clears any click-to-move route, so you won't auto-walk back toward the pad you clicked. Use it deliberately, not while fleeing.`,
-      `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground; carryingKey true once held) and seal a rich vault chest.`,
+      `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground — it glows and bobs; carryingKey true once held). Shove into the door while carrying the key to unlock it. What's behind varies wildly: a rich chest or hoard, an armory of gear, coins, food, a healing fountain, a blessing shrine, a room of elite guards or a swarm of weak foes, a champion, a spike- or lava-ringed prize — or an express staircase (») that plunges you two floors deeper. Vault foes are optional: they NEVER seal the stairs, so opening a combat vault is always your choice.`,
       `CURSED FLOOR (the "greed" gate): rarely, on descending to a non-boss floor from depth 3+, a WORLD-PAUSING prompt offers to brave the floor for DOUBLED loot & gold at the cost of tougher non-boss foes (more HP and damage). Movement freezes until you choose — gameState().greed.pending is true, mode is 'greed' and blockingOverlay is 'greed-overlay'; call acceptGreed() to take it (gameState().greed.active then reads true, mult 2) or declineGreed() to skip.`,
     ],
     enemies: [
@@ -7440,6 +7414,7 @@ window.gameGuide = function gameGuide(topic) {
       `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. FIRST-KILL JACKPOT: the first time you CLEAR a given boss floor (enemies[i].firstKill true until then), its guardian spills ~3x the loot at noticeably better quality — a one-time windfall per boss floor. Because boss species RECUR across floors in Endless, this tracks by FLOOR: each new or deeper boss floor you conquer pays its own windfall, while farming a floor you've already cleared drops at the normal boss rate (minus farm fatigue on a quick re-kill). So descending to a fresh boss floor is always the richer prize. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
       `Summoned allies (gameState().allies) act before foes and soak hits, but expire after ttl turns and have capped damage — resummon and don't expect them to solo a boss.`,
       `On a fresh floor you get a brief moment of arrival immunity — use it to reposition out of a bad spawn before engaging.`,
+      `Floor layouts vary in size: now and then a non-boss floor opens into a large, airy cavern — a bigger map of a few sprawling rooms — while most floors are tighter warrens. Foe/hazard density scales with area, so a big open floor isn't emptier, just roomier.`,
     ],
     quests: [
       `Floor mini-quests: about a third of non-boss floors (depth 2+) spawn ONE optional quest for a bonus reward (gold + XP + a gear chest). gameState().quest reports the active one (type, objective tiles, live progress) or null; its tiles are drawn on the ASCII map — 'N' a quest NPC, 'Q' an objective tile (relic to fetch, tribute/grave spot, or a gather marker).`,
@@ -7452,7 +7427,7 @@ window.gameGuide = function gameGuide(topic) {
       `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend). Spend attributes on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
       `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives. From level 20 you also earn a SEPARATE ascendancy point every 5 levels (20, 25, 30…; gameState().menu.pointsToSpend.ascendancy), spent only on the ascendancy path tree. Normal skill points can't buy path skills and ascendancy points can't buy passive/active skills. Path skills carry NO level requirement — they're gated only by the earlier skills in the path tree.`,
       `Respec attributes/skills or change class at the Trainer for gold that scales with your level (points refund). Switching to your class's other ascension afterwards costs a lot of gold (also scales with level and depth; path points refund) — the first ascension stays free, but re-ascending is a deliberate, costly choice, as is retraining class. After a respec, check that worn gear still meets its attribute requirement (under-req pieces turn red and are ignored).`,
-      `BOSS POINTS are a separate progression track that rewards new depth: every boss floor you clear for the FIRST time grants ONE point (farming a floor you've already cleared grants none — it's the same first-clear ledger as the boss loot jackpot). Spend a point on the GEAR tab to raise a gear SLOT: each level permanently boosts EVERYTHING the gear worn in that slot contributes — its stats, attributes and weapon damage — by ${Math.round(BOSS_SLOTS.perLevel * 100)}%, linear and uncapped, while that piece is equipped (so it also lifts your Power and leaderboard rank). Your TWO gear sets invest INDEPENDENTLY from the same earned pool — a point spent in Set 1 doesn't deplete Set 2 — so both loadouts can be fully optimised. Reset every slot (to reassign across the sets) at the town Trainer for a steep, scaling gold fee. gameState().menu.bossSlots reports points earned, per-set points available, and each slot's level; a hero's slot levels also show beside their gear on the leaderboard.`,
+      `BOSS POINTS are a separate progression track that rewards new depth: every boss floor you clear for the FIRST time grants ONE point (farming a floor you've already cleared grants none — it's the same first-clear ledger as the boss loot jackpot). Spend them at the ASCENDANT WEAVE, a town service that opens once you've cleared your first boss floor: a constellation board of stat nodes, attribute-threshold keystones and socketed Glyphs where every point is a real, opportunity-cost choice — see gameGuide('weave'). gameState().menu.bossPointsEarned reports the total earned all-time; gameState().endgame.weave reports points available, lit nodes and active keystones.`,
     ],
     character: [
       `Create a hero in TWO steps from the title's ENTER THE DUNGEON button: first PICK A CLASS (Warrior/Rogue/Mage/Templar), then on the next screen ENTER A NAME and choose a body type — Female or Male. Both screens have a ◀ Back button (Esc does the same): the class pick backs out to the title, the name screen back to the class pick — a typed name and toggles are kept.`,
@@ -9053,8 +9028,16 @@ function resizeCanvas() {
   // off the buffer size, so nothing else needs to change. Desktop stays 1:1.
   const touch = document.body.classList.contains('touch');
   const dpr = touch ? Math.min(2, window.devicePixelRatio || 1) : 1;
-  canvas.width  = Math.max(1, Math.round(cw * dpr));
-  canvas.height = Math.max(1, Math.round(ch * dpr));
+  // Assigning canvas.width/height CLEARS the backing buffer even when the value is
+  // unchanged. resizeCanvas() runs redundantly — the map-box ResizeObserver fires on
+  // every sub-pixel step of a panel slide, and near the end of the ease consecutive
+  // steps round to the SAME buffer size — so an unconditional assign there blanks the
+  // map (clear) while the observer, seeing no size change, skips its own redraw,
+  // leaving the map gone for the tail of the slide. Only assign (and thus only clear)
+  // when the size actually changes; the following draw() repaints when it does.
+  const nw = Math.max(1, Math.round(cw * dpr)), nh = Math.max(1, Math.round(ch * dpr));
+  if (canvas.width !== nw) canvas.width = nw;
+  if (canvas.height !== nh) canvas.height = nh;
   // The touch map lives in its own area between the solid header/footer bands, so
   // the hero just centres in the canvas — no camera bias needed (0 on desktop too).
   touchCamBiasPx = 0;
@@ -10346,9 +10329,38 @@ function growCluster(seed, size) {
   return out;
 }
 
-// Carve a sealed treasure vault out of solid rock, reachable only through a
-// locked door — and scatter its key somewhere on the floor.
+// Carve a locked vault out of solid rock and stock it with one of many themed
+// rooms (a treasure trove, a guardroom of elites, a swarming nest, a healing
+// spring, an express stair two floors down…). The door stays sealed until the
+// hero finds this floor's scattered key, so opening it is a real "what's inside?"
+// moment. Falls back to the classic single-chest cell when the rock won't fit a
+// bigger room. Vault flavour + the sealed-room geometry live in systems/vaultRooms.
 function tryBuildVault(reach) {
+  const isReach = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H &&
+    mapData[y][x] === 0 && (!reach || reach.has(y + ',' + x));
+  // Only dangle the two-floor express stair when there's actually room below it.
+  const deepOK = isEndless() || (!isLastFiniteFloor() && displayFloor() <= FLOORS_PER_DIFF - 2);
+  const variant = pickVaultRoom(Math.random, { deepOK });
+  // Try the flavour's preferred room, shrinking a little if the rock won't fit it.
+  let place = null;
+  for (const [w, h] of [[variant.w, variant.h], [3, 3], [2, 2]]) {
+    place = findSealedRoom(mapData, isReach, w, h, Math.random);
+    if (place) break;
+  }
+  if (!place) return tryBuildTreasureCell(reach);   // no room even for a 2×2 → classic vault
+  for (const c of place.cells) mapData[c.y][c.x] = 0;   // hollow out the room
+  mapData[place.door.y][place.door.x] = 11;             // seal it behind a locked door
+  populateVault(variant, place);
+  const k = randomFloorTile(reach);
+  if (k) groundKey = { x: k.x, y: k.y };
+  vaultInfo = { kind: variant.kind, openMsg: variant.openMsg };
+  log('<span data-spr=ic_key></span> A locked vault hides on this floor — find its key!', 'important');
+  return true;
+}
+
+// The original single-tile treasure vault — the fallback when a larger themed room
+// can't be seated in the available rock.
+function tryBuildTreasureCell(reach) {
   for (let tries = 0; tries < 150; tries++) {
     const x = rnd(2, MAP_W-3), y = rnd(2, MAP_H-3);
     if (mapData[y][x] !== 1) continue;               // vault interior must be rock
@@ -10370,14 +10382,132 @@ function tryBuildVault(reach) {
       if (!sealed) continue;
       mapData[y][x] = 0;                             // hollow out the vault
       mapData[wy][wx] = 11;                          // locked door
-      groundItems.push({ x, y, luck: 6 });          // guaranteed rich chest inside
+      groundItems.push({ x, y, luck: 6, ilvl: dungeonLevel + 1 }); // guaranteed rich chest inside
       const k = randomFloorTile(reach);
       if (k) groundKey = { x: k.x, y: k.y };
+      vaultInfo = { kind: 'treasure', openMsg: 'A treasure vault — a fat chest waits inside!' };
       log('<span data-spr=ic_key></span> A locked vault hides on this floor — find its key!', 'important');
       return true;
     }
   }
   return false;
+}
+
+// Stock a freshly-carved vault room with its themed contents. Cells are ordered so
+// the deepest tiles (farthest from the door) fill first, keeping the doorway clear;
+// vault foes are flagged `vaultFoe` so they NEVER seal the floor's stairs (opening a
+// combat vault is always the hero's optional choice, not a forced fight to descend).
+function populateVault(variant, place) {
+  const door = place.door;
+  const cells = place.cells.slice().sort((a, b) =>
+    (Math.abs(b.x - door.x) + Math.abs(b.y - door.y)) - (Math.abs(a.x - door.x) + Math.abs(a.y - door.y)));
+  const back = cells[0];                          // deepest tile — the natural "prize" spot
+  const entry = cells[cells.length - 1];          // tile just inside the door (kept foe-free)
+  const interior = cells.filter(c => !(c.x === entry.x && c.y === entry.y));
+  const il = dungeonLevel + 1;
+  const even = (c) => (c.x + c.y) % 2 === 0;       // checkerboard so you can weave between fills
+  const chest = (c, luck, extra = {}) => { if (c) groundItems.push({ x: c.x, y: c.y, luck, ilvl: il, ...extra }); };
+  const gold = (c) => { if (c) groundGold.push({ x: c.x, y: c.y, amount: rnd(18, 45) + dungeonLevel * 5 }); };
+  const food = (c) => { if (c) groundFood.push({ x: c.x, y: c.y, ...pick(FOODS) }); };
+  const foe = (c, hpM, dmgM, elite) => {
+    if (!c) return null;
+    const e = makeQuestFoe(c.x, c.y);
+    e.hp = e.maxHp = Math.max(1, Math.round(e.hp * hpM));
+    e.dmg = Math.max(1, Math.round(e.dmg * dmgM));
+    e.vaultFoe = true;                             // optional side-fight — never seals the stairs
+    if (elite) { e.isElite = true; e.name = pick(ELITE_NAMES); }
+    enemies.push(e);
+    return e;
+  };
+  switch (variant.kind) {
+    case 'hoard': {
+      let n = 0;
+      for (const c of interior) { if (even(c)) { chest(c, 3); if (++n >= 8) break; } }
+      if (!n) chest(back, 6);
+      break;
+    }
+    case 'gold': {
+      let n = 0;
+      for (const c of interior) { if (even(c)) { gold(c); if (++n >= 5) break; } }
+      chest(back, 5);
+      break;
+    }
+    case 'feast': {
+      let n = 0;
+      for (const c of interior) { if (even(c)) { food(c); if (++n >= 5) break; } }
+      chest(back, 3);
+      break;
+    }
+    case 'fountain':
+      mapData[back.y][back.x] = 3; hasFountain = true;
+      break;
+    case 'oasis':
+      mapData[back.y][back.x] = 3; hasFountain = true; chest(interior[1], 5);
+      break;
+    case 'shrine':
+      mapData[back.y][back.x] = 5; shrineData[back.y + ',' + back.x] = { kind: pick(SHRINE_KINDS) };
+      break;
+    case 'armory': {
+      let n = 0;
+      for (const c of interior) { if (even(c)) { chest(c, 5, { gear: true }); if (++n >= 3) break; } }
+      if (!n) chest(back, 5, { gear: true });
+      break;
+    }
+    case 'elites': {
+      const g = Math.max(1, Math.min(rnd(2, 4), interior.length));
+      for (let i = 0; i < g; i++) foe(interior[i], 1.7, 1.4, true);
+      chest(back, 6);
+      break;
+    }
+    case 'swarm': {
+      const want = Math.min(interior.length, rnd(10, 16));
+      for (let i = 0; i < want; i++) foe(interior[i], 0.45, 0.7, false);
+      chest(back, 4);
+      break;
+    }
+    case 'champion': {
+      foe(back, 2.6, 1.7, true);
+      chest(back, 8);
+      break;
+    }
+    case 'menagerie': {
+      const el = Math.min(rnd(1, 2), interior.length);
+      let i = 0;
+      for (; i < el; i++) foe(interior[i], 1.6, 1.35, true);
+      const sw = Math.min(interior.length - i, rnd(4, 6));
+      for (let j = 0; j < sw; j++) foe(interior[i + j], 0.5, 0.7, false);
+      chest(back, 6);
+      break;
+    }
+    case 'gauntlet':
+    case 'firepit': {
+      const haz = variant.kind === 'firepit' ? 7 : 8;   // lava vs spikes ring
+      if (place.w >= 3 && place.h >= 3) {
+        const mid = { x: place.rx + (place.w >> 1), y: place.ry + (place.h >> 1) };
+        for (const c of place.cells) { if (c.x !== mid.x || c.y !== mid.y) mapData[c.y][c.x] = haz; }
+        chest(mid, 6);
+      } else {
+        chest(back, 6);   // too small to ring — just the prize
+      }
+      break;
+    }
+    case 'warcamp': {
+      const g = Math.max(1, Math.min(rnd(2, 3), interior.length));
+      for (let i = 0; i < g; i++) foe(interior[i], 1.6, 1.35, true);
+      for (const c of interior.slice(g)) if (even(c)) gold(c);   // their plundered coin
+      food(interior[g]);
+      chest(back, 6);
+      break;
+    }
+    case 'deepstair':
+      deepStair = { x: back.x, y: back.y };
+      chest(interior[1], 4);   // a small parting gift beside the stair
+      break;
+    case 'treasure':
+    default:
+      chest(back, 6);
+      break;
+  }
 }
 
 // Place themed furniture across an indoor floor's open tiles (SOLID room dressing
@@ -10387,6 +10517,7 @@ function tryBuildVault(reach) {
 // solid furniture is never dropped on top of something you need to reach.
 function tileReserved(x, y) {
   if (groundKey && groundKey.x === x && groundKey.y === y) return true;
+  if (deepStair && deepStair.x === x && deepStair.y === y) return true;
   if (graveMarker && graveMarker.x === x && graveMarker.y === y) return true;
   if (merchant && merchant.x === x && merchant.y === y) return true;
   if (mystic && mystic.x === x && mystic.y === y) return true;
@@ -10442,7 +10573,14 @@ function generateMap() {
   // Size the floor for its difficulty BEFORE carving anything — harder tiers and
   // deeper Endless floors are larger maps (see mapSizeFor). areaRatio then scales
   // rooms, hazards and foes so a bigger map is a denser dungeon, not a sparse one.
-  const mapSize = mapSizeFor(dungeonLevel);
+  // ── OPEN CAVERN FLOOR? ── a slice of NON-boss floors open into a big, airy
+  // cavern: a larger map of a few sprawling, overlapping rooms instead of the
+  // usual cramped warren — a breather from the tight early halls. Boss floors
+  // (their arena is fixed, built below) and the tutorial are never resized.
+  // Rolled here so it can drive both the map size and the room/hall passes below.
+  const openFloor = dungeonLevel % 5 !== 0 && !tutorialActive && Math.random() < OPEN_FLOOR_CHANCE;
+  let mapSize = mapSizeFor(dungeonLevel);
+  if (openFloor) mapSize = Math.min(OPEN_FLOOR_MAX, Math.round(mapSize * OPEN_FLOOR_SIZE_MULT));
   MAP_W = mapSize; MAP_H = mapSize;
   const areaRatio = mapAreaRatio();
   floorSerial++;
@@ -10452,7 +10590,7 @@ function generateMap() {
   // in after the rooms are carved. Set BEFORE anything reads currentTheme().
   furnitureMap = {}; decorMap = {};
   floorThemeOverride = previewForceIndoor != null ? INDOOR_THEMES[previewForceIndoor % INDOOR_THEMES.length]
-    : ((!tutorialActive && !previewForceIsland && Math.random() < 0.28) ? pick(INDOOR_THEMES) : null);
+    : ((!tutorialActive && !previewForceIsland && !openFloor && Math.random() < 0.28) ? pick(INDOOR_THEMES) : null);
   floorIslandTheme = null; // island roll happens below, after the boss-floor bailout
   rollFloorMod();
   // ~35% of floors get a subtle colour wash for atmosphere.
@@ -10460,6 +10598,7 @@ function generateMap() {
   teleporters = {};
   groundKey = null;
   hasKey = false;
+  deepStair = null; vaultInfo = null;
   quest = null;
   bossHazards = []; bossTelegraphs = [];
 
@@ -10485,13 +10624,21 @@ function generateMap() {
   const rooms = [];
   // More rooms on bigger floors, so a larger map is a denser dungeon rather than
   // the same handful of rooms marooned in acres of rock.
-  const roomCount = Math.max(5, Math.round(rnd(5, 8) * areaRatio));
-  const grandHall = Math.random() < 0.3;
   const indoor = !!floorThemeOverride; // built interiors get larger, opener rooms + wider halls
+  // Open caverns: a few big sprawling chambers that overlap into airy halls,
+  // rather than many tight rooms. Every room runs large; on ordinary floors only
+  // the occasional grand hall does. Fewer rooms keep them big relative to the
+  // bigger map (√areaRatio, not the full area scaling other floors use).
+  const grandHall = !openFloor && Math.random() < 0.3;
+  const roomCount = openFloor
+    ? Math.max(4, Math.round(rnd(4, 6) * Math.sqrt(areaRatio)))
+    : Math.max(5, Math.round(rnd(5, 8) * areaRatio));
   for (let i = 0; i < roomCount; i++) {
     const big = grandHall && i === 0;
-    let rw = big ? rnd(indoor ? 11 : 8, indoor ? 15 : 11) : rnd(indoor ? 6 : 3, indoor ? 10 : 7);
-    let rh = big ? rnd(indoor ? 9 : 7, indoor ? 12 : 9)  : rnd(indoor ? 5 : 3, indoor ? 8 : 6);
+    let rw, rh;
+    if (openFloor)   { rw = rnd(9, 16); rh = rnd(8, 13); }             // every room a big open chamber
+    else if (big)    { rw = rnd(indoor ? 11 : 8, indoor ? 15 : 11); rh = rnd(indoor ? 9 : 7, indoor ? 12 : 9); }
+    else             { rw = rnd(indoor ? 6 : 3, indoor ? 10 : 7); rh = rnd(indoor ? 5 : 3, indoor ? 8 : 6); }
     rw = Math.min(rw, MAP_W - 2); rh = Math.min(rh, MAP_H - 2);
     // Built interiors read as a FLOOR PLAN: rooms are kept separate (a wall gap
     // between them), connected only by corridors — not merged into one organic
@@ -10519,7 +10666,7 @@ function generateMap() {
 
   // ── CORRIDORS ── connect rooms in a chain, plus a couple of loops for choice.
   // Each cave corridor rolls its own width so most halls are 2-wide walkways.
-  const wideHall = () => indoor || Math.random() < CAVE_WIDE_HALL_CHANCE;
+  const wideHall = () => indoor || openFloor || Math.random() < CAVE_WIDE_HALL_CHANCE;
   for (let i = 1; i < rooms.length; i++) carveCorridor(rooms[i-1].cx, rooms[i-1].cy, rooms[i].cx, rooms[i].cy, wideHall());
   const extraLoops = Math.max(2, Math.round(2 * areaRatio)); // more alternate routes on bigger floors
   for (let k = 0; k < extraLoops; k++) { const a = pick(rooms), b = pick(rooms); if (a !== b) carveCorridor(a.cx, a.cy, b.cx, b.cy, wideHall()); }
@@ -10912,7 +11059,7 @@ function buildBossArena() {
   // ── Floor-scoped resets ── a boss floor carries none of the usual clutter.
   merchant = null; mystic = null;
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null;
-  shrineData = {}; hasFountain = false; groundKey = null; hasKey = false;
+  shrineData = {}; hasFountain = false; groundKey = null; hasKey = false; deepStair = null; vaultInfo = null;
   quest = null; teleporters = {}; nextDiffPortal = null; floorRooms = [];
   bossHazards = []; bossTelegraphs = []; projectiles = []; clearAttackFx();
   floorThemeOverride = null;      // a bare stone arena, not a themed interior
@@ -10965,7 +11112,7 @@ function buildTutorialMap() {
   enemies = []; merchant = null; mystic = null; minions = []; combatBuffs = {};
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null;
   quest = null; teleporters = {}; shrineData = {}; bossHazards = []; bossTelegraphs = [];
-  hasFountain = false; groundKey = null; hasKey = false;
+  hasFountain = false; groundKey = null; hasKey = false; deepStair = null; vaultInfo = null;
   floorMod = FLOOR_MODS[0]; floorTint = null;
   floatingTexts = [];
   statusEffects = (statusEffects || []).filter(s => s.target === 'player');
@@ -11930,7 +12077,7 @@ function captureHeldFloor() {
     MAP_W, MAP_H,
     mapData, wallCracks, furnitureMap, decorMap, teleporters, shrineData, floorVariantMap,
     floorThemeOverride, floorTint, floorMod, floorRooms, floorMobSpec,
-    hasFountain, groundKey, hasKey, startPos,
+    hasFountain, groundKey, hasKey, deepStair, vaultInfo, startPos,
     dungeonLevel, floorCleared, floorGreed,
     enemies, minions, merchant, mystic, quest,
     groundItems, groundFood, groundGold, graveMarker, nextDiffPortal,
@@ -11964,6 +12111,7 @@ function returnToHeldFloor() {
   floorThemeOverride = h.floorThemeOverride; floorTint = h.floorTint;
   floorMod = h.floorMod; floorRooms = h.floorRooms; floorMobSpec = h.floorMobSpec;
   hasFountain = h.hasFountain; groundKey = h.groundKey; hasKey = h.hasKey;
+  deepStair = h.deepStair; vaultInfo = h.vaultInfo;
   startPos = h.startPos; dungeonLevel = h.dungeonLevel; floorCleared = h.floorCleared;
   floorGreed = h.floorGreed;   // greed buffs foes IN PLACE on the enemy objects we restore, so restore the multiplier too or the doubled loot/gold silently vanishes while the buffed roster stays
   enemies = h.enemies; minions = h.minions; merchant = h.merchant; mystic = h.mystic;
@@ -12041,7 +12189,7 @@ function buildTown() {
   floorThemeOverride = null; floorIslandTheme = null; furnitureMap = {}; decorMap = {}; // town is never an indoor/island floor
   townShopStock = null; townRestocks = 0; // fresh merchant wares + reset restock surcharge each town visit
   traps = []; projectiles = []; bossHazards = []; bossTelegraphs = []; clearAttackFx(); // real-time hazards / fx never linger into town
-  hasFountain = false; groundKey = null; hasKey = false;
+  hasFountain = false; groundKey = null; hasKey = false; deepStair = null; vaultInfo = null;
   floorMod = FLOOR_MODS[0]; floorTint = 'rgba(120,90,40,0.10)';
   statusEffects = statusEffects.filter(s => s.target === 'player');
 
@@ -14093,7 +14241,6 @@ function renderTrainer() {
         <div class="shop-row-sub">Refund all ${spentAllSkillPoints()} spent point${spentAllSkillPoints() === 1 ? '' : 's'} (skill &amp; ascendancy) to spend anew</div></div>
       <button class="act-btn ${spendableGold() >= skillRespecCost() ? '' : 'short'}" ${(spendableGold() >= skillRespecCost() && spentAllSkillPoints() > 0) ? '' : 'disabled'} onclick="respecSkills()"><span data-spr=ic_money></span>${fmtGold(skillRespecCost())}</button>
     </div>
-    ${trainerSlotRespecRow()}
     ${trainerAscensionBlock()}
     <div class="town-blurb" style="margin-top:10px">Retrain into a different class for <span data-spr=ic_money></span>${fmtGold(classChangeCost())}. Your attributes are kept; if your new class can't wield your weapon, it goes back in your bag.</div>
     ${CLASS_KEYS.map(k => {
@@ -14112,21 +14259,6 @@ function renderTrainer() {
         ${btn}
       </div>`;
     }).join('')}`);
-}
-// The Trainer's "reset every gear-slot investment" row — appears only once the hero
-// has spent Boss Points. Steep, level-scaling gold cost (see BOSS_SLOTS); frees ALL
-// points (both sets) so they can be reassigned across the two loadouts.
-function trainerSlotRespecRow() {
-  const invested = totalLevelsInvested(ensureSlotLevels());
-  if (invested <= 0) return '';
-  const cost = bossSlotRespecCost(player.slotLevels);
-  const afford = spendableGold() >= cost;
-  return `<div class="shop-row has-actions ${afford ? '' : 'cant-afford'}">
-      <span class="loot-icon"><span data-spr=q_relic></span></span>
-      <div class="shop-row-info"><div class="shop-row-name">Reset Gear-Slot Investments</div>
-        <div class="shop-row-sub">Free all ${invested} Boss Point${invested === 1 ? '' : 's'} (both sets) to reassign — every slot returns to Lv&nbsp;0</div></div>
-      <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="respecSlots()"><span data-spr=ic_money></span>${fmtGold(cost)}</button>
-    </div>`;
 }
 // The FIRST ascension is free — it is earned by reaching the level gate, never
 // bought. Switching to your class's other specialization afterwards costs a lot
@@ -17150,11 +17282,33 @@ function draw() {
     if (spriteReady) drawSpriteC('coins', px + tw/2, py + th/2, itemSpritePx(tw));
   });
 
-  // Vault key — glints on the floor until grabbed.
+  // Vault key — pulses a warm gold glow and bobs gently so it catches the eye
+  // across the floor (a layered halo + brighter core, the merchant-glow style).
   if (groundKey) {
-    const px = offX + groundKey.x * tw, py = offY + groundKey.y * th;
-    glowUnder(px + tw/2, py + th/2, tw * 0.52, 'rgba(255,224,102,0.45)');
-    if (spriteReady) drawSpriteC('key', px + tw/2, py + th/2, itemSpritePx(tw));
+    const gcx = offX + groundKey.x * tw + tw/2, gcy = offY + groundKey.y * th + th/2;
+    const pulse = 0.5 + 0.5 * Math.sin((animNow() % 1400) / 1400 * Math.PI * 2);
+    glowUnder(gcx, gcy, tw * (0.58 + 0.18 * pulse), `rgba(255,214,90,${0.30 + 0.26 * pulse})`);
+    glowUnder(gcx, gcy, tw * (0.34 + 0.08 * pulse), `rgba(255,238,150,${0.42 + 0.30 * pulse})`);
+    if (spriteReady) drawSpriteC('key', gcx, gcy - pulse * th * 0.06, itemSpritePx(tw));
+  }
+
+  // Express staircase inside an opened vault — a pixel down-stair ringed by a
+  // pulsing violet glow so it reads apart from the normal (gold-ringed) descent.
+  if (deepStair) {
+    const px = offX + deepStair.x * tw, py = offY + deepStair.y * th;
+    const pulse = 0.5 + 0.5 * Math.sin((animNow() % 1100) / 1100 * Math.PI * 2);
+    glowUnder(px + tw/2, py + th/2, tw * (0.66 + 0.16 * pulse), `rgba(150,110,255,${0.34 + 0.26 * pulse})`);
+    if (!(spriteReady && drawSprite('stairs_down', px, py, tw))) {
+      ctx.fillStyle = '#160d24'; ctx.fillRect(px, py, tw, th);
+    }
+    const lw = Math.max(2, tw * 0.09), o = lw / 2 + 1;
+    ctx.save();
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = `rgba(176,124,255,${0.5 + 0.45 * pulse})`;
+    ctx.shadowColor = 'rgba(150,110,255,0.9)';
+    ctx.shadowBlur = tw * (0.18 + 0.22 * pulse);
+    ctx.strokeRect(px + o, py + o, tw - o * 2, th - o * 2);
+    ctx.restore();
   }
 
   // Merchant (roaming trader in bright robes) — never the town stand-in.
@@ -20154,7 +20308,11 @@ function playerSolidCell(cx, cy, ignoreFoes) {
 function breakAhead(cx, cy) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
   const t = mapData[cy][cx];
-  if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; bumpMapEpochIfChanged(t, 0); pathGridDirty(); log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
+  if (t === 11 && hasKey) {
+    hasKey = false; mapData[cy][cx] = 0; bumpMapEpochIfChanged(t, 0); pathGridDirty();
+    const reveal = (vaultInfo && vaultInfo.openMsg) || 'A fat chest waits inside!';
+    log(`<span data-spr=ic_key></span> You unlock the vault door! ${reveal}`, 'important');
+  }
 }
 
 // Land one shove on the cracked wall at (cx,cy): chip it further, and collapse it
@@ -20759,6 +20917,7 @@ function onEnterCell(nx, ny) {
     enterDungeonAt(d, 1, { noPortalFx: true });   // keeps its own purple flash, not the blue pillar
     return;
   }
+  if (deepStair && deepStair.x === nx && deepStair.y === ny) { useDeepStair(); return; } // vault express stair
   const tile = mapData[ny][nx];
   if (tile === 12) { goUpStairs(nx, ny); return; }     // stairs up (or floor-1 town portal)
   if (tile === 2)  { goDownStairs(nx, ny); return; }   // stairs down
@@ -20939,6 +21098,33 @@ function performDescend(nx, ny) {
   saveGame();
 }
 
+// Take a vault's express staircase — it plunges the hero TWO floors deeper in one
+// step. Gated on the floor being clear (same as the normal down-stairs), and it
+// honours the boss-floor threshold confirm if the drop lands on a guardian floor.
+function useDeepStair() {
+  if (deepStair == null) return;
+  if (!floorCleared) { log(`<span data-spr=feat_lock></span> The hidden stair is sealed. ${clearConditionLabel()}`, 'important'); sfx('click'); return; }
+  const dest = dungeonLevel + 2;
+  const plunge = () => {
+    deepStair = null;
+    dungeonLevel += 2;
+    recordDepth();
+    statusEffects = [];
+    tickBuffs();
+    sfx('stairs'); screenFlash('#9a6cff');
+    log(`<span data-spr=feat_door></span> The hidden stair plunges you two floors deeper — ${floorLabel()}!`, 'important');
+    setPlayerCell(5, 5);
+    arrivalDir = 'down';
+    generateMap();
+    tickPact();
+    maybeFloorEvent();
+    updateBars();
+    saveGame();
+  };
+  if (bossGateNeeded(dest)) { openBossGate(dest, plunge); return; }
+  plunge();
+}
+
 // Drink from a Fountain of Healing: full restore, then it dries up.
 function useFountain(nx, ny) {
   player.hp = player.maxHp;
@@ -21011,8 +21197,6 @@ function getWeaponDamage() {
   const w = activeWeapon();   // a red/ignored weapon gives no damage — bare fists
   if (w && w.stats.DMG) {
     let [lo, hi] = w.stats.DMG.split('-').map(Number);
-    const m = slotMult('weapon');         // boss-point weapon-slot investment scales the hit
-    if (m !== 1) { lo *= m; hi *= m; }
     // Fractional roll (see systems/damageRoll.js): a continuous value kept to ~3 sig
     // figs, so a tight weapon range still yields organic damage once buffs scale it —
     // not just two or three discrete numbers. The final hit is rounded by the caller.
@@ -21039,8 +21223,7 @@ function totalStat(name) {
     const it = equipped[slot];
     if (it && typeof it.stats[name] === 'number') {
       let v = (slot === 'offhand' && tgPenalty !== 1) ? Math.round(it.stats[name] * tgPenalty) : it.stats[name];
-      const m = slotMult(slot);           // boss-point slot investment scales the piece's stats
-      sum += m === 1 ? v : v * m;
+      sum += v;
     }
   }
   // + Ascendant Weave board/glyph contribution: flat adds into the sum, mult scales
@@ -21403,13 +21586,12 @@ function onEnemyDefeated(e) {
   const firstBossKill = !!e.isBoss && !player.bossFirstKills[bfk];
   if (firstBossKill) {
     player.bossFirstKills[bfk] = 1;
-    markBossPointsDirty();   // a new point is available — refresh the GEAR-tab nudge
     // A NEW boss floor cleared grants a BOSS POINT (points are derived from this
-    // ledger — earned = distinct boss floors cleared). Spend it on the GEAR tab to
-    // level a gear slot; both gear sets draw from the same pool independently.
-    const avail = pointsAvailable(player.bossFirstKills, (player.slotLevels && player.slotLevels[activeGearSet]) || {});
+    // ledger — earned = distinct boss floors cleared). Spend it at the Ascendant
+    // Weave in town.
+    const avail = weaveAvail(pointsEarned(player.bossFirstKills), player.weaveBoard);
     sfx('levelup');
-    log(`<span data-spr=q_relic></span> First clear of this boss floor — <b>+1 Boss Point</b>! Spend it on the GEAR tab to level a gear slot (+${Math.round(BOSS_SLOTS.perLevel * 100)}% to its gear). ${avail} to spend.`, 'important');
+    log(`<span data-spr=q_relic></span> First clear of this boss floor — <b>+1 Boss Point</b>! Spend it at the Ascendant Weave in town. ${avail} to spend.`, 'important');
   }
   // ── Endgame boss-kill hooks ──
   if (e.isBoss) {
@@ -22038,8 +22220,7 @@ function weaponDmgRange() {
   if (w && w.stats && w.stats.DMG) {
     let [lo, hi] = String(w.stats.DMG).split('-').map(Number);
     if (Number.isFinite(lo) && Number.isFinite(hi)) {
-      const m = slotMult('weapon');       // boss-point weapon-slot investment scales weapon skills too
-      return m === 1 ? [lo, hi] : [lo * m, hi * m];
+      return [lo, hi];
     }
   }
   return [1, 3]; // bare fists
@@ -24433,11 +24614,12 @@ function endBlockedTurn() {
 // ground-chest pickup path and by enemy death drops (which auto-collect, so
 // you never have to walk over and open them). (x,y) is only used for the rare
 // food surprise, which lands on the ground to be scooped up on the next step.
-function collectChestLoot(luck, ilvl, x, y) {
+function collectChestLoot(luck, ilvl, x, y, gearOnly) {
   const fancy = luck > 1;
 
-  // ~15% of chests surprise you with gold or food instead of gear.
-  if (Math.random() < 0.15) {
+  // ~15% of chests surprise you with gold or food instead of gear — but an armory
+  // chest is guaranteed gear, so it skips the surprise.
+  if (!gearOnly && Math.random() < 0.15) {
     sfx('gold');
     const surprise = rnd(1, 2);
     if (surprise === 1) {
@@ -24537,7 +24719,7 @@ function openChest(chest) {
 
   // Otherwise it rolls fresh loot when opened — luckier chests roll richer.
   const luck = chest.luck || 1;
-  collectChestLoot(luck, chest.ilvl || dungeonLevel, chest.x, chest.y);
+  collectChestLoot(luck, chest.ilvl || dungeonLevel, chest.x, chest.y, chest.gear);
   return null;
 }
 
@@ -24913,22 +25095,8 @@ function flushHudDirty() { if (_hudDirty) { _hudDirty = false; updateBars(); } }
 // so each write is guarded by comparing the freshly built string first.
 let _statusStripHtml = null;
 let _clearStatusHtml = null, _pactHudKey = null, _foodHudKey = null;
-let _invTabHtml = null, _heroTabHtml = null, _skillsTabHtml = null, _gearTabHtml = null;
+let _invTabHtml = null, _heroTabHtml = null, _skillsTabHtml = null;
 let _skillBtnIconHtml = null;
-// Boss Points the WORN set has left to spend — cached so the per-frame GEAR-tab
-// nudge (in updateBars) never re-scans the bossFirstKills ledger. Invalidated by the
-// loadout epoch (which bumps on every spend / respec / set swap) and by an explicit
-// dirty flag on EARN (a first boss-floor clear doesn't touch gear, so it doesn't bump
-// the epoch). See activeBossPointsAvail / onEnemyDefeated / markBossPointsDirty.
-let _bossNudgeEpoch = -1, _bossNudgeDirty = true, _bossNudgeVal = 0;
-function markBossPointsDirty() { _bossNudgeDirty = true; }
-function activeBossPointsAvail() {
-  if (_bossNudgeDirty || _bossNudgeEpoch !== loadoutEpoch) {
-    _bossNudgeDirty = false; _bossNudgeEpoch = loadoutEpoch;
-    _bossNudgeVal = pointsAvailable(player.bossFirstKills, ensureSlotLevels()[activeGearSet]);
-  }
-  return _bossNudgeVal;
-}
 function updateBars() {
   renderStaminaBar();
   // Over-time recovery overlay helper: the pending element spans 0 → (current% +
@@ -25094,17 +25262,6 @@ function updateBars() {
     const html = sPts > 0 ? `SKILLS<span class="tab-count">${sPts}</span>` : 'SKILLS';
     if (html !== _skillsTabHtml) { _skillsTabHtml = html; skillsTab.innerHTML = html; }
     skillsTab.classList.toggle('has-points', sPts > 0);
-  }
-  // Nudge the GEAR tab when the WORN set has Boss Points to spend on its gear slots.
-  // Only the equipped set counts here — an OFF set's unspent points surface solely on
-  // that set's button in the set bar (see gearSetBarHTML), so this stays quiet until
-  // the loadout you're actually wearing has something to spend.
-  const gearTab = document.getElementById('tab-equip');
-  if (gearTab) {
-    const gPts = activeBossPointsAvail();
-    const html = gPts > 0 ? `GEAR<span class="tab-count">${gPts}</span>` : 'GEAR';
-    if (html !== _gearTabHtml) { _gearTabHtml = html; gearTab.innerHTML = html; }
-    gearTab.classList.toggle('has-points', gPts > 0);
   }
   // The tab glow only shows once the bag is open, so also surface a pulsing badge
   // on the always-visible BAG button (combining attribute + skill points).
@@ -25944,9 +26101,13 @@ function renderSkills(el) {
       const isPathNode = skillTreeKindOf(sn) === 'path';
       reqHtml += `<div class="rq-hint">☆ Ready — earn ${isPathNode ? 'an ascendancy' : 'a skill'} point by leveling up.</div>`;
     }
+    // The next rank crosses a rank-3/7/10 milestone → the Learn button wears a pink
+    // "surge" glow with circling wisps, flagging that ranking up here (or the level-up
+    // that frees the point) triggers an Empowered / Honed / Mastered spike.
+    const nextSurges = skillHasMilestones(sn) && !skillMaxed(sn) && SKILL_MILESTONES.some(m => m.rank === rank + 1);
     const buyBtn = skillMaxed(sn)
       ? `<button class="pop-buy maxed" disabled>✓ Maxed (10/10)</button>`
-      : `<button class="pop-buy" ${canBuySkill(sn) ? '' : 'disabled'} onclick="buySkill('${sn.id}')">Learn (rank ${rank + 1}/${sn.max})</button>`;
+      : `<button class="pop-buy${nextSurges ? ' surge' : ''}" ${canBuySkill(sn) ? '' : 'disabled'} onclick="buySkill('${sn.id}')">Learn (rank ${rank + 1}/${sn.max})</button>`;
     // Refund a rank for gold — the surgical alternative to the Trainer's full respec.
     let refundBtn = '';
     if (rank > 0) {
@@ -26916,7 +27077,7 @@ function renderPaperdoll() {
     `<div class="pda-stage"><div class="paperdoll-anat">${bodyHTML}${slots}</div></div>` +
     `<div class="pd-hint">Tap a slot for details · ✕ to unequip · EQUIP loot from the LOOT tab</div>` +
     `<div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div>` +
-    bossSlotPanelHTML() + `</div>`;
+    `</div>`;
 }
 // The Enchanter's Equipped section reuses the same paper-doll body, but each worn
 // piece is tapped to pick it for enchanting (no gear-set bar, no ✕ unequip).
@@ -26939,10 +27100,7 @@ function renderEnchantDoll() {
 // combat-score delta, not a sum of per-piece pills). Pieces this hero can't wear are
 // skipped, the way they'd sit inactive if equipped, so the two loadouts compare
 // fairly and the active set's figure lines up with the hero-sheet "from gear".
-function gearSetPower(set, idx) {
-  // Score THIS set's own boss-point investment (idx defaults to the active set), so
-  // the Set 1 / Set 2 bar reflects each loadout's slot levels, not just the worn one.
-  const sidx = (idx === 0 || idx === 1) ? idx : activeGearSet;
+function gearSetPower(set) {
   const { bare } = strippedPowerContext();
   const ctx = buildPowerContext();
   let withSet = bare, flat = 0;
@@ -26950,9 +27108,8 @@ function gearSetPower(set, idx) {
     const it = set[slot];
     if (!it || !it.stats) continue;
     if (typeof canEquipItem === 'function' && !canEquipItem(it)) continue;
-    const m = slotMult(slot, sidx);
-    withSet = applyDelta(withSet, itemPowerContribution(it, ctx, m), 1);
-    flat += itemFlatPower(it, m);
+    withSet = applyDelta(withSet, itemPowerContribution(it, ctx), 1);
+    flat += itemFlatPower(it);
   }
   return Math.round(GEAR_POWER.K * (powerScalar(withSet) - powerScalar(bare)) + flat);
 }
@@ -26962,14 +27119,9 @@ function gearSetBarHTML() {
   return `<div class="gearset-bar">${[0, 1].map(i => {
     const set = gearSets[i];
     const n = gearSetCount(set);
-    const meta = n ? `${n} worn · ${PWR_GLYPH}${abbreviateNumber(gearSetPower(set, i))}` : 'empty';
-    // Nudge THIS set's button when it has Boss Points to spend — so an off set's
-    // unspent points are visible without switching to it (the GEAR tab header nudges
-    // only for the worn set; see updateBars).
-    const avail = pointsAvailable(player.bossFirstKills, ensureSlotLevels()[i]);
-    const nudge = avail > 0 ? `<span class="gs-nudge" title="${avail} Boss Point${avail === 1 ? '' : 's'} to spend on this set">${avail}</span>` : '';
-    return `<button class="gearset-btn${i === activeGearSet ? ' active' : ''}${avail > 0 ? ' has-points' : ''}" onclick="toggleGearSet(${i})">
-      <span class="gs-name">Set ${i + 1}${nudge}</span><span class="gs-meta">${meta}</span>
+    const meta = n ? `${n} worn · ${PWR_GLYPH}${abbreviateNumber(gearSetPower(set))}` : 'empty';
+    return `<button class="gearset-btn${i === activeGearSet ? ' active' : ''}" onclick="toggleGearSet(${i})">
+      <span class="gs-name">Set ${i + 1}</span><span class="gs-meta">${meta}</span>
     </button>`;
   }).join('')}</div>`;
 }
@@ -26995,8 +27147,8 @@ function toggleGearSet(idx) {
   // common accidental death. You can still swap freely when safe (to assemble Set 2),
   // and gearing UP to a stronger set is never blocked, so bailing to real gear works.
   if (blockGearSwap({ inDanger: gearSwapInDanger(),
-                      curPower: gearSetPower(gearSets[activeGearSet], activeGearSet),
-                      tgtPower: gearSetPower(gearSets[target], target) })) {
+                      curPower: gearSetPower(gearSets[activeGearSet]),
+                      tgtPower: gearSetPower(gearSets[target]) })) {
     sfx('denied');
     log(`Set ${target + 1} would leave you exposed — no swapping to it with enemies near. Break away first.`, 'important');
     return;
@@ -27019,82 +27171,6 @@ function toggleGearSet(idx) {
   renderPanel();
   draw();          // re-skin the sprite with the newly worn set
   saveGame();
-}
-
-// ── BOSS POINTS ── every NEW boss floor cleared grants one point (tracked by the
-// bossFirstKills ledger; points are DERIVED, never a stored counter). A point levels
-// a gear SLOT in the ACTIVE set, permanently scaling everything the gear worn there
-// contributes by +5%/level. The two sets invest independently from the same earned
-// pool (see systems/bossSlots.js).
-function ensureSlotLevels() {
-  if (!Array.isArray(player.slotLevels) || player.slotLevels.length < 2) {
-    player.slotLevels = sanitizeSlotLevels(player.slotLevels, SLOT_KEYS);
-  }
-  return player.slotLevels;
-}
-// Spend one Boss Point to raise `slot` in the active set. Uncapped; the only gate is
-// having a point left in this set's pool (each set draws the earned pool separately).
-function raiseSlotLevel(slot) {
-  if (!SLOTS[slot]) return;
-  const idx = activeGearSet;
-  const levels = ensureSlotLevels();
-  if (pointsAvailable(player.bossFirstKills, levels[idx]) <= 0) { log('No Boss Points to spend — clear a new boss floor to earn one.'); return; }
-  levels[idx][slot] = (levels[idx][slot] || 0) + 1;
-  bumpLoadout();          // the slot multiplier changed — invalidate the loadout caches
-  recomputeMaxStats();    // worn gear feeds max HP/MP; recompute & clamp
-  if (player.hp > player.maxHp) player.hp = player.maxHp;
-  if (player.mp > player.maxMp) player.mp = player.maxMp;
-  sfx('equip');
-  const lv = levels[idx][slot];
-  log(`<span data-spr=q_relic></span> Set ${idx + 1} ${SLOTS[slot].label} slot → <b>Lv ${lv}</b> (+${Math.round(BOSS_SLOTS.perLevel * lv * 100)}% to its gear).`, 'loot');
-  updateBars(); renderPanel(); saveGame();
-}
-// Reset EVERY slot level (both sets) back to unspent so points can be reassigned —
-// deliberately expensive (see BOSS_SLOTS.respecPerLevel). Fired from the Trainer.
-function respecSlots() {
-  const levels = ensureSlotLevels();
-  const invested = totalLevelsInvested(levels);
-  const cost = bossSlotRespecCost(levels);
-  if (invested <= 0 || spendableGold() < cost) return;
-  spendGold(cost);
-  player.slotLevels = [emptySlotLevels(), emptySlotLevels()];
-  bumpLoadout(); recomputeMaxStats();
-  if (player.hp > player.maxHp) player.hp = player.maxHp;
-  if (player.mp > player.maxMp) player.mp = player.maxMp;
-  sfx('shrine');
-  log(`<span data-spr=town_trainer></span> You reset every gear-slot investment — ${invested} Boss Point${invested === 1 ? '' : 's'} freed to reassign across both sets.`, 'important');
-  updateBars(); renderPanel(); if (typeof renderTrainer === 'function') renderTrainer(); saveGame();
-}
-// The GEAR tab's Boss-Point investment panel: a spendable row per slot for the ACTIVE
-// set, showing its level + bonus. Hidden until the hero has earned a point (cleared a
-// boss floor), so the tab stays clean early. Uses the canonical shop-row + act-btn.
-function bossSlotPanelHTML() {
-  const earned = pointsEarned(player.bossFirstKills);
-  if (earned <= 0) return '';
-  const levels = ensureSlotLevels();
-  const idx = activeGearSet;
-  const avail = pointsAvailable(player.bossFirstKills, levels[idx]);
-  const pct = Math.round(BOSS_SLOTS.perLevel * 100);
-  const rows = SLOT_KEYS.map(slot => {
-    const lv = levels[idx][slot] || 0;
-    const can = avail > 0;
-    return `<div class="shop-row has-actions boss-slot-row">
-      <span class="loot-icon">${dlIcon(SLOTS[slot].sprite, 24) || ''}</span>
-      <div class="shop-row-info">
-        <div class="shop-row-name">${SLOTS[slot].label}${lv ? ` <span class="boss-slot-lv">Lv&nbsp;${lv}</span>` : ''}</div>
-        <div class="shop-row-sub">${lv ? `+${pct * lv}% to all gear worn here` : 'No investment yet'}</div>
-      </div>
-      <button class="act-btn" ${can ? '' : 'disabled'} onclick="raiseSlotLevel('${slot}')" title="Spend 1 Boss Point (+${pct}%)"><span data-spr=q_relic></span>+1</button>
-    </div>`;
-  }).join('');
-  return `<div class="boss-slots">
-    <div class="boss-slots-head">
-      <span class="boss-slots-title"><span data-spr=q_relic></span> Boss Points · Set ${idx + 1}</span>
-      <span class="boss-slots-pool"><b>${avail}</b> to spend</span>
-    </div>
-    <div class="boss-slots-note">Each level permanently boosts everything the gear in that slot does by ${pct}%, forever. ${earned} earned all-time · Sets 1 &amp; 2 invest independently · reset at the town Trainer.</div>
-    ${rows}
-  </div>`;
 }
 
 // One-tap equip: route an item straight to its own slot.
@@ -27298,14 +27374,14 @@ function itemCardHTML(item, opts = {}) {
     // DMG is a range string like "8-12"; others are flat numbers (negative on a curse).
     const negative = (typeof v === 'number') && v < 0;
     const val = (typeof v === 'string') ? abbreviateNumbersIn(v) : (v < 0 ? '' : '+') + abbreviateNumber(v);
-    // Native (headline/innate) stats come from the base and can't be rerolled, so
-    // mark them apart from rollable affixes. A curse penalty (negative) is tagged too.
+    // Base (headline/innate) stats come from the item's base and can't be
+    // rerolled, so tag them apart from rollable affixes — but keep every stat the
+    // same colour so the list reads cleanly. A curse penalty (negative) is tagged.
     const isNative = head.includes(k);
-    const cls = 'tt-stat' + (isNative ? ' tt-native' : '');
     const style = negative ? ' style="color:var(--red-350)"' : '';
     const tag = negative ? ' <span class="tt-tag">cursed</span>'
-              : isNative ? ' <span class="tt-tag">native</span>' : '';
-    return `<div class="${cls}"${style}>${val} ${STAT_LABELS[k] || k}${tag}</div>`;
+              : isNative ? ' <span class="tt-tag">base</span>' : '';
+    return `<div class="tt-stat"${style}>${val} ${STAT_LABELS[k] || k}${tag}</div>`;
   });
   // Attribute affixes (+Might, +Luck, …) get their own coloured rows.
   if (item.attrs) for (const [k, v] of Object.entries(item.attrs)) {
@@ -27349,7 +27425,10 @@ function itemCardHTML(item, opts = {}) {
   // Item level: drives raw stat size, so it's worth surfacing alongside power.
   const ilvlLine = (item.slot && item.ilvl)
     ? `<span style="color:var(--blue-250);font-weight:bold">ilvl ${item.ilvl}</span>` : '';
-  const label = opts.label ? `<div class="tt-cardlabel">${opts.label}</div>` : '';
+  // The "Equipped" label reads in gold so a glance tells which card is the piece
+  // already worn, vs the dim "Hovered" candidate beside it.
+  const label = opts.label
+    ? `<div class="tt-cardlabel${opts.label === 'Equipped' ? ' tt-cardlabel-worn' : ''}">${opts.label}</div>` : '';
   // The attribute gate to equip this weapon / off-hand — green when met, red when
   // short — so a player reads at a glance why a piece is locked and what to raise.
   // Skipped for another hero's snapshot (opts.hideReq): the "you have" comparison is
@@ -28992,12 +29071,10 @@ function loadGame() {
       const cf = player.clearedFloors || {};
       for (const k in cf) { if (cf[k] && Number(k) % 5 === 0) player.bossFirstKills[k] = 1; }
     }
-    // Boss-point gear-slot levels — normalize to two clean per-set records (missing on
-    // pre-feature saves ⇒ two empty sets). Points are DERIVED (earned = distinct boss
-    // floors cleared, above; spent = sum of these levels), so nothing else migrates:
-    // an existing hero simply arrives with points equal to the boss floors they'd
-    // already cleared, ready to spend.
-    player.slotLevels = sanitizeSlotLevels(player.slotLevels, SLOT_KEYS);
+    // Retire the boss-point gear-slot investment (feature removed): boss points now
+    // feed only the Ascendant Weave. Drop the stored per-set slot levels so an old
+    // save loads clean and no vestigial field lingers.
+    if (player.slotLevels !== undefined) delete player.slotLevels;
     // ── ENDGAME save migration ── every new field defaults gracefully so old
     // saves load byte-identical (each sanitizer tolerates undefined → empty).
     // Dread Covenants: the sworn set for the next descent + the per-class checklist.
@@ -29801,16 +29878,6 @@ function lbTrimItem(it) {
 function lbLoadoutFromPlayer() {
   const gear = {};
   for (const slot of SLOT_KEYS) { const t = lbTrimItem((equipped || {})[slot]); if (t) gear[slot] = t; }
-  // Boss-point levels for the ACTIVE set (the one whose gear is snapshot above), lean:
-  // only slots actually invested. Shown beside each gear piece in the hero-detail view
-  // so any player can see what level a hero has raised each slot to.
-  const slotLevels = (() => {
-    const lv = (player.slotLevels && player.slotLevels[activeGearSet]) || null;
-    if (!lv) return null;
-    const o = {};
-    for (const s of SLOT_KEYS) if (lv[s] > 0) o[s] = lv[s];
-    return Object.keys(o).length ? o : null;
-  })();
   const skills = {};
   if (player.skills) for (const id in player.skills) { const r = player.skills[id] | 0; if (r > 0) skills[id] = r; }
   return {
@@ -29822,7 +29889,6 @@ function lbLoadoutFromPlayer() {
     gearPower: (typeof gearContributionPower === 'function') ? Math.round(gearContributionPower() || 0) : null,
     stats: (typeof heroStatData === 'function') ? heroStatData() : null, // the hero-sheet "Stats" panel, computed once by the owner
     gear,
-    slotLevels,   // boss-point gear-slot levels for the active set (slot → level), or null
     skills,
     skillSlots: Array.isArray(player.skillSlots) ? player.skillSlots.slice(0, 12) : [],
     autoSkill: player.autoSkill || null,
@@ -30125,19 +30191,16 @@ function lbSkillNode(classKey, ascKey, id) {
 }
 
 // The per-attribute bonus a snapshot's worn gear grants, mirroring totalAttr's gear
-// loop: each piece's +attr, scaled by its boss-point slot multiplier. Derived from
-// the already-stored gear/slotLevels so the card shows base + gear like the live
-// hero sheet — no extra field on the saved blob, and old rows work too.
+// loop: each piece's +attr. Derived from the already-stored gear so the card shows
+// base + gear like the live hero sheet — no extra field on the saved blob.
 function lbGearAttrBonus(lo) {
   const out = {};
   const gear = (lo && lo.gear) || {};
-  const lv = (lo && lo.slotLevels) || {};
   for (const slot of SLOT_KEYS) {
     const it = gear[slot];
     if (!it || !it.attrs) continue;
-    const m = lv[slot] ? slotMultiplier(lv[slot]) : 1;
     for (const k in it.attrs) {
-      if (typeof it.attrs[k] === 'number') out[k] = (out[k] || 0) + it.attrs[k] * m;
+      if (typeof it.attrs[k] === 'number') out[k] = (out[k] || 0) + it.attrs[k];
     }
   }
   return out;
@@ -30157,23 +30220,16 @@ function lbHeroBuildHTML(r, lo) {
   }).join('');
   // Gear — one tile per slot; empty slots read as such so the paperdoll is complete.
   const gear = lo.gear || {};
-  const loSlotLv = lo.slotLevels || {};
-  // A boss-point slot-level badge (+bonus%) shown beside a slot's label — the level
-  // the hero has invested that gear slot to. Blank for un-invested slots.
-  const slotLvBadge = (slot) => {
-    const lv = loSlotLv[slot] || 0;
-    return lv > 0 ? `<span class="lb-gear-lv" title="Boss-point slot level: +${Math.round(BOSS_SLOTS.perLevel * lv * 100)}% to this slot's gear">Lv&nbsp;${lv}</span>` : '';
-  };
   const gearRow = SLOT_KEYS.map(slot => {
     const it = gear[slot];
     const label = (SLOTS[slot] || {}).label || slot;
-    if (!it) return `<div class="lb-gear lb-gear-empty"><span class="lb-gear-ic">${dlIcon((SLOTS[slot] || {}).sprite, 26) || ''}</span><div class="lb-gear-info"><div class="lb-gear-slot">${label}${slotLvBadge(slot)}</div><div class="lb-gear-name lb-gear-none">— empty —</div></div></div>`;
+    if (!it) return `<div class="lb-gear lb-gear-empty"><span class="lb-gear-ic">${dlIcon((SLOTS[slot] || {}).sprite, 26) || ''}</span><div class="lb-gear-info"><div class="lb-gear-slot">${label}</div><div class="lb-gear-name lb-gear-none">— empty —</div></div></div>`;
     const col = tierColor(it);
     const tip = lbItemTip(it);
     return `<div class="lb-gear" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
       <span class="lb-gear-ic">${iconMarkup(itemIcon(it), col)}</span>
       <div class="lb-gear-info">
-        <div class="lb-gear-slot">${label}${slotLvBadge(slot)}</div>
+        <div class="lb-gear-slot">${label}</div>
         <div class="lb-gear-name" style="color:${col}">${curseMark(it)}${escapeHtml(it.name || '')}${it.crafted ? ' ' + (dlIcon('ic_mallet', 12) || '') : ''}</div>
         <div class="lb-gear-power">${PWR_GLYPH} ${abbreviateNumber(itemPower(it))}${it.ilvl ? ` · <span style="color:var(--blue-250)">ilvl ${abbreviateNumber(it.ilvl)}</span>` : ''}</div>
       </div>
@@ -31766,80 +31822,97 @@ function openSlotsFromNewRun() { closeNewRun(); openSlots(); }
 function confirmTitleNewRun() { closeNewRun(); closeTitle(); wipeSave(); }   // wipeSave() reloads into a fresh hero
 function titleSound() { toggleSound(); refreshTitleToggles(); }
 
-// Load the hardcore death ledger + earned feats BEFORE the save, so loadGame() can
-// recognise (and refuse to load) a hero who has already permanently died.
-loadHcMeta();
-// Load the account-wide bestiary ledger (kills + specimen lore), folding in any legacy
-// per-hero bestiary left on existing saves. Runs BEFORE the achievement backfill (whose
-// slay feats read the ledger) and before loadGame() (so the active hero's save is already
-// stripped of its legacy fields and its kills aren't double-counted).
-loadBestiaryDex();
-loadHallDeeds();   // account-wide Hall of Deeds / Renown ledger (mirrors the bestiary key)
-// Seed the account-wide (Kitten) feat set from every existing save on this device, so
-// achievements earned before this feature — or on a slot not yet replayed — are
-// unified into one account tally instead of appearing to differ between slots.
-backfillAccountAchievements();
-loadDelMeta();  // deletion tombstones, so a hero deleted on another device stays deleted here
-loadDaily();   // daily-goal streak (persists in localStorage, independent of saves)
-const hadSave = loadGame();
-// The Dev tuning tab was removed; wipe any saved slider overrides so every hero
-// reverts to the shipping balance defaults on load.
-try { localStorage.removeItem('dungeonLoot_devTune_v1'); } catch (e) {}
-// Load the account-wide shared stash (and, on first run, migrate any older
-// per-character stashes into the pool). It lives outside the save slots, so it
-// loads even when the active slot is empty.
-loadStash();
-// Resume in town if that's where the save left off; a brand-new hero who hasn't
-// done the beach tutorial gets it first; otherwise build the dungeon floor.
-if (inTown) { buildTown(); }   // walkable town — no auto-opened hub menu; the map IS the town
-else if (!hadSave && !player.tutorialDone) buildTutorialMap();
-else generateMap();
-seedAmbientEmbers();
-draw();
-updateBars();
-renderPanel();
-updateObjectiveChip();   // paint the goal chip for the starting state
+// GUARDED BOOT — the whole first-run boot sequence lives at module top level, but
+// the game-loop kickoff and the window handler bridge (which every inline on*=
+// button needs) run LATER in this file. A synchronous throw here (e.g. a corrupt
+// or older-shape localStorage save that trips a boot step) would abort module
+// evaluation before either runs, leaving the title up with dead buttons AND a dead
+// controller. Wrap it so a boot failure is logged and recovered from instead of
+// stranding the player: execution always falls through to the loop + bridge below.
+try {
+  // Load the hardcore death ledger + earned feats BEFORE the save, so loadGame() can
+  // recognise (and refuse to load) a hero who has already permanently died.
+  loadHcMeta();
+  // Load the account-wide bestiary ledger (kills + specimen lore), folding in any legacy
+  // per-hero bestiary left on existing saves. Runs BEFORE the achievement backfill (whose
+  // slay feats read the ledger) and before loadGame() (so the active hero's save is already
+  // stripped of its legacy fields and its kills aren't double-counted).
+  loadBestiaryDex();
+  loadHallDeeds();   // account-wide Hall of Deeds / Renown ledger (mirrors the bestiary key)
+  // Seed the account-wide (Kitten) feat set from every existing save on this device, so
+  // achievements earned before this feature — or on a slot not yet replayed — are
+  // unified into one account tally instead of appearing to differ between slots.
+  backfillAccountAchievements();
+  loadDelMeta();  // deletion tombstones, so a hero deleted on another device stays deleted here
+  loadDaily();   // daily-goal streak (persists in localStorage, independent of saves)
+  const hadSave = loadGame();
+  // The Dev tuning tab was removed; wipe any saved slider overrides so every hero
+  // reverts to the shipping balance defaults on load.
+  try { localStorage.removeItem('dungeonLoot_devTune_v1'); } catch (e) {}
+  // Load the account-wide shared stash (and, on first run, migrate any older
+  // per-character stashes into the pool). It lives outside the save slots, so it
+  // loads even when the active slot is empty.
+  loadStash();
+  // Resume in town if that's where the save left off; a brand-new hero who hasn't
+  // done the beach tutorial gets it first; otherwise build the dungeon floor.
+  if (inTown) { buildTown(); }   // walkable town — no auto-opened hub menu; the map IS the town
+  else if (!hadSave && !player.tutorialDone) buildTutorialMap();
+  else generateMap();
+  seedAmbientEmbers();
+  draw();
+  updateBars();
+  renderPanel();
+  updateObjectiveChip();   // paint the goal chip for the starting state
 
-// Show the title screen / landing page first. The game is already built behind
-// it; titlePlay() dismisses the title and runs onboarding (name then class) for
-// a brand-new or class-less hero. Returning heroes just resume on CONTINUE.
-showTitle();
-// The real title is now correct (CONTINUE + hero card for a returning hero), so
-// fade out the boot splash that has been masking the cold-load flash until here.
-hideBootLoader();
+  // Show the title screen / landing page first. The game is already built behind
+  // it; titlePlay() dismisses the title and runs onboarding (name then class) for
+  // a brand-new or class-less hero. Returning heroes just resume on CONTINUE.
+  showTitle();
+  // The real title is now correct (CONTINUE + hero card for a returning hero), so
+  // fade out the boot splash that has been masking the cold-load flash until here.
+  hideBootLoader();
 
-// Paint the optional cloud-save callout, then — if already signed in — reconcile
-// this device's slots with the account in the background (may reload into a
-// newer save pulled from the cloud).
-refreshAccountUi();
-cloudBootSync();
+  // Paint the optional cloud-save callout, then — if already signed in — reconcile
+  // this device's slots with the account in the background (may reload into a
+  // newer save pulled from the cloud).
+  refreshAccountUi();
+  cloudBootSync();
 
-if (hadSave) {
-  log(`Welcome back, level ${player.level} adventurer.`, 'important');
-  if (inTown) log('You are in town. Pick a service from the menu, or take <span data-spr=feat_gate_red></span> Warp to Dungeon back into the dungeon.');
-  else log(`Resuming on dungeon level ${dungeonLevel}. Your gear is intact.`);
-} else {
-  log('Welcome to the dungeon. Use WASD or the arrow keys to move.', 'important');
-  log('<span data-spr=feat_door></span> Clear a floor of its foes to unseal the ▼ stairs, then descend.', 'important');
-  log('⚠️ The deep scales faster than you can — grind lower floors from <span data-spr=town_vault></span> TOWN when you hit a wall.');
+  if (hadSave) {
+    log(`Welcome back, level ${player.level} adventurer.`, 'important');
+    if (inTown) log('You are in town. Pick a service from the menu, or take <span data-spr=feat_gate_red></span> Warp to Dungeon back into the dungeon.');
+    else log(`Resuming on dungeon level ${dungeonLevel}. Your gear is intact.`);
+  } else {
+    log('Welcome to the dungeon. Use WASD or the arrow keys to move.', 'important');
+    log('<span data-spr=feat_door></span> Clear a floor of its foes to unseal the ▼ stairs, then descend.', 'important');
+    log('⚠️ The deep scales faster than you can — grind lower floors from <span data-spr=town_vault></span> TOWN when you hit a wall.');
+  }
+  log('Progress auto-saves automatically as you play.');
+  log('Open <span data-spr=chest></span> BAG to view your loot; press the pad\'s USE button to grab items.');
+  log(`Tap the <span data-spr=potion_r></span> or <span data-spr=potion_g></span> flask to quaff a ${logPotion('Potion')} — free to use, but they share a short cooldown.`);
+  log('⌨️ Keys: Q health potion · E mana potion · R primary skill · 3–9 skills · T town · B open bag · Space/F use.');
+  log('<span data-spr=ic_stun></span> You start with a skill point — open <span data-spr=chest></span> BAG ▸ SKILLS to learn your first active, then tap <span data-spr=ic_stun></span> (or press ' + skillKeyLabel(1) + ') to cast it.');
+  log(PWR_GLYPH + ' Each item has a Power value; your total Power blends level, gear, and attributes.');
+  log('<span data-spr=mat_glimmer></span> Level up to earn points, then raise attributes in the bag\'s HERO tab.');
+  log('<span data-spr=w_dagger></span> Every weapon fights differently — axes cleave, daggers flurry, bows & staves strike at range, maces stun, scythes drain. Try them all!');
+  log('<span data-spr=feat_gate_red></span> Tap TOWN (or press ' + kbLabel('portal') + ') to warp to the safe hub: craftsman, healer, trainer, enchanter, and a gate to re-enter any floor you\'ve reached.');
+  log('<span data-spr=chest></span> Foes drop crafting materials — <span data-spr=mat_scrap></span> Scrap & <span data-spr=mat_glimmer></span> Glimmer from the start, <span data-spr=mat_core></span> Core and <span data-spr=feat_portal></span> Chaos Orbs as you brave deeper tiers. The <span data-spr=ic_mallet></span> Craftsman forges blank gear; the <span data-spr=ic_wand></span> Enchanter fills in its modifiers.');
+  log('<span data-spr=mat_scrap></span> Tap any loot in your <span data-spr=chest></span> BAG to Sell it for gold or Scrap it into materials — any time, no vendor needed. Use the <span data-spr=mat_scrap></span> Auto-Loot button on the LOOT tab to do it automatically by rarity on pickup.');
+  log('<span data-spr=w_sword></span> Move freely in real time and auto-attack foes in reach — get surrounded and every foe piles on, so don\'t let them encircle you.');
+  // Credit every terrain pack actually painting the world (registry-driven, so
+  // attribution stays truthful automatically as packs are added — see
+  // src/data/terrainPacks.js and docs/terrain-packs.md).
+  for (const pack of terrainPacksInUse()) log(`🌍 Terrain tiles from "${pack.label}" by ${pack.credit} (${pack.license}).`);
+  log('🌿 Decor (trees, plants, cacti, shells) from the "[LPC]" collections by bluecarrot16 & contributors (CC-BY-SA) — full credits in docs/asset-credits.md.');
+} catch (bootErr) {
+  // Never let a boot hiccup strand the player behind unresponsive controls. Log it
+  // (so it's diagnosable in the console), lift the splash, and paint the landing
+  // page — the handler bridge + game loop below still wire up, so the title's
+  // buttons (incl. Reset Current Run) and the controller stay live for recovery.
+  try { console.error('[boot] game boot failed — recovering to a usable title:', bootErr); } catch (_e) {}
+  try { hideBootLoader(); } catch (_e) {}
+  try { showTitle(); } catch (_e) {}
 }
-log('Progress auto-saves automatically as you play.');
-log('Open <span data-spr=chest></span> BAG to view your loot; press the pad\'s USE button to grab items.');
-log(`Tap the <span data-spr=potion_r></span> or <span data-spr=potion_g></span> flask to quaff a ${logPotion('Potion')} — free to use, but they share a short cooldown.`);
-log('⌨️ Keys: Q health potion · E mana potion · R primary skill · 3–9 skills · T town · B open bag · Space/F use.');
-log('<span data-spr=ic_stun></span> You start with a skill point — open <span data-spr=chest></span> BAG ▸ SKILLS to learn your first active, then tap <span data-spr=ic_stun></span> (or press ' + skillKeyLabel(1) + ') to cast it.');
-log(PWR_GLYPH + ' Each item has a Power value; your total Power blends level, gear, and attributes.');
-log('<span data-spr=mat_glimmer></span> Level up to earn points, then raise attributes in the bag\'s HERO tab.');
-log('<span data-spr=w_dagger></span> Every weapon fights differently — axes cleave, daggers flurry, bows & staves strike at range, maces stun, scythes drain. Try them all!');
-log('<span data-spr=feat_gate_red></span> Tap TOWN (or press ' + kbLabel('portal') + ') to warp to the safe hub: craftsman, healer, trainer, enchanter, and a gate to re-enter any floor you\'ve reached.');
-log('<span data-spr=chest></span> Foes drop crafting materials — <span data-spr=mat_scrap></span> Scrap & <span data-spr=mat_glimmer></span> Glimmer from the start, <span data-spr=mat_core></span> Core and <span data-spr=feat_portal></span> Chaos Orbs as you brave deeper tiers. The <span data-spr=ic_mallet></span> Craftsman forges blank gear; the <span data-spr=ic_wand></span> Enchanter fills in its modifiers.');
-log('<span data-spr=mat_scrap></span> Tap any loot in your <span data-spr=chest></span> BAG to Sell it for gold or Scrap it into materials — any time, no vendor needed. Use the <span data-spr=mat_scrap></span> Auto-Loot button on the LOOT tab to do it automatically by rarity on pickup.');
-log('<span data-spr=w_sword></span> Move freely in real time and auto-attack foes in reach — get surrounded and every foe piles on, so don\'t let them encircle you.');
-// Credit every terrain pack actually painting the world (registry-driven, so
-// attribution stays truthful automatically as packs are added — see
-// src/data/terrainPacks.js and docs/terrain-packs.md).
-for (const pack of terrainPacksInUse()) log(`🌍 Terrain tiles from "${pack.label}" by ${pack.credit} (${pack.license}).`);
-log('🌿 Decor (trees, plants, cacti, shells) from the "[LPC]" collections by bluecarrot16 & contributors (CC-BY-SA) — full credits in docs/asset-credits.md.');
 
 // PREVIEW ONLY — `?terrain=proc` swaps the dungeon ground to the procedural
 // terrain-pack renderer; add `&preview=1` to auto-drop into a dungeon floor so
@@ -35803,9 +35876,6 @@ const __DL_FN_BRIDGE = {
   gearSetCount,
   gearSetBarHTML,
   toggleGearSet,
-  raiseSlotLevel,
-  respecSlots,
-  bossSlotPanelHTML,
   quickEquip,
   toggleLock,
   refreshTownService,

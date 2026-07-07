@@ -8,6 +8,21 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Removal — Boss-point gear-slot investment
+
+- 📦 Deleted `src/systems/bossSlots.js` + `src/data/bossSlots.js` (and
+  `test/systems/bossSlots.test.js`). That feature let a hero spend Boss Points to
+  level gear slots per gear set; it's removed. Boss Points now feed only the
+  Ascendant Weave.
+- 📦 New leaf module `src/systems/bossPoints.js` keeps the one helper still needed —
+  `pointsEarned` (boss points = distinct boss floors first-cleared) — which the Weave
+  and the town-service gate consume. `test/systems/bossPoints.test.js` covers it.
+- 🧪 The legacy shell drops all gear-slot wiring: `slotMult`/`slotLevels`, the GEAR-tab
+  panel + nudge, the Trainer respec row, the leaderboard slot-level badge, and the
+  save-migration now deletes any stored `player.slotLevels`. `gameState().menu`
+  swaps `bossSlots` for a plain `bossPointsEarned`; the `progression` guide topic
+  now points at the Weave.
+
 ## Feature — Bestiary codex & unique/set Collection vault tab
 
 - 📦 New pure module `src/systems/bestiary.js` holds the kill-gated reveal logic
