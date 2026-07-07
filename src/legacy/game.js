@@ -26665,11 +26665,15 @@ function renderSkillBar() {
     }
     const cd = skillCd(s.id);
     const ready = cd <= 0 && player.mp >= s.mp && player.hp > 0;
+    // Off cooldown but the mana bar is short — grey the icon so it reads as
+    // "can't afford this yet", distinct from the cooldown dial's "not yet".
+    const noMana = cd <= 0 && player.hp > 0 && player.mp < s.mp;
     // The cast hint names the slot's number key.
     const castHint = key ? ` · press ${key}` : '';
     const moveHint = 'drag to rearrange · drag a tree skill to swap';
-    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
-    return cell(sbPill('skill' + (i + 1)), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
+    const manaNote = noMana ? `<div class='ht-sub' style='color:var(--mp)'>Not enough mana</div>` : '';
+    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}${manaNote}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
+    return cell(sbPill('skill' + (i + 1)), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${noMana ? 'no-mana' : ''} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}',${i})" ondragend="skillDragEnd()" ${dropAttrs(i)} ${hoverTip(tip)} onclick="castSkillById('${s.id}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
     </button>`);
@@ -26690,8 +26694,10 @@ function renderSkillBar() {
     const s = autoS;
     const cd = skillCd(s.id);
     const ready = cd <= 0 && player.mp >= s.mp && player.hp > 0;
-    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>drag a skill here to change · tap to edit</div>`;
-    autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
+    const noMana = cd <= 0 && player.hp > 0 && player.mp < s.mp;
+    const manaNote = noMana ? `<div class='ht-sub' style='color:var(--mp)'>Not enough mana</div>` : '';
+    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}${manaNote}<div class='ht-sub' style='opacity:.7'>drag a skill here to change · tap to edit</div>`;
+    autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${noMana ? 'no-mana' : ''} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}','${AUTO_SLOT}')" ondragend="skillDragEnd()" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
     </button>`);

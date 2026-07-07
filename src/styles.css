@@ -1595,6 +1595,10 @@
     50%     { box-shadow: 0 0 14px color-mix(in srgb, var(--gold) 90%, transparent); border-color: var(--xp); }
   }
   .skillbar-btn.disabled { background: var(--panel); border-color: var(--panel); color: var(--btn-off); }
+  /* Off cooldown but you can't pay the mana — desaturate + dim the icon so it
+     clearly reads as unusable, with a faint mana-blue edge naming the reason. */
+  .skillbar-btn.no-mana { border-color: color-mix(in srgb, var(--mp) 45%, var(--panel)); }
+  .skillbar-btn.no-mana .sb-icon { filter: grayscale(1) brightness(0.72); opacity: 0.4; }
   /* League-style cooldown dial: a faint grey radial sweep that covers the
      still-recharging fraction and clears as the skill readies, with a live
      countdown (whole seconds, then one decimal under 1s) centred on top. The
