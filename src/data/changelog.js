@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-07", size: "small", v: "Click keepers to visit them, and sprint free around town", by: "Andrew Suiter", notes: [
+    "Click a keeper (or the Town Portal) and the hero walks over and opens its menu on arrival — no need to march up and press interact. Clicking the Dungeon Gate walks straight into it.",
+    "Sprinting in town no longer drains Stamina. The camp is a safe rest, so you can run everywhere at full speed and your Stamina keeps refilling as if you were standing still.",
+  ] },
   { date: "2026-07-06", size: "large", v: "Town is now a walkable map", by: "Andrew Suiter", notes: [
     "Town is no longer a menu — it's a walkable base CAMP you explore, a forest clearing on real grass with worn dirt trails winding between it all. A campfire ringed with logs and stumps to sit on sits at the heart; the service keepers make camp in trade clusters around it, and a treeline frames the clearing.",
     "Walk up to any keeper and press interact (tap them on touch) to open their service — a floating prompt names whoever you're beside. Every service has its own keeper; a locked one stands greyed with a padlock and tells you its unlock requirement.",
