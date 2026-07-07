@@ -2116,6 +2116,10 @@
   .lock-toggle-btn.on .dl-ic { opacity: 1; }
   /* Subtle gold edge on a locked loot row so it reads at a glance. */
   .loot-item.locked { border-left-color: var(--warn); }
+  /* Faint red wash on a row whose item can't be equipped (requirement unmet),
+     reinforcing the yellow lock button. */
+  .loot-item.cant-equip { background: color-mix(in srgb, var(--danger) 9%, transparent); }
+  .loot-item.cant-equip:hover { background: color-mix(in srgb, var(--danger) 15%, transparent); }
 
   /* Sell / scrap tray that drops under the selected loot row. Full row width, so
      it has room for both buttons even in the narrow 160px mobile drawer. */
