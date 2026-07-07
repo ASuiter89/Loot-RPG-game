@@ -31674,80 +31674,97 @@ function openSlotsFromNewRun() { closeNewRun(); openSlots(); }
 function confirmTitleNewRun() { closeNewRun(); closeTitle(); wipeSave(); }   // wipeSave() reloads into a fresh hero
 function titleSound() { toggleSound(); refreshTitleToggles(); }
 
-// Load the hardcore death ledger + earned feats BEFORE the save, so loadGame() can
-// recognise (and refuse to load) a hero who has already permanently died.
-loadHcMeta();
-// Load the account-wide bestiary ledger (kills + specimen lore), folding in any legacy
-// per-hero bestiary left on existing saves. Runs BEFORE the achievement backfill (whose
-// slay feats read the ledger) and before loadGame() (so the active hero's save is already
-// stripped of its legacy fields and its kills aren't double-counted).
-loadBestiaryDex();
-loadHallDeeds();   // account-wide Hall of Deeds / Renown ledger (mirrors the bestiary key)
-// Seed the account-wide (Kitten) feat set from every existing save on this device, so
-// achievements earned before this feature — or on a slot not yet replayed — are
-// unified into one account tally instead of appearing to differ between slots.
-backfillAccountAchievements();
-loadDelMeta();  // deletion tombstones, so a hero deleted on another device stays deleted here
-loadDaily();   // daily-goal streak (persists in localStorage, independent of saves)
-const hadSave = loadGame();
-// The Dev tuning tab was removed; wipe any saved slider overrides so every hero
-// reverts to the shipping balance defaults on load.
-try { localStorage.removeItem('dungeonLoot_devTune_v1'); } catch (e) {}
-// Load the account-wide shared stash (and, on first run, migrate any older
-// per-character stashes into the pool). It lives outside the save slots, so it
-// loads even when the active slot is empty.
-loadStash();
-// Resume in town if that's where the save left off; a brand-new hero who hasn't
-// done the beach tutorial gets it first; otherwise build the dungeon floor.
-if (inTown) { buildTown(); openTownHub(); }
-else if (!hadSave && !player.tutorialDone) buildTutorialMap();
-else generateMap();
-seedAmbientEmbers();
-draw();
-updateBars();
-renderPanel();
-updateObjectiveChip();   // paint the goal chip for the starting state
+// GUARDED BOOT — the whole first-run boot sequence lives at module top level, but
+// the game-loop kickoff and the window handler bridge (which every inline on*=
+// button needs) run LATER in this file. A synchronous throw here (e.g. a corrupt
+// or older-shape localStorage save that trips a boot step) would abort module
+// evaluation before either runs, leaving the title up with dead buttons AND a dead
+// controller. Wrap it so a boot failure is logged and recovered from instead of
+// stranding the player: execution always falls through to the loop + bridge below.
+try {
+  // Load the hardcore death ledger + earned feats BEFORE the save, so loadGame() can
+  // recognise (and refuse to load) a hero who has already permanently died.
+  loadHcMeta();
+  // Load the account-wide bestiary ledger (kills + specimen lore), folding in any legacy
+  // per-hero bestiary left on existing saves. Runs BEFORE the achievement backfill (whose
+  // slay feats read the ledger) and before loadGame() (so the active hero's save is already
+  // stripped of its legacy fields and its kills aren't double-counted).
+  loadBestiaryDex();
+  loadHallDeeds();   // account-wide Hall of Deeds / Renown ledger (mirrors the bestiary key)
+  // Seed the account-wide (Kitten) feat set from every existing save on this device, so
+  // achievements earned before this feature — or on a slot not yet replayed — are
+  // unified into one account tally instead of appearing to differ between slots.
+  backfillAccountAchievements();
+  loadDelMeta();  // deletion tombstones, so a hero deleted on another device stays deleted here
+  loadDaily();   // daily-goal streak (persists in localStorage, independent of saves)
+  const hadSave = loadGame();
+  // The Dev tuning tab was removed; wipe any saved slider overrides so every hero
+  // reverts to the shipping balance defaults on load.
+  try { localStorage.removeItem('dungeonLoot_devTune_v1'); } catch (e) {}
+  // Load the account-wide shared stash (and, on first run, migrate any older
+  // per-character stashes into the pool). It lives outside the save slots, so it
+  // loads even when the active slot is empty.
+  loadStash();
+  // Resume in town if that's where the save left off; a brand-new hero who hasn't
+  // done the beach tutorial gets it first; otherwise build the dungeon floor.
+  if (inTown) { buildTown(); openTownHub(); }
+  else if (!hadSave && !player.tutorialDone) buildTutorialMap();
+  else generateMap();
+  seedAmbientEmbers();
+  draw();
+  updateBars();
+  renderPanel();
+  updateObjectiveChip();   // paint the goal chip for the starting state
 
-// Show the title screen / landing page first. The game is already built behind
-// it; titlePlay() dismisses the title and runs onboarding (name then class) for
-// a brand-new or class-less hero. Returning heroes just resume on CONTINUE.
-showTitle();
-// The real title is now correct (CONTINUE + hero card for a returning hero), so
-// fade out the boot splash that has been masking the cold-load flash until here.
-hideBootLoader();
+  // Show the title screen / landing page first. The game is already built behind
+  // it; titlePlay() dismisses the title and runs onboarding (name then class) for
+  // a brand-new or class-less hero. Returning heroes just resume on CONTINUE.
+  showTitle();
+  // The real title is now correct (CONTINUE + hero card for a returning hero), so
+  // fade out the boot splash that has been masking the cold-load flash until here.
+  hideBootLoader();
 
-// Paint the optional cloud-save callout, then — if already signed in — reconcile
-// this device's slots with the account in the background (may reload into a
-// newer save pulled from the cloud).
-refreshAccountUi();
-cloudBootSync();
+  // Paint the optional cloud-save callout, then — if already signed in — reconcile
+  // this device's slots with the account in the background (may reload into a
+  // newer save pulled from the cloud).
+  refreshAccountUi();
+  cloudBootSync();
 
-if (hadSave) {
-  log(`Welcome back, level ${player.level} adventurer.`, 'important');
-  if (inTown) log('You are in town. Pick a service from the menu, or take <span data-spr=feat_gate_red></span> Warp to Dungeon back into the dungeon.');
-  else log(`Resuming on dungeon level ${dungeonLevel}. Your gear is intact.`);
-} else {
-  log('Welcome to the dungeon. Use WASD or the arrow keys to move.', 'important');
-  log('<span data-spr=feat_door></span> Clear a floor of its foes to unseal the ▼ stairs, then descend.', 'important');
-  log('⚠️ The deep scales faster than you can — grind lower floors from <span data-spr=town_vault></span> TOWN when you hit a wall.');
+  if (hadSave) {
+    log(`Welcome back, level ${player.level} adventurer.`, 'important');
+    if (inTown) log('You are in town. Pick a service from the menu, or take <span data-spr=feat_gate_red></span> Warp to Dungeon back into the dungeon.');
+    else log(`Resuming on dungeon level ${dungeonLevel}. Your gear is intact.`);
+  } else {
+    log('Welcome to the dungeon. Use WASD or the arrow keys to move.', 'important');
+    log('<span data-spr=feat_door></span> Clear a floor of its foes to unseal the ▼ stairs, then descend.', 'important');
+    log('⚠️ The deep scales faster than you can — grind lower floors from <span data-spr=town_vault></span> TOWN when you hit a wall.');
+  }
+  log('Progress auto-saves automatically as you play.');
+  log('Open <span data-spr=chest></span> BAG to view your loot; press the pad\'s USE button to grab items.');
+  log(`Tap the <span data-spr=potion_r></span> or <span data-spr=potion_g></span> flask to quaff a ${logPotion('Potion')} — free to use, but they share a short cooldown.`);
+  log('⌨️ Keys: Q health potion · E mana potion · R primary skill · 3–9 skills · T town · B open bag · Space/F use.');
+  log('<span data-spr=ic_stun></span> You start with a skill point — open <span data-spr=chest></span> BAG ▸ SKILLS to learn your first active, then tap <span data-spr=ic_stun></span> (or press ' + skillKeyLabel(1) + ') to cast it.');
+  log(PWR_GLYPH + ' Each item has a Power value; your total Power blends level, gear, and attributes.');
+  log('<span data-spr=mat_glimmer></span> Level up to earn points, then raise attributes in the bag\'s HERO tab.');
+  log('<span data-spr=w_dagger></span> Every weapon fights differently — axes cleave, daggers flurry, bows & staves strike at range, maces stun, scythes drain. Try them all!');
+  log('<span data-spr=feat_gate_red></span> Tap TOWN (or press ' + kbLabel('portal') + ') to warp to the safe hub: craftsman, healer, trainer, enchanter, and a gate to re-enter any floor you\'ve reached.');
+  log('<span data-spr=chest></span> Foes drop crafting materials — <span data-spr=mat_scrap></span> Scrap & <span data-spr=mat_glimmer></span> Glimmer from the start, <span data-spr=mat_core></span> Core and <span data-spr=feat_portal></span> Chaos Orbs as you brave deeper tiers. The <span data-spr=ic_mallet></span> Craftsman forges blank gear; the <span data-spr=ic_wand></span> Enchanter fills in its modifiers.');
+  log('<span data-spr=mat_scrap></span> Tap any loot in your <span data-spr=chest></span> BAG to Sell it for gold or Scrap it into materials — any time, no vendor needed. Use the <span data-spr=mat_scrap></span> Auto-Loot button on the LOOT tab to do it automatically by rarity on pickup.');
+  log('<span data-spr=w_sword></span> Move freely in real time and auto-attack foes in reach — get surrounded and every foe piles on, so don\'t let them encircle you.');
+  // Credit every terrain pack actually painting the world (registry-driven, so
+  // attribution stays truthful automatically as packs are added — see
+  // src/data/terrainPacks.js and docs/terrain-packs.md).
+  for (const pack of terrainPacksInUse()) log(`🌍 Terrain tiles from "${pack.label}" by ${pack.credit} (${pack.license}).`);
+  log('🌿 Decor (trees, plants, cacti, shells) from the "[LPC]" collections by bluecarrot16 & contributors (CC-BY-SA) — full credits in docs/asset-credits.md.');
+} catch (bootErr) {
+  // Never let a boot hiccup strand the player behind unresponsive controls. Log it
+  // (so it's diagnosable in the console), lift the splash, and paint the landing
+  // page — the handler bridge + game loop below still wire up, so the title's
+  // buttons (incl. Reset Current Run) and the controller stay live for recovery.
+  try { console.error('[boot] game boot failed — recovering to a usable title:', bootErr); } catch (_e) {}
+  try { hideBootLoader(); } catch (_e) {}
+  try { showTitle(); } catch (_e) {}
 }
-log('Progress auto-saves automatically as you play.');
-log('Open <span data-spr=chest></span> BAG to view your loot; press the pad\'s USE button to grab items.');
-log(`Tap the <span data-spr=potion_r></span> or <span data-spr=potion_g></span> flask to quaff a ${logPotion('Potion')} — free to use, but they share a short cooldown.`);
-log('⌨️ Keys: Q health potion · E mana potion · R primary skill · 3–9 skills · T town · B open bag · Space/F use.');
-log('<span data-spr=ic_stun></span> You start with a skill point — open <span data-spr=chest></span> BAG ▸ SKILLS to learn your first active, then tap <span data-spr=ic_stun></span> (or press ' + skillKeyLabel(1) + ') to cast it.');
-log(PWR_GLYPH + ' Each item has a Power value; your total Power blends level, gear, and attributes.');
-log('<span data-spr=mat_glimmer></span> Level up to earn points, then raise attributes in the bag\'s HERO tab.');
-log('<span data-spr=w_dagger></span> Every weapon fights differently — axes cleave, daggers flurry, bows & staves strike at range, maces stun, scythes drain. Try them all!');
-log('<span data-spr=feat_gate_red></span> Tap TOWN (or press ' + kbLabel('portal') + ') to warp to the safe hub: craftsman, healer, trainer, enchanter, and a gate to re-enter any floor you\'ve reached.');
-log('<span data-spr=chest></span> Foes drop crafting materials — <span data-spr=mat_scrap></span> Scrap & <span data-spr=mat_glimmer></span> Glimmer from the start, <span data-spr=mat_core></span> Core and <span data-spr=feat_portal></span> Chaos Orbs as you brave deeper tiers. The <span data-spr=ic_mallet></span> Craftsman forges blank gear; the <span data-spr=ic_wand></span> Enchanter fills in its modifiers.');
-log('<span data-spr=mat_scrap></span> Tap any loot in your <span data-spr=chest></span> BAG to Sell it for gold or Scrap it into materials — any time, no vendor needed. Use the <span data-spr=mat_scrap></span> Auto-Loot button on the LOOT tab to do it automatically by rarity on pickup.');
-log('<span data-spr=w_sword></span> Move freely in real time and auto-attack foes in reach — get surrounded and every foe piles on, so don\'t let them encircle you.');
-// Credit every terrain pack actually painting the world (registry-driven, so
-// attribution stays truthful automatically as packs are added — see
-// src/data/terrainPacks.js and docs/terrain-packs.md).
-for (const pack of terrainPacksInUse()) log(`🌍 Terrain tiles from "${pack.label}" by ${pack.credit} (${pack.license}).`);
-log('🌿 Decor (trees, plants, cacti, shells) from the "[LPC]" collections by bluecarrot16 & contributors (CC-BY-SA) — full credits in docs/asset-credits.md.');
 
 // PREVIEW ONLY — `?terrain=proc` swaps the dungeon ground to the procedural
 // terrain-pack renderer; add `&preview=1` to auto-drop into a dungeon floor so
