@@ -1870,6 +1870,28 @@
   .skillbar-btn.town-locked { opacity: 0.4; filter: grayscale(0.7); cursor: not-allowed; animation: none; }
   .skillbar-btn.town.town-locked:active { transform: none; background: var(--green-800); }
 
+  /* On touch devices the cast bar is your only way to fire spells/potions, so make
+     the buttons and their icons noticeably bigger for easier tapping. (Desktop has
+     its own larger sizing in the wide-layout media query above.) */
+  @media (pointer: coarse) {
+    /* Pull the whole bar in from the screen edges so the outermost tiles aren't
+       flush against the frame (easy to fat-finger past), and honour a notched
+       phone's side insets in landscape. */
+    #skill-bar { gap: 6px; padding-left: calc(14px + env(safe-area-inset-left)); padding-right: calc(14px + env(safe-area-inset-right)); }
+    /* Bigger tap targets — the touch tiles are the only way to fire spells/potions,
+       and the smaller size sometimes missed the tap. */
+    #skill-bar { --sb-size: calc(56px * var(--ui-scale,1)); }
+    /* skill slots share --sb-size; no per-variant min-width */
+    /* Icons fill the tile (base .sb-icon fill rules); only the empty-slot ＋ glyph
+       reads off font-size, bumped up for the larger touch tiles. */
+    #skill-bar .skillbar-btn .sb-icon { font-size: 2.2rem; }
+    #skill-bar .skillbar-btn .sb-icon.big { font-size: 3.2rem; }
+    #skill-bar .sb-pill { font-size: var(--fs-sub); }
+    #skill-bar .skillbar-btn .sb-info { font-size: 1.1rem; }
+    /* Lay the 4 skill slots out as a tidy 2x2 block, not 3-on-top-1-below. */
+    #skill-bar .sb-right { display: grid; grid-template-columns: repeat(2, auto); justify-content: flex-end; justify-items: end; gap: 5px; }
+  }
+
   /* SKILLS-tab loadout tray — the bank of slots you drag learned actives into. It
      sits above the skill tree so the source nodes and the slots are co-visible. */
   .sk-loadout { margin: 4px 0 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
