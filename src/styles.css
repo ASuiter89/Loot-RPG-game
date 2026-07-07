@@ -1595,6 +1595,10 @@
     50%     { box-shadow: 0 0 14px color-mix(in srgb, var(--gold) 90%, transparent); border-color: var(--xp); }
   }
   .skillbar-btn.disabled { background: var(--panel); border-color: var(--panel); color: var(--btn-off); }
+  /* Off cooldown but you can't pay the mana — desaturate + dim the icon so it
+     clearly reads as unusable, with a faint mana-blue edge naming the reason. */
+  .skillbar-btn.no-mana { border-color: color-mix(in srgb, var(--mp) 45%, var(--panel)); }
+  .skillbar-btn.no-mana .sb-icon { filter: grayscale(1) brightness(0.72); opacity: 0.4; }
   /* League-style cooldown dial: a faint grey radial sweep that covers the
      still-recharging fraction and clears as the skill readies, with a live
      countdown (whole seconds, then one decimal under 1s) centred on top. The
@@ -1870,6 +1874,28 @@
   .skillbar-btn.town-locked { opacity: 0.4; filter: grayscale(0.7); cursor: not-allowed; animation: none; }
   .skillbar-btn.town.town-locked:active { transform: none; background: var(--green-800); }
 
+  /* On touch devices the cast bar is your only way to fire spells/potions, so make
+     the buttons and their icons noticeably bigger for easier tapping. (Desktop has
+     its own larger sizing in the wide-layout media query above.) */
+  @media (pointer: coarse) {
+    /* Pull the whole bar in from the screen edges so the outermost tiles aren't
+       flush against the frame (easy to fat-finger past), and honour a notched
+       phone's side insets in landscape. */
+    #skill-bar { gap: 6px; padding-left: calc(14px + env(safe-area-inset-left)); padding-right: calc(14px + env(safe-area-inset-right)); }
+    /* Bigger tap targets — the touch tiles are the only way to fire spells/potions,
+       and the smaller size sometimes missed the tap. */
+    #skill-bar { --sb-size: calc(56px * var(--ui-scale,1)); }
+    /* skill slots share --sb-size; no per-variant min-width */
+    /* Icons fill the tile (base .sb-icon fill rules); only the empty-slot ＋ glyph
+       reads off font-size, bumped up for the larger touch tiles. */
+    #skill-bar .skillbar-btn .sb-icon { font-size: 2.2rem; }
+    #skill-bar .skillbar-btn .sb-icon.big { font-size: 3.2rem; }
+    #skill-bar .sb-pill { font-size: var(--fs-sub); }
+    #skill-bar .skillbar-btn .sb-info { font-size: 1.1rem; }
+    /* Lay the 4 skill slots out as a tidy 2x2 block, not 3-on-top-1-below. */
+    #skill-bar .sb-right { display: grid; grid-template-columns: repeat(2, auto); justify-content: flex-end; justify-items: end; gap: 5px; }
+  }
+
   /* SKILLS-tab loadout tray — the bank of slots you drag learned actives into. It
      sits above the skill tree so the source nodes and the slots are co-visible. */
   .sk-loadout { margin: 4px 0 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
@@ -2116,6 +2142,10 @@
   .lock-toggle-btn.on .dl-ic { opacity: 1; }
   /* Subtle gold edge on a locked loot row so it reads at a glance. */
   .loot-item.locked { border-left-color: var(--warn); }
+  /* Faint red wash on a row whose item can't be equipped (requirement unmet),
+     reinforcing the yellow lock button. */
+  .loot-item.cant-equip { background: color-mix(in srgb, var(--danger) 9%, transparent); }
+  .loot-item.cant-equip:hover { background: color-mix(in srgb, var(--danger) 15%, transparent); }
 
   /* Sell / scrap tray that drops under the selected loot row. Full row width, so
      it has room for both buttons even in the narrow 160px mobile drawer. */
@@ -2132,7 +2162,7 @@
   .loot-bulk-bar { display: flex; gap: 4px; margin: 0 2px 6px; }
   .loot-bulk-btn {
     flex: 1 1 0; min-width: 0; background: var(--panel); color: var(--purple-150);
-    font-size: 1.2rem; letter-spacing: 0.5px; padding: 6px 4px; border: 1px solid var(--border);
+    font-size: 1.2rem; letter-spacing: 0.5px; padding: 6px 4px; border: 1px solid var(--gold);
     border-radius: 5px; cursor: pointer; -webkit-tap-highlight-color: transparent;
     touch-action: manipulation; display: inline-flex; align-items: center;
     justify-content: center; gap: 4px;
@@ -4139,7 +4169,9 @@
     position: fixed; inset: 0; pointer-events: none; z-index: 300;
     opacity: 0; transition: opacity 0.1s ease;
   }
-  #screen-flash.active { opacity: 0.5; }
+  /* Peak flash strength, dialled down from a harsher 0.5 so the wash reads as a
+     gentle pulse; the SCREEN FLASH setting can suppress it entirely. */
+  #screen-flash.active { opacity: 0.3; }
 
   /* ── WEB / DESKTOP LAYOUT ──
      On keyboard + mouse devices with room to spare, rearrange the play area:

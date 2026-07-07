@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { footprintSealsPath, footprintInsideRoom } from '../../src/systems/decorPlacement.js';
+import { footprintSealsPath, footprintInsideRoom, isThroughCorridor } from '../../src/systems/decorPlacement.js';
 
 // footprintSealsPath answers "would walling off this footprint cut the floor in two?"
 // The grids below are ASCII maps: '#' = wall, '.' = open floor. We build an isWalkable
@@ -127,5 +127,65 @@ describe('footprintInsideRoom', () => {
     const many = [{ x: 0, y: 0, w: 3, h: 3 }, { x: 10, y: 10, w: 8, h: 8 }];
     expect(footprintInsideRoom([[12, 12], [13, 12]], many)).toBe(true); // fits the big room
     expect(footprintInsideRoom([[1, 1], [2, 1]], many)).toBe(false);    // tiny room has no room for a 2-wide interior span
+  });
+});
+
+// isThroughCorridor answers "is this a 1-wide straight hall a single impassable
+// object would FULLY plug?" — walkable on two OPPOSITE sides, blocked on the
+// perpendicular pair. This is the guard that keeps any impassable object (solid
+// decor/furniture AND shop NPCs) off a hallway even when a detour keeps the floor
+// connected — the "fully blocks a hallway" case a disconnection test can't catch.
+describe('isThroughCorridor', () => {
+  const at = (rows, x, y) => {
+    const { W, H, isWalkable } = grid(rows);
+    return isThroughCorridor(x, y, W, H, isWalkable);
+  };
+
+  it('flags a vertical 1-wide corridor tile (open N/S, walled E/W)', () => {
+    const rows = ['#####', '##.##', '##.##', '##.##', '#####'];
+    expect(at(rows, 2, 2)).toBe(true);
+  });
+
+  it('flags a horizontal 1-wide corridor tile (open E/W, walled N/S)', () => {
+    const rows = ['#####', '#####', '.....', '#####', '#####'];
+    expect(at(rows, 2, 2)).toBe(true);
+  });
+
+  it('does NOT flag a corner tile (open on two ADJACENT sides — you turn, not pass through)', () => {
+    // (2,2) opens up (N) and right (E): an L-bend, not a straight hall.
+    const rows = ['#####', '##.##', '##..#', '#####', '#####'];
+    expect(at(rows, 2, 2)).toBe(false);
+  });
+
+  it('does NOT flag a 2-wide corridor tile (the parallel lane stays open)', () => {
+    // Two-wide vertical hall: (2,2) is open N, S, and E (its lane-mate) → 3 open.
+    const rows = ['#####', '##..#', '##..#', '##..#', '#####'];
+    expect(at(rows, 2, 2)).toBe(false);
+  });
+
+  it('does NOT flag an open room tile (open on all four sides)', () => {
+    const rows = ['#####', '#...#', '#...#', '#...#', '#####'];
+    expect(at(rows, 2, 2)).toBe(false);
+  });
+
+  it('does NOT flag a dead-end tile (open on only one side)', () => {
+    // A 2-tall vertical pocket walled top and bottom; (1,2) opens only upward.
+    const rows = ['###', '#.#', '#.#', '###'];
+    expect(at(rows, 1, 2)).toBe(false);
+  });
+
+  it('treats out-of-bounds as blocked (an edge corridor tile still reads 1-wide)', () => {
+    // Column 0 is the map edge; (0,1) opens N/S along the edge, E is a wall.
+    const rows = ['.##', '.##', '.##'];
+    expect(at(rows, 0, 1)).toBe(true);
+  });
+
+  it('uses the injected walkability — a passable perpendicular neighbour means NOT 1-wide', () => {
+    // Same straight-hall shape, but the caller counts a lava/water side ('~') as
+    // walkable too, so (2,2) now has a third open side → no longer a plug point.
+    const rows = ['#####', '##.##', '#~.##', '##.##', '#####'];
+    const W = rows[0].length, H = rows.length;
+    const walk = (x, y) => x >= 0 && y >= 0 && x < W && y < H && (rows[y][x] === '.' || rows[y][x] === '~');
+    expect(isThroughCorridor(2, 2, W, H, walk)).toBe(false);
   });
 });

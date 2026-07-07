@@ -1,11 +1,16 @@
 // End-to-end smoke test for the "objects never block a path" map-build guarantee.
 // Boots the real game in Chromium (?preview=1 exposes the audit hooks) and:
 //   1) __pathBlockTest() — deterministically seals a 1-wide corridor with (a) solid
-//      decor and (b) a shop NPC, then proves clearObjectBlockedPaths() reopens it.
+//      decor and (b) a shop NPC, then proves clearObjectBlockedPaths() reopens it;
+//      plus a DETOUR case: an NPC parked in a 1-wide hall that a loop keeps
+//      connected (nothing stranded) must still be shoved off the corridor.
 //   2) A sweep over many REAL generated floors (natural mix + forced furniture-dense
-//      interiors); __connCheck() must report 0 object-walled-off tiles on EVERY one.
+//      interiors); on EVERY one __connCheck() must report 0 object-walled-off tiles
+//      AND __corridorPlugCheck() must report 0 impassable objects sitting in a
+//      1-wide through-corridor (a hall fully blocked even with a detour around it).
 // __connCheck floods the whole map treating solid decor/furniture AND the two shop
-// NPCs as walls, so bad:0 means nothing a floor-build placed can strand the hero.
+// NPCs as walls, so bad:0 means nothing a floor-build placed can strand the hero;
+// __corridorPlugCheck catches the detour case a disconnection flood can't see.
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -55,7 +60,8 @@ async function main() {
       && typeof window.__pathBlockTest === 'function'
       && typeof window.__previewFloor === 'function'
       && typeof window.__previewIndoor === 'function'
-      && typeof window.__decorPlugCheck === 'function', { timeout: 20000 });
+      && typeof window.__decorPlugCheck === 'function'
+      && typeof window.__corridorPlugCheck === 'function', { timeout: 20000 });
     await page.waitForTimeout(700);   // let the preview bootstrap settle onto a real floor
 
     // 1) Deterministic heal proof — a sealed corridor must be reopened, and the
@@ -76,13 +82,23 @@ async function main() {
         if (c.rightAfter !== true) failures.push(`terminal: right region still unreachable after repair (rightAfter=${c.rightAfter}) — terminal-stair strand not healed`);
         if (!c.freed) failures.push('terminal: sealing object was not cleared');
       }
+      if (c.kind === 'detour-npc') {
+        // NPC in a 1-wide hall that a loop keeps connected: nothing is stranded
+        // (connBefore=0), but the corridor IS plugged (plugBefore=1). The guarantee
+        // must relocate the NPC → plugAfter=0, and never disconnect the floor.
+        if (c.connBefore !== 0) failures.push(`detour-npc: floor should stay connected via the detour (connBefore=${c.connBefore}, expected 0)`);
+        if (!(c.plugBefore > 0)) failures.push(`detour-npc: corridor plug not detected before repair (plugBefore=${c.plugBefore}, expected >0)`);
+        if (c.plugAfter !== 0) failures.push(`detour-npc: NPC still plugs the 1-wide hall after repair (plugAfter=${c.plugAfter}, expected 0)`);
+        if (c.connAfter !== 0) failures.push(`detour-npc: repair disconnected the floor (connAfter=${c.connAfter}, expected 0)`);
+        if (!c.moved) failures.push('detour-npc: NPC was not relocated off the corridor');
+      }
     }
 
     // 2) Real-floor sweep — natural mix (varied depths) + forced furniture-dense
     //    interiors. Every floor must be fully walkable with objects in place.
     sweep = await page.evaluate(() => {
       const res = { floors: 0, worstBad: 0, badFloors: [], solidSeen: 0, npcSeen: 0, floorsWithSolids: 0, indoorSeen: 0,
-        indoorChecked: 0, plugOutside: 0, plugCorridor: 0, plugFloors: [] };
+        indoorChecked: 0, plugOutside: 0, plugCorridor: 0, plugFloors: [], corrPlugged: 0, corrFloors: [] };
       const check = (label, indoor) => {
         res.floors++;
         const cc = window.__connCheck();
@@ -91,6 +107,12 @@ async function main() {
         res.solidSeen += cc.furniture;
         res.npcSeen += cc.npcs;
         if (cc.solids > 0) res.floorsWithSolids++;
+        // EVERY floor (outdoor + indoor): no impassable object — solid decor/furniture
+        // OR a shop NPC — may sit in a 1-wide through-corridor, fully blocking that
+        // hall even when a detour keeps the floor connected (so __connCheck stays 0).
+        const cp = window.__corridorPlugCheck();
+        res.corrPlugged += cp.plugged;
+        if (cp.plugged > 0 && res.corrFloors.length < 6) res.corrFloors.push({ label, ...cp });
         // Interiors only: a wide solid piece (bed/table) must sit inside a room and
         // never straddle a through-corridor tile — the "bed in the hallway" bug.
         // (Outdoor caves aren't room-gated, so only assert this on built interiors.)
@@ -147,6 +169,10 @@ async function main() {
     if (churn.merchantMoved > 0) failures.push(`repair relocated a merchant on a clean floor (${churn.merchantMoved} floors) — false-positive strand`);
 
     if (sweep.worstBad !== 0) failures.push(`some floors had object-blocked paths (worstBad=${sweep.worstBad}) — ${JSON.stringify(sweep.badFloors)}`);
+    // The general guarantee: no impassable object (decor/furniture OR shop NPC) sits
+    // in a 1-wide through-corridor on ANY floor — the "fully blocks a hallway even
+    // with a detour" case a disconnection flood can't see. Asserted across the sweep.
+    if (sweep.corrPlugged !== 0) failures.push(`an impassable object plugged a 1-wide corridor (corrPlugged=${sweep.corrPlugged}) — ${JSON.stringify(sweep.corrFloors)}`);
     // A wide solid piece plugging a corridor/doorway (a bed in the hallway) — no
     // tile is stranded so __connCheck stays clean, so this is asserted separately.
     if (sweep.plugOutside !== 0 || sweep.plugCorridor !== 0) failures.push(`interior furniture plugged a passage (outsideRoom=${sweep.plugOutside}, throughCorridor=${sweep.plugCorridor}) — ${JSON.stringify(sweep.plugFloors)}`);
@@ -173,6 +199,7 @@ async function main() {
   }
   console.log('\npath-connectivity: PASS — no object ever blocks a path across',
     sweep.floors, 'floors (' + sweep.solidSeen, 'solid pieces,', sweep.indoorSeen, 'interiors);',
+    'no impassable object plugged a 1-wide corridor across all', sweep.floors, 'floors;',
     'no furniture plugged a corridor across', sweep.indoorChecked, 'inspected interiors');
 }
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -24,13 +24,14 @@ import { telegraphPhase, telegraphFill, telegraphDanger, stepTelegraph,
 import { offscreenArrows, tileOnScreen } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
 import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.js';
-import { footprintSealsPath, footprintInsideRoom } from '../systems/decorPlacement.js';
+import { footprintSealsPath, footprintInsideRoom, isThroughCorridor } from '../systems/decorPlacement.js';
 import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach.js';
 import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { restockCost } from '../systems/restockCost.js';
 import { isCritical } from '../systems/crit.js';
+import { favouredBases, armorWeight, rollFavouredBase } from '../systems/classLoot.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
 import { rollDamage, spreadRange } from '../systems/damageRoll.js';
@@ -78,6 +79,7 @@ import { CHANGELOG } from '../data/changelog.js';
 import { MUSIC_SECTIONS } from '../data/musicSections.js';
 import { bassSemi, voiceChord, voiceSpread } from '../systems/musicGroove.js';
 import { terrainPacksInUse } from '../data/terrainPacks.js';
+import { TRAP_THEME } from '../data/trapThemes.js';
 import { renderProcMap } from '../render/procTerrain.js';
 import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
 import { TOWN_W, TOWN_H, TOWN_SPAWN, TOWN_GATE, TOWN_PORTAL,
@@ -3189,6 +3191,13 @@ const BALANCE = {
   enemyDmgMult: 1,       // global × on every foe's damage
   enemyCountMult: 1,     // × on the regular foe count per floor (still capped at 40)
   hazardDmgMult: 1,      // × on trap / vent hazard damage
+  // Trap / hazard damage tuning (base + per-floor; lava/spikes also add a % of max
+  // HP so they stay a real bite as the pool grows). Arrow/fire are mitigated by
+  // defence before they land, so their raw values run higher than lava/spikes.
+  arrowBase: 16,   arrowPerFloor: 7,     // arrow-trap bolt (per hit, pre-mitigation)
+  ventBase: 11,    ventPerFloor: 3.2,    // fire vent (per 0.5s tick, pre-mitigation)
+  lavaBase: 7,     lavaPerFloor: 2.2,  lavaMaxHpFrac: 0.09,   // lava (per cell entered, raw)
+  spikeBase: 6,    spikePerFloor: 1.7, spikeMaxHpFrac: 0.06,  // spikes (per cell entered, raw)
   depthExp: 1.26,        // depthThreat exponent — how sharply deep floors pull ahead
   depthDiv: 8.5,         // depthThreat divisor — larger = gentler overall climb
   enemyHpPerFloor: 11,   // +max HP per floor of depth in the base-foe formula
@@ -4461,30 +4470,36 @@ const CLASSES = {
   warrior: {
     name: 'Warrior', icon: 'w_sword', color: '#e08a3c',
     blurb: 'A frontline bruiser — hits hardest of the melee, lightly armoured.',
+    lore: 'Forged in a hundred battles, the Warrior meets every foe head-on. Where others plan, they charge — trusting steel, muscle, and an unbreakable will.',
     passive: '+10% damage dealt · −10% damage taken',
     dmgAttrs: { primary: 'might', secondary: 'vitality' },
-    weapons: ['Sword','Axe','Mace','Spear','Scythe'],
+    // Loot lean (offhands = off-hand families, armor = light/heavy) tilts drops,
+    // the merchant and the gambler toward build-relevant bases. See rollBaseName.
+    weapons: ['Sword','Axe','Mace','Spear','Scythe'], offhands: ['shield'], armor: 'heavy',
   },
   rogue: {
     name: 'Rogue', icon: 'w_dagger', color: '#5ec27a',
     blurb: 'A nimble striker — the deadliest weapon hits, but fragile.',
+    lore: 'A shadow that moves between the torchlight, the Rogue kills before the enemy knows the fight has begun. Speed and a whispered blade are the only armour worth trusting.',
     passive: '+12% damage · crits & dodge that scale with level',
     dmgAttrs: { primary: 'agility', secondary: 'might' },
-    weapons: ['Dagger','Sword','Bow'],
+    weapons: ['Dagger','Sword','Bow'], offhands: ['ranged','dual'], armor: 'light',
   },
   mage: {
     name: 'Mage', icon: 'ic_orb', color: '#7d9bff',
     blurb: 'A glass-cannon caster — a deep mana pool and ranged fire.',
+    lore: 'Bound to the deep currents of magic, the Mage bends raw arcane force to will. Armour is traded away for command over fire, frost, and the spaces between — power that unravels the moment focus breaks.',
     passive: '+30% max MP · +15% spell power · −10% damage taken',
     dmgAttrs: { primary: 'spirit', secondary: 'luck' },
-    weapons: ['Staff','Dagger'],
+    weapons: ['Staff','Dagger'], offhands: ['caster'], armor: 'light',
   },
   templar: {
     name: 'Templar', icon: 'a_shield', color: '#e8c95a',
     blurb: 'A holy veil — the sturdiest hero, and mends its own wounds.',
+    lore: 'Sworn to a holy light, the Templar stands as the last wall between the innocent and the dark. Faith mends every wound as fast as the enemy can open it.',
     passive: '+20% max HP · −15% damage taken · stronger regen',
     dmgAttrs: { primary: 'vitality', secondary: 'spirit' },
-    weapons: ['Sword','Mace','Spear'],
+    weapons: ['Sword','Mace','Spear'], offhands: ['shield'], armor: 'heavy',
   },
 };
 const CLASS_KEYS = Object.keys(CLASSES);
@@ -5969,6 +5984,13 @@ const FLOOR_MODS = [
   // life-leech barely works here, so brute-forcing won't sustain you. The answer
   // is prep — a Mercy pact, burst skills, a healing bowl — not the same old loop.
   { id: 'warded',   name: 'Warded Halls',         dmgMult: 1.15, lootMult: 1.6, eliteBonus: 0.1,  desc: 'Foes are warded against life-draining — your lifesteal barely bites. Burst them down or come prepared.', hpMult: 1.3, lifestealMult: 0.35, prepHint: true },
+  // Trap-themed floors — one kind of trap owns the whole floor, packed in far
+  // denser than usual (see placeTraps / the spike scatter, which read `trapTheme`
+  // and the TRAP_THEME density table). Foes are ordinary; the hazard IS the
+  // theme, so the loot leans a little richer for threading it.
+  { id: 'spikefield', name: 'Spike Gauntlet',      dmgMult: 1,    lootMult: 1.4, eliteBonus: 0,    desc: 'Spikes bristle across the whole floor — pick every step.', trapTheme: 'spikes' },
+  { id: 'arrowhall',  name: 'Arrow Gallery',       dmgMult: 1,    lootMult: 1.4, eliteBonus: 0,    desc: 'Arrow traps line every hall — mind the firing lanes.', trapTheme: 'arrows' },
+  { id: 'ventworks',  name: 'The Vent Works',      dmgMult: 1,    lootMult: 1.4, eliteBonus: 0,    desc: 'Fire vents flare all across the floor — time your crossings.', trapTheme: 'fire' },
   // A deliberate wall: a floor that may simply be beyond you right now. Rich if
   // you can survive it, lethal if you can't — turn back and grind if you must.
   { id: 'nightmare',name: 'Nightmare Depths',     dmgMult: 1.7,  lootMult: 2.4, eliteBonus: 0.35, desc: 'Death itself stalks these halls. Turn back if you must.', hpMult: 1.45 },
@@ -6365,6 +6387,19 @@ try { if (localStorage.getItem(STAIRS_ARROW_KEY) === '0') showStairsArrow = fals
 const MONSTER_ARROWS_KEY = 'dungeonLoot_monsterArrows';
 let showMonsterArrows = true;
 try { if (localStorage.getItem(MONSTER_ARROWS_KEY) === '0') showMonsterArrows = false; } catch (e) {}
+// Optional camera shake on hits, crits, big casts and boss beats (see addShake /
+// shakeOffset). On by default, but its amplitude is globally dialled down by
+// SHAKE_SCALE so even the biggest beats stay gentle; toggle off for a dead-still
+// view. Saved across sessions.
+const SCREEN_SHAKE_KEY = 'dungeonLoot_screenShake';
+let showScreenShake = true;
+try { if (localStorage.getItem(SCREEN_SHAKE_KEY) === '0') showScreenShake = false; } catch (e) {}
+// Optional brief full-screen colour wash on crits, low HP and big events (see
+// screenFlash). On by default; its peak opacity lives in styles.css, dialled down
+// from its old harsher value. Toggle off to keep the view clear. Saved.
+const SCREEN_FLASH_KEY = 'dungeonLoot_screenFlash';
+let showScreenFlash = true;
+try { if (localStorage.getItem(SCREEN_FLASH_KEY) === '0') showScreenFlash = false; } catch (e) {}
 // Cap on how many monster arrows ride the edge at once — a swarm floor keeps only
 // the nearest few so the border never rings solid red (the minimap + FOES counter
 // stay the complete tally).
@@ -6934,6 +6969,7 @@ window.gameState = function gameState(radius) {
     tier: (typeof diffOf === 'function' && typeof DIFFS !== 'undefined') ? ((DIFFS[diffOf(dungeonLevel) - 1] || {}).name || null) : null,
     isBossFloor: dungeonLevel % 5 === 0,                                   // a guardian holds this floor
     island: (typeof floorIslandTheme !== 'undefined') && !!floorIslandTheme, // landmass ringed by impassable sea (~ tiles frame the map)
+    modifier: (typeof floorMod !== 'undefined' && floorMod && floorMod.name) ? floorMod.name : null, // active floor theme, e.g. "Spike Gauntlet" (null = a plain floor)
     floorCleared: (typeof floorCleared !== 'undefined') ? !!floorCleared : null,
     hostilesLeft: (typeof hostilesRemaining === 'function') ? hostilesRemaining() : live.length, // foes still sealing the stairs
     // Explicit exit coordinates + whether the down-stairs are still sealed.
@@ -7370,6 +7406,7 @@ window.gameGuide = function gameGuide(topic) {
       `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — a curse hits ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
       `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
+      `Loot LEANS to your class: drops, the merchant and the gambler favour build-relevant bases (~60%, the rest random) — a Mage sees more staves/wands, robes and tomes; a Warrior/Templar more of their melee weapons, plate and shields; a Rogue more daggers/bows, light armour and quivers. Off-favoured bases still turn up, and picking a slot at the gambler still leans the base within it.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
       `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
@@ -7391,6 +7428,7 @@ window.gameGuide = function gameGuide(topic) {
       `Lava and spikes hurt but never kill outright (HP clamps to 1), and the generator never forces you across one — route around them.`,
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
+      `TRAP-THEMED FLOORS: some floors (gameState().modifier "Spike Gauntlet" / "Arrow Gallery" / "The Vent Works") dedicate the whole floor to ONE trap kind, packed in far denser than usual — expect a field of spikes, a hall lined with arrow emitters, or clusters of fire vents. Loot runs a little richer to reward threading them; a walkable route through the spikes is always guaranteed.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `BOSS TELEGRAPHS (gameState().hazards.telegraphs) are a guardian's wind-up attacks — a floor indicator that fills, flashes, then detonates. Each carries its shape (disc = filled circle; ring = donut, lethal in the band between innerR and r but SAFE in the centre hole and beyond r; lane = beam between (x1,y1)-(x2,y2); cone = wedge of radius r opening ±halfAngle around facing), its centre (x,y)/geometry, seconds until it lands (secsToHit), and danger:true when it hurts. They are ALWAYS dodgeable by MOVING out of the zone before secsToHit hits 0 (for a ring, step past r or into the hole) — never an RNG dodge. Red = damage; cyan = a benign spawn marker. A tracking disc follows you early in its wind-up, then locks — keep moving and it lands where you were.`,
       `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, the exit is north, and four pillars give cover. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
@@ -8715,6 +8753,38 @@ function updateMonsterArrowsButton() {
   if (btn) btn.classList.toggle('on', showMonsterArrows);
 }
 
+// Flip camera shake on and off. Persisted; when off, shakeOffset() returns a zero
+// offset so no hit, crit, big cast or boss beat nudges the view.
+function toggleScreenShake() {
+  showScreenShake = !showScreenShake;
+  try { localStorage.setItem(SCREEN_SHAKE_KEY, showScreenShake ? '1' : '0'); } catch (e) {}
+  settingsChanged();
+  sfx('click');
+  updateScreenShakeButton();
+}
+function updateScreenShakeButton() {
+  const lbl = document.getElementById('screenshake-label');
+  if (lbl) lbl.textContent = showScreenShake ? 'SCREEN SHAKE: ON' : 'SCREEN SHAKE: OFF';
+  const btn = document.getElementById('screenshake-action');
+  if (btn) btn.classList.toggle('on', showScreenShake);
+}
+
+// Flip the full-screen colour flash on and off. Persisted; when off, screenFlash()
+// early-returns so crits, low HP and big events never wash the screen.
+function toggleScreenFlash() {
+  showScreenFlash = !showScreenFlash;
+  try { localStorage.setItem(SCREEN_FLASH_KEY, showScreenFlash ? '1' : '0'); } catch (e) {}
+  settingsChanged();
+  sfx('click');
+  updateScreenFlashButton();
+}
+function updateScreenFlashButton() {
+  const lbl = document.getElementById('screenflash-label');
+  if (lbl) lbl.textContent = showScreenFlash ? 'SCREEN FLASH: ON' : 'SCREEN FLASH: OFF';
+  const btn = document.getElementById('screenflash-action');
+  if (btn) btn.classList.toggle('on', showScreenFlash);
+}
+
 // Settings modal: a centred overlay holding sound, saves, Reset Run and options.
 // There's no on-screen button — it opens only with Esc (see handleEscape) and,
 // being an RT-blocking overlay, pausing the game while it's up. The scrim
@@ -9970,6 +10040,16 @@ function tileBlockedByObject(x, y) {
       || (mystic && mystic.x === x && mystic.y === y);
 }
 
+// Is (x, y) a 1-wide through-corridor — a straight hall a single impassable object
+// would FULLY plug even if a detour keeps the floor connected? Judged by what the
+// hero can walk THROUGH (isWalkThrough), so a passable perpendicular neighbour
+// means it isn't truly 1-wide. No impassable object may sit here: the shop-NPC
+// spawn guards reject such tiles, and clearCorridorPlugs() strips/relocates any
+// that slipped past. See isThroughCorridor for the definition.
+function onThroughCorridor(x, y) {
+  return isThroughCorridor(x, y, MAP_W, MAP_H, (nx, ny) => isWalkThrough(mapData[ny][nx]));
+}
+
 // Would parking an immovable blocker (a shop NPC) on this tile wall the player
 // out of part of the floor? True only when the tile is the lone pinch point
 // linking two open stretches — dead-ends and open rooms return false. A tile
@@ -10038,7 +10118,7 @@ function relocateBlockingNpc(npc) {
     const c = key.indexOf(','); const y = +key.slice(0, c), x = +key.slice(c + 1);
     if (mapData[y][x] !== 0) continue;                 // plain floor only
     if (x === player.x && y === player.y) continue;
-    if (getEnemyAt(x, y) || tileBlockedByObject(x, y) || isChokePoint(x, y)) continue;
+    if (getEnemyAt(x, y) || tileBlockedByObject(x, y) || isChokePoint(x, y) || onThroughCorridor(x, y)) continue;
     spot = { x, y }; break;
   }
   if (spot) { npc.x = spot.x; npc.y = spot.y; return; }
@@ -10056,6 +10136,29 @@ function clearBlockingObjectAt(x, y) {
   return false;
 }
 
+// PHASE 2 of the guarantee: no impassable object may SIT on a 1-wide through-
+// corridor tile — a straight hall it fully plugs even though a detour keeps the
+// floor connected. That's the "bed in the hallway" case #509 fixed for interior
+// furniture, generalised to EVERY impassable object (solid decor/furniture AND the
+// two shop NPCs) on EVERY floor (outdoor caves included, now that most carve 2-wide
+// with occasional 1-wide chokepoints). A disconnection flood can't see it (the tile
+// stays reachable via the detour), so it needs its own pass. Strip the decor piece
+// / shove the shop NPC off any such tile. The per-placement guards (obstacles need
+// >=3 open neighbours, so never a 1-wide tile; NPCs reject onThroughCorridor) keep
+// objects off these tiles in the first place, so on a clean floor this changes
+// nothing — the guarantee stays idempotent (no-churn).
+function clearCorridorPlugs() {
+  // Snapshot keys: removeDecorObjectAt deletes a whole piece's footprint as it goes.
+  for (const k of Object.keys(furnitureMap)) {
+    if (furnitureMap[k] === undefined) continue;        // already cleared with an earlier piece
+    const c = k.indexOf(','); const y = +k.slice(0, c), x = +k.slice(c + 1);
+    if (onThroughCorridor(x, y)) removeDecorObjectAt(x, y);
+  }
+  for (const npc of [merchant, mystic]) {
+    if (npc && npc.x >= 0 && onThroughCorridor(npc.x, npc.y)) relocateBlockingNpc(npc);
+  }
+}
+
 // ── OBJECTS NEVER BLOCK A PATH (final guarantee) ──
 // Run after EVERY stationary solid is placed (solid decor/furniture + the two shop
 // NPCs). Terrain foot-connectivity is already guaranteed (ensureFootConnected), so
@@ -10063,7 +10166,9 @@ function clearBlockingObjectAt(x, y) {
 // reopened by clearing that object — never by carving rock. The per-placement
 // guards (footprintSealsPath / isChokePoint, both object-aware) prevent nearly
 // every such seal; this is the belt-and-suspenders that makes a blocked floor
-// impossible and self-heals any case a local check missed.
+// impossible and self-heals any case a local check missed. Phase 1 reopens any
+// stretch an object walled OFF (disconnection); phase 2 (clearCorridorPlugs) frees
+// any object left sitting IN a 1-wide hall it fully plugs even with a detour.
 function clearObjectBlockedPaths() {
   const enter = (x, y) => isEnterable(mapData[y][x]);
   const through = (x, y) => isWalkThrough(mapData[y][x]);
@@ -10087,6 +10192,10 @@ function clearObjectBlockedPaths() {
     for (const [x, y] of path) { if (clearBlockingObjectAt(x, y)) cleared = true; }
     if (!cleared) break;                               // nothing removable on the lane — bail, don't loop
   }
+  // Phase 2 — free any object left sitting IN a 1-wide hall (blocks it even though
+  // phase 1's flood still reaches around it via a detour). Runs last so a relocated
+  // NPC lands on the now-final walkable map (relocateBlockingNpc avoids corridors).
+  clearCorridorPlugs();
 }
 
 // Pick a random plain-floor tile, optionally limited to a reachable set.
@@ -10110,13 +10219,25 @@ function placeTraps(reach) {
   traps = [];
   if (tutorialActive || inTown) return;
   const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
-  // Arrow traps — back to a wall, clear lane ahead. Only on some floors (used to
-  // be at least one on every floor, which got repetitive), and they ramp up
-  // slowly with depth.
-  let arrows = Math.random() < 0.4 ? Math.min(3, 1 + Math.floor(dungeonLevel / 6)) : 0, tries = 0;
-  while (arrows > 0 && tries++ < 600) {
+  // A trap-themed floor (see FLOOR_MODS) hands the whole floor to ONE trap kind:
+  // that kind is packed in dense, the others are held back so the theme reads.
+  const theme = floorMod.trapTheme;
+  const taken = (x, y) => traps.some(tr => tr.x === x && tr.y === y);
+  // Arrow traps — back to a wall, clear lane ahead. An "Arrow Gallery" floor
+  // bristles with them; a different trap theme yields the floor entirely;
+  // otherwise only some floors get a couple, ramping slowly with depth.
+  let arrows;
+  if (theme === 'arrows') arrows = rnd(TRAP_THEME.arrows.min, TRAP_THEME.arrows.max);
+  else if (theme) arrows = 0;
+  else arrows = Math.random() < 0.4 ? Math.min(3, 1 + Math.floor(dungeonLevel / 6)) : 0;
+  // A themed floor searches longer and relaxes the hallway preference sooner, so
+  // it can actually seat that many emitters even on a wall-sparse map.
+  const maxTries = theme === 'arrows' ? 2400 : 600;
+  const strictUntil = theme === 'arrows' ? Math.round(maxTries * 0.35) : 450;
+  let tries = 0;
+  while (arrows > 0 && tries++ < maxTries) {
     const c = randomFloorTile(reach);
-    if (!c || (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) < 6) continue;
+    if (!c || taken(c.x, c.y) || (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) < 6) continue;
     const d = pick(DIRS);
     if (tileAtCell(c.x - d[0], c.y - d[1]) !== 1) continue; // want a wall at its back
     const px = -d[1], py = d[0]; // perpendicular to the firing line
@@ -10134,19 +10255,21 @@ function placeTraps(reach) {
     // lane is mostly flanked by walls. Only late in the search do we accept an
     // open-room lane, so a wall-sparse floor still gets traps rather than none.
     const hallway = walled >= Math.min(lane, 3);
-    if (!hallway && tries < 450) continue;
-    traps.push({ kind: 'arrow', x: c.x, y: c.y, dx: d[0], dy: d[1], cd: Math.random() * 2, interval: rnd(18, 28) / 10, dmg: Math.round((10 + dungeonLevel * 4.5) * BALANCE.hazardDmgMult) });
+    if (!hallway && tries < strictUntil) continue;
+    traps.push({ kind: 'arrow', x: c.x, y: c.y, dx: d[0], dy: d[1], cd: Math.random() * 2, interval: rnd(18, 28) / 10, dmg: Math.round((BALANCE.arrowBase + dungeonLevel * BALANCE.arrowPerFloor) * BALANCE.hazardDmgMult) });
     arrows--;
   }
-  // Fire vents — a small cluster that flares in and out of life. Kept to a minority
-  // of floors so they're a hazard you notice, not a constant.
-  if (Math.random() < 0.22) {
-    const n = rnd(1, 3);
-    for (let i = 0; i < n; i++) {
-      const c = randomFloorTile(reach);
-      if (!c || (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) < 6) continue;
-      traps.push({ kind: 'fire', x: c.x, y: c.y, t: Math.random() * 3, period: rnd(26, 38) / 10, onFrac: 0.4, dmgCd: 0, dmg: Math.round((6 + dungeonLevel * 1.8) * BALANCE.hazardDmgMult) });
-    }
+  // Fire vents — a "Vent Works" floor is riddled with them; a different trap theme
+  // yields the floor; otherwise a minority of floors get a small cluster.
+  let vents;
+  if (theme === 'fire') vents = rnd(TRAP_THEME.fire.min, TRAP_THEME.fire.max);
+  else if (theme) vents = 0;
+  else vents = Math.random() < 0.22 ? rnd(1, 3) : 0;
+  for (let placed = 0, ft = 0; placed < vents && ft < vents * 40; ft++) {
+    const c = randomFloorTile(reach);
+    if (!c || taken(c.x, c.y) || (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) < 6) continue;
+    traps.push({ kind: 'fire', x: c.x, y: c.y, t: Math.random() * 3, period: rnd(26, 38) / 10, onFrac: 0.4, dmgCd: 0, dmg: Math.round((BALANCE.ventBase + dungeonLevel * BALANCE.ventPerFloor) * BALANCE.hazardDmgMult) });
+    placed++;
   }
 }
 
@@ -10527,6 +10650,7 @@ function tileReserved(x, y) {
   if (quest) {
     const q = quest;
     if (q.npc && q.npc.x === x && q.npc.y === y) return true;
+    if (q.entry && q.entry.x === x && q.entry.y === y) return true; // jailbreak: keep the smash approach clear
     if (q.spot && q.spot.x === x && q.spot.y === y) return true;
     if (q.item && q.item.x === x && q.item.y === y) return true;
     if (Array.isArray(q.markers) && q.markers.some(m => m.x === x && m.y === y)) return true;
@@ -10776,9 +10900,12 @@ function generateMap() {
       }
     }
   }
-  // ── SPIKE TRAPS (passable, stabs) ──
-  if (floorHazards.has('spikes')) {
-    const n = Math.max(2, Math.round(rnd(2, 5) * areaRatio)); // more on bigger floors so they aren't trap-sparse
+  // ── SPIKE TRAPS (passable, stabs) ── a "Spike Gauntlet" floor packs the whole
+  // map; otherwise only floors that rolled the spikes hazard get a light scatter.
+  const spikeTheme = floorMod.trapTheme === 'spikes';
+  if (spikeTheme || floorHazards.has('spikes')) {
+    const scatter = Math.max(2, Math.round(rnd(2, 5) * areaRatio)); // more on bigger floors so they aren't trap-sparse
+    const n = spikeTheme ? Math.min(TRAP_THEME.spikes.cap, scatter * TRAP_THEME.spikes.mult) : scatter;
     for (let i = 0; i < n; i++) { const c = randomFloorTile(reach); if (c) mapData[c.y][c.x] = 8; }
   }
   // With traps down, melt any that sit on the only route somewhere so the
@@ -11253,7 +11380,11 @@ function tryBuildCell(reach, who) {
       if (!sealed) continue;
       mapData[y][x] = 0;       // cell interior
       mapData[wy][wx] = 10;    // cracked wall — smash to break in
-      quest = { type: 'jailbreak', npc: { x, y, sprite: who.sprite, name: who.name }, done: false };
+      // (fx,fy) is the floor tile you must stand on to shove through the wall — the
+      // sole approach into the sealed cell. Record it so tileReserved keeps decor
+      // (and every other placed prop) off it; a cracked wall reads as unreachable
+      // wall to the path checks, so nothing else guards this tile from being blocked.
+      quest = { type: 'jailbreak', npc: { x, y, sprite: who.sprite, name: who.name }, entry: { x: fx, y: fy }, done: false };
       log(`<span data-spr=mat_scrap></span> ${who.name} is locked in a cell — smash through the cracked wall to free them!`, 'important');
       return true;
     }
@@ -11505,7 +11636,7 @@ function spawnMerchant(footReach) {
   do {
     mx = rnd(1, MAP_W-1); my = rnd(1, MAP_H-1); tries++;
   } while ((mapData[my][mx] !== 0 || (mx === player.x && my === player.y) || getEnemyAt(mx,my)
-            || isChokePoint(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
+            || isChokePoint(mx,my) || onThroughCorridor(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
   if (tries >= 100) return;
   // A full randomized stock of gamble-priced gear pieces — at least five, so the
   // wanderer is always worth the detour (a wider table than the town shop's).
@@ -11529,7 +11660,7 @@ function spawnMystic(footReach) {
     mx = rnd(1, MAP_W-1); my = rnd(1, MAP_H-1); tries++;
   } while ((mapData[my][mx] !== 0 || (mx === player.x && my === player.y) || getEnemyAt(mx,my)
             || (merchant && merchant.x === mx && merchant.y === my)
-            || isChokePoint(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
+            || isChokePoint(mx,my) || onThroughCorridor(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
   if (tries >= 100) return;
   mystic = { x: mx, y: my };
   log('<span data-spr=ic_orb></span> A hooded mystic beckons from the shadows...', 'important');
@@ -12842,7 +12973,7 @@ function openTownService(kind) {
 // Order here IS the on-screen order (the Dungeon Gate renders above this list).
 const TOWN_MENU = [
   { kind: 'healer',    name: 'Healer',      desc: 'Rest, cure & potions' },
-  { kind: 'merchant',       name: 'Merchant',    desc: 'Potions & fresh gear' },
+  { kind: 'merchant',  name: 'Merchant',    desc: 'Buy & sell fresh gear' },
   { kind: 'ramen',     name: 'Ramen House', desc: 'Cook toppings into buffs' },
   { kind: 'forge', name: 'Craftsman',   desc: 'Forge blank gear from mats',
     req: { ok: () => (player.level || 1) >= 5,          need: 'Reach level 5' } },
@@ -13618,18 +13749,17 @@ function renderForge() {
     ${baseHint}
     <div class="forge-label">Rarity <span style="opacity:.6">(stat + attr slots)</span></div>
     <div class="forge-grid forge-tiers">${tierBtns}</div>
-    <div class="shop-row" style="margin-top:10px">
+    <div class="shop-row has-actions" style="margin-top:10px">
       <span class="loot-icon">${iconMarkup(itemIcon(preview), tierColor(preview))}</span>
-      <div class="shop-row-info ${rarityClass(preview)}">
-        <div class="shop-row-name">${preview.name}${craftedMark(preview)}</div>
-        <div class="shop-row-stats">${itemStatLine(preview)} · ${caps.stat} stat / ${caps.attr} attr slots</div>
-        ${forgeReqLine}
+      <div class="shop-row-info">
+        <div class="${rarityClass(preview)}">
+          <div class="shop-row-name">${preview.name}${craftedMark(preview)}</div>
+          <div class="shop-row-stats">${itemStatLine(preview)} · ${caps.stat} stat / ${caps.attr} attr slots</div>
+          ${forgeReqLine}
+        </div>
+        <div class="shop-row-sub" style="margin-top:5px">${costLabelHi(cost)}</div>
+        <div class="shop-row-sub" style="color:var(--text-muted);font-style:italic">${craftCharacterNote(forgeSlot, forgeBase)}</div>
       </div>
-    </div>
-    <div class="shop-row has-actions">
-      <div class="shop-row-info"><div class="shop-row-name">Forge cost</div>
-        <div class="shop-row-sub">${costLabelHi(cost)}</div>
-        <div class="shop-row-sub" style="color:var(--text-muted);font-style:italic">${craftCharacterNote(forgeSlot, forgeBase)}</div></div>
       <button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="craftItem()"><span data-spr=ic_mallet></span> FORGE</button>
     </div>`;
   }
@@ -16035,22 +16165,22 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   return item;
 }
 
-// Pick the base item type for a slot. Every class can now wield every weapon, but
-// drops still lean toward the categories your class FAVOURS (CLASSES[*].weapons) so
-// most loot stays build-relevant — yet a healthy ~40% still rolls fully at random,
-// so off-favoured weapons you've invested the stat for turn up too. Other slots
-// (armour, jewelry) are wearable by everyone, so they just roll uniformly.
+// Pick the base item type for a slot. Every class can wield/wear every base, but
+// drops (and the merchant + gambler, which roll through here) lean toward the bases
+// your class FAVOURS so most loot stays build-relevant — while ~40% still rolls
+// fully at random, so off-favoured pieces you've invested a stat for turn up too.
+// The lean covers each build axis: weapons by CATEGORY (CLASSES[*].weapons), off-
+// hands by FAMILY (offhands → shield/caster/ranged/dual), and armour by WEIGHT
+// (armor → light robes vs heavy plate). Jewellery has no lean, so it rolls uniform.
+// The favoured-subset logic + biased pick live in systems/classLoot.js (tested).
 function rollBaseName(slot) {
   const names = SLOTS[slot].names;
-  if (slot === 'weapon') {
-    const cls = playerClass();
-    if (cls && cls.weapons && cls.weapons.length) {
-      // names are sub-types; the class affinity is by category, so resolve first.
-      const favoured = names.filter(n => cls.weapons.includes(weaponCategoryOf(n)));
-      if (favoured.length) return Math.random() < 0.6 ? pick(favoured) : pick(names);
-    }
-  }
-  return pick(names);
+  const favoured = favouredBases(slot, names, playerClass(), {
+    categoryOf: weaponCategoryOf,               // weapon sub-type → category
+    familyOf: n => (BASE_STATS[n] || {}).off,   // off-hand base → family
+    weightOf: n => armorWeight((BASE_STATS[n] || {}).def), // armour base → weight
+  });
+  return rollFavouredBase(names, favoured, Math.random);
 }
 
 function weighted(obj) {
@@ -18244,9 +18374,13 @@ function spawnParticles(x, y, color, n, speed) {
 // reused two-slot scratch array — draw() destructures it immediately and never
 // retains it, so recycling kills the per-frame allocation.
 const _shakeXY = [0, 0];
+// Global amplitude scale for ALL camera shake — dialled down so hits, crits and
+// even boss finishers nudge the view gently instead of jolting it. One knob keeps
+// every call site's relative weight; the SCREEN SHAKE setting can zero it entirely.
+const SHAKE_SCALE = 0.55;
 function shakeOffset() {
-  if (Date.now() >= shakeUntil || shakeMag <= 0) { shakeMag = 0; _shakeXY[0] = _shakeXY[1] = 0; return _shakeXY; }
-  const k = (shakeUntil - Date.now()) / 200, m = shakeMag * k;
+  if (!showScreenShake || Date.now() >= shakeUntil || shakeMag <= 0) { shakeMag = 0; _shakeXY[0] = _shakeXY[1] = 0; return _shakeXY; }
+  const k = (shakeUntil - Date.now()) / 200, m = shakeMag * k * SHAKE_SCALE;
   _shakeXY[0] = (Math.random() * 2 - 1) * m;
   _shakeXY[1] = (Math.random() * 2 - 1) * m;
   return _shakeXY;
@@ -19379,6 +19513,18 @@ function tickStatusEffects() {
           onEnemyDefeated(e);
         }
       }
+      if (pulse && s.effect === 'chill') {
+        // ICE's mark finally bites: a chilled foe takes a small, steady cold tick
+        // (frostbite). It's the smallest of the DoTs — ice already brings the
+        // strongest crowd-control — but it gives the ice kit the damage payoff
+        // fire (burn) and lightning (static) always had, on bosses too. No
+        // per-tick log line: chill is near-permanent and rides every ice hit, so
+        // logging each tick would flood the log — the floating number sells it.
+        const dmg = chillDmg();
+        e.hp -= dmg;
+        spawnFloatingText(e.x, e.y, `${dmg}`, '#9fdcff');
+        if (e.hp <= 0) { log(`<span data-spr=ic_ice></span> ${e.isBoss ? e.name : e.type} frozen through`, 'important'); onEnemyDefeated(e); }
+      }
     }
     s.secs -= WORLD_TICK_SECONDS;
     return s.secs > 0;
@@ -19391,11 +19537,13 @@ function tickStatusEffects() {
 //   • FIRE   — burns; a burning foe ignites its neighbours with a weak ember.
 //   • LIGHT. — builds STATIC; charged foes take bonus lightning damage, and the
 //              charge arcs to nearby foes so you can prime a whole pack.
-//   • ICE    — stacks CHILL that slows the foe; enough chill flash-freezes it.
+//   • ICE    — stacks CHILL that slows the foe AND ticks a little frostbite
+//              damage; enough chill flash-freezes it.
 // Damage that piggybacks on these is kept deliberately small so they reward
 // good positioning/combos without becoming a free damage steroid.
 function burnDmg()       { return 4 + Math.round(dungeonLevel * 1.5); }
 function burnSpreadDmg() { return 1 + Math.floor(dungeonLevel / 5); } // super low, can't snowball
+function chillDmg()      { return 2 + Math.round(dungeonLevel * 0.6); } // ice's frostbite tick — smallest DoT (ice trades raw damage for control)
 
 // Tag a spell's element from its icon / name (the data is stable and avoids
 // having to annotate every spell definition). Returns 'fire' | 'ice' | 'lightning' | null.
@@ -19598,6 +19746,7 @@ function tryPlayerStatusProc(e) {
 // Brief full-screen colour flash for crits, low HP, and big events.
 let flashTimer = null;
 function screenFlash(color) {
+  if (!showScreenFlash) return;
   const el = document.getElementById('screen-flash');
   if (!el) return;
   el.style.background = `radial-gradient(circle, transparent 30%, ${color} 100%)`;
@@ -20976,14 +21125,14 @@ function onEnterCell(nx, ny) {
   // Lava / spikes bite once per cell entered (never lethal on their own), exactly
   // as a turn-based step into them used to.
   if (tile === 7) {
-    const burn = Math.round(4 + dungeonLevel * 1.5 + player.maxHp * 0.05);
+    const burn = Math.round((BALANCE.lavaBase + dungeonLevel * BALANCE.lavaPerFloor + player.maxHp * BALANCE.lavaMaxHpFrac) * BALANCE.hazardDmgMult);
     const hpLost = takePlayerDamage(burn, 'lava', { lethal: false, isDoT: true });
     if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff7733');
     log(`<span data-spr=ic_fire></span> The lava scorches you for ${burn}!`, 'important');
     updateBars();
   }
   if (tile === 8) {
-    const stab = Math.round(3 + dungeonLevel + player.maxHp * 0.03);
+    const stab = Math.round((BALANCE.spikeBase + dungeonLevel * BALANCE.spikePerFloor + player.maxHp * BALANCE.spikeMaxHpFrac) * BALANCE.hazardDmgMult);
     const hpLost = takePlayerDamage(stab, 'spikes', { lethal: false });
     if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
     log(`🩸 Spikes stab you for ${stab}!`);
@@ -25675,6 +25824,9 @@ function renderPanel() {
     }
     el.innerHTML = lootHead + rows.map(({ item, i }) => {
       const equipable = !!item.slot;
+      // Attribute/off-hand requirement unmet — can't wield it. Flagged both by the
+      // yellow lock button and a faint red wash on the whole row.
+      const cantEquip = equipable && !canEquipItem(item);
       const slotName = item.slot ? SLOTS[item.slot].label : 'potion';
       // Compare this item's power to whatever currently fills its slot, so we can
       // flag upgrades and show the power swing (▲+5 / ▼-2).
@@ -25688,7 +25840,7 @@ function renderPanel() {
         ? `<div class='ht-name'><span data-spr=feat_door></span> Locked</div><div class='ht-line'>Safe from selling, scrapping &amp; auto-loot. Tap to unlock.</div>`
         : `<div class='ht-name'><span data-spr=feat_door></span> Unlocked</div><div class='ht-line'>Tap to lock — keeps it from being sold or scrapped.</div>`)}>${dlIcon('key', 20) || (item.locked ? '<span data-spr=feat_door></span>' : '<span data-spr=feat_door></span>')}</button>`;
       return `
-      <div class="loot-item ${rarityClass(item)} ${selectedItem===i?'selected':''} ${isUpgrade?'upgrade':''} ${item.locked?'locked':''}">
+      <div class="loot-item ${rarityClass(item)} ${selectedItem===i?'selected':''} ${isUpgrade?'upgrade':''} ${item.locked?'locked':''} ${cantEquip?'cant-equip':''}">
         <div class="loot-info" onclick="selectItem(${i}, this)"
              onmouseenter="showTooltip(event,${i})" onmouseleave="hideTooltip()">
           <div class="item-name">${curseMark(item)}${item.name}${craftedMark(item)}</div>
@@ -25697,7 +25849,7 @@ function renderPanel() {
         </div>
         ${lockBtn}
         ${equipable
-          ? (canEquipItem(item)
+          ? (!cantEquip
               ? `<button class="row-btn equip-row-btn ${isUpgrade?'upgrade-btn':''}" onclick="quickEquip(${i})">${equippedHere && isUpgrade?'SWAP':'EQUIP'}</button>`
               : `<button class="row-btn locked-row-btn" ${hoverTip(`<div class='ht-name'><span data-spr=feat_door></span> Can't Equip</div><div class='ht-line'>${equipLockReason(item)}</div>`)} onclick="quickEquip(${i})"><span data-spr=feat_door></span></button>`)
           : ''}
@@ -25813,15 +25965,9 @@ function renderHero(el) {
     <div class="hero-class" style="border-color:${cls.color}">
       <div class="hc-head"><span class="hc-icon">${dlIcon(cls.icon, 28)}</span>
         <span class="hc-name" style="color:${cls.color}">${cls.name}</span></div>
+      ${cls.lore ? `<div class="hc-line" style="opacity:0.75;font-style:italic">${cls.lore}</div>` : ''}
       <div class="hc-line">${cls.passive}</div>
       <div class="hc-line"><span data-spr=w_sword></span> Damage scales with <b>${ATTRIBUTES[dmgAttr].label}</b></div>
-      ${(() => { const pri = primarySkill(), sig = classSignature(player.class);
-        return pri ? `<div class="hc-line">${dlIcon(pri.icon,18)||''} <b>${pri.name}</b> — ${skillDescHtml(pri.node, skillRank(pri.id))} <span style="opacity:0.7">(${pri.mp} MP · ${'press ' + skillKeyLabel(1)})</span></div>`
-          : (sig ? `<div class="hc-line" style="opacity:0.8">Spend a skill point to learn ${dlIcon(sig.icon,16)||''} <b>${sig.name}</b> (SKILLS tab)</div>` : ''); })()}
-      ${ascData() ? `<div class="hc-line" style="color:${ascData().color}">${dlIcon(ascData().icon,18)||''} <b>${ascData().name}</b> — ${ascData().blurb}</div>`
-        : (cls && (player.level || 1) >= ASCEND_LEVEL ? `<div class="hc-line" style="color:var(--gold)"><span data-spr=mat_glimmer></span> Ready to ascend — visit the Trainer <span data-spr=town_trainer></span></div>` : '')}
-      <div class="hc-line" style="opacity:0.75">Favours: ${cls.weapons.join(', ')} <span style="opacity:0.7">· any weapon usable if you meet its stat</span></div>
-      <div class="hc-line" style="opacity:0.6">Change class · ascend at the town Trainer <span data-spr=town_trainer></span></div>
     </div>` : '';
   el.innerHTML = `
     <div class="hero-nameplate">${escapeHtml(player.name || 'Adventurer')}</div>
@@ -26757,11 +26903,15 @@ function renderSkillBar() {
     }
     const cd = skillCd(s.id);
     const ready = cd <= 0 && player.mp >= s.mp && player.hp > 0;
+    // Off cooldown but the mana bar is short — grey the icon so it reads as
+    // "can't afford this yet", distinct from the cooldown dial's "not yet".
+    const noMana = cd <= 0 && player.hp > 0 && player.mp < s.mp;
     // The cast hint names the slot's number key.
     const castHint = key ? ` · press ${key}` : '';
     const moveHint = 'drag to rearrange · drag a tree skill to swap';
-    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
-    return cell(sbPill('skill' + (i + 1)), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
+    const manaNote = noMana ? `<div class='ht-sub' style='color:var(--mp)'>Not enough mana</div>` : '';
+    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}${manaNote}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
+    return cell(sbPill('skill' + (i + 1)), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${noMana ? 'no-mana' : ''} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}',${i})" ondragend="skillDragEnd()" ${dropAttrs(i)} ${hoverTip(tip)} onclick="castSkillById('${s.id}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
     </button>`);
@@ -26782,8 +26932,10 @@ function renderSkillBar() {
     const s = autoS;
     const cd = skillCd(s.id);
     const ready = cd <= 0 && player.mp >= s.mp && player.hp > 0;
-    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}<div class='ht-sub' style='opacity:.7'>drag a skill here to change · tap to edit</div>`;
-    autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${cd > 0 ? 'cooling' : ''}" draggable="true"
+    const noMana = cd <= 0 && player.hp > 0 && player.mp < s.mp;
+    const manaNote = noMana ? `<div class='ht-sub' style='color:var(--mp)'>Not enough mana</div>` : '';
+    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}${manaNote}<div class='ht-sub' style='opacity:.7'>drag a skill here to change · tap to edit</div>`;
+    autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${noMana ? 'no-mana' : ''} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}','${AUTO_SLOT}')" ondragend="skillDragEnd()" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
     </button>`);
@@ -30842,6 +30994,8 @@ const SETTINGS_SYNC_KEYS = [
   'dungeonLoot_pathLine',     // click-to-move pathing line on/off
   'dungeonLoot_stairsArrow',  // off-screen stairs arrow on/off
   'dungeonLoot_monsterArrows',// off-screen monster arrows on/off
+  'dungeonLoot_screenShake',  // camera shake on/off
+  'dungeonLoot_screenFlash',  // full-screen colour flash on/off
   'dungeonLootMusic',         // music volume level (0–5)
   'dungeonLootSfx',           // sfx volume level (0–5)
   'dungeonLootTownAmb',       // town ambience on/off
@@ -32176,6 +32330,29 @@ try {
         const rightAfter = objFoot().has('3,4');
         out.cases.push({ kind: 'terminal', rightBefore, rightAfter, freed: furnitureMap['3,3'] === undefined });
       } catch (e) { out.cases.push({ kind: 'terminal', err: String(e) }); }
+      // Case 4 — a shop NPC standing on a 1-wide corridor that a DETOUR keeps
+      // connected. Two rooms joined by a top AND a bottom 1-wide corridor form a
+      // loop; an NPC on the top corridor (4,1) fully blocks that hall, yet every
+      // tile stays reachable via the bottom one — so __connCheck sees nothing
+      // (bad stays 0). The guarantee must still shove the NPC off the corridor.
+      try {
+        MAP_W = 9; MAP_H = 5;
+        mapData = [];
+        for (let y = 0; y < MAP_H; y++) { mapData[y] = []; for (let x = 0; x < MAP_W; x++) mapData[y][x] = 1; }
+        for (let x = 1; x <= 7; x++) { mapData[1][x] = 0; mapData[3][x] = 0; }      // top + bottom halls (join the rooms)
+        for (const x of [1, 2, 3, 5, 6, 7]) mapData[2][x] = 0;                       // room middles; (4,2) stays wall → a real loop
+        furnitureMap = {}; decorMap = {}; teleporters = {}; merchant = null; mystic = null;
+        floorSerial++; bumpMapEpoch(); pathGridDirty();
+        player.x = 2; player.y = 2;                                                  // left room
+        mystic = { x: 4, y: 1 };                                                     // top-corridor through-tile
+        const connBefore = window.__connCheck().bad;                                 // 0 — detour keeps it connected
+        const plugBefore = window.__corridorPlugCheck().plugged;                     // 1 — NPC in a 1-wide hall
+        clearObjectBlockedPaths();
+        const plugAfter = window.__corridorPlugCheck().plugged;
+        const connAfter = window.__connCheck().bad;
+        out.cases.push({ kind: 'detour-npc', connBefore, connAfter, plugBefore, plugAfter,
+          moved: !mystic || mystic.x !== 4 || mystic.y !== 1 });
+      } catch (e) { out.cases.push({ kind: 'detour-npc', err: String(e) }); }
       return out;
     };
     // __DECOR_PLUG_CHECK__ (preview only): a SOLID multi-tile piece (bed/table/
@@ -32189,10 +32366,7 @@ try {
       const isFloor = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && mapData[y][x] === 0;
       // A genuine 1-wide straight passage tile: open on two OPPOSITE sides, walled
       // on the other two (a corner is open on ADJACENT sides — not a through-tile).
-      const throughTile = (x, y) => {
-        const N = isFloor(x, y-1), S = isFloor(x, y+1), E = isFloor(x+1, y), W = isFloor(x-1, y);
-        return (N && S && !E && !W) || (E && W && !N && !S);
-      };
+      const throughTile = (x, y) => isThroughCorridor(x, y, MAP_W, MAP_H, isFloor);
       let outside = 0, corridor = 0; const detail = [];
       for (const k in decorMap) {
         const id = decorMap[k]; if (!DECOR_SOLID[id]) continue;
@@ -32206,6 +32380,27 @@ try {
         if ((!inRoom || onCorridor) && detail.length < 4) detail.push({ ax, ay, id, footLen: foot.length, inRoom, onCorridor });
       }
       return { outside, corridor, detail, decor: Object.keys(decorMap).length, solid: Object.keys(furnitureMap).length };
+    };
+    // __CORRIDOR_PLUG_CHECK__ (preview only): the GENERAL guarantee — NO impassable
+    // object (solid decor/furniture OR a shop NPC), single- or multi-tile, may sit
+    // on a 1-wide through-corridor tile, on ANY floor (outdoor caves included, not
+    // just built interiors). Such a tile fully blocks that hall even when a detour
+    // keeps the floor connected, so __connCheck (a disconnection flood) can't see
+    // it. Judged by what the hero walks THROUGH (isWalkThrough), so a passable
+    // perpendicular neighbour means the tile isn't really 1-wide. plugged:0 = clean.
+    window.__corridorPlugCheck = function () {
+      const walk = (x, y) => isWalkThrough(mapData[y][x]);
+      const onCorr = (x, y) => isThroughCorridor(x, y, MAP_W, MAP_H, walk);
+      let plugged = 0; const detail = [];
+      for (const k in furnitureMap) {
+        const c = k.indexOf(','); const y = +k.slice(0, c), x = +k.slice(c + 1);
+        if (onCorr(x, y)) { plugged++; if (detail.length < 4) detail.push({ x, y, kind: 'furniture' }); }
+      }
+      for (const [name, npc] of [['merchant', merchant], ['mystic', mystic]]) {
+        if (npc && npc.x >= 0 && onCorr(npc.x, npc.y)) { plugged++; if (detail.length < 4) detail.push({ x: npc.x, y: npc.y, kind: name }); }
+      }
+      const npcs = (merchant ? 1 : 0) + (mystic ? 1 : 0);
+      return { plugged, detail, objects: Object.keys(furnitureMap).length + npcs, furniture: Object.keys(furnitureMap).length, npcs };
     };
   }
 } catch (e) {}
@@ -32221,6 +32416,8 @@ updateCrosshairButton();
 updatePathLineButton();
 updateStairsArrowButton();
 updateMonsterArrowsButton();
+updateScreenShakeButton();
+updateScreenFlashButton();
 ['pointerdown', 'keydown'].forEach(ev =>
   window.addEventListener(ev, audioUnlock, { passive: true }));
 
@@ -35191,6 +35388,10 @@ const __DL_FN_BRIDGE = {
   updateStairsArrowButton,
   toggleMonsterArrows,
   updateMonsterArrowsButton,
+  toggleScreenShake,
+  updateScreenShakeButton,
+  toggleScreenFlash,
+  updateScreenFlashButton,
   toggleSettingsMenu,
   closeSettingsMenu,
   settingsToTitle,
@@ -35588,6 +35789,7 @@ const __DL_FN_BRIDGE = {
   tickStatusEffects,
   burnDmg,
   burnSpreadDmg,
+  chillDmg,
   spellElement,
   castVisual,
   spawnSpellBolt,
