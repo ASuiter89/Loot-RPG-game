@@ -10,6 +10,10 @@ export const CHANGELOG = [
   { date: "2026-07-06", size: "small", v: "Smoother combat — no more hitch when things die", by: "Andrew Suiter", notes: [
     "Killing enemies, grabbing loot and other quick actions no longer cause a brief stutter. The combat log and its icons now repaint far more efficiently, so busy fights stay smooth — with no change to how anything looks.",
   ] },
+  { date: "2026-07-06", size: "small", v: "Eight new electronic music styles + faster track changes", by: "Jeff Louie", notes: [
+    "Added eight new dance styles to the soundtrack — melodic dubstep, brostep, big room, future funk, electro-funk, French house, organic bass and piano house — roughly doubling the electronic vibes you can lock in from the music picker in Settings.",
+    "The soundtrack now drifts to a fresh style about every 90 seconds instead of every two minutes.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Reclaim your grave on a boss floor", by: "Claude", notes: [
     "Fixed lost bags being unrecoverable when you fell on a boss floor — the grave had nowhere to spawn in the arena. It now rests right beside the entrance stair, so you step onto it and reclaim everything the moment you return.",
   ] },

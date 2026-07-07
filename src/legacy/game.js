@@ -7999,8 +7999,8 @@ function setMusicVibe(v) {
     musicSectionEndTime = ctx.currentTime + SECTION_MIN;     // resume drifting before long
   }
 }
-const SECTION_MIN = 110;      // shortest a style holds before drifting (sec)
-const SECTION_MAX = 130;      // longest a style holds before drifting (sec) — ~2 min
+const SECTION_MIN = 80;       // shortest a style holds before drifting (sec)
+const SECTION_MAX = 100;      // longest a style holds before drifting (sec) — ~1.5 min
 const SECTION_FADE = 12;      // how long the crossfade between styles lasts (sec)
 const STEPS_PER_BAR = 8;      // eighth-notes per 4/4 bar
 const A2 = 110;               // reference pitch in Hz
