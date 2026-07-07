@@ -1,10 +1,9 @@
 // ── THE ASCENDANT WEAVE — board tuning (pure data) ───────────────────────────
 //
-// The Weave is an endgame CHOICE BOARD that boss points can be poured into, as a
-// second, INDEPENDENT drawer from the same earned pool the gear slots draw from
-// (see src/systems/bossSlots.js — spending here never depletes gear-slot points,
-// and vice-versa). Where the gear slots are a pure "more numbers" lever, the Weave
-// is about OPPORTUNITY COST and BUILD IDENTITY:
+// The Weave is an endgame CHOICE BOARD that boss points are poured into — the sole
+// spender of the earned boss-point pool (one point per boss floor first-cleared; see
+// src/systems/bossPoints.js). Rather than a pure "more numbers" lever, the Weave is
+// about OPPORTUNITY COST and BUILD IDENTITY:
 //
 //   • A compact, BOUNDED constellation board — five attribute-themed arms, three
 //     rings deep — where every node you light demands a point you can't get back
