@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Saved games load into a drawn world again", by: "Jeff Louie", notes: [
+    "Fixed a start-up crash that hit every hero with an existing save: pressing CONTINUE dropped you onto a pitch-black screen (music and menus still running) on desktop and mobile alike. Brand-new heroes were unaffected, which is how it slipped through — loading a save now builds and draws your floor exactly as before.",
+    "The Hall of Deeds ledger, silently skipped by the same start-up fault, loads again too.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Title screen buttons always work, even after a bad save load", by: "Andrew Suiter", notes: [
     "Fixed a rare start-up error that could leave the title screen — and the controller — completely unresponsive after loading a saved game. Start-up now always finishes wiring up the menu, so every button stays clickable and the game recovers to a usable title instead of freezing.",
   ] },
