@@ -27214,6 +27214,23 @@ function refitMapDuringSlide() {
 // preference it starts collapsed on mobile (where space is tight) and open on the
 // roomier desktop layout.
 const LOG_COLLAPSE_KEY = 'logCollapsed';
+// Pin the log to its TRUE bottom, robust to content-visibility height estimates.
+// While the log is collapsed (display:none on mobile) its lines never render, so
+// off-screen lines hold only the flat contain-intrinsic-size ESTIMATE, not a
+// remembered real height — and content-visibility won't grow scrollHeight to the
+// real total just by scrolling toward it, so a plain scrollTop=scrollHeight on
+// reopen lands well short of the newest line (dozens of lines with wrapped text).
+// Fix: the `.log-pinning` class momentarily overrides content-visibility to visible
+// so EVERY line lays out; reading scrollHeight then yields the exact total (and every
+// line now has a remembered real height). Drop the class right after so
+// content-visibility:auto resumes for the cheap per-combat reflows. This is a one-off
+// full layout, only on reopen (a deliberate tap) — never on the per-kill path.
+function _pinLogBottom(el) {
+  if (!el) return;
+  el.classList.add('log-pinning');
+  el.scrollTop = el.scrollHeight;   // scrollHeight is now exact (all lines rendered) → true bottom
+  el.classList.remove('log-pinning');
+}
 function setLogCollapsed(collapsed, persist = true) {
   const row = document.getElementById('bottom-row');
   if (row) row.classList.toggle('log-collapsed', collapsed);
@@ -27221,7 +27238,7 @@ function setLogCollapsed(collapsed, persist = true) {
   // log shrinks to a strip, the loot/bag drawer gets the reclaimed width).
   document.body.classList.toggle('log-collapsed', collapsed);
   const el = document.getElementById('log');
-  if (el && !collapsed) el.scrollTop = el.scrollHeight; // jump to newest on reopen
+  if (el && !collapsed) _pinLogBottom(el); // jump to newest on reopen (robust to content-visibility estimates)
   if (persist) { try { localStorage.setItem(LOG_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) {} settingsChanged(); }
   // Folding the log slides the map column open/closed on desktop — keep the canvas
   // backing buffer re-fit to the animating width so the map stays crisp, not

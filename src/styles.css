@@ -2639,6 +2639,11 @@
      lines. Skipped lines are off-screen, so their paint-containment clips nothing
      visible (and log-line icons carry no glow/drop-shadow anyway). */
   .log-line { color: var(--neutral-250); line-height: 1.55; content-visibility: auto; contain-intrinsic-size: auto 24px; }
+  /* Reopening the collapsed log momentarily adds .log-pinning so every line renders
+     (overriding content-visibility), letting the jump-to-newest pin read the true
+     scrollHeight — otherwise lines appended while collapsed (never rendered) keep a
+     flat estimate and the pin lands short of the newest line. See _pinLogBottom. */
+  #log.log-pinning .log-line { content-visibility: visible; }
   .log-line.important { color: var(--paper); }
   .log-line.loot { color: var(--green-500); }
 
