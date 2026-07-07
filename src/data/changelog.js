@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Map no longer blanks out while the bag or log slides", by: "Andrew Suiter", notes: [
+    "Fixed the play area going blank for a moment when you open or close the bag or combat log — the map now stays drawn and eases smoothly through the whole slide instead of vanishing and snapping back once it settles.",
+  ] },
   { date: "2026-07-06", size: "medium", v: "Locked vaults now open on 16 wildly different rooms", by: "Jeff Louie", notes: [
     "A found key no longer just reveals one chest — the door can open on a treasure hoard, an armory of gear, a coin trove, a hidden larder of food, a healing fountain, a blessing shrine, a guardroom of elite wardens, a swarm of weak foes, a lone champion, a spike- or lava-ringed prize, a raiders' cache — or a hidden staircase that plunges you two floors deep.",
     "The vault key on the floor now pulses and bobs so it's far easier to spot.",
