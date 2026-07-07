@@ -69,3 +69,32 @@ export function footprintInsideRoom(footprint, rooms) {
   return rooms.some((r) => footprint.every(
     ([x, y]) => x > r.x && x < r.x + r.w - 1 && y > r.y && y < r.y + r.h - 1));
 }
+
+// Is (x, y) a genuine 1-wide THROUGH-CORRIDOR tile — a straight hall that a single
+// impassable object would FULLY plug?
+//
+// True only when the tile is walkable on two OPPOSITE sides and blocked on the
+// other (perpendicular) pair: a hall you walk straight through, one tile wide. A
+// corner (walkable on two ADJACENT sides), a 2-wide corridor tile (walkable on 3
+// sides — the parallel lane stays open), a room tile (3–4) and a dead-end (1) are
+// all NOT through-corridors: an object on any of them still leaves a way past.
+//
+// This is the "bed in the hallway" case #509 fixed for interior furniture, stated
+// generally: an object here blocks that hall even when a longer detour keeps the
+// whole floor connected — so a plain disconnection/reachability test (which only
+// flags a tile it can no longer REACH) never catches it. Callers use it to keep any
+// impassable object (solid decor/furniture AND shop NPCs, indoor or outdoor) off
+// such tiles.
+//
+// Pure: the caller supplies `isWalkable(x, y)` → true for an in-bounds tile the hero
+// can walk through (so a passable perpendicular neighbour — water, a parallel lane —
+// correctly means the tile is not really 1-wide). Out-of-bounds reads as blocked.
+//
+//   x, y        the floor tile to classify
+//   W, H        map dimensions (bounds the neighbour reads)
+//   isWalkable  (x, y) → boolean
+export function isThroughCorridor(x, y, W, H, isWalkable) {
+  const open = (nx, ny) => nx >= 0 && ny >= 0 && nx < W && ny < H && isWalkable(nx, ny);
+  const N = open(x, y - 1), S = open(x, y + 1), E = open(x + 1, y), Wn = open(x - 1, y);
+  return (N && S && !E && !Wn) || (E && Wn && !N && !S);
+}
