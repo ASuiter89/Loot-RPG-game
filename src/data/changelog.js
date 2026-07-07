@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Cleaner, pinker skill tooltips", by: "Jeff Louie", notes: [
+    "Trimmed the Skill / Spell / Hybrid school blurb on a skill's detail card to one tight line — same info, far less text.",
+    "Rank-bonus surges on that card now light PINK once earned instead of green, so they stand apart from the card's other green readouts.",
+    "When your next rank in a skill crosses a rank-3/7/10 surge, its Learn button glows pink with circling wisps to flag the coming power spike.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Cleaner, easier-to-read item-compare card", by: "Jeff Louie", notes: [
     "Every stat now reads in the same bright colour — base stats keep a small \"base\" tag but no longer differ in colour.",
     "The Equipped side's label pops in gold, so a glance tells which piece you're already wearing.",
