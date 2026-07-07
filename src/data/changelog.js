@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Gear drops less often, so finds feel earned", by: "Jeff Louie", notes: [
+    "Trimmed how much gear foes drop across the board — ordinary kills now yield an item about a third less often, and elites and bosses spill a little less extra too (they still always leave at least one). Your bag fills slower and each find matters more; gold, materials, food and toppings are untouched.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Smoother combat — no more hitch when things die", by: "Andrew Suiter", notes: [
     "Killing enemies, grabbing loot and other quick actions no longer cause a brief stutter. The combat log and its icons now repaint far more efficiently, so busy fights stay smooth — with no change to how anything looks.",
   ] },
