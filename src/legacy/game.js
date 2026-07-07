@@ -8886,7 +8886,8 @@ function onViewportResize() {
   resizeCanvas(); if (inTown) syncTownBarReserve();
   // The belt width just changed, so the bounty module may have crossed its
   // container-query threshold — re-evaluate the map-corner chip's fallback visibility.
-  try { updateObjectiveChip(); } catch (_) {}
+  // force=true bypasses the per-kill throttle so this discrete change isn't dropped.
+  try { updateObjectiveChip(true); } catch (_) {}
   draw();
 }
 window.addEventListener('resize', onViewportResize);
@@ -12326,13 +12327,14 @@ function loadDaily() {
 let _objChipLast = null;
 // Whether the desktop belt is currently HOSTING the bounty readout is decided by a
 // CSS container query on the belt's width, so JS can only learn it by reading
-// offsetParent — a forced synchronous layout. That state changes only when the HUD
-// is re-laid-out (resize / ui-scale / touch toggle), never mid-fight, yet
-// updateObjectiveChip runs on every kill. So throttle the read: a burst of kills
-// reuses the last result instead of reflowing per kill, and it self-corrects within
-// a few hundred ms of any real layout change.
+// offsetParent — a forced synchronous layout. The belt width changes only on a
+// discrete event (window resize / log or panel collapse), never mid-fight, yet
+// updateObjectiveChip runs on every kill. So throttle the read on the hot path
+// (~2-3×/sec); the handful of handlers that actually change the belt width pass
+// updateObjectiveChip(true) to force an immediate fresh read, so a real layout
+// change is never left stale by the throttle.
 let _beltVisAt = -1e9, _beltShowsBounty = false, _beltBountyPresent = false;
-function updateObjectiveChip() {
+function updateObjectiveChip(force) {
   checkBountyComplete();   // one-shot "bounty complete" cue on the not-done → done edge
   const chip = document.getElementById('objective-chip');
   if (!chip) return;
@@ -12346,7 +12348,7 @@ function updateObjectiveChip() {
   // chip falls back here. offsetParent is null when the module is display:none or the
   // whole desktop HUD is hidden (touch/mobile), so the chip keeps showing there.
   const nowMs = performance.now();
-  if (nowMs - _beltVisAt > 400) {      // re-measure belt hosting at most ~2-3×/sec
+  if (force || nowMs - _beltVisAt > 400) {   // re-measure belt hosting at most ~2-3×/sec, or now if a caller forced it
     const beltBounty = document.querySelector('#hud-belt .sb-mod-bounty');
     _beltBountyPresent = !!beltBounty;
     _beltShowsBounty = !!(beltBounty && beltBounty.offsetParent !== null);   // forced reflow — now throttled
@@ -27226,8 +27228,9 @@ function setLogCollapsed(collapsed, persist = true) {
   // stretched, for the whole slide.
   refitMapDuringSlide();
   // The belt width slid, so the bounty module may have crossed its container-query
-  // threshold — re-check the map chip's fallback once the fold settles.
-  setTimeout(() => { try { updateObjectiveChip(); } catch (e) {} }, 360);
+  // threshold — re-check the map chip's fallback once the fold settles (force=true
+  // bypasses the per-kill throttle so this discrete change isn't dropped).
+  setTimeout(() => { try { updateObjectiveChip(true); } catch (e) {} }, 360);
 }
 function toggleLog() {
   const row = document.getElementById('bottom-row');
@@ -27256,8 +27259,9 @@ function setPanelCollapsed(collapsed, persist = true) {
   // re-fit the canvas backing buffer to the animating cell width each frame so the
   // map reveals MORE floor smoothly instead of stretching a stale buffer.
   refitMapDuringSlide();
-  // Belt width slid — re-check the bounty chip's fallback once the fold settles.
-  setTimeout(() => { try { updateObjectiveChip(); } catch (e) {} }, 360);
+  // Belt width slid — re-check the bounty chip's fallback once the fold settles
+  // (force=true bypasses the per-kill throttle so this discrete change isn't dropped).
+  setTimeout(() => { try { updateObjectiveChip(true); } catch (e) {} }, 360);
 }
 function togglePanelCollapse() {
   // On touch the drawer is a full-screen sheet, so the spine/close button just
