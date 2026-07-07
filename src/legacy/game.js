@@ -50,6 +50,7 @@ import { pointsEarned } from '../systems/bossPoints.js';
 import { resistFraction, penFraction, mitigate, physicalShare } from '../systems/defense.js';
 import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
+import { pickVaultRoom, findSealedRoom } from '../systems/vaultRooms.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
@@ -5976,7 +5977,10 @@ let tutorialActive = false;
 // Fleeing treasure goblins don't block the exit — they're a bonus chase. Every
 // other living foe (mobs, elites, bosses, quest hordes, mimics) counts.
 function hostilesRemaining() {
-  return (enemies || []).filter(e => !e.dead && !e.isGoblin).length;
+  // Vault foes (sealed behind a locked door) are an optional side-fight — like
+  // fleeing goblins, they never seal the stairs, so opening a combat vault is
+  // always a choice and never a forced fight just to descend.
+  return (enemies || []).filter(e => !e.dead && !e.isGoblin && !e.vaultFoe).length;
 }
 // Re-check after any kill (or floor setup). Once clear, announce and unseal.
 function updateFloorClear() {
@@ -6543,6 +6547,8 @@ let floorTint = null; // optional atmospheric colour overlay for the current flo
 let teleporters = {}; // "y,x" -> { x, y } partner pad for warp tiles
 let groundKey = null; // { x, y } of the vault key on this floor, if any
 let hasKey = false;   // whether the player is currently carrying a vault key
+let deepStair = null; // { x, y } of an express staircase inside a vault (drops 2 floors)
+let vaultInfo = null; // { kind, openMsg } of this floor's locked vault, for the reveal on unlock
 let startPos = { x: 5, y: 5 }; // this floor's safe entry tile (where death sends you)
 // How the player arrived on the floor about to be built: 'down' (descended, via
 // the gate, or a fresh load) or 'up' (climbed the stairs up from below). It
@@ -6683,6 +6689,7 @@ window.gameState = function gameState(radius) {
   // Real-time traps: arrow emitters ('A'); fire vents flaring NOW ('V') vs idle ('v').
   (typeof traps !== 'undefined' ? traps || [] : []).forEach(tr => put(tr.x, tr.y, tr.kind === 'arrow' ? 'A' : (tr.on ? 'V' : 'v')));
   if (typeof groundKey !== 'undefined' && groundKey) put(groundKey.x, groundKey.y, 'k');
+  if (typeof deepStair !== 'undefined' && deepStair) put(deepStair.x, deepStair.y, '»');
   (typeof groundFood !== 'undefined' ? groundFood || [] : []).forEach(f => put(f.x, f.y, '&'));
   if (typeof graveMarker !== 'undefined' && graveMarker) put(graveMarker.x, graveMarker.y, 'g');
   live.forEach(e => put(e.x, e.y, 'E'));
@@ -6882,7 +6889,9 @@ window.gameState = function gameState(radius) {
     floorCleared: (typeof floorCleared !== 'undefined') ? !!floorCleared : null,
     hostilesLeft: (typeof hostilesRemaining === 'function') ? hostilesRemaining() : live.length, // foes still sealing the stairs
     // Explicit exit coordinates + whether the down-stairs are still sealed.
-    stairs: { down: stairsDown, up: stairsUp, locked: (typeof floorCleared !== 'undefined') ? !floorCleared : null },
+    stairs: { down: stairsDown, up: stairsUp, locked: (typeof floorCleared !== 'undefined') ? !floorCleared : null,
+      express: (typeof deepStair !== 'undefined') ? deepStair : null }, // a vault's two-floor express stair, if opened
+
     player: {
       x: player.x, y: player.y, facing: player.facing, faceDir: player.faceDir, // facing: left/right (aim); faceDir: 4-way walk facing
       name: player.name, sex: player.sex,                                        // sex drives the hero sprite (Warrior has male/female art)
@@ -7158,7 +7167,7 @@ window.gameState = function gameState(radius) {
       cycle: egSafe(egCycleGameStateBlock),     // seasonal phase, enrollment, journey checklist, countdown
       deeds: egSafe(egDeedsGameStateBlock),     // Renown rank + total, deeds completed/total, equipped title
     },
-    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
+    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · » vault express stair (drops 2 floors) · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
     map: rows.join('\n'),
@@ -7308,7 +7317,7 @@ window.gameGuide = function gameGuide(topic) {
       `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" (tier being any rarity or "set") then call saveGame().`,
     ],
     hazards: [
-      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (shove into it from any side; a few hits to break), o teleporter, * shrine, f fountain, > stairs down, < stairs up, N quest npc, Q quest objective, R rainbow conquest gate.`,
+      `Map glyphs: # wall (solid), . floor, ~ deep water (impassable to walk, but you see & shoot over it), ^ lava (walkable, burns), " spikes (walkable, stab), + locked vault door, % cracked wall (shove into it from any side; a few hits to break), o teleporter, * shrine, f fountain, > stairs down, » vault express stair (drops 2 floors), < stairs up, N quest npc, Q quest objective, R rainbow conquest gate.`,
       `Lava and spikes hurt but never kill outright (HP clamps to 1), and the generator never forces you across one — route around them.`,
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
@@ -7319,7 +7328,7 @@ window.gameGuide = function gameGuide(topic) {
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom restores 50% of max HP and refills MP to full, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one plays a short walk-through-portal animation — the portal swallows you, the camera pans across to the partner pad, and you step out there (~0.9s, world frozen, unhittable; gameState().transit reads 'warp'). It also clears any click-to-move route, so you won't auto-walk back toward the pad you clicked. Use it deliberately, not while fleeing.`,
-      `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground; carryingKey true once held) and seal a rich vault chest.`,
+      `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground — it glows and bobs; carryingKey true once held). Shove into the door while carrying the key to unlock it. What's behind varies wildly: a rich chest or hoard, an armory of gear, coins, food, a healing fountain, a blessing shrine, a room of elite guards or a swarm of weak foes, a champion, a spike- or lava-ringed prize — or an express staircase (») that plunges you two floors deeper. Vault foes are optional: they NEVER seal the stairs, so opening a combat vault is always your choice.`,
       `CURSED FLOOR (the "greed" gate): rarely, on descending to a non-boss floor from depth 3+, a WORLD-PAUSING prompt offers to brave the floor for DOUBLED loot & gold at the cost of tougher non-boss foes (more HP and damage). Movement freezes until you choose — gameState().greed.pending is true, mode is 'greed' and blockingOverlay is 'greed-overlay'; call acceptGreed() to take it (gameState().greed.active then reads true, mult 2) or declineGreed() to skip.`,
     ],
     enemies: [
@@ -10242,9 +10251,38 @@ function growCluster(seed, size) {
   return out;
 }
 
-// Carve a sealed treasure vault out of solid rock, reachable only through a
-// locked door — and scatter its key somewhere on the floor.
+// Carve a locked vault out of solid rock and stock it with one of many themed
+// rooms (a treasure trove, a guardroom of elites, a swarming nest, a healing
+// spring, an express stair two floors down…). The door stays sealed until the
+// hero finds this floor's scattered key, so opening it is a real "what's inside?"
+// moment. Falls back to the classic single-chest cell when the rock won't fit a
+// bigger room. Vault flavour + the sealed-room geometry live in systems/vaultRooms.
 function tryBuildVault(reach) {
+  const isReach = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H &&
+    mapData[y][x] === 0 && (!reach || reach.has(y + ',' + x));
+  // Only dangle the two-floor express stair when there's actually room below it.
+  const deepOK = isEndless() || (!isLastFiniteFloor() && displayFloor() <= FLOORS_PER_DIFF - 2);
+  const variant = pickVaultRoom(Math.random, { deepOK });
+  // Try the flavour's preferred room, shrinking a little if the rock won't fit it.
+  let place = null;
+  for (const [w, h] of [[variant.w, variant.h], [3, 3], [2, 2]]) {
+    place = findSealedRoom(mapData, isReach, w, h, Math.random);
+    if (place) break;
+  }
+  if (!place) return tryBuildTreasureCell(reach);   // no room even for a 2×2 → classic vault
+  for (const c of place.cells) mapData[c.y][c.x] = 0;   // hollow out the room
+  mapData[place.door.y][place.door.x] = 11;             // seal it behind a locked door
+  populateVault(variant, place);
+  const k = randomFloorTile(reach);
+  if (k) groundKey = { x: k.x, y: k.y };
+  vaultInfo = { kind: variant.kind, openMsg: variant.openMsg };
+  log('<span data-spr=ic_key></span> A locked vault hides on this floor — find its key!', 'important');
+  return true;
+}
+
+// The original single-tile treasure vault — the fallback when a larger themed room
+// can't be seated in the available rock.
+function tryBuildTreasureCell(reach) {
   for (let tries = 0; tries < 150; tries++) {
     const x = rnd(2, MAP_W-3), y = rnd(2, MAP_H-3);
     if (mapData[y][x] !== 1) continue;               // vault interior must be rock
@@ -10266,14 +10304,132 @@ function tryBuildVault(reach) {
       if (!sealed) continue;
       mapData[y][x] = 0;                             // hollow out the vault
       mapData[wy][wx] = 11;                          // locked door
-      groundItems.push({ x, y, luck: 6 });          // guaranteed rich chest inside
+      groundItems.push({ x, y, luck: 6, ilvl: dungeonLevel + 1 }); // guaranteed rich chest inside
       const k = randomFloorTile(reach);
       if (k) groundKey = { x: k.x, y: k.y };
+      vaultInfo = { kind: 'treasure', openMsg: 'A treasure vault — a fat chest waits inside!' };
       log('<span data-spr=ic_key></span> A locked vault hides on this floor — find its key!', 'important');
       return true;
     }
   }
   return false;
+}
+
+// Stock a freshly-carved vault room with its themed contents. Cells are ordered so
+// the deepest tiles (farthest from the door) fill first, keeping the doorway clear;
+// vault foes are flagged `vaultFoe` so they NEVER seal the floor's stairs (opening a
+// combat vault is always the hero's optional choice, not a forced fight to descend).
+function populateVault(variant, place) {
+  const door = place.door;
+  const cells = place.cells.slice().sort((a, b) =>
+    (Math.abs(b.x - door.x) + Math.abs(b.y - door.y)) - (Math.abs(a.x - door.x) + Math.abs(a.y - door.y)));
+  const back = cells[0];                          // deepest tile — the natural "prize" spot
+  const entry = cells[cells.length - 1];          // tile just inside the door (kept foe-free)
+  const interior = cells.filter(c => !(c.x === entry.x && c.y === entry.y));
+  const il = dungeonLevel + 1;
+  const even = (c) => (c.x + c.y) % 2 === 0;       // checkerboard so you can weave between fills
+  const chest = (c, luck, extra = {}) => { if (c) groundItems.push({ x: c.x, y: c.y, luck, ilvl: il, ...extra }); };
+  const gold = (c) => { if (c) groundGold.push({ x: c.x, y: c.y, amount: rnd(18, 45) + dungeonLevel * 5 }); };
+  const food = (c) => { if (c) groundFood.push({ x: c.x, y: c.y, ...pick(FOODS) }); };
+  const foe = (c, hpM, dmgM, elite) => {
+    if (!c) return null;
+    const e = makeQuestFoe(c.x, c.y);
+    e.hp = e.maxHp = Math.max(1, Math.round(e.hp * hpM));
+    e.dmg = Math.max(1, Math.round(e.dmg * dmgM));
+    e.vaultFoe = true;                             // optional side-fight — never seals the stairs
+    if (elite) { e.isElite = true; e.name = pick(ELITE_NAMES); }
+    enemies.push(e);
+    return e;
+  };
+  switch (variant.kind) {
+    case 'hoard': {
+      let n = 0;
+      for (const c of interior) { if (even(c)) { chest(c, 3); if (++n >= 8) break; } }
+      if (!n) chest(back, 6);
+      break;
+    }
+    case 'gold': {
+      let n = 0;
+      for (const c of interior) { if (even(c)) { gold(c); if (++n >= 5) break; } }
+      chest(back, 5);
+      break;
+    }
+    case 'feast': {
+      let n = 0;
+      for (const c of interior) { if (even(c)) { food(c); if (++n >= 5) break; } }
+      chest(back, 3);
+      break;
+    }
+    case 'fountain':
+      mapData[back.y][back.x] = 3; hasFountain = true;
+      break;
+    case 'oasis':
+      mapData[back.y][back.x] = 3; hasFountain = true; chest(interior[1], 5);
+      break;
+    case 'shrine':
+      mapData[back.y][back.x] = 5; shrineData[back.y + ',' + back.x] = { kind: pick(SHRINE_KINDS) };
+      break;
+    case 'armory': {
+      let n = 0;
+      for (const c of interior) { if (even(c)) { chest(c, 5, { gear: true }); if (++n >= 3) break; } }
+      if (!n) chest(back, 5, { gear: true });
+      break;
+    }
+    case 'elites': {
+      const g = Math.max(1, Math.min(rnd(2, 4), interior.length));
+      for (let i = 0; i < g; i++) foe(interior[i], 1.7, 1.4, true);
+      chest(back, 6);
+      break;
+    }
+    case 'swarm': {
+      const want = Math.min(interior.length, rnd(10, 16));
+      for (let i = 0; i < want; i++) foe(interior[i], 0.45, 0.7, false);
+      chest(back, 4);
+      break;
+    }
+    case 'champion': {
+      foe(back, 2.6, 1.7, true);
+      chest(back, 8);
+      break;
+    }
+    case 'menagerie': {
+      const el = Math.min(rnd(1, 2), interior.length);
+      let i = 0;
+      for (; i < el; i++) foe(interior[i], 1.6, 1.35, true);
+      const sw = Math.min(interior.length - i, rnd(4, 6));
+      for (let j = 0; j < sw; j++) foe(interior[i + j], 0.5, 0.7, false);
+      chest(back, 6);
+      break;
+    }
+    case 'gauntlet':
+    case 'firepit': {
+      const haz = variant.kind === 'firepit' ? 7 : 8;   // lava vs spikes ring
+      if (place.w >= 3 && place.h >= 3) {
+        const mid = { x: place.rx + (place.w >> 1), y: place.ry + (place.h >> 1) };
+        for (const c of place.cells) { if (c.x !== mid.x || c.y !== mid.y) mapData[c.y][c.x] = haz; }
+        chest(mid, 6);
+      } else {
+        chest(back, 6);   // too small to ring — just the prize
+      }
+      break;
+    }
+    case 'warcamp': {
+      const g = Math.max(1, Math.min(rnd(2, 3), interior.length));
+      for (let i = 0; i < g; i++) foe(interior[i], 1.6, 1.35, true);
+      for (const c of interior.slice(g)) if (even(c)) gold(c);   // their plundered coin
+      food(interior[g]);
+      chest(back, 6);
+      break;
+    }
+    case 'deepstair':
+      deepStair = { x: back.x, y: back.y };
+      chest(interior[1], 4);   // a small parting gift beside the stair
+      break;
+    case 'treasure':
+    default:
+      chest(back, 6);
+      break;
+  }
 }
 
 // Place themed furniture across an indoor floor's open tiles (SOLID room dressing
@@ -10283,6 +10439,7 @@ function tryBuildVault(reach) {
 // solid furniture is never dropped on top of something you need to reach.
 function tileReserved(x, y) {
   if (groundKey && groundKey.x === x && groundKey.y === y) return true;
+  if (deepStair && deepStair.x === x && deepStair.y === y) return true;
   if (graveMarker && graveMarker.x === x && graveMarker.y === y) return true;
   if (merchant && merchant.x === x && merchant.y === y) return true;
   if (mystic && mystic.x === x && mystic.y === y) return true;
@@ -10363,6 +10520,7 @@ function generateMap() {
   teleporters = {};
   groundKey = null;
   hasKey = false;
+  deepStair = null; vaultInfo = null;
   quest = null;
   bossHazards = []; bossTelegraphs = [];
 
@@ -10823,7 +10981,7 @@ function buildBossArena() {
   // ── Floor-scoped resets ── a boss floor carries none of the usual clutter.
   merchant = null; mystic = null;
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null;
-  shrineData = {}; hasFountain = false; groundKey = null; hasKey = false;
+  shrineData = {}; hasFountain = false; groundKey = null; hasKey = false; deepStair = null; vaultInfo = null;
   quest = null; teleporters = {}; nextDiffPortal = null; floorRooms = [];
   bossHazards = []; bossTelegraphs = []; projectiles = []; clearAttackFx();
   floorThemeOverride = null;      // a bare stone arena, not a themed interior
@@ -10876,7 +11034,7 @@ function buildTutorialMap() {
   enemies = []; merchant = null; mystic = null; minions = []; combatBuffs = {};
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null;
   quest = null; teleporters = {}; shrineData = {}; bossHazards = []; bossTelegraphs = [];
-  hasFountain = false; groundKey = null; hasKey = false;
+  hasFountain = false; groundKey = null; hasKey = false; deepStair = null; vaultInfo = null;
   floorMod = FLOOR_MODS[0]; floorTint = null;
   floatingTexts = [];
   statusEffects = (statusEffects || []).filter(s => s.target === 'player');
@@ -11841,7 +11999,7 @@ function captureHeldFloor() {
     MAP_W, MAP_H,
     mapData, wallCracks, furnitureMap, decorMap, teleporters, shrineData,
     floorThemeOverride, floorTint, floorMod, floorRooms, floorMobSpec,
-    hasFountain, groundKey, hasKey, startPos,
+    hasFountain, groundKey, hasKey, deepStair, vaultInfo, startPos,
     dungeonLevel, floorCleared, floorGreed,
     enemies, minions, merchant, mystic, quest,
     groundItems, groundFood, groundGold, graveMarker, nextDiffPortal,
@@ -11875,6 +12033,7 @@ function returnToHeldFloor() {
   floorThemeOverride = h.floorThemeOverride; floorTint = h.floorTint;
   floorMod = h.floorMod; floorRooms = h.floorRooms; floorMobSpec = h.floorMobSpec;
   hasFountain = h.hasFountain; groundKey = h.groundKey; hasKey = h.hasKey;
+  deepStair = h.deepStair; vaultInfo = h.vaultInfo;
   startPos = h.startPos; dungeonLevel = h.dungeonLevel; floorCleared = h.floorCleared;
   floorGreed = h.floorGreed;   // greed buffs foes IN PLACE on the enemy objects we restore, so restore the multiplier too or the doubled loot/gold silently vanishes while the buffed roster stays
   enemies = h.enemies; minions = h.minions; merchant = h.merchant; mystic = h.mystic;
@@ -11951,7 +12110,7 @@ function buildTown() {
   floorThemeOverride = null; floorIslandTheme = null; furnitureMap = {}; decorMap = {}; // town is never an indoor/island floor
   townShopStock = null; townRestocks = 0; // fresh merchant wares + reset restock surcharge each town visit
   traps = []; projectiles = []; bossHazards = []; bossTelegraphs = []; clearAttackFx(); // real-time hazards / fx never linger into town
-  hasFountain = false; groundKey = null; hasKey = false;
+  hasFountain = false; groundKey = null; hasKey = false; deepStair = null; vaultInfo = null;
   floorMod = FLOOR_MODS[0]; floorTint = 'rgba(120,90,40,0.10)';
   statusEffects = statusEffects.filter(s => s.target === 'player');
 
@@ -17005,11 +17164,33 @@ function draw() {
     if (spriteReady) drawSpriteC('coins', px + tw/2, py + th/2, itemSpritePx(tw));
   });
 
-  // Vault key — glints on the floor until grabbed.
+  // Vault key — pulses a warm gold glow and bobs gently so it catches the eye
+  // across the floor (a layered halo + brighter core, the merchant-glow style).
   if (groundKey) {
-    const px = offX + groundKey.x * tw, py = offY + groundKey.y * th;
-    glowUnder(px + tw/2, py + th/2, tw * 0.52, 'rgba(255,224,102,0.45)');
-    if (spriteReady) drawSpriteC('key', px + tw/2, py + th/2, itemSpritePx(tw));
+    const gcx = offX + groundKey.x * tw + tw/2, gcy = offY + groundKey.y * th + th/2;
+    const pulse = 0.5 + 0.5 * Math.sin((animNow() % 1400) / 1400 * Math.PI * 2);
+    glowUnder(gcx, gcy, tw * (0.58 + 0.18 * pulse), `rgba(255,214,90,${0.30 + 0.26 * pulse})`);
+    glowUnder(gcx, gcy, tw * (0.34 + 0.08 * pulse), `rgba(255,238,150,${0.42 + 0.30 * pulse})`);
+    if (spriteReady) drawSpriteC('key', gcx, gcy - pulse * th * 0.06, itemSpritePx(tw));
+  }
+
+  // Express staircase inside an opened vault — a pixel down-stair ringed by a
+  // pulsing violet glow so it reads apart from the normal (gold-ringed) descent.
+  if (deepStair) {
+    const px = offX + deepStair.x * tw, py = offY + deepStair.y * th;
+    const pulse = 0.5 + 0.5 * Math.sin((animNow() % 1100) / 1100 * Math.PI * 2);
+    glowUnder(px + tw/2, py + th/2, tw * (0.66 + 0.16 * pulse), `rgba(150,110,255,${0.34 + 0.26 * pulse})`);
+    if (!(spriteReady && drawSprite('stairs_down', px, py, tw))) {
+      ctx.fillStyle = '#160d24'; ctx.fillRect(px, py, tw, th);
+    }
+    const lw = Math.max(2, tw * 0.09), o = lw / 2 + 1;
+    ctx.save();
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = `rgba(176,124,255,${0.5 + 0.45 * pulse})`;
+    ctx.shadowColor = 'rgba(150,110,255,0.9)';
+    ctx.shadowBlur = tw * (0.18 + 0.22 * pulse);
+    ctx.strokeRect(px + o, py + o, tw - o * 2, th - o * 2);
+    ctx.restore();
   }
 
   // Merchant (roaming trader in bright robes) — never the town stand-in.
@@ -20008,7 +20189,11 @@ function playerSolidCell(cx, cy, ignoreFoes) {
 function breakAhead(cx, cy) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
   const t = mapData[cy][cx];
-  if (t === 11 && hasKey) { hasKey = false; mapData[cy][cx] = 0; bumpMapEpochIfChanged(t, 0); pathGridDirty(); log('<span data-spr=ic_key></span> You unlock the vault door!', 'important'); }
+  if (t === 11 && hasKey) {
+    hasKey = false; mapData[cy][cx] = 0; bumpMapEpochIfChanged(t, 0); pathGridDirty();
+    const reveal = (vaultInfo && vaultInfo.openMsg) || 'A fat chest waits inside!';
+    log(`<span data-spr=ic_key></span> You unlock the vault door! ${reveal}`, 'important');
+  }
 }
 
 // Land one shove on the cracked wall at (cx,cy): chip it further, and collapse it
@@ -20605,6 +20790,7 @@ function onEnterCell(nx, ny) {
     enterDungeonAt(d, 1, { noPortalFx: true });   // keeps its own purple flash, not the blue pillar
     return;
   }
+  if (deepStair && deepStair.x === nx && deepStair.y === ny) { useDeepStair(); return; } // vault express stair
   const tile = mapData[ny][nx];
   if (tile === 12) { goUpStairs(nx, ny); return; }     // stairs up (or floor-1 town portal)
   if (tile === 2)  { goDownStairs(nx, ny); return; }   // stairs down
@@ -20783,6 +20969,33 @@ function performDescend(nx, ny) {
   maybeFloorEvent();
   updateBars();
   saveGame();
+}
+
+// Take a vault's express staircase — it plunges the hero TWO floors deeper in one
+// step. Gated on the floor being clear (same as the normal down-stairs), and it
+// honours the boss-floor threshold confirm if the drop lands on a guardian floor.
+function useDeepStair() {
+  if (deepStair == null) return;
+  if (!floorCleared) { log(`<span data-spr=feat_lock></span> The hidden stair is sealed. ${clearConditionLabel()}`, 'important'); sfx('click'); return; }
+  const dest = dungeonLevel + 2;
+  const plunge = () => {
+    deepStair = null;
+    dungeonLevel += 2;
+    recordDepth();
+    statusEffects = [];
+    tickBuffs();
+    sfx('stairs'); screenFlash('#9a6cff');
+    log(`<span data-spr=feat_door></span> The hidden stair plunges you two floors deeper — ${floorLabel()}!`, 'important');
+    setPlayerCell(5, 5);
+    arrivalDir = 'down';
+    generateMap();
+    tickPact();
+    maybeFloorEvent();
+    updateBars();
+    saveGame();
+  };
+  if (bossGateNeeded(dest)) { openBossGate(dest, plunge); return; }
+  plunge();
 }
 
 // Drink from a Fountain of Healing: full restore, then it dries up.
@@ -24274,11 +24487,12 @@ function endBlockedTurn() {
 // ground-chest pickup path and by enemy death drops (which auto-collect, so
 // you never have to walk over and open them). (x,y) is only used for the rare
 // food surprise, which lands on the ground to be scooped up on the next step.
-function collectChestLoot(luck, ilvl, x, y) {
+function collectChestLoot(luck, ilvl, x, y, gearOnly) {
   const fancy = luck > 1;
 
-  // ~15% of chests surprise you with gold or food instead of gear.
-  if (Math.random() < 0.15) {
+  // ~15% of chests surprise you with gold or food instead of gear — but an armory
+  // chest is guaranteed gear, so it skips the surprise.
+  if (!gearOnly && Math.random() < 0.15) {
     sfx('gold');
     const surprise = rnd(1, 2);
     if (surprise === 1) {
@@ -24378,7 +24592,7 @@ function openChest(chest) {
 
   // Otherwise it rolls fresh loot when opened — luckier chests roll richer.
   const luck = chest.luck || 1;
-  collectChestLoot(luck, chest.ilvl || dungeonLevel, chest.x, chest.y);
+  collectChestLoot(luck, chest.ilvl || dungeonLevel, chest.x, chest.y, chest.gear);
   return null;
 }
 
