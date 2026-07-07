@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "large", v: "Town is now a walkable map", by: "Andrew Suiter", notes: [
+    "Town is no longer a menu — it's a walkable village you explore. You arrive by the gate and roam a fixed, organic plaza: a central statue, a lamp-lined avenue, and districts of keepers set among trees, market stalls, barrels and greenery.",
+    "Walk up to any keeper and press interact (tap them on touch) to open their service — a floating prompt names whoever you're beside. Every service has its own keeper; a locked one stands greyed with a padlock and tells you its unlock requirement.",
+    "Step into the Dungeon Gate at the top of town to pick your descent. If you portaled in, a Town Portal by the entrance takes you straight back to the floor you left.",
+    "Prefer the list? The Town button still opens a directory of every service.",
+    "For console play: gameState().menu.town reports the hero's tile, every town object with its position and lock state, and whoever you're standing next to.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Gear drops less often, so finds feel earned", by: "Jeff Louie", notes: [
     "Trimmed how much gear foes drop across the board — ordinary kills now yield an item about a third less often, and elites and bosses spill a little less extra too (they still always leave at least one). Your bag fills slower and each find matters more; gold, materials, food and toppings are untouched.",
   ] },
