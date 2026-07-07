@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Ice spells hit harder — frostbite now bites", by: "Jeff Louie", notes: [
+    "A mage's ice spells now leave a frostbite chill that ticks steady cold damage, not just a slow — closing the damage gap with fire and lightning.",
+    "The frostbite works on chilled bosses too, so ice builds finally have a real damage payoff, not only crowd control.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Gear drops less often, so finds feel earned", by: "Jeff Louie", notes: [
     "Trimmed how much gear foes drop across the board — ordinary kills now yield an item about a third less often, and elites and bosses spill a little less extra too (they still always leave at least one). Your bag fills slower and each find matters more; gold, materials, food and toppings are untouched.",
   ] },
