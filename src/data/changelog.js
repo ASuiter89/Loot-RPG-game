@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Reclaim your grave on a boss floor", by: "Claude", notes: [
+    "Fixed lost bags being unrecoverable when you fell on a boss floor — the grave had nowhere to spawn in the arena. It now rests right beside the entrance stair, so you step onto it and reclaim everything the moment you return.",
+  ] },
   { date: "2026-07-06", size: "large", v: "Endgame update — six late-game systems", by: "Andrew Suiter", notes: [
     "Ascendant Weave: spend Boss Points on a constellation board of real choices — opportunity-cost nodes, attribute-threshold keystones, and socketed Glyphs that drop deep in Endless — plus a cosmetic Weave Depth rank. Opens after your first boss floor.",
     "Dread Covenants: swear stackable afflictions at a town altar before a descent; more Dread means deadlier floors AND richer loot, materials and boss rewards, tracked on a per-class “how hard did you beat it” checklist. Opens with Hardened.",
