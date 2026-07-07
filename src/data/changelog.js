@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "medium", v: "Boss Points now feed only the Ascendant Weave", by: "Jeff Louie", notes: [
+    "Removed spending Boss Points to level gear slots per set. Every Boss Point now goes into the Ascendant Weave — the board of nodes, keystones and Glyphs — and any points you'd sunk into gear slots are back in your pool to spend there.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Cleaner, pinker skill tooltips", by: "Jeff Louie", notes: [
     "Trimmed the Skill / Spell / Hybrid school blurb on a skill's detail card to one tight line — same info, far less text.",
     "Rank-bonus surges on that card now light PINK once earned instead of green, so they stand apart from the card's other green readouts.",

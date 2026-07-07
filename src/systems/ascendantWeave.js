@@ -11,10 +11,9 @@
 // Glyphs are passed in SEPARATELY (an array of socketed glyphs), because they are
 // loot living on the item side, not board allocation.
 //
-// INDEPENDENT DRAWER: like each gear set in bossSlots.js, the board draws from the
-// FULL earned boss-point pool on its own — points spent on gear slots do not reduce
-// what the board can spend, and vice-versa. boardPointsAvailable() therefore takes
-// the raw earned count, never a shared "remaining".
+// The board is the sole spender of boss points and draws from the FULL earned pool,
+// so boardPointsAvailable() takes the raw earned count (earned − lit-node count),
+// never a shared "remaining".
 import { WEAVE } from '../data/ascendantWeave.js';
 import { glyphPower } from './glyphRoll.js';
 
