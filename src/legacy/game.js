@@ -10845,6 +10845,20 @@ function buildBossArena() {
   quest = null; teleporters = {}; nextDiffPortal = null; floorRooms = [];
   bossHazards = []; bossTelegraphs = []; projectiles = []; clearAttackFx();
   floorThemeOverride = null;      // a bare stone arena, not a themed interior
+  // ── GRAVE ── if you fell on THIS boss floor, none of the procedural scatter
+  // below runs, so the dropped bag has nowhere to land in the arena. Place it
+  // right beside the entrance stair — the way you came down from the previous
+  // floor — so you always step onto it on arrival and can reclaim it.
+  if (graveSite && graveSite.floor === dungeonLevel && (graveSite.items.length || graveSite.gold)) {
+    for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [-1, -1], [1, -1], [-2, 0], [2, 0]]) {
+      const gx = cx + ox, gy = syTile + oy;
+      if (mapData[gy] && mapData[gy][gx] === 0 && !(gx === cx && gy === syTile)) {
+        graveMarker = { x: gx, y: gy };
+        break;
+      }
+    }
+    if (graveMarker) log('<span data-spr=feat_grave></span> Your lost satchel rests beside the entrance — reclaim it.', 'important');
+  }
   // Rebuild the terrain + pathfinding caches for the hand-authored layout.
   bumpMapEpoch(); pathGridDirty();
   // Spawn the guardian (boss only — spawnEnemies gives boss floors a count of 1).
