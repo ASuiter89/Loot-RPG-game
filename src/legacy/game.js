@@ -78,6 +78,7 @@ import { CHANGELOG } from '../data/changelog.js';
 import { MUSIC_SECTIONS } from '../data/musicSections.js';
 import { bassSemi, voiceChord, voiceSpread } from '../systems/musicGroove.js';
 import { terrainPacksInUse } from '../data/terrainPacks.js';
+import { TRAP_THEME } from '../data/trapThemes.js';
 import { renderProcMap } from '../render/procTerrain.js';
 import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
 import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
@@ -5965,6 +5966,13 @@ const FLOOR_MODS = [
   // life-leech barely works here, so brute-forcing won't sustain you. The answer
   // is prep — a Mercy pact, burst skills, a healing bowl — not the same old loop.
   { id: 'warded',   name: 'Warded Halls',         dmgMult: 1.15, lootMult: 1.6, eliteBonus: 0.1,  desc: 'Foes are warded against life-draining — your lifesteal barely bites. Burst them down or come prepared.', hpMult: 1.3, lifestealMult: 0.35, prepHint: true },
+  // Trap-themed floors — one kind of trap owns the whole floor, packed in far
+  // denser than usual (see placeTraps / the spike scatter, which read `trapTheme`
+  // and the TRAP_THEME density table). Foes are ordinary; the hazard IS the
+  // theme, so the loot leans a little richer for threading it.
+  { id: 'spikefield', name: 'Spike Gauntlet',      dmgMult: 1,    lootMult: 1.4, eliteBonus: 0,    desc: 'Spikes bristle across the whole floor — pick every step.', trapTheme: 'spikes' },
+  { id: 'arrowhall',  name: 'Arrow Gallery',       dmgMult: 1,    lootMult: 1.4, eliteBonus: 0,    desc: 'Arrow traps line every hall — mind the firing lanes.', trapTheme: 'arrows' },
+  { id: 'ventworks',  name: 'The Vent Works',      dmgMult: 1,    lootMult: 1.4, eliteBonus: 0,    desc: 'Fire vents flare all across the floor — time your crossings.', trapTheme: 'fire' },
   // A deliberate wall: a floor that may simply be beyond you right now. Rich if
   // you can survive it, lethal if you can't — turn back and grind if you must.
   { id: 'nightmare',name: 'Nightmare Depths',     dmgMult: 1.7,  lootMult: 2.4, eliteBonus: 0.35, desc: 'Death itself stalks these halls. Turn back if you must.', hpMult: 1.45 },
@@ -6901,6 +6909,7 @@ window.gameState = function gameState(radius) {
     tier: (typeof diffOf === 'function' && typeof DIFFS !== 'undefined') ? ((DIFFS[diffOf(dungeonLevel) - 1] || {}).name || null) : null,
     isBossFloor: dungeonLevel % 5 === 0,                                   // a guardian holds this floor
     island: (typeof floorIslandTheme !== 'undefined') && !!floorIslandTheme, // landmass ringed by impassable sea (~ tiles frame the map)
+    modifier: (typeof floorMod !== 'undefined' && floorMod && floorMod.name) ? floorMod.name : null, // active floor theme, e.g. "Spike Gauntlet" (null = a plain floor)
     floorCleared: (typeof floorCleared !== 'undefined') ? !!floorCleared : null,
     hostilesLeft: (typeof hostilesRemaining === 'function') ? hostilesRemaining() : live.length, // foes still sealing the stairs
     // Explicit exit coordinates + whether the down-stairs are still sealed.
@@ -7347,6 +7356,7 @@ window.gameGuide = function gameGuide(topic) {
       `Lava and spikes hurt but never kill outright (HP clamps to 1), and the generator never forces you across one — route around them.`,
       `ARROW TRAPS (glyph A; gameState().hazards.traps kind "arrow") loose a bolt every ~2s down a fixed direction (.dir). The bolt (glyph !; hazards.projectiles, with x/y + velocity) flies up to ~6 tiles — step out of its lane.`,
       `FIRE VENTS (glyph v idle / V flaring; hazards.traps kind "fire", .on) only burn while flaring AND you stand on them — cross while idle.`,
+      `TRAP-THEMED FLOORS: some floors (gameState().modifier "Spike Gauntlet" / "Arrow Gallery" / "The Vent Works") dedicate the whole floor to ONE trap kind, packed in far denser than usual — expect a field of spikes, a hall lined with arrow emitters, or clusters of fire vents. Loot runs a little richer to reward threading them; a walkable route through the spikes is always guaranteed.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `BOSS TELEGRAPHS (gameState().hazards.telegraphs) are a guardian's wind-up attacks — a floor indicator that fills, flashes, then detonates. Each carries its shape (disc = filled circle; ring = donut, lethal in the band between innerR and r but SAFE in the centre hole and beyond r; lane = beam between (x1,y1)-(x2,y2); cone = wedge of radius r opening ±halfAngle around facing), its centre (x,y)/geometry, seconds until it lands (secsToHit), and danger:true when it hurts. They are ALWAYS dodgeable by MOVING out of the zone before secsToHit hits 0 (for a ring, step past r or into the hole) — never an RNG dodge. Red = damage; cyan = a benign spawn marker. A tracking disc follows you early in its wind-up, then locks — keep moving and it lands where you were.`,
       `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, the exit is north, and four pillars give cover. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
@@ -10057,13 +10067,25 @@ function placeTraps(reach) {
   traps = [];
   if (tutorialActive || inTown) return;
   const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
-  // Arrow traps — back to a wall, clear lane ahead. Only on some floors (used to
-  // be at least one on every floor, which got repetitive), and they ramp up
-  // slowly with depth.
-  let arrows = Math.random() < 0.4 ? Math.min(3, 1 + Math.floor(dungeonLevel / 6)) : 0, tries = 0;
-  while (arrows > 0 && tries++ < 600) {
+  // A trap-themed floor (see FLOOR_MODS) hands the whole floor to ONE trap kind:
+  // that kind is packed in dense, the others are held back so the theme reads.
+  const theme = floorMod.trapTheme;
+  const taken = (x, y) => traps.some(tr => tr.x === x && tr.y === y);
+  // Arrow traps — back to a wall, clear lane ahead. An "Arrow Gallery" floor
+  // bristles with them; a different trap theme yields the floor entirely;
+  // otherwise only some floors get a couple, ramping slowly with depth.
+  let arrows;
+  if (theme === 'arrows') arrows = rnd(TRAP_THEME.arrows.min, TRAP_THEME.arrows.max);
+  else if (theme) arrows = 0;
+  else arrows = Math.random() < 0.4 ? Math.min(3, 1 + Math.floor(dungeonLevel / 6)) : 0;
+  // A themed floor searches longer and relaxes the hallway preference sooner, so
+  // it can actually seat that many emitters even on a wall-sparse map.
+  const maxTries = theme === 'arrows' ? 2400 : 600;
+  const strictUntil = theme === 'arrows' ? Math.round(maxTries * 0.35) : 450;
+  let tries = 0;
+  while (arrows > 0 && tries++ < maxTries) {
     const c = randomFloorTile(reach);
-    if (!c || (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) < 6) continue;
+    if (!c || taken(c.x, c.y) || (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) < 6) continue;
     const d = pick(DIRS);
     if (tileAtCell(c.x - d[0], c.y - d[1]) !== 1) continue; // want a wall at its back
     const px = -d[1], py = d[0]; // perpendicular to the firing line
@@ -10081,19 +10103,21 @@ function placeTraps(reach) {
     // lane is mostly flanked by walls. Only late in the search do we accept an
     // open-room lane, so a wall-sparse floor still gets traps rather than none.
     const hallway = walled >= Math.min(lane, 3);
-    if (!hallway && tries < 450) continue;
+    if (!hallway && tries < strictUntil) continue;
     traps.push({ kind: 'arrow', x: c.x, y: c.y, dx: d[0], dy: d[1], cd: Math.random() * 2, interval: rnd(18, 28) / 10, dmg: Math.round((10 + dungeonLevel * 4.5) * BALANCE.hazardDmgMult) });
     arrows--;
   }
-  // Fire vents — a small cluster that flares in and out of life. Kept to a minority
-  // of floors so they're a hazard you notice, not a constant.
-  if (Math.random() < 0.22) {
-    const n = rnd(1, 3);
-    for (let i = 0; i < n; i++) {
-      const c = randomFloorTile(reach);
-      if (!c || (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) < 6) continue;
-      traps.push({ kind: 'fire', x: c.x, y: c.y, t: Math.random() * 3, period: rnd(26, 38) / 10, onFrac: 0.4, dmgCd: 0, dmg: Math.round((6 + dungeonLevel * 1.8) * BALANCE.hazardDmgMult) });
-    }
+  // Fire vents — a "Vent Works" floor is riddled with them; a different trap theme
+  // yields the floor; otherwise a minority of floors get a small cluster.
+  let vents;
+  if (theme === 'fire') vents = rnd(TRAP_THEME.fire.min, TRAP_THEME.fire.max);
+  else if (theme) vents = 0;
+  else vents = Math.random() < 0.22 ? rnd(1, 3) : 0;
+  for (let placed = 0, ft = 0; placed < vents && ft < vents * 40; ft++) {
+    const c = randomFloorTile(reach);
+    if (!c || taken(c.x, c.y) || (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) < 6) continue;
+    traps.push({ kind: 'fire', x: c.x, y: c.y, t: Math.random() * 3, period: rnd(26, 38) / 10, onFrac: 0.4, dmgCd: 0, dmg: Math.round((6 + dungeonLevel * 1.8) * BALANCE.hazardDmgMult) });
+    placed++;
   }
 }
 
@@ -10559,9 +10583,12 @@ function generateMap() {
       }
     }
   }
-  // ── SPIKE TRAPS (passable, stabs) ──
-  if (floorHazards.has('spikes')) {
-    const n = Math.max(2, Math.round(rnd(2, 5) * areaRatio)); // more on bigger floors so they aren't trap-sparse
+  // ── SPIKE TRAPS (passable, stabs) ── a "Spike Gauntlet" floor packs the whole
+  // map; otherwise only floors that rolled the spikes hazard get a light scatter.
+  const spikeTheme = floorMod.trapTheme === 'spikes';
+  if (spikeTheme || floorHazards.has('spikes')) {
+    const scatter = Math.max(2, Math.round(rnd(2, 5) * areaRatio)); // more on bigger floors so they aren't trap-sparse
+    const n = spikeTheme ? Math.min(TRAP_THEME.spikes.cap, scatter * TRAP_THEME.spikes.mult) : scatter;
     for (let i = 0; i < n; i++) { const c = randomFloorTile(reach); if (c) mapData[c.y][c.x] = 8; }
   }
   // With traps down, melt any that sit on the only route somewhere so the

@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-06", size: "small", v: "Trap-themed floors — spike gauntlets, arrow galleries, vent works", by: "Jeff Louie", notes: [
+    "Some floors now hand the whole level over to ONE kind of trap, packed in thick: a Spike Gauntlet bristling with spikes, an Arrow Gallery lined with arrow traps, or The Vent Works studded with fire vents.",
+    "Loot runs a little richer on these floors to reward threading them, and a safe walkable route through the spikes is always guaranteed.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Gear drops less often, so finds feel earned", by: "Jeff Louie", notes: [
     "Trimmed how much gear foes drop across the board — ordinary kills now yield an item about a third less often, and elites and bosses spill a little less extra too (they still always leave at least one). Your bag fills slower and each find matters more; gold, materials, food and toppings are untouched.",
   ] },
