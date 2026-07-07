@@ -10502,6 +10502,7 @@ function tileReserved(x, y) {
   if (quest) {
     const q = quest;
     if (q.npc && q.npc.x === x && q.npc.y === y) return true;
+    if (q.entry && q.entry.x === x && q.entry.y === y) return true; // jailbreak: keep the smash approach clear
     if (q.spot && q.spot.x === x && q.spot.y === y) return true;
     if (q.item && q.item.x === x && q.item.y === y) return true;
     if (Array.isArray(q.markers) && q.markers.some(m => m.x === x && m.y === y)) return true;
@@ -11228,7 +11229,11 @@ function tryBuildCell(reach, who) {
       if (!sealed) continue;
       mapData[y][x] = 0;       // cell interior
       mapData[wy][wx] = 10;    // cracked wall — smash to break in
-      quest = { type: 'jailbreak', npc: { x, y, sprite: who.sprite, name: who.name }, done: false };
+      // (fx,fy) is the floor tile you must stand on to shove through the wall — the
+      // sole approach into the sealed cell. Record it so tileReserved keeps decor
+      // (and every other placed prop) off it; a cracked wall reads as unreachable
+      // wall to the path checks, so nothing else guards this tile from being blocked.
+      quest = { type: 'jailbreak', npc: { x, y, sprite: who.sprite, name: who.name }, entry: { x: fx, y: fy }, done: false };
       log(`<span data-spr=mat_scrap></span> ${who.name} is locked in a cell — smash through the cracked wall to free them!`, 'important');
       return true;
     }
