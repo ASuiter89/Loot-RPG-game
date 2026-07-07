@@ -24,7 +24,7 @@ import { telegraphPhase, telegraphFill, telegraphDanger, stepTelegraph,
 import { offscreenArrows, tileOnScreen } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
 import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.js';
-import { footprintSealsPath, footprintInsideRoom } from '../systems/decorPlacement.js';
+import { footprintSealsPath, footprintInsideRoom, isThroughCorridor } from '../systems/decorPlacement.js';
 import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach.js';
 import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
@@ -9945,6 +9945,16 @@ function tileBlockedByObject(x, y) {
       || (mystic && mystic.x === x && mystic.y === y);
 }
 
+// Is (x, y) a 1-wide through-corridor — a straight hall a single impassable object
+// would FULLY plug even if a detour keeps the floor connected? Judged by what the
+// hero can walk THROUGH (isWalkThrough), so a passable perpendicular neighbour
+// means it isn't truly 1-wide. No impassable object may sit here: the shop-NPC
+// spawn guards reject such tiles, and clearCorridorPlugs() strips/relocates any
+// that slipped past. See isThroughCorridor for the definition.
+function onThroughCorridor(x, y) {
+  return isThroughCorridor(x, y, MAP_W, MAP_H, (nx, ny) => isWalkThrough(mapData[ny][nx]));
+}
+
 // Would parking an immovable blocker (a shop NPC) on this tile wall the player
 // out of part of the floor? True only when the tile is the lone pinch point
 // linking two open stretches — dead-ends and open rooms return false. A tile
@@ -10013,7 +10023,7 @@ function relocateBlockingNpc(npc) {
     const c = key.indexOf(','); const y = +key.slice(0, c), x = +key.slice(c + 1);
     if (mapData[y][x] !== 0) continue;                 // plain floor only
     if (x === player.x && y === player.y) continue;
-    if (getEnemyAt(x, y) || tileBlockedByObject(x, y) || isChokePoint(x, y)) continue;
+    if (getEnemyAt(x, y) || tileBlockedByObject(x, y) || isChokePoint(x, y) || onThroughCorridor(x, y)) continue;
     spot = { x, y }; break;
   }
   if (spot) { npc.x = spot.x; npc.y = spot.y; return; }
@@ -10031,6 +10041,29 @@ function clearBlockingObjectAt(x, y) {
   return false;
 }
 
+// PHASE 2 of the guarantee: no impassable object may SIT on a 1-wide through-
+// corridor tile — a straight hall it fully plugs even though a detour keeps the
+// floor connected. That's the "bed in the hallway" case #509 fixed for interior
+// furniture, generalised to EVERY impassable object (solid decor/furniture AND the
+// two shop NPCs) on EVERY floor (outdoor caves included, now that most carve 2-wide
+// with occasional 1-wide chokepoints). A disconnection flood can't see it (the tile
+// stays reachable via the detour), so it needs its own pass. Strip the decor piece
+// / shove the shop NPC off any such tile. The per-placement guards (obstacles need
+// >=3 open neighbours, so never a 1-wide tile; NPCs reject onThroughCorridor) keep
+// objects off these tiles in the first place, so on a clean floor this changes
+// nothing — the guarantee stays idempotent (no-churn).
+function clearCorridorPlugs() {
+  // Snapshot keys: removeDecorObjectAt deletes a whole piece's footprint as it goes.
+  for (const k of Object.keys(furnitureMap)) {
+    if (furnitureMap[k] === undefined) continue;        // already cleared with an earlier piece
+    const c = k.indexOf(','); const y = +k.slice(0, c), x = +k.slice(c + 1);
+    if (onThroughCorridor(x, y)) removeDecorObjectAt(x, y);
+  }
+  for (const npc of [merchant, mystic]) {
+    if (npc && npc.x >= 0 && onThroughCorridor(npc.x, npc.y)) relocateBlockingNpc(npc);
+  }
+}
+
 // ── OBJECTS NEVER BLOCK A PATH (final guarantee) ──
 // Run after EVERY stationary solid is placed (solid decor/furniture + the two shop
 // NPCs). Terrain foot-connectivity is already guaranteed (ensureFootConnected), so
@@ -10038,7 +10071,9 @@ function clearBlockingObjectAt(x, y) {
 // reopened by clearing that object — never by carving rock. The per-placement
 // guards (footprintSealsPath / isChokePoint, both object-aware) prevent nearly
 // every such seal; this is the belt-and-suspenders that makes a blocked floor
-// impossible and self-heals any case a local check missed.
+// impossible and self-heals any case a local check missed. Phase 1 reopens any
+// stretch an object walled OFF (disconnection); phase 2 (clearCorridorPlugs) frees
+// any object left sitting IN a 1-wide hall it fully plugs even with a detour.
 function clearObjectBlockedPaths() {
   const enter = (x, y) => isEnterable(mapData[y][x]);
   const through = (x, y) => isWalkThrough(mapData[y][x]);
@@ -10062,6 +10097,10 @@ function clearObjectBlockedPaths() {
     for (const [x, y] of path) { if (clearBlockingObjectAt(x, y)) cleared = true; }
     if (!cleared) break;                               // nothing removable on the lane — bail, don't loop
   }
+  // Phase 2 — free any object left sitting IN a 1-wide hall (blocks it even though
+  // phase 1's flood still reaches around it via a detour). Runs last so a relocated
+  // NPC lands on the now-final walkable map (relocateBlockingNpc avoids corridors).
+  clearCorridorPlugs();
 }
 
 // Pick a random plain-floor tile, optionally limited to a reachable set.
@@ -11485,7 +11524,7 @@ function spawnMerchant(footReach) {
   do {
     mx = rnd(1, MAP_W-1); my = rnd(1, MAP_H-1); tries++;
   } while ((mapData[my][mx] !== 0 || (mx === player.x && my === player.y) || getEnemyAt(mx,my)
-            || isChokePoint(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
+            || isChokePoint(mx,my) || onThroughCorridor(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
   if (tries >= 100) return;
   // A full randomized stock of gamble-priced gear pieces — at least five, so the
   // wanderer is always worth the detour (a wider table than the town shop's).
@@ -11509,7 +11548,7 @@ function spawnMystic(footReach) {
     mx = rnd(1, MAP_W-1); my = rnd(1, MAP_H-1); tries++;
   } while ((mapData[my][mx] !== 0 || (mx === player.x && my === player.y) || getEnemyAt(mx,my)
             || (merchant && merchant.x === mx && merchant.y === my)
-            || isChokePoint(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
+            || isChokePoint(mx,my) || onThroughCorridor(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
   if (tries >= 100) return;
   mystic = { x: mx, y: my };
   log('<span data-spr=ic_orb></span> A hooded mystic beckons from the shadows...', 'important');
@@ -32093,6 +32132,29 @@ try {
         const rightAfter = objFoot().has('3,4');
         out.cases.push({ kind: 'terminal', rightBefore, rightAfter, freed: furnitureMap['3,3'] === undefined });
       } catch (e) { out.cases.push({ kind: 'terminal', err: String(e) }); }
+      // Case 4 — a shop NPC standing on a 1-wide corridor that a DETOUR keeps
+      // connected. Two rooms joined by a top AND a bottom 1-wide corridor form a
+      // loop; an NPC on the top corridor (4,1) fully blocks that hall, yet every
+      // tile stays reachable via the bottom one — so __connCheck sees nothing
+      // (bad stays 0). The guarantee must still shove the NPC off the corridor.
+      try {
+        MAP_W = 9; MAP_H = 5;
+        mapData = [];
+        for (let y = 0; y < MAP_H; y++) { mapData[y] = []; for (let x = 0; x < MAP_W; x++) mapData[y][x] = 1; }
+        for (let x = 1; x <= 7; x++) { mapData[1][x] = 0; mapData[3][x] = 0; }      // top + bottom halls (join the rooms)
+        for (const x of [1, 2, 3, 5, 6, 7]) mapData[2][x] = 0;                       // room middles; (4,2) stays wall → a real loop
+        furnitureMap = {}; decorMap = {}; teleporters = {}; merchant = null; mystic = null;
+        floorSerial++; bumpMapEpoch(); pathGridDirty();
+        player.x = 2; player.y = 2;                                                  // left room
+        mystic = { x: 4, y: 1 };                                                     // top-corridor through-tile
+        const connBefore = window.__connCheck().bad;                                 // 0 — detour keeps it connected
+        const plugBefore = window.__corridorPlugCheck().plugged;                     // 1 — NPC in a 1-wide hall
+        clearObjectBlockedPaths();
+        const plugAfter = window.__corridorPlugCheck().plugged;
+        const connAfter = window.__connCheck().bad;
+        out.cases.push({ kind: 'detour-npc', connBefore, connAfter, plugBefore, plugAfter,
+          moved: !mystic || mystic.x !== 4 || mystic.y !== 1 });
+      } catch (e) { out.cases.push({ kind: 'detour-npc', err: String(e) }); }
       return out;
     };
     // __DECOR_PLUG_CHECK__ (preview only): a SOLID multi-tile piece (bed/table/
@@ -32106,10 +32168,7 @@ try {
       const isFloor = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && mapData[y][x] === 0;
       // A genuine 1-wide straight passage tile: open on two OPPOSITE sides, walled
       // on the other two (a corner is open on ADJACENT sides — not a through-tile).
-      const throughTile = (x, y) => {
-        const N = isFloor(x, y-1), S = isFloor(x, y+1), E = isFloor(x+1, y), W = isFloor(x-1, y);
-        return (N && S && !E && !W) || (E && W && !N && !S);
-      };
+      const throughTile = (x, y) => isThroughCorridor(x, y, MAP_W, MAP_H, isFloor);
       let outside = 0, corridor = 0; const detail = [];
       for (const k in decorMap) {
         const id = decorMap[k]; if (!DECOR_SOLID[id]) continue;
@@ -32123,6 +32182,27 @@ try {
         if ((!inRoom || onCorridor) && detail.length < 4) detail.push({ ax, ay, id, footLen: foot.length, inRoom, onCorridor });
       }
       return { outside, corridor, detail, decor: Object.keys(decorMap).length, solid: Object.keys(furnitureMap).length };
+    };
+    // __CORRIDOR_PLUG_CHECK__ (preview only): the GENERAL guarantee — NO impassable
+    // object (solid decor/furniture OR a shop NPC), single- or multi-tile, may sit
+    // on a 1-wide through-corridor tile, on ANY floor (outdoor caves included, not
+    // just built interiors). Such a tile fully blocks that hall even when a detour
+    // keeps the floor connected, so __connCheck (a disconnection flood) can't see
+    // it. Judged by what the hero walks THROUGH (isWalkThrough), so a passable
+    // perpendicular neighbour means the tile isn't really 1-wide. plugged:0 = clean.
+    window.__corridorPlugCheck = function () {
+      const walk = (x, y) => isWalkThrough(mapData[y][x]);
+      const onCorr = (x, y) => isThroughCorridor(x, y, MAP_W, MAP_H, walk);
+      let plugged = 0; const detail = [];
+      for (const k in furnitureMap) {
+        const c = k.indexOf(','); const y = +k.slice(0, c), x = +k.slice(c + 1);
+        if (onCorr(x, y)) { plugged++; if (detail.length < 4) detail.push({ x, y, kind: 'furniture' }); }
+      }
+      for (const [name, npc] of [['merchant', merchant], ['mystic', mystic]]) {
+        if (npc && npc.x >= 0 && onCorr(npc.x, npc.y)) { plugged++; if (detail.length < 4) detail.push({ x: npc.x, y: npc.y, kind: name }); }
+      }
+      const npcs = (merchant ? 1 : 0) + (mystic ? 1 : 0);
+      return { plugged, detail, objects: Object.keys(furnitureMap).length + npcs, furniture: Object.keys(furnitureMap).length, npcs };
     };
   }
 } catch (e) {}
