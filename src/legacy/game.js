@@ -12852,7 +12852,7 @@ function openTownService(kind) {
 // Order here IS the on-screen order (the Dungeon Gate renders above this list).
 const TOWN_MENU = [
   { kind: 'healer',    name: 'Healer',      desc: 'Rest, cure & potions' },
-  { kind: 'merchant',       name: 'Merchant',    desc: 'Potions & fresh gear' },
+  { kind: 'merchant',  name: 'Merchant',    desc: 'Buy & sell fresh gear' },
   { kind: 'ramen',     name: 'Ramen House', desc: 'Cook toppings into buffs' },
   { kind: 'forge', name: 'Craftsman',   desc: 'Forge blank gear from mats',
     req: { ok: () => (player.level || 1) >= 5,          need: 'Reach level 5' } },
