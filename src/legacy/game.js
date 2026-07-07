@@ -3173,6 +3173,13 @@ const BALANCE = {
   enemyDmgMult: 1,       // global × on every foe's damage
   enemyCountMult: 1,     // × on the regular foe count per floor (still capped at 40)
   hazardDmgMult: 1,      // × on trap / vent hazard damage
+  // Trap / hazard damage tuning (base + per-floor; lava/spikes also add a % of max
+  // HP so they stay a real bite as the pool grows). Arrow/fire are mitigated by
+  // defence before they land, so their raw values run higher than lava/spikes.
+  arrowBase: 16,   arrowPerFloor: 7,     // arrow-trap bolt (per hit, pre-mitigation)
+  ventBase: 11,    ventPerFloor: 3.2,    // fire vent (per 0.5s tick, pre-mitigation)
+  lavaBase: 7,     lavaPerFloor: 2.2,  lavaMaxHpFrac: 0.09,   // lava (per cell entered, raw)
+  spikeBase: 6,    spikePerFloor: 1.7, spikeMaxHpFrac: 0.06,  // spikes (per cell entered, raw)
   depthExp: 1.26,        // depthThreat exponent — how sharply deep floors pull ahead
   depthDiv: 8.5,         // depthThreat divisor — larger = gentler overall climb
   enemyHpPerFloor: 11,   // +max HP per floor of depth in the base-foe formula
@@ -10081,7 +10088,7 @@ function placeTraps(reach) {
     // open-room lane, so a wall-sparse floor still gets traps rather than none.
     const hallway = walled >= Math.min(lane, 3);
     if (!hallway && tries < 450) continue;
-    traps.push({ kind: 'arrow', x: c.x, y: c.y, dx: d[0], dy: d[1], cd: Math.random() * 2, interval: rnd(18, 28) / 10, dmg: Math.round((10 + dungeonLevel * 4.5) * BALANCE.hazardDmgMult) });
+    traps.push({ kind: 'arrow', x: c.x, y: c.y, dx: d[0], dy: d[1], cd: Math.random() * 2, interval: rnd(18, 28) / 10, dmg: Math.round((BALANCE.arrowBase + dungeonLevel * BALANCE.arrowPerFloor) * BALANCE.hazardDmgMult) });
     arrows--;
   }
   // Fire vents — a small cluster that flares in and out of life. Kept to a minority
@@ -10091,7 +10098,7 @@ function placeTraps(reach) {
     for (let i = 0; i < n; i++) {
       const c = randomFloorTile(reach);
       if (!c || (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) < 6) continue;
-      traps.push({ kind: 'fire', x: c.x, y: c.y, t: Math.random() * 3, period: rnd(26, 38) / 10, onFrac: 0.4, dmgCd: 0, dmg: Math.round((6 + dungeonLevel * 1.8) * BALANCE.hazardDmgMult) });
+      traps.push({ kind: 'fire', x: c.x, y: c.y, t: Math.random() * 3, period: rnd(26, 38) / 10, onFrac: 0.4, dmgCd: 0, dmg: Math.round((BALANCE.ventBase + dungeonLevel * BALANCE.ventPerFloor) * BALANCE.hazardDmgMult) });
     }
   }
 }
@@ -20637,14 +20644,14 @@ function onEnterCell(nx, ny) {
   // Lava / spikes bite once per cell entered (never lethal on their own), exactly
   // as a turn-based step into them used to.
   if (tile === 7) {
-    const burn = Math.round(4 + dungeonLevel * 1.5 + player.maxHp * 0.05);
+    const burn = Math.round((BALANCE.lavaBase + dungeonLevel * BALANCE.lavaPerFloor + player.maxHp * BALANCE.lavaMaxHpFrac) * BALANCE.hazardDmgMult);
     const hpLost = takePlayerDamage(burn, 'lava', { lethal: false, isDoT: true });
     if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff7733');
     log(`<span data-spr=ic_fire></span> The lava scorches you for ${burn}!`, 'important');
     updateBars();
   }
   if (tile === 8) {
-    const stab = Math.round(3 + dungeonLevel + player.maxHp * 0.03);
+    const stab = Math.round((BALANCE.spikeBase + dungeonLevel * BALANCE.spikePerFloor + player.maxHp * BALANCE.spikeMaxHpFrac) * BALANCE.hazardDmgMult);
     const hpLost = takePlayerDamage(stab, 'spikes', { lethal: false });
     if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
     log(`🩸 Spikes stab you for ${stab}!`);
