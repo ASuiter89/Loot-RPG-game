@@ -10,6 +10,11 @@ export const CHANGELOG = [
   { date: "2026-07-06", size: "small", v: "Map no longer blanks out while the bag or log slides", by: "Andrew Suiter", notes: [
     "Fixed the play area going blank for a moment when you open or close the bag or combat log — the map now stays drawn and eases smoothly through the whole slide instead of vanishing and snapping back once it settles.",
   ] },
+  { date: "2026-07-06", size: "medium", v: "Locked vaults now open on 16 wildly different rooms", by: "Jeff Louie", notes: [
+    "A found key no longer just reveals one chest — the door can open on a treasure hoard, an armory of gear, a coin trove, a hidden larder of food, a healing fountain, a blessing shrine, a guardroom of elite wardens, a swarm of weak foes, a lone champion, a spike- or lava-ringed prize, a raiders' cache — or a hidden staircase that plunges you two floors deep.",
+    "The vault key on the floor now pulses and bobs so it's far easier to spot.",
+    "Vault foes are an optional side-fight: they never seal the stairs, so opening a combat vault is always your choice, never forced to descend.",
+  ] },
   { date: "2026-07-06", size: "medium", v: "Boss Points now feed only the Ascendant Weave", by: "Jeff Louie", notes: [
     "Removed spending Boss Points to level gear slots per set. Every Boss Point now goes into the Ascendant Weave — the board of nodes, keystones and Glyphs — and any points you'd sunk into gear slots are back in your pool to spend there.",
   ] },
