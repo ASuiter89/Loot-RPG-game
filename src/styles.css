@@ -2296,7 +2296,7 @@
     padding: 8px 10px;
     font-size: 1.3rem;
     min-width: 320px;
-    max-width: 440px;
+    max-width: 470px;
     /* Above the side panel (200) and control bar (210) so it never hides
        behind the drawer; below the non-interactive screen flash (300). */
     z-index: 250;
@@ -2305,10 +2305,9 @@
     line-height: 1.6;
   }
   #tooltip .tt-name { font-weight: bold; font-size: 1.4rem; margin-bottom: 4px; }
-  #tooltip .tt-stat { color: var(--meta); }
-  /* Native (headline/innate) stats read brighter than rollable affixes, with a
-     small dim tag, so it's clear they come from the base and can't be rerolled. */
-  #tooltip .tt-stat.tt-native { color: var(--purple-50); }
+  /* Every stat row reads in the same bright body colour for clean scanning; a small
+     dim "base" tag (not colour) marks the innate stats that can't be rerolled. */
+  #tooltip .tt-stat { color: var(--text); }
   #tooltip .tt-tag { font-size: 1.2rem; font-style: italic; color: var(--btn-off); margin-left: 2px; }
   #tooltip .tt-flavor { color: var(--junk); font-style: italic; margin-top: 4px; font-size: 1.2rem; }
   /* Weapon reach grid: a row of small tiles — gold = you, red = squares you can
@@ -2317,12 +2316,15 @@
   .range-grid .rg-cell { width: 11px; height: 11px; border-radius: 2px; border: 1px solid transparent; box-sizing: border-box; }
   .range-cap { font-size: 1.2rem; color: var(--orange-400); margin-left: 6px; vertical-align: middle; letter-spacing: .5px; }
   #tooltip .tt-tier { font-size: 1.2rem; opacity: 0.7; }
-  /* Side-by-side compare: hovered item next to the currently-equipped piece. */
-  #tooltip.comparing { max-width: 880px; }
-  #tooltip .tt-compare { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
-  #tooltip .tt-card { flex: 1 1 300px; min-width: 300px; }
-  #tooltip .tt-card-equipped { border-left: 1px solid var(--border); padding-left: 10px; opacity: 0.9; }
+  /* Side-by-side compare: hovered item next to the currently-equipped piece.
+     Roomy cards keep item names and requirement lines on one row. */
+  #tooltip.comparing { max-width: 940px; }
+  #tooltip .tt-compare { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+  #tooltip .tt-card { flex: 1 1 330px; min-width: 330px; }
+  #tooltip .tt-card-equipped { border-left: 1px solid var(--border); padding-left: 12px; opacity: 1; }
   #tooltip .tt-cardlabel { font-size: 1.2rem; letter-spacing: 1px; text-transform: uppercase; color: var(--junk); margin-bottom: 3px; }
+  /* The worn piece's label pops in gold so the equipped side is obvious at a glance. */
+  #tooltip .tt-cardlabel.tt-cardlabel-worn { color: var(--gold); font-weight: bold; }
 
   /* Styled hover popup for enchanter buttons — mirrors the gear tooltip look so
      hovering a reroll button reads like hovering a piece of gear (no native

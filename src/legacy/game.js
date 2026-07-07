@@ -27149,14 +27149,14 @@ function itemCardHTML(item, opts = {}) {
     // DMG is a range string like "8-12"; others are flat numbers (negative on a curse).
     const negative = (typeof v === 'number') && v < 0;
     const val = (typeof v === 'string') ? abbreviateNumbersIn(v) : (v < 0 ? '' : '+') + abbreviateNumber(v);
-    // Native (headline/innate) stats come from the base and can't be rerolled, so
-    // mark them apart from rollable affixes. A curse penalty (negative) is tagged too.
+    // Base (headline/innate) stats come from the item's base and can't be
+    // rerolled, so tag them apart from rollable affixes — but keep every stat the
+    // same colour so the list reads cleanly. A curse penalty (negative) is tagged.
     const isNative = head.includes(k);
-    const cls = 'tt-stat' + (isNative ? ' tt-native' : '');
     const style = negative ? ' style="color:var(--red-350)"' : '';
     const tag = negative ? ' <span class="tt-tag">cursed</span>'
-              : isNative ? ' <span class="tt-tag">native</span>' : '';
-    return `<div class="${cls}"${style}>${val} ${STAT_LABELS[k] || k}${tag}</div>`;
+              : isNative ? ' <span class="tt-tag">base</span>' : '';
+    return `<div class="tt-stat"${style}>${val} ${STAT_LABELS[k] || k}${tag}</div>`;
   });
   // Attribute affixes (+Might, +Luck, …) get their own coloured rows.
   if (item.attrs) for (const [k, v] of Object.entries(item.attrs)) {
@@ -27200,7 +27200,10 @@ function itemCardHTML(item, opts = {}) {
   // Item level: drives raw stat size, so it's worth surfacing alongside power.
   const ilvlLine = (item.slot && item.ilvl)
     ? `<span style="color:var(--blue-250);font-weight:bold">ilvl ${item.ilvl}</span>` : '';
-  const label = opts.label ? `<div class="tt-cardlabel">${opts.label}</div>` : '';
+  // The "Equipped" label reads in gold so a glance tells which card is the piece
+  // already worn, vs the dim "Hovered" candidate beside it.
+  const label = opts.label
+    ? `<div class="tt-cardlabel${opts.label === 'Equipped' ? ' tt-cardlabel-worn' : ''}">${opts.label}</div>` : '';
   // The attribute gate to equip this weapon / off-hand — green when met, red when
   // short — so a player reads at a glance why a piece is locked and what to raise.
   // Skipped for another hero's snapshot (opts.hideReq): the "you have" comparison is
