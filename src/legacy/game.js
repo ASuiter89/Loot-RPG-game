@@ -19376,6 +19376,18 @@ function tickStatusEffects() {
           onEnemyDefeated(e);
         }
       }
+      if (pulse && s.effect === 'chill') {
+        // ICE's mark finally bites: a chilled foe takes a small, steady cold tick
+        // (frostbite). It's the smallest of the DoTs — ice already brings the
+        // strongest crowd-control — but it gives the ice kit the damage payoff
+        // fire (burn) and lightning (static) always had, on bosses too. No
+        // per-tick log line: chill is near-permanent and rides every ice hit, so
+        // logging each tick would flood the log — the floating number sells it.
+        const dmg = chillDmg();
+        e.hp -= dmg;
+        spawnFloatingText(e.x, e.y, `${dmg}`, '#9fdcff');
+        if (e.hp <= 0) { log(`<span data-spr=ic_ice></span> ${e.isBoss ? e.name : e.type} frozen through`, 'important'); onEnemyDefeated(e); }
+      }
     }
     s.secs -= WORLD_TICK_SECONDS;
     return s.secs > 0;
@@ -19388,11 +19400,13 @@ function tickStatusEffects() {
 //   • FIRE   — burns; a burning foe ignites its neighbours with a weak ember.
 //   • LIGHT. — builds STATIC; charged foes take bonus lightning damage, and the
 //              charge arcs to nearby foes so you can prime a whole pack.
-//   • ICE    — stacks CHILL that slows the foe; enough chill flash-freezes it.
+//   • ICE    — stacks CHILL that slows the foe AND ticks a little frostbite
+//              damage; enough chill flash-freezes it.
 // Damage that piggybacks on these is kept deliberately small so they reward
 // good positioning/combos without becoming a free damage steroid.
 function burnDmg()       { return 4 + Math.round(dungeonLevel * 1.5); }
 function burnSpreadDmg() { return 1 + Math.floor(dungeonLevel / 5); } // super low, can't snowball
+function chillDmg()      { return 2 + Math.round(dungeonLevel * 0.6); } // ice's frostbite tick — smallest DoT (ice trades raw damage for control)
 
 // Tag a spell's element from its icon / name (the data is stable and avoids
 // having to annotate every spell definition). Returns 'fire' | 'ice' | 'lightning' | null.
@@ -35588,6 +35602,7 @@ const __DL_FN_BRIDGE = {
   tickStatusEffects,
   burnDmg,
   burnSpreadDmg,
+  chillDmg,
   spellElement,
   castVisual,
   spawnSpellBolt,
