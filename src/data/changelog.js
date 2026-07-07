@@ -10,6 +10,19 @@ export const CHANGELOG = [
   { date: "2026-07-06", size: "small", v: "Smoother combat — no more hitch when things die", by: "Andrew Suiter", notes: [
     "Killing enemies, grabbing loot and other quick actions no longer cause a brief stutter. The combat log and its icons now repaint far more efficiently, so busy fights stay smooth — with no change to how anything looks.",
   ] },
+  { date: "2026-07-06", size: "large", v: "Endgame update — six late-game systems", by: "Andrew Suiter", notes: [
+    "Ascendant Weave: spend Boss Points on a constellation board of real choices — opportunity-cost nodes, attribute-threshold keystones, and socketed Glyphs that drop deep in Endless — plus a cosmetic Weave Depth rank. Opens after your first boss floor.",
+    "Dread Covenants: swear stackable afflictions at a town altar before a descent; more Dread means deadlier floors AND richer loot, materials and boss rewards, tracked on a per-class “how hard did you beat it” checklist. Opens with Hardened.",
+    "Mirrorforge: a deep-crafting bench — spend a bounded Forging Potential on Attune, Exalt, Divine and a one-shot Corrupt, then Mirror an item to lock a perfect copy. Deep Endless now drops “radiant” greater rolls and the Aether material. Opens at Brutal.",
+    "Pantheon of the Deep: gather Effigy shards from Endless bosses, summon apex gods at the Altar, and fight them for exclusive Mythic gear — a Base→Uber ladder gated by how deep you’ve pushed Endless. Opens in Endless.",
+    "Cycles: opt into a seasonal ladder under a rotating headline rule and race a milestone Journey; enroll a hero for the current season from the Cycles panel.",
+    "Hall of Deeds: an account-wide Renown ladder that turns your Collection, Bestiary, Conquest, depth records and bounties into deeds paying titles, frames, badges and trophies — status only, never power.",
+    "Every system ships with bespoke pixel art — panel crests, affliction sigils, tiered glyphs, the six deep gods with ascended Uber variants, per-lineage Effigy shards, and deed trophies, frames and badges — plus six animated town keepers who run the new services.",
+    "For console play: gameGuide(“covenants”/“weave”/“mirrorforge”/“pantheon”/“cycles”/“deeds”) explains each, and gameState().endgame reports their live state.",
+  ] },
+  { date: "2026-07-06", size: "small", v: "Map no longer stretches when the loot drawer opens or folds", by: "Claude", notes: [
+    "Fixed the map stretching or squishing out of shape when the loot drawer folds, unfolds, or the bag opens — the play area now re-fits itself to whatever width it's given and stays crisp, no page refresh needed.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Quest-giver arrow floats above the head, not over the face", by: "Jeff Louie", notes: [
     "Fixed the \"follow me\" / \"quest here\" arrow over a quest-giver so it now floats clear above their head instead of covering their face.",
   ] },
