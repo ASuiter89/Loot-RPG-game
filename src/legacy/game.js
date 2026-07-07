@@ -31822,6 +31822,21 @@ function openSlotsFromNewRun() { closeNewRun(); openSlots(); }
 function confirmTitleNewRun() { closeNewRun(); closeTitle(); wipeSave(); }   // wipeSave() reloads into a fresh hero
 function titleSound() { toggleSound(); refreshTitleToggles(); }
 
+// ── Endgame-systems mutable state (wired up in the ENDGAME SYSTEMS BLOCK below) ──
+// Declared HERE, ABOVE the boot sequence, on purpose. Boot runs generateMap()
+// (whose egOnFloorEnter() hook writes _egFloorEnterMs) and loadHallDeeds() (which
+// fills hallDeeds). Function declarations hoist, but `let` bindings stay in the
+// temporal dead zone until evaluation reaches them — declared after the boot block
+// these crashed every boot that had a save (a fresh save skips generateMap via the
+// tutorial path, which is why tests and incognito checks kept passing while every
+// returning player got a black screen). Keep them above the GUARDED BOOT below.
+let _egCovDread = 0, _egCovMult = null, _egCovReward = null, _egCovMalaiseRate = 0, _egFloorEnterMs = 0;
+let _egWeaveCache = null;
+let _egMfSel = -1, _egMfDivineAether = false;
+let _egPinnacleFight = null, _egPinnacleBoss = null, _egPinnacleFightStartMs = 0, _egPinnacleBossId = null;
+let _egCycleCache = null;
+let hallDeeds = { completed: [], renown: 0, title: null, frame: null, badge: null, claimed: [], classesPlayed: [], mirrored: 0, bountiesTotal: 0 };
+
 // GUARDED BOOT — the whole first-run boot sequence lives at module top level, but
 // the game-loop kickoff and the window handler bridge (which every inline on*=
 // button needs) run LATER in this file. A synchronous throw here (e.g. a corrupt
@@ -32704,14 +32719,9 @@ requestAnimationFrame(gameLoop);
 /* ═══ ENDGAME SYSTEMS BLOCK ═══ */
 // Pure cores live in src/systems + src/data (unit-tested); this block wires them
 // into the live game — town panels, in-run hooks, gameState()/gameGuide(). It is
-// assembled from per-system function sets. Mutable run/UI state is declared here;
-// the functions below (and the seam hooks elsewhere in game.js) read/write it.
-let _egCovDread = 0, _egCovMult = null, _egCovReward = null, _egCovMalaiseRate = 0, _egFloorEnterMs = 0;
-let _egWeaveCache = null;
-let _egMfSel = -1, _egMfDivineAether = false;
-let _egPinnacleFight = null, _egPinnacleBoss = null, _egPinnacleFightStartMs = 0, _egPinnacleBossId = null;
-let _egCycleCache = null;
-let hallDeeds = { completed: [], renown: 0, title: null, frame: null, badge: null, claimed: [], classesPlayed: [], mirrored: 0, bountiesTotal: 0 };
+// assembled from per-system function sets. Its mutable run/UI state (_eg*,
+// hallDeeds) is declared ABOVE the guarded boot block — boot-path code writes it,
+// so it must be initialized before boot runs (TDZ); see the comment there.
 // Current Endless-tier depth (0 in the finite tiers) — the faucet gate for glyph
 // drops, radiant affixes, Aether and Pantheon ubers.
 function endlessDepthNow() { return (typeof isEndless === 'function' && isEndless()) ? (dungeonLevel - FINITE_DEPTH) : 0; }

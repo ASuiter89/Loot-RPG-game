@@ -14,6 +14,10 @@ export const CHANGELOG = [
     "Prefer the list? The Town button still opens a directory of every service.",
     "For console play: gameState().menu.town reports the hero's tile, every town object with its position and lock state, and whoever you're standing next to.",
   ] },
+  { date: "2026-07-06", size: "small", v: "Saved games load into a drawn world again", by: "Jeff Louie", notes: [
+    "Fixed a start-up crash that hit every hero with an existing save: pressing CONTINUE dropped you onto a pitch-black screen (music and menus still running) on desktop and mobile alike. Brand-new heroes were unaffected, which is how it slipped through — loading a save now builds and draws your floor exactly as before.",
+    "The Hall of Deeds ledger, silently skipped by the same start-up fault, loads again too.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Title screen buttons always work, even after a bad save load", by: "Andrew Suiter", notes: [
     "Fixed a rare start-up error that could leave the title screen — and the controller — completely unresponsive after loading a saved game. Start-up now always finishes wiring up the menu, so every button stays clickable and the game recovers to a usable title instead of freezing.",
   ] },
