@@ -3292,6 +3292,14 @@ function endlessBite() {
 // never balloons into an unplayably huge, foe-choked map.
 //   Normal 20×20 · Hardened 24×24 · Brutal 28×28 · Endless 32×32 and growing
 const DIFF_SIZE_STEP = 4;  // tiles added to each side per finite tier above Normal
+// ── OPEN CAVERN FLOORS ── a slice of non-boss floors open up into a big, airy
+// cavern: a larger map carved from a few sprawling, overlapping chambers instead
+// of the usual tight warren — a breather from the cramped early halls. Density
+// (foes, hazards, loot) all scales with area (mapAreaRatio), so a bigger open
+// floor stays just as busy rather than sparse.
+const OPEN_FLOOR_CHANCE    = 0.14; // ~1 in 7 non-boss floors opens up
+const OPEN_FLOOR_SIZE_MULT = 1.4;  // its map runs ~40% wider/taller than the tier's usual
+const OPEN_FLOOR_MAX       = 44;   // …but never so vast it can't be crossed
 function mapSizeFor(dl) {
   const tier = diffOf(dl);                               // 1 Normal · 2 Hardened · 3 Brutal · 4 Endless
   const base = BASE_MAP_W + (tier - 1) * DIFF_SIZE_STEP; // 20 · 24 · 28 · 32
@@ -7370,6 +7378,7 @@ window.gameGuide = function gameGuide(topic) {
       `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. FIRST-KILL JACKPOT: the first time you CLEAR a given boss floor (enemies[i].firstKill true until then), its guardian spills ~3x the loot at noticeably better quality — a one-time windfall per boss floor. Because boss species RECUR across floors in Endless, this tracks by FLOOR: each new or deeper boss floor you conquer pays its own windfall, while farming a floor you've already cleared drops at the normal boss rate (minus farm fatigue on a quick re-kill). So descending to a fresh boss floor is always the richer prize. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
       `Summoned allies (gameState().allies) act before foes and soak hits, but expire after ttl turns and have capped damage — resummon and don't expect them to solo a boss.`,
       `On a fresh floor you get a brief moment of arrival immunity — use it to reposition out of a bad spawn before engaging.`,
+      `Floor layouts vary in size: now and then a non-boss floor opens into a large, airy cavern — a bigger map of a few sprawling rooms — while most floors are tighter warrens. Foe/hazard density scales with area, so a big open floor isn't emptier, just roomier.`,
     ],
     quests: [
       `Floor mini-quests: about a third of non-boss floors (depth 2+) spawn ONE optional quest for a bonus reward (gold + XP + a gear chest). gameState().quest reports the active one (type, objective tiles, live progress) or null; its tiles are drawn on the ASCII map — 'N' a quest NPC, 'Q' an objective tile (relic to fetch, tribute/grave spot, or a gather marker).`,
@@ -10372,7 +10381,14 @@ function generateMap() {
   // Size the floor for its difficulty BEFORE carving anything — harder tiers and
   // deeper Endless floors are larger maps (see mapSizeFor). areaRatio then scales
   // rooms, hazards and foes so a bigger map is a denser dungeon, not a sparse one.
-  const mapSize = mapSizeFor(dungeonLevel);
+  // ── OPEN CAVERN FLOOR? ── a slice of NON-boss floors open into a big, airy
+  // cavern: a larger map of a few sprawling, overlapping rooms instead of the
+  // usual cramped warren — a breather from the tight early halls. Boss floors
+  // (their arena is fixed, built below) and the tutorial are never resized.
+  // Rolled here so it can drive both the map size and the room/hall passes below.
+  const openFloor = dungeonLevel % 5 !== 0 && !tutorialActive && Math.random() < OPEN_FLOOR_CHANCE;
+  let mapSize = mapSizeFor(dungeonLevel);
+  if (openFloor) mapSize = Math.min(OPEN_FLOOR_MAX, Math.round(mapSize * OPEN_FLOOR_SIZE_MULT));
   MAP_W = mapSize; MAP_H = mapSize;
   const areaRatio = mapAreaRatio();
   floorSerial++;
@@ -10382,7 +10398,7 @@ function generateMap() {
   // in after the rooms are carved. Set BEFORE anything reads currentTheme().
   furnitureMap = {}; decorMap = {};
   floorThemeOverride = previewForceIndoor != null ? INDOOR_THEMES[previewForceIndoor % INDOOR_THEMES.length]
-    : ((!tutorialActive && !previewForceIsland && Math.random() < 0.28) ? pick(INDOOR_THEMES) : null);
+    : ((!tutorialActive && !previewForceIsland && !openFloor && Math.random() < 0.28) ? pick(INDOOR_THEMES) : null);
   floorIslandTheme = null; // island roll happens below, after the boss-floor bailout
   rollFloorMod();
   // ~35% of floors get a subtle colour wash for atmosphere.
@@ -10415,13 +10431,21 @@ function generateMap() {
   const rooms = [];
   // More rooms on bigger floors, so a larger map is a denser dungeon rather than
   // the same handful of rooms marooned in acres of rock.
-  const roomCount = Math.max(5, Math.round(rnd(5, 8) * areaRatio));
-  const grandHall = Math.random() < 0.3;
   const indoor = !!floorThemeOverride; // built interiors get larger, opener rooms + wider halls
+  // Open caverns: a few big sprawling chambers that overlap into airy halls,
+  // rather than many tight rooms. Every room runs large; on ordinary floors only
+  // the occasional grand hall does. Fewer rooms keep them big relative to the
+  // bigger map (√areaRatio, not the full area scaling other floors use).
+  const grandHall = !openFloor && Math.random() < 0.3;
+  const roomCount = openFloor
+    ? Math.max(4, Math.round(rnd(4, 6) * Math.sqrt(areaRatio)))
+    : Math.max(5, Math.round(rnd(5, 8) * areaRatio));
   for (let i = 0; i < roomCount; i++) {
     const big = grandHall && i === 0;
-    let rw = big ? rnd(indoor ? 11 : 8, indoor ? 15 : 11) : rnd(indoor ? 6 : 3, indoor ? 10 : 7);
-    let rh = big ? rnd(indoor ? 9 : 7, indoor ? 12 : 9)  : rnd(indoor ? 5 : 3, indoor ? 8 : 6);
+    let rw, rh;
+    if (openFloor)   { rw = rnd(9, 16); rh = rnd(8, 13); }             // every room a big open chamber
+    else if (big)    { rw = rnd(indoor ? 11 : 8, indoor ? 15 : 11); rh = rnd(indoor ? 9 : 7, indoor ? 12 : 9); }
+    else             { rw = rnd(indoor ? 6 : 3, indoor ? 10 : 7); rh = rnd(indoor ? 5 : 3, indoor ? 8 : 6); }
     rw = Math.min(rw, MAP_W - 2); rh = Math.min(rh, MAP_H - 2);
     // Built interiors read as a FLOOR PLAN: rooms are kept separate (a wall gap
     // between them), connected only by corridors — not merged into one organic
@@ -10449,7 +10473,7 @@ function generateMap() {
 
   // ── CORRIDORS ── connect rooms in a chain, plus a couple of loops for choice.
   // Each cave corridor rolls its own width so most halls are 2-wide walkways.
-  const wideHall = () => indoor || Math.random() < CAVE_WIDE_HALL_CHANCE;
+  const wideHall = () => indoor || openFloor || Math.random() < CAVE_WIDE_HALL_CHANCE;
   for (let i = 1; i < rooms.length; i++) carveCorridor(rooms[i-1].cx, rooms[i-1].cy, rooms[i].cx, rooms[i].cy, wideHall());
   const extraLoops = Math.max(2, Math.round(2 * areaRatio)); // more alternate routes on bigger floors
   for (let k = 0; k < extraLoops; k++) { const a = pick(rooms), b = pick(rooms); if (a !== b) carveCorridor(a.cx, a.cy, b.cx, b.cy, wideHall()); }

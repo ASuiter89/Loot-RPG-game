@@ -12,6 +12,10 @@ export const CHANGELOG = [
     "Rank-bonus surges on that card now light PINK once earned instead of green, so they stand apart from the card's other green readouts.",
     "When your next rank in a skill crosses a rank-3/7/10 surge, its Learn button glows pink with circling wisps to flag the coming power spike.",
   ] },
+  { date: "2026-07-06", size: "small", v: "Some floors open into big airy caverns", by: "Jeff Louie", notes: [
+    "Now and then a non-boss floor opens up: a larger map of a few sprawling, overlapping rooms with wide halls — a breather from the cramped early warrens.",
+    "Foes, hazards and loot scale with the bigger space, so an open floor stays just as lively, only roomier.",
+  ] },
   { date: "2026-07-06", size: "small", v: "Cleaner, easier-to-read item-compare card", by: "Jeff Louie", notes: [
     "Every stat now reads in the same bright colour — base stats keep a small \"base\" tag but no longer differ in colour.",
     "The Equipped side's label pops in gold, so a glance tells which piece you're already wearing.",
