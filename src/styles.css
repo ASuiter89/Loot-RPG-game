@@ -178,6 +178,7 @@
     /* Semantic status */
     --danger: #ff5252;           /* can't-afford / error / cost short */
     --success: #2e7d32;         /* upgrade / positive */
+    --surge: #ff6fc4;           /* skill milestone / rank-bonus surge accent (pink) */
     --warn: #c9a84a;               /* locked / caution */
     --info: #9fd0ff;               /* neutral highlight (floor, tips) */
     --meta: #8899bb;               /* alias kept for existing usages */
@@ -1433,15 +1434,16 @@
      popover's border; short number ranges still fit on one line. */
   .sk-pop .ru-row .ru-v { color: var(--purple-50); text-align: right; min-width: 0; overflow-wrap: anywhere; }
   .sk-pop .ru-row .ru-v b { color: var(--green-450); font-weight: bold; }
-  /* Rank-bonus ladder: the fixed rank 3 / 7 / 10 milestones, all always shown and
-     lit green (with a ✓) once this skill's rank has earned them. */
+  /* Rank-bonus ladder: the fixed rank 3 / 7 / 10 milestone surges, all always shown and
+     lit PINK (with a ✓) once this skill's rank has earned them — pink because green is
+     already carrying synergy/leech/rank-up duty in this same card. */
   .sk-pop .ms { margin-top: 5px; padding: 4px 6px; background: var(--panel); border: 1px solid var(--panel-raised); border-radius: 6px; }
-  .sk-pop .ms-h { font-size: 1.1rem; letter-spacing: 0.5px; color: var(--blue-350); text-transform: uppercase; margin-bottom: 2px; }
+  .sk-pop .ms-h { font-size: 1.1rem; letter-spacing: 0.5px; color: var(--surge); text-transform: uppercase; margin-bottom: 2px; }
   .sk-pop .ms-row { display: flex; justify-content: space-between; gap: 6px; font-size: 1.1rem; line-height: 1.4; }
   .sk-pop .ms-row .ms-k { flex: 0 0 auto; white-space: nowrap; font-weight: 700; letter-spacing: 0.3px; color: var(--purple-150); }
   .sk-pop .ms-row .ms-v { text-align: right; min-width: 0; overflow-wrap: anywhere; color: var(--purple-50); }
   .sk-pop .ms-row .ms-v b { color: inherit; font-weight: 700; }
-  .sk-pop .ms-row.met .ms-k, .sk-pop .ms-row.met .ms-v { color: var(--green-450); }
+  .sk-pop .ms-row.met .ms-k, .sk-pop .ms-row.met .ms-v { color: var(--surge); }
   .sk-pop .rq { font-size: 1.1rem; margin-top: 3px; line-height: 1.4; }
   .sk-pop .rq.no { color: var(--red-300); }
   .sk-pop .rq.ok { color: var(--green-450); }
@@ -1455,6 +1457,23 @@
   .sk-pop .pop-buy:active { background: var(--purple-500); }
   .sk-pop .pop-buy:disabled { background: var(--panel); color: var(--junk); cursor: not-allowed; }
   .sk-pop .pop-buy.maxed { background: var(--success); color: var(--green-50); }
+  /* "Surge incoming": the next rank up crosses a rank-3/7/10 milestone, so the Learn
+     button pulses with a pink glow and a wisp of pink light circling its rim — the same
+     --surge pink as the rank-bonus ladder it is about to light. Purely decorative, so a
+     disabled ("Ready — level up") button still advertises the coming spike. */
+  .sk-pop .pop-buy.surge { position: relative; z-index: 0; overflow: visible;
+    animation: surge-pulse 1.7s ease-in-out infinite; }
+  .sk-pop .pop-buy.surge::before { content: ''; position: absolute; inset: -2px; z-index: -1;
+    border-radius: 7px; animation: surge-orbit 2.4s linear infinite;
+    background: conic-gradient(from 0deg, transparent 0deg, var(--surge) 35deg, transparent 80deg,
+      transparent 180deg, var(--surge) 215deg, transparent 260deg); filter: blur(1.5px); }
+  @keyframes surge-pulse {
+    0%, 100% { box-shadow: 0 0 5px color-mix(in srgb, var(--surge) 45%, transparent); }
+    50% { box-shadow: 0 0 13px 2px color-mix(in srgb, var(--surge) 80%, transparent); } }
+  @keyframes surge-orbit { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .sk-pop .pop-buy.surge, .sk-pop .pop-buy.surge::before { animation: none; }
+    .sk-pop .pop-buy.surge { box-shadow: 0 0 8px color-mix(in srgb, var(--surge) 60%, transparent); } }
   /* Show/hide-on-bar toggle for owned actives. */
   .sk-pop .pop-hide { width: 100%; margin-top: 5px; padding: 5px; border: 1px solid var(--border); border-radius: 5px;
     background: var(--panel); color: var(--purple-200); font-family: inherit; font-size: 1.2rem; font-weight: bold;
