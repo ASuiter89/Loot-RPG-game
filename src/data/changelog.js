@@ -8,7 +8,7 @@
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
   { date: "2026-07-06", size: "large", v: "Town is now a walkable map", by: "Andrew Suiter", notes: [
-    "Town is no longer a menu — it's a walkable village you explore. You arrive by the gate and roam a fixed, organic plaza: a central statue, a lamp-lined avenue, and districts of keepers set among trees, market stalls, barrels and greenery.",
+    "Town is no longer a menu — it's a walkable base CAMP you explore, a forest clearing on real grass with worn dirt trails winding between it all. A campfire ringed with logs and stumps to sit on sits at the heart; the service keepers make camp in trade clusters around it, and a treeline frames the clearing.",
     "Walk up to any keeper and press interact (tap them on touch) to open their service — a floating prompt names whoever you're beside. Every service has its own keeper; a locked one stands greyed with a padlock and tells you its unlock requirement.",
     "Step into the Dungeon Gate at the top of town to pick your descent. If you portaled in, a Town Portal by the entrance takes you straight back to the floor you left.",
     "Prefer the list? The Town button still opens a directory of every service.",

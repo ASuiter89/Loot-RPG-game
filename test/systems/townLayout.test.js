@@ -4,9 +4,10 @@ import {
   reachableTiles, isApproachable,
 } from '../../src/systems/townLayout.js';
 import {
-  TOWN_W, TOWN_H, TOWN_SPAWN, TOWN_STATUE, TOWN_GATE, TOWN_PORTAL,
+  TOWN_W, TOWN_H, TOWN_SPAWN, TOWN_GATE, TOWN_PORTAL,
   TOWN_PATHS, TOWN_NPCS, TOWN_DECOR, TOWN_DECOR_FAMILIES,
 } from '../../src/data/townLayout.js';
+import { DECOR_INDEX } from '../../src/assets/decorAtlas.js';
 
 describe('expandPaths', () => {
   it('expands a rect into its tile keys', () => {
@@ -56,9 +57,7 @@ describe('nearestInteractable', () => {
     expect(nearestInteractable(0, 0, objs)).toBeNull();
   });
   it('picks the closest by Euclidean distance among in-range objects', () => {
-    // standing at (5,5): 'a' same tile (0), 'b' at dist 1 → 'a' wins
     expect(nearestInteractable(5, 5, objs).kind).toBe('a');
-    // between a and b, a hair closer to b
     expect(nearestInteractable(6, 5, objs).kind).toBe('b');
   });
   it('honours a custom range', () => {
@@ -97,27 +96,42 @@ describe('reachableTiles / isApproachable', () => {
     expect(reach.size).toBe(9);
   });
   it('respects blocked tiles and walls off pockets', () => {
-    // a vertical wall at x=1 splits a 3x3 grid; from (0,0) only the left column is reachable
     const blocked = new Set(['1,0', '1,1', '1,2']);
     const reach = reachableTiles(blocked, 3, 3, { x: 0, y: 0 });
     expect(reach).toEqual(new Set(['0,0', '0,1', '0,2']));
   });
   it('isApproachable is true iff an orthogonal neighbour is reachable', () => {
     const reach = new Set(['0,0', '1,0']);
-    expect(isApproachable({ x: 2, y: 0 }, reach)).toBe(true); // (1,0) neighbours it
+    expect(isApproachable({ x: 2, y: 0 }, reach)).toBe(true);
     expect(isApproachable({ x: 5, y: 5 }, reach)).toBe(false);
   });
 });
 
-// ── Authored-data validity: these guard the hand-placed town against a bad edit ──
+// ── Authored-camp validity: guard the hand-placed campsite against a bad edit,
+// resolving decor EXACTLY as buildTown does (id or family via pickDecorVariant) so
+// the connectivity check reflects the tiles the game will actually block. ──────────
 describe('authored town data', () => {
   const key = (x, y) => x + ',' + y;
   const isBorder = (x, y) => x === 0 || y === 0 || x === TOWN_W - 1 || y === TOWN_H - 1;
+  // Mirror of decorFootprint's 'all' branch (bottom-centre anchored); 'base'/'none' → anchor.
+  const footprint = (id, ax, ay) => {
+    const d = DECOR_INDEX[id];
+    if (!d || d.block === 'none' || d.block === 'base') return [[ax, ay]];
+    const W = Math.max(1, Math.round(d.w / 32)), Hh = Math.max(1, Math.round(d.ht));
+    const left = ax - (W >> 1), top = ay - (Hh - 1), t = [];
+    for (let yy = top; yy <= ay; yy++) for (let xx = left; xx < left + W; xx++) t.push([xx, yy]);
+    return t;
+  };
+  const resolve = (d) => {
+    const id = d.id != null ? d.id : pickDecorVariant(TOWN_DECOR_FAMILIES[d.c].ids, d.x, d.y);
+    const solid = d.id != null ? DECOR_INDEX[id].block !== 'none' : TOWN_DECOR_FAMILIES[d.c].solid;
+    return { id, solid, foot: solid ? footprint(id, d.x, d.y) : [[d.x, d.y]] };
+  };
 
   it('has sane dimensions and in-bounds anchors', () => {
     expect(TOWN_W).toBeGreaterThanOrEqual(20);
     expect(TOWN_H).toBeGreaterThanOrEqual(20);
-    for (const p of [TOWN_SPAWN, TOWN_STATUE, TOWN_GATE, TOWN_PORTAL]) {
+    for (const p of [TOWN_SPAWN, TOWN_GATE, TOWN_PORTAL]) {
       expect(p.x).toBeGreaterThan(0); expect(p.x).toBeLessThan(TOWN_W - 1);
       expect(p.y).toBeGreaterThan(0); expect(p.y).toBeLessThan(TOWN_H - 1);
     }
@@ -144,39 +158,55 @@ describe('authored town data', () => {
     expect(kinds.slice().sort()).toEqual(expected.slice().sort());
   });
 
-  it('never puts a decoration on a keeper, the spawn, or a special object', () => {
-    const occupied = new Set([
+  it('every decor entry resolves to a real atlas piece and is in bounds', () => {
+    for (const d of TOWN_DECOR) {
+      const { id } = resolve(d);
+      expect(DECOR_INDEX[id]).toBeDefined();
+      expect(isBorder(d.x, d.y)).toBe(false);
+      if (d.c != null) expect(TOWN_DECOR_FAMILIES[d.c]).toBeDefined();
+    }
+  });
+
+  it('no decor footprint covers a keeper, the spawn, or an exit', () => {
+    const reserved = new Set([
       ...TOWN_NPCS.map((n) => key(n.x, n.y)),
-      key(TOWN_SPAWN.x, TOWN_SPAWN.y), key(TOWN_STATUE.x, TOWN_STATUE.y),
-      key(TOWN_GATE.x, TOWN_GATE.y), key(TOWN_PORTAL.x, TOWN_PORTAL.y),
+      key(TOWN_SPAWN.x, TOWN_SPAWN.y), key(TOWN_GATE.x, TOWN_GATE.y), key(TOWN_PORTAL.x, TOWN_PORTAL.y),
     ]);
     for (const d of TOWN_DECOR) {
-      expect(occupied.has(key(d.x, d.y))).toBe(false);
-      expect(TOWN_DECOR_FAMILIES[d.c]).toBeDefined();
-      expect(isBorder(d.x, d.y)).toBe(false);
+      for (const [fx, fy] of resolve(d).foot) expect(reserved.has(key(fx, fy))).toBe(false);
     }
   });
 
   it('keeps every keeper, the gate and the portal reachable from the spawn', () => {
-    // Blocked = border walls + the statue + solid decor (treated as its 1 anchor
-    // tile) + keeper tiles. The hero must be able to reach a tile ADJACENT to each
-    // keeper/gate/portal, or the service is unusable.
     const blocked = new Set();
     for (let x = 0; x < TOWN_W; x++) for (let y = 0; y < TOWN_H; y++) if (isBorder(x, y)) blocked.add(key(x, y));
-    blocked.add(key(TOWN_STATUE.x, TOWN_STATUE.y));
-    for (const d of TOWN_DECOR) if (TOWN_DECOR_FAMILIES[d.c].solid) blocked.add(key(d.x, d.y));
+    for (const d of TOWN_DECOR) { const r = resolve(d); if (r.solid) for (const [fx, fy] of r.foot) blocked.add(key(fx, fy)); }
     for (const n of TOWN_NPCS) blocked.add(key(n.x, n.y));
 
     const reach = reachableTiles(blocked, TOWN_W, TOWN_H, TOWN_SPAWN);
     const objs = townObjects(TOWN_NPCS, TOWN_GATE, TOWN_PORTAL, true);
-    for (const o of objs) {
-      expect(isApproachable(o, reach)).toBe(true);
+    for (const o of objs) expect(isApproachable(o, reach)).toBe(true);
+  });
+
+  it('paths are in-bounds interior tiles', () => {
+    for (const p of TOWN_PATHS) {
+      expect(isBorder(p.x, p.y)).toBe(false);
     }
   });
 
-  it('leaves the spawn tile itself walkable (no decor/statue on it)', () => {
-    const solidAt = new Set(TOWN_DECOR.filter((d) => TOWN_DECOR_FAMILIES[d.c].solid).map((d) => key(d.x, d.y)));
-    expect(solidAt.has(key(TOWN_SPAWN.x, TOWN_SPAWN.y))).toBe(false);
-    expect(key(TOWN_SPAWN.x, TOWN_SPAWN.y)).not.toBe(key(TOWN_STATUE.x, TOWN_STATUE.y));
+  it('keeps every keeper clear of tree canopies (never hidden behind a tree)', () => {
+    // Tree families (block "base") occlude actors standing behind them; a keeper you
+    // must interact with should never sit under a canopy. Bushes block but don't
+    // occlude (fully solid), so they don't count.
+    const treeChars = new Set(['T', 'a', 't']);
+    const canopy = new Set();
+    for (const d of TOWN_DECOR) {
+      if (d.c == null || !treeChars.has(d.c)) continue;
+      const id = pickDecorVariant(TOWN_DECOR_FAMILIES[d.c].ids, d.x, d.y);
+      const dd = DECOR_INDEX[id];
+      const Ht = Math.max(1, Math.round(dd.ht)), HW = Math.floor(Math.round(dd.w / 32) / 2);
+      for (let yy = d.y - Ht + 1; yy < d.y; yy++) for (let xx = d.x - HW; xx <= d.x + HW; xx++) canopy.add(key(xx, yy));
+    }
+    for (const n of TOWN_NPCS) expect(canopy.has(key(n.x, n.y))).toBe(false);
   });
 });

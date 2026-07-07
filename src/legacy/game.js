@@ -80,9 +80,9 @@ import { bassSemi, voiceChord, voiceSpread } from '../systems/musicGroove.js';
 import { terrainPacksInUse } from '../data/terrainPacks.js';
 import { renderProcMap } from '../render/procTerrain.js';
 import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
-import { TOWN_W, TOWN_H, TOWN_SPAWN, TOWN_STATUE, TOWN_GATE, TOWN_PORTAL,
+import { TOWN_W, TOWN_H, TOWN_SPAWN, TOWN_GATE, TOWN_PORTAL,
   TOWN_PATHS, TOWN_NPCS, TOWN_DECOR, TOWN_DECOR_FAMILIES } from '../data/townLayout.js';
-import { expandPaths, townObjects, nearestInteractable, pickDecorVariant } from '../systems/townLayout.js';
+import { townObjects, nearestInteractable, pickDecorVariant } from '../systems/townLayout.js';
 import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
 import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKILL_ICON_ATLAS } from '../assets/skillIconsAtlas.js';
 import { BOSS_ATLAS_URL } from '../assets/bossAtlas.js';
@@ -1784,6 +1784,16 @@ function indoorRoles(C) {
   const f = INDOOR_ROLES[C.floorStyle] || INDOOR_ROLES.stone;
   return { floor: f.floor, floor2: f.floor2, floor3: f.floor3, wall: INDOOR_WALL[C.wallStyle] || 'Rock_Gray', water: 'Water' };
 }
+// The walkable town's ground: lush grass with worn DIRT trails. The trail tiles are
+// marked variant-2 in floorVariantMap (buildTown), so the floor3 role autotiles Dirt
+// over them; a light scatter of variant-1 blends Grass_Light patches for texture.
+const TOWN_TERRAIN = { floor: 'Grass', floor2: 'Grass_Light', floor3: 'Dirt_Tan', wall: 'Rock_Gray', water: 'Water' };
+// The autotiler's floor/wall/water roles for the current context. Town uses its own
+// grass-and-dirt set; interiors and outdoor biomes are unchanged.
+function terrainRoles(C) {
+  if (inTown) return TOWN_TERRAIN;
+  return C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor: 'Grass', wall: 'Rock_Gray', water: 'Water' });
+}
 // Guard against the hard-seam bug class: a terrain used as an autotiled layer
 // MUST ship a full 16-variant blob AND have transparent edges. `Soil` was
 // exported with a baked-in background (100% opaque, no alpha); `Ice`,
@@ -1980,7 +1990,7 @@ function lpcCrackOverlayMasked(px, py, tw, th, sev, seed, x, y) {
   // autotiles the floor over a solid wall base and must be masked with the SAME
   // floor role the terrain used.
   if (C.indoor && intReady) { lpcCrackOverlay(px, py, tw, th, sev, seed); return; }
-  const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor: 'Grass', wall: 'Rock_Gray', water: 'Water' });
+  const B = terrainRoles(C);
   if (!B || !B.floor || !LPC_TABLE.table[B.floor]) { lpcCrackOverlay(px, py, tw, th, sev, seed); return; }
   const W = Math.max(1, Math.round(tw)), H = Math.max(1, Math.round(th));
   const cv = _crackMaskCv || (_crackMaskCv = document.createElement('canvas'));
@@ -2030,7 +2040,7 @@ function paintLPCTerrain(C, B, ox, oy, tw, x0, y0, x1, y1) {
   const isWater = (x, y) => inb(x, y) && mapData[y][x] === 6;
   const isLava  = (x, y) => inb(x, y) && mapData[y][x] === 7;
   ctx.imageSmoothingEnabled = false;
-  if (C.indoor && intReady) {
+  if (C.indoor && intReady && !inTown) {   // town is an outdoor clearing — always autotile grass, never indoor materials
     // Built interiors get real laid materials — wood/stone/marble/brick/adobe wall
     // and floor field tiles, a uniform tile per room (walls on wall cells, floor on
     // the rest), instead of borrowing the outdoor ground terrains.
@@ -2052,7 +2062,7 @@ function paintLPCTerrain(C, B, ox, oy, tw, x0, y0, x1, y1) {
 }
 function bakeLPCTerrain(tw) {
   const C = currentTheme();
-  const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' });
+  const B = terrainRoles(C);
   const cv = document.createElement('canvas');
   cv.width = (MAP_W + 2) * tw; cv.height = (MAP_H + 2) * tw;
   const realCtx = ctx;
@@ -2076,7 +2086,7 @@ function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
   if ((MAP_W + 2) * tw > 4096) {
     if (_lpcCache.cv) _lpcCache = { key: null, baseKey: null, tw: 0, cv: null };  // release the big canvas
     const C = currentTheme();
-    const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor:'Grass', wall:'Rock_Gray', water:'Water' });
+    const B = terrainRoles(C);
     const cx0 = Math.max(0, x0 - 1), cy0 = Math.max(0, y0 - 1);
     const cx1 = Math.min(MAP_W, x1 + 1), cy1 = Math.min(MAP_H, y1 + 1);
     paintLPCTerrain(C, B, ox, oy, tw, cx0, cy0, cx1, cy1);
@@ -2188,7 +2198,7 @@ function drawInteriorTerrain(C, ox, oy, tw, x0, y0, x1, y1) {
   ctx.imageSmoothingEnabled = sm;
 }
 function drawFloorBase(px, py, tw, th, seed, C) {
-  if ((lpcReady || PROC_TERRAIN) && !inTown) return; // terrain pass already painted the ground (indoor + outdoor)
+  if (lpcReady || PROC_TERRAIN) return; // terrain pass already painted the ground (indoor + outdoor + town)
   // Procedural floor that matches the surrounding tiles (the base terrain is no
   // longer drawn from the sprite atlas).
   ctx.fillStyle = (Math.abs(seed) % 5 === 0) ? C.floorAlt : C.floor;
@@ -2442,6 +2452,13 @@ function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
     actors.push({ footY: py + th * 0.82, l: px - tw * 0.5, t: py - th * 1.2, r: px + tw * 1.5, b: py + th * 1.15,
       tint: heroSilhouetteTint(player.class), draw: () => drawHeroSprite(px, py, tw, th, scale) });
   }
+  // Town keepers occlude like any actor: a keeper standing behind a tree is drawn
+  // BEHIND it (silhouetted), not on top. Their body matches drawTownWorld's.
+  if (inTown) for (const n of townNpcs) {
+    const cx = offX + n.x * tw + tw / 2, footY = offY + n.y * th + th * 0.92, sz = Math.round(th * 1.5);
+    actors.push({ footY, l: cx - sz * 0.5, t: footY - sz * 0.92, r: cx + sz * 0.5, b: footY + sz * 0.08,
+      tint: ENEMY_SILHOUETTE_TINT, draw: () => drawTownWalk(n.kind, cx, footY, sz) });
+  }
   enemies.forEach((e) => {
     if (e.dead) return;
     const S = e.size || 1;
@@ -2634,7 +2651,7 @@ function drawFurnitureAt(x, y, px, py, tw, th) {
 // and the sandy/grass or molten shore is painted only on sides facing land —
 // never on the edge between two liquid tiles.
 function drawLiquid(px, py, tw, th, x, y, seed, C, kind) {
-  if (lpcReady && !inTown) return; // LPC terrain pass draws water/lava
+  if (lpcReady) return; // LPC terrain pass draws water/lava
   const t = kind === 'lava' ? 7 : 6;
   const now = animNow();
   const h = Math.abs(seed);
@@ -6637,10 +6654,9 @@ let townBuildings = []; // decorative shop buildings drawn behind the NPCs
 // The walkable town is a hand-authored static map (src/data/townLayout.js). These
 // hold its live pieces once buildTown() stamps it: the cobble-path tile set (for
 // the ground painter), and the Dungeon Gate / Town Portal / statue object positions.
-let townPathSet = new Set();
+let townPathSet = new Set();       // "y,x" cobble/dirt trail tiles (ground painter + terrain paths)
 let townGatePos = null;            // {x,y,name} — walk into it / interact to descend
 let townPortalPos = null;          // {x,y,name} — return to the held floor (see townPortalActive)
-let townStatuePos = null;          // {x,y} — decorative plaza centrepiece
 // Small pixel badge shown above each service keeper (and in its interaction prompt).
 // The keeper's BODY is the animated walk sprite drawTownWalk(kind); this is just the
 // role glyph. All are real atlas keys (no emoji), per the pixel-art rule.
@@ -6744,11 +6760,10 @@ window.gameState = function gameState(radius) {
   if (typeof nextDiffPortal !== 'undefined' && nextDiffPortal) put(nextDiffPortal.x, nextDiffPortal.y, 'R');
   // Walkable-town objects (gated on inTown so they never collide with dungeon
   // glyphs): each service keeper 'n' (solid — you interact from beside it), the
-  // Dungeon Gate 'G', the Town Portal 'P' (only when a floor is held), the statue
-  // 'I'. Kinds/positions are in gameState().menu.town.objects for exact reads.
+  // Dungeon Gate 'G', the Town Portal 'P' (only when a floor is held). Kinds/
+  // positions are in gameState().menu.town.objects for exact reads.
   if (inTown) {
     (townNpcs || []).forEach(n => put(n.x, n.y, 'n'));
-    if (townStatuePos) put(townStatuePos.x, townStatuePos.y, 'I');
     if (townGatePos) put(townGatePos.x, townGatePos.y, 'G');
     if (townPortalActive()) put(townPortalPos.x, townPortalPos.y, 'P');
   }
@@ -7142,7 +7157,6 @@ window.gameState = function gameState(radius) {
           spawn: { x: TOWN_SPAWN.x, y: TOWN_SPAWN.y },
           gate: townGatePos ? { x: townGatePos.x, y: townGatePos.y } : null,
           portal: townPortalActive() ? { x: townPortalPos.x, y: townPortalPos.y } : null,
-          statue: townStatuePos ? { x: townStatuePos.x, y: townStatuePos.y } : null,
           nearby: near ? decorate(near) : null,
           objects: list.map(decorate),
         };
@@ -7249,7 +7263,7 @@ window.gameState = function gameState(radius) {
       cycle: egSafe(egCycleGameStateBlock),     // seasonal phase, enrollment, journey checklist, countdown
       deeds: egSafe(egDeedsGameStateBlock),     // Renown rank + total, deeds completed/total, equipped title
     },
-    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain · (town) n service keeper (walk up + interact) · G Dungeon Gate (step in to descend) · P Town Portal (return to held floor) · I statue',
+    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain · (town) n service keeper (walk up + interact) · G Dungeon Gate (step in to descend) · P Town Portal (return to held floor)',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
     map: rows.join('\n'),
@@ -7447,7 +7461,7 @@ window.gameGuide = function gameGuide(topic) {
       `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
     ],
     town: [
-      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE village, not a menu: you arrive at the bottom by the gate avenue and roam a fixed, organic plaza — a central statue, a lamp-lined avenue, and districts of keepers among the trees, market stalls and greenery (same layout every visit). WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it) to use their service — a floating prompt names whoever you're beside. gameState().menu.town lists every keeper/object with its tile position + lock state; .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
+      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the service keepers making camp in trade clusters around the fire and a treeline framing the clearing (same layout every visit). WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it) to use their service — a floating prompt names whoever you're beside. gameState().menu.town lists every keeper/object with its tile position + lock state; .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
       `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
@@ -11914,7 +11928,7 @@ function captureHeldFloor() {
   // persistent object and buildTown moves it to the town entry tile.
   heldFloor = {
     MAP_W, MAP_H,
-    mapData, wallCracks, furnitureMap, decorMap, teleporters, shrineData,
+    mapData, wallCracks, furnitureMap, decorMap, teleporters, shrineData, floorVariantMap,
     floorThemeOverride, floorTint, floorMod, floorRooms, floorMobSpec,
     hasFountain, groundKey, hasKey, startPos,
     dungeonLevel, floorCleared, floorGreed,
@@ -11945,7 +11959,7 @@ function returnToHeldFloor() {
   // corrupt both rendering and occupancy.
   MAP_W = h.MAP_W; MAP_H = h.MAP_H;
   mapData = h.mapData; wallCracks = h.wallCracks;
-  furnitureMap = h.furnitureMap; decorMap = h.decorMap;
+  furnitureMap = h.furnitureMap; decorMap = h.decorMap; floorVariantMap = h.floorVariantMap;
   teleporters = h.teleporters; shrineData = h.shrineData;
   floorThemeOverride = h.floorThemeOverride; floorTint = h.floorTint;
   floorMod = h.floorMod; floorRooms = h.floorRooms; floorMobSpec = h.floorMobSpec;
@@ -12031,8 +12045,8 @@ function buildTown() {
   floorMod = FLOOR_MODS[0]; floorTint = 'rgba(120,90,40,0.10)';
   statusEffects = statusEffects.filter(s => s.target === 'player');
 
-  // Solid border wall, open grass within (grass vs cobble is a render detail —
-  // both are walkable tile 0; the ground painter reads townPathSet for cobble).
+  // Solid border wall (rock, framed by the treeline), open grass within — every
+  // interior tile is walkable floor (tile 0); the trail LOOK comes from floorVariantMap.
   mapData = []; wallCracks = {};
   for (let y = 0; y < MAP_H; y++) {
     mapData[y] = [];
@@ -12041,26 +12055,33 @@ function buildTown() {
     }
   }
   townBuildings = [];                  // no buildings in the walkable town (kept empty for old code/saves)
-  townPathSet = expandPaths(TOWN_PATHS);
+  townPathSet = new Set(TOWN_PATHS.map((p) => p.y + ',' + p.x));
   townGatePos = { x: TOWN_GATE.x, y: TOWN_GATE.y, name: TOWN_GATE.name };
   townPortalPos = { x: TOWN_PORTAL.x, y: TOWN_PORTAL.y, name: TOWN_PORTAL.name };
-  townStatuePos = { x: TOWN_STATUE.x, y: TOWN_STATUE.y };
 
-  // Stamp the authored decorations. Each entry's family char resolves to a concrete
-  // atlas piece deterministically (same town every visit). Solid families block
-  // just their anchor tile (so a tall brazier/tree still lets you walk behind its
-  // crown), written into furnitureMap like any solid decor; the statue blocks too.
+  // Real autotiled ground: mark the trail tiles variant-2 (→ floor3 Dirt) and
+  // scatter a light variant-1 (→ floor2 Grass_Light) for texture; the rest is Grass.
+  floorVariantMap = [];
+  for (let y = 0; y < MAP_H; y++) {
+    const row = [];
+    for (let x = 0; x < MAP_W; x++) {
+      row.push(townPathSet.has(y + ',' + x) ? 2 : ((((x * 7 + y * 13) >>> 0) % 9 === 0) ? 1 : 0));
+    }
+    floorVariantMap.push(row);
+  }
+
+  // Stamp the authored scenery. Each entry is an EXACT atlas piece (`id`: the
+  // campfire, well, signpost, logs & stumps) or a FAMILY (`c`) resolved to a
+  // curated piece deterministically (same camp every visit). Solid pieces block
+  // their whole footprint (furnitureMap) so you path around a tree/log, not through it.
   for (const d of TOWN_DECOR) {
-    const fam = TOWN_DECOR_FAMILIES[d.c];
-    if (!fam) continue;
-    const tagIds = DECOR_BY_TAG[fam.tag] || [];
-    const ids = tagIds.filter((i) => DECOR_SOLID[i] === fam.solid);
-    const id = pickDecorVariant(ids.length ? ids : tagIds, d.x, d.y);
+    let id, solid;
+    if (d.id != null) { id = d.id; solid = DECOR_SOLID[id]; }
+    else { const fam = TOWN_DECOR_FAMILIES[d.c]; if (!fam) continue; id = pickDecorVariant(fam.ids, d.x, d.y); solid = fam.solid; }
     if (id == null) continue;
     decorMap[d.y + ',' + d.x] = id;
-    if (fam.solid) furnitureMap[d.y + ',' + d.x] = 1;   // block the anchor tile only
+    if (solid) for (const [fx, fy] of decorFootprint(id, d.x, d.y)) furnitureMap[fy + ',' + fx] = 1;
   }
-  if (townStatuePos) furnitureMap[townStatuePos.y + ',' + townStatuePos.x] = 1; // solid centrepiece
 
   // The service keepers, hand-placed among the districts. `kind` maps 1:1 to
   // openTownService(kind); `tag` is the small pixel badge above them (and in the
@@ -14951,50 +14972,9 @@ function gambleRoll() {
   updateBars(); renderPanel(); renderGambler(); saveGame();
 }
 
-// Town ground: cobblestone on the authored walkways (townPathSet), village grass
-// everywhere else. Both are walkable — this is purely the look of a lived-in town
-// square vs its green. Bespoke procedural-terrain art (literal colours, not tokens).
-function drawTownFloor(px, py, tw, th, x, y, seed) {
-  if (townPathSet.has(y + ',' + x)) drawTownCobble(px, py, tw, th, x, y, seed);
-  else drawTownGrass(px, py, tw, th, x, y, seed);
-}
-// Warm cobblestone plaza/path tile — clearly a town walkway, not a dungeon floor.
-function drawTownCobble(px, py, tw, th, x, y, seed) {
-  ctx.fillStyle = (x + y) % 2 === 0 ? '#8a7d63' : '#7e7158';
-  ctx.fillRect(px, py, tw, th);
-  // cobble seams
-  ctx.fillStyle = 'rgba(58,50,36,0.5)';
-  ctx.fillRect(px, py, tw, 1);
-  ctx.fillRect(px, py, 1, th);
-  // worn cobble highlight
-  if (seed % 7 === 0) {
-    ctx.fillStyle = 'rgba(255,240,205,0.12)';
-    ctx.fillRect(px + tw * 0.28, py + th * 0.28, tw * 0.32, th * 0.32);
-  }
-  // the odd tuft of grass between the stones
-  if (seed % 13 === 0) {
-    ctx.fillStyle = 'rgba(86,142,62,0.55)';
-    ctx.fillRect(px + tw * 0.55, py + th * 0.6, tw * 0.22, Math.max(1, th * 0.18));
-    ctx.fillRect(px + tw * 0.2, py + th * 0.68, tw * 0.14, Math.max(1, th * 0.12));
-  }
-}
-// Village-green grass tile — a two-tone sward with the odd blade tuft and wildflower.
-function drawTownGrass(px, py, tw, th, x, y, seed) {
-  ctx.fillStyle = (x + y) % 2 === 0 ? '#4c7638' : '#457031';
-  ctx.fillRect(px, py, tw, th);
-  if (seed % 5 === 0) {   // lighter blade cluster
-    ctx.fillStyle = 'rgba(122,170,86,0.35)';
-    ctx.fillRect(px + tw * 0.2, py + th * 0.55, Math.max(1, tw * 0.12), Math.max(1, th * 0.22));
-  }
-  if (seed % 11 === 0) {  // darker tuft
-    ctx.fillStyle = 'rgba(52,86,42,0.5)';
-    ctx.fillRect(px + tw * 0.6, py + th * 0.3, Math.max(1, tw * 0.1), Math.max(1, th * 0.18));
-  }
-  if (seed % 23 === 0) {  // a stray wildflower speck
-    ctx.fillStyle = 'rgba(232,220,120,0.6)';
-    ctx.fillRect(px + tw * 0.45, py + th * 0.5, Math.max(1, tw * 0.1), Math.max(1, th * 0.1));
-  }
-}
+// (The walkable town's ground is the real autotiled LPC terrain now — grass with
+// worn dirt trails, painted by drawLPCTerrain via TOWN_TERRAIN — so the old
+// procedural drawTownFloor/cobble/grass painters were removed.)
 
 // Paint the town's shop buildings: a timbered plaster wall, door, lit windows,
 // a colour-coded gabled roof, and a hanging shingle. The Dungeon Gate renders as
@@ -15091,13 +15071,7 @@ function drawTownBuildings(offX, offY, tw, th) {
 function drawTownWorld(offX, offY, tw, th, scale) {
   const cxOf = (tx) => offX + tx * tw + tw / 2;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-
-  // Statue centrepiece.
-  if (townStatuePos && spriteReady) {
-    const scx = cxOf(townStatuePos.x), sfy = offY + townStatuePos.y * th + th;
-    drawActorShadow(scx, sfy - th * 0.06, tw * 0.9);
-    drawSpriteC('feat_statue', scx, sfy - th * 0.5, Math.round(tw * 1.15));
-  }
+  // (The campfire, well, signpost and fire-ring logs render via the decor pass.)
 
   // Dungeon Gate — the red gate sprite over a warm arch glow (walk into it to descend).
   if (townGatePos) {
@@ -16476,7 +16450,7 @@ function isWallTile(x, y) {
 function drawWall(px, py, tw, th, x, y, seed, C, cracked) {
   // Indoor + outdoor both use the LPC autotiler now: drawLPCTerrain fills the
   // wall mass, so here we only add the crack overlay for damaged tiles.
-  if (lpcReady && !inTown) { if (cracked) lpcCrackOverlayMasked(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed, x, y); return; }
+  if (lpcReady) { if (cracked) lpcCrackOverlayMasked(px, py, tw, th, crackSeverity(wallCracks[y + ',' + x] || 0), seed, x, y); return; }
   if (C.wallStyle === 'forest') { drawForestWall(px, py, tw, th, x, y, seed, C, cracked); return; }
   if (C.wallStyle === 'pine') { drawPineWall(px, py, tw, th, x, y, seed, C, cracked); return; }
   if (C.wallStyle === 'mushroom') { drawMushroomWall(px, py, tw, th, x, y, seed, C, cracked); return; }
@@ -16766,7 +16740,7 @@ function draw() {
   // Indoor maps route through the same autotiler now (via indoorRoles), so both
   // outdoor biomes and built interiors get real tiled floors + clustered accents.
   if (PROC_TERRAIN && !inTown && !C.indoor) drawProcTerrain(offX, offY, tw); // preview: procedural terrain-pack ground
-  else if (lpcReady && !inTown) drawLPCTerrain(offX, offY, tw, x0, y0, x1, y1);
+  else if (lpcReady) drawLPCTerrain(offX, offY, tw, x0, y0, x1, y1);   // town uses the real autotiled terrain too (grass + dirt trails)
 
   // Draw tiles
   for (let y = y0; y < y1; y++) {
@@ -16775,23 +16749,9 @@ function draw() {
       const t = mapData[y][x];
       const seed = (x * 73856093) ^ (y * 19349663); // deterministic per-tile
 
-      // In town, every tile is either the plaza ground or a building footprint.
-      // Buildings are painted as whole structures later (drawTownBuildings), so
-      // here we just lay cobblestone everywhere and a warm stone perimeter wall.
-      if (inTown) {
-        const isBorder = (x === 0 || y === 0 || x === MAP_W - 1 || y === MAP_H - 1);
-        if (isBorder) {
-          ctx.fillStyle = '#5b5048';
-          ctx.fillRect(px, py, tw, th);
-          ctx.fillStyle = '#6b5f54';
-          ctx.fillRect(px, py, tw, Math.max(1, th * 0.5));
-          ctx.fillStyle = '#403832';
-          ctx.fillRect(px, py + th - Math.max(1, th * 0.12), tw, Math.max(1, th * 0.12));
-        } else {
-          drawTownFloor(px, py, tw, th, x, y, seed);
-        }
-        continue;
-      }
+      // The walkable town renders through the SAME real terrain path as an outdoor
+      // floor (grass + dirt trails, rock border) — see terrainRoles/TOWN_TERRAIN — so
+      // there's no town-special tile branch here anymore; it just falls through.
 
       // preview: the procedural terrain pass already painted walls/water/lava
       if (PROC_TERRAIN && (t === 1 || t === 10 || t === 6 || t === 7)) continue;
@@ -17004,7 +16964,7 @@ function draw() {
           ctx.arc(px+tw*0.66, py+th*0.5, tw*0.08, 0, Math.PI*2);
           ctx.fill();
         }
-      } else if (!(lpcReady && !inTown)) {
+      } else if (!lpcReady) {
         // Floor base — organic per-tile variation instead of a checkerboard:
         // most tiles use the base colour, a few the alt, and every tile gets a
         // faint lightness jitter so the ground reads as natural, worn stone.
@@ -17680,7 +17640,7 @@ function draw() {
 
   // Tall decor (trees) occludes actors standing behind it, with a tinted
   // silhouette over the covered part so the hero/foes stay trackable.
-  drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale);   // town trees occlude the hero too
+  drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale);   // hero + town keepers get proper depth behind trees (silhouetted), not drawn on top
   if (previewDrawSolids) { ctx.save(); ctx.globalAlpha = 0.38; ctx.fillStyle = '#ff2020'; for (const k in furnitureMap) { const c = k.split(','), sx = +c[1], sy = +c[0]; ctx.fillRect(offX + sx * tw, offY + sy * th, tw, th); } ctx.restore(); }
 
   // Player status effects are surfaced as full-screen coloured halos (see
@@ -31997,7 +31957,7 @@ try {
     // inspect always matches what's on screen. Returns a labeled contact sheet.
     window.__previewTileset = function () {
       const C = currentTheme();
-      const B = C.indoor ? indoorRoles(C) : (LPC_BIOME[C.name] || { floor: 'Grass', wall: 'Rock_Gray', water: 'Water' });
+      const B = terrainRoles(C);
       const roles = [];
       if (B.floor)  roles.push(['floor (primary)', B.floor]);
       if (B.floor2) roles.push(['floor accent 2', B.floor2]);
@@ -35467,7 +35427,6 @@ const __DL_FN_BRIDGE = {
   openGambler,
   renderGambler,
   gambleRoll,
-  drawTownFloor,
   drawTownBuildings,
   drawTownWorld,
   spawnFloorMob,
