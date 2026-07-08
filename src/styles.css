@@ -1199,6 +1199,7 @@
   .pathline-action.on,
   .stairsarrow-action.on,
   .monsterarrows-action.on,
+  .mute-action.on,
   .crosshair-action.on { background: var(--orange-850); border-color: var(--gold-350); color: var(--xp); }
 
   /* Reset Run wipes the current hero, so it shouts: red-tinted and gently pulsing at
