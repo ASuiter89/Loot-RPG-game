@@ -7580,9 +7580,11 @@ window.gameGuide = function gameGuide(topic) {
 const AUDIO_KEY = 'dungeonLootAudio';        // legacy single "all sound" switch
 const AUDIO_MUSIC_KEY = 'dungeonLootMusic';
 const AUDIO_SFX_KEY = 'dungeonLootSfx';
+const AUDIO_MUTE_KEY = 'dungeonLootMuted';   // master mute — silences everything, per-channel mix untouched
 const TOWN_AMB_KEY = 'dungeonLootTownAmb';   // town background chatter — OFF by default
 const AUDIO_LEVELS = 5;                              // volume steps above off (0 = muted, 5 = full)
 const SFX_BASE_GAIN = 0.4, MUSIC_BASE_GAIN = 0.28;  // full-volume bus gains
+const MASTER_GAIN = 0.9;                             // normal master-bus gain (drops to 0 when muted)
 // The generative soundtrack layers four voices; each gets its own fader (a level
 // 0–5, full by default) so the player can mix the music to taste. Each key routes
 // to a per-voice sub-bus under the music bus (see buildMusicVoiceBuses):
@@ -7604,6 +7606,7 @@ const audio = {
   musicVoiceGain: null,
 };
 try { audio.townAmbOn = localStorage.getItem(TOWN_AMB_KEY) === 'on'; } catch (e) {}
+try { audio.muted = localStorage.getItem(AUDIO_MUTE_KEY) === '1'; } catch (e) {}
 try {
   // Music and SFX each pick a level 0–5 (0 = off). Migrate older saves: the split
   // on/off keys stored 'on'/'off'; before that a single "all sound" switch.
@@ -7641,7 +7644,7 @@ function audioInit() {
     // voices together and tames peaks so nothing clips into harshness — most of
     // the difference between "cheap beep" and "polished" is this and the reverb.
     audio.master = audio.ctx.createGain();
-    audio.master.gain.value = 0.9;
+    audio.master.gain.value = audio.muted ? 0 : MASTER_GAIN;
     const comp = audio.ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.knee.value = 24; comp.ratio.value = 3;
     comp.attack.value = 0.003; comp.release.value = 0.25;
@@ -8546,7 +8549,7 @@ function setMusicLevel(lvl) {
   try { localStorage.setItem(AUDIO_MUSIC_KEY, String(audio.musicLevel)); } catch (e) {}
   settingsChanged();
   if (audio.musicGain) audio.musicGain.gain.value = musicBusGain();
-  if (audio.musicLevel > 0) audioUnlock();
+  if (audio.musicLevel > 0) { audioUnlock(); if (audio.muted) setMuted(false); }  // raising a channel lifts the master mute
   updateMusicButton();
 }
 function setSfxLevel(lvl) {
@@ -8554,7 +8557,7 @@ function setSfxLevel(lvl) {
   try { localStorage.setItem(AUDIO_SFX_KEY, String(audio.sfxLevel)); } catch (e) {}
   settingsChanged();
   if (audio.sfxGain) audio.sfxGain.gain.value = sfxBusGain();
-  if (audio.sfxLevel > 0) { audioUnlock(); sfx('click'); }
+  if (audio.sfxLevel > 0) { audioUnlock(); if (audio.muted) setMuted(false); sfx('click'); }  // raising a channel lifts the master mute
   updateSfxButton();
 }
 // Step up one notch, wrapping full → off (…→3→4→5→off→1→2…).
@@ -8629,9 +8632,35 @@ function updateSfxButton() {
   if (btn) btn.classList.toggle('muted', audio.sfxLevel <= 0);
   renderVolMeter(document.getElementById('sfx-meter'), audio.sfxLevel);
 }
-function updateSoundButtons() { updateMusicButton(); updateSfxButton(); }
+function updateSoundButtons() { updateMuteButton(); updateMusicButton(); updateSfxButton(); }
 // Back-compat for any lingering "all sound" caller (e.g. an old title toggle).
 function toggleSound() { cycleMusic(); cycleSfx(); }
+
+// ── Master mute ── one tap silences EVERYTHING (music, SFX, every mix voice) at
+// the master bus, leaving each channel's own level untouched so a second tap
+// restores the exact same mix — no need to step MUSIC and SFX back down by hand.
+// Persisted so it survives a reload.
+function applyMasterMute() {
+  if (audio.master) audio.master.gain.value = audio.muted ? 0 : MASTER_GAIN;
+}
+function setMuted(on) {
+  audio.muted = !!on;
+  try { localStorage.setItem(AUDIO_MUTE_KEY, audio.muted ? '1' : '0'); } catch (e) {}
+  settingsChanged();
+  applyMasterMute();
+  updateMuteButton();
+  refreshTitleToggles();
+  if (!audio.muted) { audioUnlock(); sfx('click'); }   // a click confirms the un-mute (inaudible while muting)
+}
+function toggleMute() { setMuted(!audio.muted); }
+function updateMuteButton() {
+  const btn = document.getElementById('mute-action');
+  if (btn) btn.classList.toggle('on', audio.muted);
+  const ic = document.getElementById('mute-icon');
+  if (ic) ic.innerHTML = audio.muted ? SOUND_OFF_SVG : SOUND_ON_SVG;
+  const lbl = document.getElementById('mute-label');
+  if (lbl) lbl.textContent = audio.muted ? 'MUTED' : 'MUTE ALL';
+}
 
 // ── Music mix ── each of the four voices (bass / chords / lead / drums) has its
 // own 0–5 fader, applied live to its sub-bus gain and saved per voice. Changing a
@@ -8643,6 +8672,7 @@ function setMixLevel(key, lvl) {
   try { localStorage.setItem(AUDIO_MIX_KEYS[key], String(v)); } catch (e) {}
   settingsChanged();
   if (audio.musicVoiceGain && audio.musicVoiceGain[key]) audio.musicVoiceGain[key].gain.value = v / AUDIO_LEVELS;
+  if (v > 0 && audio.muted) setMuted(false);   // raising a channel lifts the master mute
   sfx('click');
   updateMixButton(key);
 }
@@ -35395,6 +35425,9 @@ const __DL_FN_BRIDGE = {
   updateMusicButton,
   updateSfxButton,
   updateSoundButtons,
+  toggleMute,
+  setMuted,
+  updateMuteButton,
   toggleSound,
   toggleSprintMode,
   updateSprintButton,

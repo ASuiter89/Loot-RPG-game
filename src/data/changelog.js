@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-07", size: "small", v: "One-tap Mute All at the top of Audio", by: "Jeff Louie", notes: [
+    "Settings ▸ Audio opens with a Mute All button — one tap silences music and every sound at once, no more stepping each channel down.",
+    "Tap it again to restore your exact mix; every channel keeps the level you set. Nudging any volume back up also lifts the mute.",
+  ] },
   { date: "2026-07-07", size: "small", v: "Click keepers to visit them, and sprint free around town", by: "Andrew Suiter", notes: [
     "Click a keeper (or the Town Portal) and the hero walks over and opens its menu on arrival — no need to march up and press interact. Clicking the Dungeon Gate walks straight into it.",
     "Sprinting in town no longer drains Stamina. The camp is a safe rest, so you can run everywhere at full speed and your Stamina keeps refilling as if you were standing still.",
