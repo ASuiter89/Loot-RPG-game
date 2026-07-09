@@ -7273,7 +7273,7 @@ window.gameState = function gameState(radius) {
       cycle: egSafe(egCycleGameStateBlock),     // seasonal phase, enrollment, journey checklist, countdown
       deeds: egSafe(egDeedsGameStateBlock),     // Renown rank + total, deeds completed/total, equipped title
     },
-    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · » vault express stair (drops 2 floors) · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain · (town) n service keeper (walk up + interact) · G Dungeon Gate (step in to descend) · P Town Portal (return to held floor)',
+    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant (passable) · ? mystic (passable) · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · » vault express stair (drops 2 floors) · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain · (town) n service keeper (walk up + interact) · G Dungeon Gate (step in to descend) · P Town Portal (return to held floor)',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
     map: rows.join('\n'),
@@ -10071,10 +10071,13 @@ function ensureHostilesReachable() {
   }
 }
 
-// A STATIONARY, build-time solid that blocks a tile for good: solid decor/
-// furniture, or one of the two shop NPCs. The player and enemies move (and foes
-// are relocated by ensureHostilesReachable), so they're excluded — only these
-// three can permanently wall off a path once the floor is built.
+// A tile the FLOOR-BUILD treats as a blocker so placement + connectivity route
+// around it: solid decor/furniture (truly impassable in play), or one of the two
+// shop NPCs. The shop NPCs are PASSABLE in play — you walk through (or onto) them
+// to trade — but they stay here so the build never parks one on a 1-wide corridor
+// and decor never crowds one, so they always read cleanly and you're never forced
+// to stand inside them. The player and live foes move (foes are relocated by
+// ensureHostilesReachable), so they're excluded.
 function tileBlockedByObject(x, y) {
   return furnitureMap[y + ',' + x] !== undefined
       || (merchant && merchant.x === x && merchant.y === y)
@@ -20487,8 +20490,8 @@ function playerSolidCell(cx, cy, ignoreFoes) {
   if (t === 11) return true;            // locked door — solid until unlocked (see breakAhead)
   if (!isFloorPassable(t)) return true;
   if (bossWallAt(cx, cy)) return true;
-  if (merchant && merchant.x === cx && merchant.y === cy) return true;
-  if (mystic && mystic.x === cx && mystic.y === cy) return true;
+  // The roaming merchant/mystic are PASSABLE — walk through (or stand on) them to
+  // browse. Interaction stays Chebyshev ≤1 (pickup()), so overlapping opens the menu.
   // Foes are solid — you can't walk through them. You can still always retreat:
   // they move slower than you (WORLD_TICK), and resting flush against a foe leaves
   // your box just shy of its cell, so you can slide along it and step away. The one
@@ -23065,8 +23068,7 @@ function enemyTileFree(x, y) {
   if (bossWallAt(x, y)) return false; // a conjured barrier blocks foes too
   if (x === player.x && y === player.y) return false;
   if (getEnemyAt(x, y)) return false;
-  if (merchant && merchant.x === x && merchant.y === y) return false;
-  if (mystic && mystic.x === x && mystic.y === y) return false;
+  // The roaming merchant/mystic are passable now — foes may route through them too.
   return true;
 }
 
@@ -23116,8 +23118,7 @@ function pathBlockedGrid() {
       if (cx >= 0 && cy >= 0 && cx < W && cy < H) b[cy * W + cx] = 1;
     }
   }
-  if (merchant && merchant.x >= 0 && merchant.y >= 0 && merchant.x < W && merchant.y < H) b[merchant.y * W + merchant.x] = 1;
-  if (mystic && mystic.x >= 0 && mystic.y >= 0 && mystic.x < W && mystic.y < H) b[mystic.y * W + mystic.x] = 1;
+  // The roaming merchant/mystic are passable — foes path straight through them.
   b[player.y * W + player.x] = 1; // you path *to* the player, never through them
   return b;
 }
@@ -24940,7 +24941,7 @@ function pickupChestsAt(x, y) {
 }
 
 // The USE button / key. Real-time: there's no "wait a turn" any more. Standing
-// next to a merchant/mystic opens their menu (you can't walk onto them); otherwise
+// next to — or on — a merchant/mystic opens their menu (they're passable); otherwise
 // it opens any chest already underfoot (most are auto-grabbed as you walk over).
 // The service req for a keeper kind (from TOWN_MENU) — its ok()/need unlock gate,
 // or null if the service is always open.
