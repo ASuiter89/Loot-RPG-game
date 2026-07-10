@@ -25445,11 +25445,14 @@ function updateBars() {
     if (html !== _invTabHtml) { _invTabHtml = html; invTab.innerHTML = html; }
   }
 
-  // Nudge the HERO / SKILLS tabs when there are unspent points to spend. The
-  // SKILLS badge combines both pools (normal skill + ascendancy), since both are
-  // spent on that tab.
+  // Nudge the HERO / SKILLS tabs when there are unspent points to spend. The two
+  // SKILLS pools stay VISUALLY separate: unspent skill points show in the red
+  // badge, unspent ascendancy points in their own light-blue badge — never summed
+  // into one number, since they buy different trees.
   const pts = player.attrPoints || 0;
-  const sPts = (player.skillPoints || 0) + (player.ascPoints || 0);
+  const skPts = player.skillPoints || 0;
+  const ascPts = player.ascPoints || 0;
+  const sPts = skPts + ascPts;
   const heroTab = document.getElementById('tab-hero');
   if (heroTab) {
     const html = pts > 0 ? `HERO<span class="tab-count">${pts}</span>` : 'HERO';
@@ -25458,7 +25461,9 @@ function updateBars() {
   }
   const skillsTab = document.getElementById('tab-skills');
   if (skillsTab) {
-    const html = sPts > 0 ? `SKILLS<span class="tab-count">${sPts}</span>` : 'SKILLS';
+    let html = 'SKILLS';
+    if (skPts > 0) html += `<span class="tab-count">${skPts}</span>`;
+    if (ascPts > 0) html += `<span class="tab-count asc">${ascPts}</span>`;
     if (html !== _skillsTabHtml) { _skillsTabHtml = html; skillsTab.innerHTML = html; }
     skillsTab.classList.toggle('has-points', sPts > 0);
   }
