@@ -1717,16 +1717,28 @@
   .dh-vital-fill.hp.hp-low { animation: dhHpLow 0.7s ease-in-out infinite; }
   @keyframes dhHpLow { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.6); } }
 
-  /* Middle: the big endurance bar is the sole flow child, so it spans the full
-     bars-row height and lines up exactly with HP & MP. Any active pact/food buff
-     chips float over its top edge (absolute) rather than stealing bar height —
-     the pact/food indicators are re-homed here and never truly :empty. */
+  /* Middle: with no pact/food active the endurance bar is the sole visible child,
+     so it spans the full bars-row height and lines up exactly with HP & MP. An
+     active pact/food chip adds a thin flow strip above it (see .dh-buffs below),
+     which the bar yields just that height to — the two never overlap. The
+     pact/food indicators are re-homed here and are never truly :empty. */
   /* The middle takes about half the flex share of a flanking vital, so the endurance
      bar sits at roughly half an HP/MP bar's width (about double its original thin
      size) rather than matching them. */
   .dh-mid { flex: 0.45 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; padding: 0 4px; min-height: 0; position: relative; }
-  .dh-buffs { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 1.5rem; font-weight: bold; pointer-events: none; }
+  /* The pact/food chips sit IN FLOW as a compact strip directly above the bar
+     (not overlaid), so they can never stack on top of the centred stamina
+     readout — both were dead-centre before, which overlapped on the short
+     desktop bar. The strip is a flex row of the re-homed #pact-hud/#food-hud
+     chips; with no active chip both are display:none, so the strip collapses to
+     zero height and the bar (flex:1) reclaims the column's full height, staying
+     level with HP & MP. When a chip shows, the bar gives up just the strip's
+     thin height. */
+  .dh-buffs { position: relative; z-index: 3; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 1.2rem; line-height: 1; font-weight: bold; pointer-events: none; }
   .dh-buffs > * { pointer-events: auto; }
+  /* The re-homed pact/food chips default to the header's .hud-item type scale
+     (1.3rem); shrink them here so the strip stays a thin band above the bar. */
+  .dh-buffs .hud-item { font-size: 1.2rem; gap: 3px; line-height: 1; }
   .dh-buffs:empty { display: none; }
   /* Endurance bar: same look/size as the flanking HP/MP tracks. */
   .dh-end {
