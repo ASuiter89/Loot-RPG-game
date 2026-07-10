@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "small", v: "Every win gets its own victory sound", by: "Jeff Louie", notes: [
+    "Each kind of accomplishment now plays its own little victory sting instead of sharing one fanfare — clearing a floor's foes to unseal the stairs, finishing a bounty, banking an ascendancy point, ascending into a class path, earning a Boss Point, completing a deed, and unlocking a feat each sound distinct.",
+    "All follow your SFX volume, so lowering or muting sound quiets them with everything else.",
+  ] },
   { date: "2026-07-07", size: "small", v: "One-tap Mute All at the top of Audio", by: "Jeff Louie", notes: [
     "Settings ▸ Audio opens with a Mute All button — one tap silences music and every sound at once, no more stepping each channel down.",
     "Tap it again to restore your exact mix; every channel keeps the level you set. Nudging any volume back up also lifts the mute.",
