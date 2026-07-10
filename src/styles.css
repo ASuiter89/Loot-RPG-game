@@ -179,6 +179,7 @@
     --danger: #ff5252;           /* can't-afford / error / cost short */
     --success: #2e7d32;         /* upgrade / positive */
     --surge: #ff6fc4;           /* skill milestone / rank-bonus surge accent (pink) */
+    --ascendancy: #5ec8ff;      /* ascendancy-point accent — light blue, kept distinct from the red skill-point badge */
     --warn: #c9a84a;               /* locked / caution */
     --info: #9fd0ff;               /* neutral highlight (floor, tips) */
     --meta: #8899bb;               /* alias kept for existing usages */
@@ -1290,15 +1291,21 @@
   /* HERO tab glows gold while unspent attribute points are waiting. */
   .tab-btn.has-points { color: var(--xp); animation: tabGlow 1.1s ease-in-out infinite; }
   @keyframes tabGlow { 0%,100% { text-shadow: 0 0 0 transparent; } 50% { text-shadow: 0 0 8px color-mix(in srgb, var(--gold-350) 95%, transparent); } }
-  /* The unspent-point count sits in a bright red badge that pulses to grab the eye. */
+  /* The unspent-point count sits in a bright red badge that pulses to grab the eye.
+     Its colour is parameterised through --badge so the ascendancy variant can pulse
+     light blue without duplicating the keyframes. */
   .tab-count {
+    --badge: var(--danger);
     display: inline-block; margin-left: 9px; min-width: 15px; padding: 0 4px;
-    border-radius: 8px; background: var(--danger); color: var(--paper); font-weight: bold;
-    box-shadow: 0 0 6px color-mix(in srgb, var(--danger) 90%, transparent); animation: tabCountPulse 2.2s ease-in-out infinite;
+    border-radius: 8px; background: var(--badge); color: var(--paper); font-weight: bold;
+    box-shadow: 0 0 6px color-mix(in srgb, var(--badge) 90%, transparent); animation: tabCountPulse 2.2s ease-in-out infinite;
   }
+  /* Ascendancy points get their own light-blue badge, never merged into the red one.
+     Dark text reads better on the lighter fill. */
+  .tab-count.asc { --badge: var(--ascendancy); color: var(--ink); }
   @keyframes tabCountPulse {
-    0%,100% { transform: scale(1); box-shadow: 0 0 5px color-mix(in srgb, var(--danger) 70%, transparent); }
-    50% { transform: scale(1.22); box-shadow: 0 0 12px color-mix(in srgb, var(--danger) 100%, transparent); }
+    0%,100% { transform: scale(1); box-shadow: 0 0 5px color-mix(in srgb, var(--badge) 70%, transparent); }
+    50% { transform: scale(1.22); box-shadow: 0 0 12px color-mix(in srgb, var(--badge) 100%, transparent); }
   }
   /* Plain bracketed item tally on the LOOT tab — same tab font, just dimmed so
      it reads as a subtitle, not a badge. */
@@ -4698,6 +4705,12 @@
   .cook-btn { flex: 1; background: linear-gradient(180deg, var(--orange-700), var(--orange-600)); border: 1px solid var(--orange-250); color: var(--paper); font-family: var(--font-ui); font-weight: bold; font-size: 1.4rem; letter-spacing: 1px; padding: 8px 0; border-radius: 6px; cursor: pointer; }
   .cook-btn:active { filter: brightness(0.9); }
   .cook-btn.ghost { background: var(--panel-raised); border-color: var(--border); color: var(--orange-400); flex: 0 0 70px; }
+  /* Covenant altar's lone Clear-all: unlike the cooking pot (where the ghost
+     Clear sits beside wide Cook buttons and its fixed 70px basis is right), here
+     it stands alone — centre it and give it a comfortable width that still
+     shrinks below the viewport on a narrow touch screen. */
+  .cook-actions.cov-clear { justify-content: center; }
+  .cook-actions.cov-clear .cook-btn.ghost { flex: 0 1 min(100%, calc(280px * var(--ui-scale, 1))); padding-left: 16px; padding-right: 16px; }
   .food-row, .recipe-row { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 4px 2px; }
   .recipe-row.locked { opacity: 0.7; }
   /* Icon column is exactly the two text lines tall (their summed line-heights), so a
