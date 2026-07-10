@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "medium", v: "Uniques now carry 2–3 signature powers", by: "Jeff Louie", notes: [
+    "Every unique artifact now bears 2–3 signature ✦ powers instead of one — Vampiric, Duelist's, Savage and the rest stack on a single piece and compound, so a red drop reshapes your build harder than before.",
+    "Each unique's power set is hand-picked to its theme and class, and stays on its lane — caster uniques never waste a weapon-only power, martial uniques never a spell-only one.",
+    "Pantheon Mythic uniques carry the full three powers apiece.",
+    "Hover a unique — worn, in the bag, or as a Collection tile — to read every power it grants; gameState() lists them in an item's \"powers\".",
+  ] },
   { date: "2026-07-09", size: "small", v: "Covenant Altar reads clearer", by: "Jeff Louie", notes: [
     "A swearable oath's Dread cost now shows in gold, matching the Total Dread number — red is kept for the Locked gate alone, so the two never read alike.",
     "The Clear all oaths button is centred and widened instead of squished into the corner.",
