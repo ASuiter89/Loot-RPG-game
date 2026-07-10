@@ -1,0 +1,139 @@
+# Auto-merge Claude's PRs once the full gate suite is green.
+#
+# Why this file exists: Claude Code opens one PR per change (branch `claude/…`),
+# but nothing ever merged them, so they piled up open. GitHub's *native*
+# auto-merge can't help here — it only engages when a branch-protection rule
+# leaves a required check pending, and this repo has neither branch protection
+# nor a PR-triggered CI check (the sole existing PR status is Netlify's deploy
+# preview). This workflow is the self-contained replacement: on every push to a
+# `claude/…` PR it runs the same gates a human runs locally — `npm test`,
+# `npm run build`, `npm run smoke`, and the styles lint — and, ONLY if they all
+# pass, squash-merges the PR and deletes the branch.
+#
+# Scope & safety:
+#   - Only same-repo, non-draft `claude/…` branches are ever merged. Human PRs
+#     and fork PRs are left completely untouched (a fork PR would also get a
+#     read-only token and could not be merged anyway).
+#   - Gates run against the PR's own head commit, so a red change can never land.
+#   - Uses the built-in GITHUB_TOKEN — no secret to configure. Because a merge
+#     performed by GITHUB_TOKEN does NOT itself re-trigger `push`-based
+#     workflows, the job explicitly kicks the Pages deploy (deploy.yml, which
+#     exposes workflow_dispatch) after a successful merge.
+#
+# Manual use: run it from the Actions tab (workflow_dispatch) with a PR number
+# to (re-)evaluate and merge a specific open PR — handy for clearing a backlog.
+
+name: Auto-merge Claude PRs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to evaluate and merge
+        required: true
+        type: string
+
+# Least-privilege: read the repo + merge the PR, and dispatch the deploy workflow.
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+# One evaluation per PR; a newer push supersedes an in-flight run.
+concurrency:
+  group: automerge-${{ github.event.pull_request.number || github.event.inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    # Gate the whole job on the PR event being a non-draft, same-repo `claude/…`
+    # branch. The manual-dispatch path skips this expression (pull_request is
+    # null) and is re-validated authoritatively in the "Resolve PR" step below.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      ( github.event.pull_request.draft == false &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        startsWith(github.event.pull_request.head.ref, 'claude/') )
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Resolve PR number and head
+        id: pr
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            NUM="${{ github.event.inputs.pr }}"
+          else
+            NUM="${{ github.event.pull_request.number }}"
+          fi
+          # Authoritative PR facts (works for both triggers). Re-enforce the same
+          # guard the job `if` applies to PR events, so a manual dispatch can
+          # never merge a human, draft, closed, or fork branch.
+          DATA=$(gh pr view "$NUM" --repo "$GITHUB_REPOSITORY" \
+            --json headRefName,isCrossRepository,isDraft,state)
+          HEAD_REF=$(echo "$DATA" | jq -r .headRefName)
+          STATE=$(echo "$DATA" | jq -r .state)
+          CROSS=$(echo "$DATA" | jq -r .isCrossRepository)
+          DRAFT=$(echo "$DATA" | jq -r .isDraft)
+          if [ "$STATE" != "OPEN" ] || [ "$CROSS" != "false" ] || [ "$DRAFT" != "false" ] \
+             || [ "${HEAD_REF#claude/}" = "$HEAD_REF" ]; then
+            echo "PR #$NUM is not an open, non-draft, same-repo claude/* branch — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Evaluating PR #$NUM ($HEAD_REF)."
+            echo "number=$NUM" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out PR head
+        if: steps.pr.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ steps.pr.outputs.number }}/head
+
+      - name: Set up Node
+        if: steps.pr.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          # Match deploy.yml / netlify.toml (Node 20) so gates run as they ship.
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.pr.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Install Chromium for smoke tests
+        if: steps.pr.outputs.skip != 'true'
+        # The smoke suite boots the game in real Chromium via Playwright.
+        run: npx playwright install --with-deps chromium
+
+      - name: Unit + characterization tests
+        if: steps.pr.outputs.skip != 'true'
+        run: npm test
+
+      - name: Build static bundle
+        if: steps.pr.outputs.skip != 'true'
+        run: npm run build
+
+      - name: Smoke test (boots the game end-to-end)
+        if: steps.pr.outputs.skip != 'true'
+        run: npm run smoke
+
+      - name: Styles lint
+        if: steps.pr.outputs.skip != 'true'
+        run: node tools/styles-lint.js
+
+      - name: Squash-merge and delete branch
+        if: steps.pr.outputs.skip != 'true'
+        run: gh pr merge "${{ steps.pr.outputs.number }}" --repo "$GITHUB_REPOSITORY" --squash --delete-branch
+
+      - name: Trigger Pages deploy
+        if: steps.pr.outputs.skip != 'true'
+        # A GITHUB_TOKEN merge does not re-trigger deploy.yml's push event, so
+        # kick it explicitly. Non-fatal: the merge already succeeded by here.
+        run: |
+          gh workflow run deploy.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            || echo "::warning::Could not dispatch deploy.yml; deploy main manually if needed."
