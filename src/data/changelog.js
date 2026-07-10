@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "small", v: "No free gear when you step onto a boss floor", by: "Jeff Louie", notes: [
+    "Reaching a new deepest floor no longer drops a gear cache into your bag. Those depth rewards landed every fifth floor — exactly the boss floors — so you were handed a free item the moment you entered a guardian's arena. The arena stays clutter-free now; earn the guardian's spoils by beating it.",
+    "The NEW DEPTH RECORD banner and its bonus gold still play when you push deeper.",
+  ] },
   { date: "2026-07-09", size: "small", v: "Ascendancy points get their own badge on the SKILLS tab", by: "Jeff Louie", notes: [
     "Unspent ascendancy points now show in their own light-blue badge on the SKILLS tab, kept separate from the red skill-point badge — the two counts are no longer added into one number, since each buys a different tree.",
   ] },
