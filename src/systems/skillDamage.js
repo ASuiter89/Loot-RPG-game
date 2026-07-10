@@ -19,15 +19,20 @@ export const MIN_SKILL_CD = 0.5;
 
 /**
  * Multiplicative recharge haste for an active, matching the cast pipeline: every
- * active is sped by Cooldown Reduction; spells get Cast Speed on top; a rank-7+
- * skill adds its ✦✦ Honed factor. Each argument is a raw stat percent (0 = none).
- * @param {{cdr?:number, castSpd?:number, isSpell?:boolean, honed?:boolean}} p
+ * active is sped by Cooldown Reduction; spells get Cast Speed on top; a skill adds
+ * whatever recharge its milestone SURGES grant. `cdr`/`castSpd` are raw stat percents
+ * (0 = none). `surge` is the summed milestone recharge FRACTION (0.20 = +20% faster,
+ * from systems/skillSurge.js → surgeHasteFrac) — the per-archetype successor to the
+ * old blanket rank-7 "Honed" cut. `honed` is the legacy flat ✦✦ factor, kept so the
+ * boolean form still means ×1.20; the live path passes `surge` instead.
+ * @param {{cdr?:number, castSpd?:number, isSpell?:boolean, honed?:boolean, surge?:number}} p
  * @returns {number} haste factor ≥ 1
  */
-export function castHaste({ cdr = 0, castSpd = 0, isSpell = false, honed = false } = {}) {
+export function castHaste({ cdr = 0, castSpd = 0, isSpell = false, honed = false, surge = 0 } = {}) {
   let h = 1 + Math.max(0, cdr) / 100;          // Cooldown Reduction — every active
   if (isSpell) h *= 1 + Math.max(0, castSpd) / 100; // Cast Speed — spells only
-  if (honed) h *= 1.20;                          // ✦✦ Honed milestone (rank 7)
+  if (honed) h *= 1.20;                          // legacy flat ✦✦ Honed factor
+  if (surge > 0) h *= 1 + surge;                 // per-archetype milestone recharge
   return h;
 }
 
