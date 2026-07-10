@@ -7313,7 +7313,7 @@ window.gameGuide = function gameGuide(topic) {
     controls: [
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A quick key-tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
-      `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls (and avoids lava/spikes when it can), holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. IN THE WALKABLE TOWN, clicking a keeper (or the Town Portal) walks the hero over and OPENS its menu on arrival, and clicking the Dungeon Gate walks straight into it — no separate interact press. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
+      `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls but runs STRAIGHT THROUGH lava/spikes toward the cursor (it never detours around a trap; steer where you want to go, just like the keyboard), and holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. IN THE WALKABLE TOWN, clicking a keeper (or the Town Portal) walks the hero over and OPENS its menu on arrival, and clicking the Dungeon Gate walks straight into it — no separate interact press. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
       `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right — a quick TAP on a footer button fires it (cast the skill, quaff the potion); HOLD one for ~0.5s to read its tooltip instead of firing. The header holds the minimap, vitals, and the settings + bag buttons (top-right). On touch the game runs fullscreen so it fills the whole screen with no browser chrome — any tap re-enters fullscreen whenever you've left it, and you exit with the phone's native back/swipe gesture. The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
@@ -20705,21 +20705,22 @@ function playerBoxBlockedTerrain(px, py) {
 // straight for a later one (so it glides diagonally instead of shuffling tile to
 // tile). Foes are ignored while planning — they move, and are still physically
 // solid so the hero just waits/pushes if one steps into the corridor. Lava and
-// spikes are heavily penalised so a safe route is preferred, matching the rule
-// that you're never forced across a trap. The grid is tiny (≤52²) so replanning
+// spikes are NOT avoided — the planner treats them as plain floor, so the hero
+// runs straight through them toward the cursor (same as the keyboard/joystick);
+// only impassable terrain forces a detour. The grid is tiny (≤52²) so replanning
 // a few times a second is effectively free.
 
 // Can the hero's body slide in a straight line between two world points without
-// touching static terrain OR crossing a trap? Samples the segment finely. Used
-// to decide whether pathing is needed and to short-cut path corners.
+// touching static terrain? Samples the segment finely. Used to decide whether
+// pathing is needed and to short-cut path corners. Traps (lava/spikes) do NOT
+// block the line — click-to-move steers straight through them toward the cursor,
+// exactly like the keyboard/joystick; only impassable terrain forces a detour.
 function moveLineClear(x0, y0, x1, y1) {
   const dx = x1 - x0, dy = y1 - y0;
   const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 0.2));
   for (let i = 1; i <= steps; i++) {
     const t = i / steps, px = x0 + dx * t, py = y0 + dy * t;
     if (playerBoxBlockedTerrain(px, py)) return false;
-    const tile = tileAtCell(Math.floor(px), Math.floor(py));
-    if (tile === 7 || tile === 8) return false;   // lava / spikes — prefer to go around
   }
   return true;
 }
@@ -20742,15 +20743,11 @@ function nearestWalkableEdge(tx, ty) {
   }
   return best;
 }
-// Extra cost for stepping onto a cell, so the route prefers safe, quick ground.
-function pathStepCost(x, y) {
-  const t = mapData[y][x];
-  if (t === 7 || t === 8) return 8;    // lava / spikes — only if there's no way around
-  return 1;
-}
 // A* from cell (sx,sy) to (gx,gy) over walkable cells: 8-directional, no corner
-// cutting past walls, hazard-weighted. Returns waypoints as tile-centre world
-// points (the start cell dropped, destination last), or null if unreachable.
+// cutting past walls. Traps aren't weighted (lava/spikes are plain floor to the
+// planner), so the route is the shortest one and runs straight through any
+// hazards. Returns waypoints as tile-centre world points (the start cell dropped,
+// destination last), or null if unreachable.
 // The three map-sized fields are module scratch reused across calls (click-to-
 // move replans every 0.35s, and deep floors are big) — a generation stamp marks
 // which cells this call has touched, so nothing is refilled per call.
@@ -20800,7 +20797,7 @@ function findTilePath(sx, sy, gx, gy) {
       if (closed[ni] || pathCellBlocked(nx, ny)) continue;
       const diag = DIRS[d][0] !== 0 && DIRS[d][1] !== 0;
       if (diag && (pathCellBlocked(cx + DIRS[d][0], cy) || pathCellBlocked(cx, cy + DIRS[d][1]))) continue; // never clip a wall corner
-      const ng = g[cur] + (diag ? Math.SQRT2 : 1) * pathStepCost(nx, ny);
+      const ng = g[cur] + (diag ? Math.SQRT2 : 1);
       if (ng < g[ni]) { g[ni] = ng; came[ni] = cur; push(ni, ng + hEst(nx, ny)); }
     }
   }
@@ -36063,7 +36060,6 @@ const __DL_FN_BRIDGE = {
   playerBoxBlockedTerrain,
   moveLineClear,
   pathCellBlocked,
-  pathStepCost,
   findTilePath,
   updateMoveTargetPath,
   unstickPlayer,
