@@ -11,6 +11,32 @@ export const CHANGELOG = [
     "Fixed the Enchanter's Reroll all: it now reforges the properties a piece already carries and never adds new ones. It was rolling a fresh random count, so a blank piece could sprout up to a full set of modifiers for one flat fee — cheaper than augmenting each slot.",
     "Reroll all is disabled on a piece with no bonus properties now — there's nothing to reforge, so use Augment to add the first one.",
   ] },
+  { date: "2026-07-09", size: "small", v: "Every win gets its own victory sound", by: "Jeff Louie", notes: [
+    "Each kind of accomplishment now plays its own little victory sting instead of sharing one fanfare — clearing a floor's foes to unseal the stairs, finishing a bounty, banking an ascendancy point, ascending into a class path, earning a Boss Point, completing a deed, and unlocking a feat each sound distinct.",
+    "All follow your SFX volume, so lowering or muting sound quiets them with everything else.",
+  ] },
+  { date: "2026-07-09", size: "medium", v: "See how you died, in a tighter combat log", by: "Jeff Louie", notes: [
+    "The death screen now has a View Combat Log button — open your recent log in a scrollable reader and see exactly what killed you. Works on both the normal and permadeath screens.",
+    "The combat log packs in more at a glance: smaller, denser text fits more lines in the same strip.",
+    "Log messages are terser across the board — kills, hits, enemy attacks, loot, quests, shops and crafting all read as short, scannable lines.",
+  ] },
+  { date: "2026-07-09", size: "medium", v: "Uniques now carry 2–3 signature powers", by: "Jeff Louie", notes: [
+    "Every unique artifact now bears 2–3 signature ✦ powers instead of one — Vampiric, Duelist's, Savage and the rest stack on a single piece and compound, so a red drop reshapes your build harder than before.",
+    "Each unique's power set is hand-picked to its theme and class, and stays on its lane — caster uniques never waste a weapon-only power, martial uniques never a spell-only one.",
+    "Pantheon Mythic uniques carry the full three powers apiece.",
+    "Hover a unique — worn, in the bag, or as a Collection tile — to read every power it grants; gameState() lists them in an item's \"powers\".",
+  ] },
+  { date: "2026-07-09", size: "small", v: "Covenant Altar reads clearer", by: "Jeff Louie", notes: [
+    "A swearable oath's Dread cost now shows in gold, matching the Total Dread number — red is kept for the Locked gate alone, so the two never read alike.",
+    "The Clear all oaths button is centred and widened instead of squished into the corner.",
+  ] },
+  { date: "2026-07-09", size: "small", v: "Walk right through the roaming merchant and mystic", by: "Andrew Suiter", notes: [
+    "The wandering merchant and mystic no longer block their tile — walk straight through (or stand right on) them instead of bumping to a stop. Step beside or onto one and press interact to open their wares or pacts, same as before.",
+    "Enemies path through them too, so a vendor can never wall a foe out of reach on a tight floor.",
+  ] },
+  { date: "2026-07-09", size: "small", v: "Ascendancy points get their own badge on the SKILLS tab", by: "Jeff Louie", notes: [
+    "Unspent ascendancy points now show in their own light-blue badge on the SKILLS tab, kept separate from the red skill-point badge — the two counts are no longer added into one number, since each buys a different tree.",
+  ] },
   { date: "2026-07-07", size: "small", v: "One-tap Mute All at the top of Audio", by: "Jeff Louie", notes: [
     "Settings ▸ Audio opens with a Mute All button — one tap silences music and every sound at once, no more stepping each channel down.",
     "Tap it again to restore your exact mix; every channel keeps the level you set. Nudging any volume back up also lifts the mute.",
