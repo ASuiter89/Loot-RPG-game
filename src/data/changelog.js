@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "medium", v: "See how you died, in a tighter combat log", by: "Jeff Louie", notes: [
+    "The death screen now has a View Combat Log button — open your recent log in a scrollable reader and see exactly what killed you. Works on both the normal and permadeath screens.",
+    "The combat log packs in more at a glance: smaller, denser text fits more lines in the same strip.",
+    "Log messages are terser across the board — kills, hits, enemy attacks, loot, quests, shops and crafting all read as short, scannable lines.",
+  ] },
   { date: "2026-07-07", size: "small", v: "One-tap Mute All at the top of Audio", by: "Jeff Louie", notes: [
     "Settings ▸ Audio opens with a Mute All button — one tap silences music and every sound at once, no more stepping each channel down.",
     "Tap it again to restore your exact mix; every channel keeps the level you set. Nudging any volume back up also lifts the mute.",
