@@ -29,7 +29,13 @@ describe('uniqueCollection catalog', () => {
       expect(e.mods.length).toBe(6);
       expect(e.power).toBeTruthy();
       if (e.kind === 'set') { expect(e.setId).toBeTruthy(); expect(e.setName).toBeTruthy(); }
-      else { expect(e.setId).toBeNull(); }
+      else {
+        expect(e.setId).toBeNull();
+        // Uniques carry a 2–3 signature-power list; the primary mirrors `power`.
+        expect(Array.isArray(e.powers)).toBe(true);
+        expect(e.powers.length).toBeGreaterThanOrEqual(2);
+        expect(e.powers[0]).toBe(e.power);
+      }
     }
   });
 

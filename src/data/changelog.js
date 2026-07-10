@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "medium", v: "Uniques now carry 2–3 signature powers", by: "Jeff Louie", notes: [
+    "Every unique artifact now bears 2–3 signature ✦ powers instead of one — Vampiric, Duelist's, Savage and the rest stack on a single piece and compound, so a red drop reshapes your build harder than before.",
+    "Each unique's power set is hand-picked to its theme and class, and stays on its lane — caster uniques never waste a weapon-only power, martial uniques never a spell-only one.",
+    "Pantheon Mythic uniques carry the full three powers apiece.",
+    "Hover a unique — worn, in the bag, or as a Collection tile — to read every power it grants; gameState() lists them in an item's \"powers\".",
+  ] },
   { date: "2026-07-07", size: "small", v: "One-tap Mute All at the top of Audio", by: "Jeff Louie", notes: [
     "Settings ▸ Audio opens with a Mute All button — one tap silences music and every sound at once, no more stepping each channel down.",
     "Tap it again to restore your exact mix; every channel keeps the level you set. Nudging any volume back up also lifts the mute.",
