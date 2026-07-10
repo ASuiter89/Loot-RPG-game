@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "small", v: "Enchanter “Reroll all” no longer conjures modifiers from nothing", by: "Jeff Louie", notes: [
+    "Fixed the Enchanter's Reroll all: it now reforges the properties a piece already carries and never adds new ones. It was rolling a fresh random count, so a blank piece could sprout up to a full set of modifiers for one flat fee — cheaper than augmenting each slot.",
+    "Reroll all is disabled on a piece with no bonus properties now — there's nothing to reforge, so use Augment to add the first one.",
+  ] },
   { date: "2026-07-07", size: "small", v: "One-tap Mute All at the top of Audio", by: "Jeff Louie", notes: [
     "Settings ▸ Audio opens with a Mute All button — one tap silences music and every sound at once, no more stepping each channel down.",
     "Tap it again to restore your exact mix; every channel keeps the level you set. Nudging any volume back up also lifts the mute.",
