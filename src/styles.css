@@ -949,6 +949,22 @@
   .hc-death-btn { width: 100%; box-sizing: border-box; background: var(--red-550); border: 1px solid var(--red-350); color: var(--paper); font-family: var(--font-ui); font-size: 1.5rem; letter-spacing: 1px; padding: 11px; border-radius: 8px; cursor: pointer; }
   .hc-death-btn:active { background: var(--red-800); }
 
+  /* Death-screen action stack: the primary action plus a quieter "View Combat Log"
+     ghost button that opens the log viewer over the death screen (both cards). */
+  .death-actions { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .death-btn--ghost { background: transparent; color: var(--red-150); font-size: 1.3rem; padding: 8px 18px; }
+  .death-btn--ghost:active { background: var(--red-800); color: var(--paper); }
+  .hc-death-btn--ghost { background: transparent; color: var(--red-150); }
+  .hc-death-btn--ghost:active { background: var(--red-800); color: var(--paper); }
+
+  /* Combat-log viewer — layered ABOVE both death screens (z 500 / 520). A dedicated
+     reading surface, so it keeps the 1.1rem text floor, unlike the dense log strip. */
+  #death-log-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 88%, transparent); z-index: 540; display: none; align-items: center; justify-content: center; padding: 20px; }
+  #death-log-overlay.open { display: flex; animation: deathFade 0.25s ease; }
+  #death-log-card { display: flex; flex-direction: column; background: linear-gradient(180deg, var(--panel), var(--ink)); border: 2px solid var(--red-550); border-radius: 12px; max-width: 520px; width: 100%; max-height: calc(100dvh - 40px); overflow: hidden; box-shadow: 0 0 40px color-mix(in srgb, var(--ink) 60%, transparent); }
+  #death-log-content { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 14px 14px; text-align: left; }
+  #death-log-content .log-line { font-size: 1.2rem; line-height: 1.5; content-visibility: visible; }
+
   /* Hardcore toggle on the new-hero name screen. */
   .hc-toggle { display: flex; align-items: flex-start; gap: 10px; text-align: left; cursor: pointer;
     border: 1px solid var(--red-700); border-radius: 8px; background: var(--ink); padding: 10px 11px; margin-bottom: 12px;
@@ -2660,7 +2676,12 @@
   #log {
     background: var(--panel);
     padding: 6px 8px;
-    font-size: 1.4rem;
+    /* DELIBERATE one-off BELOW the 1.1rem DOM-text floor. The combat log is a dense,
+       fast-scrolling scratchpad, not prose — packing more scannable lines into the
+       same strip is worth trading the readability floor here (and only here). Paired
+       with terse, fragment-style log copy so short lines stay legible at this size.
+       Do not copy this size elsewhere; the rest of the UI keeps the 1.1rem floor. */
+    font-size: 0.9rem;
     flex: 1;
     overflow-y: auto;
   }
@@ -2675,7 +2696,7 @@
      exact — no bottom-pin drift. The px is only a fallback for never-yet-rendered
      lines. Skipped lines are off-screen, so their paint-containment clips nothing
      visible (and log-line icons carry no glow/drop-shadow anyway). */
-  .log-line { color: var(--neutral-250); line-height: 1.55; content-visibility: auto; contain-intrinsic-size: auto 24px; }
+  .log-line { color: var(--neutral-250); line-height: 1.4; content-visibility: auto; contain-intrinsic-size: auto 18px; }
   /* Reopening the collapsed log momentarily adds .log-pinning so every line renders
      (overriding content-visibility), letting the jump-to-newest pin read the true
      scrollHeight — otherwise lines appended while collapsed (never rendered) keep a

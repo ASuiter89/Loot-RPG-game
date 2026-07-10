@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "medium", v: "See how you died, in a tighter combat log", by: "Jeff Louie", notes: [
+    "The death screen now has a View Combat Log button — open your recent log in a scrollable reader and see exactly what killed you. Works on both the normal and permadeath screens.",
+    "The combat log packs in more at a glance: smaller, denser text fits more lines in the same strip.",
+    "Log messages are terser across the board — kills, hits, enemy attacks, loot, quests, shops and crafting all read as short, scannable lines.",
+  ] },
   { date: "2026-07-09", size: "medium", v: "Uniques now carry 2–3 signature powers", by: "Jeff Louie", notes: [
     "Every unique artifact now bears 2–3 signature ✦ powers instead of one — Vampiric, Duelist's, Savage and the rest stack on a single piece and compound, so a red drop reshapes your build harder than before.",
     "Each unique's power set is hand-picked to its theme and class, and stays on its lane — caster uniques never waste a weapon-only power, martial uniques never a spell-only one.",

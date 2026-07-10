@@ -5741,7 +5741,7 @@ function toggleSkillSlot(id) {
   const at = slots.indexOf(id);
   if (at >= 0) { slots[at] = null; player.skillSlots = slots; renderPanel(); renderSkillBar(); saveGame(); return; }
   const e = slots.indexOf(null);
-  if (e < 0) { log('Every skill slot is full — clear one first to add this skill.'); return; }
+  if (e < 0) { log('Skill slots full — clear one first.'); return; }
   assignSkillToSlot(id, e);   // routes through assign so it's pulled out of the auto-slot if it lived there
 }
 // Set (or clear, with a falsy id) the lone auto-cast skill. A thin wrapper over
@@ -5820,7 +5820,7 @@ function skillTreeDropRemove(e) {
 // a small overlay listing every learned active to drop in, plus Clear.
 let slotPickFor = null;
 function openSlotPicker(slot) {
-  if (!activeSkillList().length) { log('No active skills learned yet — spend a skill point in the SKILLS tab.'); return; }
+  if (!activeSkillList().length) { log('No active skills yet — learn one in the SKILLS tab.'); return; }
   slotPickFor = slot;
   renderSlotPicker();
   const ov = document.getElementById('slotpick-overlay'); if (ov) ov.classList.add('open');
@@ -5869,7 +5869,7 @@ function setSkillCd(id, v) { if (!player.skillCds) player.skillCds = {}; player.
 function buySkill(id) {
   const node = skillNode(id);
   if (!node) return;
-  if (!canBuySkill(node)) { log('You can\'t learn that yet — check its level and prerequisites.'); return; }
+  if (!canBuySkill(node)) { log('Can\'t learn yet — check level & prereqs.'); return; }
   if (!player.skills) player.skills = {};
   const firstRank = !(player.skills[id] > 0);
   player.skills[id] = (player.skills[id] || 0) + 1;
@@ -5943,9 +5943,9 @@ function refundSkill(id) {
   const rank = skillRank(id);
   if (rank <= 0) { log('Nothing to refund there.'); sfx('denied'); return; }
   const blocker = refundBlockedBy(node);
-  if (blocker) { log(`Can't refund ${node.name} — ${blocker} still relies on it. Refund that first.`); sfx('denied'); return; }
+  if (blocker) { log(`Can't refund ${node.name} — ${blocker} needs it. Refund that first.`); sfx('denied'); return; }
   const cost = skillRefundCost();
-  if (!canAfford(cost)) { log(`<span data-spr=ic_money></span> Not enough gold to refund — need <span data-spr=ic_money></span>${cost.gold}.`); sfx('denied'); return; }
+  if (!canAfford(cost)) { log(`<span data-spr=ic_money></span> Need <span data-spr=ic_money></span>${cost.gold} to refund.`); sfx('denied'); return; }
   spendCost(cost);
   const isPath = skillTreeKindOf(node) === 'path';
   if (rank - 1 <= 0) delete player.skills[id]; else player.skills[id] = rank - 1;
@@ -5959,7 +5959,7 @@ function refundSkill(id) {
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   sfx('shrine');
   const newRank = skillRank(id);
-  log(`↩️ Refunded ${node.name}${(node.max || 1) > 1 ? ` (now rank ${newRank}/${node.max})` : ''} — 1 ${isPath ? 'ascendancy' : 'skill'} point returned for <span data-spr=ic_money></span>${cost.gold}.`, 'important');
+  log(`↩️ Refunded ${node.name}${(node.max || 1) > 1 ? ` (rank ${newRank}/${node.max})` : ''} — +1 ${isPath ? 'ascendancy' : 'skill'} point (<span data-spr=ic_money></span>${cost.gold}).`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); saveGame();
 }
 
@@ -6043,7 +6043,7 @@ function updateFloorClear() {
       conquerDifficulty();
     } else if (tutorialActive) {
       // Beach tutorial: point the new player at the cave instead of "stairs".
-      log('<span data-spr=feat_door></span> The skeleton falls — the cave to the north is open!', 'important');
+      log('<span data-spr=feat_door></span> Skeleton falls — cave to the north opens!', 'important');
       sfx('stairs');
       tutorialStage('cave');
     } else {
@@ -6052,7 +6052,7 @@ function updateFloorClear() {
       // even if you port to town before descending. (Physically arriving there still
       // pays the depth milestone — see recordDepth.)
       markDepthReached(floorUnlockedByClear(dungeonLevel, false));
-      log('<span data-spr=feat_door></span> The floor is clear — the stairs down unseal!', 'important');
+      log('<span data-spr=feat_door></span> Floor clear — stairs down unseal!', 'important');
       sfx('stairs');
     }
     updateBars();
@@ -6104,7 +6104,7 @@ function placeNextDiffPortal(diff) {
   }
   if (!best) best = { x: player.x, y: Math.max(1, player.y - 1) }; // fallback: just above
   nextDiffPortal = { x: best.x, y: best.y, diff };
-  log('🌈 A shimmering rainbow portal tears open — step in to descend into the next difficulty.', 'important');
+  log('🌈 Rainbow portal tears open — step in for the next difficulty.', 'important');
 }
 function showConquest(tier, firstTime) {
   const thisName = DIFFS[tier - 1].name;
@@ -6124,7 +6124,7 @@ function showConquest(tier, firstTime) {
   if (bodyEl) bodyEl.innerHTML = lines.join('');
   const ov = document.getElementById('conquest-overlay');
   if (ov) ov.classList.add('open');
-  log(`<span data-spr=q_relic></span> You conquered the ${thisName} dungeon!`, 'important');
+  log(`<span data-spr=q_relic></span> Conquered the ${thisName} dungeon!`, 'important');
 }
 function closeConquest() { const ov = document.getElementById('conquest-overlay'); if (ov) ov.classList.remove('open'); }
 function conquestToTown() { closeConquest(); warpToTown(); }
@@ -8588,7 +8588,7 @@ function resetMusicBus() {
 // turn it up; if it hasn't started yet, starting it already gives a new track. A
 // boss owns the music, so during a boss the skip is honoured once the fight ends.
 function skipMusicTrack() {
-  if (audio.musicLevel <= 0) { sfx('denied'); log('🎵 Music is off — raise the music volume to hear the next track.'); return; }
+  if (audio.musicLevel <= 0) { sfx('denied'); log('🎵 Music off — raise music volume to hear tracks.'); return; }
   audioUnlock();
   sfx('click');
   if (!musicTimer) { startMusic(); return; }
@@ -10524,7 +10524,7 @@ function tryBuildVault(reach) {
   const k = randomFloorTile(reach);
   if (k) groundKey = { x: k.x, y: k.y };
   vaultInfo = { kind: variant.kind, openMsg: variant.openMsg };
-  log('<span data-spr=ic_key></span> A locked vault hides on this floor — find its key!', 'important');
+  log('<span data-spr=ic_key></span> Locked vault on this floor — find its key!', 'important');
   return true;
 }
 
@@ -10556,7 +10556,7 @@ function tryBuildTreasureCell(reach) {
       const k = randomFloorTile(reach);
       if (k) groundKey = { x: k.x, y: k.y };
       vaultInfo = { kind: 'treasure', openMsg: 'A treasure vault — a fat chest waits inside!' };
-      log('<span data-spr=ic_key></span> A locked vault hides on this floor — find its key!', 'important');
+      log('<span data-spr=ic_key></span> Locked vault on this floor — find its key!', 'important');
       return true;
     }
   }
@@ -11008,7 +11008,7 @@ function generateMap() {
     const c = randomFloorTile(reach);
     if (c) { mapData[c.y][c.x] = 3; hasFountain = true; }
   }
-  if (hasFountain) log('<span data-spr=feat_shrine></span> You sense a healing presence somewhere on this floor...', 'important');
+  if (hasFountain) log('<span data-spr=feat_shrine></span> A healing presence lingers on this floor...', 'important');
 
   // ── SHRINE ── (~25%), kept a few tiles from the entrance.
   shrineData = {};
@@ -11020,7 +11020,7 @@ function generateMap() {
   }
 
   if (floorMod.name) log(`${floorMod.name} — ${floorMod.desc}`, 'important');
-  if (floorMod.prepHint) log('💡 If this floor is too tough, retreat to town: strike a pact, cook a bowl, or forge gear, then come back ready.', 'important');
+  if (floorMod.prepHint) log('💡 Floor too tough? Retreat to town — pact, cook, or forge, then return ready.', 'important');
 
   projectiles = [];
   clearAttackFx();
@@ -11059,7 +11059,7 @@ function generateMap() {
           enemies.push(foe); guards++;
         }
       }
-      if (placed >= 4) log(`<span data-spr=ic_money></span> You've stumbled on a guarded hoard — a room piled with ${placed} chests!`, 'important');
+      if (placed >= 4) log(`<span data-spr=ic_money></span> Guarded hoard — a room piled with ${placed} chests!`, 'important');
     }
   }
   // Tiles you can actually WALK to (stairs/teleporters are dead-ends, not
@@ -11114,7 +11114,7 @@ function generateMap() {
     }
     if (spot) {
       graveMarker = { x: spot.x, y: spot.y };
-      log('<span data-spr=feat_grave></span> Your lost satchel lies somewhere on this floor — reclaim it.', 'important');
+      log('<span data-spr=feat_grave></span> Your lost satchel is on this floor — reclaim it.', 'important');
     }
   }
 
@@ -11168,9 +11168,9 @@ function generateMap() {
     if (player.clearedFloors) player.clearedFloors[dungeonLevel] = true;
     markDepthReached(floorUnlockedByClear(dungeonLevel, isLastFiniteFloor()));
   } else if (isLastFiniteFloor()) {
-    log(`<span data-spr=b_ratking></span> The dungeon's final guardian holds this floor. ${clearConditionLabel()}`, 'important');
+    log(`<span data-spr=b_ratking></span> Final guardian holds this floor. ${clearConditionLabel()}`, 'important');
   } else {
-    log(`<span data-spr=feat_lock></span> The stairs down are sealed. ${clearConditionLabel()}`, 'important');
+    log(`<span data-spr=feat_lock></span> Stairs down sealed. ${clearConditionLabel()}`, 'important');
   }
 
   // Consume the arrival direction — the next floor defaults to a downward entry
@@ -11249,7 +11249,7 @@ function buildBossArena() {
         break;
       }
     }
-    if (graveMarker) log('<span data-spr=feat_grave></span> Your lost satchel rests beside the entrance — reclaim it.', 'important');
+    if (graveMarker) log('<span data-spr=feat_grave></span> Your lost satchel is by the entrance — reclaim it.', 'important');
   }
   // Rebuild the terrain + pathfinding caches for the hand-authored layout.
   bumpMapEpoch(); pathGridDirty();
@@ -11264,7 +11264,7 @@ function buildBossArena() {
   if (player.clearedFloors && player.clearedFloors[dungeonLevel]) floorCleared = true;
   if (!floorCleared) {
     const b = enemies.find(e => e.isBoss);
-    log(`⚠️ ${b ? b.name : 'A guardian'} bars the way — its seal holds every exit until it falls.`, 'important');
+    log(`⚠️ ${b ? b.name : 'A guardian'} seals every exit until it falls.`, 'important');
   }
   arrivalDir = 'down';
 }
@@ -11332,7 +11332,7 @@ function finishTutorial() {
   arrivalDir = 'down';
   statusEffects = [];
   sfx('stairs');
-  log('🕳️ You step into the cave — the dungeon proper opens up below...', 'important');
+  log('🕳️ Into the cave — the dungeon opens below...', 'important');
   setPlayerCell(5, 5);
   generateMap();
   tickPact();
@@ -11385,7 +11385,7 @@ function completeQuest(msg) {
   if (!quest) return;
   const r = questReward();
   groundItems.push({ x: player.x, y: player.y, luck: 4, ilvl: dungeonLevel + 1 });
-  log(`✅ ${msg} +<span data-spr=ic_money></span>${r.gold}, +${r.xp} XP, and a chest appears!`, 'important');
+  log(`✅ ${msg} +<span data-spr=ic_money></span>${r.gold}, +${r.xp} XP, chest appears!`, 'important');
   screenFlash('#22cc66');
   sfx('levelup');
   quest = null;
@@ -11432,7 +11432,7 @@ function tryBuildCell(reach, who) {
       // (and every other placed prop) off it; a cracked wall reads as unreachable
       // wall to the path checks, so nothing else guards this tile from being blocked.
       quest = { type: 'jailbreak', npc: { x, y, sprite: who.sprite, name: who.name }, entry: { x: fx, y: fy }, done: false };
-      log(`<span data-spr=mat_scrap></span> ${who.name} is locked in a cell — smash through the cracked wall to free them!`, 'important');
+      log(`<span data-spr=mat_scrap></span> ${who.name} is caged — smash the cracked wall to free them!`, 'important');
       return true;
     }
   }
@@ -11459,12 +11459,12 @@ function maybeSpawnQuest(reach) {
     t.name = 'Wanted ' + who.name;
     t.hp = Math.round(t.hp * 1.5); t.maxHp = t.hp; // a sturdier bounty
     quest = { type: 'hunt', name: t.name, done: false };
-    log(`<span data-spr=ui_agility></span> Bounty posted! Hunt down ${t.name} ${t.type} on this floor.`, 'important');
+    log(`<span data-spr=ui_agility></span> Bounty: hunt ${t.name} ${t.type} on this floor.`, 'important');
     return;
   }
   if (kind === 'cleanse') {
     quest = { type: 'cleanse', done: false };
-    log('🧹 Cleanse the floor — slay every monster here for a reward!', 'important');
+    log('🧹 Cleanse the floor — slay every monster for a reward!', 'important');
     return;
   }
 
@@ -11487,7 +11487,7 @@ function maybeSpawnQuest(reach) {
     quest = { type: 'fetch', item: { x: tiles[0].x, y: tiles[0].y },
               npc: { x: tiles[1].x, y: tiles[1].y, sprite: who.sprite, name: who.name },
               hasItem: false, done: false };
-    log(`<span data-spr=q_relic></span> ${who.name} wants a lost relic recovered and returned.`, 'important');
+    log(`<span data-spr=q_relic></span> ${who.name} wants a lost relic returned.`, 'important');
     return;
   }
 
@@ -11496,10 +11496,10 @@ function maybeSpawnQuest(reach) {
     const c = randomFloorTile(reach); if (!c) return;
     if (kind === 'tribute') {
       quest = { type: 'tribute', spot: { x: c.x, y: c.y, sprite: 'feat_statue' }, cost: 40 + dungeonLevel * 15, done: false };
-      log(`<span data-spr=feat_statue></span> An offering altar hums on this floor — pay <span data-spr=ic_money></span>${quest.cost} for a windfall.`, 'important');
+      log(`<span data-spr=feat_statue></span> Offering altar here — pay <span data-spr=ic_money></span>${quest.cost} for a windfall.`, 'important');
     } else {
       quest = { type: 'grave', spot: { x: c.x, y: c.y, sprite: 'feat_grave' }, done: false };
-      log('<span data-spr=feat_grave></span> A grave glints with buried treasure... disturbing it may wake the dead.', 'important');
+      log('<span data-spr=feat_grave></span> A grave glints with treasure... disturbing it may wake the dead.', 'important');
     }
     return;
   }
@@ -11529,22 +11529,22 @@ function maybeSpawnQuest(reach) {
       if (mapData[hy][hx] !== 0 || getEnemyAt(hx, hy)) continue;
       enemies.push(makeQuestFoe(hx, hy)); placed++;
     }
-    log(`🆘 ${who.name} is surrounded by a horde! Cut through and reach them.`, 'important');
+    log(`🆘 ${who.name} is swarmed — cut through to reach them.`, 'important');
   } else if (kind === 'escort') {
     npc.following = false;
     quest = { type: 'escort', npc, done: false };
-    log(`🧭 ${who.name} begs for an escort to the stairs. Reach them, then lead the way.`, 'important');
+    log(`🧭 ${who.name} needs an escort — reach them, then lead to the stairs.`, 'important');
   } else if (kind === 'lostpet') {
     npc.sprite = pick(['pet_dog','pet_cat','pet_goat','pet_chicken','pet_parrot','pet_rabbit']);
     quest = { type: 'lostpet', npc, done: false };
-    log(`<span data-spr=pet_dog></span> A frightened ${dlIcon(npc.sprite, 16)} skitters around the floor — catch it to return it!`, 'important');
+    log(`<span data-spr=pet_dog></span> A frightened ${dlIcon(npc.sprite, 16)} skitters about — catch it to return!`, 'important');
   } else if (kind === 'wounded') {
     npc.sprite = 'npc_quest';
     quest = { type: 'wounded', npc, done: false };
-    log(`<span data-spr=ic_heart></span> ${who.name} lies wounded — reach them and share a potion to spare them.`, 'important');
+    log(`<span data-spr=ic_heart></span> ${who.name} lies wounded — reach them and share a potion.`, 'important');
   } else if (kind === 'courier') {
     quest = { type: 'courier', npc, done: false };
-    log(`<span data-spr=scroll></span> You're entrusted with a sealed parcel — deliver it to ${who.name} on this floor.`, 'important');
+    log(`<span data-spr=scroll></span> A sealed parcel to deliver — bring it to ${who.name}.`, 'important');
   }
 }
 
@@ -11591,19 +11591,19 @@ function handleQuestStep(nx, ny) {
     case 'lostpet':   if (onNpc) completeQuest(`The ${dlIcon(q.npc.sprite, 16)} pet is caught and scampers home!`); break;
     case 'courier':   if (onNpc) completeQuest(`${q.npc.name} accepts the parcel — delivered!`); break;
     case 'escort':
-      if (onNpc && !q.npc.following) { q.npc.following = true; log(`🧭 ${q.npc.name} falls in behind you — lead them to the stairs!`, 'important'); }
+      if (onNpc && !q.npc.following) { q.npc.following = true; log(`🧭 ${q.npc.name} falls in behind — lead them to the stairs!`, 'important'); }
       break;
     case 'wounded':
       if (onNpc) completeQuest(`${q.npc.name} drinks a potion you brew and recovers!`);
       break;
     case 'fetch':
-      if (!q.hasItem && q.item.x === nx && q.item.y === ny) { q.hasItem = true; log(`<span data-spr=q_relic></span> You recover the relic — bring it to ${q.npc.name}.`, 'loot'); }
+      if (!q.hasItem && q.item.x === nx && q.item.y === ny) { q.hasItem = true; log(`<span data-spr=q_relic></span> Relic recovered — bring it to ${q.npc.name}.`, 'loot'); }
       else if (q.hasItem && onNpc) completeQuest(`${q.npc.name} receives the relic with gratitude!`);
       break;
     case 'tribute':
       if (q.spot.x === nx && q.spot.y === ny) {
         if (player.gold >= q.cost) { player.gold -= q.cost; groundItems.push({ x: nx, y: ny, luck: 6, ilvl: dungeonLevel + 1 }); completeQuest(`The altar accepts your <span data-spr=ic_money></span>${q.cost} offering — riches answer!`); }
-        else log(`<span data-spr=feat_statue></span> The altar demands <span data-spr=ic_money></span>${q.cost} — you can't afford it yet.`);
+        else log(`<span data-spr=feat_statue></span> Altar demands <span data-spr=ic_money></span>${q.cost} — can't afford it yet.`);
       }
       break;
     case 'grave':
@@ -11664,13 +11664,13 @@ function refreshShopCost() {
 function refreshShop() {
   if (!merchant) return;
   const cost = refreshShopCost();
-  if (spendableGold() < cost) { log(`<span data-spr=ic_money></span> Not enough gold to restock — need <span data-spr=ic_money></span>${cost}.`); sfx('denied'); return; }
+  if (spendableGold() < cost) { log(`<span data-spr=ic_money></span> Need <span data-spr=ic_money></span>${cost} to restock.`); sfx('denied'); return; }
   spendGold(cost);
   merchant.stock = rollShopStock(merchant.ilvl || (player.maxFloor || 1) + 1, merchant.stockLo || 3, merchant.stockHi || 4);
   merchant.restocks = ((merchant.restocks) || 0) + 1; // next restock this visit costs more
   if (merchant.town) { townShopStock = merchant.stock; townRestocks = merchant.restocks; } // keep persisted town wares + surcharge in sync
   sfx('buy');
-  log(`🔄 The merchant clears the table and lays out fresh wares for <span data-spr=ic_money></span>${cost}.`, 'important');
+  log(`🔄 Merchant lays out fresh wares — <span data-spr=ic_money></span>${cost}.`, 'important');
   updateBars(); renderShop(); saveGame();
 }
 
@@ -11692,8 +11692,8 @@ function spawnMerchant(footReach) {
   const ilvl = dungeonLevel + 1;
   const sale = Math.random() < 0.25 ? 0.7 : 1; // sometimes a 30%-off flash sale
   merchant = { x: mx, y: my, stock: rollShopStock(ilvl, 5, 8), sale, ilvl, stockLo: 5, stockHi: 8 };
-  log('<span data-spr=mat_glimmer></span> A robed merchant has wandered onto this floor...', 'important');
-  if (sale < 1) log('<span data-spr=scroll></span> The merchant is holding a flash sale — 30% off everything!', 'important');
+  log('<span data-spr=mat_glimmer></span> A robed merchant wanders onto this floor...', 'important');
+  if (sale < 1) log('<span data-spr=scroll></span> Flash sale — 30% off everything!', 'important');
 }
 
 // The Wandering Mystic — a second wanderer who takes gold to bend the next
@@ -11810,7 +11810,7 @@ function openShop() {
   document.getElementById('shop-back').style.display = merchant.town ? '' : 'none';
   document.getElementById('shop-close').style.display = merchant.town ? 'none' : '';
   renderShop();
-  log('The merchant spreads out their wares.');
+  log('Merchant lays out their wares.');
 }
 
 function closeShop() {
@@ -12010,7 +12010,7 @@ function openMystic() {
   document.getElementById('mystic-back').style.display = mystic.town ? '' : 'none';
   document.getElementById('mystic-close').style.display = mystic.town ? 'none' : '';
   renderMystic();
-  log('The mystic studies you, weighing what the depths might become.');
+  log('The mystic studies you.');
 }
 
 function closeMystic() {
@@ -12070,7 +12070,7 @@ function buyPact(i, floors) {
   // `floors` counts the next N floors you descend into; tickPact() consumes one
   // after each floor is generated (see the stairs handler), so this is exact.
   pact = { id: def.id, icon: def.icon, name: def.name, desc: def.desc, floors, fx: def.fx };
-  log(`${dlIcon(def.icon, 16)} You strike the ${def.name} — sealed for the next ${floors} floor${floors === 1 ? '' : 's'}. (-<span data-spr=ic_money></span>${price})`, 'important');
+  log(`${dlIcon(def.icon, 16)} Struck ${def.name} — sealed for ${floors} floor${floors === 1 ? '' : 's'}. (-<span data-spr=ic_money></span>${price})`, 'important');
   updateBars();
   renderMystic();
   renderPanel();
@@ -12181,11 +12181,11 @@ function updateWarpFx(dt) {
 function startPortalChannel() {
   if (inTown) { openTownHub(); return; }
   if (portalTransiting() || mapWarping()) return;   // already teleporting — ignore the button
-  if (tutorialActive) { log('🏖️ Head north into the cave to begin your descent first.'); sfx('denied'); return; }
+  if (tutorialActive) { log('🏖️ Head north into the cave to descend first.'); sfx('denied'); return; }
   // On a boss floor the guardian's seal denies the town portal too — there is no
   // retreat until it falls (or you do).
   if (isBossLevel(dungeonLevel) && !floorCleared) {
-    log('<span data-spr=feat_gate_red></span> The guardian\'s seal smothers your portal — there is no leaving until it falls.', 'important');
+    log('<span data-spr=feat_gate_red></span> The guardian\'s seal smothers your portal — no leaving until it falls.', 'important');
     sfx('denied'); return;
   }
   if (portalCharge > 0) { cancelPortalChannel('<span data-spr=feat_gate_red></span> You let the town portal fade.'); return; }
@@ -12196,7 +12196,7 @@ function startPortalChannel() {
   // (see updatePlayer). Without this, a lingering click-to-move target would either
   // instantly collapse the channel or, worse, root the hero with no way to cancel.
   clearHeld();
-  log(`<span data-spr=feat_gate_red></span> You begin opening a town portal — hold out ${PORTAL_CHANNEL_SECS} seconds without being hit.`, 'important');
+  log(`<span data-spr=feat_gate_red></span> Opening a town portal — hold ${PORTAL_CHANNEL_SECS}s without being hit.`, 'important');
   sfx('teleport');
   updateBars(); renderSkillBar(); draw();
   // Real-time: the channel counts down on the world clock (see worldTick) — no
@@ -12225,7 +12225,7 @@ function tickPortalChannel(hpBeforeEnemies) {
   // for that animation to finish (updatePortalFx), so the floor stays on screen.
   if (portalCharge <= 0) { resetPortal(); beginPortalDeparture(); return; }
   const left = Math.ceil(portalCharge);
-  if (left !== before) log(`<span data-spr=feat_gate_red></span> The town portal swirls — ${left} second${left === 1 ? '' : 's'} to go.`);
+  if (left !== before) log(`<span data-spr=feat_gate_red></span> Town portal — ${left}s to go.`);
   updateBars(); renderSkillBar();
 }
 
@@ -12323,7 +12323,7 @@ function returnToHeldFloor() {
   resetPortal(); warpFx = null;      // no half-formed portal / in-flight pad warp lingers
   beginPortalArrival();              // blue pillar beam-in, exactly like the Gate re-entry
   sfx('stairs');
-  log(`<span data-spr=feat_gate_red></span> You step back through the portal onto ${floorLabel(dungeonLevel)}.`, 'important');
+  log(`<span data-spr=feat_gate_red></span> Back through the portal onto ${floorLabel(dungeonLevel)}.`, 'important');
   clearHeldFloor();                  // single-use — consumed on return
   updateBars(); renderSkillBar(); draw(); saveGame();
 }
@@ -12342,8 +12342,8 @@ function warpToTown() {
   buildTown();
   sfx('stairs');
   beginPortalArrival();   // blue-pillar materialise, like any arrival
-  log('<span data-spr=feat_gate_red></span> The portal opens and you step through into the safety of town.', 'important');
-  log('Roam the town and walk up to a keeper to use their service. Step into the <span data-spr=feat_gate_red></span> Dungeon Gate to descend, or the <span data-spr=feat_portal></span> Town Portal to drop back onto the floor you left.');
+  log('<span data-spr=feat_gate_red></span> You step through the portal into town.', 'important');
+  log('Walk up to a keeper to use their service. Enter the <span data-spr=feat_gate_red></span> Dungeon Gate to descend, or the <span data-spr=feat_portal></span> Town Portal to return to your floor.');
   updateBars(); renderSkillBar();
   draw();
   saveGame();
@@ -12523,7 +12523,7 @@ function hireMerc(id, floors) {
   spendGold(cost);
   player.merc = { kind: t.id, floors: dur.floors, mult: t.mult };
   sfx('buy');
-  log(`<span data-spr=a_shield></span> You hire a ${t.name} for <span data-spr=ic_money></span>${fmtGold(cost)} — they'll join you for ${dur.floors} floor${dur.floors === 1 ? '' : 's'}.`, 'important');
+  log(`<span data-spr=a_shield></span> Hired ${t.name} — <span data-spr=ic_money></span>${fmtGold(cost)}, joins for ${dur.floors} floor${dur.floors === 1 ? '' : 's'}.`, 'important');
   updateBars(); renderMercCamp(); saveGame();
 }
 
@@ -12654,7 +12654,7 @@ function transmute(tier, ids) {
   // tier-coloured flash.
   if (isTopTierItem(item)) lootReveal(item);
   else { sfx('levelup'); screenFlash((TIERS[next] || {}).color || '#fff'); }
-  log(`<span data-spr=potion_g></span> The crucible fuses ${spent} ${tier} pieces into ${logItem(item)}!`, 'loot');
+  log(`<span data-spr=potion_g></span> Crucible fuses ${spent} ${tier} pieces into ${logItem(item)}!`, 'loot');
   updateBars(); renderPanel(); renderTransmuter(); saveGame();
 }
 
@@ -12702,7 +12702,7 @@ function checkBountyComplete() {
     showLootBanner('Bounty complete!', 'RETURN TO TOWN TO CLAIM', 'var(--uncommon)',
       () => { sfx('milestone'); screenFlash('var(--uncommon)'); });
   }
-  log('<span data-spr=scroll></span> <b style="color:var(--uncommon)">Bounty complete!</b> Return to town to claim your reward.', 'important');
+  log('<span data-spr=scroll></span> <b style="color:var(--uncommon)">Bounty complete!</b> Claim your reward in town.', 'important');
 }
 
 // The board draws from a big pool of contract templates and shows a rotating
@@ -12866,7 +12866,7 @@ function claimBounty() {
   // its green "ready to claim" pulse would linger until the next world-tick rebuild.
   updateBars(); renderPanel(); renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame();
 }
-function abandonBounty() { player.bounty = null; sfx('click'); log('<span data-spr=scroll></span> You abandon the bounty.'); renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame(); }
+function abandonBounty() { player.bounty = null; sfx('click'); log('<span data-spr=scroll></span> Bounty abandoned.'); renderBounty(); updateObjectiveChip(); renderSkillBar(); saveGame(); }
 
 // ── OBJECTIVE CHIP / DAILY STREAK / COMBO + GREED RESETS ─────────────────────
 // The objective chip (a compact "what am I working toward" banner near the top),
@@ -12973,7 +12973,7 @@ function acceptGreed() {
   floorGreed = 2;
   (enemies || []).forEach(e => { if (e && !e.dead && !e.isBoss) { e.maxHp = Math.round(e.maxHp * 1.5); e.hp = e.maxHp; e.dmg = Math.round(e.dmg * 1.4); } });
   sfx('boss'); screenFlash('#b01e32');
-  log('<span data-spr=ic_cursed></span> You brave the cursed floor — spoils are DOUBLED, but the foes are deadlier.', 'important');
+  log('<span data-spr=ic_cursed></span> Cursed floor — spoils DOUBLED, foes deadlier.', 'important');
   draw();
 }
 function declineGreed() { const ov = document.getElementById('greed-overlay'); if (ov) ov.classList.remove('open'); sfx('click'); }
@@ -13289,7 +13289,7 @@ const RAMEN_INGREDIENT_COUNT = 3;
 function potAdd(k) {
   if (ingCount(k) - (cookPot[k] || 0) <= 0) return;
   const total = Object.values(cookPot).reduce((a, c) => a + c, 0);
-  if (total >= RAMEN_INGREDIENT_COUNT) { log(`<span data-spr=ramen_bowl></span> A bowl of ramen takes exactly ${RAMEN_INGREDIENT_COUNT} toppings.`); return; }
+  if (total >= RAMEN_INGREDIENT_COUNT) { log(`<span data-spr=ramen_bowl></span> A bowl takes exactly ${RAMEN_INGREDIENT_COUNT} toppings.`); return; }
   cookPot[k] = (cookPot[k] || 0) + 1;
   sfx('click');
   refreshCooking();
@@ -13307,14 +13307,14 @@ function potClear() { cookPot = {}; refreshCooking(); }
 // can afford — so you don't tap Cook over and over. Defaults to one bowl.
 function cookPotNow(n) {
   const total = Object.values(cookPot).reduce((a, c) => a + c, 0);
-  if (total !== RAMEN_INGREDIENT_COUNT) { log(`<span data-spr=ramen_bowl></span> A bowl of ramen takes exactly ${RAMEN_INGREDIENT_COUNT} toppings — you have ${total}.`); return; }
+  if (total !== RAMEN_INGREDIENT_COUNT) { log(`<span data-spr=ramen_bowl></span> A bowl takes ${RAMEN_INGREDIENT_COUNT} toppings — you have ${total}.`); return; }
   const affordable = cookableCount(cookPot, player.ingredients || {});
   const count = Math.max(1, Math.min(Math.floor(n) || 1, affordable));
   const bowl = bowlFromPot(cookPot);
   if (bowl.match && !isDiscovered(bowl.match.id)) {
     if (!Array.isArray(player.discoveredRecipes)) player.discoveredRecipes = [];
     player.discoveredRecipes.push(bowl.match.id);
-    log(`${bowlIcon(14)} Secret recipe discovered: ${bowl.name}! It carries a bonus on top of its toppings.`, 'important');
+    log(`${bowlIcon(14)} Secret recipe: ${bowl.name}! Carries a bonus atop its toppings.`, 'important');
     screenFlash('#ffd24b');
   }
   for (const [k, c] of Object.entries(cookPot)) player.ingredients[k] = Math.max(0, ingCount(k) - c * count);
@@ -13322,7 +13322,7 @@ function cookPotNow(n) {
   if (!Array.isArray(player.pantry)) player.pantry = [];
   for (let j = 0; j < count; j++) player.pantry.push({ name: bowl.name, fx: bowl.fx, floors: bowl.floors, recipe: bowl.recipe });
   const label = count > 1 ? `${count}× ${bowl.name}` : bowl.name;
-  log(`${bowlIcon(14)} You cook up ${label}${fxDesc(bowl.fx) ? ' — ' + fxDesc(bowl.fx) : ''}.`, 'loot');
+  log(`${bowlIcon(14)} Cooked ${label}${fxDesc(bowl.fx) ? ' — ' + fxDesc(bowl.fx) : ''}.`, 'loot');
   sfx('shrine');
   updateBars(); saveGame(); refreshCooking();
 }
@@ -13335,7 +13335,7 @@ function applyBowlBuff(bowl) {
   recomputeMaxStats();
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
-  log(`${bowlIcon(14)} You slurp down ${bowl.name} — ${fxDesc(bowl.fx)} for ${bowl.floors} floors!`, 'important');
+  log(`${bowlIcon(14)} Ate ${bowl.name} — ${fxDesc(bowl.fx)} for ${bowl.floors} floors!`, 'important');
   screenFlash('#66dd66'); sfx('potion');
 }
 
@@ -13358,7 +13358,7 @@ function assignMeal(pantryIndex) {
   player.pantry = r.pantry; player.mealSlots = r.mealSlots;
   sfx('click');
   updateBars(); renderSkillBar(); saveGame(); refreshCooking();
-  log(`${bowlIcon(14)} Slotted ${r.assigned}× ${name} — eat it from the belt anytime.`);
+  log(`${bowlIcon(14)} Slotted ${r.assigned}× ${name} — eat from the belt anytime.`);
 }
 
 // Un-assign a meal slot back to the pantry (Ramen House only).
@@ -13427,7 +13427,7 @@ function mealSlotDrop(e, slotIndex) {
   player.pantry = r.pantry; player.mealSlots = r.mealSlots;
   sfx('click');
   updateBars(); renderSkillBar(); saveGame(); refreshCooking();
-  log(`${bowlIcon(14)} Slotted ${r.assigned}× ${name} — eat it from the belt anytime.`);
+  log(`${bowlIcon(14)} Slotted ${r.assigned}× ${name} — eat from the belt anytime.`);
 }
 
 // Eat one bowl straight from a HUD meal slot (works anywhere — this is the whole point
@@ -13855,7 +13855,7 @@ function craftItem() {
   spendCost(cost);
   inventory.push(item);
   sfx('equip');
-  log(`<span data-spr=ic_mallet></span> You forge a ${item.name} (ilvl ${item.ilvl}). Take it to the <span data-spr=ic_wand></span> Enchanter to add modifiers.`, 'loot');
+  log(`<span data-spr=ic_mallet></span> Forged ${item.name} (ilvl ${item.ilvl}). Enchant it for modifiers at the <span data-spr=ic_wand></span> Enchanter.`, 'loot');
   updateBars(); renderPanel(); renderCraftsman(); saveGame();
 }
 
@@ -13959,7 +13959,7 @@ function warnBagFull() {
   if (now - _bagFullAt < 2000) return;   // don't spam it every kill
   _bagFullAt = now;
   sfx('denied');
-  log('<span data-spr=chest></span> Bag full (' + inventory.length + '/' + BAG_MAX + ')! Sell or scrap loot to make room.', 'important');
+  log('<span data-spr=chest></span> Bag full (' + inventory.length + '/' + BAG_MAX + ')! Sell or scrap to make room.', 'important');
 }
 function acquireLoot(item) {
   recordWardrobe(item);
@@ -13989,7 +13989,7 @@ function acquireLoot(item) {
 function sellFromBag(i) {
   const item = inventory[i];
   if (!item) return;
-  if (item.locked) { sfx('denied'); log(`<span data-spr=feat_door></span> ${logItem(item)} is locked — unlock it to sell.`); return; }
+  if (item.locked) { sfx('denied'); log(`<span data-spr=feat_door></span> ${logItem(item)} is locked — unlock to sell.`); return; }
   const price = Math.max(1, Math.round(item.value * 0.5));
   player.gold += price;
   inventory.splice(i, 1);
@@ -14003,7 +14003,7 @@ function sellFromBag(i) {
 function scrapFromBag(i) {
   const item = inventory[i];
   if (!item || !item.slot || !TIERS[item.tier]) return;
-  if (item.locked) { sfx('denied'); log(`<span data-spr=feat_door></span> ${logItem(item)} is locked — unlock it to scrap.`); return; }
+  if (item.locked) { sfx('denied'); log(`<span data-spr=feat_door></span> ${logItem(item)} is locked — unlock to scrap.`); return; }
   const got = salvageYield(item);
   for (const k in got) gainMaterial(k, got[k]);
   inventory.splice(i, 1);
@@ -14066,12 +14066,12 @@ function renderHealer() {
 function restHeal() {
   if (player.hp >= player.maxHp && player.mp >= player.maxMp) return;
   const cost = healCost();
-  if (spendableGold() < cost) { log(`Not enough gold — the healer charges <span data-spr=ic_money></span>${cost} for a full rest.`); return; }
+  if (spendableGold() < cost) { log(`Need <span data-spr=ic_money></span>${cost} for a full rest.`); return; }
   spendGold(cost);
   player.hp = player.maxHp; player.mp = player.maxMp;
   statusEffects = statusEffects.filter(s => s.target !== 'player');
   sfx('potion');
-  log(`<span data-spr=town_healer></span> The healer restores you to full and cleanses every ailment for <span data-spr=ic_money></span>${cost}.`, 'loot');
+  log(`<span data-spr=town_healer></span> Healer restores you to full and cleanses all ailments — <span data-spr=ic_money></span>${cost}.`, 'loot');
   updateBars(); renderHealer(); saveGame();
 }
 
@@ -14119,7 +14119,7 @@ function upgradePotion(kind) {
   const max = kind === 'power' ? POTION_POWER_MAX : POTION_CD_MAX;
   if (lvl >= max) return;
   const cost = potionUpgradeCost(kind);
-  if (spendableGold() < cost) { log(`Not enough gold — that upgrade costs <span data-spr=ic_money></span>${cost}.`); return; }
+  if (spendableGold() < cost) { log(`Need <span data-spr=ic_money></span>${cost} for that upgrade.`); return; }
   spendGold(cost);
   if (kind === 'power') player.potionPowerLvl = lvl + 1; else player.potionCdLvl = lvl + 1;
   sfx('buy');
@@ -14214,7 +14214,7 @@ function stashDepositGold(amt) {
   player.gold -= amt;
   depositGold(stash, stashDeviceId(), amt); // PN-counter deposit; re-materialises stash.gold
   sfx('buy');
-  log(`<span data-spr=ic_coffer></span> Deposited <span data-spr=ic_money></span>${amt} into the vault. (<span data-spr=ic_money></span>${stash.gold} stored)`, 'loot');
+  log(`<span data-spr=ic_coffer></span> Deposited <span data-spr=ic_money></span>${amt}. (<span data-spr=ic_money></span>${stash.gold} stored)`, 'loot');
   updateBars(); renderStash(); saveGame(); saveStash();
 }
 function stashWithdrawGold(amt) {
@@ -14223,7 +14223,7 @@ function stashWithdrawGold(amt) {
   withdrawGold(stash, stashDeviceId(), amt); // PN-counter withdrawal; re-materialises stash.gold
   player.gold += amt;
   sfx('buy');
-  log(`<span data-spr=ic_coffer></span> Withdrew <span data-spr=ic_money></span>${amt} from the vault. (<span data-spr=ic_money></span>${stash.gold} stored)`, 'loot');
+  log(`<span data-spr=ic_coffer></span> Withdrew <span data-spr=ic_money></span>${amt}. (<span data-spr=ic_money></span>${stash.gold} stored)`, 'loot');
   updateBars(); renderStash(); saveGame(); saveStash();
 }
 // ── Spending the vault ──────────────────────────────────────────────────────
@@ -14490,7 +14490,7 @@ function ascend(key) {
   if ((player.level || 1) < ASCEND_LEVEL) { log(`Ascension requires Hero level ${ASCEND_LEVEL}.`); return; }
   if (player.ascension === key) return;
   const cost = player.ascension ? ascendCost() : 0;
-  if (spendableGold() < cost) { log('Not enough gold to switch your ascension.'); return; }
+  if (spendableGold() < cost) { log('Not enough gold to switch ascension.'); return; }
   spendGold(cost);
   // Refund any ascendancy points spent in the previous path tree before switching
   // (they return to the ascendancy pool, not the normal skill pool).
@@ -14504,7 +14504,7 @@ function ascend(key) {
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   sfx('levelup'); screenFlash(a.color);
-  log(`You ascend as a ${a.name}! A new path of power opens.${refunded ? ` ${refunded} path point${refunded === 1 ? '' : 's'} refunded.` : ''}`, 'important');
+  log(`Ascended as a ${a.name}! A new path opens.${refunded ? ` ${refunded} path point${refunded === 1 ? '' : 's'} refunded.` : ''}`, 'important');
   skillView = 'path';
   updateBars(); renderPanel(); renderTrainer(); renderSkillBar(); draw(); saveGame();
 }
@@ -14519,11 +14519,11 @@ function respecAttrs() {
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   sfx('shrine');
-  log(`<span data-spr=town_trainer></span> You unlearn your attributes — ${spent} point${spent === 1 ? '' : 's'} returned to spend.`, 'important');
+  log(`<span data-spr=town_trainer></span> Attributes unlearned — ${spent} point${spent === 1 ? '' : 's'} returned.`, 'important');
   // Dropping back to base attributes can leave worn gear under its requirement; warn
   // so the player understands why those pieces just went red and stopped helping.
   const ignored = SLOT_KEYS.filter(s => equipped[s] && !slotActive(s)).length;
-  if (ignored) log(`⚠ ${ignored} worn piece${ignored === 1 ? '' : 's'} no longer meet${ignored === 1 ? 's' : ''} the attribute requirement — shown red in GEAR and ignored until you re-invest.`, 'important');
+  if (ignored) log(`⚠ ${ignored} worn piece${ignored === 1 ? '' : 's'} no longer meet${ignored === 1 ? 's' : ''} attribute reqs — red in GEAR, ignored until you re-invest.`, 'important');
   updateBars(); renderPanel(); renderTrainer(); saveGame();
 }
 function respecSkills() {
@@ -14543,7 +14543,7 @@ function respecSkills() {
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   sfx('shrine');
   const ascStr = spentAsc ? ` and ${spentAsc} ascendancy point${spentAsc === 1 ? '' : 's'}` : '';
-  log(`<span data-spr=town_trainer></span> You unlearn your skills — ${spent} skill point${spent === 1 ? '' : 's'}${ascStr} returned to spend.`, 'important');
+  log(`<span data-spr=town_trainer></span> Skills unlearned — ${spent} skill point${spent === 1 ? '' : 's'}${ascStr} returned.`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); renderTrainer(); saveGame();
 }
 
@@ -14653,7 +14653,7 @@ function enchantAugment(id) {
   if (addAttr) addAttrAffixes(item, item.ilvl, mult, 1);
   else         addStatAffixes(item, item.ilvl, mult, 1);
   spendCost(cost);
-  log(`<span data-spr=ic_wand></span> The enchanter augments your ${item.name} with a new property.`, 'loot');
+  log(`<span data-spr=ic_wand></span> Enchanter adds a property to your ${item.name}.`, 'loot');
   afterEnchant(item);
 }
 
@@ -14671,7 +14671,7 @@ function enchantRerollAll(id) {
   addStatAffixes(item, item.ilvl, mult, rollAffixCount(caps.stat));
   addAttrAffixes(item, item.ilvl, mult, rollAffixCount(caps.attr));
   spendCost(cost);
-  log(`<span data-spr=ic_wand></span> The enchanter reforges every property on your ${item.name}.`, 'loot');
+  log(`<span data-spr=ic_wand></span> Enchanter reforges every property on your ${item.name}.`, 'loot');
   afterEnchant(item);
 }
 
@@ -14694,7 +14694,7 @@ function enchantRerollValue(id, kind, key) {
     item.attrs[key] = affixAttrValue(item.ilvl, mult);
   }
   spendCost(cost);
-  log(`<span data-spr=ic_wand></span> The enchanter reforges the strength of a property on your ${item.name}.`, 'loot');
+  log(`<span data-spr=ic_wand></span> Enchanter reforges a property's strength on your ${item.name}.`, 'loot');
   afterEnchant(item);
 }
 
@@ -14722,7 +14722,7 @@ function enchantRerollType(id, kind, key) {
     item.attrs = replaceObjKey(item.attrs, key, na, affixAttrValue(item.ilvl, mult));
   }
   spendCost(cost);
-  log(`<span data-spr=ic_wand></span> The enchanter transmutes a property on your ${item.name} into something new.`, 'loot');
+  log(`<span data-spr=ic_wand></span> Enchanter transmutes a property on your ${item.name}.`, 'loot');
   afterEnchant(item);
 }
 
@@ -14824,7 +14824,7 @@ function upgradeItemIlvl(id, toIlvl) {
   if (!canAfford(cost)) { sfx('denied'); return; }
   spendCost(cost);
   rescaleItemToIlvl(item, from, to);
-  log(`<span data-spr=ic_wand></span> The enchanter empowers your ${item.name} to <b>ilvl ${to}</b>.`, 'loot');
+  log(`<span data-spr=ic_wand></span> Enchanter empowers your ${item.name} to <b>ilvl ${to}</b>.`, 'loot');
   afterEnchant(item);
 }
 
@@ -15165,7 +15165,7 @@ function enterDungeonAt(diff, floor, opts) {
   generateMap();   // clears inTown and builds the chosen floor
   maybeFloorEvent();
   sfx('stairs');
-  log(`<span data-spr=feat_gate_red></span> You step through the gate into ${floorLabel()}.`, 'important');
+  log(`<span data-spr=feat_gate_red></span> Through the gate into ${floorLabel()}.`, 'important');
   // Returning to the dungeon through the Gate plays the teleport in reverse — a blue
   // pillar stabs into the floor and the hero materializes. The rainbow conquest
   // portal keeps its own purple flash instead, so it opts out.
@@ -15288,7 +15288,7 @@ function gambleRoll() {
   // lesser pulls keep the plain win/loot cue.
   if (isTopTierItem(item)) lootReveal(item);
   else sfx(jackpot ? 'levelup' : 'loot');
-  log(`🎲 You wager <span data-spr=ic_money></span>${cost} and the dice favor you — ${logItem(item)}!`, jackpot ? 'important' : 'loot');
+  log(`🎲 Wagered <span data-spr=ic_money></span>${cost} — dice favor you: ${logItem(item)}!`, jackpot ? 'important' : 'loot');
   updateBars(); renderPanel(); renderGambler(); saveGame();
 }
 
@@ -15645,7 +15645,7 @@ function spawnEnemies() {
           cd: 3,            // world beats before the next special can fire again
           shieldT: 0,       // remaining world beats of an active protective ward
         });
-        log(`⚠️ ${boss.name} ${bossIcon(boss.type, 16) || dlIcon(boss.sprite, 16)} guards this floor — it ${boss.blurb}!`, 'important');
+        log(`⚠️ ${boss.name} ${bossIcon(boss.type, 16) || dlIcon(boss.sprite, 16)} guards this floor — ${boss.blurb}!`, 'important');
       } else {
         // Regular-foe stats (baseHp / baseDmg / mobLevel) were rolled once above.
         if (i === eliteIndex) {
@@ -15664,7 +15664,7 @@ function spawnEnemies() {
             behavior: behaviorFor(eType),
             mColor: (typeof MONSTERS === 'object' && MONSTERS[eType] && MONSTERS[eType].color) || null,
           });
-          log(`<span data-spr=mat_glimmer></span> ${eName}, a glowing elite, prowls this floor — slay it for richer loot!`, 'important');
+          log(`<span data-spr=mat_glimmer></span> ${eName}, a glowing elite, prowls this floor — slay for richer loot!`, 'important');
         } else {
           spawnFloorMob(ex, ey);
         }
@@ -19541,16 +19541,16 @@ function tickStatusEffects() {
         const dmg = 2 + dungeonLevel;
         const hpLost = takePlayerDamage(dmg, 'poison', { lethal: false, isDoT: true });
         if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#44dd44');
-        log(`<span data-spr=potion_g></span> Poison deals ${dmg} damage!`);
+        log(`<span data-spr=potion_g></span> Poison -${dmg} HP`);
       }
       if (pulse && s.effect === 'burn') {
         const dmg = 4 + Math.round(dungeonLevel * 1.5);
         const hpLost = takePlayerDamage(dmg, 'burning', { lethal: false, isDoT: true });
         if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff8a3a');
-        log(`<span data-spr=ic_fire></span> Burning deals ${dmg} damage!`);
+        log(`<span data-spr=ic_fire></span> Burning -${dmg} HP`);
       }
       if (pulse && s.effect === 'stun') {
-        log('<span data-spr=ic_stun></span> You are stunned and cannot move!');
+        log('<span data-spr=ic_stun></span> Stunned — locked in place!');
       }
     } else {
       const e = s.target;
@@ -19559,7 +19559,7 @@ function tickStatusEffects() {
         const dmg = s.spread ? burnSpreadDmg() : burnDmg();
         e.hp -= dmg;
         spawnFloatingText(e.x, e.y, `${dmg}`, '#ff8a3a');
-        log(`<span data-spr=ic_fire></span> Burning deals ${dmg} to ${e.isBoss ? e.name : e.type}!`);
+        log(`<span data-spr=ic_fire></span> Burn -${dmg} ${e.isBoss ? e.name : e.type}`);
         if (e.hp <= 0) { log(`<span data-spr=ic_fire></span> ${e.isBoss ? e.name : e.type} burned`, 'important'); onEnemyDefeated(e); }
         // A directly-cast fire-mage burn ignites adjacent foes (weak, non-chaining).
         else if (!s.spread && s.source === 'player' && player.class === 'mage') burnSpreaders.push(e);
@@ -19568,7 +19568,7 @@ function tickStatusEffects() {
         const dmg = 2 + dungeonLevel;
         e.hp -= dmg;
         spawnFloatingText(e.x, e.y, `${dmg}`, '#44dd44');
-        log(`<span data-spr=potion_g></span> Poison deals ${dmg} to ${e.isBoss ? e.name : e.type}!`);
+        log(`<span data-spr=potion_g></span> Poison -${dmg} ${e.isBoss ? e.name : e.type}`);
         if (e.hp <= 0) {
           // Route poison kills through the normal death handler so the foe still
           // grants XP/gold/loot AND the floor-clear check runs — otherwise a
@@ -19789,7 +19789,7 @@ function tryPlayerStatusProc(e) {
   if (bleed > 0 && !e.dead && Math.random() < bleed / 100) {
     applyStatusEffect(e, 'poison', 3, 'player');
     const label = e.isBoss ? e.name : e.type;
-    log(`🩸 Your ${w.name} opens a bleeding wound on ${label}!`, 'loot');
+    log(`🩸 Your ${w.name} makes ${label} bleed!`, 'loot');
   }
   const tierOrder = Object.keys(TIERS);
   const tierIdx = tierOrder.indexOf(w.tier);
@@ -20214,29 +20214,29 @@ function activateShrine(nx, ny) {
 // nudge. Cheap flavour to keep each new floor feeling a little alive.
 const FLOOR_EVENTS = [
   // ── Small windfalls & boons ──
-  () => { const g = rnd(10,25) + dungeonLevel*3; player.gold += g; log(`<span data-spr=ic_money></span> You stumble on a hidden coin cache — +<span data-spr=ic_money></span>${g}!`, 'important'); },
-  () => { const g = rnd(5,12) + dungeonLevel*2; player.gold += g; log(`<span data-spr=e_rat></span> A rat scurries off, dropping a stolen coin. +<span data-spr=ic_money></span>${g}.`, 'loot'); },
-  () => { const g = rnd(8,18) + dungeonLevel*2; player.gold += g; log(`<span data-spr=mat_glimmer></span> A vein of crystal glitters in the wall — you pry some loose. +<span data-spr=ic_money></span>${g}.`, 'loot'); },
-  () => { const g = rnd(12,28) + dungeonLevel*3; player.gold += g; log(`<span data-spr=ic_money></span> A careless adventurer left a coin pouch behind. +<span data-spr=ic_money></span>${g}!`, 'loot'); },
-  () => { const heal = Math.floor(player.maxHp*0.2); player.hp = Math.min(player.maxHp, player.hp+heal); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=ramen_scallion></span> An eerie calm settles over you — +${heal} HP.`, 'important'); },
-  () => { const heal = Math.floor(player.maxHp*0.1); player.hp = Math.min(player.maxHp, player.hp+heal); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=food></span> You find a forgotten ration and eat it. +${heal} HP.`, 'loot'); },
-  () => { const heal = Math.floor(player.maxHp*0.08); player.hp = Math.min(player.maxHp, player.hp+heal); log(`<span data-spr=town_healer></span> You pause to catch your breath. +${heal} HP.`, ''); },
+  () => { const g = rnd(10,25) + dungeonLevel*3; player.gold += g; log(`<span data-spr=ic_money></span> Hidden coin cache — +<span data-spr=ic_money></span>${g}!`, 'important'); },
+  () => { const g = rnd(5,12) + dungeonLevel*2; player.gold += g; log(`<span data-spr=e_rat></span> A rat drops a stolen coin. +<span data-spr=ic_money></span>${g}.`, 'loot'); },
+  () => { const g = rnd(8,18) + dungeonLevel*2; player.gold += g; log(`<span data-spr=mat_glimmer></span> A crystal vein glitters — you pry some loose. +<span data-spr=ic_money></span>${g}.`, 'loot'); },
+  () => { const g = rnd(12,28) + dungeonLevel*3; player.gold += g; log(`<span data-spr=ic_money></span> A dropped coin pouch — +<span data-spr=ic_money></span>${g}!`, 'loot'); },
+  () => { const heal = Math.floor(player.maxHp*0.2); player.hp = Math.min(player.maxHp, player.hp+heal); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=ramen_scallion></span> An eerie calm settles — +${heal} HP.`, 'important'); },
+  () => { const heal = Math.floor(player.maxHp*0.1); player.hp = Math.min(player.maxHp, player.hp+heal); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=food></span> A forgotten ration — you eat it. +${heal} HP.`, 'loot'); },
+  () => { const heal = Math.floor(player.maxHp*0.08); player.hp = Math.min(player.maxHp, player.hp+heal); log(`<span data-spr=town_healer></span> You catch your breath. +${heal} HP.`, ''); },
   () => { const xp = 15*dungeonLevel; player.xp += xp; log(`💡 A flash of insight — +${xp} XP!`, 'important'); checkLevelUp(); },
-  () => { const xp = 10*dungeonLevel; player.xp += xp; log(`<span data-spr=scroll></span> You study a torn page of a spellbook. +${xp} XP.`, 'loot'); checkLevelUp(); },
-  () => { buffs.fortune = Math.max(buffs.fortune, 2); log('<span data-spr=chest></span> You pocket a lucky coin — better loot for 2 floors!', 'important'); screenFlash('#22cc66'); },
+  () => { const xp = 10*dungeonLevel; player.xp += xp; log(`<span data-spr=scroll></span> A torn spellbook page — +${xp} XP.`, 'loot'); checkLevelUp(); },
+  () => { buffs.fortune = Math.max(buffs.fortune, 2); log('<span data-spr=chest></span> A lucky coin — better loot for 2 floors!', 'important'); screenFlash('#22cc66'); },
   () => { buffs.power = Math.max(buffs.power, 2); log('<span data-spr=ic_fire></span> Battle fury surges — +50% damage for 2 floors!', 'important'); screenFlash('#ff6600'); },
-  () => { buffs.power = Math.max(buffs.power, 1); log('<span data-spr=w_dagger></span> You hone your blade on a left-behind whetstone. +50% damage next floor.', 'loot'); },
-  () => { const heal = Math.floor(player.maxHp*0.15); const mana = Math.floor(player.maxMp*0.15); player.hp = Math.min(player.maxHp, player.hp+heal); player.mp = Math.min(player.maxMp, player.mp+mana); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=potion_g></span> You find a half-full flask and drain it — +${heal} HP, +${mana} MP.`, 'loot'); },
+  () => { buffs.power = Math.max(buffs.power, 1); log('<span data-spr=w_dagger></span> You hone your blade on a whetstone — +50% damage next floor.', 'loot'); },
+  () => { const heal = Math.floor(player.maxHp*0.15); const mana = Math.floor(player.maxMp*0.15); player.hp = Math.min(player.maxHp, player.hp+heal); player.mp = Math.min(player.maxMp, player.mp+mana); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=potion_g></span> A half-full flask — +${heal} HP, +${mana} MP.`, 'loot'); },
   // ── Small hazards ──
-  () => { const dmg = rnd(5,12) + dungeonLevel; const hpLost = takePlayerDamage(dmg, 'hidden trap', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344'); log(`🪤 A hidden trap snaps shut — you take ${dmg} damage!`, 'important'); screenFlash('#cc0000'); },
-  () => { if (Math.random()<0.5){ const h=Math.floor(player.maxHp*0.12); player.hp=Math.min(player.maxHp,player.hp+h); spawnFloatingText(player.x,player.y,`+${h}`,'#44dd44'); log(`<span data-spr=potion_g></span> You sip from a strange puddle — surprisingly refreshing. +${h} HP.`,'loot'); } else { const d=rnd(3,8); const hpLost=takePlayerDamage(d, 'strange puddle', { lethal: false }); if(hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`<span data-spr=potion_g></span> You sip from a strange puddle — bad idea. -${d} HP.`); } },
-  () => { const d = rnd(2,6); const hpLost = takePlayerDamage(d, 'web', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`🕸️ You blunder into a thick web and scratch free. -${d} HP.`); },
+  () => { const dmg = rnd(5,12) + dungeonLevel; const hpLost = takePlayerDamage(dmg, 'hidden trap', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344'); log(`🪤 A hidden trap snaps shut — -${dmg} HP!`, 'important'); screenFlash('#cc0000'); },
+  () => { if (Math.random()<0.5){ const h=Math.floor(player.maxHp*0.12); player.hp=Math.min(player.maxHp,player.hp+h); spawnFloatingText(player.x,player.y,`+${h}`,'#44dd44'); log(`<span data-spr=potion_g></span> A strange puddle — refreshing. +${h} HP.`,'loot'); } else { const d=rnd(3,8); const hpLost=takePlayerDamage(d, 'strange puddle', { lethal: false }); if(hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`<span data-spr=potion_g></span> A strange puddle — bad idea. -${d} HP.`); } },
+  () => { const d = rnd(2,6); const hpLost = takePlayerDamage(d, 'web', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`🕸️ You scratch free of a thick web. -${d} HP.`); },
   // ── Pure flavour, no effect ──
   () => log('<span data-spr=b_deathknight></span> A long-dead adventurer slumps against the wall. You leave them be.'),
   () => log('<span data-spr=scroll></span> Scrawled on the stone: "TURN BACK." You press on anyway.'),
   () => log('🌬️ A cold draft rises from below, carrying the stink of sulfur.'),
   () => log('💧 Somewhere, a stalactite drips with maddening regularity.'),
-  () => log('<span data-spr=food></span> You find a half-eaten meal, still warm. Something is close.'),
+  () => log('<span data-spr=food></span> A half-eaten meal, still warm. Something is close.'),
   () => log('<span data-spr=e_ghost></span> A whisper calls your name. You turn — nothing is there.'),
   () => log('<span data-spr=e_bat></span> A swarm of bats bursts past in a panic, then is gone.'),
   () => log('🕯️ A ghostly merchant flickers into view, then vanishes before you can trade.'),
@@ -20260,7 +20260,7 @@ function tickBuffs() {
   if (player.foodBuff && player.foodBuff.floors > 0) {
     player.foodBuff.floors--;
     if (player.foodBuff.floors <= 0) {
-      log(`${dlIcon('ramen_bowl', 16)} The warmth of your ${player.foodBuff.name} fades away.`, 'important');
+      log(`${dlIcon('ramen_bowl', 16)} Your ${player.foodBuff.name} fades.`, 'important');
       player.foodBuff = null;
       recomputeMaxStats();
       if (player.hp > player.maxHp) player.hp = player.maxHp;
@@ -20275,7 +20275,7 @@ function tickPact() {
   if (!pact) return;
   pact.floors--;
   if (pact.floors <= 0) {
-    log(`${dlIcon(pact.icon, 16)} The ${pact.name} fades — the depths return to their natural state.`, 'important');
+    log(`${dlIcon(pact.icon, 16)} The ${pact.name} fades.`, 'important');
     pact = null;
   }
 }
@@ -20544,7 +20544,7 @@ function breakAhead(cx, cy) {
   if (t === 11 && hasKey) {
     hasKey = false; mapData[cy][cx] = 0; bumpMapEpochIfChanged(t, 0); pathGridDirty();
     const reveal = (vaultInfo && vaultInfo.openMsg) || 'A fat chest waits inside!';
-    log(`<span data-spr=ic_key></span> You unlock the vault door! ${reveal}`, 'important');
+    log(`<span data-spr=ic_key></span> Vault door unlocked! ${reveal}`, 'important');
   }
 }
 
@@ -20565,7 +20565,7 @@ function smashCrackedWall(cx, cy) {
     pathGridDirty();            // …and the opened tile joins the pathfinding grid
     delete wallCracks[key];
     sfx('wall-break');
-    log('🧱 You smash through the cracked wall!', 'loot');
+    log('🧱 You smash the cracked wall!', 'loot');
   } else {
     wallCracks[key] = hits;
     sfx('wall-hit');
@@ -20996,7 +20996,7 @@ function updatePlayer(dt) {
     const wantsMove = heldDir('right') || heldDir('left') || heldDir('up') || heldDir('down') || moveTarget.active;
     if (!wantsMove) { player.vx = 0; player.vy = 0; player.dashT = 0; regenStamina(dt); return; }
     resetPortal();
-    log('<span data-spr=feat_gate_red></span> You step away and let the town portal fade.', 'important');
+    log('<span data-spr=feat_gate_red></span> You let the town portal fade.', 'important');
     updateBars(); renderSkillBar();
     // fall through: this same input starts the hero walking this frame
   }
@@ -21147,7 +21147,7 @@ function onEnterCell(nx, ny) {
     const d = nextDiffPortal.diff;
     nextDiffPortal = null;
     sfx('stairs'); screenFlash('#a060ff');
-    log(`🌈 You step into the rainbow portal — onward to ${(DIFFS[d - 1] || {}).name || 'the next difficulty'}!`, 'important');
+    log(`🌈 Into the rainbow portal — onward to ${(DIFFS[d - 1] || {}).name || 'the next difficulty'}!`, 'important');
     enterDungeonAt(d, 1, { noPortalFx: true });   // keeps its own purple flash, not the blue pillar
     return;
   }
@@ -21194,7 +21194,7 @@ function onEnterCell(nx, ny) {
     graveSite = null; graveMarker = null;
     sfx('gold');
     spawnFloatingText(player.x, player.y, 'RECLAIMED', '#ffd24b');
-    log(`<span data-spr=feat_grave></span> You reclaim your lost satchel — ${got} item${got === 1 ? '' : 's'} back in your bag.`, 'loot');
+    log(`<span data-spr=feat_grave></span> Reclaimed your satchel — ${got} item${got === 1 ? '' : 's'} back.`, 'loot');
     renderPanel();
     updateBars();
   }
@@ -21202,7 +21202,7 @@ function onEnterCell(nx, ny) {
   if (groundKey && groundKey.x === nx && groundKey.y === ny) {
     groundKey = null; hasKey = true;
     spawnFloatingText(player.x, player.y, 'KEY', '#ffd24b');
-    log('<span data-spr=ic_key></span> You found a vault key! Seek the locked door.', 'important');
+    log('<span data-spr=ic_key></span> Found a vault key! Seek the locked door.', 'important');
   }
   // Auto-pickup chests — walk onto a tile and every chest on it opens itself.
   if (pickupChestsAt(nx, ny) > 0) { renderPanelSoon(); updateBars(); }
@@ -21213,14 +21213,14 @@ function onEnterCell(nx, ny) {
     const burn = Math.round((BALANCE.lavaBase + dungeonLevel * BALANCE.lavaPerFloor + player.maxHp * BALANCE.lavaMaxHpFrac) * BALANCE.hazardDmgMult);
     const hpLost = takePlayerDamage(burn, 'lava', { lethal: false, isDoT: true });
     if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff7733');
-    log(`<span data-spr=ic_fire></span> The lava scorches you for ${burn}!`, 'important');
+    log(`<span data-spr=ic_fire></span> Lava scorches you -${burn}!`, 'important');
     updateBars();
   }
   if (tile === 8) {
     const stab = Math.round((BALANCE.spikeBase + dungeonLevel * BALANCE.spikePerFloor + player.maxHp * BALANCE.spikeMaxHpFrac) * BALANCE.hazardDmgMult);
     const hpLost = takePlayerDamage(stab, 'spikes', { lethal: false });
     if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
-    log(`🩸 Spikes stab you for ${stab}!`);
+    log(`🩸 Spikes stab you -${stab}!`);
     updateBars();
   }
 }
@@ -21254,14 +21254,14 @@ function bossGateCancel() {
   const el = document.getElementById('boss-gate-overlay'); if (el) el.classList.remove('open');
   pendingBossEntry = null;
   sfx('click');
-  log('You steady yourself at the threshold — then step back. The guardian can wait.');
+  log('You step back from the threshold. The guardian can wait.');
 }
 
 function goUpStairs(nx, ny) {
   if (displayFloor() === 1) { setPlayerCell(nx, ny); startPortalChannel(); return; }
   // A boss floor seals its entrance too — no climbing back out until the guardian falls.
   if (isBossLevel(dungeonLevel) && !floorCleared) {
-    log('<span data-spr=feat_door></span> The guardian\'s seal holds the way back shut — defeat it first.', 'important'); sfx('click'); return;
+    log('<span data-spr=feat_door></span> The guardian\'s seal holds the way shut — defeat it first.', 'important'); sfx('click'); return;
   }
   // Climbing UP into an unbeaten boss floor? Confirm at the threshold first.
   if (bossGateNeeded(dungeonLevel - 1)) { openBossGate(dungeonLevel - 1, () => performAscend(nx, ny)); return; }
@@ -21272,7 +21272,7 @@ function performAscend(nx, ny) {
   statusEffects = [];
   tickBuffs();
   sfx('stairs');
-  log(`Ascended to ${floorLabel()}. You return to ${currentTheme().name}.`, 'important');
+  log(`Ascended to ${floorLabel()} — ${currentTheme().name}.`, 'important');
   setPlayerCell(5, 5);
   arrivalDir = 'up';   // spawn on the stairs DOWN that lead back the way you came
   generateMap();
@@ -21285,13 +21285,13 @@ function performAscend(nx, ny) {
 // last-finite-floor guards.
 function goDownStairs(nx, ny) {
   if (tutorialActive) {
-    if (!floorCleared) { log('<span data-spr=b_deathknight></span> Defeat the skeleton first — then the cave will let you pass.', 'important'); sfx('click'); return; }
+    if (!floorCleared) { log('<span data-spr=b_deathknight></span> Defeat the skeleton first to pass.', 'important'); sfx('click'); return; }
     finishTutorial();
     return;
   }
-  if (!floorCleared) { log(`<span data-spr=feat_lock></span> The stairs are sealed. ${clearConditionLabel()}`, 'important'); sfx('click'); return; }
+  if (!floorCleared) { log(`<span data-spr=feat_lock></span> Stairs sealed. ${clearConditionLabel()}`, 'important'); sfx('click'); return; }
   if (isLastFiniteFloor()) {
-    log(`<span data-spr=b_ratking></span> This is the deepest floor of the ${diffMeta().name} dungeon — conquer its guardian, then take the next difficulty from town.`, 'important');
+    log(`<span data-spr=b_ratking></span> Deepest floor of the ${diffMeta().name} dungeon — beat its guardian, then take the next difficulty from town.`, 'important');
     sfx('click');
     return;
   }
@@ -21307,13 +21307,13 @@ function performDescend(nx, ny) {
       const r = questReward();
       const reward = generateItem(4, dungeonLevel + 1);
       inventory.push(reward);
-      log(`✅ ${quest.npc.name} reached the stairs safely! +<span data-spr=ic_money></span>${r.gold}, +${r.xp} XP, reward: ${logItem(reward)}`, 'important');
+      log(`✅ ${quest.npc.name} reached the stairs! +<span data-spr=ic_money></span>${r.gold}, +${r.xp} XP, reward: ${logItem(reward)}`, 'important');
       // A legendary/unique escort reward gets the full drop banner; else the green fanfare.
       if (isTopTierItem(reward)) lootReveal(reward);
       else { screenFlash('#22cc66'); sfx('levelup'); }
       checkLevelUp();
     } else {
-      log(`😟 You descended without ${quest.npc.name} — the escort failed.`);
+      log(`😟 Descended without ${quest.npc.name} — escort failed.`);
     }
     quest = null;
   }
@@ -21322,7 +21322,7 @@ function performDescend(nx, ny) {
   statusEffects = [];
   tickBuffs();
   sfx('stairs');
-  log(`Descended to ${floorLabel()}! You enter ${currentTheme().name}.`, 'important');
+  log(`Descended to ${floorLabel()} — ${currentTheme().name}.`, 'important');
   setPlayerCell(5, 5);
   arrivalDir = 'down';   // spawn on the stairs UP that lead back the way you came
   generateMap();
@@ -21337,7 +21337,7 @@ function performDescend(nx, ny) {
 // honours the boss-floor threshold confirm if the drop lands on a guardian floor.
 function useDeepStair() {
   if (deepStair == null) return;
-  if (!floorCleared) { log(`<span data-spr=feat_lock></span> The hidden stair is sealed. ${clearConditionLabel()}`, 'important'); sfx('click'); return; }
+  if (!floorCleared) { log(`<span data-spr=feat_lock></span> Hidden stair sealed. ${clearConditionLabel()}`, 'important'); sfx('click'); return; }
   const dest = dungeonLevel + 2;
   const plunge = () => {
     deepStair = null;
@@ -21370,7 +21370,7 @@ function useFountain(nx, ny) {
   pathGridDirty();     // …but the opened tile joins the pathfinding grid
   hasFountain = false;
   sfx('potion');
-  log(`<span data-spr=feat_shrine></span> The Fountain of Healing restores you to full HP and MP!`, 'important');
+  log(`<span data-spr=feat_shrine></span> Fountain of Healing — full HP and MP!`, 'important');
   updateBars();
   saveGame();
 }
@@ -21392,7 +21392,7 @@ function teleportPad(nx, ny) {
   beginMapWarp(sx, sy, dest.x + 0.5, dest.y + 0.5);
   sfx('teleport');
   spawnParticles(nx, ny, '#c77dff', 12, 0.12);  // energy discharge as the portal swallows you
-  log('<span data-spr=feat_portal></span> You step into the teleporter — the portal whisks you across the floor!', 'important');
+  log('<span data-spr=feat_portal></span> The teleporter whisks you across the floor!', 'important');
 }
 
 // ── UNSTUCK ──
@@ -21422,7 +21422,7 @@ function unstuck() {
   setPlayerCell(dest.x, dest.y);
   sfx('teleport');
   spawnFloatingText(player.x, player.y, 'WARP', '#bb88ff');
-  log('<span data-spr=feat_portal></span> You wrench yourself free and reappear elsewhere on the floor.', 'important');
+  log('<span data-spr=feat_portal></span> You wrench free and reappear elsewhere.', 'important');
   checkPickupProximity();
   draw();
 }
@@ -21726,7 +21726,7 @@ function dealDamage(e, dmg, isCrit) {
   // the clock runs out (see goblinFlee) or it vanishes with its hoard.
   if (e.isGoblin && e.escapeSecs == null && e.hp > 0) {
     e.escapeSecs = GOBLIN_ESCAPE_SECS;
-    log('<span data-spr=e_goblin></span> The Treasure Goblin is wounded and bolting — finish it fast!', 'important');
+    log('<span data-spr=e_goblin></span> Treasure Goblin wounded and bolting — finish it fast!', 'important');
   }
   e.hitAt = Date.now();   // drives the white hit-flash in draw()
   // Crit numbers land BIG and bold; ordinary hits stay small — the power fantasy
@@ -21825,7 +21825,7 @@ function onEnemyDefeated(e) {
     // Weave in town.
     const avail = weaveAvail(pointsEarned(player.bossFirstKills), player.weaveBoard);
     sfx('levelup');
-    log(`<span data-spr=q_relic></span> First clear of this boss floor — <b>+1 Boss Point</b>! Spend it at the Ascendant Weave in town. ${avail} to spend.`, 'important');
+    log(`<span data-spr=q_relic></span> First clear — <b>+1 Boss Point</b>! Spend at the Ascendant Weave in town. ${avail} to spend.`, 'important');
   }
   // ── Endgame boss-kill hooks ──
   if (e.isBoss) {
@@ -21837,7 +21837,7 @@ function onEnemyDefeated(e) {
   }
   // Pantheon apex-god kill: roll the exclusive Mythic + first-clear reward + advance pity.
   if (e.pinnacle) { try { egPinnacleOnBossKill(e); } catch (_e) {} }
-  if (e.isBoss && farm < 1 && !firstBossKill) log(`⚠️ ${label} has been slain here recently — its spoils are thinner (${Math.round(farm * 100)}%). Rest or move on to reset.`, 'important');
+  if (e.isBoss && farm < 1 && !firstBossKill) log(`⚠️ ${label} slain here recently — spoils thinner (${Math.round(farm * 100)}%). Rest or move on to reset.`, 'important');
   const xpMult = e.isBoss ? 5 : (e.isElite ? 2 : 1);
   const goldMult = e.isBoss ? 3 : (e.isElite ? 2 : 1);
   const xp = Math.round(12 * dungeonLevel * xpMult * farm * pfx('xp', 1) * (1 + (totalStat('XPGAIN') + skillBonus('xpGain')) / 100 + foodFx('xpPct')));
@@ -21891,7 +21891,7 @@ function onEnemyDefeated(e) {
     const effFarm = lootP.firstKill ? 1 : farm;
     const picks = Math.max(1, Math.round((lootP.picks + (buffs.fortune ? 1 : 0)) * effFarm));
     const noDrop = Math.pow(lootP.noDrop, 1 + Math.max(0, lootMult - 1) / 2);
-    if (lootP.firstKill) { log(`<span data-spr=mat_glimmer></span> First kill! ${label} spills a windfall of loot.`, 'important'); screenFlash('#ffd24b'); addShake(6); }
+    if (lootP.firstKill) { log(`<span data-spr=mat_glimmer></span> First kill! ${label} spills a windfall.`, 'important'); screenFlash('#ffd24b'); addShake(6); }
     let dropped = 0;
     for (let p = 0; p < picks; p++) {
       if (Math.random() >= noDrop) {                       // this pick yields an item
@@ -21994,7 +21994,7 @@ function onEnemyDefeated(e) {
     // a rare treat for catching one, same as its fabled-chest haul below.
     gainMaterial('chaos', 1);
     spawnFloatingText(e.x, e.y, `+${bonus}`, '#ffd24b', 1, true);
-    log(`<span data-spr=ic_money></span> The Treasure Goblin bursts — +<span data-spr=ic_money></span>${bonus}, a <span data-spr=feat_portal></span> Chaos Orb, and a glittering chest!`, 'loot');
+    log(`<span data-spr=ic_money></span> Treasure Goblin bursts — +<span data-spr=ic_money></span>${bonus}, a <span data-spr=feat_portal></span> Chaos Orb, and a chest!`, 'loot');
     updateBars();
     collectChestLoot(GOBLIN_LOOT_LUCK, e.level || dungeonLevel, e.x, e.y);
   }
@@ -22200,9 +22200,9 @@ function tryRangedAttack(dx, dy) {
 function castSkill() {
   if (!playerClass()) { log('Pick a class to gain skills.'); return; }
   const all = activeSkillList();
-  if (!all.length) { log(`No active skill learned yet — spend a skill point in the SKILLS tab (press B).`); return; }
+  if (!all.length) { log(`No active skill yet — learn one in the SKILLS tab (B).`); return; }
   const pri = primarySkill();
-  if (!pri) { log(`No skill in your slots — assign one in the SKILLS tab (press B).`); return; }
+  if (!pri) { log(`No skill slotted — assign one in the SKILLS tab (B).`); return; }
   castSkillById(pri.id);
 }
 
@@ -23424,7 +23424,7 @@ function goblinEscape(e) {
   spawnParticles(e.x, e.y, '#ffd24b', 14, 0.13);
   spawnFloatingText(e.x, e.y, 'POOF!', '#ffd24b');
   sfx('teleport');
-  log('💨 The Treasure Goblin slips away with its hoard — too slow!', 'important');
+  log('💨 Treasure Goblin slips away with its hoard — too slow!', 'important');
   updateFloorClear();
 }
 function goblinFlee(e) {
@@ -23620,7 +23620,7 @@ function tickBossHazards() {
     const hpLost = takePlayerDamage(burn, 'wall of flame', { lethal: false, isDoT: true });
     if (hpLost > 0) { spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff7733');
       spawnParticles(player.x, player.y, '#ff7733', 5, 0.08); }
-    log(`<span data-spr=ic_fire></span> You stand in the flames for ${burn}!`);
+    log(`<span data-spr=ic_fire></span> Standing in flames -${burn}!`);
   }
   bossHazards = bossHazards.filter(h => { h.secs -= WORLD_TICK_SECONDS; return h.secs > 0; });
 }
@@ -23678,7 +23678,7 @@ function bossSpecial(e, dist, beh) {
   if ((e.specials || []).includes('enrage') && !e.enraged && e.hp < e.maxHp * 0.4) {
     e.enraged = true;
     e.dmg = Math.round(e.dmg * 1.5);
-    log(`<span data-spr=b_dragon></span> ${e.name} ROARS and flies into a rage!`, 'important');
+    log(`<span data-spr=b_dragon></span> ${e.name} ROARS into a rage!`, 'important');
     sfx('boss'); screenFlash('#ff3344'); addShake(6); playBossVfx(e, 'enrage');
     return true;
   }
@@ -23889,12 +23889,12 @@ function ratKingTurn(e, dist) {
   if (roll < 0.32) {
     // Quake Slam — a big disc around the boss. Dodge: sprint to the rim.
     pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 4.6, tell, active: 0.14, dmg: Math.round(raw * 1.7), el: 'earth', src: e, label: `${e.name}'s quake`, flash: true, shakeAmt: 7, sfx: 'boss' });
-    log(`<span data-spr=b_ratking></span> ${e.name} rears back for a ground-shaking slam!`);
+    log(`<span data-spr=b_ratking></span> ${e.name} rears back for a slam!`);
   } else if (roll < 0.62) {
     // Pounce — a disc that tracks you, then locks. Dodge: keep moving.
     pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 2.2, tell, active: 0.12, dmg: Math.round(raw * 1.4), el: 'physical', src: e, label: `${e.name}'s pounce`, track: true, flash: true, shakeAmt: 5, sfx: 'hurt' });
     if (ph === 3) pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 2.0, tell: tell + 0.3, active: 0.12, dmg: Math.round(raw * 1.3), el: 'physical', src: e, label: `${e.name}'s pounce`, track: true, flash: true, shakeAmt: 5 });
-    log(`<span data-spr=b_ratking></span> ${e.name} fixes on you and pounces!`);
+    log(`<span data-spr=b_ratking></span> ${e.name} pounces!`);
   } else if (ph >= 2 && roll < 0.82) {
     // Tail Whirl — a lethal ring around the boss. Dodge: back away past its edge.
     pushTelegraph({ shape: 'ring', x: cx, y: cy, innerR: 1.4, r: 5.4, tell, active: 0.16, dmg: Math.round(raw * 1.5), el: 'earth', src: e, label: `${e.name}'s whirl`, flash: true, shakeAmt: 6, sfx: 'boss' });
@@ -24124,7 +24124,7 @@ function bossSummonWave(e, dist) {
   const n = summonMinions(e, rnd(1, 2));
   if (n <= 0) return false;
   e.cd = 5;
-  log(`<span data-spr=b_ratking></span> ${e.name} summons ${n} vermin to swarm you!`, 'important');
+  log(`<span data-spr=b_ratking></span> ${e.name} summons ${n} vermin!`, 'important');
   sfx('shrine');
   return true;
 }
@@ -24156,7 +24156,7 @@ function bossFirestorm(e, dist) {
     if (addHazard(player.x + dx, player.y + dy, 'fire', rnd(2, 3) + 1, burn)) placed++;
   if (!placed) return false;
   e.cd = 6;
-  log(`<span data-spr=ic_fire></span> ${e.name} rains a firestorm down around you!`, 'important');
+  log(`<span data-spr=ic_fire></span> ${e.name} rains a firestorm!`, 'important');
   sfx('boss'); screenFlash('#ff5522'); addShake(5);
   return true;
 }
@@ -24176,7 +24176,7 @@ function bossChainPull(e, dist) {
   spawnParticles(player.x, player.y, '#cc8844', 8, 0.1);
   const dmg = bossHitPlayer(Math.max(2, Math.round(e.dmg * 0.5)), e, '#ffaa33');
   e.cd = 5;
-  log(`<span data-spr=mat_scrap></span> ${e.name} hooks you and drags you in for ${dmg}!`, 'important');
+  log(`<span data-spr=mat_scrap></span> ${e.name} hooks you in -${dmg}!`, 'important');
   sfx('boss'); addShake(6); screenFlash('#aa5522');
   return true;
 }
@@ -24197,7 +24197,7 @@ function bossConjureWalls(e, dist) {
     if (addHazard(cand[i].x, cand[i].y, 'wall', rnd(2, 3) + 1)) placed++;
   if (!placed) return false;
   e.cd = 6;
-  log(`🧱 ${e.name} raises barriers of force to pen you in!`, 'important');
+  log(`🧱 ${e.name} pens you in with force walls!`, 'important');
   sfx('boss'); screenFlash('#7755bb');
   return true;
 }
@@ -24216,7 +24216,7 @@ function bossShockwave(e, dist) {
   spawnParticles(player.x, player.y, '#aaddff', 10, 0.12);
   const dmg = bossHitPlayer(Math.max(2, Math.round(e.dmg * 0.6)), e, '#88ddff');
   e.cd = 5;
-  log(`💥 ${e.name} unleashes a shockwave — you're hurled back for ${dmg}!`, 'important');
+  log(`💥 ${e.name} shockwave — hurled back -${dmg}!`, 'important');
   sfx('boss'); addShake(7); screenFlash('#6699cc');
   if (Math.random() < 0.4 && player.hp > 0) { applyStatusEffect('player', 'stun', 1, e); log('<span data-spr=ic_stun></span> The blast leaves you reeling!'); }
   return true;
@@ -24253,7 +24253,7 @@ function bossFrostNova(e, dist) {
   if (player.hp > 0) applyStatusEffect('player', 'stun', rnd(1, 2), e);
   e.cd = 6;
   spawnFloatingText(player.x, player.y - 0.3, 'FROZEN', '#aee7ff');
-  log(`<span data-spr=ic_ice></span> ${e.name} freezes you solid for ${dmg}!`, 'important');
+  log(`<span data-spr=ic_ice></span> ${e.name} freezes you -${dmg}!`, 'important');
   sfx('boss'); screenFlash('#88ccff');
   return true;
 }
@@ -24265,7 +24265,7 @@ function bossShield(e, dist) {
   e.cd = 8;
   spawnFloatingText(e.x, e.y, 'WARD', '#9fd8ff');
   spawnParticles(e.x, e.y, '#9fd8ff', 10, 0.08);
-  log(`<span data-spr=a_shield></span> ${e.name} wreathes itself in a protective ward!`, 'important');
+  log(`<span data-spr=a_shield></span> ${e.name} raises a protective ward!`, 'important');
   sfx('shrine');
   return true;
 }
@@ -24278,7 +24278,7 @@ function bossHeal(e, dist) {
   e.cd = 7;
   spawnFloatingText(e.x, e.y, `+${heal}`, '#66ff99');
   spawnParticles(e.x, e.y, '#66ff99', 10, 0.1);
-  log(`<span data-spr=mat_glimmer></span> ${e.name} channels dark energy and heals ${heal}!`, 'important');
+  log(`<span data-spr=mat_glimmer></span> ${e.name} channels dark energy — heals ${heal}!`, 'important');
   sfx('shrine');
   return true;
 }
@@ -24291,7 +24291,7 @@ function bossCurseBlast(e, dist) {
   const eff = Math.random() < 0.5 ? 'poison' : 'stun';
   if (player.hp > 0) applyStatusEffect('player', eff, eff === 'poison' ? 3 : 1, e);
   e.cd = 4;
-  log(`<span data-spr=b_allseer></span> ${e.name} hexes you from afar for ${dmg} (${eff})!`, 'important');
+  log(`<span data-spr=b_allseer></span> ${e.name} hexes you -${dmg} (${eff})!`, 'important');
   sfx('boss'); screenFlash('#9933cc');
   return true;
 }
@@ -24330,7 +24330,7 @@ function bossCharge(e, dist) {
     const kx = Math.sign(player.x - b.x) || dx, ky = Math.sign(player.y - b.y) || dy;
     for (let i = 0; i < 2; i++) { const px = player.x + kx, py = player.y + ky; if (!playerCanStand(px, py)) break; setPlayerCell(px, py); }
     if (player.hp > 0 && Math.random() < 0.4) applyStatusEffect('player', 'stun', 1, e);
-    log(`<span data-spr=e_boar></span> ${e.name} charges and tramples you for ${dmg}!`, 'important');
+    log(`<span data-spr=e_boar></span> ${e.name} tramples you -${dmg}!`, 'important');
   } else {
     log(`<span data-spr=e_boar></span> ${e.name} thunders across the room!`, 'important');
   }
@@ -24366,7 +24366,7 @@ function bossQuake(e, dist) {
   for (let i = 0; i < 2; i++) { const px = player.x + kx, py = player.y + ky; if (!playerCanStand(px, py)) break; setPlayerCell(px, py); }
   if (player.hp > 0 && Math.random() < 0.6) applyStatusEffect('player', 'stun', rnd(1, 2), e);
   e.cd = 6;
-  log(`🌋 ${e.name} slams the ground — the quake rocks you for ${dmg}!`, 'important');
+  log(`🌋 ${e.name} slams the ground — quake -${dmg}!`, 'important');
   sfx('boss'); addShake(9); screenFlash('#b08040');
   return true;
 }
@@ -24381,7 +24381,7 @@ function bossDrain(e, dist) {
   spawnFloatingText(e.x, e.y, `+${heal}`, '#66ff99');
   spawnParticles(e.x, e.y, '#66ff99', 8, 0.09);
   e.cd = 5;
-  log(`🩸 ${e.name} siphons your life for ${dmg}, mending ${heal}!`, 'important');
+  log(`🩸 ${e.name} siphons ${dmg} life, heals ${heal}!`, 'important');
   sfx('boss'); screenFlash('#992255');
   return true;
 }
@@ -24402,7 +24402,7 @@ function bossVortex(e, dist) {
   spawnParticles(player.x, player.y, '#7a6bff', 10, 0.12);
   const dmg = bossHitPlayer(Math.max(1, Math.round(e.dmg * 0.3)), e, '#9a8bff');
   e.cd = 5;
-  log(`<span data-spr=feat_portal></span> ${e.name} drags you into its pull for ${dmg}!`, 'important');
+  log(`<span data-spr=feat_portal></span> ${e.name} drags you in -${dmg}!`, 'important');
   sfx('boss'); screenFlash('#5a4bbb');
   return true;
 }
@@ -24414,7 +24414,7 @@ function bossVenom(e, dist) {
   const dmg = bossHitPlayer(Math.max(2, Math.round(e.dmg * 0.5)), e, '#88dd55');
   if (player.hp > 0) { applyStatusEffect('player', 'poison', 3, e); applyStatusEffect('player', 'slow', 3, e); }
   e.cd = 5;
-  log(`<span data-spr=e_snake></span> ${e.name} spits venom for ${dmg} — you're poisoned and slowed!`, 'important');
+  log(`<span data-spr=e_snake></span> ${e.name} spits venom -${dmg} — poisoned & slowed!`, 'important');
   sfx('boss'); screenFlash('#448833');
   return true;
 }
@@ -24429,7 +24429,7 @@ function bossWhirlwind(e, dist) {
   const kx = Math.sign(player.x - a.x) || 1, ky = Math.sign(player.y - a.y);
   for (let i = 0; i < 2; i++) { const px = player.x + kx, py = player.y + ky; if (!playerCanStand(px, py)) break; setPlayerCell(px, py); }
   e.cd = 5;
-  log(`🌪️ ${e.name} whirls in a storm of blows for ${dmg}!`, 'important');
+  log(`🌪️ ${e.name} storm of blows -${dmg}!`, 'important');
   sfx('boss'); addShake(6); screenFlash('#ccaa66');
   return true;
 }
@@ -24443,7 +24443,7 @@ function bossBerserk(e, dist) {
   e.cd = 9;
   spawnFloatingText(e.x, e.y, 'BERSERK', '#ff5533');
   spawnParticles(e.x, e.y, '#ff5533', 12, 0.12);
-  log(`😤 ${e.name} flies into a berserk fury — its blows hit far harder now!`, 'important');
+  log(`😤 ${e.name} goes berserk — blows hit far harder!`, 'important');
   sfx('boss'); screenFlash('#cc3322'); addShake(5);
   return true;
 }
@@ -24616,7 +24616,7 @@ function handleDeath() {
     player.shield = player.maxShield; player._noDmgSecs = 0;   // rise with a full Spirit Veil
     sfx('levelup'); screenFlash('#ffd24b');
     spawnFloatingText(player.x, player.y, 'REVIVED!', '#ffd24b');
-    log(`${bowlIcon(14)} ${fb.name} blazes to life — you cheat death and rise from the ashes!`, 'important');
+    log(`${bowlIcon(14)} ${fb.name} blazes — you cheat death and rise!`, 'important');
     updateBars(); renderPanel(); saveGame(); draw();
     return;
   }
@@ -24668,7 +24668,7 @@ function handleDeath() {
   player.mp = player.maxMp;
   showDeathScreen(lostGold, lostXp, lostBag, (graveSite ? fellOn : 0));
   dmgTaken = [];
-  log(`<span data-spr=b_deathknight></span> ${player.name || HERO} was SLAIN on ${floorLabel(fellOn)}! Lost <span data-spr=ic_money></span>${lostGold}${lostXp ? ` and ${lostXp} XP` : ''}${lostBag ? `, and dropped your bag (${lostBag}) — reclaim it on ${floorLabel(fellOn)}` : ''} — revived at full strength in town. The dungeon eases up while you find your feet.`, 'important');
+  log(`<span data-spr=b_deathknight></span> ${player.name || HERO} SLAIN on ${floorLabel(fellOn)}! Lost <span data-spr=ic_money></span>${lostGold}${lostXp ? ` & ${lostXp} XP` : ''}${lostBag ? `, dropped bag (${lostBag}) — reclaim on ${floorLabel(fellOn)}` : ''} — revived in town.`, 'important');
   recomputeMaxStats();
   player.shield = player.maxShield; player._noDmgSecs = 0;   // revive in town with a full Spirit Veil
   player.stamina = player.maxStamina; player._stamDelay = 0;   // …and a full, ready Stamina bar (no post-death exertion delay)
@@ -24702,6 +24702,26 @@ function showDeathScreen(lostGold, lostXp, lostBag, graveFloor) {
 }
 function closeDeath() { const ov = document.getElementById('death-overlay'); if (ov) ov.classList.remove('open'); }
 
+// ── DEATH-SCREEN COMBAT LOG VIEWER ──
+// Both death screens offer a "View Combat Log" button so a fallen hero can read
+// back exactly how they died. It snapshots the live #log into a scrollable reading
+// overlay (the log's own icons are already painted, so the clone renders as-is) and
+// layers ABOVE the death screen, which stays open beneath it — closing the viewer
+// returns to the death screen with no state to restore. Newest line is at the
+// bottom (the killing blow), so it opens scrolled to the end.
+function openDeathLog() {
+  const content = document.getElementById('death-log-content');
+  const src = document.getElementById('log');
+  if (content) {
+    const html = src ? src.innerHTML.trim() : '';
+    content.innerHTML = html || '<div class="log-line">No combat was logged this run.</div>';
+  }
+  const ov = document.getElementById('death-log-overlay');
+  if (ov) ov.classList.add('open');
+  if (content) content.scrollTop = content.scrollHeight;
+}
+function closeDeathLog() { const ov = document.getElementById('death-log-overlay'); if (ov) ov.classList.remove('open'); }
+
 // ── HARDCORE DEATH ── final and unrecoverable. Files a graveyard headstone, writes
 // the death to the permanent ledger (so the hero can never be loaded again), then
 // destroys the playable save and shows the terminal screen.
@@ -24734,7 +24754,7 @@ function hardcoreDeath() {
   try { cloudDeleteSlot(activeSlot); } catch (e) {}
   sfx('death'); screenFlash('#cc0000'); addShake(9);
   spawnFloatingText(player.x, player.y, 'SLAIN', '#ff3344');
-  log(`${hcIcon(15)} <b style="color:var(--red-350)">${escapeHtml(deadName)}</b> was SLAIN on ${floorLabel(fellOn)} — and in Hardcore, death is forever. Their tale ends here, remembered only in the Graveyard.`, 'important');
+  log(`${hcIcon(15)} <b style="color:var(--red-350)">${escapeHtml(deadName)}</b> SLAIN on ${floorLabel(fellOn)} — in Hardcore, death is forever. Their tale ends in the Graveyard.`, 'important');
   showHardcoreDeathScreen(deadName, deadLevel, deadClass, fellOn, deepest, newAch);
   dmgTaken = [];
   try { draw(); } catch (e) {}
@@ -24857,7 +24877,7 @@ function collectChestLoot(luck, ilvl, x, y, gearOnly) {
     if (surprise === 1) {
       const g = rnd(15, 40) + dungeonLevel * 4;
       player.gold += g;
-      log(`${fancy ? '<span data-spr=chest></span>' : '<span data-spr=chest></span>'} The chest was full of coins — +<span data-spr=ic_money></span>${g}!`, 'loot');
+      log(`${fancy ? '<span data-spr=chest></span>' : '<span data-spr=chest></span>'} Chest full of coins — +<span data-spr=ic_money></span>${g}!`, 'loot');
     } else {
       const f = pick(FOODS);
       groundFood.push({ x, y, ...f });
@@ -24875,8 +24895,8 @@ function collectChestLoot(luck, ilvl, x, y, gearOnly) {
   // Loot explosion: a lucky chest occasionally overflows with a bonus item.
   if (Math.random() < 0.08) {
     const bonus = generateItem(luck, ilvl);
-    if (acquireLoot(bonus) === 'keep') log(`<span data-spr=mat_glimmer></span> The chest overflows — bonus loot: ${logItem(bonus)}!`, 'important');
-    else log('<span data-spr=mat_glimmer></span> The chest overflows with bonus loot!', 'important');
+    if (acquireLoot(bonus) === 'keep') log(`<span data-spr=mat_glimmer></span> Chest overflows — bonus: ${logItem(bonus)}!`, 'important');
+    else log('<span data-spr=mat_glimmer></span> Chest overflows with bonus loot!', 'important');
   }
 }
 
@@ -24909,7 +24929,7 @@ function openChest(chest) {
       if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
     }
     sfx('trap');
-    log('<span data-spr=chest></span> It\'s a MIMIC! The chest lunges at you!', 'important');
+    log('<span data-spr=chest></span> MIMIC! The chest lunges at you!', 'important');
     screenFlash('#cc0000');
     return 'mimic';
   }
@@ -24928,7 +24948,7 @@ function openChest(chest) {
     }
     if (sprung) {
       sfx('trap'); screenFlash('#cc0000');
-      log(`<span data-spr=w_sword></span> It's an ambush! ${sprung} foe${sprung === 1 ? '' : 's'} spring from the chest!`, 'important');
+      log(`<span data-spr=w_sword></span> Ambush! ${sprung} foe${sprung === 1 ? '' : 's'} spring from the chest!`, 'important');
       return 'ambush';
     }
     // Nowhere to spawn — fall through and just give the loot.
@@ -24941,7 +24961,7 @@ function openChest(chest) {
       const dmg = 4 + dungeonLevel * 2;
       const hpLost = takePlayerDamage(dmg, 'trapped chest', { lethal: false });
       if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
-      log(`💥 It was a trapped chest! It explodes for ${dmg} damage!`, 'important');
+      log(`💥 Trapped chest! Explodes -${dmg}!`, 'important');
     } else {
       applyStatusEffect('player', 'poison', 3, null);
       log('<span data-spr=b_deathknight></span> A trapped chest bursts with poison gas!', 'important');
@@ -25057,7 +25077,7 @@ function checkLevelUp() {
     player.mp = Math.min(player.maxMp, player.mp + Math.round(player.maxMp * 0.4));
     sfx('levelup');
     showLevelUpBanner(player.level);
-    log(`<span data-spr=ui_level></span> LEVEL UP! You are now level ${player.level}!`, 'important');
+    log(`<span data-spr=ui_level></span> LEVEL UP! Now level ${player.level}!`, 'important');
     log(`<span data-spr=mat_glimmer></span> +${ATTR_POINTS_PER_LEVEL} attribute points (HERO tab) · +${SKILL_POINTS_PER_LEVEL} skill point (SKILLS tab)${ascGained ? ` · +${ascGained} ascendancy point (PATH tree)` : ''}.`, 'important');
     updateBars();
     renderPanel();
@@ -25586,7 +25606,7 @@ function useHealthPotion() {
   if (player.hp >= player.maxHp) { log('Already at full health.'); return; }
   const amt = queueHeal(healPotionAmount(), true); // over-time, interruptible sip (a heavy direct hit spills it)
   sfx('potion');
-  log(`<span data-spr=ic_heart></span> Quaffed a ${logPotion('Health Potion')} — mending ${amt} HP over a few seconds.`, 'loot');
+  log(`<span data-spr=ic_heart></span> Quaffed a ${logPotion('Health Potion')} — +${amt} HP over a few seconds.`, 'loot');
   spendPotionTurn();
 }
 
@@ -25600,7 +25620,7 @@ function useManaPotion() {
   if (player.mp >= player.maxMp) { log('Already at full mana.'); return; }
   const amt = queueMana(manaPotionAmount()); // over-time restore
   sfx('potion');
-  log(`<span data-spr=potion_g></span> Quaffed a ${logPotion('Mana Potion')} — restoring ${amt} MP over a few seconds.`, 'loot');
+  log(`<span data-spr=potion_g></span> Quaffed a ${logPotion('Mana Potion')} — +${amt} MP over a few seconds.`, 'loot');
   spendPotionTurn();
 }
 
@@ -27170,7 +27190,7 @@ function chooseClass(key) {
   // a name somehow already exists do we finalize here (defensive).
   if (!player.name) { showNameEntry(); return; }
   const sig = classSignature(key);
-  log(`${dlIcon(cls.icon, 16)} You are a ${cls.name}! ${cls.passive}.${sig ? ` Spend your skill point in the SKILLS tab (press B) to learn ${sig.name}.` : ''}`, 'important');
+  log(`${dlIcon(cls.icon, 16)} You are a ${cls.name}! ${cls.passive}.${sig ? ` Learn ${sig.name} in the SKILLS tab (B).` : ''}`, 'important');
   sfx('levelup');
   updateBars(); renderPanel(); renderSkillBar(); draw(); saveGame();
 }
@@ -27198,7 +27218,7 @@ function changeClass(key) {
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   player.shield = player.maxShield;   // retrain refreshes the Spirit Veil for the new class
   sfx('shrine');
-  log(`${dlIcon(cls.icon, 16)} You retrain as a ${cls.name}!${refunded ? ` ${refunded} skill point${refunded === 1 ? '' : 's'} refunded — respend them in the SKILLS tab.` : ''}`, 'important');
+  log(`${dlIcon(cls.icon, 16)} You retrain as a ${cls.name}!${refunded ? ` ${refunded} skill point${refunded === 1 ? '' : 's'} refunded — respend in the SKILLS tab.` : ''}`, 'important');
   updateBars(); renderPanel(); renderSkillBar(); renderTrainer(); draw(); saveGame();
 }
 
@@ -27390,7 +27410,7 @@ function toggleGearSet(idx) {
                       curPower: gearSetPower(gearSets[activeGearSet]),
                       tgtPower: gearSetPower(gearSets[target]) })) {
     sfx('denied');
-    log(`Set ${target + 1} would leave you exposed — no swapping to it with enemies near. Break away first.`, 'important');
+    log(`Set ${target + 1} — can't swap with enemies near. Break away first.`, 'important');
     return;
   }
   activeGearSet = target;
@@ -27435,7 +27455,7 @@ function quickEquip(i) {
   if (slot === 'weapon' && equipped.offhand && offhandEquipError(equipped.offhand, item)) {
     inventory.push(equipped.offhand);
     equipped.offhand = null;
-    log('<span data-spr=feat_door></span> Your off-hand no longer fits that weapon — off-hand stowed.');
+    log('<span data-spr=feat_door></span> Off-hand no longer fits — stowed.');
   }
   if (equipped[slot]) inventory.push(equipped[slot]); // swap old back into bag
   equipped[slot] = item;
@@ -28030,6 +28050,9 @@ function handleEscape() {
   if (close('version-overlay', closeVersion)) return true;
   if (close('howto-overlay', closeHowTo)) return true;
   if (close('autoloot-overlay', closeAutoLoot)) return true;
+  // The combat-log viewer sits ON TOP of either death screen — close it first,
+  // returning to the death screen underneath (the hardcore screen stays non-escapable).
+  if (close('death-log-overlay', closeDeathLog)) return true;
   if (close('death-overlay', closeDeath)) return true;
   if (close('keybind-overlay', keybindsBack)) return true;
   if (close('settings-menu', () => document.getElementById('settings-menu').classList.remove('open'))) return true;
@@ -31648,7 +31671,7 @@ function submitName() {
   if (!player.class) { saveGame(); showClassPick(); return; }
   const cls = CLASSES[player.class];
   const sig = classSignature(player.class);
-  log(`${dlIcon(cls.icon, 16)} ${player.name} the ${cls.name} begins the descent! ${cls.passive}.${sig ? ` Spend your skill point in the SKILLS tab (press B) to learn ${sig.name}.` : ''}`, 'important');
+  log(`${dlIcon(cls.icon, 16)} ${player.name} the ${cls.name} begins the descent! ${cls.passive}.${sig ? ` Learn ${sig.name} in the SKILLS tab (B).` : ''}`, 'important');
   sfx('levelup');
   updateBars(); renderPanel(); renderSkillBar(); draw(); saveGame();
 }
@@ -32137,25 +32160,25 @@ try {
 
   if (hadSave) {
     log(`Welcome back, level ${player.level} adventurer.`, 'important');
-    if (inTown) log('You are in town. Pick a service from the menu, or take <span data-spr=feat_gate_red></span> Warp to Dungeon back into the dungeon.');
-    else log(`Resuming on dungeon level ${dungeonLevel}. Your gear is intact.`);
+    if (inTown) log('In town. Pick a service, or take <span data-spr=feat_gate_red></span> Warp to Dungeon.');
+    else log(`Resuming on dungeon level ${dungeonLevel}.`);
   } else {
-    log('Welcome to the dungeon. Use WASD or the arrow keys to move.', 'important');
-    log('<span data-spr=feat_door></span> Clear a floor of its foes to unseal the ▼ stairs, then descend.', 'important');
-    log('⚠️ The deep scales faster than you can — grind lower floors from <span data-spr=town_vault></span> TOWN when you hit a wall.');
+    log('Move with WASD or the arrow keys.', 'important');
+    log('<span data-spr=feat_door></span> Clear a floor of foes to unseal the ▼ stairs, then descend.', 'important');
+    log('⚠️ The deep scales fast — grind lower floors from <span data-spr=town_vault></span> TOWN when you hit a wall.');
   }
-  log('Progress auto-saves automatically as you play.');
-  log('Open <span data-spr=chest></span> BAG to view your loot; press the pad\'s USE button to grab items.');
-  log(`Tap the <span data-spr=potion_r></span> or <span data-spr=potion_g></span> flask to quaff a ${logPotion('Potion')} — free to use, but they share a short cooldown.`);
+  log('Progress auto-saves as you play.');
+  log('Open <span data-spr=chest></span> BAG to view loot; press the pad\'s USE button to grab items.');
+  log(`Tap the <span data-spr=potion_r></span> or <span data-spr=potion_g></span> flask to quaff a ${logPotion('Potion')} — free, but they share a short cooldown.`);
   log('⌨️ Keys: Q health potion · E mana potion · R primary skill · 3–9 skills · T town · B open bag · Space/F use.');
-  log('<span data-spr=ic_stun></span> You start with a skill point — open <span data-spr=chest></span> BAG ▸ SKILLS to learn your first active, then tap <span data-spr=ic_stun></span> (or press ' + skillKeyLabel(1) + ') to cast it.');
-  log(PWR_GLYPH + ' Each item has a Power value; your total Power blends level, gear, and attributes.');
-  log('<span data-spr=mat_glimmer></span> Level up to earn points, then raise attributes in the bag\'s HERO tab.');
+  log('<span data-spr=ic_stun></span> You have a skill point — open <span data-spr=chest></span> BAG ▸ SKILLS to learn an active, then tap <span data-spr=ic_stun></span> (or press ' + skillKeyLabel(1) + ') to cast it.');
+  log(PWR_GLYPH + ' Each item has Power; your total blends level, gear, and attributes.');
+  log('<span data-spr=mat_glimmer></span> Level up for points, then raise attributes in the bag\'s HERO tab.');
   log('<span data-spr=w_dagger></span> Every weapon fights differently — axes cleave, daggers flurry, bows & staves strike at range, maces stun, scythes drain. Try them all!');
-  log('<span data-spr=feat_gate_red></span> Tap TOWN (or press ' + kbLabel('portal') + ') to warp to the safe hub: craftsman, healer, trainer, enchanter, and a gate to re-enter any floor you\'ve reached.');
+  log('<span data-spr=feat_gate_red></span> Tap TOWN (or press ' + kbLabel('portal') + ') to warp to the safe hub: craftsman, healer, trainer, enchanter, and a gate back to any floor you\'ve reached.');
   log('<span data-spr=chest></span> Foes drop crafting materials — <span data-spr=mat_scrap></span> Scrap & <span data-spr=mat_glimmer></span> Glimmer from the start, <span data-spr=mat_core></span> Core and <span data-spr=feat_portal></span> Chaos Orbs as you brave deeper tiers. The <span data-spr=ic_mallet></span> Craftsman forges blank gear; the <span data-spr=ic_wand></span> Enchanter fills in its modifiers.');
   log('<span data-spr=mat_scrap></span> Tap any loot in your <span data-spr=chest></span> BAG to Sell it for gold or Scrap it into materials — any time, no vendor needed. Use the <span data-spr=mat_scrap></span> Auto-Loot button on the LOOT tab to do it automatically by rarity on pickup.');
-  log('<span data-spr=w_sword></span> Move freely in real time and auto-attack foes in reach — get surrounded and every foe piles on, so don\'t let them encircle you.');
+  log('<span data-spr=w_sword></span> Move in real time and auto-attack foes in reach — get surrounded and every foe piles on, so don\'t let them encircle you.');
   // Credit every terrain pack actually painting the world (registry-driven, so
   // attribution stays truthful automatically as packs are added — see
   // src/data/terrainPacks.js and docs/terrain-packs.md).
@@ -33618,7 +33641,7 @@ function egWeaveDropGlyph(endlessDepth) {
     player.weaveGlyphs.push(g);
     egWeaveInvalidate();
     const icon = dlIcon(g.tier ? ('glyph_' + g.tier) : 'glyph', 24);
-    log(`${icon} A <span style="color:${g.color || 'var(--gold)'}">${escapeHtml(g.name || 'glyph')}</span> glyph settles into your satchel — socket it in the Ascendant Weave.`, 'loot');
+    log(`${icon} A <span style="color:${g.color || 'var(--gold)'}">${escapeHtml(g.name || 'glyph')}</span> glyph drops — socket it in the Ascendant Weave.`, 'loot');
     if (typeof sfx === 'function') sfx('loot');
     if (typeof saveGameSoon === 'function') saveGameSoon();
   } catch (e) {
@@ -36100,6 +36123,8 @@ const __DL_FN_BRIDGE = {
   handleDeath,
   showDeathScreen,
   closeDeath,
+  openDeathLog,
+  closeDeathLog,
   hardcoreDeath,
   showHardcoreDeathScreen,
   hcDeathReturnToTitle,
