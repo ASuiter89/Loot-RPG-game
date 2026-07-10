@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "small", v: "Covenant Altar reads clearer", by: "Jeff Louie", notes: [
+    "A swearable oath's Dread cost now shows in gold, matching the Total Dread number — red is kept for the Locked gate alone, so the two never read alike.",
+    "The Clear all oaths button is centred and widened instead of squished into the corner.",
+  ] },
   { date: "2026-07-07", size: "small", v: "One-tap Mute All at the top of Audio", by: "Jeff Louie", notes: [
     "Settings ▸ Audio opens with a Mute All button — one tap silences music and every sound at once, no more stepping each channel down.",
     "Tap it again to restore your exact mix; every channel keeps the level you set. Nudging any volume back up also lifts the mute.",

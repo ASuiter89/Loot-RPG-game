@@ -33170,8 +33170,10 @@ function renderCovenants() {
       const rowCls = `shop-row ${on ? 'picked' : ''} ${unlocked ? '' : 'locked'}`;
       const click = unlocked ? `onclick="covToggle('${c.id}')"` : '';
       const border = on ? 'border-color:var(--gold)' : '';
+      // Gold "Dread N" for a swearable oath (matches the Total Dread number);
+      // red is reserved for the "Locked" gate so the two never read alike.
       const gate = unlocked
-        ? `<span style="color:var(--danger)">Dread ${c.dread}</span>`
+        ? `<span style="color:var(--gold)">Dread ${c.dread}</span>`
         : `<span style="color:var(--danger)">Locked — needs ${c.unlockOrder} mark${c.unlockOrder === 1 ? '' : 's'} (Dread ${c.dread})</span>`;
       html += `<div class="${rowCls}" ${click} style="${border}">
         <span class="loot-icon">${dlIcon(c.sprite || 'cov_altar', 30)}</span>
@@ -33185,7 +33187,7 @@ function renderCovenants() {
     html += '</div>';
 
     // Clear-all — only useful when something is sworn.
-    html += `<div class="cook-actions"><button class="cook-btn ghost" ${ids.length ? '' : 'disabled'} onclick="covClearAll()">Clear all oaths</button></div>`;
+    html += `<div class="cook-actions cov-clear"><button class="cook-btn ghost" ${ids.length ? '' : 'disabled'} onclick="covClearAll()">Clear all oaths</button></div>`;
     return html;
   } catch (e) {
     if (typeof log === 'function') log('The altar could not be rendered.', 'important');
