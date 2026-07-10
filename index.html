@@ -445,7 +445,10 @@
       <div class="death-sub">You fell in the dungeon and woke up back in <b>Town</b>.</div>
       <div id="death-cause"></div>
       <div id="death-penalties"></div>
-      <button class="death-btn" onclick="closeDeath()">Wake up in Town →</button>
+      <div class="death-actions">
+        <button class="death-btn death-btn--ghost" onclick="openDeathLog()"><span data-spr=scroll></span> View Combat Log</button>
+        <button class="death-btn" onclick="closeDeath()">Wake up in Town →</button>
+      </div>
     </div>
   </div>
 
@@ -458,7 +461,26 @@
       <div class="hc-death-sub" id="hc-death-sub">There is no coming back from this.</div>
       <div id="hc-death-stats"></div>
       <div id="hc-death-ach"></div>
-      <button class="hc-death-btn" onclick="hcDeathReturnToTitle()">Lay them to rest <span data-spr=feat_grave></span></button>
+      <div class="death-actions">
+        <button class="hc-death-btn hc-death-btn--ghost" onclick="openDeathLog()"><span data-spr=scroll></span> View Combat Log</button>
+        <button class="hc-death-btn" onclick="hcDeathReturnToTitle()">Lay them to rest <span data-spr=feat_grave></span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Combat-log viewer — opened from either death screen so a fallen hero can read
+       back exactly how they died. Snapshots the live #log; the death screen stays
+       open beneath it, so closing returns straight to it. -->
+  <div id="death-log-overlay">
+    <div id="death-log-card">
+      <div class="modal-head">
+        <span class="modal-head__flank"></span>
+        <span class="modal-head__title"><span data-spr=scroll></span> Combat Log</span>
+        <span class="modal-head__flank right">
+          <button class="modal-nav-btn" onclick="closeDeathLog()">Back</button>
+        </span>
+      </div>
+      <div id="death-log-content"></div>
     </div>
   </div>
 
