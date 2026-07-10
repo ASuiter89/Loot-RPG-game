@@ -67,7 +67,7 @@ import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
 import { bountyProgress as _bountyProgress, bountyDone as _bountyDone, bountyNewlyComplete, bountyMaterialReward, bountyXpReward } from '../systems/bounty.js';
 import { forgeSections } from '../systems/forgeFlow.js';
 import { weaponSpeedInfo } from '../systems/weaponSpeed.js';
-import { CURSE_TIER_MULT, curseTierMult, statCurseSwing, cursedStatCeiling } from '../systems/curseRoll.js';
+import { CURSE_TIER_MULT, curseTierMult, statCurseSwing, cursedStatCeiling, cursePenaltyStats } from '../systems/curseRoll.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
@@ -7408,7 +7408,7 @@ window.gameGuide = function gameGuide(topic) {
       `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike the random rarities it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and a fixed SET of 2–3 signature powers (each a "legendary modifier" like Vampiric) — where an ordinary legendary rolls just one, a unique stacks several, and they compound. Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. (Set pieces — see below — are the OTHER fixed, named red artifacts.) gameState() marks worn/held uniques with a "unique" id and "fixed":true, and lists a piece's powers in item "powers".`,
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a depth-milestone cache, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
       `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
-      `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — a curse hits ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
+      `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. The drawback always lands on a property you'll actually FEEL — a core stat (Attack, Defense, Max HP/MP, Speed) or a damage amp (Increased/Boss Damage, Spell/Skill Power) — never on a benefit-only rating whose negative would just floor to zero, so a curse's price is always paid. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — a curse hits ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
       `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Loot LEANS to your class: drops, the merchant and the gambler favour build-relevant bases (~60%, the rest random) — a Mage sees more staves/wands, robes and tomes; a Warrior/Templar more of their melee weapons, plate and shields; a Rogue more daggers/bows, light armour and quivers. Off-favoured bases still turn up, and picking a slot at the gambler still leans the base within it.`,
@@ -16274,7 +16274,12 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   if (tierRank >= 2 && Math.random() < 0.12) {
     const pool = itemStatPool(item).length ? itemStatPool(item) : STAT_NAMES.filter(s => s !== 'DMG');
     const boostStat = pick(pool);
-    const curseStat = pick(pool.filter(s => s !== boostStat));
+    // The penalty must land where a NEGATIVE value is actually FELT: most gear stats are
+    // benefit-only ratings the combat layer floors at 0 (see cursePenaltyStats), so a
+    // penalty there would be an invisible drawback — cursed gear with no real downside.
+    // Restrict it to felt stats, preferring one the item already invests in.
+    const positive = Object.keys(stats).filter(k => typeof stats[k] === 'number' && stats[k] > 0);
+    const curseStat = pick(cursePenaltyStats(pool, boostStat, positive));
     const cm = curseTierMult(tier); // rarity-scaled curse strength (2.2× → 5×)
     stats[boostStat] = (stats[boostStat] || 0) + curseSwing(boostStat, lvl, mult, cm);
     if (curseStat) stats[curseStat] = (stats[curseStat] || 0) - curseSwing(curseStat, lvl, mult, cm); // negative = penalty
@@ -33806,11 +33811,16 @@ function egMfFromContract(item, contract) {
   const affs = Array.isArray(c.affixes) ? c.affixes : [];
   for (const a of affs) {
     if (!a || a.key == null) continue;
-    // A curse penalty (negative val, e.g. key 'CURSE') lands on stats and brands the item cursed.
+    // A curse penalty (negative val, key 'CURSE') brands the item cursed. Redirect it
+    // onto a REAL stat whose negative is felt in combat — writing a nonexistent 'CURSE'
+    // stat would be an invisible drawback (see cursePenaltyStats). Prefer a felt stat
+    // the item already has, excluding the boosted stat (contract.curseStat).
     if (a.key === 'CURSE' || (a.curse && a.val < 0)) {
-      out.stats[a.key] = a.val;
+      const cpool = (typeof itemStatPool === 'function') ? (itemStatPool(out) || []) : [];
+      const cpos = Object.keys(out.stats).filter(k => typeof out.stats[k] === 'number' && out.stats[k] > 0);
+      const pen = pick(cursePenaltyStats(cpool, c.curseStat, cpos));
+      if (pen) { out.stats[pen] = (out.stats[pen] || 0) + a.val; out.curseStat = pen; }
       out.cursed = true;
-      out.curseStat = a.key;
       continue;
     }
     // A corrupt addAffix new key (e.g. 'MIRRORFORGE') writes to stats; attrs to attrs; everything else to stats.

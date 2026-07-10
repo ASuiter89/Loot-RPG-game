@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "small", v: "Cursed gear always has a real drawback", by: "Jeff Louie", notes: [
+    "Fixed cursed items that felt like a free upgrade: a curse's penalty could land on a stat whose negative value quietly floored to zero (crit, dodge, block, pen, life-leech, attack speed and other benefit-only ratings), so the drawback did nothing.",
+    "A curse now always spends its price on a stat you FEEL — a core stat (Attack, Defense, Max HP/MP, Speed) or a damage boost (Increased/Boss Damage, Spell/Skill Power) — and prefers to drag down a stat the item was already strong in. The gift and the penalty stay equally strong.",
+    "Same fix covers the Mirrorforge's Corrupt curse, which used to stamp an invisible penalty that never touched your totals.",
+  ] },
   { date: "2026-07-09", size: "small", v: "Enchanter “Reroll all” no longer conjures modifiers from nothing", by: "Jeff Louie", notes: [
     "Fixed the Enchanter's Reroll all: it now reforges the properties a piece already carries and never adds new ones. It was rolling a fresh random count, so a blank piece could sprout up to a full set of modifiers for one flat fee — cheaper than augmenting each slot.",
     "Reroll all is disabled on a piece with no bonus properties now — there's nothing to reforge, so use Augment to add the first one.",
