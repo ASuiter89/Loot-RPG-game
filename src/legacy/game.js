@@ -6725,13 +6725,16 @@ window.gameState = function gameState(radius) {
   const R = (typeof radius === 'number' && radius > 0) ? Math.floor(radius) : 10;
   const live = (enemies || []).filter(e => e && !e.dead);
   const dist = e => Math.abs(e.x - player.x) + Math.abs(e.y - player.y);
-  // A compact item view for the AI-play API. Attributes, the signature power and
+  // A compact item view for the AI-play API. Attributes, the signature power(s) and
   // the unique/fixed flags matter to a driving agent (a fixed unique can't be
-  // reforged), so they ride along with the stats.
+  // reforged), so they ride along with the stats. A unique carries 2–3 powers: `power`
+  // is the primary (kept for back-compat) and `powers` lists every one by name.
+  const briefPowers = it => itemPowerKeys(it).filter(k => ITEM_POWERS[k]).map(k => ITEM_POWERS[k].name);
   const brief = it => it ? {
     name: it.name, slot: it.slot, tier: it.tier, stats: it.stats,
     ...(it.attrs && Object.keys(it.attrs).length ? { attrs: it.attrs } : {}),
     ...(it.power && ITEM_POWERS[it.power] ? { power: ITEM_POWERS[it.power].name } : {}),
+    ...(briefPowers(it).length > 1 ? { powers: briefPowers(it) } : {}),
     // `pow` is this piece's BUILD-AWARE Power (its worth to the current hero, not a
     // fixed table): a stat that does nothing for your build adds ~0. `upgrade` is
     // the Power swing vs. what fills its slot now (+ = a real upgrade for you).
@@ -7273,7 +7276,7 @@ window.gameState = function gameState(radius) {
       cycle: egSafe(egCycleGameStateBlock),     // seasonal phase, enrollment, journey checklist, countdown
       deeds: egSafe(egDeedsGameStateBlock),     // Renown rank + total, deeds completed/total, equipped title
     },
-    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant · ? mystic · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · » vault express stair (drops 2 floors) · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain · (town) n service keeper (walk up + interact) · G Dungeon Gate (step in to descend) · P Town Portal (return to held floor)',
+    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant (passable) · ? mystic (passable) · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · » vault express stair (drops 2 floors) · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain · (town) n service keeper (walk up + interact) · G Dungeon Gate (step in to descend) · P Town Portal (return to held floor)',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
     map: rows.join('\n'),
@@ -7401,7 +7404,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     loot: [
       `Rarity is COLOUR ONLY (no text labels), lowest to highest: grey → white → green → blue → purple → orange → red. Higher tiers allow more bonus affixes.`,
-      `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike the random rarities it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and its own signature power (a "legendary modifier" like Vampiric). Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. (Set pieces — see below — are the OTHER fixed, named red artifacts.) gameState() marks worn/held uniques with a "unique" id and "fixed":true.`,
+      `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike the random rarities it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and a fixed SET of 2–3 signature powers (each a "legendary modifier" like Vampiric) — where an ordinary legendary rolls just one, a unique stacks several, and they compound. Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. (Set pieces — see below — are the OTHER fixed, named red artifacts.) gameState() marks worn/held uniques with a "unique" id and "fixed":true, and lists a piece's powers in item "powers".`,
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a depth-milestone cache, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
       `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
       `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — a curse hits ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
@@ -10071,10 +10074,13 @@ function ensureHostilesReachable() {
   }
 }
 
-// A STATIONARY, build-time solid that blocks a tile for good: solid decor/
-// furniture, or one of the two shop NPCs. The player and enemies move (and foes
-// are relocated by ensureHostilesReachable), so they're excluded — only these
-// three can permanently wall off a path once the floor is built.
+// A tile the FLOOR-BUILD treats as a blocker so placement + connectivity route
+// around it: solid decor/furniture (truly impassable in play), or one of the two
+// shop NPCs. The shop NPCs are PASSABLE in play — you walk through (or onto) them
+// to trade — but they stay here so the build never parks one on a 1-wide corridor
+// and decor never crowds one, so they always read cleanly and you're never forced
+// to stand inside them. The player and live foes move (foes are relocated by
+// ensureHostilesReachable), so they're excluded.
 function tileBlockedByObject(x, y) {
   return furnitureMap[y + ',' + x] !== undefined
       || (merchant && merchant.x === x && merchant.y === y)
@@ -14314,8 +14320,11 @@ function collPreviewTip(entry) {
   const kindLine = entry.kind === 'set'
     ? `<div class="coll-tip-tag" style="color:${SET_RARITY_COLOR}">✦ ${escapeHtml(entry.setName)} set piece</div>`
     : `<div class="coll-tip-tag" style="color:${color}">✦ Unique</div>`;
-  const pw = ITEM_POWERS[entry.power];
-  const powLine = pw ? `<div class="coll-tip-pow" style="color:${pw.color}">${escapeHtml(pw.name)} — ${escapeHtml(pw.desc)}</div>` : '';
+  // A unique/Mythic lists 2–3 signature powers; a set piece one. One row each.
+  const powKeys = Array.isArray(entry.powers) && entry.powers.length ? entry.powers : (entry.power ? [entry.power] : []);
+  const powLine = powKeys.map(k => ITEM_POWERS[k]).filter(Boolean)
+    .map(pw => `<div class="coll-tip-pow" style="color:${pw.color}">${escapeHtml(pw.name)} — ${escapeHtml(pw.desc)}</div>`)
+    .join('');
   const row = (label, native) => `<div class="coll-tip-stat${native ? ' native' : ''}">${escapeHtml(label)}${native ? ' <span class="coll-tip-native">native</span>' : ''}</div>`;
   const rows = [row(STAT_LABELS[entry.native] || entry.native, true)];
   for (const m of entry.mods) {
@@ -16060,9 +16069,15 @@ function buildFixedArtifact(def, lvl, membership) {
   const slot = def.slot;
   const baseName = def.base;
   const value = Math.round(5000 * (1 + lvl * 0.12));
+  // A unique/Mythic carries a SET of 2–3 signature `powers`; `power` stays the
+  // primary (its first) so single-power consumers keep working. Set pieces (and any
+  // legacy def with only a single `power`) fall back to that one key via
+  // itemPowerKeys(), so `powers` is stamped only when the def authors a list.
   const item = { id: Math.random(), name: def.name, tier, slot, ilvl: lvl,
     stats: {}, attrs: {}, value, flavor: def.flavor, icon: iconForBase(slot, baseName),
-    base: baseName, fixed: true, power: def.power, ...membership };
+    base: baseName, fixed: true, power: def.power,
+    ...(Array.isArray(def.powers) && def.powers.length ? { powers: def.powers.slice() } : {}),
+    ...membership };
   // Auto headline (DMG / DEF+ATK / off-hand family), rolled within its depth band.
   applyBaseStats(item, baseName, lvl + rnd(0, 2) * 0.6, mult, dmgMult);
   const baseInnate = (item.baseStats || []).slice(); // what applyBaseStats protected
@@ -19980,6 +19995,18 @@ const ITEM_POWERS = {
   sweeping:    { name: 'Sweeping',     color: '#ffbe6a', desc: 'Area skills reach noticeably wider.',   stats: { AREA: 22 } },
 };
 function rollItemPower() { const ks = Object.keys(ITEM_POWERS); return ks[Math.floor(Math.random() * ks.length)]; }
+// Shared immutable empty result — the no-power path is common (most gear), so this
+// avoids allocating a throwaway array on the dealDamage hot path.
+const EMPTY_ARR = Object.freeze([]);
+// Every signature power an item carries. Uniques and Mythics carry 2–3 (item.powers);
+// legendaries and set pieces carry one (item.power). Old saves predate the array, so
+// fall back to the single key so a stored unique keeps its (primary) power. A piece
+// never lists the same key twice, so each item contributes at most once per key.
+function itemPowerKeys(item) {
+  if (!item) return EMPTY_ARR;
+  if (Array.isArray(item.powers) && item.powers.length) return item.powers;
+  return item.power ? [item.power] : EMPTY_ARR;
+}
 // How many active worn pieces carry a given power (so two Vampiric pieces stack).
 // Fast path: if no worn piece even carries the power, skip the active resolve.
 // Memoized per power key in the loadout cache — dealDamage probes vampiric/arcing
@@ -19989,27 +20016,31 @@ function itemPowerCount(key) {
   const memo = c.powerN || (c.powerN = {});
   if (memo[key] !== undefined) return memo[key];
   let raw = 0;
-  for (const slot of SLOT_KEYS) { const it = equipped[slot]; if (it && it.power === key) raw++; }
+  for (const slot of SLOT_KEYS) { const it = equipped[slot]; if (it && itemPowerKeys(it).includes(key)) raw++; }
   if (!raw) return memo[key] = 0;
   const active = activeSlots();
   let n = 0;
-  for (const slot of SLOT_KEYS) { const it = equipped[slot]; if (it && it.power === key && active[slot]) n++; }
+  for (const slot of SLOT_KEYS) { const it = equipped[slot]; if (it && active[slot] && itemPowerKeys(it).includes(key)) n++; }
   return memo[key] = n;
 }
 function hasItemPower(key) { return itemPowerCount(key) > 0; }
 // Flat stat bonuses granted by worn powers that carry a `stats` map. Percent
 // stats add their value directly; rating/flat stats scale with the piece's item
-// level so a special power keeps pace at any depth. Folded into totalStat().
+// level so a special power keeps pace at any depth. A unique carries 2–3 powers, so
+// every one it lists that touches `name` stacks. Folded into totalStat().
 function itemPowerStatBonus(name) {
   let sum = 0;
   const active = activeSlots();
   for (const slot of SLOT_KEYS) {
     if (!active[slot]) continue;
     const it = equipped[slot];
-    const p = it && it.power && ITEM_POWERS[it.power];
-    if (!p || !p.stats || typeof p.stats[name] !== 'number') continue;
-    const base = p.stats[name];
-    sum += PCT_STATS.has(name) ? base : Math.round(base * (it.ilvl || 1));
+    if (!it) continue;
+    for (const key of itemPowerKeys(it)) {
+      const p = ITEM_POWERS[key];
+      if (!p || !p.stats || typeof p.stats[name] !== 'number') continue;
+      const base = p.stats[name];
+      sum += PCT_STATS.has(name) ? base : Math.round(base * (it.ilvl || 1));
+    }
   }
   return sum;
 }
@@ -20100,12 +20131,15 @@ function setTooltipHTML(setId) {
 }
 // Short markup describing an item's special power / set membership, appended to its
 // stat line so the build-defining bit is visible wherever gear is listed.
-// The glowing "✦ Name" tag for an item's build-defining power, WITHOUT a leading
-// separator, so callers can lead the stat line with it. Empty if no power.
+// The glowing "✦ Name" tag(s) for an item's build-defining power(s), WITHOUT a
+// leading separator, so callers can lead the stat line with it. A unique carries
+// 2–3, each rendered as its own tag. Empty if no power.
 function itemPowerFront(item) {
-  if (!item.power || !ITEM_POWERS[item.power]) return '';
-  const p = ITEM_POWERS[item.power];
-  return `<span class="ipow" style="color:${p.color};--pc:${p.color}" ${hoverTip(p.desc)}>✦ ${p.name}</span>`;
+  return itemPowerKeys(item)
+    .filter(k => ITEM_POWERS[k])
+    .map(k => { const p = ITEM_POWERS[k];
+      return `<span class="ipow" style="color:${p.color};--pc:${p.color}" ${hoverTip(p.desc)}>✦ ${p.name}</span>`; })
+    .join(' ');
 }
 // The set-membership tag (with a leading separator) that trails the stat line.
 function itemSetTag(item) {
@@ -20117,8 +20151,9 @@ function itemSetTag(item) {
 }
 function itemPowerLine(item) {
   let out = '';
-  if (item.power && ITEM_POWERS[item.power]) {
-    const p = ITEM_POWERS[item.power];
+  for (const k of itemPowerKeys(item)) {
+    const p = ITEM_POWERS[k];
+    if (!p) continue;
     out += ` · <span style="color:${p.color}" ${hoverTip(p.desc)}>✦ ${p.name}</span>`;
   }
   if (item.set && ITEM_SETS[item.set]) {
@@ -20487,8 +20522,8 @@ function playerSolidCell(cx, cy, ignoreFoes) {
   if (t === 11) return true;            // locked door — solid until unlocked (see breakAhead)
   if (!isFloorPassable(t)) return true;
   if (bossWallAt(cx, cy)) return true;
-  if (merchant && merchant.x === cx && merchant.y === cy) return true;
-  if (mystic && mystic.x === cx && mystic.y === cy) return true;
+  // The roaming merchant/mystic are PASSABLE — walk through (or stand on) them to
+  // browse. Interaction stays Chebyshev ≤1 (pickup()), so overlapping opens the menu.
   // Foes are solid — you can't walk through them. You can still always retreat:
   // they move slower than you (WORLD_TICK), and resting flush against a foe leaves
   // your box just shy of its cell, so you can slide along it and step away. The one
@@ -23065,8 +23100,7 @@ function enemyTileFree(x, y) {
   if (bossWallAt(x, y)) return false; // a conjured barrier blocks foes too
   if (x === player.x && y === player.y) return false;
   if (getEnemyAt(x, y)) return false;
-  if (merchant && merchant.x === x && merchant.y === y) return false;
-  if (mystic && mystic.x === x && mystic.y === y) return false;
+  // The roaming merchant/mystic are passable now — foes may route through them too.
   return true;
 }
 
@@ -23116,8 +23150,7 @@ function pathBlockedGrid() {
       if (cx >= 0 && cy >= 0 && cx < W && cy < H) b[cy * W + cx] = 1;
     }
   }
-  if (merchant && merchant.x >= 0 && merchant.y >= 0 && merchant.x < W && merchant.y < H) b[merchant.y * W + merchant.x] = 1;
-  if (mystic && mystic.x >= 0 && mystic.y >= 0 && mystic.x < W && mystic.y < H) b[mystic.y * W + mystic.x] = 1;
+  // The roaming merchant/mystic are passable — foes path straight through them.
   b[player.y * W + player.x] = 1; // you path *to* the player, never through them
   return b;
 }
@@ -24960,7 +24993,7 @@ function pickupChestsAt(x, y) {
 }
 
 // The USE button / key. Real-time: there's no "wait a turn" any more. Standing
-// next to a merchant/mystic opens their menu (you can't walk onto them); otherwise
+// next to — or on — a merchant/mystic opens their menu (they're passable); otherwise
 // it opens any chest already underfoot (most are auto-grabbed as you walk over).
 // The service req for a keeper kind (from TOWN_MENU) — its ok()/need unlock gate,
 // or null if the service is always open.
@@ -25465,11 +25498,14 @@ function updateBars() {
     if (html !== _invTabHtml) { _invTabHtml = html; invTab.innerHTML = html; }
   }
 
-  // Nudge the HERO / SKILLS tabs when there are unspent points to spend. The
-  // SKILLS badge combines both pools (normal skill + ascendancy), since both are
-  // spent on that tab.
+  // Nudge the HERO / SKILLS tabs when there are unspent points to spend. The two
+  // SKILLS pools stay VISUALLY separate: unspent skill points show in the red
+  // badge, unspent ascendancy points in their own light-blue badge — never summed
+  // into one number, since they buy different trees.
   const pts = player.attrPoints || 0;
-  const sPts = (player.skillPoints || 0) + (player.ascPoints || 0);
+  const skPts = player.skillPoints || 0;
+  const ascPts = player.ascPoints || 0;
+  const sPts = skPts + ascPts;
   const heroTab = document.getElementById('tab-hero');
   if (heroTab) {
     const html = pts > 0 ? `HERO<span class="tab-count">${pts}</span>` : 'HERO';
@@ -25478,7 +25514,9 @@ function updateBars() {
   }
   const skillsTab = document.getElementById('tab-skills');
   if (skillsTab) {
-    const html = sPts > 0 ? `SKILLS<span class="tab-count">${sPts}</span>` : 'SKILLS';
+    let html = 'SKILLS';
+    if (skPts > 0) html += `<span class="tab-count">${skPts}</span>`;
+    if (ascPts > 0) html += `<span class="tab-count asc">${ascPts}</span>`;
     if (html !== _skillsTabHtml) { _skillsTabHtml = html; skillsTab.innerHTML = html; }
     skillsTab.classList.toggle('has-points', sPts > 0);
   }
@@ -33193,8 +33231,10 @@ function renderCovenants() {
       const rowCls = `shop-row ${on ? 'picked' : ''} ${unlocked ? '' : 'locked'}`;
       const click = unlocked ? `onclick="covToggle('${c.id}')"` : '';
       const border = on ? 'border-color:var(--gold)' : '';
+      // Gold "Dread N" for a swearable oath (matches the Total Dread number);
+      // red is reserved for the "Locked" gate so the two never read alike.
       const gate = unlocked
-        ? `<span style="color:var(--danger)">Dread ${c.dread}</span>`
+        ? `<span style="color:var(--gold)">Dread ${c.dread}</span>`
         : `<span style="color:var(--danger)">Locked — needs ${c.unlockOrder} mark${c.unlockOrder === 1 ? '' : 's'} (Dread ${c.dread})</span>`;
       html += `<div class="${rowCls}" ${click} style="${border}">
         <span class="loot-icon">${dlIcon(c.sprite || 'cov_altar', 30)}</span>
@@ -33208,7 +33248,7 @@ function renderCovenants() {
     html += '</div>';
 
     // Clear-all — only useful when something is sworn.
-    html += `<div class="cook-actions"><button class="cook-btn ghost" ${ids.length ? '' : 'disabled'} onclick="covClearAll()">Clear all oaths</button></div>`;
+    html += `<div class="cook-actions cov-clear"><button class="cook-btn ghost" ${ids.length ? '' : 'disabled'} onclick="covClearAll()">Clear all oaths</button></div>`;
     return html;
   } catch (e) {
     if (typeof log === 'function') log('The altar could not be rendered.', 'important');
