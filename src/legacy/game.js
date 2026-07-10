@@ -71,6 +71,7 @@ import { CURSE_TIER_MULT, curseTierMult, statCurseSwing, cursedStatCeiling } fro
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
   enchTierFactor as calcEnchTierFactor } from '../systems/enchantCost.js';
+import { rerollAllCounts, canRerollAll } from '../systems/enchantReroll.js';
 import { fuseCount, transmuteCost as calcTransmuteCost, fusableByTier,
   resolveTransmute } from '../systems/transmute.js';
 import { upgradeOptions as ilvlUpgradeOptions, upgradeCost as calcIlvlUpgradeCost,
@@ -14732,13 +14733,18 @@ function enchantRerollAll(id) {
   if (isEnchantLocked(item)) return; // unique/cursed — properties are locked
   const cost = rerollAllCost(item);
   const caps = TIER_AFFIX_CAPS[item.tier] || { stat:0, attr:0 };
-  if (!canAfford(cost) || (caps.stat + caps.attr) === 0) return;
+  // Reforge only what the piece ALREADY carries — reroll-all gambles existing
+  // modifiers, it never adds slots (that's Augment). Rolling a fresh count up to
+  // the cap here let a blank piece sprout a full set of modifiers for one flat fee.
+  const counts = itemAffixCounts(item);
+  if (!canAfford(cost) || !canRerollAll(counts)) return;
+  const n = rerollAllCounts(counts, caps);
   const locked = lockedStats(item);
   for (const k of Object.keys(item.stats)) if (!locked.includes(k)) delete item.stats[k];
   item.attrs = {};
   const mult = tierMult(item.tier);
-  addStatAffixes(item, item.ilvl, mult, rollAffixCount(caps.stat));
-  addAttrAffixes(item, item.ilvl, mult, rollAffixCount(caps.attr));
+  addStatAffixes(item, item.ilvl, mult, n.stat);
+  addAttrAffixes(item, item.ilvl, mult, n.attr);
   spendCost(cost);
   log(`<span data-spr=ic_wand></span> Enchanter reforges every property on your ${item.name}.`, 'loot');
   afterEnchant(item);
@@ -15031,7 +15037,7 @@ function renderEnchantItem(item) {
   const canAug = canAddStat(item) || canAddAttr(item);
   const allCost = rerollAllCost(item);
   const augBtn = `<button class="ench-act" ${(canAug && canAfford(augCost))?'':'disabled'} onclick="enchantAugment(${item.id})"><span data-spr=mat_glimmer></span> Augment ${costLabelHi(augCost)}</button>`;
-  const allBtn = `<button class="ench-act" ${(canAfford(allCost) && (caps.stat+caps.attr)>0)?'':'disabled'} onclick="enchantRerollAll(${item.id})">Reroll all ${costLabelHi(allCost)}</button>`;
+  const allBtn = `<button class="ench-act" ${(canAfford(allCost) && canRerollAll({ statN, attrN }))?'':'disabled'} onclick="enchantRerollAll(${item.id})">Reroll all ${costLabelHi(allCost)}</button>`;
 
   // Why is Augment unavailable? Distinguish "rarity slots full" from "this slot
   // has no more modifier types to add" (the common, confusing case — e.g. a

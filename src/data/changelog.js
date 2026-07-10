@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "small", v: "Enchanter “Reroll all” no longer conjures modifiers from nothing", by: "Jeff Louie", notes: [
+    "Fixed the Enchanter's Reroll all: it now reforges the properties a piece already carries and never adds new ones. It was rolling a fresh random count, so a blank piece could sprout up to a full set of modifiers for one flat fee — cheaper than augmenting each slot.",
+    "Reroll all is disabled on a piece with no bonus properties now — there's nothing to reforge, so use Augment to add the first one.",
+  ] },
   { date: "2026-07-09", size: "small", v: "Every win gets its own victory sound", by: "Jeff Louie", notes: [
     "Each kind of accomplishment now plays its own little victory sting instead of sharing one fanfare — clearing a floor's foes to unseal the stairs, finishing a bounty, banking an ascendancy point, ascending into a class path, earning a Boss Point, completing a deed, and unlocking a feat each sound distinct.",
     "All follow your SFX volume, so lowering or muting sound quiets them with everything else.",
