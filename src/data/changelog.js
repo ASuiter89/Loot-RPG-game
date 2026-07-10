@@ -17,6 +17,10 @@ export const CHANGELOG = [
     "Gloves, gauntlets, bracers and grips no longer carry a built-in Attack stat — hands now lean on Defense plus their signature stat, like every other armor slot.",
     "Existing hands gear keeps the Attack it already rolled; only newly found and forged pieces skip it.",
   ] },
+  { date: "2026-07-09", size: "small", v: "Click-to-move runs straight through traps", by: "Jeff Louie", notes: [
+    "Mouse click-and-hold movement no longer detours around lava and spikes. The hero now runs straight through them toward the cursor — the same as walking into them on the keyboard — so holding the button drives exactly where you point.",
+    "Walls, water and other solid terrain are still routed around; only the trap-dodging is gone. Traps still only hurt, never kill, so crossing one is your call.",
+  ] },
   { date: "2026-07-09", size: "small", v: "No free gear when you step onto a boss floor", by: "Jeff Louie", notes: [
     "Reaching a new deepest floor no longer drops a gear cache into your bag. Those depth rewards landed every fifth floor — exactly the boss floors — so you were handed a free item the moment you entered a guardian's arena. The arena stays clutter-free now; earn the guardian's spoils by beating it.",
     "The NEW DEPTH RECORD banner and its bonus gold still play when you push deeper.",
