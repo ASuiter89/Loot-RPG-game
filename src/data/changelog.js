@@ -7,7 +7,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
-  { date: "2026-07-09", size: "small", v: "Hands gear drops its innate Attack", by: "Andrew Suiter", notes: [
+  { date: "2026-07-09", size: "small", v: "Hands gear drops its innate Attack", by: "Jeff Louie", notes: [
     "Gloves, gauntlets, bracers and grips no longer carry a built-in Attack stat — hands now lean on Defense plus their signature stat, like every other armor slot.",
     "Existing hands gear keeps the Attack it already rolled; only newly found and forged pieces skip it.",
   ] },
@@ -125,14 +125,14 @@ export const CHANGELOG = [
     "The ✦ item powers on legendary and unique gear — Vampiric, Duelist's, Warmage and all the rest — get their own section in the key, each in its loot-row color with what it does.",
     "The whole key prints in finer type so the much bigger reference stays compact.",
   ] },
-  { date: "2026-07-06", size: "small", v: "Dropped food refuels mana & stamina too", by: "Claude", notes: [
+  { date: "2026-07-06", size: "small", v: "Dropped food refuels mana & stamina too", by: "Jeff Louie", notes: [
     "Snacks picked up off the floor now restore MP and Stamina alongside HP — the same amount to all three, so a bite is a quick top-up for casters and sprinters, not just wounded fighters.",
   ] },
   { date: "2026-07-06", size: "small", v: "On touch, opening any menu pauses the game", by: "Jeff Louie", notes: [
     "On phones and tablets, opening the bag or any pop-up menu now freezes the dungeon — no more taking hits while you rearrange gear or read the codex. Close it and play resumes exactly where it left off.",
     "Desktop is unchanged: its loot drawer is a permanent sidebar, so play continues beside it.",
   ] },
-  { date: "2026-07-06", size: "small", v: "Mana bar pulses when you're short to cast", by: "Claude", notes: [
+  { date: "2026-07-06", size: "small", v: "Mana bar pulses when you're short to cast", by: "Jeff Louie", notes: [
     "Trying to cast a skill without enough mana now gives the mana bar a brief, faint blue pulse — a quick nudge toward why nothing fired.",
     "Skill buttons already grey out while recharging or when you can't afford them; this points the eye at the mana pool as the reason.",
   ] },
@@ -188,7 +188,7 @@ export const CHANGELOG = [
     "The warrior's Spirit Veil skill gets the framed skill-badge look the other skills already had.",
     "Quest-givers and lost pets on the map are drawn at full character size, matching the hero and foes instead of a tiny marker.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Island floors ringed by the sea", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Island floors ringed by the sea", by: "Jeff Louie", notes: [
     "Some outdoor floors now come up as an island — the whole map edge is open water instead of a rock wall, so you fight on a sandy shore surrounded by sea.",
     "The water is the boundary: you can see and shoot across it but can't walk off. Everything reachable stays reachable — the sea only replaces the impassable frame.",
   ] },
@@ -251,14 +251,14 @@ export const CHANGELOG = [
     "Weapon tooltips and the Forge preview now show a base swing rate — attacks/sec plus a Slow / Normal / Fast tag — beside the reach grid, so you know how fast a weapon hits without equipping it first.",
     "The rate is the weapon type's base speed before Attack Speed and Agility: light daggers swing fastest, heavy two-handers and staves slowest.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Leaderboard hero snapshot shows gear's attribute bonus", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Leaderboard hero snapshot shows gear's attribute bonus", by: "Jeff Louie", notes: [
     "A hero's Attributes on the leaderboard snapshot now show the bonus their worn gear adds (e.g. 40 +13 in green), not just the base you spent — matching your own hero sheet.",
   ] },
   { date: "2026-07-05", size: "small", v: "Crafted gear forges at full depth — Craftsman & Enchanter now agree", by: "Claude", notes: [
     "The Craftsman now forges blanks at your full depth item level (deepest floor + 1) — the level a fresh drop there would carry, matching the Merchant, Gambler and the Enchanter's Empower cap. Forged gear starts one item level higher than before.",
     "Fixes the two disagreeing: a piece you just forged used to arrive one level short, so the Enchanter would immediately offer a free +1 Empower to max. Now a fresh forge is already at your depth, so there's nothing left to Empower.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Sort & filter the merchant like your bag", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Sort & filter the merchant like your bag", by: "Jeff Louie", notes: [
     "The merchant's Buy and Sell tabs now carry the same Sort (rarity, power, slot, value) and stat Filter controls as the LOOT drawer.",
     "Sell all / Scrap all at the merchant honor the filter — they only touch what's shown.",
   ] },
@@ -280,7 +280,7 @@ export const CHANGELOG = [
     "Opening the Bestiary (or Achievements) from the pause menu now shows it on top of the menu instead of hidden behind it — no need to close settings first.",
     "Long single-word foe names like Constrictor and Bloodhound now wrap inside their card instead of spilling past its right edge.",
   ] },
-  { date: "2026-07-05", size: "medium", v: "Maxed passives surge into a brand-new stat at rank 10", by: "Claude", notes: [
+  { date: "2026-07-05", size: "medium", v: "Maxed passives surge into a brand-new stat at rank 10", by: "Jeff Louie", notes: [
     "Taking a base-tree passive to rank 10 now unlocks a NEW stat it never gave before — not just a bigger version of what it already scaled.",
     "Each surge stat is thematic to its passive: a crit node gains crit damage, an HP node gains regen, a spell node gains crit, and so on.",
     "The new stat stacks on top of the existing rank-3/7/10 bonus spikes and folds straight into the same combat math.",
@@ -708,7 +708,7 @@ export const CHANGELOG = [
     "Monsters animate their blows — a claw swipe each strike (a heavy ground-smash for brutes and bosses). Boss tricks get proper telegraphs: flame lines, ember rain, quake cracks, shockwave rings, frost bursts, life-siphon beams, hex and venom bolts, pull vortices. Shielded and enraged bosses now show a lasting aura.",
     "New element-flavoured cast sounds for fired shots, weapon swings and each spell school.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Loot bag sorts by Power by default", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Loot bag sorts by Power by default", by: "Jeff Louie", notes: [
     "Bag now opens sorted by Power instead of Rarity — strongest gear surfaces first. Switch back to Rarity, Slot or Value any time.",
   ] },
   { date: "2026-07-03", size: "small", v: "Spend straight from the vault", by: "Jeff Louie", notes: [
@@ -723,7 +723,7 @@ export const CHANGELOG = [
     "Deepening one passive now pays off in jumps, not just a steady drip: its always-on bonus spikes at ranks 3, 7 and 10 — the same milestone ranks that already power up active skills (up to +30% of the stat total at rank 10).",
     "The skill card flags the surge with a chip and rank pips, previews the bigger jump on rank-up, and the level-up line calls out each milestone as you cross it. Keystones stay single-rank, so they don't surge.",
   ] },
-  { date: "2026-07-03", size: "medium", v: "A full rack of new synth instruments", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "A full rack of new synth instruments", by: "Jeff Louie", notes: [
     "Rebuilt the soundtrack's synth engine so styles no longer share the same three sounds. New instruments: deep round sub bass, a detuned drum-&-bass reese, a squelchy acid bass, big super-saw leads and chords, metallic FM bells, plucky bell/marimba tones, and hollow reed leads — each style now picks the ones that fit it.",
     "Fixed the bass: it used to be forced to the same punchy sawtooth in every style (the 'polka' feel). Basslines now use rounder, smoother sub tones and less on-the-beat bounce, so each style's low end has its own character.",
   ] },
@@ -777,7 +777,7 @@ export const CHANGELOG = [
     "Longer contracts shave a little off each floor's cost, so a long haul is a touch cheaper per floor.",
     "Each merc gets its own hire card, matching the Mystic's pact layout.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Skill cards: shorter text, wider card", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Skill cards: shorter text, wider card", by: "Jeff Louie", notes: [
     "Every passive and keystone description rewritten terse — stats first, filler words and leftover internal tags gone.",
     "Skill detail card is wider with slightly smaller text, so each stat line fits without wrapping mid-phrase.",
   ] },
@@ -796,7 +796,7 @@ export const CHANGELOG = [
     "All ten styles get their own groove so each sounds distinct: driving for Cavern, machine-like for Forge, martial for March, lazy and swung for Tide, ambient and still for Mist and Veil, and pounding for the boss theme.",
     "The music keeps its per-performance key, tempo, and melody variation on top, so it still never repeats note-for-note.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Hero Bars stay put", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Hero Bars stay put", by: "Jeff Louie", notes: [
     "With Hero Bars on, the red Health and blue Mana bars under your hero now stay visible at all times — no more vanishing when a vital fills up.",
     "Stamina bar unchanged: still pops up only while stamina is recovering.",
   ] },
