@@ -29,6 +29,11 @@ export const CHANGELOG = [
     "Reaching a new deepest floor no longer drops a gear cache into your bag. Those depth rewards landed every fifth floor — exactly the boss floors — so you were handed a free item the moment you entered a guardian's arena. The arena stays clutter-free now; earn the guardian's spoils by beating it.",
     "The NEW DEPTH RECORD banner and its bonus gold still play when you push deeper.",
   ] },
+  { date: "2026-07-09", size: "small", v: "Every spell brands its own sigil", by: "Jeff Louie", notes: [
+    "Fixed spells that cast the exact same effect: the Templar's Judgment Day and the Crusader's Final Judgment (among many others) were both holy novas, so they looked identical.",
+    "Every skill now stamps its own signature rune when cast — the glyph, its spin, spoke count and rings are picked per spell — so two casts that share a colour and shape read apart at a glance.",
+    "Reaches every cast: the two dozen look-alike self-buffs, every summon circle, the holy novas, the beams and the big capstone ultimates each carry a distinct mark now.",
+  ] },
   { date: "2026-07-09", size: "small", v: "Cursed gear always has a real drawback", by: "Jeff Louie", notes: [
     "Fixed cursed items that felt like a free upgrade: a curse's penalty could land on a stat whose negative value quietly floored to zero (crit, dodge, block, pen, life-leech, attack speed and other benefit-only ratings), so the drawback did nothing.",
     "A curse now always spends its price on a stat you FEEL — a core stat (Attack, Defense, Max HP/MP, Speed) or a damage boost (Increased/Boss Damage, Spell/Skill Power) — and prefers to drag down a stat the item was already strong in. The gift and the penalty stay equally strong.",

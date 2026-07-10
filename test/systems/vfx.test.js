@@ -1,9 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
   elementOf, paletteFor, castArchetype, weaponArchetype, projectileElement, bossFxFor,
-  archetypeIsProjectile,
+  archetypeIsProjectile, hashStr, castSignature,
   clamp01, easeOutCubic, easeInCubic, easeInOutSine, easeOutBack, bump,
 } from '../../src/systems/vfx.js';
+import { SIGIL_GLYPHS } from '../../src/data/vfxPalette.js';
 
 describe('elementOf', () => {
   it('classifies spells by keyword in name', () => {
@@ -110,6 +113,95 @@ describe('archetypeIsProjectile', () => {
     expect(archetypeIsProjectile('mystery')).toBe(false);
     expect(archetypeIsProjectile(undefined)).toBe(false);
     expect(archetypeIsProjectile(null)).toBe(false);
+  });
+});
+
+describe('hashStr', () => {
+  it('is deterministic and returns an unsigned 32-bit int', () => {
+    for (const s of ['', 'a', 'Judgment Day', 't_a54|Judgment Day']) {
+      const h = hashStr(s);
+      expect(h).toBe(hashStr(s));
+      expect(Number.isInteger(h)).toBe(true);
+      expect(h).toBeGreaterThanOrEqual(0);
+      expect(h).toBeLessThanOrEqual(0xffffffff);
+    }
+  });
+  it('coerces nullish input to the empty string (no throw)', () => {
+    expect(hashStr(null)).toBe(hashStr(''));
+    expect(hashStr(undefined)).toBe(hashStr(''));
+  });
+  it('separates inputs that differ only by field boundary', () => {
+    // The signature keys on `id + '|' + name`, so "a|b" must not collide with "ab|".
+    expect(hashStr('a|b')).not.toBe(hashStr('ab|'));
+  });
+});
+
+describe('castSignature', () => {
+  it('is deterministic — a spell always maps to the same signature', () => {
+    expect(castSignature('t_a54', 'Judgment Day')).toEqual(castSignature('t_a54', 'Judgment Day'));
+  });
+  it('always yields a real glyph and in-range channels', () => {
+    for (const id of ['w_a00', 'm_a50', 'cr_judgment', 'r_a11', 'nc_golem', 'zzz']) {
+      const s = castSignature(id, id);
+      expect(SIGIL_GLYPHS).toContain(s.glyph);
+      expect(s.points).toBeGreaterThanOrEqual(5);
+      expect(s.points).toBeLessThanOrEqual(10);
+      expect(s.rings).toBeGreaterThanOrEqual(2);
+      expect(s.rings).toBeLessThanOrEqual(4);
+      expect([1, -1]).toContain(s.spin);
+      expect(s.twist).toBeGreaterThanOrEqual(0);
+      expect(s.twist).toBeLessThan(Math.PI * 2);
+    }
+  });
+  it('gives the two example holy novas different sigils', () => {
+    // The bug report: Templar "Judgment Day" and Crusader "Final Judgment" are both
+    // holy novas and looked identical. Their signatures must now differ.
+    const jday = castSignature('t_a54', 'Judgment Day');
+    const fjudg = castSignature('cr_judgment', 'Final Judgment');
+    expect(jday).not.toEqual(fjudg);
+    // and specifically the rune the player sees is different
+    expect(visualKey(jday)).not.toBe(visualKey(fjudg));
+  });
+});
+
+// The rendered look of a sigil is its glyph + the channels the drawers vary.
+function visualKey(sig) { return [sig.glyph, sig.points, sig.spin, sig.rings].join(':'); }
+
+describe('every active skill casts a distinct sigil', () => {
+  // Parse the real skill trees out of the (giant) legacy monolith so this guarantee
+  // tracks the actual game data instead of a fixture that drifts. Two spells that
+  // share an element (colour) and archetype (shape) — e.g. the holy novas, the two
+  // dozen "gold" self-buffs — used to render identically; the per-spell signature
+  // must give each of them its own visual key.
+  const src = readFileSync(resolve(process.cwd(), 'src/legacy/game.js'), 'utf8');
+  const rows = [];
+  const push = (id, name, shape) => rows.push({ id, name, shape });
+  // JSON-ish class-tree nodes: {"id":"…","name":"…", … "cast":{ … "shape":"…" …
+  const reA = /"id"\s*:\s*"([^"]+)"[^\n]*?"name"\s*:\s*"([^"]+)"[^\n]*?"cast"\s*:\s*\{[^\n]*?"shape"\s*:\s*"([a-z]+)"/g;
+  // Terser ascendancy-path nodes: {id:'…',name:'…',icon:'…',t:'active',…cast:{shape:'…'
+  const reB = /\{id:'([^']+)',name:'([^']+)',icon:'[^']*',t:'active'[^\n]*?cast:\{shape:'([a-z]+)'/g;
+  let m;
+  while ((m = reA.exec(src))) push(m[1], m[2], m[3]);
+  while ((m = reB.exec(src))) push(m[1], m[2], m[3]);
+  const byId = new Map();
+  for (const r of rows) if (!byId.has(r.id)) byId.set(r.id, r);
+  const skills = [...byId.values()];
+
+  it('parsed a plausible number of active skills (guards the regex)', () => {
+    expect(skills.length).toBeGreaterThanOrEqual(140);
+  });
+
+  it('no two spells sharing an element + archetype render the same sigil', () => {
+    const seen = new Map();       // "element|archetype|visualKey" -> first spell name
+    const clashes = [];
+    for (const s of skills) {
+      const el = elementOf(s.name);
+      const arch = castArchetype(s.shape);
+      const key = `${el}|${arch}|${visualKey(castSignature(s.id, s.name))}`;
+      if (seen.has(key)) clashes.push(`${seen.get(key)} == ${s.name} (${key})`);
+      else seen.set(key, s.name);
+    }
+    expect(clashes).toEqual([]);
   });
 });
 

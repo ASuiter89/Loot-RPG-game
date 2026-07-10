@@ -7,7 +7,7 @@
 
 import {
   VFX_PALETTES, DEFAULT_ELEMENT, SHAPE_ARCHETYPE, WEAPON_ARCHETYPE,
-  BOSS_ABILITY_FX, PROJECTILE_ELEMENT, PROJECTILE_ARCHETYPES,
+  BOSS_ABILITY_FX, PROJECTILE_ELEMENT, PROJECTILE_ARCHETYPES, SIGIL_GLYPHS,
 } from '../data/vfxPalette.js';
 
 const PROJECTILE_ARCH_SET = new Set(PROJECTILE_ARCHETYPES);
@@ -53,6 +53,43 @@ export function archetypeIsProjectile(archetype) { return PROJECTILE_ARCH_SET.ha
 // The {type, el} animation spec for a named boss ability, or null if it has none
 // (falls back to the old generic feedback at the call site).
 export function bossFxFor(name) { return BOSS_ABILITY_FX[name] || null; }
+
+// ── Per-spell VFX signature ──
+// Element (colour) + archetype (shape) can't tell two casts of the same family
+// apart — the classic "Judgment Day and Final Judgment fire the identical holy
+// nova" problem, and the two dozen "gold" self-buffs that all bloom the same aura.
+// castSignature() gives every spell its OWN deterministic signature from its stable
+// id (name as a salt): a rune glyph plus the point-count, spin direction and
+// ring-count the drawers vary, so the edge layer can stamp a distinct sigil on each
+// cast. Pure — a small FNV-1a hash sliced into independent channels, no RNG or
+// clock, so a spell's look is fixed run-to-run and unit-testable.
+
+// FNV-1a 32-bit string hash -> uint32. Deterministic: the same id always maps to
+// the same number (and therefore the same sigil).
+export function hashStr(s) {
+  s = String(s == null ? '' : s);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
+}
+
+// The signature for one spell, keyed on its (unique) id with the name folded in as a
+// salt. `glyph` picks the rune; `points` sets a star/ray's spokes; `spin` the
+// rotation direction; `rings` how many concentric rings a nova draws; `twist` a
+// resting-angle offset so even two casts that land on the same glyph sit differently.
+// `seed` is the raw hash — distinct ids give distinct seeds, so the signature as a
+// whole is effectively unique per spell.
+export function castSignature(id, name) {
+  const h = hashStr((id || '') + '|' + (name || ''));
+  return {
+    seed: h,
+    glyph: SIGIL_GLYPHS[h % SIGIL_GLYPHS.length],
+    points: 5 + ((h >>> 4) % 6),          // 5..10 spokes / rune strokes
+    spin: ((h >>> 10) & 1) ? 1 : -1,      // clockwise / counter-clockwise
+    rings: 2 + ((h >>> 11) % 3),          // 2..4 concentric rings
+    twist: ((h >>> 13) % 360) * Math.PI / 180,
+  };
+}
 
 // ── easing / envelope helpers ──
 // Small deterministic curves the drawers share so every effect grows and fades on

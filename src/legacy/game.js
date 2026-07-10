@@ -143,7 +143,7 @@ import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
 import { mercCost } from '../systems/mercPricing.js';
 import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTints.js';
 import { elementOf, paletteFor, castArchetype, weaponArchetype, projectileElement, bossFxFor,
-  archetypeIsProjectile, clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
+  archetypeIsProjectile, castSignature, clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
 import { UNIQUES, uniqueForBase, uniquesForSlot } from '../data/uniques.js';
 import { ITEM_SETS } from '../data/itemSets.js';
 import { setPieceCount, setComplete as setIsComplete, setStatContribution,
@@ -18682,7 +18682,11 @@ function spawnUltimateFx(node, c, center, targets) {
   const color = castVisual(node);
   const R = Math.random;
   const tg = (targets || []).filter(o => o).map(o => ({ x: o.x + 0.5, y: o.y + 0.5 }));
-  const e = { style, color, born: Date.now(), x: (center.x || 0) + 0.5, y: (center.y || 0) + 0.5, targets: tg, flashed: false };
+  // Per-spell sigil so two ultimates of the same style (e.g. Judgment Day and Final
+  // Judgment, both the 'holy' cinematic) still brand a distinct rune over the burst.
+  const e = { style, color, born: Date.now(), x: (center.x || 0) + 0.5, y: (center.y || 0) + 0.5, targets: tg, flashed: false,
+    sig: castSignature(node && node.id, node && node.name),
+    sigPal: paletteFor(elementOf((node && node.name) || '', (node && node.icon) || '', 'gold')) };
   if (style === 'meteor') {
     e.dur = 1500; e.impactMs = 230;
     e.embers = Array.from({ length: 26 }, () => ({ a: R() * Math.PI * 2, spd: 0.4 + R() * 1.1, sz: 1 + R() * 2.4, rise: 0.5 + R() }));
@@ -18742,6 +18746,63 @@ function _ultBolt(x1, y1, x2, y2, jag, amp, color, w) {
   ctx.lineTo(x2, y2); ctx.stroke();
   ctx.restore();
 }
+// Paint one procedural SIGIL rune centred at (cx,cy): radius r px, rotated `rot`
+// radians, stroked in the cast's palette. The per-spell signature (castSignature)
+// picks the glyph + point-count, so two casts that share an element and a shape
+// still brand a different rune — this is what keeps every spell's look unique.
+// Purely cosmetic and self-contained (save/restore its own state); no game state.
+function drawSigil(cx, cy, r, rot, pal, alpha, sig) {
+  if (!sig || alpha <= 0 || r <= 0) return;
+  const n = Math.max(3, sig.points || 6);
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(rot);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = pal.core; ctx.fillStyle = pal.core;
+  ctx.shadowColor = pal.glow; ctx.shadowBlur = r * 0.6;
+  ctx.globalAlpha = alpha; ctx.lineWidth = Math.max(1, r * 0.09);
+  const ring = rad => { ctx.beginPath(); ctx.arc(0, 0, rad, 0, PI2); ctx.stroke(); };
+  const poly = (pts, rad) => {
+    ctx.beginPath();
+    for (let i = 0; i < pts; i++) { const a = (i / pts) * PI2 - Math.PI / 2; i ? ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad) : ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad); }
+    ctx.closePath(); ctx.stroke();
+  };
+  const star = (pts, r1, r2) => {
+    ctx.beginPath();
+    for (let i = 0; i < pts * 2; i++) { const a = (i / (pts * 2)) * PI2 - Math.PI / 2, rad = i % 2 ? r2 : r1; i ? ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad) : ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad); }
+    ctx.closePath(); ctx.stroke();
+  };
+  switch (sig.glyph) {
+    case 'cross':
+      ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(0, r); ctx.moveTo(-r * 0.7, -r * 0.15); ctx.lineTo(r * 0.7, -r * 0.15); ctx.stroke(); ring(r * 0.32); break;
+    case 'star': star(n, r, r * 0.42); break;
+    case 'triangle': poly(3, r); ring(r * 0.28); break;
+    case 'diamond': poly(4, r); poly(4, r * 0.5); break;
+    case 'hexagram': poly(3, r); ctx.save(); ctx.rotate(Math.PI); poly(3, r); ctx.restore(); break;
+    case 'spiral':
+      ctx.beginPath();
+      for (let s = 0; s <= 28; s++) { const f = s / 28, ang = f * PI2 * 1.6, rad = r * f; s ? ctx.lineTo(Math.cos(ang) * rad, Math.sin(ang) * rad) : ctx.moveTo(Math.cos(ang) * rad, Math.sin(ang) * rad); }
+      ctx.stroke(); break;
+    case 'chevron':
+      for (let k = 0; k < 3; k++) { const rr = r * (0.45 + k * 0.28); ctx.beginPath(); ctx.moveTo(-rr * 0.75, rr * 0.35); ctx.lineTo(0, -rr * 0.5); ctx.lineTo(rr * 0.75, rr * 0.35); ctx.stroke(); }
+      break;
+    case 'rays':
+      for (let i = 0; i < n; i++) { const a = (i / n) * PI2; ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.3, Math.sin(a) * r * 0.3); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); ctx.stroke(); }
+      ring(r * 0.28); break;
+    case 'runes':
+      for (let i = 0; i < n; i++) { const a = (i / n) * PI2, bx = Math.cos(a) * r * 0.72, by = Math.sin(a) * r * 0.72; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + Math.cos(a + 1.35) * r * 0.32, by + Math.sin(a + 1.35) * r * 0.32); ctx.stroke(); }
+      ring(r * 0.5); break;
+    case 'crescent':
+      ctx.beginPath(); ctx.arc(0, 0, r, Math.PI * 0.35, Math.PI * 1.65); ctx.stroke();
+      ctx.beginPath(); ctx.arc(r * 0.42, 0, r * 0.85, Math.PI * 0.55, Math.PI * 1.45, true); ctx.stroke(); break;
+    case 'pentacle': star(5, r, r * 0.5); ring(r); break;
+    case 'wings':
+      for (const dir of [-1, 1]) { ctx.beginPath(); ctx.moveTo(0, -r * 0.1); ctx.quadraticCurveTo(dir * r * 0.7, -r * 0.6, dir * r, r * 0.2); ctx.quadraticCurveTo(dir * r * 0.6, r * 0.12, 0, r * 0.35); ctx.stroke(); }
+      break;
+    default: star(n, r, r * 0.45);
+  }
+  ctx.restore();
+  ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+}
 // Render (and prune) every live ultimate cinematic.
 function drawUltimateFx(offX, offY, tw, th) {
   if (!ultFx.length) return;
@@ -18759,6 +18820,12 @@ function drawUltimateFx(offX, offY, tw, th) {
     else if (e.style === 'summon') drawUltSummon(e, el, cx, cy, tw);
     else drawUltGeneric(e, el, cx, cy, tw);
     ctx.restore();
+    // A big rotating rune stamped over the cinematic — unique per spell (see sig).
+    if (e.sig) {
+      const a = clamp01(el / e.dur);
+      drawSigil(cx, cy, tw * (0.8 + easeOutCubic(a) * 2.1), e.sig.twist + e.sig.spin * a * 2,
+        e.sigPal, 0.7 * (1 - a), e.sig);
+    }
   }
 }
 function drawUltMeteor(e, el, cx, cy, tw) {
@@ -19243,6 +19310,17 @@ function drawFxBlink(fx, t, cx, cy, tw) {
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(s.a) * len, cy + Math.sin(s.a) * len); ctx.stroke();
   }
 }
+// The per-spell sigil overlay for a NON-epic cast: the signature's rune pops in with
+// a slight overshoot, spins in its signature direction, then fades — stamped once at
+// the caster (see playCastVfx) so two casts sharing an element + shape read apart.
+function drawFxSigil(fx, t, cx, cy, tw) {
+  if (!fx.sig) return;
+  const pop = easeOutBack(Math.min(1, t * 1.8));
+  const r = tw * (fx.scale || 0.9) * (0.4 + 0.6 * pop);
+  const rot = (fx.sig.twist || 0) + fx.sig.spin * t * 1.6;
+  const alpha = (t < 0.22 ? t / 0.22 : Math.max(0, 1 - (t - 0.22) / 0.78)) * 0.85;
+  drawSigil(cx, cy, r, rot, fx.pal, alpha, fx.sig);
+}
 // Render (and compact) every live attack/spell effect. Drawn over the world with
 // the particles/cinematics, beneath the floating damage numbers so hits stay legible.
 function drawAttackFx(offX, offY, tw, th) {
@@ -19269,6 +19347,7 @@ function drawAttackFx(offX, offY, tw, th) {
       case 'emberRain': drawFxEmberRain(fx, t, cx, cy, tw); break;
       case 'smash': drawFxSmash(fx, t, cx, cy, tw); break;
       case 'blink': drawFxBlink(fx, t, cx, cy, tw); break;
+      case 'sigil': drawFxSigil(fx, t, cx, cy, tw); break;
       default: drawFxImpact(fx, t, cx, cy, tw);
     }
     ctx.restore();
@@ -19438,6 +19517,11 @@ function playCastVfx(node, c, center, targets, onArrive) {
   sfx(castSoundFor(c, el));
   const px = player.x + 0.5, py = player.y + 0.5;
   const tgts = (targets || []).filter(o => o && o.x != null);
+  // Every cast brands its own signature rune at the caster, so two spells that share
+  // an element + archetype (a dozen "gold" self-buffs, both holy novas…) still look
+  // distinct. Sized to the cast's punch (radius / spell / weapon mult).
+  const sigScale = 0.7 + Math.min(1.15, (c.radius || 0) * 0.14 + (c.spell || 0) * 0.12 + (c.wpn || 0) * 0.1);
+  _fxPush('sigil', px, py, pal, { sig: castSignature(node.id, node.name), scale: sigScale, dur: 560 });
   let deferred = false;   // did a flying bolt take ownership of onArrive?
   switch (arch) {
     case 'aura':
