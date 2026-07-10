@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "small", v: "Every win gets its own victory sound", by: "Jeff Louie", notes: [
+    "Each kind of accomplishment now plays its own little victory sting instead of sharing one fanfare — clearing a floor's foes to unseal the stairs, finishing a bounty, banking an ascendancy point, ascending into a class path, earning a Boss Point, completing a deed, and unlocking a feat each sound distinct.",
+    "All follow your SFX volume, so lowering or muting sound quiets them with everything else.",
+  ] },
   { date: "2026-07-09", size: "medium", v: "See how you died, in a tighter combat log", by: "Jeff Louie", notes: [
     "The death screen now has a View Combat Log button — open your recent log in a scrollable reader and see exactly what killed you. Works on both the normal and permadeath screens.",
     "The combat log packs in more at a glance: smaller, denser text fits more lines in the same strip.",

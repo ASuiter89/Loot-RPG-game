@@ -6044,7 +6044,7 @@ function updateFloorClear() {
     } else if (tutorialActive) {
       // Beach tutorial: point the new player at the cave instead of "stairs".
       log('<span data-spr=feat_door></span> Skeleton falls — cave to the north opens!', 'important');
-      sfx('stairs');
+      sfx('floorclear');
       tutorialStage('cave');
     } else {
       // Clearing this floor unsealed its down-stairs, which opens the NEXT floor at
@@ -6053,7 +6053,7 @@ function updateFloorClear() {
       // pays the depth milestone — see recordDepth.)
       markDepthReached(floorUnlockedByClear(dungeonLevel, false));
       log('<span data-spr=feat_door></span> Floor clear — stairs down unseal!', 'important');
-      sfx('stairs');
+      sfx('floorclear');
     }
     updateBars();
   }
@@ -7913,6 +7913,75 @@ function sfx(name) {
       fan(784, 0.6,  t + 0.45, 0.55); // G (held, top of the run)
       fan(1047, 0.6, t + 0.45, 0.4);  // C above — victory chord
       noise(0.5, t + 0.45, 0.28, 6000, 'highpass'); // cymbal swell
+      break;
+    }
+    // ── ACHIEVEMENT / VICTORY STINGS ── a little family of distinct, celebratory
+    // cues, one per kind of accomplishment, so each win sounds like its own reward
+    // (floor cleared, bounty done, points banked, ascension, deeds, feats). Kept
+    // short and each in a different register/motif so they're told apart by ear. ──
+    case 'floorclear': { // all foes down, the stairs unseal — a bright, quick rising flourish
+      [523, 659, 784].forEach((f, i) => {   // C E G ascent
+        tone(f, 0.11, t + i * 0.06, 'square', 0.34);
+        tone(f, 0.11, t + i * 0.06, 'triangle', 0.16);
+      });
+      tone(1047, 0.34, t + 0.18, 'triangle', 0.30); // lands on high C
+      tone(1568, 0.32, t + 0.20, 'sine', 0.16);      // airy fifth on top
+      noise(0.28, t + 0.18, 0.12, 6800, 'highpass'); // light shimmer
+      break;
+    }
+    case 'bounty': { // bounty complete — a proud two-note herald with a coin-bright sparkle
+      const h = (f, w, v) => { tone(f, 0.16, w, 'sawtooth', v * 0.4); tone(f, 0.16, w, 'square', v * 0.26); };
+      h(587, t, 0.5);          // D stab
+      h(880, t + 0.14, 0.55);  // lifts to a held A
+      tone(1319, 0.34, t + 0.16, 'sine', 0.18);  // bright third shimmer
+      tone(1760, 0.1,  t + 0.16, 'square', 0.16); // coin glint
+      tone(2093, 0.12, t + 0.24, 'square', 0.14);
+      noise(0.2, t + 0.14, 0.12, 6500, 'highpass');
+      break;
+    }
+    case 'ascpoint': { // an ascendancy point banked — an ethereal, ascending crystalline shimmer
+      [784, 988, 1319, 1568].forEach((f, i) => tone(f, 0.2, t + i * 0.05, 'sine', 0.2)); // rising G B E G bells
+      tone(2093, 0.5, t + 0.22, 'sine', 0.16);       // sustained high sparkle
+      tone(196,  0.5, t,        'sine', 0.22, 392);  // soft rising sub for lift
+      noise(0.4, t + 0.05, 0.12, 7200, 'highpass');  // airy sweep
+      break;
+    }
+    case 'ascend': { // ascension into a class path — a grand, radiant rising chord that blooms open
+      [392, 523, 659].forEach((f, i) => { tone(f, 0.16, t + i * 0.08, 'sawtooth', 0.34); tone(f, 0.16, t + i * 0.08, 'triangle', 0.2); }); // G C E rise
+      const land = t + 0.30;
+      tone(784,  0.7,  land,        'triangle', 0.34); // G
+      tone(988,  0.7,  land,        'triangle', 0.28); // B
+      tone(1175, 0.7,  land,        'sine',     0.24); // D — bright major bloom
+      tone(1568, 0.65, land + 0.04, 'sine',     0.18);
+      tone(98,   0.8,  land,        'sawtooth', 0.34, 49); // deep radiant root
+      noise(0.6, land, 0.2, 7000, 'highpass');            // radiant sweep
+      break;
+    }
+    case 'bosspoint': { // a Boss Point banked — a weighty low bloom into a resonant power chord
+      tone(98,  0.5, t,        'sawtooth', 0.42, 49); // low root swell
+      tone(196, 0.5, t + 0.02, 'square',   0.26);
+      const c = t + 0.16;
+      tone(392, 0.5,  c,        'sawtooth', 0.32); // G
+      tone(587, 0.5,  c,        'square',   0.24); // D — open fifth
+      tone(784, 0.55, c + 0.02, 'triangle', 0.24); // octave, power-chord shimmer
+      noise(0.4, t, 0.18, 3200, 'lowpass');        // dark body
+      noise(0.3, c, 0.12, 6000, 'highpass');       // top sparkle
+      break;
+    }
+    case 'deed': { // a deed earned — a noble, ceremonial IV→I resolve with a bright bell
+      const h = (f, w, v) => { tone(f, 0.4, w, 'sawtooth', v * 0.34); tone(f, 0.4, w, 'triangle', v * 0.26); };
+      h(349, t,        0.5);  // F (IV)
+      h(523, t + 0.18, 0.55); // C (I) — the resolve
+      tone(1047, 0.5, t + 0.2,  'sine', 0.22); // bright bell over the cadence
+      tone(1568, 0.4, t + 0.24, 'sine', 0.14);
+      noise(0.35, t + 0.18, 0.12, 6200, 'highpass');
+      break;
+    }
+    case 'achieve': { // an achievement/feat earned — a bright trophy triad landing on a sparkle
+      [659, 880, 1319].forEach((f, i) => { tone(f, 0.14, t + i * 0.07, 'square', 0.3); tone(f, 0.14, t + i * 0.07, 'sine', 0.16); }); // E A high-E bells
+      tone(1760, 0.4, t + 0.24, 'sine', 0.2);  // sparkling top
+      tone(2637, 0.3, t + 0.26, 'sine', 0.12);
+      noise(0.32, t + 0.2, 0.14, 7400, 'highpass'); // glitter
       break;
     }
     case 'stairs':  [392, 330, 262].forEach((f, i) => tone(f, 0.14, t + i * 0.08, 'triangle', 0.4)); break;
@@ -12700,7 +12769,7 @@ function checkBountyComplete() {
   if (inTown || titleOpen) return;
   if (typeof showLootBanner === 'function') {
     showLootBanner('Bounty complete!', 'RETURN TO TOWN TO CLAIM', 'var(--uncommon)',
-      () => { sfx('milestone'); screenFlash('var(--uncommon)'); });
+      () => { sfx('bounty'); screenFlash('var(--uncommon)'); });
   }
   log('<span data-spr=scroll></span> <b style="color:var(--uncommon)">Bounty complete!</b> Claim your reward in town.', 'important');
 }
@@ -14503,7 +14572,7 @@ function ascend(key) {
   recomputeMaxStats();
   if (player.hp > player.maxHp) player.hp = player.maxHp;
   if (player.mp > player.maxMp) player.mp = player.maxMp;
-  sfx('levelup'); screenFlash(a.color);
+  sfx('ascend'); screenFlash(a.color);
   log(`Ascended as a ${a.name}! A new path opens.${refunded ? ` ${refunded} path point${refunded === 1 ? '' : 's'} refunded.` : ''}`, 'important');
   skillView = 'path';
   updateBars(); renderPanel(); renderTrainer(); renderSkillBar(); draw(); saveGame();
@@ -21824,7 +21893,7 @@ function onEnemyDefeated(e) {
     // ledger — earned = distinct boss floors cleared). Spend it at the Ascendant
     // Weave in town.
     const avail = weaveAvail(pointsEarned(player.bossFirstKills), player.weaveBoard);
-    sfx('levelup');
+    sfx('bosspoint');
     log(`<span data-spr=q_relic></span> First clear — <b>+1 Boss Point</b>! Spend at the Ascendant Weave in town. ${avail} to spend.`, 'important');
   }
   // ── Endgame boss-kill hooks ──
@@ -25075,7 +25144,9 @@ function checkLevelUp() {
     // a free full reset, so health and mana stay finite resources you manage.
     player.hp = Math.min(player.maxHp, player.hp + Math.round(player.maxHp * 0.4));
     player.mp = Math.min(player.maxMp, player.mp + Math.round(player.maxMp * 0.4));
-    sfx('levelup');
+    // A level that also banks an ascendancy point gets its own ethereal sting so the
+    // milestone stands out from an ordinary level-up fanfare.
+    if (ascGained) sfx('ascpoint'); else sfx('levelup');
     showLevelUpBanner(player.level);
     log(`<span data-spr=ui_level></span> LEVEL UP! Now level ${player.level}!`, 'important');
     log(`<span data-spr=mat_glimmer></span> +${ATTR_POINTS_PER_LEVEL} attribute points (HERO tab) · +${SKILL_POINTS_PER_LEVEL} skill point (SKILLS tab)${ascGained ? ` · +${ascGained} ascendancy point (PATH tree)` : ''}.`, 'important');
@@ -29629,7 +29700,7 @@ function checkHardcoreAchievements() {
       log(`${hcIcon(15)} <b style="color:var(--red-350)">Hardcore</b> — earned <b>${earned.length}</b> feats: ${earned.map(a => a.name).join(', ')}.`, 'important');
     }
   } catch (e) {}
-  try { sfx('levelup'); } catch (e) {}
+  try { sfx('achieve'); } catch (e) {}
 }
 
 // ── Account-wide achievements ── The Kitten-mode twin of the hardcore check above.
@@ -29653,7 +29724,7 @@ function checkAchievements() {
       log(`${trophy} <b style="color:var(--gold)">Achievements</b> — earned <b>${earned.length}</b> feats: ${earned.map(a => a.name).join(', ')}.`, 'important');
     }
   } catch (e) {}
-  try { sfx('levelup'); } catch (e) {}
+  try { sfx('achieve'); } catch (e) {}
 }
 
 // One-time boot migration for account-wide achievements. The per-slot tally shipped
@@ -34960,7 +35031,7 @@ function egDeedsEvaluate() {
     for (const id of (r.newlyCompleted || [])) {
       const d = DEEDS.find(x => x.id === id);
       log(dlIcon('deed_trophy', 16) + ' <b>Deed earned:</b> ' + escapeHtml(d ? d.name : id) + ' (+' + (d ? d.renown : 0) + ' Renown)', 'important');
-      if (typeof sfx === 'function') sfx('levelup');
+      if (typeof sfx === 'function') sfx('deed');
     }
     egRenownApplyRewards();
     writeHallDeeds();
