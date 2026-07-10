@@ -11,6 +11,9 @@ export const CHANGELOG = [
     "The wandering merchant and mystic no longer block their tile — walk straight through (or stand right on) them instead of bumping to a stop. Step beside or onto one and press interact to open their wares or pacts, same as before.",
     "Enemies path through them too, so a vendor can never wall a foe out of reach on a tight floor.",
   ] },
+  { date: "2026-07-09", size: "small", v: "Ascendancy points get their own badge on the SKILLS tab", by: "Jeff Louie", notes: [
+    "Unspent ascendancy points now show in their own light-blue badge on the SKILLS tab, kept separate from the red skill-point badge — the two counts are no longer added into one number, since each buys a different tree.",
+  ] },
   { date: "2026-07-07", size: "small", v: "One-tap Mute All at the top of Audio", by: "Jeff Louie", notes: [
     "Settings ▸ Audio opens with a Mute All button — one tap silences music and every sound at once, no more stepping each channel down.",
     "Tap it again to restore your exact mix; every channel keeps the level you set. Nudging any volume back up also lifts the mute.",
