@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "small", v: "No free gear when you step onto a boss floor", by: "Jeff Louie", notes: [
+    "Reaching a new deepest floor no longer drops a gear cache into your bag. Those depth rewards landed every fifth floor — exactly the boss floors — so you were handed a free item the moment you entered a guardian's arena. The arena stays clutter-free now; earn the guardian's spoils by beating it.",
+    "The NEW DEPTH RECORD banner and its bonus gold still play when you push deeper.",
+  ] },
   { date: "2026-07-09", size: "small", v: "Cursed gear always has a real drawback", by: "Jeff Louie", notes: [
     "Fixed cursed items that felt like a free upgrade: a curse's penalty could land on a stat whose negative value quietly floored to zero (crit, dodge, block, pen, life-leech, attack speed and other benefit-only ratings), so the drawback did nothing.",
     "A curse now always spends its price on a stat you FEEL — a core stat (Attack, Defense, Max HP/MP, Speed) or a damage boost (Increased/Boss Damage, Spell/Skill Power) — and prefers to drag down a stat the item was already strong in. The gift and the penalty stay equally strong.",

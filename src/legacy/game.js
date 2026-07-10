@@ -3359,7 +3359,7 @@ function diffDebuffMult() { return Math.pow(BALANCE.conquestScar, diffClearedCou
 // longer claws either back.
 function recordDepth() {
   markDepthReached(dungeonLevel);
-  // Depth MILESTONES (the every-5-floors cache) pay out on physically SETTING FOOT
+  // Depth MILESTONES (the every-5-floors depth record) pay out on physically SETTING FOOT
   // on a new deepest floor — tracked on `milestoneFloor`, NOT `maxFloor`. maxFloor
   // now also jumps a floor early when you clear one (its unsealed stairs make the
   // next floor re-enterable at the Gate), so keying the fanfare off it would fire a
@@ -6229,7 +6229,7 @@ let player = { x: 5, y: 5,
   maxFloor: 1,
   // Deepest floor the hero has physically SET FOOT ON. Distinct from maxFloor,
   // which now runs a floor ahead after a clear. Depth milestones (the every-5
-  // cache + fanfare) fire off this on arrival, so the "floor N reached" banner
+  // depth record + fanfare) fire off this on arrival, so the "floor N reached" banner
   // never triggers while you're still standing on floor N-1.
   milestoneFloor: 1,
   // Deepest floor currently *re-enterable* at the Gate. Tracks maxFloor — a death
@@ -7406,7 +7406,7 @@ window.gameGuide = function gameGuide(topic) {
     loot: [
       `Rarity is COLOUR ONLY (no text labels), lowest to highest: grey → white → green → blue → purple → orange → red. Higher tiers allow more bonus affixes.`,
       `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike the random rarities it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and a fixed SET of 2–3 signature powers (each a "legendary modifier" like Vampiric) — where an ordinary legendary rolls just one, a unique stacks several, and they compound. Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. (Set pieces — see below — are the OTHER fixed, named red artifacts.) gameState() marks worn/held uniques with a "unique" id and "fixed":true, and lists a piece's powers in item "powers".`,
-      `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a depth-milestone cache, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
+      `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
       `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
       `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. The drawback always lands on a property you'll actually FEEL — a core stat (Attack, Defense, Max HP/MP, Speed) or a damage amp (Increased/Boss Damage, Spell/Skill Power) — never on a benefit-only rating whose negative would just floor to zero, so a curse's price is always paid. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — a curse hits ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
       `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
@@ -19929,8 +19929,8 @@ function showLevelUpBanner(level) {
 
 // ── LOOT BANNER ── the big center-screen payoff for a legendary/unique find
 // (and the deep-dive milestone), coloured in the rarity hue.
-// Banners can fire back-to-back — a depth milestone reveals its cache the same
-// instant it shows its own "NEW DEPTH RECORD" banner, and two big drops can land
+// Banners can fire back-to-back — a depth milestone shows its "NEW DEPTH RECORD"
+// banner the same instant a big drop lands, and two big drops can land
 // together. Rather than let a later banner clobber one that's still mid-show
 // (which read as a context-free "UNIQUE DROP" popping up out of nowhere on a new
 // floor), queue them and play each in turn. Each gets its full pop animation, and
@@ -19983,24 +19983,20 @@ function lootReveal(item) {
 }
 
 // ── DEPTH MILESTONES ── every 5 floors of NEW depth pays a visible dividend: a
-// banner, a fanfare, bonus gold and a guaranteed cache (rarity floor climbs with
-// depth). Fired from recordDepth whenever a fresh multiple of 5 is crossed.
-function milestoneTier(floor) { return floor >= 30 ? 'legendary' : floor >= 15 ? 'epic' : 'rare'; }
+// banner, a fanfare and bonus gold. Fired from recordDepth whenever a fresh
+// multiple of 5 is crossed. It grants NO gear on purpose: every milestone floor is
+// a multiple of 5 — i.e. a boss floor — so a cache here dropped a free item into
+// your bag the instant you stepped into the guardian's arena. A boss floor stays
+// clutter-free; its reward is the guardian's own spoils, not a gift on arrival.
 function depthMilestone(prevMax, newMax) {
   const from = Math.floor(prevMax / 5), to = Math.floor(newMax / 5);
   if (to <= from) return;
   const floorHit = to * 5;
-  // Show the depth banner first (fanfare + blue flash land as it appears); the
-  // cache's own reveal banner queues behind it via acquireLoot → lootReveal, so a
-  // unique cache now reads as "NEW DEPTH RECORD" then "UNIQUE DROP", not a lone
-  // context-free unique popup the instant you step onto the floor.
   showLootBanner(`${floorTag(floorHit)} reached`, 'NEW DEPTH RECORD', '#7fe0ff',
     () => { sfx('milestone'); screenFlash('#3aa0ff'); });
   const bonusGold = 25 * floorHit;
   player.gold += bonusGold;
-  const cache = generateItem(4, newMax + 1, milestoneTier(floorHit));
-  if (acquireLoot(cache) === 'keep') log(`<span data-spr=q_relic></span> New depth — ${floorTag(floorHit)}! +<span data-spr=ic_money></span>${bonusGold} and a cache: ${logItem(cache)}.`, 'important');
-  else log(`<span data-spr=q_relic></span> New depth — ${floorTag(floorHit)}! +<span data-spr=ic_money></span>${bonusGold} and a bonus cache.`, 'important');
+  log(`<span data-spr=q_relic></span> New depth — ${floorTag(floorHit)}! +<span data-spr=ic_money></span>${bonusGold}.`, 'important');
   updateBars();
 }
 
@@ -36028,7 +36024,6 @@ const __DL_FN_BRIDGE = {
   playNextLootBanner,
   isTopTierItem,
   lootReveal,
-  milestoneTier,
   depthMilestone,
   greedLootMult,
   greedGoldMult,
