@@ -32,14 +32,15 @@ export function itemCatalogKey(item) {
 // Build the ordered catalog from the static data. Uniques first (data order), then
 // every set piece grouped by set — a stable order the grid can rely on. Each entry
 // carries everything a tooltip needs WITHOUT a rolled item: its fixed `native`
-// stat, its six `mods`, its signature `power` and flavour.
+// stat, its six `mods`, its signature `powers` (a unique carries 2–3; `power` keeps
+// the primary for back-compat) and flavour.
 export function buildCollectionCatalog(uniques = UNIQUES, sets = ITEM_SETS) {
   const out = [];
   for (const d of uniques) {
     out.push({
       key: uniqueCatalogKey(d.id), kind: 'unique', id: d.id,
       name: d.name, base: d.base, slot: d.slot, cls: d.cls,
-      native: d.native, mods: d.mods, power: d.power, flavor: d.flavor,
+      native: d.native, mods: d.mods, power: d.power, powers: d.powers, flavor: d.flavor,
       setId: null, setName: null,
     });
   }
@@ -48,7 +49,7 @@ export function buildCollectionCatalog(uniques = UNIQUES, sets = ITEM_SETS) {
     out.push({
       key: setCatalogKey(piece.id), kind: 'set', id: piece.id,
       name: piece.name, base: piece.base, slot: piece.slot, cls: set.cls,
-      native: piece.native, mods: piece.mods, power: piece.power, flavor: piece.flavor,
+      native: piece.native, mods: piece.mods, power: piece.power, powers: piece.powers, flavor: piece.flavor,
       setId, setName: set.name || setId,
     });
   }

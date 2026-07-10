@@ -36,3 +36,37 @@ export function cursedStatCeiling(normalMax, curseMult) {
   const nm = Math.max(0, normalMax);
   return Math.round(nm) + statCurseSwing(nm, curseMult);
 }
+
+// ── WHERE A CURSE PENALTY IS ALLOWED TO LAND ──
+// A curse's drawback is only a REAL drawback if a NEGATIVE value on the stat actually
+// subtracts in combat. Most gear stats are benefit-only RATINGS — crit, dodge, block,
+// pen, leech, attack/cast speed, double-strike, cooldown/mana reduction, area, bleed,
+// tenacity — whose combat layer floors them at 0 (rated() returns 0 for rating ≤ 0,
+// penFraction() clamps, Math.max(0,…) guards). Push a penalty onto one of those while
+// the hero has none from elsewhere and the negative simply vanishes: "cursed" gear
+// with no felt downside (the bug this list fixes).
+//
+// These are the stats whose negative value genuinely BITES: flat pools that combine
+// with a hero base so a negative directly lowers a real total (Attack, Defense, Max
+// HP/MP, Speed) and the multiplicative damage amps (Increased Damage, Boss Damage,
+// Spell/Skill Power) where a negative scales every hit DOWN. A curse penalty must come
+// from here so the price is always paid.
+export const FELT_CURSE_PENALTY_STATS = ['ATK', 'DEF', 'HP', 'MP', 'SPD', 'IDMG', 'BOSSDMG', 'SPELLPWR', 'SKILLPWR'];
+
+// The candidate stats a curse may lay its PENALTY on, given the item's affix `pool`,
+// the `boostStat` its gift already took (never also the penalty), and `positive` — the
+// stats the item currently carries a > 0 value on. Only ever returns FELT stats (see
+// above), so the drawback can never be invisible. Prefers a felt stat the item already
+// invests in (turning a genuine strength into a weakness), then any felt stat in the
+// pool, then — only for a degenerate pool with no felt stat — the felt core, so a real
+// item is never left with an empty candidate set. Returns [] only for an empty pool
+// AND an empty core (never in practice), which the caller reads as "don't curse it".
+export function cursePenaltyStats(pool, boostStat, positive = []) {
+  const felt = new Set(FELT_CURSE_PENALTY_STATS);
+  const pos = new Set(positive);
+  const feltPool = (pool || []).filter(s => s !== boostStat && felt.has(s));
+  const owned = feltPool.filter(s => pos.has(s));
+  if (owned.length) return owned;
+  if (feltPool.length) return feltPool;
+  return FELT_CURSE_PENALTY_STATS.filter(s => s !== boostStat);
+}
