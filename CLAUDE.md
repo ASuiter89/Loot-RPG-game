@@ -60,6 +60,10 @@ lives in `src/legacy/game.js` and shrinks as code is extracted.)
   every change through a feature branch + PR so GitHub gates the merge. Resolve
   conflicts yourself, keeping both sides' intent. Only stop to ask if a request is
   genuinely impossible or self-contradictory.
+  - **ALWAYS open a PR when you finish a change — don't stop at a pushed branch.**
+    Once the work is committed and pushed and the gates are green, open the PR into
+    `main` as the final step (no need to ask first). Pushing the branch is not
+    "done"; the PR is.
 - **All on-screen art is real pixel art — never an emoji as the thing itself.**
   Every game asset (heroes, enemies, bosses, NPCs, minions, items, pickups,
   projectiles, status icons, world objects) must be actual pixel-art imagery on the
