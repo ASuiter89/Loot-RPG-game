@@ -15,7 +15,7 @@
 //   name    the artifact's proper name (unique across the set)
 //   cls     the class/archetype it's built for ('warrior'|'rogue'|'mage'|'templar'|'any')
 //   native  its signature stat — baked in & protected, may be unusual for the type.
-//           Never the slot's auto headline (DMG for weapons, DEF/ATK for armour, the
+//           Never the slot's auto headline (DMG for weapons, DEF for armour, the
 //           family headline for off-hands); for jewelry the native IS the headline.
 //   mods    EXACTLY six modifiers: five stats + one attribute, all distinct and none
 //           equal to the native or a headline. Their values scale with depth on drop.

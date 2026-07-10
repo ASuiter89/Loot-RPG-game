@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "small", v: "Hands gear drops its innate Attack", by: "Andrew Suiter", notes: [
+    "Gloves, gauntlets, bracers and grips no longer carry a built-in Attack stat — hands now lean on Defense plus their signature stat, like every other armor slot.",
+    "Existing hands gear keeps the Attack it already rolled; only newly found and forged pieces skip it.",
+  ] },
   { date: "2026-07-07", size: "small", v: "One-tap Mute All at the top of Audio", by: "Jeff Louie", notes: [
     "Settings ▸ Audio opens with a Mute All button — one tap silences music and every sound at once, no more stepping each channel down.",
     "Tap it again to restore your exact mix; every channel keeps the level you set. Nudging any volume back up also lifts the mute.",

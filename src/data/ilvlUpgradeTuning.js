@@ -29,7 +29,7 @@ export const ILVL_UPGRADE = {
   coreBase: 0.3, corePerRank: 0.4, coreIlvlStep: 0.04,
 
   // Generation-curve factors per HEADLINE role, used to rescale the deterministic
-  // headline values (weapon DMG, armour/shield DEF, hands/off-hand ATK, shield
+  // headline values (weapon DMG, armour/shield DEF, off-hand ATK, shield
   // BLOCK) by the ratio of the curve at the two item levels. These MIRROR the
   // slopes baked into applyBaseStats() in src/legacy/game.js — keep them in sync:
   //   DMG   base = (2 + lvl*1.2) * dmgMult * dm

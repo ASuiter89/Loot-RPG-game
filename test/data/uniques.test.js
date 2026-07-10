@@ -49,8 +49,7 @@ const CLASSES = new Set(['warrior', 'rogue', 'mage', 'templar', 'any']);
 // families in applyBaseStats.
 function mandatoryHeadline(slot, base) {
   if (slot === 'weapon') return ['DMG'];
-  if (slot === 'hands') return ['DEF', 'ATK'];
-  if (slot === 'head' || slot === 'chest' || slot === 'legs') return ['DEF'];
+  if (slot === 'head' || slot === 'chest' || slot === 'hands' || slot === 'legs') return ['DEF'];
   if (slot === 'offhand') {
     if (['Buckler', 'Kite Shield', 'Tower Shield'].includes(base)) return ['DEF', 'BLOCK'];
     if (['Tome', 'Focus'].includes(base)) return ['SPELLPWR'];
