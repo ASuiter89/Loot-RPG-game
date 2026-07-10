@@ -7167,16 +7167,21 @@ window.gameState = function gameState(radius) {
       townView: inTown ? townView : null,
       // Walkable-town live state (null outside town). The hero roams a fixed map
       // (position in player.x/player.y) and walks up to a keeper to use it. `objects`
-      // are every interactable with tile position + lock state; `nearby` is the one
-      // in reach right now (Chebyshev ≤1 — what pressing interact would open, or the
-      // Dungeon Gate / Town Portal); `portal` is present only when a floor is held.
+      // are every interactable present (only UNLOCKED keepers appear; each carries a
+      // `newArrival` flag when it wears a "!" for having just arrived); `nearby` is
+      // the one in reach right now (Chebyshev ≤1 — what pressing interact would open,
+      // or the Dungeon Gate / Town Portal); `portal` is present only when held.
       town: inTown ? (() => {
         const list = townInteractables();
         const near = nearestInteractable(player.x, player.y, list);
         const decorate = (o) => {
           const req = o.type === 'npc' ? townServiceReq(o.kind) : null;
           const locked = !!(req && !req.ok());
-          return { kind: o.kind, name: o.name, type: o.type, x: o.x, y: o.y, locked, need: locked ? req.need : null };
+          // Present keepers are always unlocked now (locked ones don't appear in the
+          // walkable town); `newArrival` flags a keeper that has arrived but hasn't
+          // been greeted yet (it wears a "!" over its head).
+          const newArrival = o.type === 'npc' && !locked && npcNewlyArrived(o.kind);
+          return { kind: o.kind, name: o.name, type: o.type, x: o.x, y: o.y, locked, need: locked ? req.need : null, newArrival };
         };
         return {
           walkable: canMove,
@@ -7478,12 +7483,12 @@ window.gameGuide = function gameGuide(topic) {
       `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
     ],
     town: [
-      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the service keepers making camp in trade clusters around the fire and a treeline framing the clearing (same layout every visit). WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town lists every keeper/object with its tile position + lock state; .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
+      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the service keepers SCATTERED across the green and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all (same layout every visit). A keeper only appears once its service is UNLOCKED — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
       `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
-      `Mystic: buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
+      `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Every keeper stands in the town from the start, but a service unlocks as you progress: Healer, Merchant, Ramen House and Vault are open immediately; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked keeper stands GREYED with a padlock badge and, on interact, announces its unlock requirement instead of opening. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
@@ -12478,10 +12483,15 @@ function buildTown() {
     if (solid) for (const [fx, fy] of decorFootprint(id, d.x, d.y)) furnitureMap[fy + ',' + fx] = 1;
   }
 
-  // The service keepers, hand-placed among the districts. `kind` maps 1:1 to
-  // openTownService(kind); `tag` is the small pixel badge above them (and in the
-  // interaction prompt). Their body is the animated walk sprite drawTownWalk(kind).
-  townNpcs = TOWN_NPCS.map((n) => ({ x: n.x, y: n.y, kind: n.kind, name: n.name, tag: TOWN_SVC_TAG[n.kind] || 'npc_quest' }));
+  // The service keepers, scattered across the clearing (late-game ones in the
+  // hedged sanctum). `kind` maps 1:1 to openTownService(kind); `tag` is the small
+  // pixel badge above them (and in the interaction prompt); body is the animated
+  // walk sprite drawTownWalk(kind). Only keepers whose service is UNLOCKED have
+  // "arrived" — a locked keeper is simply ABSENT (no greyed placeholder), so the
+  // town fills in as the hero earns each service.
+  townNpcs = TOWN_NPCS
+    .filter((n) => townServiceAvailable(n.kind))
+    .map((n) => ({ x: n.x, y: n.y, kind: n.kind, name: n.name, tag: TOWN_SVC_TAG[n.kind] || 'npc_quest' }));
   // Keepers block their tile (like the dungeon merchant/mystic) so you stand
   // ADJACENT and interact — furnitureMap is the solidity the collision/path checks
   // already read (playerSolidCell/tileBlockedByObject). The Gate and Portal are NOT
@@ -13049,6 +13059,8 @@ function declineGreed() { const ov = document.getElementById('greed-overlay'); i
 
 function openTownService(kind) {
   townServiceKind = kind;
+  // Greeting a keeper clears its "just arrived" exclamation mark for good.
+  if (kind && kind !== 'gate' && kind !== 'portal') greetTownNpc(kind);
   if (kind === 'merchant') {
     // A well-stocked town merchant: several gear pieces geared to the deepest
     // floor you've reached, so shopping stays relevant. (Potions are a built-in
@@ -13111,8 +13123,8 @@ const TOWN_MENU = [
     req: { ok: () => diffOf(player.maxFloor || 1) >= 2, need: 'Reach Hardened' } },
   { kind: 'bounty',      name: 'Bounty Board',desc: 'Take a bounty for a reward',
     req: { ok: () => diffClearedCount() >= 1,           need: 'Unlock Hardened' } },
-  { kind: 'mystic',       name: 'Mystic',      desc: 'Forge a risky pact',
-    req: { ok: () => diffClearedCount() >= 1,           need: 'Unlock Hardened' } },
+  // (The Mystic no longer keeps a town camp — the Wandering Mystic is met on
+  // dungeon floors instead; see spawnMystic / openMystic.)
   { kind: 'sellsword',   name: 'Sellsword',   desc: 'Hire a companion',
     req: { ok: () => diffOf(player.maxFloor || 1) >= 3, need: 'Reach Brutal' } },
   // The Vault is open from the start — except to a Solo Self-Found hero, whose
@@ -15462,6 +15474,24 @@ function drawTownBuildings(offX, offY, tw, th) {
 // sprite + role badge + name, greyed with a lock badge while its service is still
 // gated), and a bobbing prompt over whichever object the hero is standing next to.
 // Culled implicitly — the town is small and iterated once, like the roaming vendor.
+// A newly-arrived keeper flags a bobbing pixel-art "!" over their head — the
+// classic "come see me" marker — until you greet them (open their service). Drawn
+// with crisp blocks (an outlined gold stem + dot), never an emoji, per the art rule.
+function drawTownArrivedMark(cx, footY, tw, th) {
+  const u = Math.max(2, Math.round(tw * 0.1));                 // pixel unit
+  const bob = Math.round(Math.sin(animNow() / 260) * th * 0.06);
+  const x = Math.round(cx), top = Math.round(footY - th * 2.02) + bob;
+  glowUnder(x, top + u * 3, tw * 0.34, 'rgba(255,224,90,0.4)');
+  const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false;
+  const rect = (rx, ry, rw, rh, col) => { ctx.fillStyle = col; ctx.fillRect(rx, ry, rw, rh); };
+  const OUT = 'rgba(20,14,0,0.85)', FILL = '#ffd23f';
+  rect(x - u - 1, top - 1, u * 2 + 2, u * 4 + 2, OUT);        // stem outline
+  rect(x - u,     top,     u * 2,     u * 4,     FILL);       // stem
+  rect(x - u - 1, top + u * 5 - 1, u * 2 + 2, u * 2 + 2, OUT); // dot outline
+  rect(x - u,     top + u * 5,     u * 2,     u * 2,     FILL); // dot
+  ctx.imageSmoothingEnabled = sm;
+}
+
 function drawTownWorld(offX, offY, tw, th, scale) {
   const cxOf = (tx) => offX + tx * tw + tw / 2;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -15484,25 +15514,24 @@ function drawTownWorld(offX, offY, tw, th, scale) {
   const pulse = 0.14 + 0.1 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2));
   townNpcs.forEach((n) => {
     const cx = cxOf(n.x), footY = offY + n.y * th + th * 0.92;
-    const req = townServiceReq(n.kind);
-    const locked = !!(req && !req.ok());
+    // Every keeper here is UNLOCKED (buildTown never places a locked one), so all
+    // draw at full presence — the warm hub glow, body, role badge and name label.
     drawActorShadow(cx, footY, tw * 0.78);
-    glowUnder(cx, footY - th * 0.28, tw * 0.5, locked ? `rgba(150,150,162,${pulse})` : `rgba(255,210,120,${pulse + 0.06})`);
-    ctx.save();
-    if (locked) ctx.globalAlpha = 0.55;   // greyed while the service is gated
+    glowUnder(cx, footY - th * 0.28, tw * 0.5, `rgba(255,210,120,${pulse + 0.06})`);
     // Body: the animated walk sprite; fall back to the static role sprite.
     if (!drawTownWalk(n.kind, cx, footY, Math.round(th * 1.5))) {
       const tSprite = TOWN_SPRITE[n.kind];
       if (tSprite && spriteReady) drawSpriteC(tSprite, cx, footY - th * 0.42, charSpritePx(tw));
     }
-    ctx.restore();
-    // Badge above the head: a lock while gated, else the role glyph.
-    const badge = locked ? 'feat_lock' : n.tag;
-    if (badge && spriteReady) drawSpriteC(badge, cx, footY - th * 1.6, Math.round(tw * 0.42));
+    // Role glyph badge above the head.
+    if (n.tag && spriteReady) drawSpriteC(n.tag, cx, footY - th * 1.6, Math.round(tw * 0.42));
+    // A keeper freshly arrived (unlocked since you last greeted them) flags a
+    // bobbing "!" over their head until you walk up and open their service.
+    if (npcNewlyArrived(n.kind)) drawTownArrivedMark(cx, footY, tw, th);
     // Name label, outlined for legibility on grass or cobble.
     ctx.font = `bold ${Math.max(12, Math.round(tw * 0.2))}px monospace`;
     ctx.lineWidth = Math.max(2, tw * 0.06); ctx.strokeStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillStyle = locked ? '#c2c2cc' : '#ffe9b0';
+    ctx.fillStyle = '#ffe9b0';
     ctx.strokeText(n.name, cx, footY + th * 0.18);
     ctx.fillText(n.name, cx, footY + th * 0.18);
   });
@@ -25160,6 +25189,20 @@ function pickupChestsAt(x, y) {
 function townServiceReq(kind) {
   const e = (typeof TOWN_MENU !== 'undefined') ? TOWN_MENU.find((s) => s.kind === kind) : null;
   return e ? e.req : null;
+}
+// A town service is available (its keeper has "arrived") once its unlock req passes
+// — or immediately if it has none. buildTown only places available keepers.
+function townServiceAvailable(kind) {
+  const req = townServiceReq(kind);
+  return !(req && !req.ok());
+}
+// Which keepers the hero has already greeted (walked up to and opened). A keeper
+// that has arrived but is still un-greeted flags a "!" so a newly-unlocked service
+// draws the eye. Persisted on the player (player.metNpcs), so it's a one-time nudge.
+function npcNewlyArrived(kind) { return !(player.metNpcs && player.metNpcs[kind]); }
+function greetTownNpc(kind) {
+  if (!player.metNpcs) player.metNpcs = {};
+  if (!player.metNpcs[kind]) { player.metNpcs[kind] = 1; saveGameSoon(); }
 }
 // Walk-up interaction in the walkable town: if a keeper / the Dungeon Gate / the
 // Town Portal sits within one tile (Chebyshev ≤1, like the dungeon merchant), act
