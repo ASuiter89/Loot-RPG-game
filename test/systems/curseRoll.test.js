@@ -4,6 +4,8 @@ import {
   curseTierMult,
   statCurseSwing,
   cursedStatCeiling,
+  FELT_CURSE_PENALTY_STATS,
+  cursePenaltyStats,
 } from '../../src/systems/curseRoll.js';
 
 describe('CURSE_TIER_MULT', () => {
@@ -64,5 +66,64 @@ describe('cursedStatCeiling', () => {
     for (const nm of [8, 15, 25, 45, 100, 480]) {
       expect(cursedStatCeiling(nm, 5)).toBeGreaterThan(statCurseSwing(nm, 5));
     }
+  });
+});
+
+describe('FELT_CURSE_PENALTY_STATS', () => {
+  it('is only stats whose NEGATIVE value actually bites (never a floored-at-0 rating)', () => {
+    // Core pools that combine with a hero base + the multiplicative damage amps.
+    expect(FELT_CURSE_PENALTY_STATS).toEqual(
+      expect.arrayContaining(['ATK', 'DEF', 'HP', 'MP', 'SPD', 'IDMG', 'BOSSDMG', 'SPELLPWR', 'SKILLPWR']),
+    );
+    // Benefit-only ratings that combat floors at 0 must NOT be curse-penalty targets —
+    // a negative there is invisible, which is the whole bug this guards against.
+    for (const rating of ['CRIT', 'DODGE', 'BLOCK', 'DR', 'PEN', 'LEECH', 'DBLSTRIKE', 'ATKSPD', 'CDR', 'TENAC', 'ACC']) {
+      expect(FELT_CURSE_PENALTY_STATS).not.toContain(rating);
+    }
+  });
+});
+
+describe('cursePenaltyStats', () => {
+  // A realistic weapon-ish pool: mostly benefit-only ratings, a few felt stats.
+  const WEAPON_POOL = ['ATK', 'ACC', 'CRIT', 'CRITDMG', 'IDMG', 'DBLSTRIKE', 'BOSSDMG', 'PEN', 'LEECH', 'ATKSPD', 'SKILLPWR'];
+
+  it('only ever offers FELT stats — never a rating whose negative floors to 0', () => {
+    const cands = cursePenaltyStats(WEAPON_POOL, 'CRIT', []);
+    expect(cands.length).toBeGreaterThan(0);
+    for (const s of cands) expect(FELT_CURSE_PENALTY_STATS).toContain(s);
+  });
+
+  it('never returns the boosted stat (the gift and the price are different stats)', () => {
+    const cands = cursePenaltyStats(WEAPON_POOL, 'ATK', []);
+    expect(cands).not.toContain('ATK');
+    expect(cands.length).toBeGreaterThan(0);
+  });
+
+  it('prefers a felt stat the item already invests in — degrading a genuine strength', () => {
+    // Item already has +IDMG (felt) and +CRIT (a rating). Boost took ATK. The penalty
+    // should target the OWNED felt stat (IDMG), not a fresh unrelated one.
+    const cands = cursePenaltyStats(WEAPON_POOL, 'ATK', ['IDMG', 'CRIT']);
+    expect(cands).toEqual(['IDMG']);
+  });
+
+  it('ignores an OWNED stat that is a floored rating (CRIT), falling back to felt pool stats', () => {
+    // The only owned stat is CRIT (a floored rating) — not a valid penalty target — so
+    // it must fall through to the pool's felt stats rather than curse an invisible one.
+    const cands = cursePenaltyStats(WEAPON_POOL, 'ATK', ['CRIT']);
+    expect(cands).not.toContain('CRIT');
+    for (const s of cands) expect(FELT_CURSE_PENALTY_STATS).toContain(s);
+    expect(cands).toEqual(expect.arrayContaining(['IDMG', 'BOSSDMG', 'SKILLPWR']));
+  });
+
+  it('falls back to the felt core when the pool has NO felt stat, so a real item is never left uncursable', () => {
+    const ratingsOnly = ['CRIT', 'DODGE', 'BLOCK', 'PEN', 'LEECH'];
+    const cands = cursePenaltyStats(ratingsOnly, 'CRIT', []);
+    expect(cands.length).toBeGreaterThan(0);
+    for (const s of cands) expect(FELT_CURSE_PENALTY_STATS).toContain(s);
+  });
+
+  it('is empty only for an empty pool with the whole felt core excluded (never in practice)', () => {
+    expect(cursePenaltyStats([], null, [])).toEqual(FELT_CURSE_PENALTY_STATS);
+    expect(cursePenaltyStats(undefined, null, undefined).length).toBe(FELT_CURSE_PENALTY_STATS.length);
   });
 });
