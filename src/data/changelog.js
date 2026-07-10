@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "small", v: "Covenant Altar reads clearer", by: "Jeff Louie", notes: [
+    "A swearable oath's Dread cost now shows in gold, matching the Total Dread number — red is kept for the Locked gate alone, so the two never read alike.",
+    "The Clear all oaths button is centred and widened instead of squished into the corner.",
+  ] },
   { date: "2026-07-09", size: "small", v: "Walk right through the roaming merchant and mystic", by: "Andrew Suiter", notes: [
     "The wandering merchant and mystic no longer block their tile — walk straight through (or stand right on) them instead of bumping to a stop. Step beside or onto one and press interact to open their wares or pacts, same as before.",
     "Enemies path through them too, so a vendor can never wall a foe out of reach on a tight floor.",

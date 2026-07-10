@@ -4705,6 +4705,12 @@
   .cook-btn { flex: 1; background: linear-gradient(180deg, var(--orange-700), var(--orange-600)); border: 1px solid var(--orange-250); color: var(--paper); font-family: var(--font-ui); font-weight: bold; font-size: 1.4rem; letter-spacing: 1px; padding: 8px 0; border-radius: 6px; cursor: pointer; }
   .cook-btn:active { filter: brightness(0.9); }
   .cook-btn.ghost { background: var(--panel-raised); border-color: var(--border); color: var(--orange-400); flex: 0 0 70px; }
+  /* Covenant altar's lone Clear-all: unlike the cooking pot (where the ghost
+     Clear sits beside wide Cook buttons and its fixed 70px basis is right), here
+     it stands alone — centre it and give it a comfortable width that still
+     shrinks below the viewport on a narrow touch screen. */
+  .cook-actions.cov-clear { justify-content: center; }
+  .cook-actions.cov-clear .cook-btn.ghost { flex: 0 1 min(100%, calc(280px * var(--ui-scale, 1))); padding-left: 16px; padding-right: 16px; }
   .food-row, .recipe-row { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 4px 2px; }
   .recipe-row.locked { opacity: 0.7; }
   /* Icon column is exactly the two text lines tall (their summed line-heights), so a
