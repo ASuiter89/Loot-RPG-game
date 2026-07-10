@@ -69,7 +69,7 @@ export function headlineFactor(role, lvl) {
 }
 
 // Rescale a deterministic HEADLINE value (a weapon DMG endpoint, armour DEF,
-// hands/off-hand ATK, shield BLOCK) by the ratio of its generation curve at the
+// off-hand ATK, shield BLOCK) by the ratio of its generation curve at the
 // two item levels — exactly how it would have been generated deeper. Never below
 // 1, and (bands only grow with depth) never below the current value.
 export function scaleHeadline(value, fromFactor, toFactor) {

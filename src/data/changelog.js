@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "small", v: "Hands gear drops its innate Attack", by: "Jeff Louie", notes: [
+    "Gloves, gauntlets, bracers and grips no longer carry a built-in Attack stat — hands now lean on Defense plus their signature stat, like every other armor slot.",
+    "Existing hands gear keeps the Attack it already rolled; only newly found and forged pieces skip it.",
+  ] },
   { date: "2026-07-09", size: "small", v: "No free gear when you step onto a boss floor", by: "Jeff Louie", notes: [
     "Reaching a new deepest floor no longer drops a gear cache into your bag. Those depth rewards landed every fifth floor — exactly the boss floors — so you were handed a free item the moment you entered a guardian's arena. The arena stays clutter-free now; earn the guardian's spoils by beating it.",
     "The NEW DEPTH RECORD banner and its bonus gold still play when you push deeper.",
@@ -103,7 +107,7 @@ export const CHANGELOG = [
     "Added eight new dance styles to the soundtrack — melodic dubstep, brostep, big room, future funk, electro-funk, French house, organic bass and piano house — roughly doubling the electronic vibes you can lock in from the music picker in Settings.",
     "The soundtrack now drifts to a fresh style about every 90 seconds instead of every two minutes.",
   ] },
-  { date: "2026-07-06", size: "small", v: "Reclaim your grave on a boss floor", by: "Claude", notes: [
+  { date: "2026-07-06", size: "small", v: "Reclaim your grave on a boss floor", by: "Andrew Suiter", notes: [
     "Fixed lost bags being unrecoverable when you fell on a boss floor — the grave had nowhere to spawn in the arena. It now rests right beside the entrance stair, so you step onto it and reclaim everything the moment you return.",
   ] },
   { date: "2026-07-06", size: "large", v: "Endgame update — six late-game systems", by: "Andrew Suiter", notes: [
@@ -116,7 +120,7 @@ export const CHANGELOG = [
     "Every system ships with bespoke pixel art — panel crests, affliction sigils, tiered glyphs, the six deep gods with ascended Uber variants, per-lineage Effigy shards, and deed trophies, frames and badges — plus six animated town keepers who run the new services.",
     "For console play: gameGuide(“covenants”/“weave”/“mirrorforge”/“pantheon”/“cycles”/“deeds”) explains each, and gameState().endgame reports their live state.",
   ] },
-  { date: "2026-07-06", size: "small", v: "Map no longer stretches when the loot drawer opens or folds", by: "Claude", notes: [
+  { date: "2026-07-06", size: "small", v: "Map no longer stretches when the loot drawer opens or folds", by: "Andrew Suiter", notes: [
     "Fixed the map stretching or squishing out of shape when the loot drawer folds, unfolds, or the bag opens — the play area now re-fits itself to whatever width it's given and stays crisp, no page refresh needed.",
   ] },
   { date: "2026-07-06", size: "small", v: "Quest-giver arrow floats above the head, not over the face", by: "Jeff Louie", notes: [
@@ -160,14 +164,14 @@ export const CHANGELOG = [
     "The ✦ item powers on legendary and unique gear — Vampiric, Duelist's, Warmage and all the rest — get their own section in the key, each in its loot-row color with what it does.",
     "The whole key prints in finer type so the much bigger reference stays compact.",
   ] },
-  { date: "2026-07-06", size: "small", v: "Dropped food refuels mana & stamina too", by: "Claude", notes: [
+  { date: "2026-07-06", size: "small", v: "Dropped food refuels mana & stamina too", by: "Jeff Louie", notes: [
     "Snacks picked up off the floor now restore MP and Stamina alongside HP — the same amount to all three, so a bite is a quick top-up for casters and sprinters, not just wounded fighters.",
   ] },
   { date: "2026-07-06", size: "small", v: "On touch, opening any menu pauses the game", by: "Jeff Louie", notes: [
     "On phones and tablets, opening the bag or any pop-up menu now freezes the dungeon — no more taking hits while you rearrange gear or read the codex. Close it and play resumes exactly where it left off.",
     "Desktop is unchanged: its loot drawer is a permanent sidebar, so play continues beside it.",
   ] },
-  { date: "2026-07-06", size: "small", v: "Mana bar pulses when you're short to cast", by: "Claude", notes: [
+  { date: "2026-07-06", size: "small", v: "Mana bar pulses when you're short to cast", by: "Jeff Louie", notes: [
     "Trying to cast a skill without enough mana now gives the mana bar a brief, faint blue pulse — a quick nudge toward why nothing fired.",
     "Skill buttons already grey out while recharging or when you can't afford them; this points the eye at the mana pool as the reason.",
   ] },
@@ -223,7 +227,7 @@ export const CHANGELOG = [
     "The warrior's Spirit Veil skill gets the framed skill-badge look the other skills already had.",
     "Quest-givers and lost pets on the map are drawn at full character size, matching the hero and foes instead of a tiny marker.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Island floors ringed by the sea", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Island floors ringed by the sea", by: "Jeff Louie", notes: [
     "Some outdoor floors now come up as an island — the whole map edge is open water instead of a rock wall, so you fight on a sandy shore surrounded by sea.",
     "The water is the boundary: you can see and shoot across it but can't walk off. Everything reachable stays reachable — the sea only replaces the impassable frame.",
   ] },
@@ -255,7 +259,7 @@ export const CHANGELOG = [
   { date: "2026-07-05", size: "small", v: "Wandering merchant & mystic show up less often", by: "Jeff Louie", notes: [
     "The roaming merchant now wanders in on roughly 1 floor in 8 (was 1 in 5), and the hooded mystic on roughly 1 in 10 (was 1 in 6) — each stays a treat to stumble on rather than a near-guarantee.",
   ] },
-  { date: "2026-07-05", size: "big", v: "Full controller support", by: "ASuiter89", notes: [
+  { date: "2026-07-05", size: "big", v: "Full controller support", by: "Andrew Suiter", notes: [
     "Plug in a PlayStation, Xbox or Steam Deck / generic gamepad — everything in the game is now playable on a controller, revealed the moment you touch it. Keyboard and mouse stay live.",
     "In the dungeon: left stick moves, R2 sprints, R1 dashes. ✕ interacts/uses, ○ opens the Bag, □ toggles the log, △ opens a town portal. Hold L1 and press ✕○□△ to cast your four skills.",
     "D-pad: health & mana potions (left/right), swap weapon set (up), cycle auto-attack focus (down). Right stick inspects foes; L3 collapses the minimap.",
@@ -268,17 +272,17 @@ export const CHANGELOG = [
     "The Vault Keeper turns SSF heroes away — no banking or withdrawing gold or gear, and town shops charge carried coin only. Crafting materials fill a private per-hero wallet instead of the shared one.",
     "SSF heroes wear a gold SOLO SELF-FOUND tag on the title card, save slots and graveyard, matching Hardcore's crimson one.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Bag's frozen header no longer leaks the list above the gold & materials card", by: "ASuiter89", notes: [
+  { date: "2026-07-05", size: "small", v: "Bag's frozen header no longer leaks the list above the gold & materials card", by: "Andrew Suiter", notes: [
     "The LOOT drawer's pinned header (gold & materials pill, slot tabs, sort/filter) now hugs the very top as the list scrolls — closing a thin strip where scrolling items used to peek through just above the gold & materials card.",
   ] },
   { date: "2026-07-05", size: "small", v: "Save slots name each hero's class", by: "Jeff Louie", notes: [
     "Each save slot now shows the hero's class (Warrior, Rogue, Mage, Templar) beside their name, so lookalike heroes are easy to tell apart.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Foe attacks launch from the foe, not the tile next to it", by: "ASuiter89", notes: [
+  { date: "2026-07-05", size: "small", v: "Foe attacks launch from the foe, not the tile next to it", by: "Andrew Suiter", notes: [
     "Enemy sprites now stay locked to the tile the foe actually occupies, drawn and moved the same way the hero is — the sprite no longer drifts up to a tile off its cell while chasing you.",
     "Because of that drift, ranged bolts and strike lunges used to fly out of a neighbouring tile, or from across a wall from where the foe showed on the map. Every foe attack now originates from where its sprite stands.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Melee reaches a half tile further", by: "ASuiter89", notes: [
+  { date: "2026-07-05", size: "small", v: "Melee reaches a half tile further", by: "Andrew Suiter", notes: [
     "Auto-attacks and melee-range skills now connect from a half tile away instead of demanding you stand right on top of a foe — the hit gate follows where the sprites actually are, not the tiles they snap to.",
     "Weapon reach numbers and tooltips are unchanged; this only softens the exact distance at which a swing lands.",
   ] },
@@ -286,25 +290,25 @@ export const CHANGELOG = [
     "Weapon tooltips and the Forge preview now show a base swing rate — attacks/sec plus a Slow / Normal / Fast tag — beside the reach grid, so you know how fast a weapon hits without equipping it first.",
     "The rate is the weapon type's base speed before Attack Speed and Agility: light daggers swing fastest, heavy two-handers and staves slowest.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Leaderboard hero snapshot shows gear's attribute bonus", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Leaderboard hero snapshot shows gear's attribute bonus", by: "Jeff Louie", notes: [
     "A hero's Attributes on the leaderboard snapshot now show the bonus their worn gear adds (e.g. 40 +13 in green), not just the base you spent — matching your own hero sheet.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Crafted gear forges at full depth — Craftsman & Enchanter now agree", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Crafted gear forges at full depth — Craftsman & Enchanter now agree", by: "Andrew Suiter", notes: [
     "The Craftsman now forges blanks at your full depth item level (deepest floor + 1) — the level a fresh drop there would carry, matching the Merchant, Gambler and the Enchanter's Empower cap. Forged gear starts one item level higher than before.",
     "Fixes the two disagreeing: a piece you just forged used to arrive one level short, so the Enchanter would immediately offer a free +1 Empower to max. Now a fresh forge is already at your depth, so there's nothing left to Empower.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Sort & filter the merchant like your bag", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Sort & filter the merchant like your bag", by: "Jeff Louie", notes: [
     "The merchant's Buy and Sell tabs now carry the same Sort (rarity, power, slot, value) and stat Filter controls as the LOOT drawer.",
     "Sell all / Scrap all at the merchant honor the filter — they only touch what's shown.",
   ] },
   { date: "2026-07-05", size: "small", v: "Weapon type shows up top on the item card", by: "Jeff Louie", notes: [
     "A weapon's type and hand (e.g. Dagger · 1H) now sits right under its name instead of down among the stats, so you read what it is at a glance.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Stamina recharges in town; death revives you at full strength", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Stamina recharges in town; death revives you at full strength", by: "Andrew Suiter", notes: [
     "Stamina now refills while you rest in town, alongside HP and MP — it used to sit frozen there, so a drained bar (and a save made in town) stayed empty until you dived back in.",
     "Dying and waking in town now restores you to FULL HP, MP and Stamina — no more reviving weakened. The gold/XP loss and dropped-bag grave still stand.",
   ] },
-  { date: "2026-07-05", size: "medium", v: "Ramen House pantry overhaul", by: "Claude", notes: [
+  { date: "2026-07-05", size: "medium", v: "Ramen House pantry overhaul", by: "Andrew Suiter", notes: [
     "Pantry rows are bigger and clearer: readable EAT button and a larger ramen-bowl icon sized to the row (its transparent padding no longer shrinks the art).",
     "Identical bowls now stack into a single row with an ×N count instead of one line per bowl.",
     "New TRASH button (tap twice to confirm) dumps a whole stack you'll never eat.",
@@ -315,7 +319,7 @@ export const CHANGELOG = [
     "Opening the Bestiary (or Achievements) from the pause menu now shows it on top of the menu instead of hidden behind it — no need to close settings first.",
     "Long single-word foe names like Constrictor and Bloodhound now wrap inside their card instead of spilling past its right edge.",
   ] },
-  { date: "2026-07-05", size: "medium", v: "Maxed passives surge into a brand-new stat at rank 10", by: "Claude", notes: [
+  { date: "2026-07-05", size: "medium", v: "Maxed passives surge into a brand-new stat at rank 10", by: "Jeff Louie", notes: [
     "Taking a base-tree passive to rank 10 now unlocks a NEW stat it never gave before — not just a bigger version of what it already scaled.",
     "Each surge stat is thematic to its passive: a crit node gains crit damage, an HP node gains regen, a spell node gains crit, and so on.",
     "The new stat stacks on top of the existing rank-3/7/10 bonus spikes and folds straight into the same combat math.",
@@ -326,24 +330,24 @@ export const CHANGELOG = [
     "Finishing a contract now pops a centre-screen \"Bounty complete!\" banner with a chime and flash, so you know to head back to town and claim.",
     "The belt's bounty tracker no longer strands a finished contract's bar empty — a done bounty shows a full green bar, a green ✓, and a gentle glow so \"ready to claim\" reads at a glance.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Account-wide bestiary, no more codex freeze", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Account-wide bestiary, no more codex freeze", by: "Andrew Suiter", notes: [
     "The Bestiary is now account-wide: kills carry across every hero and save slot, so slaying a species on one hero fills in its card for all of them. Your codex survives death, a Reset Run, and switching slots — like the shared town stash.",
     "Existing per-hero kill counts fold into the shared codex automatically, so nothing already recorded is lost.",
     "Opening the Bestiary no longer freezes the game for a couple of seconds — foe portraits are now pre-baked, so the whole roster paints instantly.",
   ] },
-  { date: "2026-07-05", size: "small", v: "HP, MP & Spirit Veil fill at a steady pace", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "HP, MP & Spirit Veil fill at a steady pace", by: "Andrew Suiter", notes: [
     "The bars used to charge smoothly, then rush the last sliver in a little jump as they topped off. Now the whole fill — including the final bit — climbs at one consistent rate, on HP, MP and the Spirit Veil alike.",
   ] },
   { date: "2026-07-05", size: "small", v: "Furniture never blocks a hallway", by: "Claude", notes: [
     "Wide solid furniture — beds, tables, sofas — now only settles inside a room, never across a doorway or corridor, so a piece can no longer drop into a hall and block the way through.",
     "Earlier fixes stopped furniture from fully sealing a floor, but a wide piece could still plug a corridor that had a long way around; now it never sits in the passage at all.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Cleaner GEAR equipment layout", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Cleaner GEAR equipment layout", by: "Andrew Suiter", notes: [
     "The equipment doll on the GEAR tab drops the name label under each slot — long names used to wrap and spill over the tiles below them. Every piece's name and full stats still show in its tap/hover tooltip.",
     "Slots are evenly stacked at one consistent spacing, and the whole layout is centred between the loadout bar above and the hint text below.",
     "The hero behind the slots is centred over them and sized to stand just slightly taller, with no empty band left under the feet.",
   ] },
-  { date: "2026-07-05", size: "large", v: "Bestiary codex & a unique/set Collection vault tab", by: "Claude", notes: [
+  { date: "2026-07-05", size: "large", v: "Bestiary codex & a unique/set Collection vault tab", by: "Andrew Suiter", notes: [
     "New Bestiary — a browsable codex of every foe, opened from the pause menu. Each card fills in as you slay more of a species; a boss card stays a sealed silhouette until your first kill, then opens fully.",
     "A foe's stats reveal one field at a time over ten kills (a boss is all-or-nothing on the first kill), mirroring the dungeon hover card. Filter by creatures, bosses, or discovered, and track completion.",
     "Bosses now also stay sealed on the dungeon hover card until you've slain them once, instead of reading fully on sight.",
@@ -352,7 +356,7 @@ export const CHANGELOG = [
     "Storing a unique or set piece now files it in the Collection instead of ordinary storage. A slot can hold several copies — it shows your strongest with a count badge, and you can withdraw any of them.",
     "Filter the Collection by gear slot, unique vs set, a specific set, or acquired/missing. Like the rest of the Vault it's shared across your heroes, with separate Standard and Hardcore collections.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Shorter Spirit Veil tooltip", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Shorter Spirit Veil tooltip", by: "Andrew Suiter", notes: [
     "Trimmed the Spirit Veil blurb on the HP bar's hover tooltip to a couple of tight sentences, matching the HP line above it.",
   ] },
   { date: "2026-07-05", size: "small", v: "Cleaner empty bounty tile", by: "Claude", notes: [
@@ -367,7 +371,7 @@ export const CHANGELOG = [
     "Empty states (\"No bounty yet\", \"Go cook something!\") now overlay the same-size slot instead of a differently-shaped prompt.",
     "Trimmed the stamina bar to about half an HP/MP bar's width.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Attribute values no longer clip under the + button", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Attribute values no longer clip under the + button", by: "Andrew Suiter", notes: [
     "On the HERO tab, an attribute's value and its green gear bonus now right-align flush to the + button and stack instead of overflowing under it, so a big number like 125 (+47) reads in full. The description text gives up a sliver of width to make room.",
   ] },
   { date: "2026-07-05", size: "large", v: "Belt fills its empty space: loadout, meals & bounty", by: "Claude", notes: [
@@ -389,7 +393,7 @@ export const CHANGELOG = [
   { date: "2026-07-05", size: "small", v: "Arcing crits obey line of sight", by: "Claude", notes: [
     "The Arcing power's crit fork now jumps from the struck foe by line of sight, like chain lightning — a ranged or spell crit no longer arcs through a wall to a foe the impact can't see.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Area spells blast from the point of impact", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Area spells blast from the point of impact", by: "Andrew Suiter", notes: [
     "Meteor, Fireball, Blizzard, Firestorm, Condemn, Plague Bomb, Death Rain and every other impact-and-burst spell now spread their radius damage from where they LAND, not from you. A blast dropped onto a pack tucked behind a wall now catches the whole pack — foes you couldn't have hit directly still take the splash.",
     "These spells also aim at the nearest foe you can actually SEE, so one closer foe hidden behind a wall no longer makes the cast fizzle with a clear target in view.",
     "Mark detonations (Immolation, Death Blossom, Final Judgment popping a marked foe) burst outward from the marked foe the same way, and no longer blast through solid walls.",
@@ -403,7 +407,7 @@ export const CHANGELOG = [
     "Hero name lifts to a centred banner across the top of the map.",
     "Endurance is now a full-height bar between HP and MP with its stamina value overlaid, draining inward from both edges toward the middle.",
   ] },
-  { date: "2026-07-05", size: "large", v: "Class attribute overhaul + the Spirit Veil shield", by: "Claude", notes: [
+  { date: "2026-07-05", size: "large", v: "Class attribute overhaul + the Spirit Veil shield", by: "Andrew Suiter", notes: [
     "Each class now deals weapon & skill damage off a SINGLE attribute — Warrior off Might, Rogue off Agility, Mage off Spirit, Templar off Vitality. The old secondary damage attribute (and the small off-class Might bonus) are gone; spells still scale off Spirit for everyone.",
     "Attributes re-homed: Might now raises Defense; Vitality raises max HP, HP regen AND Stamina; Spirit raises max MP, MP regen, spell power AND healing. Agility (evasion, accuracy, move/attack speed) and Luck (crit, loot quality) keep their roles.",
     "How much each point of an attribute gives is now CLASS-SCALED — the Templar gets the most HP per Vitality, the Mage the most spell power per Spirit, the Warrior the most Defense per Might, the Rogue the most evasion per Agility, and so on.",
@@ -411,7 +415,7 @@ export const CHANGELOG = [
     "Cast heals now scale off Spirit and Spell Power (class-scaled) and lost their flat 20%-of-max-HP cap, so a high-Spirit healer mends far more per cast (still only up to the health you're missing).",
     "Item Power is no longer weighted by class guesswork — it's derived purely from how a piece changes THIS hero's real damage and survivability (and now counts the Spirit Veil). So Spell Power reads ~0 Power for a hero with no spell skills whatever their class, and +Spirit is valued for the shield it grants.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Honest upgrade arrows around two-handed weapons", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Honest upgrade arrows around two-handed weapons", by: "Andrew Suiter", notes: [
     "An off-hand in your bag no longer lights up as an upgrade while a two-handed weapon fills your hands — there's no free slot to equip it into, so it's not a swap you can make.",
     "A two-handed weapon now only flags as an upgrade when it beats your equipped weapon AND off-hand combined, since equipping it drops the off-hand too.",
   ] },
@@ -419,7 +423,7 @@ export const CHANGELOG = [
     "Fixed the see-through silhouette that keeps a hero or foe trackable while they stand behind a tree: when two or more of them tucked behind the SAME tree, the tree redrew over the ones already outlined and blinked their silhouettes out.",
     "Now the tree is redrawn over everyone first and every silhouette is stamped on top, so all of them read through the trunk at once.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Cracked-wall fissures stay on the stone", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Cracked-wall fissures stay on the stone", by: "Andrew Suiter", notes: [
     "Breakable-wall cracks no longer spill onto the grass or dirt around the rock — each fracture is now clipped to the wall's own pixels.",
     "Most visible on a lone rock, where the ground wraps in close on every side.",
   ] },
@@ -427,7 +431,7 @@ export const CHANGELOG = [
     "Disturbing a buried-treasure grave raises the dead — those risen foes now render as proper zombies instead of blank boxes marked with a \"?\".",
     "The slip left up to three placeholder squares standing until you cut them down.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Objects and NPCs never wall off a path", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Objects and NPCs never wall off a path", by: "Andrew Suiter", notes: [
     "Fixed floors where a tree, a piece of decor or a wandering merchant/mystic could sit on the only route through and seal off part of the level.",
     "Solid decor now knows the shop NPCs are immovable, and NPCs won't stand on a lone pinch point, so neither can plug the last gap of a corridor.",
     "Every floor gets a final walkability sweep after it's built: anything left blocking the way is cleared or shoved aside, so you can always reach the whole floor.",
@@ -734,7 +738,7 @@ export const CHANGELOG = [
   { date: "2026-07-03", size: "small", v: "Merchant stocks rarer gear", by: "Jeff Louie", notes: [
     "The merchant no longer lays out grey or white gear — every ware is uncommon or better, weighted toward the rarer tiers, so his table always beats a raw floor drop.",
   ] },
-  { date: "2026-07-03", size: "large", v: "Full combat VFX overhaul", by: "Claude", notes: [
+  { date: "2026-07-03", size: "large", v: "Full combat VFX overhaul", by: "Andrew Suiter", notes: [
     "Every skill, spell, weapon swing and monster attack now has its own animation, tinted to its element — fire, ice, lightning, holy, poison, blood, arcane.",
     "Weapon swings draw on the canvas at last: a crescent slash (sword), a wide sweep (axe/scythe), a rapid double-flick (dagger), an overhead smash (mace), a reaching stab (spear).",
     "Bows and staves finally fire something — a real arrow or magic bolt flies to the target, instead of the foe just taking damage from across the room with nothing visible.",
@@ -743,7 +747,7 @@ export const CHANGELOG = [
     "Monsters animate their blows — a claw swipe each strike (a heavy ground-smash for brutes and bosses). Boss tricks get proper telegraphs: flame lines, ember rain, quake cracks, shockwave rings, frost bursts, life-siphon beams, hex and venom bolts, pull vortices. Shielded and enraged bosses now show a lasting aura.",
     "New element-flavoured cast sounds for fired shots, weapon swings and each spell school.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Loot bag sorts by Power by default", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Loot bag sorts by Power by default", by: "Jeff Louie", notes: [
     "Bag now opens sorted by Power instead of Rarity — strongest gear surfaces first. Switch back to Rarity, Slot or Value any time.",
   ] },
   { date: "2026-07-03", size: "small", v: "Spend straight from the vault", by: "Jeff Louie", notes: [
@@ -758,11 +762,11 @@ export const CHANGELOG = [
     "Deepening one passive now pays off in jumps, not just a steady drip: its always-on bonus spikes at ranks 3, 7 and 10 — the same milestone ranks that already power up active skills (up to +30% of the stat total at rank 10).",
     "The skill card flags the surge with a chip and rank pips, previews the bigger jump on rank-up, and the level-up line calls out each milestone as you cross it. Keystones stay single-rank, so they don't surge.",
   ] },
-  { date: "2026-07-03", size: "medium", v: "A full rack of new synth instruments", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "A full rack of new synth instruments", by: "Jeff Louie", notes: [
     "Rebuilt the soundtrack's synth engine so styles no longer share the same three sounds. New instruments: deep round sub bass, a detuned drum-&-bass reese, a squelchy acid bass, big super-saw leads and chords, metallic FM bells, plucky bell/marimba tones, and hollow reed leads — each style now picks the ones that fit it.",
     "Fixed the bass: it used to be forced to the same punchy sawtooth in every style (the 'polka' feel). Basslines now use rounder, smoother sub tones and less on-the-beat bounce, so each style's low end has its own character.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Clearing a floor banks the next as your deepest", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Clearing a floor banks the next as your deepest", by: "Andrew Suiter", notes: [
     "Clearing a floor's foes unseals its down-stairs — which now opens the NEXT floor at the Dungeon Gate right away, so it counts as your deepest the moment you clear.",
     "Port to town after a clear and you can drop straight back onto the floor you opened, instead of re-clearing the one you just finished.",
   ] },
@@ -776,7 +780,7 @@ export const CHANGELOG = [
     "When you slip behind a tree or tall furniture, your see-through silhouette now takes your class colour — Warrior red, Mage yellow, Templar blue, Rogue green — so you can still read who you are at a glance.",
     "Enemies hidden behind scenery now show a distinct magenta silhouette, so a lurking foe never blurs into a red Warrior.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Cursor size setting", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Cursor size setting", by: "Andrew Suiter", notes: [
     "Settings ▸ Visuals ▸ CURSOR SIZE — a new 1x–2x picker that enlarges the mouse pointer on top of the UI scale, so you can grow the blade without resizing every menu. Defaults to 1x and travels with your chosen cursor across devices.",
   ] },
   { date: "2026-07-03", size: "small", v: "Patch notes group by local day", by: "Claude", notes: [
@@ -812,7 +816,7 @@ export const CHANGELOG = [
     "Longer contracts shave a little off each floor's cost, so a long haul is a touch cheaper per floor.",
     "Each merc gets its own hire card, matching the Mystic's pact layout.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Skill cards: shorter text, wider card", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Skill cards: shorter text, wider card", by: "Jeff Louie", notes: [
     "Every passive and keystone description rewritten terse — stats first, filler words and leftover internal tags gone.",
     "Skill detail card is wider with slightly smaller text, so each stat line fits without wrapping mid-phrase.",
   ] },
@@ -831,11 +835,11 @@ export const CHANGELOG = [
     "All ten styles get their own groove so each sounds distinct: driving for Cavern, machine-like for Forge, martial for March, lazy and swung for Tide, ambient and still for Mist and Veil, and pounding for the boss theme.",
     "The music keeps its per-performance key, tempo, and melody variation on top, so it still never repeats note-for-note.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Hero Bars stay put", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Hero Bars stay put", by: "Jeff Louie", notes: [
     "With Hero Bars on, the red Health and blue Mana bars under your hero now stay visible at all times — no more vanishing when a vital fills up.",
     "Stamina bar unchanged: still pops up only while stamina is recovering.",
   ] },
-  { date: "2026-07-03", size: "big", v: "Deep performance pass — the lag is gone", by: "Claude", notes: [
+  { date: "2026-07-03", size: "big", v: "Deep performance pass — the lag is gone", by: "Andrew Suiter", notes: [
     "Frame rate stays smooth on deep floors and stays smooth however long the game has been open.",
     "Combat log keeps the newest 200 lines; endless growth was quietly slowing every message.",
     "Ground, minimap and decoration shadows now drawn once per floor and reused, instead of rebuilt every frame.",
@@ -852,40 +856,40 @@ export const CHANGELOG = [
     "Redrew the fracture as thin hairline fissures fanning from an impact point instead of one fat scratch.",
     "Each shove now ADDS more cracks rather than fattening the same one, so the wall visibly shatters further toward breaking.",
   ] },
-  { date: "2026-07-03", size: "medium", v: "New skill icons + unique skill names", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "New skill icons + unique skill names", by: "Andrew Suiter", notes: [
     "Every skill now has its own hand-generated pixel-art icon set in a raised, class-coloured metal frame — red for Warrior, green for Rogue, yellow for Mage, blue for Templar — filling the whole tile.",
     "Keystone passives keep their octagon frame, now in the same metal look.",
     "Renamed eight skills that shared a name with another so every skill reads uniquely: the active Rampage is now Onslaught, the crit-fury Bloodletter is Tempered Fury, the active Blood Frenzy is War Cry, the Warrior Executioner passive is Ruthless, the second Brace is Fortify, the Warrior Avatar is Titan Form, the Warrior Apocalypse is Bloodstorm, and the passive Absolute Zero is Frozen Ward.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Ascendancy skills get their own points", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Ascendancy skills get their own points", by: "Andrew Suiter", notes: [
     "Ascendancy (path) skills now spend a SEPARATE pool of ascendancy points — normal skill points buy only passive & active skills, ascendancy points buy only path skills.",
     "Earn one ascendancy point every 5 levels starting at level 20 (20, 25, 30…) — the level you can first ascend. Points bank up even before you ascend.",
     "Path skills no longer have a level requirement — they're gated only by the earlier skills in the path tree.",
     "Path-tree nodes now show their names under their icons, matching the passive & active trees.",
     "The SKILLS-tab header retitles to ASCENDANCY POINTS on the path tab; the Trainer's full respec refunds both point kinds.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Cracked walls take a few hits — smash from any side", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Cracked walls take a few hits — smash from any side", by: "Andrew Suiter", notes: [
     "Shove into a cracked wall from ANY direction now — no more needing to hit it dead-on. Walk or dash into one at any angle and it registers.",
     "Cracked walls no longer shatter in one blow: each shove chips one further and it collapses after three hits, so it half-blocks the way until you keep at it.",
     "The wall grows visibly more fractured with each hit — the crack darkens, spreads and sheds chips, and a warm rim brightens as it nears breaking.",
     "Redrawn crack art: a jagged, chiselled fissure with branches and rubble instead of the old thin scratch.",
     "Each shove throws rock dust, knocks the camera and cracks; the wall giving way crumbles with a heavier thud.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Redesigned skill-bar & loadout tiles", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Redesigned skill-bar & loadout tiles", by: "Andrew Suiter", notes: [
     "Every combat-bar tile — skills, potions, the town gate and the auto-cast slot — now shows its icon filling the whole box, edge to edge, with the corners rounded off.",
     "The hotkey moved out of the box corner onto a full-width pill sitting just above each tile; the auto-cast tile's pill reads \"AUTO\".",
     "The SKILLS-tab slot tray gets the same look: bigger tiles with filled icons and pills above, the auto-cast slot set off on the left and the four manual slots as a 2×2 block.",
     "Every skill slot now reads the same — the old gold marking on the first slot is gone. The ready-glow and cooldown dial are unchanged.",
     "The bottom HUD grew taller to seat the pills, and stays clear of clipping at large UI SIZE.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Portal into the dungeon facing down", by: "Claude", notes: ["The hero now always materialises facing down when you enter the dungeon through the Gate — before, it kept whatever direction it faced when it last left, so a re-entry could look like it was facing the wrong way."] },
-  { date: "2026-07-03", size: "small", v: "Skill nodes drop the slot badge", by: "Claude", notes: ["Removed the small slot-number badge from the top-left corner of learned active skills in the tree — it looked just like the rank badge beside it, and the skill-slot bar right above the tree already shows what's bound where."] },
-  { date: "2026-07-03", size: "small", v: "Skill-tree nodes always show their rank", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Portal into the dungeon facing down", by: "Andrew Suiter", notes: ["The hero now always materialises facing down when you enter the dungeon through the Gate — before, it kept whatever direction it faced when it last left, so a re-entry could look like it was facing the wrong way."] },
+  { date: "2026-07-03", size: "small", v: "Skill nodes drop the slot badge", by: "Andrew Suiter", notes: ["Removed the small slot-number badge from the top-left corner of learned active skills in the tree — it looked just like the rank badge beside it, and the skill-slot bar right above the tree already shows what's bound where."] },
+  { date: "2026-07-03", size: "small", v: "Skill-tree nodes always show their rank", by: "Andrew Suiter", notes: [
     "Every skill-tree node now shows its current rank on a redesigned corner pill in every state — learned, ready, locked or maxed — so you can always read a skill's level at a glance.",
     "A node you can spend a point on marks it with a bright pulsing + beside the rank, instead of hiding the rank behind a lone +, so having a point to spend never masks how far you've already ranked a skill.",
     "The rank and hotkey-slot pills are bigger and cleaner, and no longer get clipped on the octagonal keystone nodes.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Animated town-portal teleport", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Animated town-portal teleport", by: "Andrew Suiter", notes: [
     "Opening a town portal now charges a blue aura over the hero instead of flashing a gate icon — the full countdown reads as an energy build-up.",
     "When it opens, the hero fades out and rockets up a beam of light off the map before you land in town.",
     "Returning through the Dungeon Gate plays it in reverse: a blue pillar stabs into the floor and the hero materializes out of it.",
@@ -904,13 +908,13 @@ export const CHANGELOG = [
     "Clicking a skill node no longer leaves its small hover label stuck on top of the detail card.",
   ] },
   { date: "2026-07-03", size: "small", v: "Walls read as raised", by: "Claude", notes: ["Walls now cast a soft shadow onto the floor in front of them — indoors and out — so wall and floor no longer sit on one flat plane. The walls read as raised, the ground as sunken.", "Outdoor the shadow follows the wall's real curved outline (not the tile grid); indoor it follows the built walls' square edges. Light stays fixed at top-left, and it only ever darkens floor, never another wall.", "Lighter grounds (snow, crystal) get a gentler shadow so it never looks harsh."] },
-  { date: "2026-07-03", size: "small", v: "Title Screen button in Settings", by: "Claude", notes: ["New TITLE SCREEN button at the top of the Settings ▸ Play tab returns you to the title/landing screen without abandoning the run — progress is saved, and CONTINUE drops you straight back in."] },
-  { date: "2026-07-03", size: "small", v: "Roomier attribute + buttons", by: "Claude", notes: ["More space between each attribute's value and its + button on the HERO tab; the description column shrinks to make room, so nothing else shifts."] },
+  { date: "2026-07-03", size: "small", v: "Title Screen button in Settings", by: "Andrew Suiter", notes: ["New TITLE SCREEN button at the top of the Settings ▸ Play tab returns you to the title/landing screen without abandoning the run — progress is saved, and CONTINUE drops you straight back in."] },
+  { date: "2026-07-03", size: "small", v: "Roomier attribute + buttons", by: "Andrew Suiter", notes: ["More space between each attribute's value and its + button on the HERO tab; the description column shrinks to make room, so nothing else shifts."] },
   { date: "2026-07-03", size: "small", v: "Furniture never walls off a path", by: "Claude", notes: ["Solid furniture and scenery now refuse any spot where their full footprint would seal a room or corridor off — a wide table can't plug a hall with its far half, and a stray chest or brazier can't close the last gap of a pocket.", "Every floor stays fully walkable no matter how densely it's furnished."] },
   { date: "2026-07-03", size: "medium", v: "Furnished interiors & fuller scenery", by: "Claude", notes: ["Built interiors — lodges, halls, crypts, keeps, kitchens — now have real materials: wood-beam, stone-block, brick, panel and adobe walls over wood-plank, stone, marble, tile and cobble floors, matched to the room, in place of the old flat rooms.", "Interiors are laid out as a floor plan now — separate rectangular rooms and halls joined by corridors, rather than one merged cave.", "They're dressed with hand-made props too — tables, chairs, sofas, beds, cabinets, barrels, chests, braziers, potted plants, rugs and clutter. Solid furniture is set off the corridors so it never blocks your path; low clutter and rugs stay walkable.", "The whole prop set is far larger now — indoors and out — so floors repeat much less.", "All art is drawn from the CC-BY-SA \"[LPC]\" collections (full credits in the About notes)."] },
   { date: "2026-07-03", size: "medium", v: "Floors with depth, not one flat fill", by: "Claude", notes: ["Outdoor floors now blend two or three ground types in natural patches — think tan stone with grey mudstone and a lighter gravel path, or sand giving way to dry soil and rock — instead of a single repeated tile.", "Each biome has a primary floor plus clustered secondary and tertiary floors, with the tileset's own edges smoothing the transitions between them.", "The patches are clustered, never confetti, so the ground reads as a real place with wear and paths."] },
   { date: "2026-07-03", size: "large", v: "Scenery, trees & see-through occlusion", by: "Claude", notes: ["Outdoor floors now grow real hand-made scenery — trees, bushes, ferns, flowers, mushrooms, logs, cacti, agave, shells and driftwood — matched to the biome: leafy woods on grass, cacti and shells on sand, pines in the cold, bare trees in haunted woods.", "Tall obstacles (trees, big cacti) are solid — you and foes route around them; low clutter (flowers, grass, mushrooms) stays walkable so you step right over it.", "Scenery is placed naturally: sparse obstacles that never seal a corridor, plus a few clusters of ground clutter rather than an even sprinkle.", "Stand behind a tree and its canopy hides you — but a tinted silhouette of your hero (and of foes) shows through the leaves so you can still track exactly where everyone is; only the covered part reads as a silhouette.", "New pixel art is drawn from the CC-BY-SA \"[LPC]\" collections (full credits in the About notes)."] },
-  { date: "2026-07-03", size: "small", v: "Crits land on skills & spells too", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Crits land on skills & spells too", by: "Andrew Suiter", notes: [
     "Critical hits now fire on every damage source — auto-attacks, martial skills and spells all roll crits, show the big crit number, and trigger your on-crit passives (combo/zeal charges, primed crits, mana refunds).",
     "Previously only auto-attacks and guaranteed-crit skills surfaced a crit; caster and skill crit builds now pay off as their skills describe.",
   ] },
@@ -919,12 +923,12 @@ export const CHANGELOG = [
     "Spell casts never leech: Life and Mana Leech are physical-attack and skill sustain only.",
   ] },
   { date: "2026-07-03", size: "small", v: "Mud & ice floors removed", by: "Claude", notes: ["Pulled the mud and ice patch terrain for now — they didn't read clearly on the map. Floors no longer slow you in mud or make you slide on ice."] },
-  { date: "2026-07-03", size: "small", v: "Red gate for town & dungeon travel", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Red gate for town & dungeon travel", by: "Andrew Suiter", notes: [
     "The Town Portal, Return to Dungeon gate, Dungeon Gate, and the dungeon-depth readout now show a red-swirl stone gate — distinct at a glance from the purple within-floor teleporters.",
     "Every town-bound and dungeon-bound icon shares the one red gate: sidebar TOWN button, town menu, minimap, floor-1 exit, depth pill, and the log & tooltip messages.",
   ] },
   { date: "2026-07-03", size: "small", v: "Kraken & Tempest sprites refreshed", by: "Claude", notes: ["The Kraken and Tempest now use new bespoke pixel-art sprites in the packed monster sheet."] },
-  { date: "2026-07-03", size: "small", v: "Legendary/unique banner for every source", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Legendary/unique banner for every source", by: "Andrew Suiter", notes: [
     "The centre-screen legendary/unique loot banner now fires no matter how you get the piece, not just off kills and chests.",
     "Gambler jackpots, bounty and escort rewards, and transmuter fuses now pop the full banner — sting, flash and shake — when they land a legendary or unique.",
     "Lesser rewards keep their existing win cue; only the top two tiers get the banner.",
@@ -1102,7 +1106,7 @@ export const CHANGELOG = [
   { date: "2026-06-30", size: "small", v: "Clearer Achievements popup", by: "Claude", notes: ["Category headings are centred, bolder and divided so each group pops.", "Unearned feats fade further back so earned ones stand out.", "The popup is wider on desktop, filling several badges across instead of one skinny column."] },
   { date: "2026-06-30", size: "small", v: "Patch Notes creator filter reads JL/AS", by: "Claude", notes: ["The creator filter now lists JL and AS to match the per-entry badges, and filtering by AS correctly includes every non-JL entry."] },
   { date: "2026-06-30", size: "small", v: "Blue portals + move to cancel", by: "Claude", notes: ["Town Portal and Return to Dungeon gate icons now glow blue instead of red/orange, matching the home portal.", "Moving (WASD/arrows/stick) while a town portal channels now cancels it, like a hit does."] },
-  { date: "2026-06-30", size: "medium", v: "Monster roster overhaul", by: "ASuiter89", notes: ["161 named monsters across 8 depth tiers (was a bug/animal-heavy list of ~42).", "New registry gives every foe a name, colour and AI behaviour — vermin, beasts, goblinoids, undead, demons, elementals, aberrations and dragons.", "Monsters awaiting their art show as labelled colour squares for now."] },
+  { date: "2026-06-30", size: "medium", v: "Monster roster overhaul", by: "Andrew Suiter", notes: ["161 named monsters across 8 depth tiers (was a bug/animal-heavy list of ~42).", "New registry gives every foe a name, colour and AI behaviour — vermin, beasts, goblinoids, undead, demons, elementals, aberrations and dragons.", "Monsters awaiting their art show as labelled colour squares for now."] },
   { date: "2026-06-30", size: "small", v: "Sellswords hit harder", by: "Jeff Louie", notes: ["Hired companions deal much more damage now (and a bit more health) — a real threat at your side instead of a weak add."] },
   { date: "2026-06-30", size: "small", v: "Six sellswords to hire", by: "Jeff Louie", notes: ["The Sellsword camp now offers six companions instead of three — added a Hound (fast melee), Flame Adept (ranged fire) and Acolyte (ranged holy).", "Each fights with its own creature and price."] },
   { date: "2026-06-30", size: "small", v: "Cinematic ultimate spells", by: "Claude", notes: ["The capstone spells at the bottom of each skill tree now cast with a full-screen cinematic — a meteor slamming down and radiating flames, a frost nova shattering outward, a lightning storm, a searing beam, a holy pillar, a summoning vortex or a ground-shaking slam.", "Each comes with a big themed sound, screen flash and camera shake, matched to the spell."] },
@@ -1118,35 +1122,35 @@ export const CHANGELOG = [
   { date: "2026-06-30", size: "small", v: "Town background sounds", by: "Jeff Louie", notes: ["Optional medieval-town ambience — hammering anvils, clucking chickens, children's laughter, distant cheers, shouts, birds and dogs — plays softly while in town.", "Off by default; flip 🔕 Town sounds at the bottom of the town menu to turn it on."] },
   { date: "2026-06-30", size: "small", v: "Living town background", by: "Claude", notes: ["The town menu drifts a subtle ambient scene behind it — fireflies, chimney smoke, falling leaves, stars, rain, snow, lantern glow, clouds, blossom petals, aurora and more.", "A different one is picked each visit, so the safe haven feels a little alive instead of static."] },
   { date: "2026-06-30", size: "small", v: "Stat code tooltips", by: "Jeff Louie", notes: ["Hovering a stat abbreviation (DMG, CRIT, PEN...) on an item now shows its full name."] },
-  { date: "2026-06-30", size: "small", v: "Bounty giver + mercenary art", by: "ASuiter89", notes: ["The Bounty Board now has an animated bounty-giver character.", "The three hireable mercenaries (Sellsword, Marksman, Warden) show animated sprites in the hire list and as your companion in the dungeon."] },
+  { date: "2026-06-30", size: "small", v: "Bounty giver + mercenary art", by: "Andrew Suiter", notes: ["The Bounty Board now has an animated bounty-giver character.", "The three hireable mercenaries (Sellsword, Marksman, Warden) show animated sprites in the hire list and as your companion in the dungeon."] },
   { date: "2026-06-30", size: "small", v: "Bag holds 50", by: "Jeff Louie", notes: ["The bag now caps at 50 items — a full bag leaves loot chests unopened and warns you to sell or scrap to make room."] },
   { date: "2026-06-30", size: "small", v: "Auto-attack target focus", by: "Claude", notes: ["New gear-menu setting picks which foe your auto-attack locks onto: Closest, Weakest (low HP), Toughest (high HP), Farthest, or Elites & bosses first.", "Click the <span data-spr=ui_agility></span> TARGET tile in Settings to cycle it; saved per character."] },
-  { date: "2026-06-30", size: "medium", v: "Animated townsfolk", by: "ASuiter89", notes: ["Every town service now shows its own animated character (walking in place) in the town menu.", "The roaming Merchant and Mystic in the dungeon use their animated sprites too."] },
+  { date: "2026-06-30", size: "medium", v: "Animated townsfolk", by: "Andrew Suiter", notes: ["Every town service now shows its own animated character (walking in place) in the town menu.", "The roaming Merchant and Mystic in the dungeon use their animated sprites too."] },
   { date: "2026-06-30", size: "medium", v: "Music sounds like real instruments", by: "Jeff Louie", notes: ["Rebuilt the synth voice: layered detuned oscillators, sub-bass, ADSR sustain and vibrato give bass, pad and lead distinct instrument voices instead of one soft flute.", "Added a backbeat snare so drum styles groove instead of oom-pah. (More style variety coming next.)"] },
   { date: "2026-06-30", size: "small", v: "Skill slots on the SKILLS screen", by: "Claude", notes: ["The Skill slots tray (4 active slots + the auto-cast slot) now shows on desktop too, right above the skill tree.", "Drag a learned spell from its tree node into a slot, drag slots to rearrange, or drag a slotted spell back onto the tree to remove it."] },
   { date: "2026-06-30", size: "small", v: "Guarded chest hoard", by: "Jeff Louie", notes: ["The rare chest-hoard room now has elite sentinels and much higher mimic, ambush and trap odds per chest."] },
   { date: "2026-06-30", size: "small", v: "Arrow traps hit hard", by: "Jeff Louie", notes: ["Arrow-trap bolts do far more damage now — a real threat, so step out of the lane."] },
-  { date: "2026-06-30", size: "small", v: "Templar art + heroes shown everywhere", by: "ASuiter89", notes: ["The Templar now has animated female and male hero sprites — all four classes are covered.", "Your hero sprite now shows everywhere it appears: the gear paperdoll, save slots, graveyard, leaderboard and the title card."] },
+  { date: "2026-06-30", size: "small", v: "Templar art + heroes shown everywhere", by: "Andrew Suiter", notes: ["The Templar now has animated female and male hero sprites — all four classes are covered.", "Your hero sprite now shows everywhere it appears: the gear paperdoll, save slots, graveyard, leaderboard and the title card."] },
   { date: "2026-06-30", size: "small", v: "Craft blue gear anywhere", by: "Jeff Louie", notes: ["Rare (blue) crafts no longer need Core, and Core now drops from Hardened, not just Brutal."] },
   { date: "2026-06-30", size: "small", v: "Time played folded into Graveyard", by: "Jeff Louie", notes: ["Graveyard now shows full stats and play time for each fallen hero, with a total-time header; the separate Time Played screen is gone."] },
-  { date: "2026-06-30", size: "small", v: "Mage hero art", by: "ASuiter89", notes: ["The Mage now has its own animated female and male hero sprites."] },
+  { date: "2026-06-30", size: "small", v: "Mage hero art", by: "Andrew Suiter", notes: ["The Mage now has its own animated female and male hero sprites."] },
   { date: "2026-06-30", size: "small", v: "Sell & scrap at the merchant", by: "Jeff Louie", notes: ["The Merchant has a SELL tab now — sell or scrap loot there too, not just from the bag."] },
   { date: '2026-06-30', size: 'small', v: 'Rarer gear demands more', by: 'Claude', notes: ['A piece\'s attribute requirement now climbs with its rarity, not only its item level — roughly 8% more per rarity step above normal. A legendary or unique item asks for noticeably more of its attribute than a plain one of the same level, so the flashiest drops take real investment before you can wield them.'] },
   { date: "2026-06-30", size: "small", v: "2x2 skill slots on mobile", by: "Jeff Louie", notes: ["The four skill tiles now sit in a 2x2 block instead of three-on-top, one-below."] },
-  { date: "2026-06-30", size: "small", v: "Rogue hero art", by: "ASuiter89", notes: ["The Rogue now has its own animated female and male hero sprites."] },
+  { date: "2026-06-30", size: "small", v: "Rogue hero art", by: "Andrew Suiter", notes: ["The Rogue now has its own animated female and male hero sprites."] },
   { date: "2026-06-30", size: "small", v: "Patch Notes date grouping", by: "Jeff Louie", notes: ["Sorted entries by date so each day groups under one heading; fixed a July 1 date that was a timezone slip."] },
   { date: "2026-06-30", size: "small", v: "Renamed to Patch Notes", by: "Jeff Louie", notes: ["The Version menu and popup are now called Patch Notes."] },
   { date: "2026-06-30", size: "small", v: "Mana rebalance", by: "Jeff Louie", notes: ["Lower max mana, mana from gear, and mana regen — spells cost more of the pool now."] },
-  { date: "2026-06-30", size: "small", v: "Hero sprite fixes", by: "ASuiter89", notes: ["Fix swapped male/female warrior art and left/right facing.", "Idle uses a standing pose; the walk speeds up with movement and sprinting."] },
+  { date: "2026-06-30", size: "small", v: "Hero sprite fixes", by: "Andrew Suiter", notes: ["Fix swapped male/female warrior art and left/right facing.", "Idle uses a standing pose; the walk speeds up with movement and sprinting."] },
   { date: "2026-06-30", size: "small", v: "Endurance is now Stamina", by: "Jeff Louie", notes: ["Renamed Endurance to Stamina everywhere; dropped the END label from the bar."] },
   { date: "2026-06-30", size: "small", v: "Return to Dungeon, front and center", by: "Claude", notes: ["The town's Dungeon Gate is renamed Return to Dungeon, moved to the top of the menu above the shops, and given a glowing gold border so it's obvious that's how you head back down."] },
   { date: "2026-06-30", size: "small", v: "Wider version box", by: "Jeff Louie", notes: ["Version History box is wider on desktop, easier to skim."] },
-  { date: "2026-06-30", size: "medium", v: "Male/female heroes + walking animation", by: "ASuiter89", notes: ["Character creation is now two steps: pick your class first, then name your hero and choose Female or Male on the next screen.", "Your hero walks with an animated sprite that turns to face the way you move — up, down, left or right.", "The Warrior has distinct female and male art; the other classes share one look for both sexes for now."] },
-  { date: "2026-06-30", size: "small", v: "Tidier title screen", by: "ASuiter89", notes: ["The achievement badges moved off the title screen into their own popup, opened by a new full-width Achievements button that sits with Continue and Start a New Run.", "The button shows your feat progress at a glance, so the landing page stays uncluttered."] },
-  { date: "2026-06-30", size: "medium", v: "Timers count in real seconds", by: "ASuiter89", notes: ["Status effects, buffs and other timed effects now last in real seconds instead of vanishing almost instantly — a poison, burn, stun, chill or shield that reads as 3 seconds now lingers a full three seconds, and poison and burn deal their damage once per second.", "The town portal channel, summoned minion lifespans, the Treasure Goblin getaway window and boss flame and barrier hazards all run on the same real-seconds clock, and every tooltip, the buffs/debuffs strip and the HERO sheet (HP and MP regen shown as a per-second rate) now read in seconds."] },
-  { date: "2026-06-30", size: "medium", v: "Reworked skill bar", by: "ASuiter89", notes: ["The skill bar is rebuilt around four slots, with the potions pinned to the left and an auto-cast slot in the middle."] },
-  { date: "2026-06-30", size: "small", v: "Settings from town", by: "ASuiter89", notes: ["You can open Settings from the town hub now — the <span data-spr=ic_mallet></span> button and Esc both work there."] },
-  { date: "2026-06-30", size: "small", v: "AI-play introspection", by: "ASuiter89", notes: ["Watch / AI play can now read ground hazards and a gameGuide() mechanics reference, so an AI player reads the board more clearly."] },
+  { date: "2026-06-30", size: "medium", v: "Male/female heroes + walking animation", by: "Andrew Suiter", notes: ["Character creation is now two steps: pick your class first, then name your hero and choose Female or Male on the next screen.", "Your hero walks with an animated sprite that turns to face the way you move — up, down, left or right.", "The Warrior has distinct female and male art; the other classes share one look for both sexes for now."] },
+  { date: "2026-06-30", size: "small", v: "Tidier title screen", by: "Andrew Suiter", notes: ["The achievement badges moved off the title screen into their own popup, opened by a new full-width Achievements button that sits with Continue and Start a New Run.", "The button shows your feat progress at a glance, so the landing page stays uncluttered."] },
+  { date: "2026-06-30", size: "medium", v: "Timers count in real seconds", by: "Andrew Suiter", notes: ["Status effects, buffs and other timed effects now last in real seconds instead of vanishing almost instantly — a poison, burn, stun, chill or shield that reads as 3 seconds now lingers a full three seconds, and poison and burn deal their damage once per second.", "The town portal channel, summoned minion lifespans, the Treasure Goblin getaway window and boss flame and barrier hazards all run on the same real-seconds clock, and every tooltip, the buffs/debuffs strip and the HERO sheet (HP and MP regen shown as a per-second rate) now read in seconds."] },
+  { date: "2026-06-30", size: "medium", v: "Reworked skill bar", by: "Andrew Suiter", notes: ["The skill bar is rebuilt around four slots, with the potions pinned to the left and an auto-cast slot in the middle."] },
+  { date: "2026-06-30", size: "small", v: "Settings from town", by: "Andrew Suiter", notes: ["You can open Settings from the town hub now — the <span data-spr=ic_mallet></span> button and Esc both work there."] },
+  { date: "2026-06-30", size: "small", v: "AI-play introspection", by: "Andrew Suiter", notes: ["Watch / AI play can now read ground hazards and a gameGuide() mechanics reference, so an AI player reads the board more clearly."] },
   { date: "2026-06-30", size: "medium", v: "Cooldown dials on the bar", by: "Jeff Louie", notes: ["Skill and potion buttons now show a radial grey cooldown sweep that depletes as they recharge, with a live countdown — whole seconds, then a decimal under 1s.", "Spell tiles dropped their MP label so the icon fills the button (hover for MP, cooldown and keybind)."] },
   { date: "2026-06-30", size: "small", v: "Version history filters", by: "Jeff Louie", notes: ["The Version tab can now be filtered by creator, size and category, plus a free-text search."] },
   { date: "2026-06-30", size: "small", v: "Minimap tweaks", by: "Jeff Louie", notes: ["Tap the minimap to collapse it to a small corner thumbnail (tap again to expand) — remembered.", "It defaults to 50% opacity, and the you/foe dots are smaller and tidier."] },
@@ -1162,61 +1166,61 @@ export const CHANGELOG = [
   { date: "2026-06-30", size: "small", v: "Clearer ready & descend cues", by: "Jeff Louie", notes: ["Ready skills and ready potions glow so it's obvious when they can be used.", "Once a floor is cleared, the down-stairs pulse gold so you know which way leads deeper."] },
   { date: "2026-06-30", size: "small", v: "Cook at the Ramen House", by: "Jeff Louie", notes: ["Cooking lives only at the town Ramen House now — the duplicate COOK tab is gone from the bag."] },
   { date: "2026-06-30", size: "small", v: "Teleport safety", by: "Jeff Louie", notes: ["Mage and rogue blink skills never drop you onto lava or spikes anymore."] },
-  { date: "2026-06-30", size: "small", v: "Settings reachable from town", by: "ASuiter89", notes: ["Town now has a <span data-spr=ic_mallet></span> Settings button (top-right of its menu) to open sound, saves, keybinds and more without leaving town.", "Esc on the main Town menu opens Settings too, like Esc in the dungeon; Esc inside a service panel still steps back to the hub."] },
+  { date: "2026-06-30", size: "small", v: "Settings reachable from town", by: "Andrew Suiter", notes: ["Town now has a <span data-spr=ic_mallet></span> Settings button (top-right of its menu) to open sound, saves, keybinds and more without leaving town.", "Esc on the main Town menu opens Settings too, like Esc in the dungeon; Esc inside a service panel still steps back to the hub."] },
   { date: '2026-06-30', size: 'medium', v: 'Reworked skill bar + auto-cast slot', by: 'Claude', notes: ['The bar is now three parts: Town/Health/Mana on the left, four active slots (keys 1–4) on the right, and a new auto-cast slot in the middle.', 'Auto-cast is no longer a per-skill toggle — drop one skill into the middle slot and it casts itself the moment it\'s ready. Tap to change or clear it.', 'The rule is simply "as soon as it\'s available", so buffs stay refreshed instead of only re-casting near foes. Heals still wait until you\'re hurt; damage still needs a target.', 'Active slots dropped from nine to four. Old heroes keep their first four; any auto-cast skill moves into the new slot.'] },
-  { date: "2026-06-30", size: "medium", v: "Potion Mastery upgrades", by: "ASuiter89", notes: ["The Healer now sells two permanent potion upgrades: Potency raises HP/MP restored per sip, Recharge shortens the shared cooldown. Both climb in steep, costly tiers."] },
-  { date: "2026-06-30", size: "small", v: "Settings is a centred pause menu", by: "ASuiter89", notes: ["The <span data-spr=ic_mallet></span> button is gone — Settings now open with Esc as a centred pop-up.", "Opening it pauses and dims the game; nothing else works until you close it (Esc or click outside)."] },
-  { date: "2026-06-30", size: "small", v: "Consistent cursor pointers", by: "ASuiter89", notes: ["Every <span data-spr=ic_mallet></span> → CURSOR option now points up-left like a normal pointer, with the click point right on the weapon's tip."] },
-  { date: "2026-06-30", size: "small", v: "Collapsible loot drawer on desktop", by: "ASuiter89", notes: ["The desktop loot drawer now folds away like the combat log — click its bar to collapse it and give the width to the map. Remembered.", "Both toggles are matching bars on the map-facing edge.", "The map fills its whole area, so collapsing a panel simply shows more floor. Tiles stay square."] },
-  { date: "2026-06-30", size: "big", v: "Furnished, roomier interiors", by: "ASuiter89", notes: ["The ten indoor floor types now have new wood/concrete textures and furniture — beds, shelves, couches, tables, stoves, barrels and more.", "Furniture is solid but only placed in open space, never blocking a doorway or your path to the stairs.", "Indoor floors are now roomier than ordinary ones."] },
-  { date: "2026-06-30", size: "big", v: "Bottom command bar on desktop", by: "ASuiter89", notes: ["On desktop every readout moved into one bottom command bar under the map, with big flanking Health and Mana bars hugging the side panels.", "Name, Power and gold sit centre above a slim stamina bar, skill slots run across, and one segmented XP bar spans the bottom. The old top strip is gone.", "The bar reflows with the side panels; touch layout is unchanged."] },
-  { date: "2026-06-30", size: "medium", v: "Auto-cast your skills", by: "ASuiter89", notes: ["Any bar skill can cast itself once ready (off cooldown, enough mana, valid target). Arm it by right-click, holding its key, or the SKILLS-tab Auto-cast button on phones — a cyan ⟳ marks armed skills.", "It follows hotbar order, so when mana's tight slot 1 gets first dibs. Skills fire only when useful: damage needs a target, heals wait for hurt, buffs wait for foes.", "Opt-in and saved per character."] },
-  { date: "2026-06-30", size: "medium", v: "Minimap + fixed map view", by: "ASuiter89", notes: ["A minimap sits top-left, sketching the whole floor — walls, water, lava, doors, shrines, teleporters, the green down-stairs — with live dots for you, foes, allies, chests, coins and NPCs. Hidden in town.", "The map view is now fixed at the closest zoom; the old Wide/Wider/Widest control is retired."] },
-  { date: "2026-06-30", size: "medium", v: "Power score retuned for the new stats", by: "ASuiter89", notes: ["POWER was recalibrated to the current stats so it reflects real strength; combat is unchanged.", "Power is class-aware now: a +Might piece is worth more to a Warrior, +Spirit to a caster, Spell Power near-nothing to a martial. Your damage attribute moves Power most.", "Level-up and gear attribute points now count equally (gear used to count double).", "Max HP/MP rolls no longer dominate, and Speed and Evasion report equal Power for equal benefit.", "The upgrade ↑ arrow now accounts for an off-hand a two-hander makes you stow."] },
-  { date: "2026-06-30", size: "small", v: "Click-to-move slides around walls", by: "ASuiter89", notes: ["Click-to-move no longer grinds into a wall past a corner — if the way's open above or below, the hero slides along and rounds it.", "The slide heads toward the click and stops where you aimed, so it never overshoots."] },
-  { date: "2026-06-30", size: "small", v: "Dungeon Gate is the only way down", by: "ASuiter89", notes: ["The ✕ in town menus no longer drops you into the dungeon; the Town menu lost its ✕, and town Merchant/Mystic panels show only ← back.", "Head down via the <span data-spr=feat_gate_red></span> Dungeon Gate (pick floor and difficulty). Esc in a town panel steps back instead of leaving. A dungeon Merchant/Mystic keeps its ✕."] },
-  { date: "2026-06-30", size: "small", v: "Skill bar stays in town", by: "ASuiter89", notes: ["On desktop the skill bar no longer vanishes in town — it parks as a tray so you can see and rearrange your kit. (Phones already show the slot row in the SKILLS tab.)", "Its Health/Mana potions grey out in town — resting heals for free — and relight when you take the gate down."] },
-  { date: "2026-06-30", size: "small", v: "Tidier SKILLS tab on desktop", by: "ASuiter89", notes: ["On wide desktop the SKILLS tab no longer repeats the slot row above the tree — the bottom bar already shows it, so drag or rearrange there.", "Phones and tablets keep the slot tray as-is."] },
-  { date: "2026-06-30", size: "medium", v: "Might fuels Stamina + Sprint toggle", by: "ASuiter89", notes: ["Might now also deepens your Stamina pool and speeds its recharge, so a mighty hero sprints longer and recovers sooner. The HERO sheet lists Max Stamina and regen.", "New Sprint setting: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch). Remembered."] },
-  { date: "2026-06-30", size: "medium", v: "Drag-and-drop skill slots", by: "ASuiter89", notes: ["The bar now shows every hotkey slot (1–9), empty ones as dashed gaps. Slot 1 is still the gold primary R/<span data-spr=ic_stun></span> casts.", "Drag a learned skill from its node onto a slot to bind it, or drag a slot onto another to rearrange. An unslotted skill reads as off the bar (🚫).", "A loadout tray above the ACTIVE tree shows all slots; on touch, tap a slot to fill or clear it. Saved per character."] },
-  { date: "2026-06-30", size: "small", v: "One skill card on hover", by: "ASuiter89", notes: ["Skill nodes now show a single detail card (mechanics, rank-up preview, Learn/Hide) instead of a tooltip plus a separate card, and it stays open while you're over the node or card.", "On touch, a tap still opens the same card."] },
-  { date: "2026-06-30", size: "small", v: "Active buffs & debuffs", by: "ASuiter89", notes: ["A row of status icons floats top-right of the map for every timed effect — buffs, debuffs and shrine boons — each badged with time left and ringed green or red.", "They stay tucked in the corner and reflow as effects end; hover (or hold) one to read it."] },
-  { date: "2026-06-30", size: "medium", v: "Agility speeds you up", by: "ASuiter89", notes: ["Agility now also raises Move and Attack speed, so a nimble build kites and swings faster. The HERO sheet lists both (with live swings-per-second).", "Both use a soft cap that always rewards more Agility without runaway speed.", "The other attributes were kept: Might→Attack, Vitality→HP/Defense, Spirit→MP/spell, Luck→Crit & loot."] },
-  { date: "2026-06-30", size: "small", v: "Custom mouse cursor", by: "ASuiter89", notes: ["On mouse-and-keyboard the pointer is now a custom pixel blade with its tip as the click point, used everywhere — text fields still show an I-beam and disabled controls the \"not allowed\" cursor."] },
-  { date: "2026-06-30", size: "medium", v: "Click to move", by: "ASuiter89", notes: ["On mouse-and-keyboard, click the map to walk there (a glowing ring marks the spot), or hold and drag to steer in real time. Arrows/WASD take back control, clicking a foe opens its info, and touch keeps its joystick."] },
-  { date: "2026-06-30", size: "small", v: "Cooldowns in seconds", by: "ASuiter89", notes: ["Skill and potion cooldowns now count down in real seconds, matching real-time combat.", "Potions share a 5-second cooldown (up from near-instant), so a sip is a real choice."] },
-  { date: "2026-06-30", size: "medium", v: "Real-time movement tuning", by: "ASuiter89", notes: ["Foes move a little slower, so you can create distance and kite. They're still solid.", "Movement is smooth again.", "Stamina now shows as its own <span data-spr=ic_stun></span> END bar by HP/MP; fixed old saves loading it empty (which disabled Sprint).", "Stray traps/bolts no longer flicker on the town screen."] },
-  { date: "2026-06-30", size: "big", v: "Movement, speed & traps", by: "ASuiter89", notes: ["Movement is physical now: you carry momentum, slide on ice, and slog through mud.", "Hold Shift (or push the stick to its edge) to Sprint off a stamina bar; tap Space to Dash. Blink skills still work.", "Attack speed is real — about one swing per 1.5s, faster with daggers and Attack Speed gear, slower with heavy weapons. Foes swing on their own rhythms.", "New crowd control: snares, sliding ice and slows.", "Dodgeable hazards: arrow traps fire down a lane, fire vents flare on and off. No foes on the entry stairs; the tutorial foe waits for you.", "Mobile uses a floating analog joystick."] },
-  { date: "2026-06-30", size: "big", v: "Real-time movement", by: "ASuiter89", notes: ["The dungeon is real-time now — hold the d-pad/arrows/WASD to walk freely in 8 directions and slide along walls.", "You auto-attack foes in reach on a short cooldown, so positioning matters. Skills and potions still fire on the bar/keys.", "Foes roam until they notice you, give chase when you're close or seen, and break off if you escape.", "Effects, cooldowns, hazards and the portal channel tick on a world clock. The USE button grabs loot and talks to NPCs underfoot."] },
-  { date: "2026-06-30", size: "big", v: "Stat requirements on all gear", by: "ASuiter89", notes: ["The attribute requirement now covers every gear slot. Each base leans on its natural attribute — heavy plate wants Vitality, mid armour Might, light leather Agility, cloth Spirit; jewelry asks less. Meet it and any class can wear it.", "Requirements scale with item level and are gentler than weapons'. Tooltips and the loot list show green/red, and you can only equip what you qualify for.", "Worn gear is protected: if a respec drops you below a requirement, that piece turns red and is ignored until you re-invest."] },
-  { date: "2026-06-30", size: "medium", v: "Forge cost varies by base", by: "ASuiter89", notes: ["Crafting cost now depends on the base, not just rarity: bulky pieces (Maul, Tower Shield, plate) drink more materials, fine pieces (Dagger, ring) sip them.", "Gold runs the other way — fine work bills more labour, so a Dagger costs more gold than a crude Maul of the same rarity. The Forge notes each base's build.", "The weapon picker is now two steps: category, then exact type."] },
-  { date: "2026-06-30", size: "small", v: "Smooth escort movement", by: "ASuiter89", notes: ["Escort followers and wandering lost pets now glide between tiles instead of snapping. Visual only — rescue/escort distances are unchanged."] },
-  { date: "2026-06-30", size: "small", v: "Even gear slots", by: "ASuiter89", notes: ["Fixed the GEAR paper-doll so the bottom hands/legs slots always match the size of the slots above them."] },
-  { date: "2026-06-30", size: "big", v: "Deep difficulty rebalance", by: "ASuiter89", notes: ["Levelling now starts fast and ends hard: early levels fly by, top costs climb steeply, and you can no longer out-level the dungeon — deep runs lean on gear.", "The floor curve outpaces your levelling, pulling further ahead with depth, so you periodically grind or upgrade to break through. No hard wall.", "All four classes got distinct identities: Warrior hardest-hitting melee, Rogue fragile crit/dodge striker (now scaling with level), Mage glass cannon, Templar the sturdy bulwark with no damage bonus.", "Committing to Agility (dodge) or Luck (crit) now keeps pace with depth-scaling defences, so evasion and crit are real foundations."] },
-  { date: "2026-06-30", size: "small", v: "Skills cost more mana as they level", by: "ASuiter89", notes: ["Ranking an active skill now raises its mana cost a little each rank, so deepening one is a real commitment — though power still outpaces it. The rank-3 ✦ Empowered perk trims the cost back.", "The current cost shows everywhere it's cast, and the \"On rank up\" tooltip previews the next rank's cost beside its power gain."] },
-  { date: "2026-06-30", size: "big", v: "Any weapon, with stat requirements", by: "ASuiter89", notes: ["Every class can now wield every weapon and pair any sensible off-hand — the old class lock is gone. A stat requirement gates it instead: Might for heavy, Agility for finesse/bows, Spirit for staves, Vitality for shields.", "Requirements are per weapon type and scale with item level. Your class still favours its weapons in drops, and +attribute gear counts toward meeting them.", "Tooltips, loot and the Forge show green/red. Off-hands keep their pairing rules (a two-hander pairs once you learn Titan's Grip)."] },
-  { date: "2026-06-30", size: "medium", v: "Hardcore leaderboards", by: "ASuiter89", notes: ["The Leaderboards now have a Hardcore ladder — a Standard/Hardcore switch flips every board between ordinary and one-life heroes.", "Hardcore heroes rank only against each other."] },
-  { date: "2026-06-30", size: "small", v: "Clearer \"can't afford\" prices", by: "ASuiter89", notes: ["Across the shop, gambler, forge, enchanter, mystic, healer and trainer, wares you can't afford now dim out.", "Mixed prices pinpoint the shortfall — the exact gold or material you're missing turns red."] },
-  { date: "2026-06-29", size: "medium", v: "Channeled town portal", by: "ASuiter89", notes: ["The town gate is clickable any time now; opening it channels a portal in real time.", "While it channels, the dungeon auto-runs a turn every half-second — survive 3 clean turns and it opens; a single hit shatters it.", "You're committed while it charges (a countdown shows over your hero); tap TOWN again to break off."] },
-  { date: "2026-06-29", size: "medium", v: "Bigger floors per difficulty", by: "ASuiter89", notes: ["Floors grow with difficulty: Normal 20×20, Hardened 24×24, Brutal 28×28, Endless from 32×32 and still expanding (ever slower).", "Density is held constant, so a bigger floor just carries proportionally more foes.", "A cap keeps the largest floors from spawning an unplayable swarm."] },
-  { date: "2026-06-29", size: "medium", v: "Two gear sets", by: "ASuiter89", notes: ["You now keep two equipment loadouts and swap in one tap. The GEAR tab has a Set 1/Set 2 switch showing each set's count and power.", "Tap the other set (or press G) to swap your whole loadout. Gear stays on its set instead of cluttering your bag, and both save with your character."] },
-  { date: "2026-06-29", size: "small", v: "Floor 1 portal fix", by: "ASuiter89", notes: ["Stepping onto the gate on a difficulty's first floor now returns you to town — it was silently doing nothing."] },
-  { date: "2026-06-29", size: "big", v: "Rating-based combat overhaul", by: "ASuiter89", notes: ["Crit, dodge, hit, block and damage reduction are now RATINGS you build from attributes and gear; the actual % is your rating vs the enemy (rating / (rating + opposition)) — it nears but never reaches 100%, so absurd numbers are impossible.", "Opposition grows with depth, so a rating worth a lot on floor 5 is worth less on floor 50 — you keep investing to stay sharp.", "Combat is two-sided: foes have Accuracy (eats your dodge) and Evasion (your weapon attacks can miss), and your Accuracy rating (Agility + the ACC affix) fights back. Spells never miss.", "Agility drives Evasion and Accuracy, Luck drives Crit; gear ratings show as flat numbers with live % on the HERO sheet. Crit damage is uncapped.", "Health and mana stay finite: slower regen, level-ups mend ~40%, smaller potions, capped burst-heals."] },
-  { date: "2026-06-29", size: "medium", v: "Every action costs a turn", by: "ASuiter89", notes: ["Anything you do now passes a turn, so the world keeps moving — bumping a wall, the edge, water, a locked door or sealed stairs all tick the clock.", "Walking into a boss's wall of force passes a turn too, so the barriers crumble on their own.", "Being stunned no longer freezes the dungeon; fountains, shrines and opening a chest underfoot are turns as well."] },
-  { date: "2026-06-29", size: "big", v: "Rebalanced loot drops", by: "ASuiter89", notes: ["Loot rarity is rebalanced so you stop drowning in high-end gear: each drop now makes one independent check per tier from rarest down — roughly 50% normal down to ~0.15% unique.", "Magic Find, Luck and depth still raise the odds, but with diminishing returns and per-tier caps, so stacking Magic Find floods you with greens, not legendaries.", "Tougher foes drop more items (ordinary 1, elites 3, bosses 5 picks), each nothing-or-one — so a boss sprays loot while trash mostly drops nothing."] },
-  { date: "2026-06-29", size: "small", v: "Tidier Settings menu", by: "ASuiter89", notes: ["The <span data-spr=ic_mallet></span> menu is one consistent style now — every row shares the same neutral tile.", "Sound, Zoom and Time gained icons in a fixed cell, so labels line up.", "Only meaningful states colour: New Run flashes red when armed, Sound dims when muted."] },
-  { date: "2026-06-29", size: "small", v: "Auto-Loot on the LOOT tab", by: "ASuiter89", notes: ["The <span data-spr=mat_scrap></span> Auto-Loot picker moved from the <span data-spr=ic_mallet></span> menu onto the LOOT tab — a button shows its state and opens the per-rarity Keep/Scrap/Sell picker."] },
-  { date: "2026-06-29", size: "medium", v: "Shared stash", by: "ASuiter89", notes: ["The town Vault is now shared across all save slots, so any hero can withdraw what another banked — account-wide storage to pass loot between characters.", "Signed in, it syncs across devices.", "Existing banked gear merges in automatically."] },
-  { date: "2026-06-29", size: "big", v: "Auto-loot & bag selling", by: "ASuiter89", notes: ["New <span data-spr=mat_scrap></span> AUTO-LOOT (off by default): per rarity, keep, auto-scrap or auto-sell dropped gear.", "Sell and Scrap now live on the bag — tap an item for per-piece buttons, or use Sell all / Scrap all atop the LOOT drawer.", "The Merchant is buy-only and the Craftsman forge-only.", "Rarer materials drop a little less, so scrapping is a steady high-end supply."] },
-  { date: "2026-06-29", size: "big", v: "Dungeon difficulties", by: "ASuiter89", notes: ["Beat the floor-25 guardian to unlock the next difficulty at the Gate: Normal → Hardened → Brutal → Endless, each 25 floors, deeper red and more powerful.", "Endless restarts at floor 1, rolls random bosses and ramps forever.", "Death penalties grow per tier, and each difficulty conquered leaves a permanent stat scar.", "Rarer materials are gated by tier: Glimmer (Hardened), Core (Brutal), Chaos Orbs (Endless).", "The leaderboard shows difficulty and ranks harder runs higher."] },
-  { date: "2026-06-29", size: "small", v: "Healer charges a fee", by: "ASuiter89", notes: ["A full rest & cure at the healer now costs gold that climbs steeply with level — cheap early, a real sink later, capped at 100k.", "The free cooldown-gated potions are unchanged."] },
-  { date: "2026-06-29", size: "medium", v: "Power leaderboard", by: "ASuiter89", notes: ["The leaderboards gained a fourth board ranking heroes by highest Power ever reached."] },
+  { date: "2026-06-30", size: "medium", v: "Potion Mastery upgrades", by: "Andrew Suiter", notes: ["The Healer now sells two permanent potion upgrades: Potency raises HP/MP restored per sip, Recharge shortens the shared cooldown. Both climb in steep, costly tiers."] },
+  { date: "2026-06-30", size: "small", v: "Settings is a centred pause menu", by: "Andrew Suiter", notes: ["The <span data-spr=ic_mallet></span> button is gone — Settings now open with Esc as a centred pop-up.", "Opening it pauses and dims the game; nothing else works until you close it (Esc or click outside)."] },
+  { date: "2026-06-30", size: "small", v: "Consistent cursor pointers", by: "Andrew Suiter", notes: ["Every <span data-spr=ic_mallet></span> → CURSOR option now points up-left like a normal pointer, with the click point right on the weapon's tip."] },
+  { date: "2026-06-30", size: "small", v: "Collapsible loot drawer on desktop", by: "Andrew Suiter", notes: ["The desktop loot drawer now folds away like the combat log — click its bar to collapse it and give the width to the map. Remembered.", "Both toggles are matching bars on the map-facing edge.", "The map fills its whole area, so collapsing a panel simply shows more floor. Tiles stay square."] },
+  { date: "2026-06-30", size: "big", v: "Furnished, roomier interiors", by: "Andrew Suiter", notes: ["The ten indoor floor types now have new wood/concrete textures and furniture — beds, shelves, couches, tables, stoves, barrels and more.", "Furniture is solid but only placed in open space, never blocking a doorway or your path to the stairs.", "Indoor floors are now roomier than ordinary ones."] },
+  { date: "2026-06-30", size: "big", v: "Bottom command bar on desktop", by: "Andrew Suiter", notes: ["On desktop every readout moved into one bottom command bar under the map, with big flanking Health and Mana bars hugging the side panels.", "Name, Power and gold sit centre above a slim stamina bar, skill slots run across, and one segmented XP bar spans the bottom. The old top strip is gone.", "The bar reflows with the side panels; touch layout is unchanged."] },
+  { date: "2026-06-30", size: "medium", v: "Auto-cast your skills", by: "Andrew Suiter", notes: ["Any bar skill can cast itself once ready (off cooldown, enough mana, valid target). Arm it by right-click, holding its key, or the SKILLS-tab Auto-cast button on phones — a cyan ⟳ marks armed skills.", "It follows hotbar order, so when mana's tight slot 1 gets first dibs. Skills fire only when useful: damage needs a target, heals wait for hurt, buffs wait for foes.", "Opt-in and saved per character."] },
+  { date: "2026-06-30", size: "medium", v: "Minimap + fixed map view", by: "Andrew Suiter", notes: ["A minimap sits top-left, sketching the whole floor — walls, water, lava, doors, shrines, teleporters, the green down-stairs — with live dots for you, foes, allies, chests, coins and NPCs. Hidden in town.", "The map view is now fixed at the closest zoom; the old Wide/Wider/Widest control is retired."] },
+  { date: "2026-06-30", size: "medium", v: "Power score retuned for the new stats", by: "Andrew Suiter", notes: ["POWER was recalibrated to the current stats so it reflects real strength; combat is unchanged.", "Power is class-aware now: a +Might piece is worth more to a Warrior, +Spirit to a caster, Spell Power near-nothing to a martial. Your damage attribute moves Power most.", "Level-up and gear attribute points now count equally (gear used to count double).", "Max HP/MP rolls no longer dominate, and Speed and Evasion report equal Power for equal benefit.", "The upgrade ↑ arrow now accounts for an off-hand a two-hander makes you stow."] },
+  { date: "2026-06-30", size: "small", v: "Click-to-move slides around walls", by: "Andrew Suiter", notes: ["Click-to-move no longer grinds into a wall past a corner — if the way's open above or below, the hero slides along and rounds it.", "The slide heads toward the click and stops where you aimed, so it never overshoots."] },
+  { date: "2026-06-30", size: "small", v: "Dungeon Gate is the only way down", by: "Andrew Suiter", notes: ["The ✕ in town menus no longer drops you into the dungeon; the Town menu lost its ✕, and town Merchant/Mystic panels show only ← back.", "Head down via the <span data-spr=feat_gate_red></span> Dungeon Gate (pick floor and difficulty). Esc in a town panel steps back instead of leaving. A dungeon Merchant/Mystic keeps its ✕."] },
+  { date: "2026-06-30", size: "small", v: "Skill bar stays in town", by: "Andrew Suiter", notes: ["On desktop the skill bar no longer vanishes in town — it parks as a tray so you can see and rearrange your kit. (Phones already show the slot row in the SKILLS tab.)", "Its Health/Mana potions grey out in town — resting heals for free — and relight when you take the gate down."] },
+  { date: "2026-06-30", size: "small", v: "Tidier SKILLS tab on desktop", by: "Andrew Suiter", notes: ["On wide desktop the SKILLS tab no longer repeats the slot row above the tree — the bottom bar already shows it, so drag or rearrange there.", "Phones and tablets keep the slot tray as-is."] },
+  { date: "2026-06-30", size: "medium", v: "Might fuels Stamina + Sprint toggle", by: "Andrew Suiter", notes: ["Might now also deepens your Stamina pool and speeds its recharge, so a mighty hero sprints longer and recovers sooner. The HERO sheet lists Max Stamina and regen.", "New Sprint setting: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch). Remembered."] },
+  { date: "2026-06-30", size: "medium", v: "Drag-and-drop skill slots", by: "Andrew Suiter", notes: ["The bar now shows every hotkey slot (1–9), empty ones as dashed gaps. Slot 1 is still the gold primary R/<span data-spr=ic_stun></span> casts.", "Drag a learned skill from its node onto a slot to bind it, or drag a slot onto another to rearrange. An unslotted skill reads as off the bar (🚫).", "A loadout tray above the ACTIVE tree shows all slots; on touch, tap a slot to fill or clear it. Saved per character."] },
+  { date: "2026-06-30", size: "small", v: "One skill card on hover", by: "Andrew Suiter", notes: ["Skill nodes now show a single detail card (mechanics, rank-up preview, Learn/Hide) instead of a tooltip plus a separate card, and it stays open while you're over the node or card.", "On touch, a tap still opens the same card."] },
+  { date: "2026-06-30", size: "small", v: "Active buffs & debuffs", by: "Andrew Suiter", notes: ["A row of status icons floats top-right of the map for every timed effect — buffs, debuffs and shrine boons — each badged with time left and ringed green or red.", "They stay tucked in the corner and reflow as effects end; hover (or hold) one to read it."] },
+  { date: "2026-06-30", size: "medium", v: "Agility speeds you up", by: "Andrew Suiter", notes: ["Agility now also raises Move and Attack speed, so a nimble build kites and swings faster. The HERO sheet lists both (with live swings-per-second).", "Both use a soft cap that always rewards more Agility without runaway speed.", "The other attributes were kept: Might→Attack, Vitality→HP/Defense, Spirit→MP/spell, Luck→Crit & loot."] },
+  { date: "2026-06-30", size: "small", v: "Custom mouse cursor", by: "Andrew Suiter", notes: ["On mouse-and-keyboard the pointer is now a custom pixel blade with its tip as the click point, used everywhere — text fields still show an I-beam and disabled controls the \"not allowed\" cursor."] },
+  { date: "2026-06-30", size: "medium", v: "Click to move", by: "Andrew Suiter", notes: ["On mouse-and-keyboard, click the map to walk there (a glowing ring marks the spot), or hold and drag to steer in real time. Arrows/WASD take back control, clicking a foe opens its info, and touch keeps its joystick."] },
+  { date: "2026-06-30", size: "small", v: "Cooldowns in seconds", by: "Andrew Suiter", notes: ["Skill and potion cooldowns now count down in real seconds, matching real-time combat.", "Potions share a 5-second cooldown (up from near-instant), so a sip is a real choice."] },
+  { date: "2026-06-30", size: "medium", v: "Real-time movement tuning", by: "Andrew Suiter", notes: ["Foes move a little slower, so you can create distance and kite. They're still solid.", "Movement is smooth again.", "Stamina now shows as its own <span data-spr=ic_stun></span> END bar by HP/MP; fixed old saves loading it empty (which disabled Sprint).", "Stray traps/bolts no longer flicker on the town screen."] },
+  { date: "2026-06-30", size: "big", v: "Movement, speed & traps", by: "Andrew Suiter", notes: ["Movement is physical now: you carry momentum, slide on ice, and slog through mud.", "Hold Shift (or push the stick to its edge) to Sprint off a stamina bar; tap Space to Dash. Blink skills still work.", "Attack speed is real — about one swing per 1.5s, faster with daggers and Attack Speed gear, slower with heavy weapons. Foes swing on their own rhythms.", "New crowd control: snares, sliding ice and slows.", "Dodgeable hazards: arrow traps fire down a lane, fire vents flare on and off. No foes on the entry stairs; the tutorial foe waits for you.", "Mobile uses a floating analog joystick."] },
+  { date: "2026-06-30", size: "big", v: "Real-time movement", by: "Andrew Suiter", notes: ["The dungeon is real-time now — hold the d-pad/arrows/WASD to walk freely in 8 directions and slide along walls.", "You auto-attack foes in reach on a short cooldown, so positioning matters. Skills and potions still fire on the bar/keys.", "Foes roam until they notice you, give chase when you're close or seen, and break off if you escape.", "Effects, cooldowns, hazards and the portal channel tick on a world clock. The USE button grabs loot and talks to NPCs underfoot."] },
+  { date: "2026-06-30", size: "big", v: "Stat requirements on all gear", by: "Andrew Suiter", notes: ["The attribute requirement now covers every gear slot. Each base leans on its natural attribute — heavy plate wants Vitality, mid armour Might, light leather Agility, cloth Spirit; jewelry asks less. Meet it and any class can wear it.", "Requirements scale with item level and are gentler than weapons'. Tooltips and the loot list show green/red, and you can only equip what you qualify for.", "Worn gear is protected: if a respec drops you below a requirement, that piece turns red and is ignored until you re-invest."] },
+  { date: "2026-06-30", size: "medium", v: "Forge cost varies by base", by: "Andrew Suiter", notes: ["Crafting cost now depends on the base, not just rarity: bulky pieces (Maul, Tower Shield, plate) drink more materials, fine pieces (Dagger, ring) sip them.", "Gold runs the other way — fine work bills more labour, so a Dagger costs more gold than a crude Maul of the same rarity. The Forge notes each base's build.", "The weapon picker is now two steps: category, then exact type."] },
+  { date: "2026-06-30", size: "small", v: "Smooth escort movement", by: "Andrew Suiter", notes: ["Escort followers and wandering lost pets now glide between tiles instead of snapping. Visual only — rescue/escort distances are unchanged."] },
+  { date: "2026-06-30", size: "small", v: "Even gear slots", by: "Andrew Suiter", notes: ["Fixed the GEAR paper-doll so the bottom hands/legs slots always match the size of the slots above them."] },
+  { date: "2026-06-30", size: "big", v: "Deep difficulty rebalance", by: "Andrew Suiter", notes: ["Levelling now starts fast and ends hard: early levels fly by, top costs climb steeply, and you can no longer out-level the dungeon — deep runs lean on gear.", "The floor curve outpaces your levelling, pulling further ahead with depth, so you periodically grind or upgrade to break through. No hard wall.", "All four classes got distinct identities: Warrior hardest-hitting melee, Rogue fragile crit/dodge striker (now scaling with level), Mage glass cannon, Templar the sturdy bulwark with no damage bonus.", "Committing to Agility (dodge) or Luck (crit) now keeps pace with depth-scaling defences, so evasion and crit are real foundations."] },
+  { date: "2026-06-30", size: "small", v: "Skills cost more mana as they level", by: "Andrew Suiter", notes: ["Ranking an active skill now raises its mana cost a little each rank, so deepening one is a real commitment — though power still outpaces it. The rank-3 ✦ Empowered perk trims the cost back.", "The current cost shows everywhere it's cast, and the \"On rank up\" tooltip previews the next rank's cost beside its power gain."] },
+  { date: "2026-06-30", size: "big", v: "Any weapon, with stat requirements", by: "Andrew Suiter", notes: ["Every class can now wield every weapon and pair any sensible off-hand — the old class lock is gone. A stat requirement gates it instead: Might for heavy, Agility for finesse/bows, Spirit for staves, Vitality for shields.", "Requirements are per weapon type and scale with item level. Your class still favours its weapons in drops, and +attribute gear counts toward meeting them.", "Tooltips, loot and the Forge show green/red. Off-hands keep their pairing rules (a two-hander pairs once you learn Titan's Grip)."] },
+  { date: "2026-06-30", size: "medium", v: "Hardcore leaderboards", by: "Andrew Suiter", notes: ["The Leaderboards now have a Hardcore ladder — a Standard/Hardcore switch flips every board between ordinary and one-life heroes.", "Hardcore heroes rank only against each other."] },
+  { date: "2026-06-30", size: "small", v: "Clearer \"can't afford\" prices", by: "Andrew Suiter", notes: ["Across the shop, gambler, forge, enchanter, mystic, healer and trainer, wares you can't afford now dim out.", "Mixed prices pinpoint the shortfall — the exact gold or material you're missing turns red."] },
+  { date: "2026-06-29", size: "medium", v: "Channeled town portal", by: "Andrew Suiter", notes: ["The town gate is clickable any time now; opening it channels a portal in real time.", "While it channels, the dungeon auto-runs a turn every half-second — survive 3 clean turns and it opens; a single hit shatters it.", "You're committed while it charges (a countdown shows over your hero); tap TOWN again to break off."] },
+  { date: "2026-06-29", size: "medium", v: "Bigger floors per difficulty", by: "Andrew Suiter", notes: ["Floors grow with difficulty: Normal 20×20, Hardened 24×24, Brutal 28×28, Endless from 32×32 and still expanding (ever slower).", "Density is held constant, so a bigger floor just carries proportionally more foes.", "A cap keeps the largest floors from spawning an unplayable swarm."] },
+  { date: "2026-06-29", size: "medium", v: "Two gear sets", by: "Andrew Suiter", notes: ["You now keep two equipment loadouts and swap in one tap. The GEAR tab has a Set 1/Set 2 switch showing each set's count and power.", "Tap the other set (or press G) to swap your whole loadout. Gear stays on its set instead of cluttering your bag, and both save with your character."] },
+  { date: "2026-06-29", size: "small", v: "Floor 1 portal fix", by: "Andrew Suiter", notes: ["Stepping onto the gate on a difficulty's first floor now returns you to town — it was silently doing nothing."] },
+  { date: "2026-06-29", size: "big", v: "Rating-based combat overhaul", by: "Andrew Suiter", notes: ["Crit, dodge, hit, block and damage reduction are now RATINGS you build from attributes and gear; the actual % is your rating vs the enemy (rating / (rating + opposition)) — it nears but never reaches 100%, so absurd numbers are impossible.", "Opposition grows with depth, so a rating worth a lot on floor 5 is worth less on floor 50 — you keep investing to stay sharp.", "Combat is two-sided: foes have Accuracy (eats your dodge) and Evasion (your weapon attacks can miss), and your Accuracy rating (Agility + the ACC affix) fights back. Spells never miss.", "Agility drives Evasion and Accuracy, Luck drives Crit; gear ratings show as flat numbers with live % on the HERO sheet. Crit damage is uncapped.", "Health and mana stay finite: slower regen, level-ups mend ~40%, smaller potions, capped burst-heals."] },
+  { date: "2026-06-29", size: "medium", v: "Every action costs a turn", by: "Andrew Suiter", notes: ["Anything you do now passes a turn, so the world keeps moving — bumping a wall, the edge, water, a locked door or sealed stairs all tick the clock.", "Walking into a boss's wall of force passes a turn too, so the barriers crumble on their own.", "Being stunned no longer freezes the dungeon; fountains, shrines and opening a chest underfoot are turns as well."] },
+  { date: "2026-06-29", size: "big", v: "Rebalanced loot drops", by: "Andrew Suiter", notes: ["Loot rarity is rebalanced so you stop drowning in high-end gear: each drop now makes one independent check per tier from rarest down — roughly 50% normal down to ~0.15% unique.", "Magic Find, Luck and depth still raise the odds, but with diminishing returns and per-tier caps, so stacking Magic Find floods you with greens, not legendaries.", "Tougher foes drop more items (ordinary 1, elites 3, bosses 5 picks), each nothing-or-one — so a boss sprays loot while trash mostly drops nothing."] },
+  { date: "2026-06-29", size: "small", v: "Tidier Settings menu", by: "Andrew Suiter", notes: ["The <span data-spr=ic_mallet></span> menu is one consistent style now — every row shares the same neutral tile.", "Sound, Zoom and Time gained icons in a fixed cell, so labels line up.", "Only meaningful states colour: New Run flashes red when armed, Sound dims when muted."] },
+  { date: "2026-06-29", size: "small", v: "Auto-Loot on the LOOT tab", by: "Andrew Suiter", notes: ["The <span data-spr=mat_scrap></span> Auto-Loot picker moved from the <span data-spr=ic_mallet></span> menu onto the LOOT tab — a button shows its state and opens the per-rarity Keep/Scrap/Sell picker."] },
+  { date: "2026-06-29", size: "medium", v: "Shared stash", by: "Andrew Suiter", notes: ["The town Vault is now shared across all save slots, so any hero can withdraw what another banked — account-wide storage to pass loot between characters.", "Signed in, it syncs across devices.", "Existing banked gear merges in automatically."] },
+  { date: "2026-06-29", size: "big", v: "Auto-loot & bag selling", by: "Andrew Suiter", notes: ["New <span data-spr=mat_scrap></span> AUTO-LOOT (off by default): per rarity, keep, auto-scrap or auto-sell dropped gear.", "Sell and Scrap now live on the bag — tap an item for per-piece buttons, or use Sell all / Scrap all atop the LOOT drawer.", "The Merchant is buy-only and the Craftsman forge-only.", "Rarer materials drop a little less, so scrapping is a steady high-end supply."] },
+  { date: "2026-06-29", size: "big", v: "Dungeon difficulties", by: "Andrew Suiter", notes: ["Beat the floor-25 guardian to unlock the next difficulty at the Gate: Normal → Hardened → Brutal → Endless, each 25 floors, deeper red and more powerful.", "Endless restarts at floor 1, rolls random bosses and ramps forever.", "Death penalties grow per tier, and each difficulty conquered leaves a permanent stat scar.", "Rarer materials are gated by tier: Glimmer (Hardened), Core (Brutal), Chaos Orbs (Endless).", "The leaderboard shows difficulty and ranks harder runs higher."] },
+  { date: "2026-06-29", size: "small", v: "Healer charges a fee", by: "Andrew Suiter", notes: ["A full rest & cure at the healer now costs gold that climbs steeply with level — cheap early, a real sink later, capped at 100k.", "The free cooldown-gated potions are unchanged."] },
+  { date: "2026-06-29", size: "medium", v: "Power leaderboard", by: "Andrew Suiter", notes: ["The leaderboards gained a fourth board ranking heroes by highest Power ever reached."] },
   { date: "2026-06-29", size: "big", v: "Paper-doll gear screen", by: "Jeff Louie", notes: ["The GEAR tab is now a paper-doll: each slot a framed cell around a faint hero body, worn pieces ringed by rarity. Tap for the tooltip, ✕ to unequip."] },
   { date: "2026-06-29", size: "small", v: "Monochrome UI symbols", by: "Jeff Louie", notes: ["Menu/HUD emoji that aren't game icons now render as flat single-colour symbols (and the title setting icons no longer vanish). Pixel-art game icons are unchanged."] },
   { date: "2026-06-29", size: "small", v: "Rarer, smarter loot", by: "Jeff Louie", notes: ["Lower gear drop rates so each find feels earned.", "Weapon drops now favour types your class can wield."] },
   { date: "2026-06-29", size: "small", v: "Lost-loot grave beacon", by: "Jeff Louie", notes: ["Your dropped-bag grave now glows with a halo, expanding rings and a bobbing pointer so it's easy to find."] },
   { date: "2026-06-29", size: "small", v: "Control & list fixes", by: "Jeff Louie", notes: ["A right-click no longer leaves a movement key stuck.", "The LOOT tab shows your bag's item count."] },
-  { date: "2026-06-28", size: "medium", v: "Start with a skill point", by: "ASuiter89", notes: ["The always-on baseline class skill is gone — it just copied each tree's first node.", "Every hero now starts with one skill point to pick its first active; R and <span data-spr=ic_stun></span> cast it.", "Existing heroes get the extra point retroactively."] },
+  { date: "2026-06-28", size: "medium", v: "Start with a skill point", by: "Andrew Suiter", notes: ["The always-on baseline class skill is gone — it just copied each tree's first node.", "Every hero now starts with one skill point to pick its first active; R and <span data-spr=ic_stun></span> cast it.", "Existing heroes get the extra point retroactively."] },
   { date: "2026-06-28", size: "big", v: "Boss battle abilities", by: "Jeff Louie", notes: ["Every 5th-floor guardian now fights with telegraphed tricks instead of just walking at you.", "Flame walls and firestorms leave burning ground; chains yank you in; shockwaves throw you back; force barriers pen you.", "Bosses also blink, freeze you, raise damage-halving wards and mend when cornered."] },
   { date: "2026-06-28", size: "small", v: "Slower mana regen", by: "Jeff Louie", notes: ["Mana regenerates about half as fast, so it runs dry in long fights and mana potions matter again."] },
   { date: "2026-06-28", size: "medium", v: "Time played counter", by: "Jeff Louie", notes: ["New ⏱️ TIME button shows total play time across all characters, plus a per-hero breakdown.", "Each save slot lists its character's play time."] },
@@ -1225,24 +1229,24 @@ export const CHANGELOG = [
   { date: "2026-06-27", size: "medium", v: "Death: lose your bag", by: "Jeff Louie", notes: ["Dying also takes your whole bag and one random equipped piece — never your weapon."] },
   { date: "2026-06-27", size: "small", v: "Death screen", by: "Jeff Louie", notes: ["A loud YOU DIED screen lists every penalty at once."] },
   { date: "2026-06-27", size: "medium", v: "Harsher deaths", by: "Jeff Louie", notes: ["Lose half your gold and all progress toward your next level, revive at half health/mana, knocked back a floor."] },
-  { date: "2026-06-27", size: "big", v: "Skill-tree overhaul", by: "ASuiter89", notes: ["Passive & active skill trees, ascensions, and summonable minions."] },
+  { date: "2026-06-27", size: "big", v: "Skill-tree overhaul", by: "Andrew Suiter", notes: ["Passive & active skill trees, ascensions, and summonable minions."] },
   { date: "2026-06-27", size: "small", v: "Mobile tooltip fix", by: "Jeff Louie", notes: ["Hover tooltips no longer pop open at random when you tap on a touchscreen."] },
   { date: "2026-06-27", size: "small", v: "Roaming behemoths", by: "Jeff Louie", notes: ["Big bosses lumber after you and spawn in a cleared, roomy arena."] },
-  { date: "2026-06-27", size: "small", v: "Native stats & curse lock", by: "ASuiter89", notes: ["Gear marks its native stats; curse penalties can no longer be rerolled away."] },
-  { date: "2026-06-27", size: "small", v: "Styled hover popups", by: "ASuiter89", notes: ["Native browser title tooltips replaced with styled hover cards."] },
+  { date: "2026-06-27", size: "small", v: "Native stats & curse lock", by: "Andrew Suiter", notes: ["Gear marks its native stats; curse penalties can no longer be rerolled away."] },
+  { date: "2026-06-27", size: "small", v: "Styled hover popups", by: "Andrew Suiter", notes: ["Native browser title tooltips replaced with styled hover cards."] },
   { date: "2026-06-27", size: "small", v: "Cleaner pickups", by: "Jeff Louie", notes: ["Square glow boxes under coins, keys and chests replaced with a soft round glow."] },
   { date: "2026-06-27", size: "small", v: "Summon anti-farm", by: "Jeff Louie", notes: ["Boss-summoned minions drop no rewards, and a boss can summon at most 10."] },
   { date: "2026-06-27", size: "small", v: "Affix auras", by: "Jeff Louie", notes: ["Tough / Fierce / Venomous foes show a steel / red / purple glow instead of an icon."] },
-  { date: "2026-06-27", size: "medium", v: "Weapon bases & reach", by: "ASuiter89", notes: ["Item bases shape stats, classes filter usable weapons, and weapons have reach on the grid."] },
-  { date: "2026-06-27", size: "small", v: "Musical styles", by: "ASuiter89", notes: ["Distinct musical styles that crossfade into one another."] },
+  { date: "2026-06-27", size: "medium", v: "Weapon bases & reach", by: "Andrew Suiter", notes: ["Item bases shape stats, classes filter usable weapons, and weapons have reach on the grid."] },
+  { date: "2026-06-27", size: "small", v: "Musical styles", by: "Andrew Suiter", notes: ["Distinct musical styles that crossfade into one another."] },
   { date: "2026-06-27", size: "small", v: "No more kiting", by: "Jeff Louie", notes: ["Ranged foes hold ground and fight back when cornered instead of fleeing."] },
   { date: "2026-06-27", size: "small", v: "Goblin fumble", by: "Jeff Louie", notes: ["Treasure Goblins trip or bolt the wrong way about half the time."] },
   { date: "2026-06-27", size: "medium", v: "Giant bosses", by: "Jeff Louie", notes: ["Some bosses are huge 2–3 tile behemoths with footprint-wide health bars."] },
   { date: "2026-06-27", size: "medium", v: "Living water & lava", by: "Jeff Louie", notes: ["Liquids merge into cohesive pools with organic edges, shores and flowing animation."] },
-  { date: "2026-06-27", size: "big", v: "Pixel-asset rework", by: "ASuiter89", notes: ["New pixel-art sprites for heroes, NPCs, objects and procedural terrain."] },
-  { date: "2026-06-27", size: "medium", v: "Salvage & save slots", by: "ASuiter89", notes: ["Salvage gear into materials at the Craftsman; up to 10 save slots."] },
-  { date: "2026-06-27", size: "small", v: "Potion cooldown", by: "ASuiter89", notes: ["Potions are a cooldown-gated skill — one per turn, 3-turn cooldown."] },
-  { date: "2026-06-27", size: "medium", v: "Names & leaderboards", by: "ASuiter89", notes: ["Name your character; global leaderboards."] },
+  { date: "2026-06-27", size: "big", v: "Pixel-asset rework", by: "Andrew Suiter", notes: ["New pixel-art sprites for heroes, NPCs, objects and procedural terrain."] },
+  { date: "2026-06-27", size: "medium", v: "Salvage & save slots", by: "Andrew Suiter", notes: ["Salvage gear into materials at the Craftsman; up to 10 save slots."] },
+  { date: "2026-06-27", size: "small", v: "Potion cooldown", by: "Andrew Suiter", notes: ["Potions are a cooldown-gated skill — one per turn, 3-turn cooldown."] },
+  { date: "2026-06-27", size: "medium", v: "Names & leaderboards", by: "Andrew Suiter", notes: ["Name your character; global leaderboards."] },
   { date: "2026-06-27", size: "small", v: "Tile blend fix", by: "Jeff Louie", notes: ["Spikes and other special tiles match the floor they sit on."] },
   { date: "2026-06-27", size: "medium", v: "Exotic biomes", by: "Jeff Louie", notes: ["Mushroom Hollow, Crystal Cavern, Coral Lagoon, Lavender Fields, Obsidian Wastes."] },
   { date: "2026-06-27", size: "medium", v: "Seasonal biomes", by: "Jeff Louie", notes: ["Winter Frostwood, Wildflower Meadow, Golden Savanna, Harvest Vineyard."] },
@@ -1253,31 +1257,31 @@ export const CHANGELOG = [
   { date: "2026-06-27", size: "big", v: "Mini-quests", by: "Jeff Louie", notes: ["13 types: rescue, escort, jailbreak, hunt, fetch, forage, tribute, grave, courier and more."] },
   { date: "2026-06-27", size: "medium", v: "Flavour vignettes", by: "Jeff Louie", notes: ["25 light on-descent events: coin caches, traps, whispers, ghostly merchants."] },
   { date: "2026-06-27", size: "medium", v: "Randomness pass", by: "Jeff Louie", notes: ["Treasure Goblins, gold piles, flash sales, chest surprises, super-drops, floor modifiers & tints."] },
-  { date: "2026-06-27", size: "big", v: "Combat rework & 21 stats", by: "ASuiter89", notes: ["Percentage armor, dozens of new gear stats, 5-stat/1-attr items, hero-tab redo."] },
-  { date: "2026-06-27", size: "big", v: "Enchanter & affixes", by: "ASuiter89", notes: ["Reroll affix values/types with ranges and pool hints; widened, fully-rerollable pools."] },
-  { date: "2026-06-27", size: "medium", v: "Attributes & Luck", by: "ASuiter89", notes: ["Attribute-driven stats, a Luck attribute, and slotted affixes."] },
-  { date: "2026-06-27", size: "big", v: "Crafting & materials", by: "ASuiter89", notes: ["Craftsman replaces the blacksmith; forge gear from material currencies."] },
-  { date: "2026-06-27", size: "medium", v: "Town stash & gambler", by: "ASuiter89", notes: ["Safe vault for gold & gear; wager gold for random loot (can target a type)."] },
-  { date: "2026-06-27", size: "medium", v: "Town as a menu", by: "ASuiter89", notes: ["Town is a service menu with real buildings rather than a walkable map."] },
-  { date: "2026-06-27", size: "big", v: "Class system", by: "ASuiter89", notes: ["Warrior / Rogue / Mage / Templar with per-class skill trees and a node graph."] },
+  { date: "2026-06-27", size: "big", v: "Combat rework & 21 stats", by: "Andrew Suiter", notes: ["Percentage armor, dozens of new gear stats, 5-stat/1-attr items, hero-tab redo."] },
+  { date: "2026-06-27", size: "big", v: "Enchanter & affixes", by: "Andrew Suiter", notes: ["Reroll affix values/types with ranges and pool hints; widened, fully-rerollable pools."] },
+  { date: "2026-06-27", size: "medium", v: "Attributes & Luck", by: "Andrew Suiter", notes: ["Attribute-driven stats, a Luck attribute, and slotted affixes."] },
+  { date: "2026-06-27", size: "big", v: "Crafting & materials", by: "Andrew Suiter", notes: ["Craftsman replaces the blacksmith; forge gear from material currencies."] },
+  { date: "2026-06-27", size: "medium", v: "Town stash & gambler", by: "Andrew Suiter", notes: ["Safe vault for gold & gear; wager gold for random loot (can target a type)."] },
+  { date: "2026-06-27", size: "medium", v: "Town as a menu", by: "Andrew Suiter", notes: ["Town is a service menu with real buildings rather than a walkable map."] },
+  { date: "2026-06-27", size: "big", v: "Class system", by: "Andrew Suiter", notes: ["Warrior / Rogue / Mage / Templar with per-class skill trees and a node graph."] },
   { date: "2026-06-27", size: "medium", v: "QoL HUD & cues", by: "Jeff Louie", notes: ["Floor, level/XP and foes in the header; Q potion, B bag; pulsing stairs, low-HP vignette, +gold popups."] },
   { date: "2026-06-27", size: "small", v: "Enemy pop & status colour", by: "Jeff Louie", notes: ["Bigger sprites with shadows/halos; poison glows green, stun gold."] },
   { date: "2026-06-27", size: "small", v: "Damage floor & calmer screen", by: "Jeff Louie", notes: ["Foes take 4+ hits (crits/buffs break through); no flash on every hit."] },
   { date: "2026-06-27", size: "small", v: "Bars & log", by: "Jeff Louie", notes: ["Brighter HP/MP bars with numbers; loot/potions log in their rarity colours."] },
   { date: "2026-06-27", size: "small", v: "Movement pad options", by: "Jeff Louie", notes: ["Floating d-pad defaults left; position & opacity adjustable."] },
-  { date: "2026-06-27", size: "big", v: "Mobile controls", by: "ASuiter89", notes: ["Bottom nav bar, tap/swipe to move, floating d-pad, forced portrait, settings wheel."] },
-  { date: "2026-06-27", size: "medium", v: "Generative audio", by: "ASuiter89", notes: ["Richer synth sound effects and non-repeating drifting music."] },
-  { date: "2026-06-27", size: "medium", v: "Endless difficulty", by: "ASuiter89", notes: ["Polynomial depth scaling with anti-grind, so the dungeon never walls out."] },
-  { date: "2026-06-27", size: "medium", v: "Up-stairs & reachability", by: "ASuiter89", notes: ["Backtrack via up-stairs; orphaned sections and sealed vaults always connect."] },
-  { date: "2026-06-27", size: "medium", v: "Item icons", by: "ASuiter89", notes: ["Multi-tone vector item icons with rarity shown as a frame."] },
-  { date: "2026-06-27", size: "small", v: "Wandering Mystic", by: "ASuiter89", notes: ["A vendor who sells floor-spanning pacts."] },
-  { date: "2026-06-27", size: "big", v: "Town & smarter AI", by: "ASuiter89", notes: ["Town hub, weapon styles, smarter enemy AI and deadlier turns."] },
-  { date: "2026-06-27", size: "small", v: "Death → healer", by: "ASuiter89", notes: ["Death sends you to the town healer instead of a game over."] },
-  { date: "2026-06-27", size: "medium", v: "Power & attributes", by: "ASuiter89", notes: ["Item power values, player power, attributes and upgrade flags."] },
+  { date: "2026-06-27", size: "big", v: "Mobile controls", by: "Andrew Suiter", notes: ["Bottom nav bar, tap/swipe to move, floating d-pad, forced portrait, settings wheel."] },
+  { date: "2026-06-27", size: "medium", v: "Generative audio", by: "Andrew Suiter", notes: ["Richer synth sound effects and non-repeating drifting music."] },
+  { date: "2026-06-27", size: "medium", v: "Endless difficulty", by: "Andrew Suiter", notes: ["Polynomial depth scaling with anti-grind, so the dungeon never walls out."] },
+  { date: "2026-06-27", size: "medium", v: "Up-stairs & reachability", by: "Andrew Suiter", notes: ["Backtrack via up-stairs; orphaned sections and sealed vaults always connect."] },
+  { date: "2026-06-27", size: "medium", v: "Item icons", by: "Andrew Suiter", notes: ["Multi-tone vector item icons with rarity shown as a frame."] },
+  { date: "2026-06-27", size: "small", v: "Wandering Mystic", by: "Andrew Suiter", notes: ["A vendor who sells floor-spanning pacts."] },
+  { date: "2026-06-27", size: "big", v: "Town & smarter AI", by: "Andrew Suiter", notes: ["Town hub, weapon styles, smarter enemy AI and deadlier turns."] },
+  { date: "2026-06-27", size: "small", v: "Death → healer", by: "Andrew Suiter", notes: ["Death sends you to the town healer instead of a game over."] },
+  { date: "2026-06-27", size: "medium", v: "Power & attributes", by: "Andrew Suiter", notes: ["Item power values, player power, attributes and upgrade flags."] },
   { date: "2026-06-27", size: "big", v: "Floors & hazards", by: "Jeff Louie", notes: ["Rooms, corridors, water, lava, spikes, teleporters, breakable walls and a locked vault."] },
-  { date: "2026-06-27", size: "medium", v: "Floor modifiers & shrines", by: "ASuiter89", notes: ["Floor modifiers, shrine buffs, crits, mimics and cursed items."] },
-  { date: "2026-06-27", size: "medium", v: "Sound", by: "ASuiter89", notes: ["First pass of sound effects and background music."] },
-  { date: "2026-06-27", size: "medium", v: "Sprite gear & cosmetics", by: "ASuiter89", notes: ["The hero wears its equipped gear; pick-able cosmetics."] },
+  { date: "2026-06-27", size: "medium", v: "Floor modifiers & shrines", by: "Andrew Suiter", notes: ["Floor modifiers, shrine buffs, crits, mimics and cursed items."] },
+  { date: "2026-06-27", size: "medium", v: "Sound", by: "Andrew Suiter", notes: ["First pass of sound effects and background music."] },
+  { date: "2026-06-27", size: "medium", v: "Sprite gear & cosmetics", by: "Andrew Suiter", notes: ["The hero wears its equipped gear; pick-able cosmetics."] },
   { date: "2026-06-27", size: "big", v: "Bosses & status", by: "Jeff Louie", notes: ["A guardian boss every 5th floor, plus poison/stun status effects."] },
   { date: "2026-06-27", size: "medium", v: "Openable chests", by: "Jeff Louie", notes: ["Ground loot became openable chests; varied enemies, elites and per-depth themes."] },
   { date: "2026-06-27", size: "big", v: "Foundations", by: "Jeff Louie", notes: ["Colour-coded loot tiers, a shop, floating damage numbers, and browser auto-save."] },

@@ -233,7 +233,7 @@ const TIER_AFFIX_CAPS = {
 // Each pool is intentionally LARGER than the rarity cap (5 stats / 1 attr at the
 // top), so even a fully-rolled item always has spare types to transmute into —
 // that keeps the Enchanter's modifier (🔄) reroll alive on every property. A
-// slot's own headline (weapon DMG, armor DEF/ATK) is never listed here, since the
+// slot's own headline (weapon DMG, armor DEF) is never listed here, since the
 // headline already occupies that stat and would only waste a pool slot.
 const SLOT_AFFIX_POOLS = {
   // A weapon slot lists BOTH power/speed families; itemStatPool() then hard-gates
@@ -304,9 +304,8 @@ function itemStatPool(item) {
 // base a drop rolls, actually matters instead of being pure flavour.
 //   • Weapons scale their damage (`dmg`) and how wide the low–high range rolls
 //     (`spread`), so an Axe hits harder but swingier than a steady Dagger.
-//   • Armor scales its defence (`def`); gloves also scale their bonus attack
-//     (`atk`), so heavy plate guards more while light pieces lean offensive. Each
-//     armor base ALSO carries one INNATE signature stat (`innate`) so a base has a
+//   • Armor scales its defence (`def`), so a heavy plate base guards more than a
+//     light one. Each armor base ALSO carries one INNATE signature stat (`innate`) so a base has a
 //     role beyond raw DEF: heavier bases bank a DEFENSIVE stat (Helm HP, Chestplate
 //     damage-reduction, Gauntlets block, Greaves regen); lighter bases grant
 //     evasion/offense/utility (Hood dodge, Cap magic-find, Circlet cooldowns, Grips
@@ -332,8 +331,8 @@ const BASE_STATS = {
   Helm: { def: 1.25, innate: 'HP' }, Cap: { def: 0.80, innate: 'MAGICFIND' }, Crown: { def: 0.85, innate: 'SPELLPWR' }, Hood: { def: 0.90, innate: 'DODGE' }, Circlet: { def: 0.80, innate: 'CDR' },
   // chest — mitigation / retaliation / crowd-control / evasion / caster
   Chestplate: { def: 1.30, innate: 'DR' }, Robe: { def: 0.70, innate: 'MP' }, Cuirass: { def: 1.10, innate: 'THORNS' }, Tunic: { def: 0.85, innate: 'DODGE' }, Mail: { def: 1.15, innate: 'TENAC' },
-  // hands — def vs atk lean, plus a signature stat (block / caster / sustain / crit)
-  Gauntlets: { def: 1.25, atk: 0.90, innate: 'BLOCK' }, Gloves: { def: 0.85, atk: 1.15, innate: 'CDR' }, Bracers: { def: 1.05, atk: 1.00, innate: 'LEECH' }, Grips: { def: 0.90, atk: 1.10, innate: 'CRIT' },
+  // hands — DEF lean, plus a signature stat (block / caster / sustain / crit)
+  Gauntlets: { def: 1.25, innate: 'BLOCK' }, Gloves: { def: 0.85, innate: 'CDR' }, Bracers: { def: 1.05, innate: 'LEECH' }, Grips: { def: 0.90, innate: 'CRIT' },
   // legs — sustain / on-kill / mobility / caster
   Greaves: { def: 1.25, innate: 'REGEN' }, Leggings: { def: 0.85, innate: 'MP' }, Tassets: { def: 1.10, innate: 'HPKILL' }, Trousers: { def: 0.90, innate: 'SPD' },
   // jewelry — each base's signature innate stat (drawn from its slot pool)
@@ -449,7 +448,6 @@ function applyBaseStats(item, baseName, lvl, mult, dmgMult, opts = {}) {
   } else if (slot === 'head' || slot === 'chest' || slot === 'hands' || slot === 'legs') {
     const slotDef = { chest: 1.3, legs: 1.0, head: 0.8, hands: 0.7 }[slot];
     item.stats.DEF = Math.max(1, Math.floor((1 + lvl) * mult * slotDef * (bp.def || 1)));
-    if (slot === 'hands') item.stats.ATK = Math.max(1, Math.floor((1 + lvl * 0.35) * mult * 0.6 * (bp.atk || 1)));
     // Each armor base bakes in a signature stat (exactly like jewelry) so the base
     // you pick matters beyond raw DEF — heavy plate banks a defensive stat, light
     // gear an evasion/offense/utility one. Recorded on item.baseStats so it counts
@@ -7410,7 +7408,7 @@ window.gameGuide = function gameGuide(topic) {
       `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
       `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. The drawback always lands on a property you'll actually FEEL — a core stat (Attack, Defense, Max HP/MP, Speed) or a damage amp (Increased/Boss Damage, Spell/Skill Power) — never on a benefit-only rating whose negative would just floor to zero, so a curse's price is always paid. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — a curse hits ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
       `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
-      `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF/ATK AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
+      `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Loot LEANS to your class: drops, the merchant and the gambler favour build-relevant bases (~60%, the rest random) — a Mage sees more staves/wands, robes and tomes; a Warrior/Templar more of their melee weapons, plate and shields; a Rogue more daggers/bows, light armour and quivers. Off-favoured bases still turn up, and picking a slot at the gambler still leans the base within it.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
@@ -13897,7 +13895,7 @@ function renderForge() {
     ${readySection}`);
 }
 
-// Build a blank item: headline stat only (weapon DMG / armor DEF, gloves +ATK),
+// Build a blank item: headline stat only (weapon DMG / armor DEF),
 // no bonus affixes. Deterministic so the Forge preview matches what you'll get.
 function craftBlankItem(slot, tier, baseName) {
   const lvl = depthItemLevel();
@@ -14620,7 +14618,7 @@ function respecSkills() {
 // ── ENCHANTER — fill in & reroll item affixes ──
 // Lets the player gamble gold to add a missing affix (Augment), reroll every
 // bonus affix at once (Reroll), or reroll a single chosen affix. Headlines
-// (weapon DMG / armor DEF/ATK) are untouched; rerolls respect the slot's pool,
+// (weapon DMG / armor DEF) are untouched; rerolls respect the slot's pool,
 // the rarity caps, and the no-duplicate rule, all via the shared affix helpers.
 let enchantSel = null; // id of the item currently being worked on, or null
 
@@ -14832,7 +14830,7 @@ function empowerCost(item, toIlvl) {
 }
 
 // Which generation curve scales a headline stat (a weapon DMG endpoint, armour
-// DEF, hands/off-hand ATK, shield BLOCK). Innate signatures (SPELLPWR, jewelry
+// DEF, off-hand ATK, shield BLOCK). Innate signatures (SPELLPWR, jewelry
 // natives, …) are NOT special-cased — they scale as affixes below.
 function headlineRoleOf(key) {
   return (key === 'DMG' || key === 'DEF' || key === 'ATK' || key === 'BLOCK') ? key : null;
@@ -16084,14 +16082,13 @@ function addAttrAffixes(item, lvl, mult, count) {
   }
 }
 // The set of stats that count as an item's headline (never rerolled/removed):
-// weapon damage, and the armor DEF/ATK granted by the slot itself.
+// weapon damage, and the armor DEF granted by the slot itself.
 function headlineStats(item) {
   // A jewelry base's innate signature stat (item.baseStats) counts as a headline:
   // it's protected from reroll/removal and doesn't eat into the affix budget.
   const base = item.baseStats || [];
   if (item.slot === 'weapon') return ['DMG', ...base];
-  if (item.slot === 'hands')  return ['DEF', 'ATK', ...base];
-  if (item.slot === 'head' || item.slot === 'chest' || item.slot === 'legs') return ['DEF', ...base];
+  if (item.slot === 'head' || item.slot === 'chest' || item.slot === 'hands' || item.slot === 'legs') return ['DEF', ...base];
   return [...base]; // ring / amulet: pure-affix apart from the base's innate stat
 }
 
@@ -16121,12 +16118,11 @@ function lockedStats(item) {
 // pieces instead (UNIQUE_SET_CHANCE); the rest are these fixed uniques.
 const UNIQUE_SET_CHANCE = 0.4;
 // Which stats a slot's headline OWNS automatically (protected, never a native/mod):
-// DMG for weapons, DEF (+ATK on hands) for armour, the family headline for off-hands,
+// DMG for weapons, DEF for armour, the family headline for off-hands,
 // and nothing for jewelry (its native IS the headline).
 function uniqueMandatoryHeadline(slot, familyHeadline) {
   if (slot === 'weapon') return ['DMG'];
-  if (slot === 'hands')  return ['DEF', 'ATK'];
-  if (slot === 'head' || slot === 'chest' || slot === 'legs') return ['DEF'];
+  if (slot === 'head' || slot === 'chest' || slot === 'hands' || slot === 'legs') return ['DEF'];
   if (slot === 'offhand') return familyHeadline.slice();
   return []; // ring / amulet
 }
@@ -16153,7 +16149,7 @@ function buildFixedArtifact(def, lvl, membership) {
     base: baseName, fixed: true, power: def.power,
     ...(Array.isArray(def.powers) && def.powers.length ? { powers: def.powers.slice() } : {}),
     ...membership };
-  // Auto headline (DMG / DEF+ATK / off-hand family), rolled within its depth band.
+  // Auto headline (DMG / DEF / off-hand family), rolled within its depth band.
   applyBaseStats(item, baseName, lvl + rnd(0, 2) * 0.6, mult, dmgMult);
   const baseInnate = (item.baseStats || []).slice(); // what applyBaseStats protected
   if (slot === 'offhand') {
