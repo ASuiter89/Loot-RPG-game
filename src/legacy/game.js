@@ -78,6 +78,8 @@ import { fuseCount, transmuteCost as calcTransmuteCost, fusableByTier,
 import { upgradeOptions as ilvlUpgradeOptions, upgradeCost as calcIlvlUpgradeCost,
   headlineFactor, scaleHeadline, projectAffix } from '../systems/ilvlUpgrade.js';
 import { CHANGELOG } from '../data/changelog.js';
+import { WIKI } from '../data/wiki.js';
+import { buildWikiIndex, searchWiki } from '../systems/wikiSearch.js';
 import { MUSIC_SECTIONS } from '../data/musicSections.js';
 import { bassSemi, voiceChord, voiceSpread } from '../systems/musicGroove.js';
 import { terrainPacksInUse } from '../data/terrainPacks.js';
@@ -6814,7 +6816,7 @@ window.gameState = function gameState(radius) {
     ['title-overlay', 'title'], ['class-overlay', 'classSelect'], ['name-overlay', 'nameSelect'],
     ['hc-death-overlay', 'dead'], ['death-overlay', 'dead'],
     ['settings-menu', 'settings'], ['version-overlay', 'changelog'],
-    ['howto-overlay', 'howto'], ['autoloot-overlay', 'autoloot'], ['keybind-overlay', 'keybinds'],
+    ['howto-overlay', 'howto'], ['wiki-overlay', 'wiki'], ['autoloot-overlay', 'autoloot'], ['keybind-overlay', 'keybinds'],
     ['slotpick-overlay', 'slotpick'], ['newrun-overlay', 'newrun'], ['slots-overlay', 'slots'],
     ['account-overlay', 'account'], ['lb-hero-overlay', 'heroSnapshot'], ['lb-overlay', 'leaderboard'], ['graveyard-overlay', 'graveyard'],
     ['conquest-overlay', 'conquest'], ['greed-overlay', 'greed'], ['boss-gate-overlay', 'bossgate'],
@@ -7325,6 +7327,7 @@ window.gameGuide = function gameGuide(topic) {
       `Bag / inventory: ${key('bag')} — opens the LOOT / GEAR / HERO / SKILLS tabs.`,
       `Cast hotbar skills: number keys ${key('skill1')}-${key('skill' + SKILL_SLOTS)} fire the ${SKILL_SLOTS} manual slots on the RIGHT of the bar (or click a slot). One extra skill sits in a dedicated auto-cast slot in the MIDDLE and fires itself — see the "autocast" topic.`,
       `Esc closes the top menu/overlay, or opens Settings. Settings is split into tabs (Play / Visuals / Audio / Progress / About); non-movement keys are remappable under the Play tab → KEYS (◀ Back or Esc there returns to Settings). The keys shown here are your CURRENT bindings.`,
+      `The About tab holds PATCH NOTES and HOW TO PLAY — the latter opens a full, categorised, searchable guide (this same reference for a human): browse a category or type to search any topic. It's a world-pausing overlay (gameState().mode 'wiki'); this gameGuide() is the machine-readable twin of that guide.`,
       `The Play tab's TITLE SCREEN button (at the very top) saves your progress and returns you to the title/landing screen without abandoning the run — hit CONTINUE there to drop straight back in. (This is separate from Reset Run on the Progress tab, which wipes the hero.)`,
       `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds MINIMAP (the top-left floor-sketch box size — Small / Medium / Large), UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker plus CURSOR SIZE (a 1x–2x multiplier that enlarges the mouse pointer on top of the UI scale; default 1x).`,
     ],
@@ -9048,6 +9051,179 @@ function showVersionHistory() {
 function closeVersion() { document.getElementById('version-overlay').classList.remove('open'); }
 function showHowTo() { const ov = document.getElementById('howto-overlay'); if (ov) ov.classList.add('open'); }
 function closeHowTo() { const ov = document.getElementById('howto-overlay'); if (ov) ov.classList.remove('open'); }
+
+// ── HOW TO PLAY WIKI ── the full, categorised, searchable guide behind
+// Settings ▸ About ▸ HOW TO PLAY. Content is pure data (src/data/wiki.js); the
+// search is pure logic (src/systems/wikiSearch.js). This block is only the DOM
+// shell: view state + HTML assembly, nothing an agent needs to see in gameState.
+//
+// View state: 'home' (all categories), 'category' (one category's articles),
+// 'article' (one article), 'search' (live results). The search box overrides the
+// browse view whenever it holds text.
+let wikiView = 'home', wikiCatId = null, wikiArtId = null, wikiQuery = '';
+let _wikiIndex = null;                 // buildWikiIndex(WIKI), lazily built once
+function wikiIndex() { return _wikiIndex || (_wikiIndex = buildWikiIndex(WIKI)); }
+function wikiCatById(id) { return WIKI.find(c => c.id === id) || null; }
+function wikiFindArticle(catId, artId) {
+  const cat = wikiCatById(catId);
+  return cat ? (cat.articles.find(a => a.id === artId) || null) : null;
+}
+// Total article count, shown on the home screen so the guide reads as thorough.
+function wikiArticleTotal() { return WIKI.reduce((n, c) => n + c.articles.length, 0); }
+
+// Render one article body block (heading / paragraph / bullet list / callout /
+// loot-tier chip row) to HTML. Inline <b>/<i> and <span data-spr> icons in the
+// copy pass straight through (the [data-spr] painter hydrates the icons).
+function wikiBlockHtml(block) {
+  if (!block) return '';
+  if (block.h) return `<div class="wiki-h">${block.h}</div>`;
+  if (block.p) return `<div class="wiki-p">${block.p}</div>`;
+  if (block.note) return `<div class="wiki-note">${block.note}</div>`;
+  if (Array.isArray(block.ul)) return `<ul class="wiki-ul">${block.ul.map(li => `<li>${li}</li>`).join('')}</ul>`;
+  if (block.tiers) {
+    // Rarity communicated by colour only (no text labels) — the same chip row the
+    // quick How-to card uses, driven by the loot-tier tokens.
+    const tiers = ['junk', 'normal', 'uncommon', 'rare', 'epic', 'legendary', 'unique'];
+    return `<div class="wiki-tiers" aria-hidden="true">${tiers.map(t => `<i style="background:var(--${t})"></i>`).join('')}</div>`;
+  }
+  return '';
+}
+
+// A category tile for the home grid: icon, title, one-line blurb.
+function wikiCatTileHtml(cat) {
+  return `<button class="wiki-cat" onclick="wikiOpenCat('${cat.id}')">`
+    + `<span class="wiki-cat-ic"><span data-spr=${cat.icon}></span></span>`
+    + `<span class="wiki-cat-body"><span class="wiki-cat-name">${cat.title}</span>`
+    + `<span class="wiki-cat-blurb">${cat.blurb}</span></span></button>`;
+}
+
+// An article row (used in a category list and in search results). `catHint`
+// tags the row with its category name — handy in mixed search results.
+function wikiArtRowHtml(catId, article, snippet, catHint) {
+  const snip = snippet != null ? snippet : (article.body.map(b => (b.p || b.note || '')).find(Boolean) || '');
+  const plain = String(snip).replace(/<[^>]*>/g, '');
+  return `<button class="wiki-art" onclick="wikiOpenArticle('${catId}','${article.id}')">`
+    + `<span class="wiki-art-top"><span class="wiki-art-name">${article.title}</span>`
+    + (catHint ? `<span class="wiki-art-cat">${catHint}</span>` : '')
+    + `</span><span class="wiki-art-snip">${plain}</span></button>`;
+}
+
+// Sync the header title, ◀ Back button visibility and breadcrumb to the view.
+function wikiSyncChrome() {
+  const back = document.getElementById('wiki-back');
+  if (back) back.style.visibility = (wikiView === 'home') ? 'hidden' : 'visible';
+  const clear = document.getElementById('wiki-search-clear');
+  if (clear) clear.style.display = wikiQuery ? 'inline-flex' : 'none';
+  const crumb = document.getElementById('wiki-crumb');
+  if (!crumb) return;
+  if (wikiView === 'search') {
+    crumb.innerHTML = '';
+    crumb.style.display = 'none';
+    return;
+  }
+  const parts = [`<button class="wiki-crumb-link" onclick="wikiHome()">All Topics</button>`];
+  if (wikiView === 'category' || wikiView === 'article') {
+    const cat = wikiCatById(wikiCatId);
+    if (cat) {
+      const isLeaf = wikiView === 'category';
+      parts.push(isLeaf
+        ? `<span class="wiki-crumb-cur">${cat.title}</span>`
+        : `<button class="wiki-crumb-link" onclick="wikiOpenCat('${cat.id}')">${cat.title}</button>`);
+      if (wikiView === 'article') {
+        const art = wikiFindArticle(wikiCatId, wikiArtId);
+        if (art) parts.push(`<span class="wiki-crumb-cur">${art.title}</span>`);
+      }
+    }
+  }
+  crumb.innerHTML = parts.join('<span class="wiki-crumb-sep">▸</span>');
+  crumb.style.display = (wikiView === 'home') ? 'none' : 'flex';
+}
+
+// Assemble the body pane for the current view.
+function renderWiki() {
+  const body = document.getElementById('wiki-body');
+  if (!body) return;
+  let html = '';
+  if (wikiView === 'search') {
+    const results = searchWiki(WIKI, wikiQuery, { index: wikiIndex() });
+    if (!results.length) {
+      html = `<div class="wiki-empty">No topics match &ldquo;${String(wikiQuery).replace(/</g, '&lt;')}&rdquo;. Try a different word — a skill, stat, enemy, or town service.</div>`;
+    } else {
+      html = `<div class="wiki-result-count">${results.length} result${results.length === 1 ? '' : 's'}</div>`
+        + results.map(r => wikiArtRowHtml(r.catId, r.article, r.snippet, r.catTitle)).join('');
+    }
+  } else if (wikiView === 'article') {
+    const art = wikiFindArticle(wikiCatId, wikiArtId);
+    if (art) {
+      html = `<article class="wiki-article"><h3 class="wiki-article-title">${art.title}</h3>`
+        + art.body.map(wikiBlockHtml).join('') + `</article>`;
+      // Sibling nav so a reader can move through a category without going back up.
+      const cat = wikiCatById(wikiCatId);
+      if (cat && cat.articles.length > 1) {
+        const others = cat.articles.filter(a => a.id !== art.id);
+        html += `<div class="wiki-more">More in ${cat.title}</div>`
+          + others.map(a => wikiArtRowHtml(cat.id, a)).join('');
+      }
+    } else {
+      html = `<div class="wiki-empty">That topic could not be found.</div>`;
+    }
+  } else if (wikiView === 'category') {
+    const cat = wikiCatById(wikiCatId);
+    if (cat) {
+      html = `<div class="wiki-cat-head"><span class="wiki-cat-head-ic"><span data-spr=${cat.icon}></span></span>`
+        + `<span class="wiki-cat-head-txt">${cat.blurb}</span></div>`
+        + cat.articles.map(a => wikiArtRowHtml(cat.id, a)).join('');
+    }
+  } else { // home
+    html = `<div class="wiki-intro">Everything you need to play, in ${wikiArticleTotal()} short topics across ${WIKI.length} categories. Tap a category to browse, or search above.</div>`
+      + `<div class="wiki-cat-grid">${WIKI.map(wikiCatTileHtml).join('')}</div>`;
+  }
+  body.innerHTML = html;
+  body.scrollTop = 0;
+  wikiSyncChrome();
+}
+
+function openWiki() {
+  // Fresh browse each open (but keep the built index).
+  wikiView = 'home'; wikiCatId = null; wikiArtId = null; wikiQuery = '';
+  const input = document.getElementById('wiki-search');
+  if (input) input.value = '';
+  renderWiki();
+  const ov = document.getElementById('wiki-overlay');
+  if (ov) ov.classList.add('open');
+  // Like Version History / How-to, this is a world-pausing overlay that replaces
+  // the settings menu rather than stacking on it.
+  const menu = document.getElementById('settings-menu');
+  if (menu) menu.classList.remove('open');
+}
+function closeWiki() { const ov = document.getElementById('wiki-overlay'); if (ov) ov.classList.remove('open'); }
+
+function wikiHome() { wikiView = 'home'; wikiCatId = null; wikiArtId = null; renderWiki(); }
+function wikiOpenCat(id) { wikiCatId = id; wikiView = 'category'; renderWiki(); }
+function wikiOpenArticle(catId, artId) {
+  wikiCatId = catId; wikiArtId = artId; wikiView = 'article';
+  // Jumping to an article from search clears the search box so ◀ Back is sane.
+  if (wikiQuery) { wikiQuery = ''; const input = document.getElementById('wiki-search'); if (input) input.value = ''; }
+  renderWiki();
+}
+// ◀ Back walks up one level: article → its category, category/search → home.
+function wikiBack() {
+  if (wikiView === 'article') { wikiView = 'category'; renderWiki(); return; }
+  wikiClearSearch();
+  wikiHome();
+}
+function wikiSearchInput(v) {
+  wikiQuery = v || '';
+  wikiView = wikiQuery.trim() ? 'search' : (wikiCatId ? (wikiArtId ? 'article' : 'category') : 'home');
+  renderWiki();
+}
+function wikiClearSearch() {
+  wikiQuery = '';
+  const input = document.getElementById('wiki-search');
+  if (input) input.value = '';
+  if (wikiView === 'search') wikiView = wikiCatId ? (wikiArtId ? 'article' : 'category') : 'home';
+  renderWiki();
+}
 
 // ── AUTO-LOOT SETTINGS ── per-rarity Keep / Scrap / Sell picker, opened from the
 //  Auto-Loot button on the LOOT tab. Choices live on player.autoLoot and apply
@@ -28248,6 +28424,8 @@ function handleEscape() {
   if (close('name-overlay', nameBack)) return true;
   if (close('version-overlay', closeVersion)) return true;
   if (close('howto-overlay', closeHowTo)) return true;
+  // The wiki carries its own ◀ Back nav; a top-level Esc closes the whole thing.
+  if (close('wiki-overlay', closeWiki)) return true;
   if (close('autoloot-overlay', closeAutoLoot)) return true;
   // The combat-log viewer sits ON TOP of either death screen — close it first,
   // returning to the death screen underneath (the hardcore screen stays non-escapable).
@@ -28675,7 +28853,7 @@ function padPlayInspect(axes) {
 // it here (even via typeof) would hit its temporal dead zone and throw at load.
 const PAD_MODAL_IDS = [
   'title-overlay','name-overlay','class-overlay','hc-death-overlay','death-overlay',
-  'shop-overlay','mystic-overlay','town-overlay','settings-menu','version-overlay','howto-overlay',
+  'shop-overlay','mystic-overlay','town-overlay','settings-menu','version-overlay','howto-overlay','wiki-overlay',
   'autoloot-overlay','newrun-overlay','keybind-overlay','conquest-overlay','slots-overlay',
   'account-overlay','lb-overlay','lb-hero-overlay','graveyard-overlay','slotpick-overlay',
   'greed-overlay','boss-gate-overlay','bestiary-overlay','achievements-overlay','pad-kbd',
@@ -32754,7 +32932,7 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => draw
 // true) must NOT count, or web players could never move. The WORLD CLOCK is gated
 // separately (clockPaused) so time keeps flowing in town — see gameLoop.
 const RT_BLOCKING_OVERLAYS = ['title-overlay','name-overlay','class-overlay','hc-death-overlay','death-overlay',
-  'shop-overlay','mystic-overlay','town-overlay','settings-menu','version-overlay','howto-overlay',
+  'shop-overlay','mystic-overlay','town-overlay','settings-menu','version-overlay','howto-overlay','wiki-overlay',
   'autoloot-overlay','newrun-overlay','keybind-overlay',
   // Reachable mid-dungeon (e.g. from the menu or on a tier conquest) — these
   // close the settings menu, so they must pause the world on their own.
@@ -35728,6 +35906,15 @@ const __DL_FN_BRIDGE = {
   closeVersion,
   showHowTo,
   closeHowTo,
+  openWiki,
+  closeWiki,
+  renderWiki,
+  wikiHome,
+  wikiBack,
+  wikiOpenCat,
+  wikiOpenArticle,
+  wikiSearchInput,
+  wikiClearSearch,
   openAutoLoot,
   closeAutoLoot,
   renderAutoLoot,
