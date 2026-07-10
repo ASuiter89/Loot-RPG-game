@@ -38,6 +38,7 @@ import { rollDamage, spreadRange } from '../systems/damageRoll.js';
 import { castTargetsInSight, splashTargetsFrom, nextChainLink } from '../systems/aoeTargeting.js';
 import { spellSpreadFor } from '../data/spellSpread.js';
 import { SKILL_MILESTONES } from '../data/skillMilestones.js';
+import { activeSurgePerks, applySurgeCastMods, surgeHasteFrac } from '../systems/skillSurge.js';
 import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/gearPower.js';
 import { equipSwapDelta } from '../systems/gearCompare.js';
 import { GEAR_POWER } from '../data/gearPower.js';
@@ -5901,7 +5902,7 @@ function buySkill(id) {
   // data/passiveSurges.js), not just a bigger version of what it already gave.
   const surge = node.type === 'passive' && newRank === node.max && PASSIVE_SURGES[node.id];
   const msStr = ms
-    ? ` ${ms.pips} ${ms.name} — ${node.type === 'passive' ? ms.passiveDesc : ms.activeDesc}${surge ? `, unlocking ${fxOneLine(surge)}` : ''}!`
+    ? ` ${ms.pips} ${ms.name} — ${node.type === 'passive' ? passiveMilestoneDesc(node, newRank) : activeMilestoneDesc(node, newRank)}${surge ? `, unlocking ${fxOneLine(surge)}` : ''}!`
     : '';
   if (ms) screenFlash('#ffd27a');
   log(`<span data-spr=mat_glimmer></span> Learned ${node.name}${(node.max || 1) > 1 ? ` (rank ${newRank}/${node.max})` : ''}${summary ? ` — now ${summary}.` : '.'}${gainStr}${msStr}`, 'important');
@@ -7367,10 +7368,10 @@ window.gameGuide = function gameGuide(topic) {
       `The bar has ${SKILL_SLOTS} MANUAL slots (cast by hand with ${key('skill1')}-${key('skill' + SKILL_SLOTS)}) plus ONE dedicated auto-cast slot. You choose what goes where — drag a learned active onto a slot, or use the SKILLS-tab slot buttons; a freshly-learned active auto-fills the first open manual slot.`,
       `gameState().skills lists each filled manual slot's number key, MP cost (already reduced by your Mana Cost Reduction), cooldown remaining, ready flag, and what the skill DOES — its shape, range/radius and the damages/heals/buffs/summons flags — so you can pick one without inspecting it. The auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
       `Every active has a SCHOOL — SKILL, SPELL, or HYBRID — shown as a badge on its tree node and in gameState().skills[i].school. A SKILL is martial: weapon-based, scales with weapon damage + Skill Power, leeches life, meets a foe's physical ARMOR (pierced by Armor Pen), recharged by CDR only. A SPELL is magic: scales with Spirit + Spell Power, never leeches, meets a foe's MAGIC RESIST (pierced by Magic Pen), recharged by CDR + Cast Speed. A HYBRID lands BOTH — a physical part (leeches, meets armor, Skill Power) AND a magic part (meets magic resist, Spell Power); its tooltip spells out the split, and it recharges with CDR + Cast Speed. Classes lean differently: Warrior is all SKILL, Mage all SPELL, Rogue mostly skill with shadow/toxic hybrids, Templar mostly holy spells with holy-strike hybrids. Gear the stats that match the actives you lean on.`,
-      `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and a rank-7 skill adds an extra ×1.2. The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
-      `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a rank-7 skill's extra ×1.2 recharge) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) + rank 7 lifts a 40%-baseline buff to ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
-      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% power (Empowered), then +20% power and a 20%-faster recharge (Honed), then +30% power plus +1 radius/range/target/hit (Mastered) — so deepening a key skill outpaces its rising mana cost. Every skill's detail card shows a "Rank bonuses" ladder listing all three, each lit pink with a ✓ once your rank has earned it.`,
-      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10), so maxing one passive beats spreading points thin. AND at rank 10 a passive unlocks one BRAND-NEW stat it never gave before — thematic to the node (a crit passive gains crit damage, an HP passive gains regen, a spell passive gains crit, and so on) — folded straight into the same combat formulas. Its detail card lists all three spikes plus the rank-10 stat in the pink-when-earned "Rank bonuses" ladder, shows milestone pips by the rank, and folds the surge into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
+      `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and many skills gain extra recharge from their rank milestones (how much varies by skill — its "Rank bonuses" ladder spells it out). The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
+      `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a self-buff's rank milestones, which lengthen its buff at ranks 7 & 10 and add a 20%-faster recharge at rank 10) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) plus a maxed skill's longer, faster buff lifts a 40%-baseline buff well past ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
+      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% (Empowered), +20% (Honed), +30% (Mastered) — so deepening a key skill outpaces its rising mana cost. On TOP of that flat power, each milestone grants a SIGNATURE perk unique to the skill's archetype — no two kinds of spell read alike: a chain arcs to more foes, a summon lingers longer then raises an extra minion, an ailment nova inflicts more reliably then longer and wider, a self-buff hits harder then lasts longer, a bolt gains range then a double-strike, a piercing beam reaches further then strikes twice, a cleave leeches, a floor-wide storm hits more foes, an assassin's strike gains an execute. Every skill's detail card shows a "Rank bonuses" ladder listing all three (its power spike + that rank's signature), each lit pink with a ✓ once your rank has earned it.`,
+      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10) — the ladder names the passive's OWN bonus so each reads uniquely — so maxing one passive beats spreading points thin. AND at rank 10 a passive unlocks one BRAND-NEW stat it never gave before — thematic to the node (a crit passive gains crit damage, an HP passive gains regen, a spell passive gains crit, and so on) — folded straight into the same combat formulas. Its detail card lists all three spikes plus the rank-10 stat in the pink-when-earned "Rank bonuses" ladder, shows milestone pips by the rank, and folds the surge into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
@@ -22218,16 +22219,19 @@ function castSkillById(id, opts) {
   // is MULTIPLICATIVE haste, like attack speed (see playerAttackInterval): every
   // source multiplies the recharge RATE, so cd = base / (product of speed factors).
   // Cooldown Reduction speeds EVERY active; Cast Speed is a second, spell-only
-  // factor stacked on top (the caster mirror of Attack Speed); a rank-7 skill adds
-  // the ✦✦ Honed factor. There is NO cap: each stacked point does a little less
-  // than the last and the cooldown asymptotes toward — but never reaches — zero,
-  // so it's functionally impossible to trivialise it even with extreme gear. The
-  // 0.5s floor is only a spam guard on the final number, not a cap on the stats.
+  // factor stacked on top (the caster mirror of Attack Speed); a skill adds whatever
+  // recharge its milestone surges grant (per archetype — see systems/skillSurge.js).
+  // There is NO cap: each stacked point does a little less than the last and the
+  // cooldown asymptotes toward — but never reaches — zero, so it's functionally
+  // impossible to trivialise it even with extreme gear. The 0.5s floor is only a spam
+  // guard on the final number, not a cap on the stats.
   // Reduction form: cd = base × (1 − CDR/(CDR+CDR_SCALE)) = base / (1 + CDR/CDR_SCALE).
   // Same rating→asymptotic-% curve the hero sheet shows (cooldownReductionFrac).
   let haste = 1 + Math.max(0, totalStat('CDR')) / CDR_SCALE;                        // every active
   if (castKind(sk) !== 'skill') haste *= 1 + Math.max(0, totalStat('CASTSPD')) / 100; // spells + hybrids
-  if (skillRank(id) >= 7) haste *= 1.20;                                            // ✦✦ Honed milestone
+  const _skSurge = activeSurgePerks(sk);                                            // milestone recharge
+  const _skHasteFrac = surgeHasteFrac(skillRank(id), _skSurge && _skSurge.perks);
+  if (_skHasteFrac > 0) haste *= 1 + _skHasteFrac;
   setSkillCd(id, Math.max(0.5, sk.cd / haste));
   updateBars();
   renderSkillBar();
@@ -22350,11 +22354,13 @@ function spellBase(flat, perLevel) {
 // fired (false = nothing to do, so castSkillById refunds the mana).
 
 // ── ACTIVE-SKILL MILESTONES ──
-// Ranks 3 / 7 / 10 each grant a power spike PLUS a signature perk (Empowered /
-// Honed / Mastered), generic so it applies to every data-driven skill. The table
-// (pips, names, per-type blurbs) lives in src/data/skillMilestones.js; the
-// magnitudes in src/systems/skillMath.js (milestonePower / passiveMilestonePower).
-// milestonePower / rankScale / skillManaCost extracted to src/systems/skillMath.js.
+// Ranks 3 / 7 / 10 each grant a UNIVERSAL power spike (Empowered / Honed / Mastered —
+// milestonePower in src/systems/skillMath.js) PLUS a SIGNATURE perk that differs per
+// skill: each active is sorted into an archetype (systems/skillSurge.js) whose
+// per-milestone perks (data/skillSurges.js) fold real cast changes in via
+// applySurgeCastMods — an extra chain link, a longer summon, a wider/longer affliction,
+// a faster recharge, an execute… so no two kinds of spell read alike. The milestone
+// names/pips still come from src/data/skillMilestones.js.
 // Milestone pips earned so far (for the node popover rank readout).
 function milestonePips(rank) { let p = ''; for (const m of SKILL_MILESTONES) if (rank >= m.rank) p = m.pips; return p; }
 // The next milestone the skill is climbing toward (null once all are reached).
@@ -22450,12 +22456,15 @@ function skillDamagePreview(node, rank) {
   if (!hasWpn && !hasSpell) return null; // no direct damage → no readout
 
   const r = rank || 1;
-  // Multi-strike: a cast that lands several hits on the SAME target (cast.repeat);
-  // rank-10 "Mastered" adds one more. Reported SEPARATELY (as a ×N badge): the Damage
-  // range below is PER HIT — the number that pops over a foe on each strike — not the
-  // whole activation. DPS folds the strikes back in (hitsPerCast).
-  let strikes = Math.max(1, c.repeat || 1);
-  if ((rank || 0) >= 10 && c.repeat) strikes = c.repeat + 1;
+  // Multi-strike: a cast that lands several hits on the SAME target (cast.repeat).
+  // Fold in this skill's milestone surges exactly as resolveCast does — several
+  // archetypes add extra strikes (flurry/cleave/bolt/strike/lance) at ranks 7/10, so
+  // the preview must count them. Reported SEPARATELY (as a ×N badge): the Damage range
+  // below is PER HIT — the number that pops over a foe on each strike — not the whole
+  // activation. DPS folds the strikes back in (hitsPerCast).
+  const _sg = activeSurgePerks(node);
+  const cSurged = applySurgeCastMods(c, r, _sg && _sg.perks);
+  const strikes = Math.max(1, cSurged.repeat || 1);
 
   const synM = synergyMult(node);
   const rs = rankScale(r);
@@ -22504,7 +22513,7 @@ function skillDamagePreview(node, rank) {
   const critMult = critDamageMult();
   // Effective DPS = the PER-HIT range's midpoint, lifted by the expected crit
   // multiplier, times hits-per-cast (strikes), times how often the skill can fire (its
-  // cooldown after CDR / Cast Speed / the rank-7 Honed cut, honouring the 0.5s floor).
+  // cooldown after CDR / Cast Speed / its milestone recharge surges, honouring the 0.5s floor).
   // The only readout that folds in crit and cast rate.
   const effCd = effectiveSkillCd(node, r);
   const dps = effectiveDps({ min: hitMin, max: hitMax, critChance, critMult, hitsPerCast: strikes, castsPerSec: 1 / effCd });
@@ -22518,12 +22527,14 @@ function skillDamagePreview(node, rank) {
 
 // The recharge an active ACTUALLY has right now, in seconds: its base cooldown
 // shortened by the same haste the cast applies — Cooldown Reduction for every
-// active, Cast Speed for spells, the rank-7 Honed cut — floored at 0.5s. Works for
-// any active (buffs/heals too), so tooltips can show the real, CDR-adjusted cd.
+// active, Cast Speed for spells, its milestone recharge surges — floored at 0.5s. Works
+// for any active (buffs/heals too), so tooltips can show the real, CDR-adjusted cd.
 function effectiveSkillCd(node, rank) {
+  const sg = activeSurgePerks(node);
   const haste = castHaste({
     cdr: totalStat('CDR'), castSpd: totalStat('CASTSPD'),
-    isSpell: castKind(node) !== 'skill', honed: (rank || 1) >= 7, // Cast Speed: spells + hybrids
+    isSpell: castKind(node) !== 'skill',            // Cast Speed: spells + hybrids
+    surge: surgeHasteFrac(rank, sg && sg.perks),    // per-archetype milestone recharge
   });
   return effectiveCooldown((node && node.cd) || 0, haste);
 }
@@ -22627,16 +22638,12 @@ function resolveCast(node, rank) {
   if (!node.cast) return false;
   // Owned passives can TRANSFORM this ability (pierce, extra radius, pull, status…).
   let c = applyCastMods(node, node.cast);
-  // ✦✦✦ Mastered (rank 10): the same cast, but reaching further and catching more
-  // foes — radius, range, chain length, target count and multi-hits all step up.
-  if (rank >= 10) {
-    c = Object.assign({}, c);
-    if (c.radius) c.radius += 1;
-    if (c.range)  c.range  += 1;
-    if (c.chain)  c.chain  += 1;
-    if (c.count)  c.count  += 1;
-    if (c.repeat) c.repeat += 1;
-  }
+  // MILESTONE SURGES (ranks 3 / 7 / 10): fold in this skill's own signature perks —
+  // the archetype-specific reach/duration/affliction/execute steps that replace the
+  // old one-size-fits-all "+1 to everything" Mastered bump (see systems/skillSurge.js
+  // + data/skillSurges.js). Returns c untouched below rank 3 / for a perk-less cast.
+  const _surge = activeSurgePerks(node);
+  c = applySurgeCastMods(c, rank, _surge && _surge.perks);
   // Gear Area of Effect %: widen every radius skill (nova / blast) so a +AoE build
   // catches more of a pack per cast. Rounded to whole tiles (targeting steps by tile)
   // and clamped to never shrink the base, so it only ever grows a cast. Copies c
@@ -26679,6 +26686,43 @@ function skillHasMilestones(node) {
   if (node.type === 'passive') return !node.keystone && !!(node.fx || node.cfx);
   return false;
 }
+// ── Per-skill milestone copy ──
+// The rank 3 / 7 / 10 rows used to read identically on every node ("+28% power",
+// "+8% to its bonus"). Now each row states what THIS skill gains: an active shows its
+// universal power spike PLUS its archetype signature (systems/skillSurge.js); a
+// passive names its OWN bonus so the ladder reads uniquely per node.
+const SURGE_STATUS_NAME = { burn: 'burn', poison: 'poison', chill: 'chill', slow: 'slow',
+  stun: 'stun', vuln: 'vulnerability', bleed: 'bleed', freeze: 'freeze' };
+function surgeStatusName(cast) {
+  const e = cast && cast.status && cast.status.effect;
+  return SURGE_STATUS_NAME[e] || e || 'the ailment';
+}
+// The universal power-spike percent a milestone rank adds (matches milestonePower's
+// +28 / +20 / +30 breakpoints), shown as the first half of every active row.
+function milestonePowerPct(rank) { return Math.round((milestonePower(rank) - milestonePower(rank - 1)) * 100); }
+// An active's full milestone line: its power spike, then its signature perk (with the
+// {status} token resolved to the cast's ailment name).
+function activeMilestoneDesc(node, rank) {
+  const sg = activeSurgePerks(node);
+  const perk = sg && sg.perks && sg.perks[rank];
+  const power = `+${milestonePowerPct(rank)}% power`;
+  if (!perk || !perk.desc) return power;
+  return `${power} · ${perk.desc.replace(/\{status\}/g, surgeStatusName(node.cast))}`;
+}
+// The (up to two) stat names a passive's bonus covers, for its milestone rows.
+function passiveBonusName(node) {
+  const keys = [];
+  if (node.fx) for (const k of Object.keys(node.fx)) keys.push(k);
+  if (node.cfx) for (const k of Object.keys(node.cfx)) if (!keys.includes(k)) keys.push(k);
+  const names = keys.slice(0, 2).map(k => (FX_LABELS[k] || [k])[0]);
+  if (!names.length) return 'its bonus';
+  return names.join(' & ');
+}
+// A passive's milestone line: the surge percent applied to its OWN named bonus.
+function passiveMilestoneDesc(node, rank) {
+  const pct = Math.round((passiveRankScale(rank) - passiveRankScale(rank - 1)) * 100);
+  return `+${pct}% ${passiveBonusName(node)}`;
+}
 // The rank 3 / 7 / 10 spikes as a standalone checklist for the detail card: all
 // three are ALWAYS shown (what each grants), and each lights green once this skill's
 // rank is high enough to have earned it — so you can see the whole ladder at any
@@ -26692,7 +26736,7 @@ function skillMilestonesHtml(node, rank) {
   const surge = passive ? PASSIVE_SURGES[node.id] : null;
   const rows = SKILL_MILESTONES.map(m => {
     const met = r >= m.rank;
-    let desc = passive ? m.passiveDesc : m.activeDesc;
+    let desc = passive ? passiveMilestoneDesc(node, m.rank) : activeMilestoneDesc(node, m.rank);
     if (surge && m.rank === node.max) desc += `, and unlocks ${fxOneLine(surge)} — a brand-new stat`;
     return `<div class="ms-row${met ? ' met' : ''}">`
       + `<span class="ms-k">${met ? '✓ ' : ''}${m.pips} Rank ${m.rank}</span>`

@@ -18,13 +18,20 @@ describe('castHaste', () => {
     // Stacks multiplicatively with CDR.
     expect(castHaste({ cdr: 50, castSpd: 20, isSpell: true })).toBeCloseTo(1.5 * 1.2, 10);
   });
-  it('adds the Honed (rank 7) factor', () => {
+  it('adds the legacy Honed (rank 7) factor', () => {
     expect(castHaste({ honed: true })).toBeCloseTo(1.2, 10);
     expect(castHaste({ cdr: 100, honed: true })).toBeCloseTo(2 * 1.2, 10);
+  });
+  it('adds a per-archetype milestone surge factor', () => {
+    expect(castHaste({ surge: 0.2 })).toBeCloseTo(1.2, 10);
+    expect(castHaste({ surge: 0 })).toBe(1);
+    // stacks multiplicatively with CDR, like the recharge pipeline
+    expect(castHaste({ cdr: 100, surge: 0.35 })).toBeCloseTo(2 * 1.35, 10);
   });
   it('ignores negative stats', () => {
     expect(castHaste({ cdr: -50 })).toBe(1);
     expect(castHaste({ castSpd: -50, isSpell: true })).toBe(1);
+    expect(castHaste({ surge: -0.5 })).toBe(1);
   });
 });
 
