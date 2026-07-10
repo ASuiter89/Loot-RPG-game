@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   VFX_PALETTES, DEFAULT_ELEMENT, SHAPE_ARCHETYPE, WEAPON_ARCHETYPE,
-  BOSS_ABILITY_FX, PROJECTILE_ELEMENT, PROJECTILE_ARCHETYPES,
+  BOSS_ABILITY_FX, PROJECTILE_ELEMENT, PROJECTILE_ARCHETYPES, SIGIL_GLYPHS,
 } from '../../src/data/vfxPalette.js';
 
 const HEX = /^#[0-9a-f]{6}$/;
@@ -70,5 +70,14 @@ describe('archetype tables', () => {
     for (const a of PROJECTILE_ARCHETYPES) expect(produced.has(a), a).toBe(true);
     // The four traveling-bolt archetypes: bolt/blast casts, bow/staff auto-attacks.
     expect([...PROJECTILE_ARCHETYPES].sort()).toEqual(['arrow', 'blast', 'magicBolt', 'projectile']);
+  });
+});
+
+describe('SIGIL_GLYPHS', () => {
+  it('is a non-empty list of unique glyph names', () => {
+    expect(Array.isArray(SIGIL_GLYPHS)).toBe(true);
+    expect(SIGIL_GLYPHS.length).toBeGreaterThan(1);
+    expect(new Set(SIGIL_GLYPHS).size).toBe(SIGIL_GLYPHS.length);
+    for (const g of SIGIL_GLYPHS) expect(typeof g).toBe('string');
   });
 });

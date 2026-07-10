@@ -117,3 +117,20 @@ export const PROJECTILE_ELEMENT = {
   hex:     'arcane',
   bone:    'physical',
 };
+
+// ── Per-spell SIGIL glyphs ──────────────────────────────────────────────────
+// A cast's element (colour) and archetype (shape) alone can't separate two spells
+// of the same family: two holy novas, a dozen "gold" self-buffs and every summon
+// otherwise read as the exact same effect. So every player cast ALSO stamps a
+// SIGIL — a small procedural rune whose glyph, point-count, spin and ring-count are
+// chosen deterministically from the spell's stable id (castSignature in
+// systems/vfx.js). That gives each of the game's ~140 actives its own signature
+// without hand-authoring one per skill (e.g. Judgment Day and Final Judgment, both
+// holy novas, now brand a different rune). This list is the set of glyph shapes the
+// renderer (drawSigil, at the edge) knows how to paint — ART runes on the canvas,
+// not UI design tokens. Order is stable: the signature indexes into it, so
+// reordering or removing an entry re-skins spells (only ever append).
+export const SIGIL_GLYPHS = [
+  'cross', 'star', 'triangle', 'diamond', 'hexagram', 'spiral',
+  'chevron', 'rays', 'runes', 'crescent', 'pentacle', 'wings',
+];
