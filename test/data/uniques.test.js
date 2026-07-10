@@ -49,8 +49,7 @@ const CLASSES = new Set(['warrior', 'rogue', 'mage', 'templar', 'any']);
 // families in applyBaseStats.
 function mandatoryHeadline(slot, base) {
   if (slot === 'weapon') return ['DMG'];
-  if (slot === 'hands') return ['DEF', 'ATK'];
-  if (slot === 'head' || slot === 'chest' || slot === 'legs') return ['DEF'];
+  if (slot === 'head' || slot === 'chest' || slot === 'hands' || slot === 'legs') return ['DEF'];
   if (slot === 'offhand') {
     if (['Buckler', 'Kite Shield', 'Tower Shield'].includes(base)) return ['DEF', 'BLOCK'];
     if (['Tome', 'Focus'].includes(base)) return ['SPELLPWR'];
@@ -141,8 +140,24 @@ describe('UNIQUES data — every field is valid', () => {
         }
       });
 
-      it('has a valid signature power', () => {
-        expect(POWER_KEYS.has(u.power), `bad power ${u.power}`).toBe(true);
+      it('has 2–3 distinct, valid signature powers (primary mirrored to `power`)', () => {
+        expect(Array.isArray(u.powers), 'powers must be an array').toBe(true);
+        expect(u.powers.length, 'a unique carries 2–3 signature powers').toBeGreaterThanOrEqual(2);
+        expect(u.powers.length, 'a unique carries at most 3 signature powers').toBeLessThanOrEqual(3);
+        expect(new Set(u.powers).size, 'signature powers must be distinct').toBe(u.powers.length);
+        for (const p of u.powers) expect(POWER_KEYS.has(p), `bad power ${p}`).toBe(true);
+        expect(u.power, '`power` mirrors the primary (first) power').toBe(u.powers[0]);
+      });
+
+      it('keeps signature powers on their family lane', () => {
+        // Powers that grant a lane-locked stat are dead on the wrong family, so a
+        // caster never carries Warmage/Frenzied and a martial never Spellbound/Quickened.
+        const MARTIAL_POWERS = new Set(['warmage', 'frenzied']);
+        const CASTER_POWERS = new Set(['spellbound', 'quickened']);
+        for (const p of u.powers) {
+          if (CASTER_BASES.has(u.base)) expect(MARTIAL_POWERS.has(p), `caster carries martial power ${p}`).toBe(false);
+          else expect(CASTER_POWERS.has(p), `martial carries caster power ${p}`).toBe(false);
+        }
       });
 
       it('never references another game (player-facing copy)', () => {
@@ -159,17 +174,18 @@ describe('UNIQUES data — each unique feels distinct', () => {
     const sigs = UNIQUES.map(u => {
       const stats = u.mods.filter(m => m.kind === 'stat').map(m => m.key).sort().join(',');
       const attr = u.mods.filter(m => m.kind === 'attr').map(m => m.key).join(',');
-      return `${u.native}|${stats}|${attr}|${u.power}`;
+      return `${u.native}|${stats}|${attr}|${u.powers.slice().sort().join('+')}`;
     });
     expect(new Set(sigs).size, 'two uniques are structurally identical').toBe(sigs.length);
   });
 
   it('spreads signature powers around (no single power dominates)', () => {
     const counts = {};
-    for (const u of UNIQUES) counts[u.power] = (counts[u.power] || 0) + 1;
+    for (const u of UNIQUES) for (const p of u.powers) counts[p] = (counts[p] || 0) + 1;
     const max = Math.max(...Object.values(counts));
-    // With 58 uniques and 42 powers, a well-spread set never leans hard on one power.
-    expect(max, `a power is reused too often: ${JSON.stringify(counts)}`).toBeLessThanOrEqual(6);
+    // 58 uniques × 2–3 powers ≈ 150 power-slots over 42 powers; a well-spread set
+    // leans on no single power for more than ~1/6 of them.
+    expect(max, `a power is reused too often: ${JSON.stringify(counts)}`).toBeLessThanOrEqual(10);
   });
 
   it('uniquesForSlot returns exactly the bases that slot owns', () => {

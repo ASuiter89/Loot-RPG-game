@@ -32,6 +32,26 @@ describe('PINNACLE_UNIQUES shape', () => {
     }
   });
 
+  it('carries 2–3 distinct signature powers, primary mirrored to `power`', () => {
+    // Lane-locked powers are dead on the wrong family (see uniques.js), so a caster
+    // Mythic never carries martial powers and vice versa.
+    const MARTIAL_POWERS = new Set(['warmage', 'frenzied']);
+    const CASTER_POWERS = new Set(['spellbound', 'quickened']);
+    for (const u of PINNACLE_UNIQUES) {
+      expect(Array.isArray(u.powers)).toBe(true);
+      expect(u.powers.length).toBeGreaterThanOrEqual(2);
+      expect(u.powers.length).toBeLessThanOrEqual(3);
+      expect(new Set(u.powers).size).toBe(u.powers.length); // distinct
+      for (const p of u.powers) expect(typeof p).toBe('string');
+      expect(u.power).toBe(u.powers[0]); // primary mirrored
+      const isCaster = [...u.mods.map((m) => m.key), u.native].some((k) => CASTER_STATS.has(k));
+      for (const p of u.powers) {
+        if (isCaster) expect(MARTIAL_POWERS.has(p)).toBe(false);
+        else expect(CASTER_POWERS.has(p)).toBe(false);
+      }
+    }
+  });
+
   it('every entry carries EXACTLY six mods: five stats + one attribute', () => {
     for (const u of PINNACLE_UNIQUES) {
       expect(Array.isArray(u.mods)).toBe(true);
