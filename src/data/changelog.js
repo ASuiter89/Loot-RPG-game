@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-09", size: "small", v: "Pact & meal trackers no longer overlap the stamina bar", by: "Jeff Louie", notes: [
+    "Fixed the active mystic-pact and ramen-meal floor trackers overlapping the stamina number in the bottom HUD — the chip and the readout were both centred on the same bar.",
+    "The trackers now sit in a compact strip just above the stamina bar; with none active the bar reclaims its full height, level with Health and Mana.",
+  ] },
   { date: "2026-07-09", size: "large", v: "Every skill's rank bonuses are its own now", by: "Jeff Louie", notes: [
     "The rank 3 / 7 / 10 milestones (Empowered · Honed · Mastered) used to grant every active the SAME thing — a blanket faster recharge, then +1 to every reach at once. Now each active earns a SIGNATURE that fits how it plays, on top of its unchanged power spike.",
     "Chains arc to more foes; summons linger then add a minion; ailment novas inflict longer and wider; self-buffs hit harder then last longer; bolts gain range then a double-strike; beams reach further then strike twice; cleaves leech; floor-wide storms hit more foes; assassin strikes gain an execute. No two kinds of spell read alike.",
