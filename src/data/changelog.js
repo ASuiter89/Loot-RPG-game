@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-10", size: "large", v: "Full How to Play guide — a searchable, categorised wiki", by: "Jeff Louie", notes: [
+    "Settings ▸ About now opens HOW TO PLAY: a complete in-game guide covering every system — getting started, controls, combat, staying alive, skills, progression, loot, the dungeon, enemies, town and the endgame — as short topics grouped into browsable categories.",
+    "Type in the search box to jump straight to any topic by name, stat, skill, enemy or keyword; tap a category to browse, and use the breadcrumb or ◀ Back to move around.",
+    "The quick How-to card gains an \"Open the full guide\" link into the wiki.",
+  ] },
   { date: "2026-07-10", size: "small", v: "Pantheon Summon buttons say why they're locked", by: "Jeff Louie", notes: [
     "Hovering a Summon button you can't yet afford at the Pantheon of the Deep now pops a card naming exactly what you're short — the missing shards, gold or chaos — instead of a bare stop-sign cursor with no reason given.",
     "The card confirms you have enough to forge once your purse covers the recipe.",

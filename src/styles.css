@@ -1019,8 +1019,8 @@
   .conquest-btn-alt:active { background: var(--orange-850); }
 
   /* ── VERSION HISTORY POPUP ── */
-  #version-overlay, #howto-overlay, #achievements-overlay, #bestiary-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 60%, transparent); z-index: 400; display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 16px; }
-  #version-overlay.open, #howto-overlay.open, #achievements-overlay.open, #bestiary-overlay.open { display: flex; }
+  #version-overlay, #howto-overlay, #wiki-overlay, #achievements-overlay, #bestiary-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 60%, transparent); z-index: 400; display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 16px; }
+  #version-overlay.open, #howto-overlay.open, #wiki-overlay.open, #achievements-overlay.open, #bestiary-overlay.open { display: flex; }
   /* Achievements + Bestiary pop FROM the settings/pause menu WITHOUT closing it —
      unlike Version History / How-to (which are RT-blocking and remove the settings
      menu on open), these two are not RT-blocking and lean on the still-open pause
@@ -1028,7 +1028,7 @@
      menu (z 600) or they render behind its scrim. Kept below the slot picker (620)
      and the hover tooltip (630). */
   #achievements-overlay, #bestiary-overlay { z-index: 610; }
-  #version-card, #howto-card, #achievements-card, #bestiary-card { margin: auto; background: linear-gradient(180deg, var(--panel), var(--panel)); border: 2px solid var(--frame); border-radius: 10px; max-width: 360px; width: 100%; max-height: 80vh; max-height: 80dvh; overflow-y: auto; padding: 14px; box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 60%, transparent); }
+  #version-card, #howto-card, #wiki-card, #achievements-card, #bestiary-card { margin: auto; background: linear-gradient(180deg, var(--panel), var(--panel)); border: 2px solid var(--frame); border-radius: 10px; max-width: 360px; width: 100%; max-height: 80vh; max-height: 80dvh; overflow-y: auto; padding: 14px; box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 60%, transparent); }
   /* Desktop has room — widen the Version History box so it's easier to skim, and
      the Achievements grid so its badges fill several across instead of a skinny
      column. */
@@ -1037,6 +1037,7 @@
     #achievements-card { max-width: min(920px, 90vw); }
     #bestiary-card { max-width: min(960px, 92vw); }
     #howto-card { max-width: min(760px, 88vw); }
+    #wiki-card { max-width: min(820px, 90vw); }
   }
   .cl-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
   .cl-filters select, .cl-filters input { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--purple-50); font-family: var(--font-ui); font-size: 1.3rem; padding: 5px 6px; cursor: pointer; }
@@ -1059,6 +1060,66 @@
   .howto-ctrl b { color: var(--paper); }
   .howto-tiers { display: inline-flex; gap: 3px; vertical-align: middle; margin-left: 4px; }
   .howto-tiers i { width: calc(9px * var(--ui-scale,1)); height: calc(9px * var(--ui-scale,1)); border-radius: 2px; transform: rotate(45deg); display: inline-block; }
+  /* "Open the full guide →" link at the foot of the quick How-to card. */
+  .wiki-openfull { display: block; width: 100%; margin-top: var(--space-6); padding: var(--space-4); background: var(--tint-black); border: 1px solid var(--frame); border-radius: var(--radius-sm); color: var(--gold); font-family: var(--font-ui); font-size: var(--fs-body); font-weight: bold; letter-spacing: .5px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .wiki-openfull:hover { border-color: var(--interactive); color: var(--paper); }
+
+  /* ── HOW TO PLAY — the full, searchable wiki (Settings ▸ About). Shares the
+     info-popup card chrome (#wiki-card) + header (.version-head); below are the
+     inner pieces. Layout is fluid so it fits a ~280px phone to a wide desktop. */
+  /* Header ◀ Back, mirroring the ✕ close on the opposite flank. */
+  .wiki-back { position: absolute; left: 0; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 4px 9px; background: var(--tint-black); border: 1px solid var(--frame); border-radius: var(--radius-sm); color: var(--text); font-size: var(--fs-head-sm); cursor: pointer; line-height: 1; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .wiki-back:hover { border-color: var(--interactive); color: var(--paper); }
+  #wiki-title { display: inline-flex; align-items: center; gap: var(--space-3); }
+  /* Search bar — icon on the left, a clear ✕ that appears once there's text. */
+  .wiki-searchbar { position: relative; display: flex; align-items: center; margin-bottom: var(--space-4); }
+  .wiki-search-ic { position: absolute; left: var(--space-4); display: inline-flex; color: var(--blue-350); pointer-events: none; }
+  #wiki-search { flex: 1 1 100%; min-width: 0; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--purple-50); font-family: var(--font-ui); font-size: var(--fs-body); padding: var(--space-4) var(--space-7) var(--space-4) var(--space-8); }
+  #wiki-search:focus { outline: none; border-color: var(--interactive); box-shadow: var(--shadow-glow); }
+  #wiki-search::placeholder { color: var(--blue-450); }
+  .wiki-search-clear { position: absolute; right: var(--space-3); display: none; align-items: center; justify-content: center; width: 24px; height: 24px; background: transparent; border: none; color: var(--blue-350); font-size: var(--fs-body); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .wiki-search-clear:hover { color: var(--paper); }
+  /* Breadcrumb trail. */
+  .wiki-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-5); font-size: var(--fs-fine); }
+  .wiki-crumb-link { background: none; border: none; padding: 0; color: var(--btn-text); font-family: var(--font-ui); font-size: var(--fs-fine); cursor: pointer; }
+  .wiki-crumb-link:hover { color: var(--paper); text-decoration: underline; }
+  .wiki-crumb-cur { color: var(--gold); }
+  .wiki-crumb-sep { color: var(--blue-450); }
+  /* Meta lines: intro blurb, result count, empty state. */
+  .wiki-intro, .wiki-result-count { color: var(--blue-350); font-size: var(--fs-sub); margin-bottom: var(--space-5); line-height: 1.5; }
+  .wiki-empty { color: var(--blue-350); font-style: italic; text-align: center; padding: var(--space-8) var(--space-4); font-size: var(--fs-body); line-height: 1.5; }
+  /* Home: a fluid category grid — a lone column never exceeds the viewport, and
+     extra columns are added only when they genuinely fit (no fixed count). */
+  .wiki-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: var(--space-4); }
+  .wiki-cat { display: flex; align-items: center; gap: var(--space-4); text-align: left; padding: var(--space-5); background: var(--panel-raised); border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .wiki-cat:hover { border-color: var(--interactive); }
+  .wiki-cat-ic { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; min-width: 34px; font-size: var(--fs-title); }
+  .wiki-cat-body { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+  .wiki-cat-name { color: var(--gold); font-size: var(--fs-strong); font-weight: bold; }
+  .wiki-cat-blurb { color: var(--blue-350); font-size: var(--fs-fine); line-height: 1.35; }
+  /* Category header (icon + blurb) sitting atop its article list. */
+  .wiki-cat-head { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-2) var(--space-2) var(--space-5); }
+  .wiki-cat-head-ic { flex: none; display: inline-flex; font-size: var(--fs-head); }
+  .wiki-cat-head-txt { color: var(--text); font-size: var(--fs-body); line-height: 1.4; }
+  /* Article rows (category lists, search results, "more in…"). */
+  .wiki-art { display: block; width: 100%; text-align: left; padding: var(--space-4) var(--space-5); margin-bottom: var(--space-3); background: var(--panel-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .wiki-art:hover { border-color: var(--interactive); }
+  .wiki-art-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); }
+  .wiki-art-name { color: var(--gold); font-size: var(--fs-body); font-weight: bold; }
+  .wiki-art-cat { flex: none; color: var(--btn-text); font-size: var(--fs-fine); }
+  .wiki-art-snip { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin-top: var(--space-1); color: var(--blue-350); font-size: var(--fs-sub); line-height: 1.4; overflow: hidden; }
+  /* Article body blocks. */
+  .wiki-article-title { color: var(--gold); font-size: var(--fs-head); font-weight: bold; margin: var(--space-2) 0 var(--space-5); letter-spacing: .5px; }
+  .wiki-h { color: var(--gold-350); font-size: var(--fs-head-sm); font-weight: bold; margin: var(--space-6) 0 var(--space-3); }
+  .wiki-p { color: var(--purple-50); font-size: var(--fs-body); line-height: 1.6; margin: 0 0 var(--space-4); }
+  .wiki-p b, .wiki-ul b { color: var(--paper); }
+  .wiki-ul { list-style: none; margin: 0 0 var(--space-4); padding: 0; }
+  .wiki-ul li { position: relative; color: var(--purple-50); font-size: var(--fs-body); line-height: 1.5; padding-left: var(--space-6); margin-bottom: var(--space-3); }
+  .wiki-ul li::before { content: ''; position: absolute; left: var(--space-2); top: .62em; width: 5px; height: 5px; background: var(--frame); border-radius: var(--radius-pill); }
+  .wiki-note { color: var(--info); font-size: var(--fs-sub); line-height: 1.5; margin: 0 0 var(--space-4); padding: var(--space-4) var(--space-5); background: color-mix(in srgb, var(--info) 10%, transparent); border-left: 3px solid var(--info); border-radius: var(--radius-xs); }
+  .wiki-tiers { display: flex; gap: var(--space-2); margin: var(--space-1) 0 var(--space-5) var(--space-3); }
+  .wiki-tiers i { width: 16px; height: 16px; border-radius: var(--radius-xs); transform: rotate(45deg); display: inline-block; }
+  .wiki-more { color: var(--gold); font-size: var(--fs-strong); font-weight: bold; margin: var(--space-6) 0 var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border); }
   /* Date section header — sticks to the top of the scroll card so the current
      group's date stays visible as you scroll the changelog. */
   .version-date {
