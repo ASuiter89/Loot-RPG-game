@@ -74,6 +74,12 @@ export const CHANGELOG = [
   { date: "2026-07-09", size: "small", v: "Ascendancy points get their own badge on the SKILLS tab", by: "Jeff Louie", notes: [
     "Unspent ascendancy points now show in their own light-blue badge on the SKILLS tab, kept separate from the red skill-point badge — the two counts are no longer added into one number, since each buys a different tree.",
   ] },
+  { date: "2026-07-09", size: "medium", v: "Town keepers spread out, and the endgame moves into its own grove", by: "Jeff Louie", notes: [
+    "The service keepers no longer stand in a tidy grid — they're scattered naturally across the camp, so town feels like a lived-in clearing instead of a lineup.",
+    "The late-game keepers (Covenant Altar, Ascendant Weave, Mirrorforge, Pantheon, Cycles, Hall of Deeds) now gather in their own hedged sanctum — a walled grove up the top-left, reached through a single gap in the hedge.",
+    "A keeper you haven't unlocked yet simply isn't in town anymore — no greyed padlock placeholder. When you earn a service, its keeper arrives wearing a bobbing exclamation mark over their head, which clears once you walk up and greet them.",
+    "The Mystic no longer keeps a town camp — strike your risky pacts with the Wandering Mystic out on the dungeon floors instead.",
+  ] },
   { date: "2026-07-07", size: "small", v: "One-tap Mute All at the top of Audio", by: "Jeff Louie", notes: [
     "Settings ▸ Audio opens with a Mute All button — one tap silences music and every sound at once, no more stepping each channel down.",
     "Tap it again to restore your exact mix; every channel keeps the level you set. Nudging any volume back up also lifts the mute.",

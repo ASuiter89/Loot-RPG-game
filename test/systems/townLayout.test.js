@@ -152,10 +152,35 @@ describe('authored town data', () => {
     const kinds = TOWN_NPCS.map((n) => n.kind);
     const expected = [
       'forge', 'enchanter', 'transmuter', 'mirrorforge', 'merchant', 'gambler', 'ramen',
-      'mystic', 'covenants', 'weave', 'pantheon', 'healer', 'trainer', 'bounty', 'deeds',
+      'covenants', 'weave', 'pantheon', 'healer', 'trainer', 'bounty', 'deeds',
       'cycles', 'stash', 'sellsword',
     ];
     expect(kinds.slice().sort()).toEqual(expected.slice().sort());
+  });
+
+  it('has no Mystic keeper (the Wandering Mystic lives in the dungeon, not town)', () => {
+    expect(TOWN_NPCS.some((n) => n.kind === 'mystic')).toBe(false);
+  });
+
+  it('gathers every endgame keeper INSIDE the hedged sanctum, and no regular one', () => {
+    // The endgame keepers cluster in the walled grove (interior x:4..10, y:4..9);
+    // every regular keeper sits out in the open clearing. This is the "group all
+    // end-game NPCs together in a separate room" invariant.
+    const ENDGAME = new Set(['covenants', 'weave', 'pantheon', 'mirrorforge', 'deeds', 'cycles']);
+    const inSanctum = (n) => n.x >= 4 && n.x <= 10 && n.y >= 4 && n.y <= 9;
+    for (const n of TOWN_NPCS) {
+      if (ENDGAME.has(n.kind)) expect(inSanctum(n)).toBe(true);
+      else expect(inSanctum(n)).toBe(false);
+    }
+    // The sanctum is a real enclosure: a ring of solid hedge ('h') decor around that
+    // interior, with exactly ONE walkable gap (its doorway) on the border.
+    const hedges = new Set(TOWN_DECOR.filter((d) => d.c === 'h').map((d) => key(d.x, d.y)));
+    let gaps = 0;
+    for (let x = 3; x <= 11; x++) for (let y = 3; y <= 10; y++) {
+      const border = x === 3 || x === 11 || y === 3 || y === 10;
+      if (border && !hedges.has(key(x, y))) gaps++;
+    }
+    expect(gaps).toBe(1);
   });
 
   it('every decor entry resolves to a real atlas piece and is in bounds', () => {
