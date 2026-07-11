@@ -101,8 +101,18 @@ async function main() {
       // Pantheon: hand over shards for the first god, summon it, run a few world ticks.
       try {
         const boss = W.__egBaseBosses ? W.__egBaseBosses()[0] : null;
-        // pull the first Summon target id from the rendered panel
+        // Can't-afford affordance: with an empty purse the first Summon button must be
+        // DISABLED but wrapped in a hover-tip explaining the shortfall — so a disabled
+        // button reads as "you can't afford this yet", not an unexplained stop-sign.
+        W.player.pinnacleShards = {}; W.player.gold = 0;
         W.openPantheon();
+        {
+          const b = [...document.querySelectorAll('#town-content .act-btn')].filter((x) => /Summon/.test(x.textContent))[0];
+          const wrap = b ? b.closest('.ench-tipwrap') : null;
+          res.drive.pantheonSummonDisabled = !!(b && b.disabled);
+          res.drive.pantheonSummonTip = !!(wrap && wrap.dataset && /Still need/.test(wrap.dataset.tip || ''));
+        }
+        // pull the first Summon target id from the rendered panel
         const html = document.getElementById('town-content').innerHTML || '';
         const m = /pantheonSummon\('([^']+)'\)/.exec(html);
         const bid = boss ? boss.id : (m ? m[1] : 'thallor');
@@ -145,6 +155,8 @@ async function main() {
     // Interaction assertions (soft where data ids are UI-derived, hard on "no error").
     const d = out.drive || {};
     if (d.weaveAllocated === false) failures.push('Weave allocation did not add a node');
+    if (d.pantheonSummonDisabled === false) failures.push('Pantheon Summon button was not disabled while unaffordable');
+    if (d.pantheonSummonTip === false) failures.push('Pantheon Summon button lacks the shortfall hover-tip when unaffordable (disabled with no explanation)');
     if (d.pantheonBossSpawned === false) failures.push('Pantheon summon did not spawn the apex boss (state=' + JSON.stringify(d.pantheonState) + ')');
     if (d.pantheonInTown !== false) failures.push('Pantheon summon did not move the hero out of town into the arena (inTown=' + d.pantheonInTown + ', floor=' + d.pantheonFloor + ')');
 

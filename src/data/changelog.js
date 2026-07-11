@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-10", size: "small", v: "Pantheon Summon buttons say why they're locked", by: "Jeff Louie", notes: [
+    "Hovering a Summon button you can't yet afford at the Pantheon of the Deep now pops a card naming exactly what you're short — the missing shards, gold or chaos — instead of a bare stop-sign cursor with no reason given.",
+    "The card confirms you have enough to forge once your purse covers the recipe.",
+  ] },
   { date: "2026-07-09", size: "small", v: "Pact & meal trackers no longer overlap the stamina bar", by: "Jeff Louie", notes: [
     "Fixed the active mystic-pact and ramen-meal floor trackers overlapping the stamina number in the bottom HUD — the chip and the readout were both centred on the same bar.",
     "The trackers now sit in a compact strip just above the stamina bar; with none active the bar reclaims its full height, level with Health and Mana.",
