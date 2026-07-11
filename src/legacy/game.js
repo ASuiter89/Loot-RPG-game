@@ -26520,12 +26520,17 @@ const SKILL_BRANCH_DESC = {
     'Holy caster — ranged smites and scaling divine spell power.',
   ],
 };
-// Fraction of the tree height reserved at the top for the branch headers.
-const SK_HEADER = 0.08;
-function nodePos(n, cols, bands) {
+// Fraction of the tree height reserved at the top. Just enough to clear the top
+// row's rank badge — grid trees also drop their column (branch) headers in here.
+// Kept tight so there's no dead band between the tabs / skill-slots and the first
+// row of nodes.
+const SK_HEADER = 0.075;
+function nodePos(n, cols, bands, topY = 0) {
   // Web nodes carry their own position (a branching web); grid nodes are placed by
-  // band/col into clean columns. The header band up top is reserved either way.
-  if (n.x != null) return [ n.x, SK_HEADER + n.y * (1 - SK_HEADER - 0.02) ];
+  // band/col into clean columns. Web trees subtract their own topmost y (`topY`) so
+  // the first band sits right under the header pad rather than a fixed fraction down
+  // — otherwise a root at y≈0.12 wasted a whole empty band above it.
+  if (n.x != null) return [ n.x, SK_HEADER + (n.y - topY) * (1 - SK_HEADER - 0.02) ];
   return [ (n.col + 0.5) / cols, SK_HEADER + (n.band + 0.5) / bands * (1 - SK_HEADER - 0.02) ];
 }
 // Is this tree laid out as a free-form web (nodes carry x/y)?
@@ -26543,7 +26548,10 @@ function renderSkills(el) {
   // normal skill-point pool. The header retitles itself to match the open tab.
   const onPath = skillView === 'path';
   const pts = onPath ? (player.ascPoints || 0) : (player.skillPoints || 0);
-  const learned = onPath ? spentAscPoints() : spentSkillPoints();
+  // "N learned" reports ranks spent in the CURRENTLY-OPEN tree only (active OR
+  // passive OR path), not the passive+active total — the number tracks the tree
+  // you're looking at. pointsInTree keys off the same view string as the tabs.
+  const learned = pointsInTree(skillView);
   const ptWord = onPath ? 'ascendancy point' : 'skill point';
   const asc = ascData();
   // Sub-tab selector across the three trees.
@@ -26569,7 +26577,10 @@ function renderSkills(el) {
   // (was three stacked full-width rows that ate vertical space). The no-points nudge
   // is gone — the "N to spend!" call-to-action rides the identity line, and only when
   // there is actually something to spend.
-  const idLine = `${dlIcon(cls.icon, 16)} ${cls.name}${asc ? ` · <span style="color:${asc.color}">${dlIcon(asc.icon,16)||''} ${asc.name}</span>` : ''}`;
+  // Class only — the ascension (e.g. Crusader) already names itself on the PATH
+  // sub-tab just below, so repeating it here was redundant. The identity line is
+  // centred in its box (see .sk-id).
+  const idLine = `${dlIcon(cls.icon, 16)} ${cls.name}`;
   const spend = pts > 0 ? ` · <span class="sk-spend">${pts} ${ptWord}${pts > 1 ? 's' : ''} to spend!</span>` : '';
   const header = `
     <div class="sk-head">
@@ -26611,6 +26622,10 @@ function renderSkills(el) {
   if (bNames && isWebTree(tree)) tree = tree.filter(n => n.br === skillBranch);
   const { cols, bands } = treeDims(tree);
   const web = isWebTree(tree);
+  // Topmost web y in THIS (branch-filtered) tree — used to pull the web up so its
+  // first band sits just below the header pad, with no empty band above it.
+  const topY = web && tree.length ? Math.min(...tree.map(n => n.y)) : 0;
+  const posOf = n => nodePos(n, cols, bands, topY);
   const byId = {}; tree.forEach(n => byId[n.id] = n);
 
   // Branch connectors. A WEB draws straight links between freely-placed nodes so
@@ -26620,10 +26635,10 @@ function renderSkills(el) {
   for (const n of tree) {
     const reqs = [...(n.req || []), ...(n.reqAny || [])];
     if (!reqs.length) continue;
-    const p = nodePos(n, cols, bands);
+    const p = posOf(n);
     for (const rid of reqs) {
       const q = byId[rid]; if (!q) continue;
-      const a = nodePos(q, cols, bands);
+      const a = posOf(q);
       const x1 = a[0] * 100, y1 = a[1] * 100, x2 = p[0] * 100, y2 = p[1] * 100;
       let pts;
       if (web || Math.abs(x1 - x2) < 0.01) pts = `${x1.toFixed(1)},${y1.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
@@ -26652,7 +26667,7 @@ function renderSkills(el) {
     const seenBand = {};
     for (const n of tree) {
       if (seenBand[n.band]) continue; seenBand[n.band] = true;
-      const y = web ? (nodePos(n, cols, bands)[1] * 100).toFixed(1) : ((n.band + 0.6) / (bands + 0.1) * 100).toFixed(1);
+      const y = web ? (posOf(n)[1] * 100).toFixed(1) : ((n.band + 0.6) / (bands + 0.1) * 100).toFixed(1);
       const met = (player.level || 1) >= n.lvl;
       bandLabels += `<div class="sk-band ${met ? 'met' : ''}" style="top:${y}%">Lv${n.lvl}</div>`;
     }
@@ -26660,7 +26675,7 @@ function renderSkills(el) {
 
   // Node tiles. State precedence: maxed > available > owned > ready > locked.
   const tiles = tree.map(n => {
-    const p = nodePos(n, cols, bands);
+    const p = posOf(n);
     const rank = skillRank(n.id);
     const maxd = skillMaxed(n);
     const owned = rank > 0;

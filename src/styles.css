@@ -1590,7 +1590,7 @@
   .sk-pts-label { font-size: 1.2rem; color: var(--junk); letter-spacing: 1px; line-height: 1.2; }
   .sk-pts-value { font-size: 2rem; font-weight: bold; color: var(--gold-350); line-height: 1.1;
     text-shadow: 0 0 10px color-mix(in srgb, var(--gold-350) 60%, transparent); }
-  .sk-id { display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 6px 10px; min-width: 0; }
+  .sk-id { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 3px; padding: 6px 10px; min-width: 0; }
   .sk-id-cls { font-size: 1.3rem; color: var(--text); line-height: 1.4; }
   .sk-id-meta { font-size: 1.2rem; color: var(--junk); line-height: 1.4; }
   .sk-spend { color: var(--xp); font-weight: bold; }
@@ -1609,8 +1609,10 @@
     color: var(--blue-450); font-family: inherit; font-size: 1.1rem; letter-spacing: .2px; text-transform: uppercase; cursor: pointer; text-align: center;
     -webkit-tap-highlight-color: transparent; touch-action: manipulation; white-space: nowrap; }
   .sk-btab.on { border-color: var(--frame); background: var(--orange-850); color: var(--xp); box-shadow: 0 0 6px color-mix(in srgb, var(--frame) 35%, transparent); }
-  /* Hairline rule setting the branch tabs off from the tree selector above them. */
-  .sk-div { border-top: 1px solid var(--border); margin: 8px 4px 2px; }
+  /* Gold double rule setting the branch tabs firmly off from the active/passive/
+     path selector above them — a heavier separator than a hairline so the two
+     tiers of tabs read as distinct blocks. */
+  .sk-div { border-top: 4px double var(--gold); margin: 8px 4px 4px; }
   /* On touch, lay the five branches as three across then two centred underneath
      (rather than the desktop auto-fit run). Flex-basis of a third keeps three per
      row; the trailing two can't grow, so justify-content centres them. min-width:0
@@ -1631,10 +1633,11 @@
   /* Denser nodes (5 wide × 6 bands) with a 10-pip rank gauge. */
   .sk-tree { height: 520px; }
   .sk-tnode { width: 46px; height: 46px; border-radius: 9px; }
-  /* A single branch web — and the ascendancy path tree — fills the whole panel,
-     so its nodes are bigger and their names sit under the icon with room to
+  /* A single branch web — and the ascendancy path tree — fills the whole panel.
+     Nodes stay compact (matching the small active-spell slot tiles) so the tree
+     reads dense rather than oversized; names sit under the icon with room to
      breathe (the path tree shares the web's layout so its nodes read the same). */
-  .sk-tree.web .sk-tnode, .sk-tree.path .sk-tnode { width: 66px; height: 66px; }
+  .sk-tree.web .sk-tnode, .sk-tree.path .sk-tnode { width: 48px; height: 48px; }
   .sk-tree.web .sk-tnode .nm, .sk-tree.path .sk-tnode .nm { font-size: 1.2rem; top: calc(100% + 3px); bottom: auto; left: -22px; right: -22px;
     max-width: none; white-space: normal; line-height: 1.05; text-shadow: 0 1px 2px var(--ink);
     background: none; padding: 0; }

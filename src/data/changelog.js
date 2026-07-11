@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "small", v: "Skills tab: denser trees, tighter layout", by: "Jeff Louie", notes: [
+    "Skill-tree nodes are smaller and denser, matching the compact spell-slot tiles — more of a branch fits on screen at once.",
+    "Removed the empty gap above every tree: the first row of skills now sits right under the tabs (and the Skill slots), instead of a wasted band below them.",
+    "The class box drops the redundant subclass name — it already labels its own tab — and centres its text.",
+    "\"N learned\" now counts only the tree you're viewing, not Active and Passive added together.",
+    "The rule under the Active / Passive / Path selector is now a bold gold double line, for a clearer split from the specialization tabs.",
+  ] },
   { date: "2026-07-11", size: "small", v: "Tighter, clearer Skills tab", by: "Jeff Louie", notes: [
     "The Skills tab header no longer eats the top of the screen: the point pool now sits in a compact box beside your class and subclass instead of stacked in tall full-width rows, and the \"level up to earn more\" filler line is gone.",
     "A hairline rule now separates the Active / Passive / Path selector from the specialization tabs below it, so the two rows of tabs no longer read as one block.",
