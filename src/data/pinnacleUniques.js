@@ -4,9 +4,9 @@
 // kill (see src/systems/pinnacle.js → rollPinnacleDrop, whose per-boss loot pool
 // lists ids from this file). They are the mechanical apex of the game: a Mythic
 // carries the same FIXED signature the ordinary uniques do (one `native` stat +
-// exactly six `mods` + a hand-picked SET of signature `powers`), but authored to be
-// build-defining and tuned a notch above anything a normal drop can reach — each
-// Mythic carries the full three signature powers.
+// exactly six `mods` + a primary signature power and a chance at a second), but
+// authored to be build-defining and tuned a notch above anything a normal drop can
+// reach. Like every unique, a Mythic rolls 1 power (~67%) or 2 (~33%) on drop.
 //
 // Entry shape mirrors src/data/uniques.js EXACTLY so the legacy builder
 // (buildUnique / isFixedItem in src/legacy/game.js) can stamp one with zero special
@@ -21,8 +21,9 @@
 //     weapons; for jewelry the native IS the headline, which is allowed).
 //   • Caster gear uses SPELLPWR/CASTSPD (never SKILLPWR/ATKSPD); martial gear the
 //     reverse — the two never mix on one piece.
-//   • `powers` is 2–3 distinct real ITEM_POWERS keys (validated against the live
-//     table on wiring); the first is the primary, mirrored onto a derived `power`.
+//   • `powers` is EXACTLY two distinct real ITEM_POWERS keys (validated against the
+//     live table on wiring): [0] the primary (always granted, mirrored onto a
+//     derived `power`), [1] the secondary (granted on the ~33% two-power drops).
 //   • `flavor` is one original line — never references any other game or franchise.
 
 // A stat modifier (percent / rating stat, e.g. CRIT, IDMG, SPELLPWR).
@@ -46,56 +47,56 @@ const DEFS = [
   // punish the boss it comes from: apex single-target burst that scales on bosses.
   { id: 'pin_drownedVerdict', base: 'Greatsword', name: 'The Drowned Verdict', cls: 'warrior',
     native: 'BOSSDMG',
-    mods: [s('ATK'), s('IDMG'), s('CRITDMG'), s('PEN'), s('HP'), a('might')], powers: ['giantsbane', 'executioner', 'rending'],
+    mods: [s('ATK'), s('IDMG'), s('CRITDMG'), s('PEN'), s('HP'), a('might')], powers: ['giantsbane', 'executioner'],
     flavor: 'it fell with the tide upon a thing that thought itself a mountain, and the mountain drowned' },
 
   // ── Nyxara, the Starved Void → the caster's answer. A staff that turns the void's
   // own hunger into spell power and mana return.
   { id: 'pin_voidsongScepter', base: 'Staff', name: 'Voidsong Scepter', cls: 'mage',
     native: 'SPELLPWR',
-    mods: [s('CRIT'), s('CRITDMG'), s('CASTSPD'), s('MPLEECH'), s('CDR'), a('spirit')], powers: ['spellbound', 'quickened', 'siphoning'],
+    mods: [s('CRIT'), s('CRITDMG'), s('CASTSPD'), s('MPLEECH'), s('CDR'), a('spirit')], powers: ['spellbound', 'quickened'],
     flavor: 'it hums the one note the empty dark is always singing, and answers it with fire' },
 
   // ── Vorgrim, the Ashen Tyrant → a rogue's stormfeather longbow: relentless crit
   // volleys that execute what the ash leaves standing.
   { id: 'pin_stormfeather', base: 'Longbow', name: 'Stormfeather, the Last Volley', cls: 'rogue',
     native: 'CRITDMG',
-    mods: [s('CRIT'), s('ATKSPD'), s('DBLSTRIKE'), s('EXEC'), s('PEN'), a('agility')], powers: ['deadeye', 'executioner', 'keen'],
+    mods: [s('CRIT'), s('ATKSPD'), s('DBLSTRIKE'), s('EXEC'), s('PEN'), a('agility')], powers: ['deadeye', 'executioner'],
     flavor: 'each shaft is fletched with a feather off the storm, and none of them miss the throat twice' },
 
   // ── Sylvaine, the Thornqueen → the wall that outlasts her endless adds. A tower
   // shield of living bramble that answers every swarm.
   { id: 'pin_tidewall', base: 'Tower Shield', name: 'The Bramblewall', cls: 'templar',
     native: 'DR',
-    mods: [s('HP'), s('THORNS'), s('TENAC'), s('BLOCK'), s('HPKILL'), a('vitality')], powers: ['aegis', 'thornmail', 'tenacious'],
+    mods: [s('HP'), s('THORNS'), s('TENAC'), s('BLOCK'), s('HPKILL'), a('vitality')], powers: ['aegis', 'thornmail'],
     flavor: 'plant it once and the horde breaks upon a hedge that grows back faster than they can cut it' },
 
   // ── Umbriel, the Hollow Choir → a crown for the mind that can hold five phases in
   // its head at once. Peak caster cooldown + burst.
   { id: 'pin_hollowCrown', base: 'Crown', name: 'Crown of the Hollow Choir', cls: 'mage',
     native: 'SPELLPWR',
-    mods: [s('CDR'), s('CASTSPD'), s('MP'), s('CRITDMG'), s('MCR'), a('spirit')], powers: ['attuned', 'spellbound', 'quickened'],
+    mods: [s('CDR'), s('CASTSPD'), s('MP'), s('CRITDMG'), s('MCR'), a('spirit')], powers: ['attuned', 'spellbound'],
     flavor: 'it sings back every voice the deep swallowed, and each one knows a different way to end a foe' },
 
   // ── Kaethon, the Stormcrowned → the warrior's storm-forged breastplate: a wall of
   // health that grows heavier with every kill.
   { id: 'pin_ashenAegis', base: 'Chestplate', name: 'The Stormforged Aegis', cls: 'warrior',
     native: 'HP',
-    mods: [s('DR'), s('TENAC'), s('THORNS'), s('REGEN'), s('HPKILL'), a('vitality')], powers: ['warded', 'stalwart', 'tenacious'],
+    mods: [s('DR'), s('TENAC'), s('THORNS'), s('REGEN'), s('HPKILL'), a('vitality')], powers: ['warded', 'stalwart'],
     flavor: 'quenched in the eye of a living storm, it has taken lightning full in the chest and only rung' },
 
   // ── A cross-class amulet from the deepest kills. Amulet native IS the headline
   // (allowed for jewelry), a heavy incoming-damage bulwark for any archetype.
   { id: 'pin_deepwaterHeart', base: 'Amulet', name: 'The Deepwater Heart', cls: 'any',
     native: 'DR',
-    mods: [s('HP'), s('REGEN'), s('TENAC'), s('HPKILL'), s('THORNS'), a('vitality')], powers: ['stalwart', 'warded', 'mending'],
+    mods: [s('HP'), s('REGEN'), s('TENAC'), s('HPKILL'), s('THORNS'), a('vitality')], powers: ['stalwart', 'warded'],
     flavor: 'it beats slow and cold and certain, the way the pressure a mile down beats against a hull' },
 
   // ── The apex signet — a universal boss-slayer ring, the trophy every Pantheon
   // hunter chases. Native IS the headline for rings.
   { id: 'pin_apexSignet', base: 'Ring', name: 'Signet of the Apex', cls: 'any',
     native: 'BOSSDMG',
-    mods: [s('CRIT'), s('CRITDMG'), s('IDMG'), s('PEN'), s('HP'), a('might')], powers: ['executioner', 'giantsbane', 'savage'],
+    mods: [s('CRIT'), s('CRITDMG'), s('IDMG'), s('PEN'), s('HP'), a('might')], powers: ['executioner', 'giantsbane'],
     flavor: 'worn only by those who have stood over every god the deep could raise, and outlived them all' },
 ];
 

@@ -31,9 +31,11 @@ describe('uniqueCollection catalog', () => {
       if (e.kind === 'set') { expect(e.setId).toBeTruthy(); expect(e.setName).toBeTruthy(); }
       else {
         expect(e.setId).toBeNull();
-        // Uniques carry a 2–3 signature-power list; the primary mirrors `power`.
+        // Uniques author a 2-power pool (primary + rollable secondary); the primary
+        // mirrors `power`. (A dropped copy carries 1 or 2 of these; the catalog shows
+        // the authored pool the tile can roll.)
         expect(Array.isArray(e.powers)).toBe(true);
-        expect(e.powers.length).toBeGreaterThanOrEqual(2);
+        expect(e.powers.length).toBe(2);
         expect(e.powers[0]).toBe(e.power);
       }
     }

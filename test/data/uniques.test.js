@@ -141,10 +141,9 @@ describe('UNIQUES data — every field is valid', () => {
         }
       });
 
-      it('has 2–3 distinct, valid signature powers (primary mirrored to `power`)', () => {
+      it('has exactly 2 distinct, valid signature powers (a primary + a rollable secondary)', () => {
         expect(Array.isArray(u.powers), 'powers must be an array').toBe(true);
-        expect(u.powers.length, 'a unique carries 2–3 signature powers').toBeGreaterThanOrEqual(2);
-        expect(u.powers.length, 'a unique carries at most 3 signature powers').toBeLessThanOrEqual(3);
+        expect(u.powers.length, 'a unique authors exactly 2 signature powers (primary + secondary)').toBe(2);
         expect(new Set(u.powers).size, 'signature powers must be distinct').toBe(u.powers.length);
         for (const p of u.powers) expect(POWER_KEYS.has(p), `bad power ${p}`).toBe(true);
         expect(u.power, '`power` mirrors the primary (first) power').toBe(u.powers[0]);
@@ -184,8 +183,8 @@ describe('UNIQUES data — each unique feels distinct', () => {
     const counts = {};
     for (const u of UNIQUES) for (const p of u.powers) counts[p] = (counts[p] || 0) + 1;
     const max = Math.max(...Object.values(counts));
-    // 58 uniques × 2–3 powers ≈ 150 power-slots over 42 powers; a well-spread set
-    // leans on no single power for more than ~1/6 of them.
+    // 58 uniques × 2 authored powers = 116 pool slots over 42 powers; a well-spread
+    // set leans on no single power for more than ~1/12 of them.
     expect(max, `a power is reused too often: ${JSON.stringify(counts)}`).toBeLessThanOrEqual(10);
   });
 

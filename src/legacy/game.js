@@ -142,7 +142,8 @@ import { mercCost } from '../systems/mercPricing.js';
 import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTints.js';
 import { elementOf, paletteFor, castArchetype, weaponArchetype, projectileElement, bossFxFor,
   archetypeIsProjectile, clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
-import { UNIQUES, uniqueForBase, uniquesForSlot } from '../data/uniques.js';
+import { UNIQUES, uniqueForBase, uniquesForSlot, UNIQUE_SECOND_POWER_CHANCE } from '../data/uniques.js';
+import { rollUniquePowers } from '../systems/uniquePowers.js';
 import { ITEM_SETS } from '../data/itemSets.js';
 import { setPieceCount, setComplete as setIsComplete, setStatContribution,
   rollSetPiece } from '../systems/itemSets.js';
@@ -7404,7 +7405,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     loot: [
       `Rarity is COLOUR ONLY (no text labels), lowest to highest: grey → white → green → blue → purple → orange → red. Higher tiers allow more bonus affixes.`,
-      `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike the random rarities it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and a fixed SET of 2–3 signature powers (each a "legendary modifier" like Vampiric) — where an ordinary legendary rolls just one, a unique stacks several, and they compound. Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. (Set pieces — see below — are the OTHER fixed, named red artifacts.) gameState() marks worn/held uniques with a "unique" id and "fixed":true, and lists a piece's powers in item "powers".`,
+      `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike the random rarities it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and its signature power (a "legendary modifier" like Vampiric) — plus a ~33% chance, rolled on drop, of a SECOND signature power stacked on top (never a third). Only the VALUES and that power roll vary — settled scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. (Set pieces — see below — are the OTHER fixed, named red artifacts.) gameState() marks worn/held uniques with a "unique" id and "fixed":true, and lists a piece's rolled powers in item "powers".`,
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a depth-milestone cache, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
       `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
       `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — a curse hits ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
@@ -14320,11 +14321,17 @@ function collPreviewTip(entry) {
   const kindLine = entry.kind === 'set'
     ? `<div class="coll-tip-tag" style="color:${SET_RARITY_COLOR}">✦ ${escapeHtml(entry.setName)} set piece</div>`
     : `<div class="coll-tip-tag" style="color:${color}">✦ Unique</div>`;
-  // A unique/Mythic lists 2–3 signature powers; a set piece one. One row each.
+  // A unique lists its PRIMARY power (always granted) and a SECONDARY (the ~33%
+  // second-power roll); a set piece lists its single power. One row each — the
+  // secondary is tagged as a chance so the preview reads honestly.
   const powKeys = Array.isArray(entry.powers) && entry.powers.length ? entry.powers : (entry.power ? [entry.power] : []);
-  const powLine = powKeys.map(k => ITEM_POWERS[k]).filter(Boolean)
-    .map(pw => `<div class="coll-tip-pow" style="color:${pw.color}">${escapeHtml(pw.name)} — ${escapeHtml(pw.desc)}</div>`)
-    .join('');
+  const secondPct = Math.round(UNIQUE_SECOND_POWER_CHANCE * 100);
+  const powLine = powKeys.map((k, i) => {
+    const pw = ITEM_POWERS[k];
+    if (!pw) return '';
+    const chance = i === 0 ? '' : ` <span class="coll-tip-native">${secondPct}% chance</span>`;
+    return `<div class="coll-tip-pow" style="color:${pw.color}">${escapeHtml(pw.name)} — ${escapeHtml(pw.desc)}${chance}</div>`;
+  }).filter(Boolean).join('');
   const row = (label, native) => `<div class="coll-tip-stat${native ? ' native' : ''}">${escapeHtml(label)}${native ? ' <span class="coll-tip-native">native</span>' : ''}</div>`;
   const rows = [row(STAT_LABELS[entry.native] || entry.native, true)];
   for (const m of entry.mods) {
@@ -16069,14 +16076,18 @@ function buildFixedArtifact(def, lvl, membership) {
   const slot = def.slot;
   const baseName = def.base;
   const value = Math.round(5000 * (1 + lvl * 0.12));
-  // A unique/Mythic carries a SET of 2–3 signature `powers`; `power` stays the
-  // primary (its first) so single-power consumers keep working. Set pieces (and any
-  // legacy def with only a single `power`) fall back to that one key via
-  // itemPowerKeys(), so `powers` is stamped only when the def authors a list.
+  // A unique/Mythic authors a two-power pool; `power` stays the primary (its first)
+  // so single-power consumers keep working. The drop rolls how many it carries — the
+  // primary always, the secondary ~33% of the time (rollUniquePowers), never a third
+  // — and that lands in `item.powers`, locked with the rest of the roll. Set pieces
+  // (and any def with only a single `power`) have no pool, so they fall back to that
+  // one key via itemPowerKeys() and never grow a second power.
+  const rolledPowers = (Array.isArray(def.powers) && def.powers.length)
+    ? rollUniquePowers(def.powers, Math.random) : null;
   const item = { id: Math.random(), name: def.name, tier, slot, ilvl: lvl,
     stats: {}, attrs: {}, value, flavor: def.flavor, icon: iconForBase(slot, baseName),
     base: baseName, fixed: true, power: def.power,
-    ...(Array.isArray(def.powers) && def.powers.length ? { powers: def.powers.slice() } : {}),
+    ...(rolledPowers ? { powers: rolledPowers } : {}),
     ...membership };
   // Auto headline (DMG / DEF+ATK / off-hand family), rolled within its depth band.
   applyBaseStats(item, baseName, lvl + rnd(0, 2) * 0.6, mult, dmgMult);
