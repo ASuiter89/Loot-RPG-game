@@ -12,6 +12,10 @@ export const CHANGELOG = [
     "Type in the search box to jump straight to any topic by name, stat, skill, enemy or keyword; tap a category to browse, and use the breadcrumb or ◀ Back to move around.",
     "The quick How-to card gains an \"Open the full guide\" link into the wiki.",
   ] },
+  { date: "2026-07-10", size: "small", v: "Pantheon Summon buttons say why they're locked", by: "Jeff Louie", notes: [
+    "Hovering a Summon button you can't yet afford at the Pantheon of the Deep now pops a card naming exactly what you're short — the missing shards, gold or chaos — instead of a bare stop-sign cursor with no reason given.",
+    "The card confirms you have enough to forge once your purse covers the recipe.",
+  ] },
   { date: "2026-07-09", size: "small", v: "Pact & meal trackers no longer overlap the stamina bar", by: "Jeff Louie", notes: [
     "Fixed the active mystic-pact and ramen-meal floor trackers overlapping the stamina number in the bottom HUD — the chip and the readout were both centred on the same bar.",
     "The trackers now sit in a compact strip just above the stamina bar; with none active the bar reclaims its full height, level with Health and Mana.",

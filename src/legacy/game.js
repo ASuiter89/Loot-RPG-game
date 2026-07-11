@@ -34617,6 +34617,45 @@ function egPinnaclePoolLine(bossId) {
   }
 }
 
+// The styled hover-card for a Summon button (the gear-card look via hoverTip()).
+// A Summon button is DISABLED when you can't yet forge the Effigy, so on desktop it
+// shows the browser's not-allowed cursor with no hint why. This tip — raised by the
+// .ench-tipwrap wrapper even over the disabled button — explains what summoning does
+// and, when short, spells out exactly which shards / gold / chaos are still missing.
+function egPinnacleSummonTip(bossName, recipe, wallet) {
+  try {
+    var w = wallet || {};
+    var name = (typeof escapeHtml === 'function') ? escapeHtml(bossName || 'this god') : (bossName || 'this god');
+    var html = '<div class="ht-name">Forge the Effigy</div>' +
+      '<div class="ht-line">Spend the recipe below to forge a single-use Effigy and drag ' + name + ' into a bespoke arena.</div>';
+    var missing = [];
+    if (recipe && recipe.shards && recipe.shards.type) {
+      var t = recipe.shards.type;
+      var haveSh = (w.shards && w.shards[t]) || 0;
+      var needSh = recipe.shards.count || 0;
+      if (haveSh < needSh) {
+        var short = needSh - haveSh;
+        missing.push(short + ' ' + egShardLabel(t) + ' shard' + (short === 1 ? '' : 's'));
+      }
+    }
+    if (recipe && recipe.gold && (w.gold || 0) < recipe.gold) {
+      var goldShort = recipe.gold - (w.gold || 0);
+      missing.push(((typeof fmtGold === 'function') ? fmtGold(goldShort) : goldShort) + ' gold');
+    }
+    if (recipe && recipe.chaos && (w.chaos || 0) < recipe.chaos) {
+      missing.push((recipe.chaos - (w.chaos || 0)) + ' chaos');
+    }
+    if (missing.length) {
+      html += '<div class="ht-sub" style="color:var(--danger)">Still need: ' + missing.join(', ') + '.</div>';
+    } else {
+      html += '<div class="ht-sub" style="color:var(--success)">You have enough to forge this now.</div>';
+    }
+    return html;
+  } catch (e) {
+    return 'Forge the Effigy to summon this god.';
+  }
+}
+
 // ── PANTHEON MODAL ───────────────────────────────────────────────────────────
 
 function openPantheon() {
@@ -34678,8 +34717,9 @@ function renderPantheon() {
             '<div class="shop-row-name">' + boss.name + '</div>' +
             '<div class="shop-row-stats">' + stats + '</div>' +
           '</div>' +
-          '<button class="act-btn ' + (afford ? '' : 'short') + '" ' + (afford ? '' : 'disabled') +
-            ' onclick="pantheonSummon(\'' + id + '\')">Summon</button>' +
+          '<span class="ench-tipwrap" ' + hoverTip(egPinnacleSummonTip(boss.name, recipe, wallet)) + '>' +
+            '<button class="act-btn ' + (afford ? '' : 'short') + '" ' + (afford ? '' : 'disabled') +
+            ' onclick="pantheonSummon(\'' + id + '\')">Summon</button></span>' +
         '</div>';
 
       // ── Uber staircase ──
@@ -34702,8 +34742,9 @@ function renderPantheon() {
                   (cleared[uber.id] ? '<span style="color:var(--success)">felled</span>' : '<span style="color:var(--gold)">not yet cleared</span>') +
                   ' &nbsp;·&nbsp; ' + upity + '</div>' +
               '</div>' +
-              '<button class="act-btn ' + (uafford ? '' : 'short') + '" ' + (uafford ? '' : 'disabled') +
-                ' onclick="pantheonSummon(\'' + uber.id + '\')">Summon</button>' +
+              '<span class="ench-tipwrap" ' + hoverTip(egPinnacleSummonTip(uber.name, urecipe, wallet)) + '>' +
+                '<button class="act-btn ' + (uafford ? '' : 'short') + '" ' + (uafford ? '' : 'disabled') +
+                ' onclick="pantheonSummon(\'' + uber.id + '\')">Summon</button></span>' +
             '</div>';
         } else {
           var need = Math.max(0, Math.floor(uber.uberMinEndlessDepth || 0));
