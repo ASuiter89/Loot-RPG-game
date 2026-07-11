@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve, relative } from 'node:path';
-import { globSync } from 'node:fs';
+import { dirname, resolve, relative, join } from 'node:path';
 
 // CHARACTERIZATION / SAFETY-NET TEST.
 //
@@ -16,6 +15,21 @@ import { globSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
+
+// Recursively collect .js/.mjs files under a directory. Plain readdirSync so the
+// gate runs identically on every Node version we build with (Node 20 on
+// Netlify/CI has no fs.globSync — that's a Node 22+ API), with no new dependency.
+// Dotfiles/dot-dirs are skipped to match shell-glob semantics.
+function collectModules(dir) {
+  const out = [];
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    if (ent.name.startsWith('.')) continue;
+    const full = join(dir, ent.name);
+    if (ent.isDirectory()) out.push(...collectModules(full));
+    else if (/\.(js|mjs)$/.test(ent.name)) out.push(full);
+  }
+  return out;
+}
 
 function parsesAsModule(code) {
   try {
@@ -44,10 +58,9 @@ describe('index.html script wiring', () => {
 });
 
 describe('every source & test module parses (strict ESM)', () => {
-  const files = globSync(
-    ['src/**/*.js', 'src/**/*.mjs', 'test/**/*.js', 'test/**/*.mjs'],
-    { cwd: ROOT },
-  ).map((f) => resolve(ROOT, f));
+  const files = ['src', 'test']
+    .flatMap((d) => collectModules(resolve(ROOT, d)))
+    .sort();
 
   it('discovers the source tree', () => {
     expect(files.length).toBeGreaterThan(3);
