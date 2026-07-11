@@ -1581,6 +1581,20 @@
   .sk-pop .pop-refund:disabled { background: var(--panel); color: var(--junk); border-color: var(--border); cursor: not-allowed; }
   .sk-pop .pop-refund.short { color: var(--danger); border-color: var(--danger); }
 
+  /* SKILLS-tab header: the point pool and the class / subclass identity share one
+     compact two-column strip (was three stacked full-width rows). The point box sizes
+     to its content on the left; the identity block takes the rest. */
+  .sk-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; margin-bottom: 8px; }
+  .sk-pts, .sk-id { border: 1px solid var(--border); border-radius: 6px; background: var(--ink); }
+  .sk-pts { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px 14px; text-align: center; }
+  .sk-pts-label { font-size: 1.2rem; color: var(--junk); letter-spacing: 1px; line-height: 1.2; }
+  .sk-pts-value { font-size: 2rem; font-weight: bold; color: var(--gold-350); line-height: 1.1;
+    text-shadow: 0 0 10px color-mix(in srgb, var(--gold-350) 60%, transparent); }
+  .sk-id { display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 6px 10px; min-width: 0; }
+  .sk-id-cls { font-size: 1.3rem; color: var(--text); line-height: 1.4; }
+  .sk-id-meta { font-size: 1.2rem; color: var(--junk); line-height: 1.4; }
+  .sk-spend { color: var(--xp); font-weight: bold; }
+
   /* Sub-tabs across the three trees (passive / active / path). */
   .sk-vtabs { display: flex; gap: 4px; margin: 8px 2px 2px; }
   .sk-vtab { flex: 1; padding: 9px 2px; border: 1px solid var(--panel); border-radius: 6px; background: var(--bg);
@@ -1595,6 +1609,14 @@
     color: var(--blue-450); font-family: inherit; font-size: 1.1rem; letter-spacing: .2px; text-transform: uppercase; cursor: pointer; text-align: center;
     -webkit-tap-highlight-color: transparent; touch-action: manipulation; white-space: nowrap; }
   .sk-btab.on { border-color: var(--frame); background: var(--orange-850); color: var(--xp); box-shadow: 0 0 6px color-mix(in srgb, var(--frame) 35%, transparent); }
+  /* Hairline rule setting the branch tabs off from the tree selector above them. */
+  .sk-div { border-top: 1px solid var(--border); margin: 8px 4px 2px; }
+  /* On touch, lay the five branches as three across then two centred underneath
+     (rather than the desktop auto-fit run). Flex-basis of a third keeps three per
+     row; the trailing two can't grow, so justify-content centres them. min-width:0
+     lets a tab shrink on a narrow cover screen instead of overflowing. */
+  body.touch .sk-btabs { display: flex; flex-wrap: wrap; justify-content: center; }
+  body.touch .sk-btab { flex: 0 1 calc(33.333% - 4px); min-width: 0; }
   /* Blurb under the branch tabs explaining what the selected specialization is about. */
   .sk-bdesc { margin: 5px 2px 2px; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-sm);
     background: var(--panel); color: var(--text-muted); font-size: 1.2rem; line-height: 1.35; text-align: center; }
@@ -1997,7 +2019,6 @@
      sits above the skill tree so the source nodes and the slots are co-visible. */
   .sk-loadout { margin: 4px 0 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
   .lt-title { font-size: 1.3rem; color: var(--purple-200); margin-bottom: 5px; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; text-align: center; gap: 6px; }
-  .lt-hint { font-size: 1.2rem; color: var(--blue-350); opacity: 0.85; }
   .lt-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; --sb-size: calc(46px * var(--ui-scale,1)); }
   /* A slim divider between the auto-cast slot and the four manual slots (the row's
      own gap spaces it, so no extra margin — keeps the single row compact). */
