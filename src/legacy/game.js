@@ -26545,11 +26545,6 @@ function renderSkills(el) {
   const pts = onPath ? (player.ascPoints || 0) : (player.skillPoints || 0);
   const learned = onPath ? spentAscPoints() : spentSkillPoints();
   const ptWord = onPath ? 'ascendancy point' : 'skill point';
-  const noPtHint = onPath
-    ? ((player.level || 1) < ASCEND_LEVEL
-        ? `Reach level ${ASCEND_LEVEL} to earn ascendancy points.`
-        : `Level up to earn more ascendancy points (1 every ${ASC_POINT_EVERY} levels).`)
-    : 'Level up to earn more skill points.';
   const asc = ascData();
   // Sub-tab selector across the three trees.
   const tabBtn = (v, label) => `<button class="sk-vtab ${skillView === v ? 'on' : ''}" onclick="setSkillView('${v}')">${label}</button>`;
@@ -26561,20 +26556,32 @@ function renderSkills(el) {
   let branchTabs = '';
   if (bNames) {
     if (skillBranch >= bNames.length) skillBranch = 0;
-    branchTabs = `<div class="sk-btabs">${bNames.map((nm, i) =>
+    // A hairline rule sets the specialization branches off from the active/passive/
+    // path selector above them, so the two tiers of tabs don't read as one block.
+    branchTabs = `<div class="sk-div" aria-hidden="true"></div><div class="sk-btabs">${bNames.map((nm, i) =>
       `<button class="sk-btab ${skillBranch === i ? 'on' : ''}" onclick="setSkillBranch(${i})">${nm}</button>`).join('')}</div>`;
     // Blurb for the selected branch so its theme is clear before browsing the tree.
     const bDesc = (SKILL_BRANCH_DESC[player.class] || [])[skillBranch];
     if (bDesc) branchTabs += `<div class="sk-bdesc">${bDesc}</div>`;
   }
 
+  // The point pool sits BESIDE the class / subclass identity in a two-column strip
+  // (was three stacked full-width rows that ate vertical space). The no-points nudge
+  // is gone — the "N to spend!" call-to-action rides the identity line, and only when
+  // there is actually something to spend.
+  const idLine = `${dlIcon(cls.icon, 16)} ${cls.name}${asc ? ` · <span style="color:${asc.color}">${dlIcon(asc.icon,16)||''} ${asc.name}</span>` : ''}`;
+  const spend = pts > 0 ? ` · <span class="sk-spend">${pts} ${ptWord}${pts > 1 ? 's' : ''} to spend!</span>` : '';
   const header = `
-    <div class="hero-power">
-      <div class="hp-label">${onPath ? 'ASCENDANCY POINTS' : 'SKILL POINTS'}</div>
-      <div class="hp-value">${pts}</div>
+    <div class="sk-head">
+      <div class="sk-pts">
+        <span class="sk-pts-label">${onPath ? 'ASCENDANCY' : 'SKILL'} POINTS</span>
+        <span class="sk-pts-value">${pts}</span>
+      </div>
+      <div class="sk-id">
+        <div class="sk-id-cls">${idLine}</div>
+        <div class="sk-id-meta">${learned} learned${spend}</div>
+      </div>
     </div>
-    <div class="hero-sub">${dlIcon(cls.icon, 16)} ${cls.name}${asc ? ` · <span style="color:${asc.color}">${dlIcon(asc.icon,16)||''} ${asc.name}</span>` : ''} · ${learned} learned</div>
-    <div class="hero-points">${pts > 0 ? `${pts} ${ptWord}${pts > 1 ? 's' : ''} to spend!` : noPtHint}</div>
     ${tabs}${branchTabs}`;
 
   // The PATH tab before ascending: a prompt and the two specialization previews.
@@ -26839,7 +26846,7 @@ function skillLoadoutTrayHtml() {
   // slim divider. It stays a single row wherever the drawer is wide enough, wrapping
   // only when it truly can't fit.
   return `<div class="sk-loadout">
-    <div class="lt-title"><span data-spr=ic_stun></span> Skill slots <span class="lt-hint">drag a learned skill in · drag to rearrange · drag out to remove · tap to edit</span></div>
+    <div class="lt-title"><span data-spr=ic_stun></span> Skill slots</div>
     <div class="lt-row">${autoCell}<span class="lt-sep" aria-hidden="true"></span>${manual}</div>
   </div>`;
 }

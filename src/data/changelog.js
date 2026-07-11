@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "small", v: "Tighter, clearer Skills tab", by: "Jeff Louie", notes: [
+    "The Skills tab header no longer eats the top of the screen: the point pool now sits in a compact box beside your class and subclass instead of stacked in tall full-width rows, and the \"level up to earn more\" filler line is gone.",
+    "A hairline rule now separates the Active / Passive / Path selector from the specialization tabs below it, so the two rows of tabs no longer read as one block.",
+    "On phones the five specializations lay out as three across then two centred underneath, instead of an uneven four-then-one row.",
+    "Dropped the drag-and-drop instructions under Skill slots — arranging your bar is self-explanatory.",
+  ] },
   { date: "2026-07-10", size: "large", v: "Full How to Play guide — a searchable, categorised wiki", by: "Jeff Louie", notes: [
     "Settings ▸ About now opens HOW TO PLAY: a complete in-game guide covering every system — getting started, controls, combat, staying alive, skills, progression, loot, the dungeon, enemies, town and the endgame — as short topics grouped into browsable categories.",
     "Type in the search box to jump straight to any topic by name, stat, skill, enemy or keyword; tap a category to browse, and use the breadcrumb or ◀ Back to move around.",
