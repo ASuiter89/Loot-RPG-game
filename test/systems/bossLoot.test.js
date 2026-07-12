@@ -21,30 +21,30 @@ describe('killLootClass', () => {
 describe('killLootParams — ordinary kills', () => {
   it('returns the plain per-tier numbers for a boss (no first kill)', () => {
     expect(killLootParams({ isBoss: true })).toEqual({
-      firstKill: false, picks: 5, noDrop: 0.30, quality: 3,
+      firstKill: false, picks: 5, noDrop: 0.44, quality: 3,
     });
   });
 
   it('returns the plain per-tier numbers for an elite', () => {
     expect(killLootParams({ isElite: true })).toEqual({
-      firstKill: false, picks: 3, noDrop: 0.55, quality: 2,
+      firstKill: false, picks: 3, noDrop: 0.64, quality: 2,
     });
   });
 
   it('returns the plain per-tier numbers for an ordinary foe', () => {
     expect(killLootParams({ type: 'rat' })).toEqual({
-      firstKill: false, picks: 1, noDrop: 0.90, quality: 1,
+      firstKill: false, picks: 1, noDrop: 0.92, quality: 1,
     });
   });
 });
 
 describe('killLootParams — first-kill jackpot', () => {
-  it('pays a windfall on a boss first kill: ~3x picks, +quality, slashed noDrop', () => {
+  it('pays a windfall on a boss first kill: ~2x picks, +quality, slashed noDrop', () => {
     const p = killLootParams({ isBoss: true, firstKill: true });
     expect(p.firstKill).toBe(true);
-    expect(p.picks).toBe(15);                 // 5 * 3
+    expect(p.picks).toBe(10);                 // 5 * 2
     expect(p.quality).toBe(6);                // 3 + 3
-    expect(p.noDrop).toBeCloseTo(0.30 * 0.35, 10);
+    expect(p.noDrop).toBeCloseTo(0.44 * 0.35, 10);
     // A first kill drops strictly more, and more often, than a farmed re-kill.
     const farmed = killLootParams({ isBoss: true, firstKill: false });
     expect(p.picks).toBeGreaterThan(farmed.picks);
