@@ -690,7 +690,7 @@ export const WIKI = [
           { ul: [
             '<b>Merchant</b> — buy gear (uncommon and up), and pay to restock the wares (each restock this visit makes the next one dearer).',
             '<b>Craftsman / Forge</b> — forge a blank item from materials and gold; its rarity sets how many affix slots it gets.',
-            '<b>Enchanter</b> — add or reroll affixes on a piece, and <b>Empower</b> it to raise its item level (scaling every stat up as if it dropped deeper).',
+            '<b>Enchanter</b> — add or reroll affixes on a piece, and <b>Empower</b> it to raise its item level (scaling every stat up as if it dropped deeper). Each piece asks for its own randomized mix of crafting materials, and every reroll permanently raises that piece\'s future enchant costs — so chasing a perfect roll gets steadily dearer.',
             '<b>Healer</b> — a full heal and cure for gold.',
           ] },
           { note: 'A spend menu warns "Can\'t equip yet — needs N ATTR" when your attributes can\'t wield a piece. It\'s a heads-up, not a block: you can still buy it and grow into it.' },
