@@ -8,6 +8,27 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — Floor-5 town unlock; keeper waves; strolling townsfolk
+
+- 📦 New leaf module `src/systems/townWander.js`: pure helpers for the town's
+  strolling keepers — `randomDistinctTiles` (fresh random keeper spots each visit),
+  `wanderNeighbors`/`pickWanderTarget` (in-patch orthogonal amble with an injected
+  rng), and `joinNames` (the arrivals banner's "A, B & C" join). Fully unit-tested
+  (`test/systems/townWander.test.js`, 100% cov).
+- 📦 `src/data/townLayout.js` gains `TOWN_SERVICE_WAVES` (keeper → boss-kill wave),
+  `TOWN_ENDGAME_KINDS` (the fixed sanctum keepers), and `TOWN_WANDER` (stroll tuning).
+- 🧪 The legacy shell: town is sealed until the Floor 5 guardian falls (`townUnlocked`
+  gates the Town Portal); keepers now unlock by boss-kill WAVES via a single
+  `townServiceReq`/`townServiceAvailable` (the ad-hoc per-keeper level/depth/difficulty
+  `req`s on `TOWN_MENU` are gone). `buildTown` scatters the regular keepers to random
+  reachable tiles and gives most a slow wander (`updateTownNpcs` on the frame loop);
+  endgame keepers keep their grove. A `checkTownArrivals` + `showNpcBanner` pair pops
+  an arrivals banner (`#npc-banner`) when a wave lands; `graduateToTown` carries the
+  hero from the first Floor 5 clear into the celebrating camp with Floor 6 held for the
+  Town Portal. New persisted `player.pendingTownGraduation` + `player.knownServices`
+  (save-migration seeds a silent baseline). The HUD BOUNTY/MEALS belt chips gate on
+  their keeper. `gameState().menu.townServices` + the `gameGuide("town")` topic follow.
+
 ## Removal — Ascendant Weave glyphs & sockets; bigger board + more keystones
 
 - 📦 Deleted `src/data/glyphs.js` + `src/systems/glyphRoll.js` (and their tests

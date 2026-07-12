@@ -68,6 +68,9 @@ async function main() {
       const p = window.player;
 
       // ── 1) Belt bar must survive a rebuild without being stranded empty ──────
+      // The belt BOUNTY module only appears once the Bounty Board keeper has arrived
+      // (wave 3 — three boss floors felled), so unlock it before painting the belt.
+      p.bossFirstKills = { 5: 1, 10: 1, 15: 1 };
       // Contract A: a boss bounty, already done (2/2). Paint the belt.
       p.bestiary = {};
       p.bossKills = 2; p.eliteKills = 0; p.goldEarned = 0; p.clearedFloors = {};

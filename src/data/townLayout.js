@@ -95,6 +95,37 @@ export const TOWN_DECOR = [
   { x: 27, y: 4, c: 'b' }, { x: 27, y: 6, c: 'b' }, { x: 27, y: 8, c: 'b' }, { x: 27, y: 10, c: 'b' }, { x: 2, y: 12, c: 'b' }, { x: 27, y: 12, c: 'b' }, { x: 27, y: 14, c: 'b' }, { x: 27, y: 16, c: 'b' }, { x: 2, y: 18, c: 'b' },
 ];
 
+// ── SERVICE UNLOCK WAVES ──────────────────────────────────────────────────────
+// The town is a CAMP that fills in as the hero proves themselves against the
+// dungeon's guardians. Every keeper belongs to a WAVE: wave N arrives once N
+// distinct boss floors have been first-cleared (the floor-5 guardian is boss #1,
+// floor 10 is #2, …). Wave 1 is the town-unlock itself — before the floor-5
+// guardian falls, the camp offers no services and the Town Portal is sealed.
+//   Wave 1 (floor 5):  Vault, Merchant, Healer — the essentials.
+//   Wave 2 (floor 10): Ramen House, Craftsman, Trainer.
+//   Wave 3 (floor 15): Gambler, Enchanter, Bounty Board.
+//   Wave 4 (floor 20): Transmuter, Sellsword — the last regular keepers.
+//   Wave 5 (floor 25): Ascendant Weave, Cycles, Hall of Deeds (endgame sanctum).
+//   Wave 6-8 (deeper tiers): Covenant Altar, Mirrorforge, Pantheon.
+export const TOWN_SERVICE_WAVES = {
+  healer: 1, merchant: 1, stash: 1,
+  ramen: 2, forge: 2, prospector: 2, trainer: 2,
+  gambler: 3, enchanter: 3, bounty: 3,
+  transmuter: 4, sellsword: 4,
+  weave: 5, cycles: 5, deeds: 5,
+  covenants: 6, mirrorforge: 7, pantheon: 8,
+};
+
+// The late-game keepers who gather in the hedged ENDGAME SANCTUM (top-left grove).
+// They keep their AUTHORED sanctum tiles and never wander — the regular keepers out
+// in the open clearing are the ones who get randomized spots and stroll about.
+export const TOWN_ENDGAME_KINDS = ['covenants', 'weave', 'pantheon', 'mirrorforge', 'deeds', 'cycles'];
+
+// Slow-stroll tuning for the wandering regular keepers (buildTown + updateTownNpcs).
+// speed in tiles/sec (unhurried amble); radius is how far (Chebyshev) a keeper drifts
+// from its arrival spot; dwell is the pause (seconds) between steps.
+export const TOWN_WANDER = { speed: 1.1, radius: 3, dwellMin: 0.7, dwellMax: 2.6, walkChance: 0.8 };
+
 // Family char → { ids (curated DECOR_INDEX pieces), solid }. buildTown picks one id
 // per placement deterministically (pickDecorVariant). Border trees are kept SHORT
 // (ht ≤ ~3.8) so their canopies never reach the keepers. Bushes/hedges block but do
