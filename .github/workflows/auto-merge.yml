@@ -5,34 +5,54 @@
 # auto-merge can't help here — it only engages when a branch-protection rule
 # leaves a required check pending, and this repo has neither branch protection
 # nor a PR-triggered CI check (the sole existing PR status is Netlify's deploy
-# preview). This workflow is the self-contained replacement: on every push to a
-# `claude/…` PR it runs the same gates a human runs locally — `npm test`,
-# `npm run build`, `npm run smoke`, and the styles lint — and, ONLY if they all
-# pass, squash-merges the PR and deletes the branch.
+# preview). This workflow is the self-contained replacement: it runs the same
+# gates a human runs locally — `npm test`, `npm run build`, `npm run smoke`, and
+# the styles lint — and, ONLY if they all pass, squash-merges the PR and deletes
+# the branch.
 #
-# Scope & safety:
+# Why it also runs on a SCHEDULE (the 2026-07 fix): relying on the per-PR
+# `pull_request` event alone proved fragile — GitHub silently dropped that event
+# for several freshly-opened `claude/…` PRs, so they were never evaluated and sat
+# open. While they sat, later merges moved `src/data/changelog.js`, and the
+# stranded PRs rotted into merge conflicts. A dropped webhook must not be able to
+# strand a PR, so a periodic `schedule` sweep re-evaluates EVERY open, eligible
+# PR independently of whether its event ever fired. The `pull_request` trigger is
+# still the fast path (merges within a minute when it fires); the sweep is the
+# backstop that guarantees eventual pickup.
+#
+# Scope & safety (unchanged):
 #   - Only same-repo, non-draft `claude/…` branches are ever merged. Human PRs
 #     and fork PRs are left completely untouched (a fork PR would also get a
 #     read-only token and could not be merged anyway).
 #   - Gates run against the PR's own head commit, so a red change can never land.
+#   - A PR that currently conflicts with `main` (mergeStateStatus DIRTY) is
+#     skipped, not force-merged — the sweep never spins uselessly on it and never
+#     lands a bad tree; a human resolves the conflict, then the next sweep picks
+#     it up.
 #   - Uses the built-in GITHUB_TOKEN — no secret to configure. Because a merge
 #     performed by GITHUB_TOKEN does NOT itself re-trigger `push`-based
 #     workflows, the job explicitly kicks the Pages deploy (deploy.yml, which
 #     exposes workflow_dispatch) after a successful merge.
 #
-# Manual use: run it from the Actions tab (workflow_dispatch) with a PR number
-# to (re-)evaluate and merge a specific open PR — handy for clearing a backlog.
+# Manual use: run it from the Actions tab (workflow_dispatch). Leave `pr` blank to
+# sweep every open `claude/…` PR (handy for clearing a backlog), or pass a single
+# PR number to (re-)evaluate just that one.
 
 name: Auto-merge Claude PRs
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  schedule:
+    # Backstop for dropped `pull_request` events. Every 15 minutes GitHub cron is
+    # best-effort and may coalesce/delay runs — fine for a safety net whose job is
+    # eventual pickup, not latency (the `pull_request` fast path covers latency).
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       pr:
-        description: PR number to evaluate and merge
-        required: true
+        description: PR number to evaluate (leave blank to sweep all open claude/* PRs)
+        required: false
         type: string
 
 # Least-privilege: read the repo + merge the PR, and dispatch the deploy workflow.
@@ -41,49 +61,106 @@ permissions:
   pull-requests: write
   actions: write
 
-# One evaluation per PR; a newer push supersedes an in-flight run.
+# Serialize sweeps so two never race to merge the same PR; a `pull_request` run
+# stays scoped to its own PR so unrelated PRs don't cancel each other. A sweep is
+# NOT cancelled in progress (mid-merge interruption is worse than waiting), while a
+# newer push to one PR supersedes its own older in-flight run.
 concurrency:
-  group: automerge-${{ github.event.pull_request.number || github.event.inputs.pr }}
-  cancel-in-progress: true
+  group: automerge-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'sweep' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  auto-merge:
+  # Cheap job: figure out which PR numbers this run should evaluate, and emit them
+  # as a JSON array the merge job fans out over. An empty array skips the merge job
+  # entirely, so an idle sweep costs only this ~seconds-long step.
+  discover:
     runs-on: ubuntu-latest
-    # Gate the whole job on the PR event being a non-draft, same-repo `claude/…`
-    # branch. The manual-dispatch path skips this expression (pull_request is
-    # null) and is re-validated authoritatively in the "Resolve PR" step below.
+    # For `pull_request` events, pre-filter to the same guard as before so we don't
+    # even spin up for human/fork/draft branches. schedule & workflow_dispatch have
+    # a null pull_request context, so they always run discover and enumerate below.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      github.event_name != 'pull_request' ||
       ( github.event.pull_request.draft == false &&
         github.event.pull_request.head.repo.full_name == github.repository &&
         startsWith(github.event.pull_request.head.ref, 'claude/') )
+    outputs:
+      prs: ${{ steps.list.outputs.prs }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Resolve PR number and head
+      - name: Compute the set of PRs to evaluate
+        id: list
+        run: |
+          set -euo pipefail
+          # Candidate PR numbers depend on the trigger:
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CANDIDATES='${{ github.event.pull_request.number }}'
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.pr }}" ]; then
+            CANDIDATES='${{ github.event.inputs.pr }}'
+          else
+            # schedule, or a blank-`pr` dispatch: sweep every open PR.
+            CANDIDATES=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open \
+              --limit 50 --json number --jq '.[].number')
+          fi
+
+          # Keep only the ones that pass the safety guard: open, non-draft,
+          # same-repo, `claude/*` head. (Re-checked authoritatively in the merge
+          # job too, in case state changes between now and then.)
+          ELIGIBLE=()
+          for NUM in $CANDIDATES; do
+            DATA=$(gh pr view "$NUM" --repo "$GITHUB_REPOSITORY" \
+              --json headRefName,isCrossRepository,isDraft,state 2>/dev/null) || continue
+            STATE=$(jq -r .state <<<"$DATA")
+            CROSS=$(jq -r .isCrossRepository <<<"$DATA")
+            DRAFT=$(jq -r .isDraft <<<"$DATA")
+            HEAD_REF=$(jq -r .headRefName <<<"$DATA")
+            if [ "$STATE" = "OPEN" ] && [ "$CROSS" = "false" ] && [ "$DRAFT" = "false" ] \
+               && [ "${HEAD_REF#claude/}" != "$HEAD_REF" ]; then
+              ELIGIBLE+=("$NUM")
+            fi
+          done
+
+          # Emit a compact JSON array for the matrix; [] when nothing is eligible.
+          PRS=$(printf '%s\n' "${ELIGIBLE[@]:-}" | jq -R 'select(length>0) | tonumber' | jq -sc .)
+          echo "Eligible PRs: $PRS"
+          echo "prs=$PRS" >> "$GITHUB_OUTPUT"
+
+  # Fan out over the discovered PRs, one at a time (max-parallel: 1 keeps two
+  # merges from racing the same base). fail-fast: false so one PR's failure never
+  # blocks the rest of the backlog.
+  gate-and-merge:
+    needs: discover
+    if: needs.discover.outputs.prs != '' && needs.discover.outputs.prs != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        pr: ${{ fromJson(needs.discover.outputs.prs) }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Re-resolve PR and skip if ineligible or conflicting
         id: pr
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            NUM="${{ github.event.inputs.pr }}"
-          else
-            NUM="${{ github.event.pull_request.number }}"
-          fi
-          # Authoritative PR facts (works for both triggers). Re-enforce the same
-          # guard the job `if` applies to PR events, so a manual dispatch can
-          # never merge a human, draft, closed, or fork branch.
+          NUM='${{ matrix.pr }}'
           DATA=$(gh pr view "$NUM" --repo "$GITHUB_REPOSITORY" \
-            --json headRefName,isCrossRepository,isDraft,state)
-          HEAD_REF=$(echo "$DATA" | jq -r .headRefName)
-          STATE=$(echo "$DATA" | jq -r .state)
-          CROSS=$(echo "$DATA" | jq -r .isCrossRepository)
-          DRAFT=$(echo "$DATA" | jq -r .isDraft)
+            --json headRefName,isCrossRepository,isDraft,state,mergeStateStatus)
+          STATE=$(jq -r .state <<<"$DATA")
+          CROSS=$(jq -r .isCrossRepository <<<"$DATA")
+          DRAFT=$(jq -r .isDraft <<<"$DATA")
+          HEAD_REF=$(jq -r .headRefName <<<"$DATA")
+          MERGE=$(jq -r .mergeStateStatus <<<"$DATA")
           if [ "$STATE" != "OPEN" ] || [ "$CROSS" != "false" ] || [ "$DRAFT" != "false" ] \
              || [ "${HEAD_REF#claude/}" = "$HEAD_REF" ]; then
             echo "PR #$NUM is not an open, non-draft, same-repo claude/* branch — skipping."
             echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ "$MERGE" = "DIRTY" ]; then
+            echo "PR #$NUM conflicts with the base branch (mergeStateStatus=DIRTY) — skipping until resolved."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Evaluating PR #$NUM ($HEAD_REF)."
+            echo "Evaluating PR #$NUM ($HEAD_REF, mergeStateStatus=$MERGE)."
             echo "number=$NUM" >> "$GITHUB_OUTPUT"
           fi
 
