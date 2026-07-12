@@ -3199,7 +3199,7 @@ const BALANCE = {
   enemyHpMult: 1,        // global × on every foe's max HP (regular, elite, boss)
   enemyDmgMult: 1,       // global × on every foe's damage
   enemyCountMult: 1,     // × on the regular foe count per floor (still capped at 40)
-  hazardDmgMult: 1,      // × on trap / vent hazard damage
+  hazardDmgMult: 2,      // × on ALL passive/environmental damage — arrow & fire-vent traps, lava, spikes, hidden traps, trapped chests, hazard puddles/webs (every non-combat damage dealer routes through this one knob)
   // Trap / hazard damage tuning (base + per-floor; lava/spikes also add a % of max
   // HP so they stay a real bite as the pool grows). Arrow/fire are mitigated by
   // defence before they land, so their raw values run higher than lava/spikes.
@@ -20822,9 +20822,9 @@ const FLOOR_EVENTS = [
   () => { buffs.power = Math.max(buffs.power, 1); log('<span data-spr=w_dagger></span> You hone your blade on a whetstone — +50% damage next floor.', 'loot'); },
   () => { const heal = Math.floor(player.maxHp*0.15); const mana = Math.floor(player.maxMp*0.15); player.hp = Math.min(player.maxHp, player.hp+heal); player.mp = Math.min(player.maxMp, player.mp+mana); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=potion_g></span> A half-full flask — +${heal} HP, +${mana} MP.`, 'loot'); },
   // ── Small hazards ──
-  () => { const dmg = rnd(5,12) + dungeonLevel; const hpLost = takePlayerDamage(dmg, 'hidden trap', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344'); log(`🪤 A hidden trap snaps shut — -${dmg} HP!`, 'important'); screenFlash('#cc0000'); },
-  () => { if (Math.random()<0.5){ const h=Math.floor(player.maxHp*0.12); player.hp=Math.min(player.maxHp,player.hp+h); spawnFloatingText(player.x,player.y,`+${h}`,'#44dd44'); log(`<span data-spr=potion_g></span> A strange puddle — refreshing. +${h} HP.`,'loot'); } else { const d=rnd(3,8); const hpLost=takePlayerDamage(d, 'strange puddle', { lethal: false }); if(hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`<span data-spr=potion_g></span> A strange puddle — bad idea. -${d} HP.`); } },
-  () => { const d = rnd(2,6); const hpLost = takePlayerDamage(d, 'web', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`🕸️ You scratch free of a thick web. -${d} HP.`); },
+  () => { const dmg = Math.round((rnd(5,12) + dungeonLevel) * BALANCE.hazardDmgMult); const hpLost = takePlayerDamage(dmg, 'hidden trap', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344'); log(`🪤 A hidden trap snaps shut — -${dmg} HP!`, 'important'); screenFlash('#cc0000'); },
+  () => { if (Math.random()<0.5){ const h=Math.floor(player.maxHp*0.12); player.hp=Math.min(player.maxHp,player.hp+h); spawnFloatingText(player.x,player.y,`+${h}`,'#44dd44'); log(`<span data-spr=potion_g></span> A strange puddle — refreshing. +${h} HP.`,'loot'); } else { const d=Math.round(rnd(3,8) * BALANCE.hazardDmgMult); const hpLost=takePlayerDamage(d, 'strange puddle', { lethal: false }); if(hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`<span data-spr=potion_g></span> A strange puddle — bad idea. -${d} HP.`); } },
+  () => { const d = Math.round(rnd(2,6) * BALANCE.hazardDmgMult); const hpLost = takePlayerDamage(d, 'web', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`🕸️ You scratch free of a thick web. -${d} HP.`); },
   // ── Pure flavour, no effect ──
   () => log('<span data-spr=b_deathknight></span> A long-dead adventurer slumps against the wall. You leave them be.'),
   () => log('<span data-spr=scroll></span> Scrawled on the stone: "TURN BACK." You press on anyway.'),
@@ -25570,7 +25570,7 @@ function openChest(chest) {
   if (Math.random() < 0.07 * dm) {
     sfx('trap');
     if (Math.random() < 0.5) {
-      const dmg = 4 + dungeonLevel * 2;
+      const dmg = Math.round((4 + dungeonLevel * 2) * BALANCE.hazardDmgMult);
       const hpLost = takePlayerDamage(dmg, 'trapped chest', { lethal: false });
       if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
       log(`💥 Trapped chest! Explodes -${dmg}!`, 'important');
