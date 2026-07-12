@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "small", v: "Magic Find is rarity-only; leaner boss windfall", by: "Claude", notes: [
+    "Magic Find now shifts only how RARE your drops roll, never how many — matching what the stat always promised. Stack it for better gear, not bigger piles.",
+    "A boss's first-clear windfall spills fewer items (about a third less) so it stays a treat, not a mountain — the quality bump on that windfall is unchanged.",
+  ] },
   { date: "2026-07-11", size: "small", v: "Town Portal drops you mid-clearing", by: "Jeff Louie", notes: [
     "Portal to town and you now step out ONTO the return portal in the middle of the clearing — right where you land, not tucked down by the bottom entrance. The way home is under your feet the moment you arrive.",
   ] },

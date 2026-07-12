@@ -22472,18 +22472,20 @@ function onEnemyDefeated(e) {
     if (got > 0) { player.mp += got; spawnFloatingText(player.x, player.y - 0.3, `+${got}`, '#7fb0ff'); }
   }
   updateBars();
-  // The floor modifier, an active Fortune buff, gear Magic Find, and any pact all
-  // sweeten every drop roll.
-  const lootMult = (floorMod.lootMult || 1) * greedLootMult() * (buffs.fortune ? 1.5 : 1) * pfx('loot', 1) * (1 + (totalStat('MAGICFIND') + skillBonus('magicFind')) / 100 + foodFx('magicPct')) * (1 + foodFx('dropPct') + healerFx('dropPct')) * egCovLootQtyMult();   // × Dread Covenant loot quantity (×1 when un-sworn) + healer Blessing (Fortune)
+  // The floor modifier, an active Fortune buff, a drop-quantity food buff, and any
+  // pact all sweeten every drop roll. Magic Find is deliberately NOT here — it
+  // raises drop RARITY only (see qualityMagicFind/rollTier), never how MUCH drops.
+  const lootMult = (floorMod.lootMult || 1) * greedLootMult() * (buffs.fortune ? 1.5 : 1) * pfx('loot', 1) * (1 + foodFx('dropPct') + healerFx('dropPct')) * egCovLootQtyMult();   // × Dread Covenant loot quantity (×1 when un-sworn) + healer Blessing (Fortune)
   // ── Gear drops (Diablo-2-style "picks") ──
   // Instead of one super-lucky roll, each kill makes a number of independent
   // PICKS; every pick either finds nothing (NoDrop) or yields one item whose
   // rarity is rolled on its own (rollTier). Bosses make the most picks — so they
   // spill the MOST loot — elites fewer, ordinary foes a single stingy pick. The
   // richer the foe, the small per-item quality nudge it gets too, so the rarity
-  // ratio differs by foe as well as the count. Magic Find & a deep floor erode
-  // the per-pick NoDrop (the single-player echo of D2's "players X" trick), so
-  // juicing loot raises how MUCH drops without ever flooding you with legendaries.
+  // ratio differs by foe as well as the count. Loot-QUANTITY boosts (Fortune, a
+  // drop-food buff, floor/greed mods, a pact, Dread covenants) erode the per-pick
+  // NoDrop so more picks land; Magic Find stays OUT of this and lifts drop RARITY
+  // only, so juicing quantity never floods you with legendaries.
   {
     // Per-tier pick shape, with the first-kill jackpot folded in (systems/bossLoot.js):
     // a boss's FIRST kill makes ~3x the picks at a higher quality with a slashed

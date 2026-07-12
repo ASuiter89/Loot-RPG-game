@@ -640,7 +640,7 @@ export const WIKI = [
         body: [
           { p: 'Boss guardians reward patience. Respect <b>warded</b> (your damage is halved while the ward is up — wait it out, then burst) and stay out of boss flame and barriers.' },
           { h: 'First-kill jackpot' },
-          { p: 'The <b>first</b> time you clear a given boss floor, its guardian spills roughly triple the loot at noticeably better quality — a one-time windfall. Because bosses recur in Endless, each new or deeper boss floor pays its own windfall, so descending to a fresh boss floor is always the richer prize.' },
+          { p: 'The <b>first</b> time you clear a given boss floor, its guardian spills roughly double the loot at noticeably better quality — a one-time windfall. Because bosses recur in Endless, each new or deeper boss floor pays its own windfall, so descending to a fresh boss floor is always the richer prize.' },
           { h: 'Conquering a tier' },
           { p: 'Floor 25 of a finite tier is the final guardian — clearing it conquers the tier and brands a permanent "conquest scar" (a small, stacking cut to max HP and damage). A rainbow gate then opens; step onto it to dive straight into the next tier, or pick it later at the town Dungeon Gate.' },
         ],
