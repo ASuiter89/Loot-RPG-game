@@ -266,8 +266,21 @@ The in-game Version History popup is driven by the `CHANGELOG` array in
   if any entry is dated after the current Pacific day, so a UTC-drifted date breaks
   CI instead of silently shipping under tomorrow.
 - **Add an entry for every user-facing change you ship, in the same commit.**
-- **Be maximally concise** — present-tense fragments, drop articles/hedges, ~one
-  line each.
+- **Be maximally terse — patch notes are skimmed, not read.** This is a hard rule,
+  not a nicety: entries drift wordy over time, and wordy patch notes are a bug. The
+  oldest `CHANGELOG` entries are the reference style — present-tense sentence
+  fragments, one glanceable line. Match them.
+  - **Drop** articles (the/a), hedges (now/actually/really/far/simply/just), and
+    filler clauses ("so you can…", "no more …ing", "instead of…") unless they carry
+    a fact. Never restate the title `v` in a note.
+  - **Compress** each note to a fragment (aim ≤ ~90 chars); an entry to ≤ ~160 chars
+    total. Collapse several wordy bullets into fewer punchy ones; split facts with
+    `;` or `—`. A one-fact change is one short note, not a paragraph.
+  - **Keep** every concrete fact — numbers, `(was X)` comparisons, names, stat
+    abbreviations — while cutting the prose around them. Terse ≠ vague.
+  - Good: `"Roaming merchant appears ~1 floor in 8 (was 1 in 5), mystic ~1 in 10 (was 1 in 6)."`
+    Bad: a three-sentence version of the same fact.
+  - A data-validity test caps note length, so an over-long note fails CI.
 
 ## Loot tiers & typography
 

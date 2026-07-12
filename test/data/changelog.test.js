@@ -40,6 +40,20 @@ describe('CHANGELOG data validity', () => {
     ).toEqual([]);
   });
 
+  it('keeps notes terse — no rambling paragraph as a single note', () => {
+    // CLAUDE.md: patch notes are skimmed, not read. A single note should be a
+    // glanceable fragment, not a multi-sentence essay. This is a coarse backstop
+    // (dense reference enumerations legitimately run long); the review rule drives
+    // the real ~90-char target. Anything past this ceiling is prose that should be
+    // split into separate bullets or cut.
+    const MAX = 300;
+    const offenders = [];
+    for (const e of CHANGELOG) {
+      for (const n of e.notes) if (n.length > MAX) offenders.push(`${n.length} chars — ${e.v}: ${n.slice(0, 60)}…`);
+    }
+    expect(offenders, `notes over ${MAX} chars (split into shorter bullets):\n${offenders.join('\n')}`).toEqual([]);
+  });
+
   it('never references other games (project changelog rule)', () => {
     // CLAUDE.md: player-facing copy must stand on its own, not lean on another
     // title for meaning. Guard the most likely slips.
