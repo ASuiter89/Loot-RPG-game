@@ -741,10 +741,10 @@ export const WIKI = [
       {
         id: 'weave',
         title: 'The Ascendant Weave',
-        keywords: ['weave', 'ascendant weave', 'constellation', 'keystone', 'glyph', 'boss point', 'board'],
+        keywords: ['weave', 'ascendant weave', 'constellation', 'keystone', 'boss point', 'board'],
         body: [
-          { p: 'The <b>Ascendant Weave</b> is a constellation choice board fed by <b>boss points</b>, opened once you clear your first boss floor. It has five arms — one per attribute — each three rings deep. Light an arm\'s entry node first, then branch outward.' },
-          { p: '<b>Keystones</b> are build-definers that ignite once you\'ve entered their arm and crossed an attribute or point gate. <b>Glyphs</b> drop deep in Endless and socket into the board, multiplying every lit node they can reach — so <b>where</b> you place a glyph decides what it amplifies.' },
+          { p: 'The <b>Ascendant Weave</b> is a constellation choice board fed by <b>boss points</b>, opened once you clear your first boss floor. It has five arms — one per attribute — each four rings deep. Light an arm\'s entry node first, then branch outward toward its deep apex.' },
+          { p: '<b>Keystones</b> are build-definers that ignite once you\'ve entered their arm and crossed its gate. Gates ladder up: a cheap keystone lights early, while an apex keystone can demand a high attribute total, most of an arm lit, and a large total board investment all at once — so the strongest bonuses reward a dedicated build.' },
           { note: 'Every node refunds for free, so you can freely re-plan a build.' },
         ],
       },

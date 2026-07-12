@@ -10,7 +10,6 @@ import {
   refundNode,
   refundAll,
   keystonesActive,
-  glyphRadiusNodes,
   weaveStatContribution,
   weaveDepthRank,
   sanitizeBoard,
@@ -172,90 +171,82 @@ describe('keystonesActive — gated two ways, dormant on an untouched arm', () =
     expect(keystonesActive(four, {})).toContain('ks_overwhelm');
   });
 
+  it('AND-combines every gate condition (attribute total + board-wide spend)', () => {
+    // ks_annihilate gates on { attr:might, total:150, boardPts:24 }. Enter ferocity and
+    // clear the attribute total but fall short on total board points → still dormant.
+    const shallow = litPath('ferocity_1');
+    expect(keystonesActive(shallow, { might: 999 })).not.toContain('ks_annihilate');
+    // Light 24 nodes across the board AND clear the might total → ignites.
+    let big = empty();
+    for (const c of ['ferocity', 'aegis', 'zephyr', 'oracle', 'fortune']) {
+      // full 7-node arm: entry, both branches, both tips, both apexes
+      big = allocate(big, `${c}_1`);
+      big = allocate(big, `${c}_2`);
+      big = allocate(big, `${c}_3`);
+      big = allocate(big, `${c}_4`);
+      big = allocate(big, `${c}_5`);
+      big = allocate(big, `${c}_6`);
+      big = allocate(big, `${c}_7`);
+    }
+    expect(boardPointsSpent(big)).toBeGreaterThanOrEqual(24);
+    expect(keystonesActive(big, { might: 150 })).toContain('ks_annihilate');
+    // Board points met but might below 150 → dormant again (every part must hold).
+    expect(keystonesActive(big, { might: 149 })).not.toContain('ks_annihilate');
+  });
+
   it('tolerates missing attrs object', () => {
     expect(Array.isArray(keystonesActive(litPath('ferocity_1'), null))).toBe(true);
   });
 });
 
-describe('glyphRadiusNodes — socket geometry', () => {
-  it('the core socket reaches exactly the five entry nodes', () => {
-    const got = glyphRadiusNodes('core').sort();
-    expect(got).toEqual(['aegis_1', 'ferocity_1', 'fortune_1', 'oracle_1', 'zephyr_1']);
-  });
-
-  it('an arm socket reaches that arm’s entry + branches, not its deep tips', () => {
-    const got = glyphRadiusNodes('sock_ferocity').sort();
-    expect(got).toEqual(['ferocity_1', 'ferocity_2', 'ferocity_3']);
-  });
-
-  it('an unknown socket reaches nothing', () => {
-    expect(glyphRadiusNodes('nope')).toEqual([]);
-  });
-
-  it('honours a radius override', () => {
-    expect(glyphRadiusNodes('core', WEAVE, 0)).toEqual([]);        // shrunk to nothing
-    expect(glyphRadiusNodes('core', WEAVE, 999).length).toBe(WEAVE.nodes.length); // covers all
-  });
-});
-
 describe('weaveStatContribution — the aggregate', () => {
-  it('an EMPTY board is a true no-op, even with glyphs socketed and gates cleared', () => {
-    const glyphs = [{ socketId: 'sock_ferocity', value: 0.5 }];
+  it('an EMPTY board is a true no-op, even with every gate cleared', () => {
     const attrs = { might: 999, vitality: 999, agility: 999, spirit: 999, luck: 999 };
-    expect(weaveStatContribution(empty(), glyphs, attrs)).toEqual({ flat: {}, mult: {} });
-    // Missing glyphs/attrs args also no-op.
+    expect(weaveStatContribution(empty(), attrs)).toEqual({ flat: {}, mult: {} });
+    // Missing attrs arg also no-op.
     expect(weaveStatContribution(empty())).toEqual({ flat: {}, mult: {} });
   });
 
-  it('sums lit-node payloads into flat with no glyphs', () => {
+  it('sums lit-node payloads straight into flat', () => {
     const b = litPath('ferocity_1', 'ferocity_2'); // {might:2} + {ATK:4}
-    const { flat, mult } = weaveStatContribution(b, [], {});
+    const { flat, mult } = weaveStatContribution(b, {});
     expect(flat).toEqual({ might: 2, ATK: 4 });
     expect(mult).toEqual({});
   });
 
-  it('a glyph multiplies ONLY the covered lit nodes (placement matters)', () => {
-    // sock_ferocity covers ferocity_1 & ferocity_2 but NOT the tip ferocity_4.
+  it('sums an attribute that appears on more than one node in the arm', () => {
+    // ferocity_1 {might:2} + ferocity_4 tip {might:3} both add might.
     const b = litPath('ferocity_1', 'ferocity_2', 'ferocity_4');
-    const glyphs = [{ socketId: 'sock_ferocity', value: 0.5 }]; // power ×1.5
-    const { flat } = weaveStatContribution(b, glyphs, {});
-    // ATK lives only on the covered branch ferocity_2 → cleanly amplified ×1.5.
-    expect(flat.ATK).toBeCloseTo(4 * 1.5, 3);
-    // might lives on BOTH the covered entry ferocity_1 ({might:2}) and the UNCOVERED
-    // tip ferocity_4 ({might:3}); only the covered one is amplified:
-    //   2*1.5 (covered) + 3 (uncovered) = 6.
-    expect(flat.might).toBeCloseTo(2 * 1.5 + 3, 3);
-  });
-
-  it('a glyph with its own radius overrides the socket reach', () => {
-    const b = litPath('ferocity_1', 'ferocity_2', 'ferocity_4');
-    // Shrink the ferocity socket glyph to radius 0 → covers nothing.
-    const { flat } = weaveStatContribution(b, [{ socketId: 'sock_ferocity', value: 1, radius: 0 }], {});
-    expect(flat.might).toBe(2 + 3); // nothing amplified
+    const { flat } = weaveStatContribution(b, {});
+    expect(flat.might).toBe(2 + 3);
     expect(flat.ATK).toBe(4);
   });
 
   it('folds an active stat-mult keystone into mult', () => {
     const b = litPath('ferocity_1'); // ferocity entered
-    const { mult } = weaveStatContribution(b, [], { might: 60 }); // ks_unbroken active
+    const { mult } = weaveStatContribution(b, { might: 60 }); // ks_unbroken active
     expect(mult.ATK).toBeCloseTo(1.15, 10);
+  });
+
+  it('multiplies together several active keystones on the same stat', () => {
+    // ferocity full 7-node arm (7 pts): ks_overwhelm (n:4) and ks_titanic (n:6) both
+    // fire, and with might 150 ks_unbroken (60) + ks_annihilate need boardPts too —
+    // here only the in-arm gates matter for ATK stacking (unbroken 1.15 × titanic 1.18).
+    const b = litPath('ferocity_1', 'ferocity_2', 'ferocity_3', 'ferocity_4', 'ferocity_5', 'ferocity_6', 'ferocity_7');
+    const { mult } = weaveStatContribution(b, { might: 60 });
+    expect(mult.ATK).toBeCloseTo(1.15 * 1.18, 10); // unbroken × titanic
+    expect(mult.CRITDMG).toBeCloseTo(1.12, 10);     // overwhelm
   });
 
   it('folds an active flat-effect keystone into flat', () => {
     // Light 4 aegis nodes → ks_stoneskin ({ DR:8 }) active via the n:4 gate.
     const b = litPath('aegis_1', 'aegis_2', 'aegis_3', 'aegis_4');
-    const { flat, mult } = weaveStatContribution(b, [], {});
+    const { flat, mult } = weaveStatContribution(b, {});
     // aegis payloads: {vitality:2},{HP:12},{DR:3},{vitality:3}
     expect(flat.vitality).toBe(5);
     expect(flat.HP).toBe(12);
     expect(flat.DR).toBe(3 + 8); // node DR + stoneskin flat
     expect(mult).toEqual({});    // stoneskin is a flat effect, no mult
-  });
-
-  it('ignores glyphs whose socket is unknown', () => {
-    const b = litPath('ferocity_1');
-    const { flat } = weaveStatContribution(b, [{ socketId: 'ghost', value: 5 }, null], {});
-    expect(flat.might).toBe(2); // unamplified
   });
 });
 

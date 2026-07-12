@@ -15,8 +15,7 @@ itself. Everything here is a shippable pixel-art tile.
   (`cov_frenzy`, `cov_horde`, `cov_teeming`, `cov_legion`, `cov_warband`,
   `cov_bloodlust`, `cov_relentless`, `cov_apex`, `cov_annihilation`, `cov_famine`,
   `cov_scarcity`, `cov_carapace`, `cov_juggernaut`, `cov_haste`, `cov_swelling`).
-- **Ascendant Weave (7):** `weave_star` header + glyph tiles `glyph` and
-  `glyph_1`…`glyph_5` (one per tier, so each rarity reads differently).
+- **Ascendant Weave (1):** `weave_star` header for the constellation board.
 - **Mirrorforge (5):** `mf_anvil` header, `mat_aether` (deep material — wallet chip
   + floor pickup), and the item markers `mf_radiant`, `mf_mirrored`, `mf_corrupt`.
 - **Pantheon of the Deep (21):** `pin_altar`, `pin_locked`, generic `pin_shard`,
@@ -38,8 +37,8 @@ itself. Everything here is a shippable pixel-art tile.
 
 ## Optional polish (nice-to-have, not blocking)
 
-- **Weave node art:** the constellation/keystone nodes reuse the glyph/tier tiles;
-  bespoke per-constellation and per-keystone icons would sell the board further.
+- **Weave node art:** the constellation/keystone nodes reuse generic tiles; bespoke
+  per-constellation and per-keystone icons would sell the board further.
 - **Mythic unique tint/frame:** the 8 Mythic uniques in `src/data/pinnacleUniques.js`
   reuse their base gear icon via `iconForBase` (acceptable); a distinct Mythic
   tint/frame would set them apart.

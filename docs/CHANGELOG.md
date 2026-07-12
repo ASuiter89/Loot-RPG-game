@@ -8,6 +8,24 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Removal — Ascendant Weave glyphs & sockets; bigger board + more keystones
+
+- 📦 Deleted `src/data/glyphs.js` + `src/systems/glyphRoll.js` (and their tests
+  `test/data/glyphs.test.js`, `test/systems/glyphRoll.test.js`). The Weave no longer
+  has a socketable-gem layer; its power is nodes + keystones only.
+- 📦 `src/systems/ascendantWeave.js` drops `socketIndex`/`glyphRadiusNodes` and the
+  glyph amplification path; `weaveStatContribution(board, attrs, data)` loses its
+  `glyphs` argument. `keystonesActive` now AND-combines any of `{attr,total}`,
+  `{n}`, and a new `{boardPts}` (total board spend) gate condition.
+- 📦 `src/data/ascendantWeave.js` grows each arm from 5 nodes/3 rings to 7 nodes/4
+  rings (a band-4 apex pair), drops the `sockets` table, and expands the keystone
+  list from 8 to 24 with laddered, higher gates.
+- 🧪 The legacy shell removes glyph drop/socket UI, imports, `player.weaveGlyphs`
+  (save-migration now deletes it), the deep-Endless glyph faucet, and the
+  `weaveSocketUI`/`weaveUnsocketUI` window bridges; `gameState().endgame.weave`
+  swaps the `glyphs` count for `spent`. Unused `glyph*` atlas tiles pruned from
+  `src/assets/endgameArt.js`.
+
 ## Removal — Boss-point gear-slot investment
 
 - 📦 Deleted `src/systems/bossSlots.js` + `src/data/bossSlots.js` (and

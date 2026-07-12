@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "large", v: "Ascendant Weave: bigger board, more keystones, glyphs gone", by: "Jeff Louie", notes: [
+    "Retired glyphs and sockets entirely — no more hunting deep Endless for gems to slot. The board's power now comes purely from the nodes you light and the keystones you ignite, so the whole system reads at a glance.",
+    "Every arm grows from three rings to four — seven nodes each, ending in a deep apex pair — so there's far more to pour boss points into as your pool grows.",
+    "Tripled the keystones, from 8 to 24. Each arm now ladders from a cheap early keystone up to an apex one, and gates can stack: the strongest demand a high attribute total, most of an arm lit, AND a large total board investment together.",
+    "Deep apex nodes pay a fatter themed bonus than the shallow ones, so pushing an arm to its tip is worth the points.",
+    "Existing boards load unchanged; any glyphs an old save was carrying are cleared out.",
+  ] },
   { date: "2026-07-11", size: "small", v: "Unspent skill points glow on the SKILLS tab", by: "Jeff Louie", notes: [
     "Dropped the \"N points to spend!\" text nudge on the Skills tab. When you have points waiting, the POINTS box itself now glows gold with wisps of light circling its border — the call-to-action lives right on the number.",
     "The glow tracks whichever pool the open tab spends: skill points on Active/Passive, ascendancy points on the Path tab.",
