@@ -64,6 +64,8 @@ import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
 import { moatCells, seaMargin } from '../systems/islandFloor.js';
 import { emptyMealSlots, sanitizeMealSlots, assignMealToSlot, assignMealToSlotAt, groupPantry, removePantryStack, takeFromMealSlot, returnSlotToPantry, filledSlotCount, mealSignature } from '../systems/meals.js';
 import { cookableCount, cookBatchOptions } from '../systems/cooking.js';
+import { RESTED_BUFF, HEALER_BLESSINGS } from '../data/healerBuffs.js';
+import { blessingCost, blessingById, healerBuffFx, upsertHealerBuff, tickHealerBuffs, sanitizeHealerBuffs } from '../systems/healerBuffs.js';
 import { trimFillStyle } from '../utils/iconTrim.js';
 import { cursorHotspotPx } from '../systems/cursorMath.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
@@ -3735,7 +3737,7 @@ function attrCoef(channel) { return channelCoef(channel, player.class); }
 function baseMaxHp() {
   let hp = player.level*BALANCE.hpPerLevel + totalAttr('vitality') * attrCoef('hp') + totalStat('HP');
   hp = hp * classHpMult(); // Templar: hardier body (+20%)
-  hp = hp * (1 + skillBonus('maxHpPct') + foodFx('maxHpPct')); // skills + a hearty bowl of ramen
+  hp = hp * (1 + skillBonus('maxHpPct') + foodFx('maxHpPct') + healerFx('maxHpPct')); // skills + a hearty bowl of ramen + a healer Blessing (Vigor)
   hp = hp * diffDebuffMult();   // permanent scar from each difficulty conquered
   return Math.max(1, Math.round(hp));
 }
@@ -3846,7 +3848,7 @@ function agiAtkSpeedPct() {
 }
 function playerCritRating() {
   let r = totalAttr('luck') * LUCK_FX.critPerLuck + totalStat('CRIT') + totalStat('LCK')
-    + ratePct(skillBonus('crit')) + ratePct(buffMag('critUp')) + ratePct(foodFx('critPct'));
+    + ratePct(skillBonus('crit')) + ratePct(buffMag('critUp')) + ratePct(foodFx('critPct')) + ratePct(healerFx('critPct'));
   // Rogue's innate crit scales with level so "keener crits" keeps pace with the
   // rising crit opposition of deeper floors instead of fading to nothing.
   r += classInnateCritRating();
@@ -3917,6 +3919,7 @@ function hpRegenPerSec() {
   r += skillBonus('hpRegen'); // Recovery / Divine Vigor passives
   r += buffMag('regen'); // Redeemer / Bastion regen buffs
   r += foodFx('regen'); // a warm bowl of ramen mends you between fights
+  r += healerFx('regen'); // a healer Blessing (Vigor) keeps you mending
   return r * TICKS_PER_SEC;
 }
 function mpRegenPerSec() {
@@ -4095,6 +4098,12 @@ function foodFx(key) {
   if (!b || !(b.floors > 0) || !b.fx) return 0;
   return b.fx[key] || 0;
 }
+// Active HEALER-buff effect value for a stat key: summed across the Rested bonus and
+// any purchased Blessing (0 when none). Uses the SAME fx keys as food, so a healer
+// buff folds into combat wherever foodFx already does — see the `+ healerFx(...)`
+// terms alongside the foodFx terms in the derived-stat / loot formulas. Deliberately
+// read live (not through the loadout cache), like foodFx, since buffs lapse per floor.
+function healerFx(key) { return healerBuffFx(player.healerBuffs, key); }
 
 // Enemy rosters by depth band. Each floor draws a few types from one band so
 // floors feel varied but enemies stay around the same power level.
@@ -6356,7 +6365,7 @@ let player = { x: 5, y: 5,
   // Cooking — ramen toppings dropped by foes (ingredients), cooked bowls waiting
   // to be eaten (pantry), the secret recipes found so far, and the single active
   // food buff (set when a bowl is eaten, counts down per floor in tickBuffs).
-  ingredients: {}, pantry: [], discoveredRecipes: [], foodBuff: null, mealSlots: emptyMealSlots(MEAL_SLOT_COUNT) };
+  ingredients: {}, pantry: [], discoveredRecipes: [], foodBuff: null, healerBuffs: [], mealSlots: emptyMealSlots(MEAL_SLOT_COUNT) };
 
 // ══════════════════════════════════════════
 // REAL-TIME CORE (movement, world clock, tuning)
@@ -6927,6 +6936,11 @@ window.gameState = function gameState(radius) {
       effects.push({ id: 's_' + k, name: m ? m.name : k, kind: 'buff', floors: buffs[k] });
     }
   }
+  if (typeof player !== 'undefined' && Array.isArray(player.healerBuffs)) {
+    for (const b of player.healerBuffs) if (b && b.floors > 0) {
+      effects.push({ id: b.id, name: b.name, kind: 'buff', floors: b.floors });
+    }
+  }
   // Snapshot of one skill id: number key (manual slots only), MP cost, cooldown
   // left and ready flag. Shared by the manual hotbar and the lone auto-cast slot.
   const skillInfo = (id, idx) => {
@@ -7284,6 +7298,7 @@ window.gameState = function gameState(radius) {
       materialsUnlocked: Object.fromEntries(CRAFT_MAT_KEYS.map(k => [k, materialUnlocked(k)])),  // which mats the CURRENT tier can drop from kills (salvage ignores this)
       autoLoot: player.autoLoot ? Object.assign({}, player.autoLoot) : null,       // per-rarity keep/scrap/sell
       foodBuff: player.foodBuff ? { name: player.foodBuff.name, floors: player.foodBuff.floors } : null,
+      healerBuffs: (player.healerBuffs || []).filter(b => b && b.floors > 0).map(b => ({ id: b.id, name: b.name, floors: b.floors, fx: b.fx })),   // Rested bonus + any purchased Blessing (see gameGuide("town"))
       pact: (typeof pact !== 'undefined' && pact) ? { name: pact.name, floors: pact.floors } : null,
       merc: (player.merc && player.merc.floors > 0) ? (() => {
         const t = (typeof MERC_TYPES !== 'undefined') ? MERC_TYPES.find(x => x.id === player.merc.kind) : null;
@@ -7537,9 +7552,9 @@ window.gameGuide = function gameGuide(topic) {
     ],
     town: [
       `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the service keepers SCATTERED across the green and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all (same layout every visit). A keeper only appears once its service is UNLOCKED — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
-      `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff and pact.`,
+      `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff, healerBuffs and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
-      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
+      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1, 5 or 10 floors (more damage/loot/gold, or an easier stretch). Each mystic offers just TWO pacts, rolled at random from twelve, so the choice changes every time you find one; a longer pact costs MORE per floor (the price climbs exponentially with floors sealed). gameState().npcs lists the two pacts a nearby mystic offers. Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentle bulk discount, so a long hire stays a serious sum). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
@@ -14450,30 +14465,80 @@ function healCost() {
   return Math.min(100000, Math.round(10 * Math.pow(1.28, lvl - 1)));
 }
 function openHealer() { openTownModal('Healer', 'town_healer'); renderHealer(); }
+// Whether the Rested bonus is currently on the hero (so a paid rest is still worth
+// buying purely for it even at full HP/MP).
+function hasRestedBuff() { return (player.healerBuffs || []).some(b => b && b.id === RESTED_BUFF.id); }
 function renderHealer() {
   const full = player.hp >= player.maxHp && player.mp >= player.maxMp;
+  // At full HP/MP with the Rested bonus already up there's nothing a rest would add.
+  const settled = full && hasRestedBuff();
   const cost = healCost();
   const afford = spendableGold() >= cost;
   setTownContent(`
-    <div class="town-blurb">The healer mends your wounds and cleanses any lingering curse before you head back down — for a fee that grows with your legend.</div>
-    <div class="shop-row has-actions ${afford ? '' : 'cant-afford'}">
+    <div class="town-blurb">The healer mends your wounds and sends you back down rested — for a fee that grows with your legend.</div>
+    <div class="shop-row has-actions ${(settled || afford) ? '' : 'cant-afford'}">
       <span class="loot-icon"><span data-spr=ic_heart></span></span>
-      <div class="shop-row-info"><div class="shop-row-name">Full Rest &amp; Cure</div>
-        <div class="shop-row-sub">Restore all HP/MP and clear poison &amp; curses</div></div>
-      <button class="act-btn ${afford ? '' : 'short'}" ${(full || !afford) ? 'disabled' : ''} onclick="restHeal()">${full ? 'Rested' : '<span data-spr=ic_money></span>' + fmtGold(cost)}</button>
+      <div class="shop-row-info"><div class="shop-row-name">Full Rest</div>
+        <div class="shop-row-sub">Restore all HP/MP and gain <b style="color:var(--gold)">Rested</b> — ${RESTED_BUFF.desc} for ${RESTED_BUFF.floors} floors</div></div>
+      <button class="act-btn ${(settled || afford) ? '' : 'short'}" ${(settled || !afford) ? 'disabled' : ''} onclick="restHeal()">${settled ? 'Rested' : '<span data-spr=ic_money></span>' + fmtGold(cost)}</button>
     </div>
-    ${(!full && !afford) ? `<div class="town-blurb" style="color:var(--hp)">You can't cover the <span data-spr=ic_money></span>${fmtGold(cost)} fee — earn more gold first.</div>` : ''}
+    ${(!settled && !afford) ? `<div class="town-blurb" style="color:var(--hp)">You can't cover the <span data-spr=ic_money></span>${fmtGold(cost)} fee — earn more gold first.</div>` : ''}
+    ${renderHealerBuffs()}
     ${potionUpgradeHTML()}`);
 }
 function restHeal() {
-  if (player.hp >= player.maxHp && player.mp >= player.maxMp) return;
+  // Nothing to sell only when you're already topped off AND still Rested.
+  if (player.hp >= player.maxHp && player.mp >= player.maxMp && hasRestedBuff()) return;
   const cost = healCost();
-  if (spendableGold() < cost) { log(`Need <span data-spr=ic_money></span>${cost} for a full rest.`); return; }
+  if (spendableGold() < cost) { log(`Need <span data-spr=ic_money></span>${fmtGold(cost)} for a full rest.`); return; }
   spendGold(cost);
   player.hp = player.maxHp; player.mp = player.maxMp;
+  // A full rest still clears lingering ailments (poison, burn, …) — quietly, as part
+  // of restoring you to full, without advertising a "cure" the town has no other use for.
   statusEffects = statusEffects.filter(s => s.target !== 'player');
+  // The paid rest leaves you Rested — sharper for the next few floors (+XP).
+  player.healerBuffs = upsertHealerBuff(player.healerBuffs, { ...RESTED_BUFF });
   sfx('potion');
-  log(`<span data-spr=town_healer></span> Healer restores you to full and cleanses all ailments — <span data-spr=ic_money></span>${cost}.`, 'loot');
+  log(`<span data-spr=town_healer></span> Healer restores you to full and leaves you Rested — <span data-spr=ic_money></span>${fmtGold(cost)}.`, 'loot');
+  updateBars(); renderHealer(); saveGame();
+}
+// The premium Blessings the Healer sells: costly, impactful buffs that last a few
+// floors, one active at a time. Rendered as shop-rows below the Full Rest service.
+function renderHealerBuffs() {
+  const lvl = player.level || 1;
+  const rows = HEALER_BLESSINGS.map(b => {
+    const cost = blessingCost(b.base, lvl);
+    const active = (player.healerBuffs || []).find(x => x && x.id === b.id);
+    const afford = spendableGold() >= cost;
+    const sub = active
+      ? `${b.desc} · <b style="color:var(--gold)">${active.floors} floor${active.floors === 1 ? '' : 's'} left</b>`
+      : `${b.desc} · lasts ${b.floors} floors`;
+    const btn = active
+      ? `<button class="act-btn is-active" disabled>Active</button>`
+      : `<button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="buyBlessing('${b.id}')"><span data-spr=ic_money></span>${fmtGold(cost)}</button>`;
+    return `<div class="shop-row has-actions ${(active || afford) ? '' : 'cant-afford'}">
+      <span class="loot-icon"><span data-spr=${b.icon}></span></span>
+      <div class="shop-row-info"><div class="shop-row-name">${b.name}</div>
+        <div class="shop-row-sub">${sub}</div></div>
+      ${btn}</div>`;
+  }).join('');
+  return `<div class="cook-sec"><span data-spr=feat_shrine></span> Blessings</div>
+    <div class="town-blurb" style="opacity:0.8">Costly boons that empower you for a few floors — only one Blessing runs at a time, and buying another replaces it.</div>
+    ${rows}`;
+}
+function buyBlessing(id) {
+  const def = blessingById(id);
+  if (!def) return;
+  const cost = blessingCost(def.base, player.level || 1);
+  if (spendableGold() < cost) { log(`Need <span data-spr=ic_money></span>${fmtGold(cost)} for the ${def.name}.`); return; }
+  spendGold(cost);
+  player.healerBuffs = upsertHealerBuff(player.healerBuffs, def);
+  // Vigor deepens the HP pool — refresh derived max stats and re-clamp.
+  recomputeMaxStats();
+  if (player.hp > player.maxHp) player.hp = player.maxHp;
+  if (player.mp > player.maxMp) player.mp = player.maxMp;
+  sfx('potion');
+  log(`<span data-spr=town_healer></span> The Healer bestows the <b style="color:var(--gold)">${def.name}</b> — ${def.desc} for ${def.floors} floors. <span data-spr=ic_money></span>${fmtGold(cost)}.`, 'loot');
   updateBars(); renderHealer(); saveGame();
 }
 
@@ -20789,6 +20854,19 @@ function tickBuffs() {
       if (player.mp > player.maxMp) player.mp = player.maxMp;
     }
   }
+  // Healer buffs (the Rested bonus + any purchased Blessing) also fade a floor at a
+  // time. Age them, log each fade, and recompute pools if a max-HP/MP buff (Vigor)
+  // lapsed so the bar snaps back cleanly.
+  if (Array.isArray(player.healerBuffs) && player.healerBuffs.length) {
+    const { buffs: kept, expired } = tickHealerBuffs(player.healerBuffs);
+    player.healerBuffs = kept;
+    for (const b of expired) log(`${dlIcon(b.icon || 'ic_heart', 16)} Your ${b.name} fades.`, 'important');
+    if (expired.some(b => b.fx && (b.fx.maxHpPct || b.fx.maxMpPct))) {
+      recomputeMaxStats();
+      if (player.hp > player.maxHp) player.hp = player.maxHp;
+      if (player.mp > player.maxMp) player.mp = player.maxMp;
+    }
+  }
 }
 
 // Consume one floor from the active pact. Called after a new floor is generated
@@ -22161,7 +22239,8 @@ function rollPlayerHit(e) {
   // handful of integers once buffs scale it. One Math.round at the finish; ≥1 floor.
   let dmg = getWeaponDamage() + player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
   if (buffs.power) dmg *= 1.5;
-  if (foodFx('dmgPct')) dmg *= 1 + foodFx('dmgPct'); // ramen damage buff
+  const dmgPct = foodFx('dmgPct') + healerFx('dmgPct'); // ramen + healer Blessing (Might)
+  if (dmgPct) dmg *= 1 + dmgPct;
   dmg *= classDmgDealtMult(); // Warrior + damage passives
   if (diffClearedCount()) dmg *= diffDebuffMult(); // permanent per-tier scar
   const dmgUp = buffMag('dmgUp'); // War Cry / Frenzy / Avatar self-buffs
@@ -22359,10 +22438,10 @@ function onEnemyDefeated(e) {
   if (e.isBoss && farm < 1 && !firstBossKill) log(`⚠️ ${label} slain here recently — spoils thinner (${Math.round(farm * 100)}%). Rest or move on to reset.`, 'important');
   const xpMult = e.isBoss ? 5 : (e.isElite ? 2 : 1);
   const goldMult = e.isBoss ? 3 : (e.isElite ? 2 : 1);
-  const xp = Math.round(12 * dungeonLevel * xpMult * farm * pfx('xp', 1) * (1 + (totalStat('XPGAIN') + skillBonus('xpGain')) / 100 + foodFx('xpPct')));
+  const xp = Math.round(12 * dungeonLevel * xpMult * farm * pfx('xp', 1) * (1 + (totalStat('XPGAIN') + skillBonus('xpGain')) / 100 + foodFx('xpPct') + healerFx('xpPct')));
   player.xp += xp;
   // Greed gate (cursed floor) and the Greedy item power both fatten the purse.
-  const gold = Math.round((rnd(2, 8) + dungeonLevel * 3) * goldMult * farm * (floorMod.goldMult || 1) * greedGoldMult() * (1 + 0.4 * itemPowerCount('greedy')) * pfx('gold', 1) * (1 + (totalStat('GOLDFIND') + skillBonus('goldFind')) / 100 + foodFx('goldPct')));
+  const gold = Math.round((rnd(2, 8) + dungeonLevel * 3) * goldMult * farm * (floorMod.goldMult || 1) * greedGoldMult() * (1 + 0.4 * itemPowerCount('greedy')) * pfx('gold', 1) * (1 + (totalStat('GOLDFIND') + skillBonus('goldFind')) / 100 + foodFx('goldPct') + healerFx('goldPct')));
   player.gold += gold;
   // Lifetime counters that bounty contracts snapshot & track against.
   if (e.isBoss) player.bossKills = (player.bossKills || 0) + 1;
@@ -22388,7 +22467,7 @@ function onEnemyDefeated(e) {
   updateBars();
   // The floor modifier, an active Fortune buff, gear Magic Find, and any pact all
   // sweeten every drop roll.
-  const lootMult = (floorMod.lootMult || 1) * greedLootMult() * (buffs.fortune ? 1.5 : 1) * pfx('loot', 1) * (1 + (totalStat('MAGICFIND') + skillBonus('magicFind')) / 100 + foodFx('magicPct')) * (1 + foodFx('dropPct')) * egCovLootQtyMult();   // × Dread Covenant loot quantity (×1 when un-sworn)
+  const lootMult = (floorMod.lootMult || 1) * greedLootMult() * (buffs.fortune ? 1.5 : 1) * pfx('loot', 1) * (1 + (totalStat('MAGICFIND') + skillBonus('magicFind')) / 100 + foodFx('magicPct')) * (1 + foodFx('dropPct') + healerFx('dropPct')) * egCovLootQtyMult();   // × Dread Covenant loot quantity (×1 when un-sworn) + healer Blessing (Fortune)
   // ── Gear drops (Diablo-2-style "picks") ──
   // Instead of one super-lucky roll, each kill makes a number of independent
   // PICKS; every pick either finds nothing (NoDrop) or yields one item whose
@@ -22932,7 +23011,8 @@ let _lastOffenseCrit = false;
 // _lastOffenseCrit for the caller to react to.
 function applyOffenseMods(dmg, e, forceCrit, isSpell) {
   if (buffs.power) dmg *= 1.5;
-  if (foodFx('dmgPct')) dmg *= (1 + foodFx('dmgPct')); // ramen damage buff
+  const dmgPct = foodFx('dmgPct') + healerFx('dmgPct'); // ramen + healer Blessing (Might)
+  if (dmgPct) dmg *= (1 + dmgPct);
   if (!isSpell) dmg *= classDmgDealtMult();
   dmg *= diffDebuffMult(); // permanent per-tier scar — applies to weapon actives AND spells
   const du = buffMag('dmgUp'); if (du) dmg *= (1 + du);
@@ -25830,6 +25910,12 @@ const STATUS_META = {
   s_guard:   { icon: 'a_shield', kind: 'buff', name: 'Guarded',      desc: 'Take 40% less damage.' },
   s_fortune: { icon: 'ic_money', kind: 'buff', name: 'Fortune',      desc: '+50% loot and an extra drop.' },
 };
+// Healer buffs (Rested + Blessings) — counted in floors. Fold their metadata in from
+// the data catalog so their strip chips render name/icon/tooltip like any other buff,
+// with a single source of truth (src/data/healerBuffs.js).
+for (const _hb of [RESTED_BUFF, ...HEALER_BLESSINGS]) {
+  STATUS_META[_hb.id] = { icon: _hb.icon, kind: 'buff', name: _hb.name, desc: _hb.desc + '.' };
+}
 // Order the combat buffs read tidily in the strip (sustain/defence first).
 const COMBAT_BUFF_ORDER = ['shield', 'regen', 'defUp', 'dmgUp', 'spellUp', 'critUp', 'dodgeUp', 'lifestealUp', 'thorns'];
 function buffChipHTML(id, remaining, unit, mag) {
@@ -25865,6 +25951,10 @@ function renderStatusStrip() {
   // Floor-based shrine boons.
   for (const k of ['power', 'guard', 'fortune']) {
     if (buffs[k] > 0) chips.push(buffChipHTML('s_' + k, buffs[k], 'floor', null));
+  }
+  // Floor-based healer buffs (Rested + any Blessing).
+  for (const b of (player.healerBuffs || [])) {
+    if (b && b.floors > 0 && STATUS_META[b.id]) chips.push(buffChipHTML(b.id, b.floors, 'floor', null));
   }
   const html = chips.join('');
   if (html === _statusStripHtml) return;   // identical chips — skip the innerHTML teardown
@@ -29811,6 +29901,9 @@ function loadGame() {
     if (!Array.isArray(player.pantry)) player.pantry = [];
     if (!Array.isArray(player.discoveredRecipes)) player.discoveredRecipes = [];
     if (player.foodBuff && (typeof player.foodBuff !== 'object' || !player.foodBuff.fx || !(player.foodBuff.floors > 0))) player.foodBuff = null;
+    // Migrate saves that predate healer buffs (Rested + Blessings): seed/repair the
+    // array, dropping any malformed or already-expired entry.
+    player.healerBuffs = sanitizeHealerBuffs(player.healerBuffs);
     // Meal slots (HUD stacks assigned at the Ramen House) — seed/repair for saves that
     // predate them, and coerce any malformed entries to a valid fixed-length array.
     player.mealSlots = sanitizeMealSlots(player.mealSlots, MEAL_SLOT_COUNT);
@@ -36340,6 +36433,7 @@ const __DL_FN_BRIDGE = {
   openHealer,
   renderHealer,
   restHeal,
+  buyBlessing,
   potionPowerLvl,
   potionCdLvl,
   potionHealPct,
