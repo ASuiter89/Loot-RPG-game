@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "small", v: "Crit stat tooltips note spells crit too", by: "Jeff Louie", notes: [
+    "The Crit and Crit Damage stat blurbs (hero sheet, Enchanter, item cards, stat glossary) now spell out that spells crit alongside auto-attacks and skills — the same way Life/Mana Leech already notes it does NOT apply to spells.",
+  ] },
   { date: "2026-07-11", size: "small", v: "Double Strike now works with ranged weapons", by: "Jeff Louie", notes: [
     "Double Strike's bonus hit can now trigger on ranged weapon attacks — bow shots and staff/wand bolts — not just melee swings. Bows already rolled the stat, so it finally pays off.",
     "It stays a weapon-attack effect: cast spells still don't gain extra hits from it.",
