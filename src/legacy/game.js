@@ -56,6 +56,8 @@ import { pickVaultRoom, findSealedRoom } from '../systems/vaultRooms.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
+import { lockedTiers } from '../systems/rarityGate.js';
+import { salvageVariance, salvageIlvlCurve, salvageRanges as salvageRangesPure } from '../systems/salvage.js';
 import { isSsf, walletGain, walletSpend } from '../systems/ssf.js';
 import { foodGains } from '../systems/foodRestore.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
@@ -7409,6 +7411,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     loot: [
       `Rarity is COLOUR ONLY (no text labels), lowest to highest: grey → white → green → blue → purple → orange → red. Higher tiers allow more bonus affixes.`,
+      `COLOUR UNLOCKS IN WAVES over the early floors, so the opening dungeon is a real ramp: below the first boss, drops are only grey & white. Defeating the first guardian (floor 5) unlocks GREENS; the second guardian (floor 10) unlocks BLUES and every rarer tier. A boss's own first-kill windfall already pays in the colour it just unlocked. So a green is an early milestone, not a floor-1 giveaway.`,
       `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike the random rarities it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and a fixed SET of 2–3 signature powers (each a "legendary modifier" like Vampiric) — where an ordinary legendary rolls just one, a unique stacks several, and they compound. Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. (Set pieces — see below — are the OTHER fixed, named red artifacts.) gameState() marks worn/held uniques with a "unique" id and "fixed":true, and lists a piece's powers in item "powers".`,
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
       `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
@@ -7429,7 +7432,7 @@ window.gameGuide = function gameGuide(topic) {
       `The picker has a row per rarity plus a "set" row (right above unique) for set pieces — they drop at the top tier alongside uniques but answer to their own rule, so you can keep chase set pieces while still auto-selling plain uniques.`,
       `It only touches organically-found drops (chests, kills) — never shop buys or forged gear — and never locked items.`,
       `Auto-scrap only works on equippable gear; non-gear set to Scrap falls back to Keep. Use Sell to auto-dispose of non-gear.`,
-      `Scrapping melts gear into materials, tied to the item's RARITY (not difficulty): any piece gives Scrap, white+ can shed Glimmer, green+ a slim Core (real odds from blue+), and epic+ a lucky Chaos Orb — grey junk melts to pure Scrap. Each mat is a separate roll, so finer mats stay scarce; the COUNT scales with item level along a curve that flattens as it climbs. Every individual item salvages a little differently, so two same-rarity pieces vary. gameState().menu.materials shows your wallet.`,
+      `Scrapping melts gear into materials, tied to the item's RARITY (not difficulty): any piece gives Scrap, but the finer mats' drop CHANCE climbs STEEPLY with rarity, so simple gear rarely sheds them. White+ can shed Glimmer (~10% white → ~25% green → ~40% blue, up to ~85% red); green+ a slim Core (~5% green, real odds from blue ~19% up to ~61% red); epic+ a lucky Chaos Orb — grey junk melts to pure Scrap. So don't expect a pile of Glimmer/Core from breaking down greys, whites and greens; save the finer mats for higher-rarity finds. Each mat is a separate roll, so finer mats stay scarce; the COUNT scales with item level along a curve that flattens as it climbs. Every individual item salvages a little differently, so two same-rarity pieces vary. gameState().menu.materials shows your wallet.`,
       `From the console you can set player.autoLoot[tier] = "scrap" | "sell" | "keep" (tier being any rarity or "set") then call saveGame().`,
     ],
     hazards: [
@@ -14134,49 +14137,13 @@ function craftItem() {
 // salt, so we can pull several independent streams (per-material chance jitter, qty
 // jitter). Cheap fractional hash — deterministic so the tooltip preview matches the
 // roll, and its precision is plenty for a small cosmetic nudge.
-function salvageVariance(item, salt) {
-  const x = Math.sin(((((item && item.id) || 0.5) + 1) * (salt * 12.9898 + 78.233))) * 43758.5453;
-  return x - Math.floor(x);
-}
-// Item-level multiplier on salvage quantity: a diminishing-returns curve (early ilvl
-// adds the most, deep ilvl barely moves it). `strength` softens it for the finer
-// mats — Scrap (bulk) rides the full curve, Glimmer/Core/Chaos scale gently since
-// they're tied more to rarity than to mass.
-function salvageIlvlCurve(ilvl, strength = 1) {
-  return 1 + (Math.sqrt(Math.max(1, ilvl || 1)) - 1) * 0.5 * strength;
-}
-
-// What an item can yield, per material: a drop `chance` plus a quantity range
-// (already curved by item level and nudged by this item's own variance). Passing a
-// mat's chance check always yields at least 1 — scarcity comes from the chance, the
-// spread from the range. The UI previews these and salvageYield() rolls them.
-// rank: junk 0 · white 1 · green 2 · blue 3 · purple 4 · orange 5 · red 6.
+// Salvage math (variance/ilvl curve/per-material ranges) lives in
+// systems/salvage.js — pure and unit-tested, with the per-rarity bands in
+// data/salvageTuning.js. The monolith keeps a thin wrapper that supplies the
+// item's rarity rank from TIERS (junk 0 · white 1 · green 2 · blue 3 · purple 4 ·
+// orange 5 · red 6); salvageVariance/salvageIlvlCurve are imported for reuse.
 function salvageRanges(item) {
-  const rank = Object.keys(TIERS).indexOf(item.tier);
-  const out = [];
-  // chance = base drop odds, qMid = midpoint quantity at ilvl 1, strength = how hard
-  // ilvl scales it. Per-item variance shifts chance ±12% and quantity ±20%.
-  const push = (key, chance, qMid, strength) => {
-    const mi = CRAFT_MAT_KEYS.indexOf(key);
-    const cJit = 0.88 + salvageVariance(item, mi * 101 + 1) * 0.24;   // ×0.88..1.12 drop chance
-    const qJit = 0.80 + salvageVariance(item, mi * 211 + 2) * 0.40;   // ×0.80..1.20 quantity
-    const mid = qMid * salvageIlvlCurve(item.ilvl || 1, strength) * qJit;
-    const lo = Math.max(1, Math.round(mid * 0.65));
-    const hi = Math.max(lo + 1, Math.round(mid * 1.35));
-    // chance ≥ 1 means GUARANTEED — the per-item jitter varies only its quantity,
-    // never gates it away (Scrap is the reliable bulk; every piece must yield ≥1).
-    out.push({ key, chance: chance >= 1 ? 1 : Math.min(1, chance * cJit), lo, hi });
-  };
-  // Scrap — every piece, guaranteed: the common bulk; grows fastest with rarity/ilvl.
-  push('scrap', 1, 1 + rank * 0.9, 1);
-  // Glimmer — white (rank ≥1) and up; a lucky-ish shed, likelier on finer gear. Grey
-  // junk stays pure Scrap.
-  if (rank >= 1) push('glimmer', 0.30 + rank * 0.05, 1 + rank * 0.25, 0.5);
-  // Core — a slim chance from green (rank 2), real odds from blue+ (rank ≥3).
-  if (rank >= 2) push('core', (rank >= 3 ? 0.22 : 0.08) + (rank - 2) * 0.04, 1 + Math.max(0, rank - 2) * 0.3, 0.5);
-  // Chaos — top-end: a lucky shot from epic (rank 4), better from legendary/unique.
-  if (rank >= 4) push('chaos', 0.10 + (rank - 4) * 0.08, 1 + Math.max(0, rank - 5) * 0.5, 0.35);
-  return out;
+  return salvageRangesPure(item, Object.keys(TIERS).indexOf(item.tier));
 }
 // Roll the actual materials gained from salvaging one item: each material passes its
 // own drop-chance check first, then rolls a quantity within its range.
@@ -16141,7 +16108,12 @@ function qualityMagicFind() {
 function rollTier(rolls = 1, ilvl = null) {
   const df = depthFactor(ilvl != null ? ilvl : dungeonLevel);
   const mf = qualityMagicFind() + rollsQualityBonus(rolls);
+  // Early-game colour gate: greens unlock on the first boss (floor 5), blues and
+  // rarer on the second (floor 10). Skip any tier still locked so shallow drops
+  // stay grey/white until earned (see systems/rarityGate.js).
+  const locked = lockedTiers(player.bossFirstKills, player.maxFloor);
   for (const t of TIER_CHECK_ORDER) {
+    if (locked.has(t)) continue;
     let p = TIER_BASE[t] * df * (1 + effMF(mf, TIER_MF_FACTOR[t]) / 100);
     if (p > TIER_CAP[t]) p = TIER_CAP[t];
     if (Math.random() < p) return t;

@@ -15,6 +15,12 @@ export const CHANGELOG = [
     "Deleting a save slot — or starting a New Game over one — now files a headstone in History first, so a past run is no longer erased along with its slot (Reset Run already did this).",
     "History holds many more runs before the oldest ones age off.",
   ] },
+  { date: "2026-07-11", size: "medium", v: "Colour arrives later; finer salvage scales with rarity", by: "Jeff Louie", notes: [
+    "Loot colour now unlocks in waves over the early floors. Below the first boss, drops are only grey & white — no more green or blue on floor 1.",
+    "Beating the first guardian (floor 5) unlocks greens; the second guardian (floor 10) unlocks blues and every rarer tier. A boss's own first-kill windfall already pays in the colour it just unlocked, so clearing floor 5 can hand you your first green.",
+    "Scrapping: the finer materials' drop chance now climbs steeply with an item's rarity. Breaking down greys, whites and greens no longer floods you with Glimmer and Core — save the rarer finds for the mats you want.",
+    "Deep saves are unaffected — anything already past those bosses keeps the full colour range.",
+  ] },
   { date: "2026-07-11", size: "small", v: "Bigger skill-tree icons on desktop", by: "Jeff Louie", notes: [
     "Skill-tree nodes are large again on desktop — the recent shrink now applies only on phones, where the compact size fits more of a branch on a small screen.",
   ] },
