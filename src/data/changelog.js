@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "medium", v: "New town keeper: the Prospector, a materials trader", by: "Claude", notes: [
+    "A new keeper joins the camp near the Craftsman: the Prospector trades gold for raw crafting materials — buy Scrap, Glimmer, Core or Chaos Orbs outright instead of grinding them.",
+    "Prices climb with the material's rarity, with how deep you've delved, and a little with every purchase you make each visit (resetting when you next enter town), so it tops up your stock without trivializing it.",
+    "You can only buy a material your progress could already drop — the same tier gate as kills (Scrap/Glimmer from Normal, Core from Hardened, Chaos from Brutal).",
+    "Refine, too: fuse a stack of a common material into one of the next tier up. It's deliberately lossy — a way to burn off an overflow of Scrap you'll never craft with.",
+    "Unlocks at level 5, alongside the Craftsman.",
+  ] },
   { date: "2026-07-11", size: "medium", v: "Enchanter: randomized material costs + escalating rerolls", by: "Jeff Louie", notes: [
     "Enchanting no longer always bills the same Scrap + Glimmer + Core. Every piece now draws its OWN material mix — a small random subset of Scrap, Glimmer, Core and (new to the Enchanter) Chaos Orbs — so two pieces of the same rarity can cost quite different materials.",
     "Rarer gear can call on the rarer materials: Core enters on rare and up, a Chaos Orb only on legendary reforges. A piece never asks for a material far rarer than itself.",
