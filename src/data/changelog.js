@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "small", v: "Quick How to Play trimmed to the essentials", by: "Jeff Louie", notes: [
+    "The How to Play card is now a fast getting-started guide — goal, controls, loot colours, skills & potions, and how to go deeper. Terrain footing, set pieces, hazards and the town-services rundown drop off it; all still live behind \"Open the full guide\".",
+  ] },
   { date: "2026-07-11", size: "small", v: "Loot bag filter tabs name their category on hover", by: "Claude", notes: [
     "Hovering a filter tab in the LOOT bag now pops a tip naming that category — All, Weapon, Off-Hand, Head, Chest, Hands, Legs, Ring, Amulet — and the kinds of gear it holds, so the icon-only tabs are no longer a guess.",
   ] },
