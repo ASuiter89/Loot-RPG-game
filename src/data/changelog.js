@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "small", v: "Settings menu fits the screen — no more page-scrolling", by: "Jeff Louie", notes: [
+    "A tall Settings tab (like Visuals) now anchors near the top of the screen and stretches to use the full height, instead of opening centred with its bottom hanging off the edge.",
+    "No more double scrollbar: the page behind the card no longer scrolls — only the card scrolls, and only when its options genuinely can't all fit at once.",
+    "Short tabs still open neatly centred.",
+  ] },
   { date: "2026-07-11", size: "medium", v: "New town keeper: the Prospector, a materials trader", by: "Claude", notes: [
     "A new keeper joins the camp near the Craftsman: the Prospector trades gold for raw crafting materials — buy Scrap, Glimmer, Core or Chaos Orbs outright instead of grinding them.",
     "Prices climb with the material's rarity, with how deep you've delved, and a little with every purchase you make each visit (resetting when you next enter town), so it tops up your stock without trivializing it.",

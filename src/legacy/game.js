@@ -8959,6 +8959,8 @@ function toggleSettingsMenu(e) {
 function closeSettingsMenu() {
   const menu = document.getElementById('settings-menu');
   if (menu) { menu.classList.remove('open'); menu.style.paddingTop = ''; }
+  const card = document.getElementById('settings-card');
+  if (card) card.style.maxHeight = '';
 }
 // "Title Screen" button on Settings ▸ Play — snapshot progress, close the
 // settings overlay, and raise the title/landing screen. The run is NOT
@@ -8969,11 +8971,14 @@ function settingsToTitle() {
   closeSettingsMenu();
   showTitle();
 }
-// Position the card so it OPENS vertically centred, then leave the top anchored
-// there. We measure the card's initial height and push it down with the modal's
-// padding-top; because the modal stays align-items:flex-start, switching to a
-// taller tab just grows the card downward from this fixed top — it never
-// re-centres. Only called on a fresh open, never from showSettingsTab().
+// Position the stack (character card + settings card) on open. A SHORT tab that
+// fits comfortably is vertically centred (looks balanced); a TALL tab (e.g.
+// Visuals) is anchored near the TOP so the maximum amount is visible without
+// scrolling, and the card is then sized to take ALL the remaining height and
+// scroll internally for whatever still overflows — so there's never a second,
+// page-level scrollbar stacking the bottom of the menu off-screen. Only called
+// on a fresh open, never from showSettingsTab(): the chosen top stays fixed, so
+// switching tabs grows/shrinks the card in place rather than re-centring.
 function centerSettingsCard() {
   const menu = document.getElementById('settings-menu');
   const card = document.getElementById('settings-card');
@@ -8984,12 +8989,26 @@ function centerSettingsCard() {
   // (e.g. Visuals) partly below the fold, and the nested card scroll it used to
   // pair with left the bottom unreachable by a one-finger drag — so skip centering
   // on touch and let the CSS top padding govern.
-  if (isTouchMode()) { menu.style.paddingTop = ''; return; }
-  // Centre the whole stack (character card + settings card), not just the card,
-  // so adding the hero panel keeps the group vertically middled on open.
-  const measure = document.getElementById('settings-stack') || card;
-  const top = Math.max(12, Math.round((window.innerHeight - measure.offsetHeight) / 2));
+  if (isTouchMode()) { menu.style.paddingTop = ''; card.style.maxHeight = ''; return; }
+  // Breathing room kept above and below the stack so it never kisses the edges.
+  const TOP_GAP = 16, BOTTOM_GAP = 24;
+  const vh = window.innerHeight;
+  // The character card (shown for an existing hero) sits ABOVE the settings card
+  // in the stack; count its height + the stack's 10px gap as space the card can't
+  // use, so the card is sized around it instead of overflowing the viewport.
+  const hero = document.getElementById('settings-hero');
+  const heroSpace = (hero && hero.style.display !== 'none' && hero.offsetHeight)
+    ? hero.offsetHeight + 10 : 0;
+  // Measure the card's natural (uncapped) content height to decide fit. scrollHeight
+  // reports the full content extent regardless of the CSS max-height clamp.
+  const natural = heroSpace + card.scrollHeight;
+  const fits = natural <= vh - TOP_GAP - BOTTOM_GAP;
+  const top = fits ? Math.max(TOP_GAP, Math.round((vh - natural) / 2)) : TOP_GAP;
   menu.style.paddingTop = top + 'px';
+  // Cap the card to exactly the space left below the (fixed) top and the hero, so
+  // the stack bottom always lands at vh - BOTTOM_GAP: no page scroll on any tab,
+  // and the card shows its content fully when it fits, scrolls in place when not.
+  card.style.maxHeight = Math.max(120, vh - top - heroSpace - BOTTOM_GAP) + 'px';
 }
 // Which settings tab is showing. Persists across opens so reopening lands where
 // you left off; keybindsBack() reopens straight onto the Play tab (where KEYS lives).
