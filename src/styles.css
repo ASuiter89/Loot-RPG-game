@@ -1586,14 +1586,48 @@
      to its content on the left; the identity block takes the rest. */
   .sk-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; margin-bottom: 8px; }
   .sk-pts, .sk-id { border: 1px solid var(--border); border-radius: 6px; background: var(--ink); }
-  .sk-pts { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px 14px; text-align: center; }
+  .sk-pts { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px 14px; text-align: center; }
   .sk-pts-label { font-size: 1.2rem; color: var(--junk); letter-spacing: 1px; line-height: 1.2; }
   .sk-pts-value { font-size: 2rem; font-weight: bold; color: var(--gold-350); line-height: 1.1;
     text-shadow: 0 0 10px color-mix(in srgb, var(--gold-350) 60%, transparent); }
   .sk-id { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 3px; padding: 6px 10px; min-width: 0; }
   .sk-id-cls { font-size: 1.3rem; color: var(--text); line-height: 1.4; }
   .sk-id-meta { font-size: 1.2rem; color: var(--junk); line-height: 1.4; }
-  .sk-spend { color: var(--xp); font-weight: bold; }
+
+  /* Unspent points: the point card BECOMES the call-to-action (this replaced the
+     old "N to spend!" text nudge on the identity line). A warm gold glow pulses on
+     the card and its number, while wisps of light circle the border — a conic sweep
+     masked to just the border ring, its start angle rotated by the --sk-wisp custom
+     property. Where @property is unsupported the sweep simply holds still (a steady
+     gold ring) — the pulsing glow still reads as "spend me". */
+  @property --sk-wisp { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+  .sk-pts.has-points { border-color: color-mix(in srgb, var(--gold-350) 55%, var(--border));
+    animation: sk-pts-glow 1.9s ease-in-out infinite; }
+  .sk-pts.has-points .sk-pts-value { animation: sk-pts-value-glow 1.9s ease-in-out infinite; }
+  .sk-pts.has-points::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none;
+    background: conic-gradient(from var(--sk-wisp),
+      transparent 0deg,
+      color-mix(in srgb, var(--gold-350) 90%, transparent) 28deg,
+      transparent 66deg,
+      transparent 180deg,
+      color-mix(in srgb, var(--gold-200) 80%, transparent) 208deg,
+      transparent 246deg,
+      transparent 360deg);
+    -webkit-mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    mask-composite: exclude;
+    animation: sk-wisps 3.4s linear infinite; }
+  @keyframes sk-wisps { to { --sk-wisp: 360deg; } }
+  @keyframes sk-pts-glow {
+    0%, 100% { box-shadow: 0 0 4px color-mix(in srgb, var(--gold-350) 28%, transparent); }
+    50%      { box-shadow: 0 0 13px 1px color-mix(in srgb, var(--gold-350) 60%, transparent); } }
+  @keyframes sk-pts-value-glow {
+    0%, 100% { text-shadow: 0 0 8px color-mix(in srgb, var(--gold-350) 55%, transparent); }
+    50%      { text-shadow: 0 0 16px color-mix(in srgb, var(--gold-350) 95%, transparent); } }
+  @media (prefers-reduced-motion: reduce) {
+    .sk-pts.has-points, .sk-pts.has-points::before, .sk-pts.has-points .sk-pts-value { animation: none; } }
 
   /* Sub-tabs across the three trees (passive / active / path). */
   .sk-vtabs { display: flex; gap: 4px; margin: 8px 2px 2px; }
