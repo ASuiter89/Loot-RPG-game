@@ -21,12 +21,12 @@ export const MERC_TYPES = [
 // sheet fall back to their (real) minion sprite in both places.
 export const MERC_ART = { blade: 'sellsword', marks: 'marks', warden: 'warden' };
 
-// Contract-length tiers offered for every merc — mirror the Mystic's multi-floor
-// pacts so you can sign on for a quick test, a short delve, or a long haul. Each
-// tier's `mult` is the WHOLE contract's cost relative to one floor. Because that
-// grows a touch slower than the floor count, the per-floor rate eases as you
-// commit to more floors — but far more gently than the Mystic's pact discount, so
-// a long contract stays a serious sum (10 floors ≈ 8% off per floor, 30 ≈ 15%).
+// Contract-length tiers — sign on for a quick test, a short delve, or a long
+// haul. Each tier's `mult` is the WHOLE contract's cost relative to one floor.
+// Because that grows a touch slower than the floor count, the per-floor rate
+// eases as you commit to more floors — but gently, so a long contract stays a
+// serious sum (10 floors ≈ 8% off per floor, 30 ≈ 15%). (Unlike the Mystic's
+// pacts, which now charge a rising premium per floor, the merc still discounts.)
 export const MERC_DURATIONS = [
   { floors: 1,  mult: 1 },
   { floors: 10, mult: 9.2 },

@@ -714,7 +714,7 @@ export const WIKI = [
         body: [
           { ul: [
             '<b>Ramen House</b> — cook toppings into a multi-floor food buff (only one active at a time). Secret recipes can grant lifesteal, thorns, bonus XP, or a one-time revive. Assign cooked bowls to meal slots to eat them mid-run.',
-            '<b>Mystic</b> — buy a multi-floor <b>pact</b> that warps the next 1, 10 or 30 floors (more damage, loot or gold, or an easier stretch).',
+            '<b>Mystic</b> — buy a multi-floor <b>pact</b> that warps the next 1, 5 or 10 floors (more damage, loot or gold, or an easier stretch). Each mystic offers two of the twelve pacts at random, so the pick changes every time; sealing more floors costs more per floor.',
             '<b>Sellsword</b> (Brutal and up) — hire a combat companion for a stretch of floors; it fights beside you like a strong summon and revives between floors.',
           ] },
         ],

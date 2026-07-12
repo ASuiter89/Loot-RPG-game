@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "small", v: "Mystic: twelve pacts, a random pair per meeting, steeper multi-floor pricing", by: "Jeff Louie", notes: [
+    "Six new Mystic pacts join the roster (twelve total): Swarm, Hunter's Solitude, Alchemist's, Warlord's Gambit, Ironhide Ward, and Reaper's Toll.",
+    "Each mystic you find now offers just TWO pacts, drawn at random from the twelve — the choice changes every encounter, so meeting a mystic is worth a look.",
+    "Pact lengths are now 1, 5 or 10 floors (was 1, 10 or 30). Sealing more floors costs MORE per floor — the price climbs exponentially — so a long pact is a real commitment, not a bulk bargain.",
+  ] },
   { date: "2026-07-11", size: "small", v: "Crit stat tooltips note spells crit too", by: "Jeff Louie", notes: [
     "The Crit and Crit Damage stat blurbs (hero sheet, Enchanter, item cards, stat glossary) now spell out that spells crit alongside auto-attacks and skills — the same way Life/Mana Leech already notes it does NOT apply to spells.",
   ] },

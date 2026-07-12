@@ -6174,20 +6174,58 @@ const MYSTIC_PACTS = [
   { id:'glass',   accent:'#c77dff', icon:'mat_glimmer', name:'Glass Gambit',
     desc:'You and your foes turn to glass — everyone dies fast, loot runs richer.',
     base:65, fx:{ dmg:1.6, hp:0.4, loot:1.3 } },
+  { id:'swarm',   accent:'#8bd450', icon:'e_rat', name:'Swarm Pact',
+    desc:'The halls teem with foes — but the crush spills extra loot, gold and XP.',
+    base:60, fx:{ enemy:1.7, loot:1.25, gold:1.3, xp:1.3 } },
+  { id:'solitude',accent:'#3ce0d2', icon:'w_bow', name:"Hunter's Solitude",
+    desc:'Few foes roam, but each is a hardened brute guarding far richer spoils.',
+    base:60, fx:{ enemy:0.5, hp:1.6, dmg:1.3, loot:1.7 } },
+  { id:'alchemy', accent:'#57d98e', icon:'potion_g', name:"Alchemist's Pact",
+    desc:'Fortune clings to every drop — loot pours richer, nothing else shifts.',
+    base:70, fx:{ loot:2.3 } },
+  { id:'warlord', accent:'#ff7a3d', icon:'w_axe', name:"Warlord's Gambit",
+    desc:'Foes grow deadlier and tougher — yet every kill floods you with XP and gold.',
+    base:75, fx:{ dmg:1.5, hp:1.3, xp:1.7, gold:1.5 } },
+  { id:'ironhide',accent:'#6fb2ff', icon:'a_shield', name:'Ironhide Ward',
+    desc:'Enemies turn thick-skinned yet strike softly — a slow, safe grind for finer loot.',
+    base:45, fx:{ hp:1.4, dmg:0.7, loot:1.2 } },
+  { id:'reaper',  accent:'#b06bff', icon:'feat_grave', name:"Reaper's Toll",
+    desc:'Foes strike like doom, but death itself pays out — loot and gold erupt.',
+    base:85, fx:{ dmg:1.8, loot:1.8, gold:1.8 } },
 ];
 
-// Duration tiers offered for every pact. The per-floor cost drops in bulk, so
-// 30 floors is cheaper per-floor than buying one at a time.
+// Which pacts a given mystic offers — a fresh random pair rolled each time you
+// meet one. Stored on the mystic so browsing / re-opening shows the same two;
+// the NEXT mystic you find rolls a new pair. Returns distinct indices into
+// MYSTIC_PACTS, low-to-high.
+const MYSTIC_OFFER_COUNT = 2;
+function rollMysticOffers() {
+  const idx = MYSTIC_PACTS.map((_, i) => i);
+  for (let i = idx.length - 1; i > 0; i--) {          // Fisher–Yates shuffle
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = idx[i]; idx[i] = idx[j]; idx[j] = t;
+  }
+  return idx.slice(0, MYSTIC_OFFER_COUNT).sort((a, b) => a - b);
+}
+
+// Duration tiers offered for every pact. Unlike a bulk discount, a longer pact
+// costs MORE per floor — the mystic charges an escalating premium to bend more of
+// the dungeon, so the total climbs EXPONENTIALLY with the floors you seal.
 const PACT_DURATIONS = [
-  { floors: 1,  mult: 1 },
-  { floors: 10, mult: 7 },
-  { floors: 30, mult: 18 },
+  { floors: 1 },
+  { floors: 5 },
+  { floors: 10 },
 ];
+// Each extra floor sealed multiplies the per-floor price by this — the source of
+// the exponential premium (a 10-floor pact costs far more per floor than a 1).
+const PACT_FLOOR_PREMIUM = 1.18;
 
-// What a given pact + duration costs right now. Scales gently with depth so it
-// stays meaningful as gold piles up.
+// What a given pact + duration costs right now. Total = base × floors ×
+// premium^(floors-1), so each additional floor is dearer than the last. Scales
+// gently with depth too, so it stays meaningful as gold piles up.
 function pactPrice(pactDef, dur) {
-  return Math.round(pactDef.base * dur.mult * (1 + dungeonLevel * 0.08));
+  const premium = Math.pow(PACT_FLOOR_PREMIUM, dur.floors - 1);
+  return Math.round(pactDef.base * dur.floors * premium * (1 + dungeonLevel * 0.08));
 }
 
 // Active-pact accessors (mirror the `(floorMod.x || default)` style used below).
@@ -7099,7 +7137,8 @@ window.gameState = function gameState(radius) {
       ? { floor: graveSite.floor, where: floorLabel(graveSite.floor), items: graveSite.items.length, gold: graveSite.gold || 0 } : null,
     npcs: [
       merchant ? { kind: 'merchant', x: merchant.x, y: merchant.y } : null,
-      mystic ? { kind: 'mystic', x: mystic.x, y: mystic.y } : null,
+      mystic ? { kind: 'mystic', x: mystic.x, y: mystic.y,
+                 offers: (Array.isArray(mystic.offers) ? mystic.offers : []).map(i => MYSTIC_PACTS[i] && MYSTIC_PACTS[i].name).filter(Boolean) } : null,
       (quest && quest.npc) ? { kind: 'quest', name: quest.npc.name, x: quest.npc.x, y: quest.npc.y } : null,
     ].filter(Boolean),
     allies: (minions || []).map(m => ({ kind: m.kind || m.type, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp, ttl: m.ttl, ranged: !!m.ranged })),
@@ -7491,8 +7530,8 @@ window.gameGuide = function gameGuide(topic) {
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + Glimmer + Scrap, plus a Core on rare+ gear — Scrap/Core amounts track how much you earn, and the whole price scales with rarity; Augment also costs more per affix already on the piece, so the last slot is dearest. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full heal + cure for gold).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
-      `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1/10/30 floors (more damage/loot/gold, or an easier stretch). Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
-      `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
+      `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1, 5 or 10 floors (more damage/loot/gold, or an easier stretch). Each mystic offers just TWO pacts, rolled at random from twelve, so the choice changes every time you find one; a longer pact costs MORE per floor (the price climbs exponentially with floors sealed). gameState().npcs lists the two pacts a nearby mystic offers. Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
+      `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentle bulk discount, so a long hire stays a serious sum). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Every keeper stands in the town from the start, but a service unlocks as you progress: Healer, Merchant, Ramen House and Vault are open immediately; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked keeper stands GREYED with a padlock badge and, on interact, announces its unlock requirement instead of opening. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim its reward. Each contract pays a DIFFERENT MIX of 1–3 rewards — gold, a crafting material (any of scrap/glimmer/core/chaos, scaled by depth), a lump of XP, or a gear piece scaled to your depth (the toughest boss contracts guarantee a rarer piece) — and a contract paying fewer things pays more of each. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract, its live progress (including menu.bounty.done once it's ready to claim), and menu.bounty.rewards listing exactly what it pays. In town, clicking the belt's BOUNTY module opens the board (even with no active contract).`,
@@ -11947,8 +11986,9 @@ function spawnMerchant(footReach) {
 }
 
 // The Wandering Mystic — a second wanderer who takes gold to bend the next
-// 1/10/30 floors to a pact of your choosing. Appears on roughly 1 in 10 floors,
-// independent of the merchant (but never sharing a tile with one).
+// 1/5/10 floors to a pact of your choosing (two of the twelve pacts, rolled at
+// random per encounter). Appears on roughly 1 in 10 floors, independent of the
+// merchant (but never sharing a tile with one).
 function spawnMystic(footReach) {
   mystic = null;
   if (Math.random() > 0.10) return;
@@ -11959,7 +11999,7 @@ function spawnMystic(footReach) {
             || (merchant && merchant.x === mx && merchant.y === my)
             || isChokePoint(mx,my) || onThroughCorridor(mx,my) || (footReach && !footReach.has(my + ',' + mx))) && tries < 100);
   if (tries >= 100) return;
-  mystic = { x: mx, y: my };
+  mystic = { x: mx, y: my, offers: rollMysticOffers() };
   log('<span data-spr=ic_orb></span> A hooded mystic beckons from the shadows...', 'important');
 }
 
@@ -12286,10 +12326,16 @@ function renderMystic() {
   } else {
     active.style.display = 'none';
   }
-  // One card per pact, with a buy button for each duration.
+  // One card per OFFERED pact (this mystic's random pair), with a buy button for each duration.
   const softOf = (hex) => { const n = parseInt(hex.replace('#',''), 16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},0.14)`; };
-  const DUR_LABEL = { 1: '1 floor', 10: '10 floors', 30: '30 floors' };
-  document.getElementById('mystic-content').innerHTML = '<div class="pact-grid">' + MYSTIC_PACTS.map((p, i) => {
+  const DUR_LABEL = { 1: '1 floor', 5: '5 floors', 10: '10 floors' };
+  // Only the two pacts THIS mystic offers (rolled when you found them). Guard
+  // covers older saves and any mystic created before the roll existed.
+  const offers = (Array.isArray(mystic.offers) && mystic.offers.length === MYSTIC_OFFER_COUNT
+                  && mystic.offers.every(i => MYSTIC_PACTS[i]))
+    ? mystic.offers : (mystic.offers = rollMysticOffers());
+  document.getElementById('mystic-content').innerHTML = '<div class="pact-grid">' + offers.map((i) => {
+    const p = MYSTIC_PACTS[i];
     const accent = p.accent || '#3ce0d2';
     const buttons = PACT_DURATIONS.map(dur => {
       const price = pactPrice(p, dur);
@@ -13249,7 +13295,7 @@ function openTownService(kind) {
     openShop();
     return;
   }
-  if (kind === 'mystic')  { mystic = { x: 0, y: 0, town: true }; openMystic(); return; }
+  if (kind === 'mystic')  { mystic = { x: 0, y: 0, town: true, offers: rollMysticOffers() }; openMystic(); return; }
   if (kind === 'forge')   { openForge();   return; }
   if (kind === 'healer')  { openHealer();  return; }
   if (kind === 'trainer') { openTrainer(); return; }
