@@ -60,10 +60,23 @@ lives in `src/legacy/game.js` and shrinks as code is extracted.)
   every change through a feature branch + PR so GitHub gates the merge. Resolve
   conflicts yourself, keeping both sides' intent. Only stop to ask if a request is
   genuinely impossible or self-contradictory.
-  - **ALWAYS open a PR when you finish a change — don't stop at a pushed branch.**
-    Once the work is committed and pushed and the gates are green, open the PR into
-    `main` as the final step (no need to ask first). Pushing the branch is not
-    "done"; the PR is.
+  - **ALWAYS open a PR when you finish — then see it MERGED; don't stop at an open
+    PR.** Once the work is committed, pushed, and green, open the PR into `main` (no
+    need to ask first). A `claude/*` PR then auto-merges via
+    `.github/workflows/auto-merge.yml`, which re-runs the full gate suite against the
+    PR head and squash-merges only on green. That workflow fires on the PR event
+    **and** on a 15-minute `schedule` sweep — the sweep is the backstop, because
+    GitHub silently drops the per-PR `pull_request` event often enough that, without
+    it, PRs are never evaluated and pile up open (this is exactly what stranded a
+    batch of PRs before 2026-07-12). Pushing the branch is not "done", and neither is
+    an open PR; a *merged* PR is.
+  - **A stalled PR is yours to finish — don't leave it dirty.** Every change adds a
+    `CHANGELOG` entry at the top of the same array, so any two PRs open at once
+    conflict on `src/data/changelog.js` — only the first can merge cleanly; the rest
+    go "dirty", and the auto-merge sweep deliberately SKIPS a conflicting PR rather
+    than force-merge it. So land one change at a time, and if your PR falls behind
+    `main` (usually just that changelog collision), rebase it onto latest `main` —
+    re-stack the entry newest-first, keeping both sides — and push so it can merge.
 - **All on-screen art is real pixel art — never an emoji as the thing itself.**
   Every game asset (heroes, enemies, bosses, NPCs, minions, items, pickups,
   projectiles, status icons, world objects) must be actual pixel-art imagery on the
