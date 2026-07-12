@@ -724,6 +724,18 @@
   <div class="lvl-sub">Open the <span data-spr=chest></span> BAG → HERO tab to spend your points!</div>
 </div>
 
+<!-- Town-keeper ARRIVALS banner — a small pop-up that slides in near the top when a
+     fresh wave of townsfolk arrives (fired the instant a boss kill unlocks them, so
+     it shows even mid-fight in the dungeon) and fades after a few seconds. Filled by
+     showNpcBanner(): real walk-sprite icons + names, never an emoji standing in. -->
+<div id="npc-banner" role="status" aria-live="polite">
+  <div class="npcb-icons" aria-hidden="true"></div>
+  <div class="npcb-text">
+    <div class="npcb-title"></div>
+    <div class="npcb-sub"></div>
+  </div>
+</div>
+
 <!-- Big center-screen LOOT banner — fires for legendary/unique drops (and the
      deep-dive milestone), coloured by rarity. Filled by showLootBanner(). -->
 <div id="loot-banner">

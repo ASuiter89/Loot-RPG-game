@@ -91,8 +91,10 @@ import { TRAP_THEME } from '../data/trapThemes.js';
 import { renderProcMap } from '../render/procTerrain.js';
 import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
 import { TOWN_W, TOWN_H, TOWN_SPAWN, TOWN_GATE, TOWN_PORTAL,
-  TOWN_PATHS, TOWN_NPCS, TOWN_DECOR, TOWN_DECOR_FAMILIES } from '../data/townLayout.js';
-import { townObjects, nearestInteractable, pickDecorVariant } from '../systems/townLayout.js';
+  TOWN_PATHS, TOWN_NPCS, TOWN_DECOR, TOWN_DECOR_FAMILIES,
+  TOWN_SERVICE_WAVES, TOWN_ENDGAME_KINDS, TOWN_WANDER } from '../data/townLayout.js';
+import { townObjects, nearestInteractable, pickDecorVariant, reachableTiles } from '../systems/townLayout.js';
+import { randomDistinctTiles, pickWanderTarget, joinNames } from '../systems/townWander.js';
 import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
 import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKILL_ICON_ATLAS } from '../assets/skillIconsAtlas.js';
 import { BOSS_ATLAS_URL } from '../assets/bossAtlas.js';
@@ -2462,7 +2464,8 @@ function drawDecorOcclusion(offX, offY, tw, th, x0, y0, x1, y1, scale) {
   // Town keepers occlude like any actor: a keeper standing behind a tree is drawn
   // BEHIND it (silhouetted), not on top. Their body matches drawTownWorld's.
   if (inTown) for (const n of townNpcs) {
-    const cx = offX + n.x * tw + tw / 2, footY = offY + n.y * th + th * 0.92, sz = Math.round(th * 1.5);
+    const nx = n.fx != null ? n.fx : n.x, ny = n.fy != null ? n.fy : n.y;
+    const cx = offX + nx * tw + tw / 2, footY = offY + ny * th + th * 0.92, sz = Math.round(th * 1.5);
     actors.push({ footY, l: cx - sz * 0.5, t: footY - sz * 0.92, r: cx + sz * 0.5, b: footY + sz * 0.08,
       tint: ENEMY_SILHOUETTE_TINT, draw: () => drawTownWalk(n.kind, cx, footY, sz) });
   }
@@ -6328,6 +6331,14 @@ let player = { x: 5, y: 5,
   // the normal boss payout. Keyed by FLOOR, not species, so Endless — where bosses
   // recur — keeps paying a windfall for each new depth. Per-character.
   bossFirstKills: {},
+  // Town PROGRESSION: the camp is sealed until the floor-5 guardian falls — no Town
+  // Portal, no service keepers. Each boss floor first-cleared arrives another wave of
+  // keepers (see TOWN_SERVICE_WAVES). `pendingTownGraduation` is the one-time flag set
+  // by that first floor-5 kill so leaving the floor whisks the hero to the celebrating
+  // camp; `knownServices` remembers which keepers have already been announced, so a
+  // fresh wave pops the arrivals banner exactly once.
+  pendingTownGraduation: false,
+  knownServices: [],
   // ── ENDGAME state (a fresh hero starts empty; loadGame() migrates old saves) ──
   covenantsActive: [],        // Dread Covenants sworn for the next descent
   dreadGrid: {},              // per-class "highest Dread cleared" checklist
@@ -6727,6 +6738,7 @@ function animNow() { return _animMs; }
 // harmless backdrop behind the menu and so old saves load cleanly.)
 let inTown = false;
 let townNpcs = [];                 // walkable-town service keepers: {x,y,kind,name}
+let townFreeSet = null;            // Set of "x,y" tiles a regular keeper may stroll onto (buildTown → updateTownNpcs)
 let townBuildings = []; // decorative shop buildings drawn behind the NPCs
 // The walkable town is a hand-authored static map (src/data/townLayout.js). These
 // hold its live pieces once buildTown() stamps it: the cobble-path tile set (for
@@ -7260,8 +7272,9 @@ window.gameState = function gameState(radius) {
       // Town hub services in on-screen order, each with whether it's unlocked and,
       // if not, the requirement to open it (level / depth / difficulty milestone).
       townServices: (inTown && typeof TOWN_MENU !== 'undefined') ? TOWN_MENU.map(s => {
-        const locked = !!(s.req && !s.req.ok());
-        return { kind: s.kind, name: s.name, locked, need: locked ? s.req.need : null };
+        const req = townServiceReq(s.kind);
+        const locked = !!(req && !req.ok());
+        return { kind: s.kind, name: s.name, locked, need: locked ? req.need : null };
       }) : null,
       // The town's two top gates. Warp to Dungeon (the tier+floor picker) is
       // always usable; Return to Last Floor restores the EXACT stage you portaled
@@ -7551,16 +7564,17 @@ window.gameGuide = function gameGuide(topic) {
       `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
     ],
     town: [
-      `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the service keepers SCATTERED across the green and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all (same layout every visit). A keeper only appears once its service is UNLOCKED — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
+`The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived. That first kill opens the camp — and when you then leave Floor 5 you climb up into town for a one-time celebration (the townsfolk cheer, the first keepers arrive) before a Town Portal there carries you on to Floor 6. `
+      + `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the regular service keepers milling about the green at FRESH random spots every visit (most of them slowly strolling around) and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all. A keeper only appears once its service WAVE has arrived — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
       `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff, healerBuffs and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
       `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town); Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1, 5 or 10 floors (more damage/loot/gold, or an easier stretch). Each mystic offers just TWO pacts, rolled at random from twelve, so the choice changes every time you find one; a longer pact costs MORE per floor (the price climbs exponentially with floors sealed). gameState().npcs lists the two pacts a nearby mystic offers. Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
-      `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentle bulk discount, so a long hire stays a serious sum). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
-      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
+      `Sellsword (Floor 20 wave): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
+      `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Floor 20 wave): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Prospector (level 5+): trades GOLD for raw crafting materials, and refines commons up a tier. BUY Scrap, Glimmer, Core or Chaos Orbs outright — the price climbs steeply with the material's rarity, grows with the deepest floor you've reached, and rises a little with every purchase you make this visit (resetting when you next enter town) — a bulk lot is priced flat, so it's always the cheapest way to buy a quantity. You can only buy a material your progression could already DROP — the same difficulty gate as kills (Scrap/Glimmer from Normal, Core from Hardened, Chaos from Brutal) — so it tops up what you farm, never a tier you couldn't yet earn. REFINE fuses a stack of a common material into ONE of the next tier up (Scrap→Glimmer→Core→Chaos); it's deliberately lossy, so it never beats simply buying the rarer material — it's a way to spend an overflow of commons. Bought/refined materials land in your shared stash pool (or an SSF hero's private wallet), same as drops.`,
-      `Every keeper stands in the town from the start, but a service unlocks as you progress: Healer, Merchant, Ramen House and Vault are open immediately; Craftsman & Prospector at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked keeper stands GREYED with a padlock badge and, on interact, announces its unlock requirement instead of opening. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
+      `Keepers arrive in WAVES as you fell boss floors — each guardian you beat (Floor 5 is the first, Floor 10 the second, and so on) opens another wave, announced by a pop-up banner the instant the boss dies (even mid-fight down in the dungeon). Wave 1 (Floor 5): Vault, Merchant, Healer. Wave 2 (Floor 10): Ramen House, Craftsman, Prospector, Trainer. Wave 3 (Floor 15): Gambler, Enchanter, Bounty Board. Wave 4 (Floor 20): Transmuter, Sellsword. Wave 5 (Floor 25): Ascendant Weave, Cycles, Hall of Deeds. Deeper tiers add the Covenant Altar, Mirrorforge and Pantheon. (A Solo Self-Found hero's Vault stays sealed for life.) A still-locked keeper is ABSENT from the walkable camp; in the Town directory it shows GREYED with a padlock and its unlock hint. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim its reward. Each contract pays a DIFFERENT MIX of 1–3 rewards — gold, a crafting material (any of scrap/glimmer/core/chaos, scaled by depth), a lump of XP, or a gear piece scaled to your depth (the toughest boss contracts guarantee a rarer piece) — and a contract paying fewer things pays more of each. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract, its live progress (including menu.bounty.done once it's ready to claim), and menu.bounty.rewards listing exactly what it pays. In town, clicking the belt's BOUNTY module opens the board (even with no active contract).`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
@@ -12524,6 +12538,13 @@ function startPortalChannel() {
   if (inTown) { openTownHub(); return; }
   if (portalTransiting() || mapWarping()) return;   // already teleporting — ignore the button
   if (tutorialActive) { log('🏖️ Head north into the cave to descend first.'); sfx('denied'); return; }
+  // The way back to the camp is sealed until you prove yourself: no Town Portal until
+  // the Floor 5 guardian falls (the run that unlocks the town, its keepers and this
+  // retreat). Before then the only way out is down.
+  if (!townUnlocked()) {
+    log('<span data-spr=feat_lock></span> There is no road back to town yet — fell the guardian on <b>Floor 5</b> to open the way.', 'important');
+    sfx('denied'); return;
+  }
   // On a boss floor the guardian's seal denies the town portal too — there is no
   // retreat until it falls (or you do).
   if (isBossLevel(dungeonLevel) && !floorCleared) {
@@ -12686,6 +12707,47 @@ function warpToTown() {
   beginPortalArrival();   // blue-pillar materialise, like any arrival
   log('<span data-spr=feat_gate_red></span> You step through the portal into town.', 'important');
   log('Walk up to a keeper to use their service. Enter the <span data-spr=feat_gate_red></span> Dungeon Gate to descend, or the <span data-spr=feat_portal></span> Town Portal to return to your floor.');
+  // If the hero portaled out AFTER unlocking the town (but chose the portal over the
+  // stairs), still greet them once — the arrivals banner fired at the kill, so here
+  // it's just a warm log line.
+  if (player.pendingTownGraduation) { player.pendingTownGraduation = false; log('<span data-spr=q_relic></span> The townsfolk greet the guardian-slayer with open arms — their services are yours.', 'important'); saveGameSoon(); }
+  updateBars(); renderSkillBar();
+  draw();
+  saveGame();
+}
+
+// GRADUATE TO TOWN — the one-time victory lap the very first time the Floor 5 guardian
+// is felled and the hero leaves the floor. Instead of stepping straight onto Floor 6,
+// they climb out into the newly-opened camp: the townsfolk celebrate, the first
+// keepers (Vault, Merchant, Healer) are milling about, and the Town Portal is primed
+// to press on. We quietly build Floor 6 first and FREEZE it as the held floor, so the
+// Town Portal ("Return to Last Floor") drops the hero right onto Floor 6 to continue.
+function graduateToTown() {
+  player.pendingTownGraduation = false;
+  // Quietly advance to (and build) Floor 6, so the town's held-floor portal continues
+  // the descent onto it. No "Descended…" fanfare — the celebration is the town arrival.
+  dungeonLevel += 1;
+  recordDepth();
+  statusEffects = [];
+  tickBuffs();
+  setPlayerCell(5, 5);
+  player.faceDir = 'down'; player.faceDx = 0; player.faceDy = 1;
+  arrivalDir = 'down';
+  generateMap();
+  tickPact();
+  maybeFloorEvent();
+  // Freeze the fresh floor and step into the celebrating camp.
+  captureHeldFloor();
+  dungeonReturn = dungeonLevel;   // the Town Portal returns the hero here (Floor 6)
+  bossHazards = []; bossTelegraphs = [];
+  buildTown();
+  sfx('stairs');
+  beginPortalArrival();
+  screenFlash('#ffd24b');
+  sfx('levelup');
+  log('<span data-spr=feat_gate_red></span> You climb from the guardian\'s lair — and step into <b>town</b> for the very first time.', 'important');
+  log('<span data-spr=q_relic></span> Word of the fallen guardian races ahead of you. The townsfolk pour out cheering — grateful, they open their doors: the <b>Vault</b>, <b>Merchant</b> and <b>Healer</b> are at your service!', 'important');
+  log('Rest and resupply, then step into the <span data-spr=feat_portal></span> Town Portal when you\'re ready to press on to <b>Floor 6</b>.');
   updateBars(); renderSkillBar();
   draw();
   saveGame();
@@ -12755,20 +12817,58 @@ function buildTown(atPortal = false) {
     if (solid) for (const [fx, fy] of decorFootprint(id, d.x, d.y)) furnitureMap[fy + ',' + fx] = 1;
   }
 
-  // The service keepers, scattered across the clearing (late-game ones in the
-  // hedged sanctum). `kind` maps 1:1 to openTownService(kind); `tag` is the small
-  // pixel badge above them (and in the interaction prompt); body is the animated
-  // walk sprite drawTownWalk(kind). Only keepers whose service is UNLOCKED have
-  // "arrived" — a locked keeper is simply ABSENT (no greyed placeholder), so the
-  // town fills in as the hero earns each service.
-  townNpcs = TOWN_NPCS
-    .filter((n) => townServiceAvailable(n.kind))
-    .map((n) => ({ x: n.x, y: n.y, kind: n.kind, name: n.name, tag: TOWN_SVC_TAG[n.kind] || 'npc_quest' }));
-  // Keepers block their tile (like the dungeon merchant/mystic) so you stand
-  // ADJACENT and interact — furnitureMap is the solidity the collision/path checks
-  // already read (playerSolidCell/tileBlockedByObject). The Gate and Portal are NOT
-  // stamped: they stay walkable so you can step straight into them.
-  for (const n of townNpcs) furnitureMap[n.y + ',' + n.x] = 1;
+  // The service keepers. `kind` maps 1:1 to openTownService(kind); `tag` is the small
+  // pixel badge above them (and in the interaction prompt); body is the animated walk
+  // sprite drawTownWalk(kind). Only keepers whose WAVE has arrived are placed — a
+  // still-locked keeper is simply ABSENT (no greyed placeholder), so the camp fills in
+  // as the hero fells deeper guardians.
+  //   • ENDGAME keepers keep their authored tiles inside the hedged sanctum, fixed.
+  //   • REGULAR keepers get a FRESH random spot in the open clearing every visit, and
+  //     most of them slowly stroll around it (see updateTownNpcs). Wanderers don't
+  //     block — you interact from within a tile — so the camp feels alive without ever
+  //     penning the hero in behind a moving body.
+  const endgameKinds = new Set(TOWN_ENDGAME_KINDS);
+  const available = TOWN_NPCS.filter((n) => townServiceAvailable(n.kind));
+  const mkNpc = (n, x, y, wander) => ({
+    x, y, kind: n.kind, name: n.name, tag: TOWN_SVC_TAG[n.kind] || 'npc_quest',
+    fx: x, fy: y, tx: x, ty: y, homeX: x, homeY: y, wander, dwell: 0, faceDx: 0, faceDy: 1,
+  });
+  // Free tiles a wanderer may occupy: interior, off any solid decor/furniture, outside
+  // the sanctum grove (reserved for the fixed endgame keepers), and off the spawn/gate/
+  // portal — then keep only those actually reachable from the arrival tile.
+  const sanctum = (x, y) => x >= 3 && x <= 11 && y >= 3 && y <= 10;
+  const reserved = new Set([
+    TOWN_SPAWN.x + ',' + TOWN_SPAWN.y,
+    townGatePos.x + ',' + townGatePos.y,
+    townPortalPos.x + ',' + townPortalPos.y,
+  ]);
+  const blocked = new Set();
+  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+    if (x === 0 || y === 0 || x === MAP_W - 1 || y === MAP_H - 1) blocked.add(x + ',' + y);
+    else if (furnitureMap[y + ',' + x] || sanctum(x, y)) blocked.add(x + ',' + y);
+  }
+  const reach = reachableTiles(blocked, MAP_W, MAP_H, TOWN_SPAWN);
+  const freeTiles = [];
+  townFreeSet = new Set();
+  for (const key of reach) {
+    if (reserved.has(key)) continue;
+    freeTiles.push({ x: +key.split(',')[0], y: +key.split(',')[1] });
+    townFreeSet.add(key);
+  }
+  const regulars = available.filter((n) => !endgameKinds.has(n.kind));
+  const spots = randomDistinctTiles(freeTiles, regulars.length, Math.random);
+  townNpcs = [];
+  for (const n of available) if (endgameKinds.has(n.kind)) townNpcs.push(mkNpc(n, n.x, n.y, false));
+  regulars.forEach((n, i) => {
+    const s = spots[i] || { x: n.x, y: n.y };
+    // Most regulars amble; a few keep a "stall" and stand put — but all still take a
+    // fresh randomized spot, so the camp never lays out the same way twice.
+    townNpcs.push(mkNpc(n, s.x, s.y, Math.random() < TOWN_WANDER.walkChance));
+  });
+  // Only the FIXED keepers block their tile (like the dungeon merchant/mystic) so you
+  // stand adjacent and interact; wanderers pass through. The Gate and Portal are never
+  // stamped — they stay walkable so you can step straight into them.
+  for (const n of townNpcs) if (!n.wander) furnitureMap[n.y + ',' + n.x] = 1;
 
   // Materialise at the arrival tile. On a Town-Portal arrival you step out ONTO the
   // return portal (townPortalPos) up in the clearing; otherwise you appear at the
@@ -13478,49 +13578,33 @@ function openTownService(kind) {
 // a ← back button to return here.
 // Each service shows the pixel sprite of the NPC who runs it, referenced
 // directly by its atlas key (`dl`).
-// Some services stay locked until the hero earns them. Each optional `req` reads
-// live progression state — `ok()` returns true once unlocked, `need` is the short
-// player-facing hint shown on the locked tile. "Reach X" gates on how deep the
-// hero has actually delved (all-time max depth / difficulty tier); "Unlock
-// Hardened" gates on having conquered Normal (which opens the Hardened tier).
-// Order here IS the on-screen order (the Dungeon Gate renders above this list).
+// Keepers arrive in WAVES as the hero fells boss floors, NOT by level/depth — the
+// unlock gate for every service now lives in one place (TOWN_SERVICE_WAVES →
+// townServiceReq); this list is just name/desc/order. Order here IS the on-screen
+// order (the Dungeon Gate renders above this list). The Vault (stash) stays sealed
+// for life to a Solo Self-Found hero — its one bespoke exception is in townServiceReq.
 const TOWN_MENU = [
   { kind: 'healer',    name: 'Healer',      desc: 'Rest, cure & potions' },
   { kind: 'merchant',  name: 'Merchant',    desc: 'Buy & sell fresh gear' },
   { kind: 'ramen',     name: 'Ramen House', desc: 'Cook toppings into buffs' },
-  { kind: 'forge', name: 'Craftsman',   desc: 'Forge blank gear from mats',
-    req: { ok: () => (player.level || 1) >= 5,          need: 'Reach level 5' } },
-  { kind: 'gambler',    name: 'Gambler',     desc: 'Wager gold for loot',
-    req: { ok: () => (player.maxFloor || 1) >= 10,      need: 'Reach depth 10' } },
-  { kind: 'trainer',   name: 'Trainer',     desc: 'Respec & change class',
-    req: { ok: () => (player.level || 1) >= 10,         need: 'Reach level 10' } },
-  { kind: 'enchanter', name: 'Enchanter',   desc: 'Add & reroll affixes',
-    req: { ok: () => (player.level || 1) >= 10,         need: 'Reach level 10' } },
-  { kind: 'prospector', name: 'Prospector',  desc: 'Trade gold for materials',
-    req: { ok: () => (player.level || 1) >= 5,          need: 'Reach level 5' } },
-  { kind: 'transmuter',       name: 'Transmuter',  desc: 'Fuse 3 items into 1 rarer',
-    req: { ok: () => diffOf(player.maxFloor || 1) >= 2, need: 'Reach Hardened' } },
-  { kind: 'bounty',      name: 'Bounty Board',desc: 'Take a bounty for a reward',
-    req: { ok: () => diffClearedCount() >= 1,           need: 'Unlock Hardened' } },
+  { kind: 'forge',     name: 'Craftsman',   desc: 'Forge blank gear from mats' },
+  { kind: 'prospector', name: 'Prospector',  desc: 'Trade gold for materials' },
+  { kind: 'gambler',   name: 'Gambler',     desc: 'Wager gold for loot' },
+  { kind: 'trainer',   name: 'Trainer',     desc: 'Respec & change class' },
+  { kind: 'enchanter', name: 'Enchanter',   desc: 'Add & reroll affixes' },
+  { kind: 'transmuter', name: 'Transmuter', desc: 'Fuse 3 items into 1 rarer' },
+  { kind: 'bounty',    name: 'Bounty Board', desc: 'Take a bounty for a reward' },
   // (The Mystic no longer keeps a town camp — the Wandering Mystic is met on
   // dungeon floors instead; see spawnMystic / openMystic.)
-  { kind: 'sellsword',   name: 'Sellsword',   desc: 'Hire a companion',
-    req: { ok: () => diffOf(player.maxFloor || 1) >= 3, need: 'Reach Brutal' } },
-  // The Vault is open from the start — except to a Solo Self-Found hero, whose
-  // vault is sealed for life (they never touch the shared pools).
+  { kind: 'sellsword', name: 'Sellsword',   desc: 'Hire a companion' },
   // ── ENDGAME services (the loot-driven late game) ──
-  { kind: 'weave',      name: 'Ascendant Weave', desc: 'Spend Boss Points on a power board',
-    req: { ok: () => pointsEarned(player.bossFirstKills) >= 1, need: 'Clear a boss floor' } },
-  { kind: 'covenants',  name: 'Covenant Altar',  desc: 'Swear afflictions for greater rewards',
-    req: { ok: () => diffClearedCount() >= 1,            need: 'Unlock Hardened' } },
-  { kind: 'mirrorforge',name: 'Mirrorforge',     desc: 'Perfect & Mirror your gear',
-    req: { ok: () => diffOf(player.maxFloor || 1) >= 3,  need: 'Reach Brutal' } },
-  { kind: 'pantheon',   name: 'Pantheon',        desc: 'Summon apex gods for Mythics',
-    req: { ok: () => (player.maxFloor || 1) > FINITE_DEPTH, need: 'Reach Endless' } },
+  { kind: 'weave',      name: 'Ascendant Weave', desc: 'Spend Boss Points on a power board' },
+  { kind: 'covenants',  name: 'Covenant Altar',  desc: 'Swear afflictions for greater rewards' },
+  { kind: 'mirrorforge', name: 'Mirrorforge',    desc: 'Perfect & Mirror your gear' },
+  { kind: 'pantheon',   name: 'Pantheon',        desc: 'Summon apex gods for Mythics' },
   { kind: 'cycles',     name: 'Cycles',          desc: 'Join the seasonal ladder' },
   { kind: 'deeds',      name: 'Hall of Deeds',   desc: 'Renown, titles & trophies' },
-  { kind: 'stash',     name: 'Vault',       desc: 'Store gold & gear safe',
-    req: { ok: () => !isSsf(player),                  need: 'Sealed — Solo Self-Found' } },
+  { kind: 'stash',      name: 'Vault',           desc: 'Store gold & gear safe' },
 ];
 // ── TOWN AMBIENT BACKGROUND ── a different living scene drifts behind the town
 // menu each visit, so the safe haven feels alive rather than a static list. Every
@@ -13604,12 +13688,13 @@ function openTownHub() {
   document.getElementById('town-overlay').classList.add('open');
   const tiles = TOWN_MENU.map(s => {
     const icon = `<span class="tm-icon">${townWalkIcon(s.kind, 68)}</span>`;
-    if (s.req && !s.req.ok()) {
+    const req = townServiceReq(s.kind);
+    if (req && !req.ok()) {
       // Locked: greyed, inert, and captioned with the unlock requirement.
       // Keep a trailing number glued to its label (e.g. "level\u00A05") so it
       // never wraps alone; word requirements wrap naturally so they never
       // overflow a narrow tile (the "no loners" rule).
-      const need = /\d$/.test(s.req.need) ? s.req.need.replace(/ (\d+)$/, '\u00A0$1') : s.req.need;
+      const need = /\d$/.test(req.need) ? req.need.replace(/ (\d+)$/, '\u00A0$1') : req.need;
       return `<button class="town-menu-btn tm-locked" type="button" disabled aria-disabled="true">
        ${icon}
        <span class="tm-text"><span class="tm-name">${s.name}</span><span class="tm-desc tm-req">🔒 ${need}</span></span>
@@ -15916,7 +16001,10 @@ function drawTownWorld(offX, offY, tw, th, scale) {
   const t = (animNow() % 2400) / 2400;
   const pulse = 0.14 + 0.1 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2));
   townNpcs.forEach((n) => {
-    const cx = cxOf(n.x), footY = offY + n.y * th + th * 0.92;
+    // Draw at the smooth stroll position (fx/fy) so a wandering keeper glides rather
+    // than snapping tile to tile; a fixed keeper's fx/fy simply equal its tile.
+    const nx = n.fx != null ? n.fx : n.x, ny = n.fy != null ? n.fy : n.y;
+    const cx = offX + nx * tw + tw / 2, footY = offY + ny * th + th * 0.92;
     // Every keeper here is UNLOCKED (buildTown never places a locked one), so all
     // draw at full presence — the warm hub glow, body, role badge and name label.
     drawActorShadow(cx, footY, tw * 0.78);
@@ -20438,6 +20526,30 @@ function showLevelUpBanner(level) {
   screenFlash('#ffd24b');
 }
 
+// A small pop-up banner that slides in near the top when a fresh WAVE of town keepers
+// arrives — heralded the instant a boss kill unlocks them, so it fires even mid-fight
+// down in the dungeon and disappears after a few seconds. Shows each new keeper's real
+// walk sprite (pixel art, never an emoji) beside its name.
+let npcBannerTimer;
+function showNpcBanner(kinds) {
+  const el = document.getElementById('npc-banner');
+  if (!el || !kinds || !kinds.length) return;
+  const names = kinds.map((k) => { const s = TOWN_MENU.find((m) => m.kind === k); return s ? s.name : k; });
+  const icons = kinds.map((k) => townWalkIcon(k, 34) || dlIcon(TOWN_SVC_TAG[k] || 'npc_quest', 30)).join('');
+  const titleEl = el.querySelector('.npcb-title');
+  const subEl = el.querySelector('.npcb-sub');
+  const iconEl = el.querySelector('.npcb-icons');
+  if (iconEl) iconEl.innerHTML = icons;
+  if (titleEl) titleEl.innerHTML = kinds.length === 1 ? `${joinNames(names)} has arrived in town!` : `${joinNames(names)} have arrived in town!`;
+  if (subEl) subEl.textContent = 'New services await back in the safe hub.';
+  el.classList.remove('show');
+  void el.offsetWidth; // force reflow so the slide re-triggers even if it's already up
+  el.classList.add('show');
+  clearTimeout(npcBannerTimer);
+  npcBannerTimer = setTimeout(() => el.classList.remove('show'), 4600);
+  sfx('bosspoint');
+}
+
 // ══════════════════════════════════════════
 // REWARD LOGIC (drop reveal, rampage combo, depth milestones, greed gate,
 // build-defining item powers/sets). The objective chip + daily streak, the DOM
@@ -21894,6 +22006,10 @@ function goDownStairs(nx, ny) {
     return;
   }
   if (!floorCleared) { log(`<span data-spr=feat_lock></span> Stairs sealed. ${clearConditionLabel()}`, 'important'); sfx('click'); return; }
+  // Just felled the Floor 5 guardian for the first time? Leaving the floor doesn't
+  // drop you onto Floor 6 — it carries you up into the newly-opened town to celebrate,
+  // and the Town Portal there continues the descent onto Floor 6 (see graduateToTown).
+  if (player.pendingTownGraduation && dungeonLevel === 5) { graduateToTown(); return; }
   if (isLastFiniteFloor()) {
     log(`<span data-spr=b_ratking></span> Deepest floor of the ${diffMeta().name} dungeon — beat its guardian, then take the next difficulty from town.`, 'important');
     sfx('click');
@@ -22431,6 +22547,13 @@ function onEnemyDefeated(e) {
     const avail = weaveAvail(pointsEarned(player.bossFirstKills), player.weaveBoard);
     sfx('bosspoint');
     log(`<span data-spr=q_relic></span> First clear — <b>+1 Boss Point</b>! Spend at the Ascendant Weave in town. ${avail} to spend.`, 'important');
+    // The Floor 5 guardian is the town-unlock — flag the one-time "graduate to the
+    // celebrating camp" so leaving this floor whisks the hero there (see graduateToTown).
+    if (bfk === '5') player.pendingTownGraduation = true;
+    // A newly-cleared boss floor may arrive a fresh WAVE of town keepers. Herald them
+    // now with the arrivals banner — it pops even here in the dungeon, so the hero
+    // learns the camp has grown without having to walk back in.
+    checkTownArrivals();
   }
   // ── Endgame boss-kill hooks ──
   if (e.isBoss) {
@@ -25607,17 +25730,52 @@ function pickupChestsAt(x, y) {
 // The USE button / key. Real-time: there's no "wait a turn" any more. Standing
 // next to — or on — a merchant/mystic opens their menu (they're passable); otherwise
 // it opens any chest already underfoot (most are auto-grabbed as you walk over).
-// The service req for a keeper kind (from TOWN_MENU) — its ok()/need unlock gate,
-// or null if the service is always open.
+// How many distinct boss floors this hero has first-cleared (the floor-5 guardian is
+// boss #1). Each new boss floor arrives another WAVE of town keepers.
+function bossesBeaten() { return pointsEarned(player.bossFirstKills); }
+// The town CAMP throws open its doors once the Floor 5 guardian falls — before that
+// there is no Town Portal and no service keeper has arrived. (This IS wave 1.)
+function townUnlocked() { return !!(player.bossFirstKills && player.bossFirstKills['5']); }
+// The unlock gate for a keeper kind: which boss-kill wave it arrives in, plus the
+// short player-facing hint shown on a still-locked tile. The Vault stays sealed for
+// life to a Solo Self-Found hero (they never touch the shared pools).
 function townServiceReq(kind) {
-  const e = (typeof TOWN_MENU !== 'undefined') ? TOWN_MENU.find((s) => s.kind === kind) : null;
-  return e ? e.req : null;
+  const wave = TOWN_SERVICE_WAVES[kind] || 1;
+  if (kind === 'stash' && isSsf(player)) return { ok: () => false, need: 'Sealed — Solo Self-Found', wave };
+  return {
+    ok: () => townUnlocked() && bossesBeaten() >= wave,
+    need: !townUnlocked()
+      ? 'Fell the Floor 5 guardian'
+      : `Beat ${wave} boss floors (${Math.min(bossesBeaten(), wave)}/${wave})`,
+    wave,
+  };
 }
-// A town service is available (its keeper has "arrived") once its unlock req passes
-// — or immediately if it has none. buildTown only places available keepers.
+// A town service is available (its keeper has "arrived") once its unlock wave is
+// reached. buildTown only places available keepers.
 function townServiceAvailable(kind) {
   const req = townServiceReq(kind);
   return !(req && !req.ok());
+}
+// The kinds whose keepers are available right now, in TOWN_MENU order.
+function availableServiceKinds() {
+  return (typeof TOWN_MENU !== 'undefined') ? TOWN_MENU.filter((s) => townServiceAvailable(s.kind)).map((s) => s.kind) : [];
+}
+// Announce any freshly-arrived keepers with a small pop-up banner (fires even down in
+// the dungeon, the instant a boss kill unlocks a wave). `knownServices` latches which
+// have been announced so a wave is heralded exactly once. Silent baseline sync when
+// `knownServices` is missing (an older save / mid-run load) so nothing spams on boot.
+function checkTownArrivals(silent) {
+  const avail = availableServiceKinds();
+  if (!Array.isArray(player.knownServices) || silent) { player.knownServices = avail; return; }
+  const fresh = avail.filter((k) => !player.knownServices.includes(k));
+  if (!fresh.length) return;
+  player.knownServices = avail;
+  showNpcBanner(fresh);
+  // A newly-arrived Bounty Board / Ramen House flips the HUD's BOUNTY / MEALS chips
+  // on — repaint the belt now so they appear the moment the wave lands, not on the
+  // next incidental rebuild.
+  if (typeof renderSkillBar === 'function') { try { renderSkillBar(); } catch (_e) {} }
+  saveGameSoon();
 }
 // Which keepers the hero has already greeted (walked up to and opened). A keeper
 // that has arrived but is still un-greeted flags a "!" so a newly-unlocked service
@@ -27790,7 +27948,12 @@ function renderSkillBar() {
   // manual slots. The two .sb-fill boxes grow (desktop belt only) to occupy the empty
   // space and centre their optional modules in it; the modules themselves are hidden
   // until the belt is wide enough (container queries). See the .sb-* flex CSS.
-  const html = `<div class="sb-side sb-side-left"><div class="sb-left">${sprintCell}${townBtn}${healBtn}${manaBtn}</div><div class="sb-fill sb-fill-left">${beltBountyHtml()}${beltMealsHtml()}</div></div>`
+  // The BOUNTY and MEALS modules only appear once their keeper has arrived in town —
+  // no point offering a "No bounty yet" / "Go cook something!" prompt for a service the
+  // hero can't reach until the Bounty Board / Ramen House unlock.
+  const beltBounty = townServiceAvailable('bounty') ? beltBountyHtml() : '';
+  const beltMeals = townServiceAvailable('ramen') ? beltMealsHtml() : '';
+  const html = `<div class="sb-side sb-side-left"><div class="sb-left">${sprintCell}${townBtn}${healBtn}${manaBtn}</div><div class="sb-fill sb-fill-left">${beltBounty}${beltMeals}</div></div>`
     + `<div class="sb-auto-wrap">${autoCell}</div>`
     + `<div class="sb-side sb-side-right"><div class="sb-fill sb-fill-right">${beltLoadoutHtml()}</div><div class="sb-right">${skillsHtml}</div></div>`;
   if (html !== _lastSkillBarHtml) {   // identical markup — skip the DOM teardown + reflow
@@ -30046,6 +30209,13 @@ function loadGame() {
       const cf = player.clearedFloors || {};
       for (const k in cf) { if (cf[k] && Number(k) % 5 === 0) player.bossFirstKills[k] = 1; }
     }
+    // Town progression: keeper/camp unlocks now key off boss-floor clears (see
+    // TOWN_SERVICE_WAVES). Coerce the one-time graduation flag, then SILENTLY baseline
+    // the "already announced" keeper set to whatever this hero has currently unlocked —
+    // so a returning hero never gets spammed with arrival banners on load, only when a
+    // genuinely new wave arrives.
+    player.pendingTownGraduation = !!player.pendingTownGraduation;
+    checkTownArrivals(true);
     // Retire the boss-point gear-slot investment (feature removed): boss points now
     // feed only the Ascendant Weave. Drop the stored per-set slot levels so an old
     // save loads clean and no vestigial field lingers.
@@ -33528,6 +33698,37 @@ function glideActor(a, tx, ty, dt) {
     a.faceDx = dx; a.faceDy = dy;                       // remember heading (for facing)
   }
 }
+// Slowly stroll the wandering town keepers around their own patch of the clearing,
+// and keep each keeper's LOGIC tile (n.x/n.y — what interaction, the walk-up prompt
+// and click-to-interact all key off) locked to where its sprite actually is. Cheap
+// (≤ a dozen keepers, neighbours only picked at a dwell boundary — no per-frame
+// allocation) and only runs while the walkable town is on screen.
+function updateTownNpcs(dt) {
+  if (!inTown || !townNpcs.length) return;
+  const isFree = (x, y) => townFreeSet != null && townFreeSet.has(x + ',' + y);
+  for (const n of townNpcs) {
+    if (!n.wander) continue;
+    const dx = n.tx - n.fx, dy = n.ty - n.fy;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 0.05) {
+      // Arrived on the target tile — snap, then pause a beat before the next step so
+      // the amble reads as unhurried rather than a constant shuffle.
+      n.fx = n.tx; n.fy = n.ty; n.x = n.tx; n.y = n.ty;
+      n.dwell -= dt;
+      if (n.dwell <= 0) {
+        const next = pickWanderTarget({ x: n.x, y: n.y }, { x: n.homeX, y: n.homeY }, TOWN_WANDER.radius, isFree, Math.random);
+        if (next) { n.tx = next.x; n.ty = next.y; }
+        n.dwell = TOWN_WANDER.dwellMin + Math.random() * (TOWN_WANDER.dwellMax - TOWN_WANDER.dwellMin);
+      }
+    } else {
+      const step = Math.min(dist, TOWN_WANDER.speed * dt);
+      n.fx += dx / dist * step; n.fy += dy / dist * step;
+      n.faceDx = dx; n.faceDy = dy;
+      n.x = Math.round(n.fx); n.y = Math.round(n.fy);   // keep the interaction tile under the sprite
+    }
+  }
+}
+
 function updateActorRender(dt) {
   for (const e of enemies) {
     if (e.atkCd > 0) e.atkCd -= dt;               // real-time attack cooldown
@@ -33729,6 +33930,7 @@ function gameLoop(ts) {
     safeStep('stamRegen', () => regenStamina(dt));
   }
   safeStep('actorRender', () => updateActorRender(dt));
+  if (inTown && !clockPaused()) safeStep('townNpcs', () => updateTownNpcs(dt));  // townsfolk stroll while the walkable hub is on screen
   safeStep('hudFlush', () => flushHudDirty());     // damage events mark the HUD dirty; one updateBars() lands here same-frame
   safeStep('stamina', () => renderStaminaBar());   // stamina drains/refills continuously — keep the END bar live
   safeStep('vitalBars', () => updateVitalFills(dt)); // ease HP/MP fills so over-time recovery climbs fluidly

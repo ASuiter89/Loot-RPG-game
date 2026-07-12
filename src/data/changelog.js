@@ -7,6 +7,14 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "large", v: "Town opens after the Floor 5 boss — keepers arrive in waves", by: "Jeff Louie", notes: [
+    "The town is now sealed until you fell the Floor 5 guardian. Until then the Town Portal is refused — the only way is down.",
+    "Beat that first boss and leaving the floor carries you up into town for a one-time welcome: the townsfolk cheer, the first keepers arrive, and a Town Portal there sends you on to Floor 6.",
+    "Keepers arrive in waves as you beat deeper bosses. Floor 5: Vault, Merchant, Healer. Floor 10: Ramen House, Craftsman, Trainer. Floor 15: Gambler, Enchanter, Bounty Board. Floor 20: Transmuter, Sellsword. Floor 25 and beyond open the endgame keepers.",
+    "Each new wave pops a banner the instant the boss dies — even while you're still fighting down in the dungeon — so you know the camp has grown.",
+    "Regular keepers now take fresh random spots every visit, and most of them slowly stroll about the clearing, so the camp feels alive. The endgame keepers keep their grove.",
+    "The HUD BOUNTY and MEALS chips now appear only once the Bounty Board and Ramen House have opened.",
+  ] },
   { date: "2026-07-12", size: "small", v: "Environmental hazards hit twice as hard", by: "Claude", notes: [
     "Every passive damage dealer now bites for double — arrow traps, fire vents, lava, spikes, hidden traps, trapped chests and the odd hazard puddle or web. Footing matters more; route around the burn and mind the firing lanes.",
   ] },

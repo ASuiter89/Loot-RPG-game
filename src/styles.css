@@ -577,6 +577,41 @@
     100% { opacity: 0; transform: scale(1.02); }
   }
 
+  /* Town-keeper ARRIVALS banner — a small pill that slides down from the top when a
+     fresh wave of townsfolk unlocks (fires even mid-dungeon), then fades. Gold-lit to
+     read as a happy, welcoming event, distinct from the big center-screen banners. */
+  #npc-banner {
+    position: fixed; top: 10px; left: 50%; z-index: 322;
+    transform: translate(-50%, -140%); opacity: 0;
+    pointer-events: none; display: flex; align-items: center; gap: 12px;
+    max-width: min(92vw, 460px); padding: 9px 16px; border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    border: 1px solid color-mix(in srgb, var(--gold) 60%, var(--frame));
+    box-shadow: 0 6px 22px color-mix(in srgb, var(--ink) 55%, transparent),
+                0 0 20px color-mix(in srgb, var(--gold) 30%, transparent);
+    font-family: var(--font-ui);
+  }
+  #npc-banner.show { animation: npcBannerPop 4.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  #npc-banner .npcb-icons { display: flex; align-items: flex-end; gap: 2px; flex: none; }
+  #npc-banner .npcb-icons:empty { display: none; }
+  #npc-banner .npcb-text { text-align: left; min-width: 0; }
+  #npc-banner .npcb-title {
+    font-weight: bold; font-size: 1.5rem; letter-spacing: 0.5px; color: var(--gold);
+    text-shadow: 0 0 10px color-mix(in srgb, var(--gold) 60%, transparent), 0 1px 2px var(--ink);
+  }
+  #npc-banner .npcb-title b { color: var(--paper); }
+  #npc-banner .npcb-sub {
+    font-size: 1.2rem; color: var(--text-muted); margin-top: 1px;
+  }
+  #npc-banner .npcb-sub:empty { display: none; }
+  @keyframes npcBannerPop {
+    0%   { opacity: 0; transform: translate(-50%, -140%); }
+    7%   { opacity: 1; transform: translate(-50%, 6%); }
+    12%  { transform: translate(-50%, 0); }
+    88%  { opacity: 1; transform: translate(-50%, 0); }
+    100% { opacity: 0; transform: translate(-50%, -60%); }
+  }
+
   /* Objective chip — pinned near the top, shows the active bounty's progress. */
   #objective-chip {
     position: fixed; top: 4px; left: 50%; transform: translateX(-50%);
