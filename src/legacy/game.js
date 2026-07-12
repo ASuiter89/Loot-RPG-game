@@ -104,14 +104,12 @@ import { emptyGrid as emptyDreadGrid, recordBossClear as recordDreadClear,
   marksEarned as dreadMarksEarned, sanitizeGrid as sanitizeDreadGrid } from '../systems/dreadChecklist.js';
 import { malaiseMult, malaiseActive, combinedMalaiseRate } from '../systems/malaise.js';
 import { WEAVE } from '../data/ascendantWeave.js';
-import { GLYPHS } from '../data/glyphs.js';
 import { boardPointsSpent as weaveSpent, boardPointsAvailable as weaveAvail,
   nodesAllocated as weaveNodes, pointsInConstellation as weaveInArm,
   canAllocate as weaveCanAllocate, allocate as weaveDoAllocate,
   refundNode as weaveRefundNode, refundAll as weaveRefundAll,
-  keystonesActive as weaveKeystones, glyphRadiusNodes as weaveGlyphRadius,
+  keystonesActive as weaveKeystones,
   weaveStatContribution, weaveDepthRank, sanitizeBoard as sanitizeWeaveBoard } from '../systems/ascendantWeave.js';
-import { rollGlyph, glyphPower } from '../systems/glyphRoll.js';
 import { MIRRORFORGE } from '../data/mirrorforge.js';
 import { fpBudget, fpSpent as mfSpent, fpRemaining, fpCost, matCost as mfMatCost,
   canApply as mfCanApply, applyAttune, applyExalt, applyDivine, applyCorrupt,
@@ -1621,7 +1619,7 @@ function _egPlaceholderSprite(name) {
   if (typeof name !== 'string') return undefined;
   let src = null;
   if (name.startsWith('cov_')) src = 'ic_cursed';
-  else if (name.startsWith('weave') || name.startsWith('glyph')) src = 'mat_glimmer';
+  else if (name.startsWith('weave')) src = 'mat_glimmer';
   else if (name === 'mat_aether' || name.startsWith('mf_')) src = 'mat_chaos';
   else if (name.startsWith('pin_')) src = 'feat_gate_red';
   else if (name.startsWith('cycle')) src = 'feat_gate_red';
@@ -6280,7 +6278,6 @@ let player = { x: 5, y: 5,
   covenantsActive: [],        // Dread Covenants sworn for the next descent
   dreadGrid: {},              // per-class "highest Dread cleared" checklist
   weaveBoard: { nodes: {} },  // Ascendant Weave constellation allocations
-  weaveGlyphs: [],            // socketed/held glyphs
   weaveDepthPoints: 0,        // cosmetic infinite Weave Depth (no power)
   aether: 0,                  // Mirrorforge deep material (hero-side)
   attunement: 0, attuneTarget: null, attunePity: 0,  // Mirrorforge targeting pity
@@ -7277,7 +7274,7 @@ window.gameState = function gameState(radius) {
     // "pantheon"/"cycles"/"deeds"). ──
     endgame: {
       covenants: egSafe(egCovGameStateBlock),   // sworn afflictions + total Dread + reward mults + per-class marks
-      weave: egSafe(egWeaveGameStateBlock),     // Ascendant Weave board points, active keystones, glyphs, cosmetic depth
+      weave: egSafe(egWeaveGameStateBlock),     // Ascendant Weave board points, active keystones, cosmetic depth
       mirrorforge: egSafe(egMfGameStateBlock),  // Aether, Attunement pity + target, Perfected (Mirrored) count
       pantheon: egSafe(egPinnacleGameStateBlock), // active apex fight (phase/hp/telegraphs) or shard wallet + gods cleared
       cycle: egSafe(egCycleGameStateBlock),     // seasonal phase, enrollment, journey checklist, countdown
@@ -7548,7 +7545,7 @@ window.gameGuide = function gameGuide(topic) {
   const alias = {
     // ── Endgame aliases ──
     covenant: 'covenants', dread: 'covenants', affliction: 'covenants', afflictions: 'covenants', covenantaltar: 'covenants', malaise: 'covenants',
-    weave: 'weave', ascendant: 'weave', ascendantweave: 'weave', constellation: 'weave', keystone: 'weave', keystones: 'weave', glyph: 'weave', glyphs: 'weave', weavedepth: 'weave',
+    weave: 'weave', ascendant: 'weave', ascendantweave: 'weave', constellation: 'weave', keystone: 'weave', keystones: 'weave', weavedepth: 'weave',
     mirrorforge: 'mirrorforge', mirror: 'mirrorforge', mirrored: 'mirrorforge', perfect: 'mirrorforge', perfected: 'mirrorforge', aether: 'mirrorforge', attune: 'mirrorforge', attunement: 'mirrorforge', exalt: 'mirrorforge', divine: 'mirrorforge', corrupt: 'mirrorforge', radiant: 'mirrorforge', forgingpotential: 'mirrorforge',
     pantheon: 'pantheon', god: 'pantheon', gods: 'pantheon', effigy: 'pantheon', shard: 'pantheon', shards: 'pantheon', mythic: 'pantheon', mythics: 'pantheon', uber: 'pantheon', apex: 'pantheon', summit: 'pantheon',
     cycle: 'cycles', season: 'cycles', seasonal: 'cycles', league: 'cycles', ladder: 'cycles', journey: 'cycles', legacyrealm: 'cycles',
@@ -21819,7 +21816,7 @@ function totalStat(name) {
       sum += v;
     }
   }
-  // + Ascendant Weave board/glyph contribution: flat adds into the sum, mult scales
+  // + Ascendant Weave board contribution: flat adds into the sum, mult scales
   // the whole stat. Both are no-ops (0 / ×1) for an un-invested board, so an
   // un-woven hero is byte-identical. Cached behind loadoutEpoch + the weave signature.
   const wBase = sum + setStatBonus(name) + itemPowerStatBonus(name) + egWeaveFlat(name);
@@ -22309,14 +22306,10 @@ function onEnemyDefeated(e) {
     }
   }
   // ── Endgame faucets (deep Endless only) ──
-  // Ascendant Weave glyphs, Mirrorforge Aether, and (on boss kills) a Deed re-check.
+  // Mirrorforge Aether, and (on boss kills) a Deed re-check.
   {
     const edepth = endlessDepthNow();
     if (edepth > 0) {
-      // Glyphs: rarer, board-empowering drops gated to deeper Endless (bosses & elites
-      // are the reliable source; ordinary foes a rare trickle).
-      const glyphChance = (e.isBoss ? 0.5 : e.isElite ? 0.18 : 0.02) * lootMult;
-      if (Math.random() < glyphChance) { try { egWeaveDropGlyph(edepth); } catch (_e) {} }
       // Aether: the Mirrorforge's deep material (gate handled inside egMfAetherDrop).
       let aeth = 0; try { aeth = egMfAetherDrop(edepth); } catch (_e) { aeth = 0; }
       if (aeth > 0) { player.aether = (player.aether || 0) + aeth; log(`<span data-spr=mat_chaos></span> ${label} dropped ${aeth} Aether.`, 'loot'); }
@@ -29784,9 +29777,10 @@ function loadGame() {
     // Dread Covenants: the sworn set for the next descent + the per-class checklist.
     player.covenantsActive = sanitizeActiveSet(player.covenantsActive);
     player.dreadGrid = sanitizeDreadGrid(player.dreadGrid);
-    // Ascendant Weave: the constellation board, socketed glyphs, cosmetic depth.
+    // Ascendant Weave: the constellation board + cosmetic depth. Drop any glyph list
+    // a pre-glyph-removal save still carries so no vestigial field lingers.
     player.weaveBoard = sanitizeWeaveBoard(player.weaveBoard, WEAVE);
-    player.weaveGlyphs = Array.isArray(player.weaveGlyphs) ? player.weaveGlyphs.filter(g => g && typeof g === 'object') : [];
+    if (player.weaveGlyphs !== undefined) delete player.weaveGlyphs;
     player.weaveDepthPoints = Math.max(0, Math.floor(player.weaveDepthPoints) || 0);
     // Mirrorforge: the deep material (hero-side, not the shared wallet), attunement pity.
     player.aether = Math.max(0, Math.floor(player.aether) || 0);
@@ -33471,8 +33465,8 @@ requestAnimationFrame(gameLoop);
 // assembled from per-system function sets. Its mutable run/UI state (_eg*,
 // hallDeeds) is declared ABOVE the guarded boot block — boot-path code writes it,
 // so it must be initialized before boot runs (TDZ); see the comment there.
-// Current Endless-tier depth (0 in the finite tiers) — the faucet gate for glyph
-// drops, radiant affixes, Aether and Pantheon ubers.
+// Current Endless-tier depth (0 in the finite tiers) — the faucet gate for radiant
+// affixes, Aether and Pantheon ubers.
 function endlessDepthNow() { return (typeof isEndless === 'function' && isEndless()) ? (dungeonLevel - FINITE_DEPTH) : 0; }
 // Called from generateMap() when a floor is (re)built: stamp the floor-enter clock
 // (malaise ramp) and refresh the per-descent covenant caches.
@@ -33773,36 +33767,31 @@ function egCovGuideTopic() {
 // it calls game.js globals + the imported pure-core aliases directly. No import/
 // export, no module-level state (those globals are pre-declared elsewhere).
 //
-// The pure math (systems/ascendantWeave.js + systems/glyphRoll.js) is imported
-// into game.js under: weaveSpent, weaveAvail, weaveNodes, weaveInArm,
-// weaveCanAllocate, weaveDoAllocate, weaveRefundNode, weaveRefundAll,
-// weaveKeystones, weaveGlyphRadius, weaveStatContribution, weaveDepthRank,
-// sanitizeWeaveBoard, rollGlyph, glyphPower, plus the WEAVE / GLYPHS tables.
+// The pure math (systems/ascendantWeave.js) is imported into game.js under:
+// weaveSpent, weaveAvail, weaveNodes, weaveInArm, weaveCanAllocate, weaveDoAllocate,
+// weaveRefundNode, weaveRefundAll, weaveKeystones, weaveStatContribution,
+// weaveDepthRank, sanitizeWeaveBoard, plus the WEAVE table.
 
 // ── live stat contribution (memoized) ────────────────────────────────────────
 
 // The board's whole aggregated contribution: { flat:{key:sum}, mult:{stat:prod} }.
 // Memoized on _egWeaveCache keyed by a cheap signature so the hot totalStat /
-// totalAttr path only recomputes when the board, its socketed glyphs, or the
-// depth counter actually change. An empty board returns a true no-op.
+// totalAttr path only recomputes when the board actually changes. An empty board
+// returns a true no-op.
 // NOTE: attrs = player.attributes (the ALLOCATED block) — never totalAttr, which
 // would recurse (totalAttr calls back into the weave hooks).
 function egWeaveContrib() {
   try {
     const board = (typeof player === 'object' && player && player.weaveBoard) || { nodes: {} };
     const nodesObj = (board && board.nodes) || {};
-    const glyphs = (player && Array.isArray(player.weaveGlyphs)) ? player.weaveGlyphs : [];
-    // Signature: lit-node map + a compact glyph fingerprint (socket + value drive
-    // the contribution) + the cosmetic depth counter. Node map is ~25 keys, tiny.
-    let gsig = '';
-    for (let i = 0; i < glyphs.length; i++) {
-      const g = glyphs[i];
-      gsig += g ? ((g.socketId || '') + ':' + (g.value || 0) + '|') : '|';
-    }
-    const sig = JSON.stringify(nodesObj) + '#' + glyphs.length + '#' + gsig + '#' + ((player && player.weaveDepthPoints) || 0);
-    if (_egWeaveCache && _egWeaveCache.sig === sig) return _egWeaveCache.val;
     const attrs = (player && player.attributes) || {};
-    const val = weaveStatContribution(board, glyphs, attrs) || { flat: {}, mult: {} };
+    // Signature: the lit-node map (a few dozen keys, tiny) plus a fingerprint of the
+    // five allocated attributes, since attribute-gated keystones ignite off those —
+    // so crossing a gate on level-up recomputes without needing a board edit.
+    const asig = `${attrs.might || 0},${attrs.vitality || 0},${attrs.agility || 0},${attrs.spirit || 0},${attrs.luck || 0}`;
+    const sig = JSON.stringify(nodesObj) + '#' + asig;
+    if (_egWeaveCache && _egWeaveCache.sig === sig) return _egWeaveCache.val;
+    const val = weaveStatContribution(board, attrs) || { flat: {}, mult: {} };
     if (!val.flat) val.flat = {};
     if (!val.mult) val.mult = {};
     _egWeaveCache = { sig: sig, val: val };
@@ -33823,7 +33812,7 @@ function egWeaveMult(key) {
   try { const m = egWeaveContrib().mult[key]; return (typeof m === 'number' && isFinite(m)) ? m : 1; } catch (e) { return 1; }
 }
 
-// Drop the memo — call after ANY board/glyph mutation, BEFORE bumpLoadout().
+// Drop the memo — call after ANY board mutation, BEFORE bumpLoadout().
 function egWeaveInvalidate() { _egWeaveCache = null; }
 
 // ── small render helpers ─────────────────────────────────────────────────────
@@ -33846,29 +33835,6 @@ function _egWeavePayloadLabel(payload) {
   return parts.join(', ');
 }
 
-// A human label for a socket id (core, or an arm's name).
-function _egWeaveSocketLabel(socketId) {
-  if (socketId === 'core') return 'Core';
-  const list = (WEAVE && Array.isArray(WEAVE.constellations)) ? WEAVE.constellations : [];
-  const c = list.find((x) => x && ('sock_' + x.id) === socketId);
-  return c ? c.name : String(socketId || '');
-}
-
-// The set of LIT-or-not node ids currently reached by any socketed glyph — drives
-// the "a glyph amplifies this node" marker. Uses each glyph's own reach radius so
-// the marker matches what weaveStatContribution actually multiplies.
-function _egWeaveCoveredSet() {
-  const set = new Set();
-  const glyphs = (player && Array.isArray(player.weaveGlyphs)) ? player.weaveGlyphs : [];
-  for (const g of glyphs) {
-    if (!g || !g.socketId) continue;
-    let ids = [];
-    try { ids = weaveGlyphRadius(g.socketId, WEAVE, g.radius) || []; } catch (e) { ids = []; }
-    for (const id of ids) set.add(id);
-  }
-  return set;
-}
-
 // ── panel ────────────────────────────────────────────────────────────────────
 
 function openWeave() {
@@ -33889,13 +33855,12 @@ function renderWeave() {
     const avail = weaveAvail(earned, board);
     const lit = weaveNodes(board) || [];
     const activeKs = weaveKeystones(board, attrs) || [];
-    const covered = _egWeaveCoveredSet();
 
     let html = '';
 
     // Intro + point budget. The board is an independent drawer from the boss-point
     // pool — spending here never touches gear-slot points, and vice-versa.
-    html += `<div class="town-blurb">The Weave pours boss points into a bounded constellation board — five attribute arms, three rings deep. It draws its own pool from the same points, <b>separate</b> from your gear slots. Light nodes for modest bonuses, cross a keystone's gate for a build-defining boost, and socket glyphs to amplify the nodes they sit near. Nodes refund freely, so experiment.</div>`;
+    html += `<div class="town-blurb">The Weave pours boss points into a bounded constellation board — five attribute arms, four rings deep. It draws its own pool from the same points, <b>separate</b> from your gear slots. Light nodes for modest bonuses, then cross a keystone's gate for a build-defining boost — the deepest keystones demand a dedicated, heavily-invested arm. Nodes refund freely, so experiment.</div>`;
     html += `<div class="shop-row"><div class="shop-row-info"><div class="shop-row-name">${dlIcon('weave_star', 18)} <b>${avail}</b> boss point${avail === 1 ? '' : 's'} free to weave</div><div class="shop-row-sub">${earned} earned in total · lit nodes: ${lit.length}</div></div><button class="act-btn" onclick="weaveRespecUI()">RESPEC ALL</button></div>`;
 
     // Cosmetic Weave Depth prestige bar — grants NO power, label says so.
@@ -33906,7 +33871,7 @@ function renderWeave() {
     html += `<div class="shop-row"><div class="shop-row-info"><div class="shop-row-name">Rank ${dr.rank} · ${escapeHtml(dr.title || '')}</div><div class="shop-row-sub">${dr.into} / ${span} depth to next rank · cosmetic, grants no power</div><div style="margin-top:4px;height:10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel);overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--gold)"></div></div></div></div>`;
 
     // The five constellation arms, each a section header + a responsive grid of its
-    // five nodes. Node grids reuse .shop-grid (fluid auto-fill columns).
+    // seven nodes. Node grids reuse .shop-grid (fluid auto-fill columns).
     const consts = (WEAVE && Array.isArray(WEAVE.constellations)) ? WEAVE.constellations : [];
     const allNodes = (WEAVE && Array.isArray(WEAVE.nodes)) ? WEAVE.nodes : [];
     for (const c of consts) {
@@ -33918,7 +33883,6 @@ function renderWeave() {
         const isLit = lit.includes(n.id);
         const canA = !isLit && weaveCanAllocate(n.id, board, earned);
         const label = _egWeavePayloadLabel(n.payload) || 'Node';
-        const mark = covered.has(n.id) ? ` <span title="A socketed glyph amplifies this node" style="color:var(--gold)">✦</span>` : '';
         let cls = 'shop-row has-actions';
         let btn;
         if (isLit) {
@@ -33930,13 +33894,13 @@ function renderWeave() {
           cls += ' cant-afford';
           btn = `<button class="act-btn" disabled>LOCKED</button>`;
         }
-        html += `<div class="${cls}"><div class="shop-row-info"><div class="shop-row-name">${label}${mark}</div><div class="shop-row-sub">Ring ${n.band}${isLit ? ' · lit' : (canA ? ' · ready' : ' · locked')}</div></div>${btn}</div>`;
+        html += `<div class="${cls}"><div class="shop-row-info"><div class="shop-row-name">${label}</div><div class="shop-row-sub">Ring ${n.band}${isLit ? ' · lit' : (canA ? ' · ready' : ' · locked')}</div></div>${btn}</div>`;
       }
       html += '</div>';
     }
 
     // Keystones — build-definers, dormant until their arm is entered AND their gate
-    // (attribute total, or points in the arm) is crossed.
+    // (attribute total, points in the arm, and/or total board spend) is crossed.
     const keystones = (WEAVE && Array.isArray(WEAVE.keystones)) ? WEAVE.keystones : [];
     if (keystones.length) {
       html += `<div class="ench-group">${dlIcon('weave_star', 16)} Keystones</div>`;
@@ -33946,43 +33910,16 @@ function renderWeave() {
         const arm = consts.find((x) => x && x.id === ks.constellation);
         const armName = arm ? arm.name : ks.constellation;
         const gate = ks.gate || {};
-        let gateStr;
-        if (gate.attr != null && gate.total != null) gateStr = `Enter ${escapeHtml(armName)} · reach ${gate.total} ${attrLabelIcon(gate.attr)}`;
-        else if (gate.n != null) gateStr = `Spend ${gate.n} pts in ${escapeHtml(armName)}`;
-        else gateStr = `Enter ${escapeHtml(armName)}`;
+        // A gate can carry several conditions — list every one so the requirement reads
+        // honestly (e.g. "Enter The Ferocity · reach 150 Might · 24 pts on the board").
+        const reqs = [`Enter ${escapeHtml(armName)}`];
+        if (gate.attr != null && gate.total != null) reqs.push(`reach ${gate.total} ${attrLabelIcon(gate.attr)}`);
+        if (gate.n != null) reqs.push(`spend ${gate.n} pts here`);
+        if (gate.boardPts != null) reqs.push(`${gate.boardPts} pts on the board`);
+        const gateStr = reqs.join(' · ');
         const cls = active ? 'shop-row upgrade' : 'shop-row cant-afford';
         const nameStyle = active ? 'color:var(--gold)' : '';
         html += `<div class="${cls}"><div class="shop-row-info"><div class="shop-row-name" style="${nameStyle}">${escapeHtml(ks.name)}${active ? ' ✦' : ''}</div><div class="shop-row-sub">${escapeHtml(ks.desc || '')}</div><div class="shop-row-stats">${gateStr} · ${active ? '<b style="color:var(--gold)">ACTIVE</b>' : 'dormant'}</div></div></div>`;
-      }
-      html += '</div>';
-    }
-
-    // Glyphs & sockets. Each glyph multiplies the payload of every LIT node it
-    // reaches from its socket — placement is the puzzle.
-    html += `<div class="ench-group">${dlIcon('glyph', 16)} Glyphs &amp; Sockets</div>`;
-    const glyphs = (player && Array.isArray(player.weaveGlyphs)) ? player.weaveGlyphs : [];
-    if (!glyphs.length) {
-      html += `<div class="town-blurb" style="opacity:0.8">No glyphs yet. They drop from kills at deep Endless depth, then socket here to amplify the nodes they cover.</div>`;
-    } else {
-      const sockets = (WEAVE && Array.isArray(WEAVE.sockets)) ? WEAVE.sockets : [];
-      html += '<div class="shop-grid">';
-      for (let i = 0; i < glyphs.length; i++) {
-        const g = glyphs[i];
-        if (!g) continue;
-        const icon = dlIcon(g.tier ? ('glyph_' + g.tier) : 'glyph', 32);
-        const valPct = Math.round(((g.value || 0)) * 100);
-        const tert = g.tertiary ? (' · ' + escapeHtml(String(g.tertiary))) : '';
-        let controls;
-        if (g.socketId) {
-          controls = `Socketed at <b>${escapeHtml(_egWeaveSocketLabel(g.socketId))}</b> <button class="act-btn" onclick="weaveUnsocketUI(${i})">UNSOCKET</button>`;
-        } else {
-          let btns = `<span style="opacity:0.7">Socket into:</span> `;
-          for (const s of sockets) {
-            btns += `<button class="act-btn" onclick="weaveSocketUI(${i},'${s.id}')">${escapeHtml(_egWeaveSocketLabel(s.id))}</button> `;
-          }
-          controls = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:2px">${btns}</div>`;
-        }
-        html += `<div class="shop-row"><span class="loot-icon">${icon}</span><div class="shop-row-info"><div class="shop-row-name" style="color:${g.color || 'var(--text)'}">${escapeHtml(g.name || 'Glyph')}</div><div class="shop-row-sub">+${valPct}% to covered lit nodes${tert}</div><div class="shop-row-stats">${controls}</div></div></div>`;
       }
       html += '</div>';
     }
@@ -34045,51 +33982,6 @@ function weaveRespecUI() {
   }
 }
 
-function weaveSocketUI(glyphIdx, socketId) {
-  try {
-    const glyphs = (player && Array.isArray(player.weaveGlyphs)) ? player.weaveGlyphs : null;
-    const g = glyphs && glyphs[glyphIdx];
-    if (!g) { sfx('error'); return; }
-    g.socketId = socketId;
-    sfx('click');
-    _egWeaveApply();
-  } catch (e) {
-    log('Weave: could not socket that glyph.');
-  }
-}
-
-function weaveUnsocketUI(glyphIdx) {
-  try {
-    const glyphs = (player && Array.isArray(player.weaveGlyphs)) ? player.weaveGlyphs : null;
-    const g = glyphs && glyphs[glyphIdx];
-    if (!g) { sfx('error'); return; }
-    g.socketId = null;
-    sfx('click');
-    _egWeaveApply();
-  } catch (e) {
-    log('Weave: could not unsocket that glyph.');
-  }
-}
-
-// ── loot hook: a glyph drops on a deep-Endless kill ──────────────────────────
-function egWeaveDropGlyph(endlessDepth) {
-  try {
-    const g = rollGlyph(Math.random, endlessDepth);
-    if (!g) return;
-    g.socketId = null;
-    if (!player) return;
-    if (!Array.isArray(player.weaveGlyphs)) player.weaveGlyphs = [];
-    player.weaveGlyphs.push(g);
-    egWeaveInvalidate();
-    const icon = dlIcon(g.tier ? ('glyph_' + g.tier) : 'glyph', 24);
-    log(`${icon} A <span style="color:${g.color || 'var(--gold)'}">${escapeHtml(g.name || 'glyph')}</span> glyph drops — socket it in the Ascendant Weave.`, 'loot');
-    if (typeof sfx === 'function') sfx('loot');
-    if (typeof saveGameSoon === 'function') saveGameSoon();
-  } catch (e) {
-    // A bad drop must never break the kill path.
-  }
-}
-
 // ── AI-play API blocks ───────────────────────────────────────────────────────
 
 function egWeaveGameStateBlock() {
@@ -34098,13 +33990,13 @@ function egWeaveGameStateBlock() {
     const attrs = (player && player.attributes) || {};
     return {
       available: weaveAvail(pointsEarned(player.bossFirstKills), board),
+      spent: weaveSpent(board),
       nodes: weaveNodes(board) || [],
       keystones: weaveKeystones(board, attrs) || [],
-      glyphs: (player && Array.isArray(player.weaveGlyphs)) ? player.weaveGlyphs.length : 0,
       depth: weaveDepthRank((player && player.weaveDepthPoints) || 0),
     };
   } catch (e) {
-    return { available: 0, nodes: [], keystones: [], glyphs: 0, depth: weaveDepthRank(0) };
+    return { available: 0, spent: 0, nodes: [], keystones: [], depth: weaveDepthRank(0) };
   }
 }
 
@@ -34112,11 +34004,10 @@ function egWeaveGuideTopic() {
   return [
     'THE ASCENDANT WEAVE — an endgame choice board fed by the SAME boss points as your gear slots, but as an INDEPENDENT drawer: points lit here never reduce what your gear slots can spend, and vice-versa.',
     'Points free to the board = boss points earned minus points already lit on the board. Every node costs 1 and refunds for free (Respec all), so you can freely re-plan a build.',
-    'Five arms, one per attribute — Ferocity (Might), Aegis (Vitality), Zephyr (Agility), Oracle (Spirit), Fortune (Luck) — each three rings deep. Light an arm\'s entry node first; band-2 branches need the entry, band-3 tips need either branch.',
-    'KEYSTONES are build-definers that stay dormant until you ENTER their arm (light at least one node there) AND cross their gate — a hero attribute TOTAL, or a number of points spent in that arm. Each folds a multiplier or flat bonus into one stat.',
-    'GLYPHS drop from kills at deep Endless depth and socket into the board. A socketed glyph MULTIPLIES the payload of every LIT node it physically reaches from its socket, so WHERE you place it decides which nodes it amplifies.',
+    'Five arms, one per attribute — Ferocity (Might), Aegis (Vitality), Zephyr (Agility), Oracle (Spirit), Fortune (Luck) — each FOUR rings deep, seven nodes per arm. Light an arm\'s entry node first; band-2 branches need the entry, band-3 tips need either branch, and each band-4 apex needs its own side\'s tip.',
+    'KEYSTONES are build-definers that stay dormant until you ENTER their arm (light at least one node there) AND cross their gate. A gate can combine a hero attribute TOTAL, a number of points spent in that arm, and a total number of points lit across the whole board — ALL parts must hold. They ladder up: a cheap keystone lights early, an apex keystone demands a deep, dedicated, board-wide investment. Each folds a multiplier or flat bonus into one stat.',
     'WEAVE DEPTH is a purely cosmetic prestige rank — an ever-receding badge that grants NO power, only a title.',
-    'An untouched board is a true no-op: with no nodes lit, no keystone can ignite and socketed glyphs cover nothing, so the hero is byte-identical to having no Weave at all.',
+    'An untouched board is a true no-op: with no nodes lit, no keystone can ignite, so the hero is byte-identical to having no Weave at all.',
   ];
 }
 
@@ -36168,7 +36059,7 @@ const __DL_FN_BRIDGE = {
   openTownService,
   // ── Endgame panel handlers (inline onclick=) ──
   openCovenants, covToggle, covClearAll,
-  openWeave, weaveAllocateUI, weaveRefundUI, weaveRespecUI, weaveSocketUI, weaveUnsocketUI,
+  openWeave, weaveAllocateUI, weaveRefundUI, weaveRespecUI,
   openMirrorforge, mfPick, mfDo, mfToggleAether, mfShatter, egMfSpendAttunement,
   openPantheon, pantheonSummon,
   openCycles, cycleEnrollUI,

@@ -26,19 +26,24 @@ describe('WEAVE.nodes', () => {
   const ids = new Set(WEAVE.nodes.map((n) => n.id));
   const constIds = new Set(WEAVE.constellations.map((c) => c.id));
 
-  it('is a compact, bounded board (~24 nodes, all cost 1)', () => {
-    expect(WEAVE.nodes.length).toBeGreaterThanOrEqual(20);
-    expect(WEAVE.nodes.length).toBeLessThanOrEqual(28);
+  it('is a bounded board (~35 nodes, all cost 1)', () => {
+    expect(WEAVE.nodes.length).toBeGreaterThanOrEqual(30);
+    expect(WEAVE.nodes.length).toBeLessThanOrEqual(45);
     expect(new Set(WEAVE.nodes.map((n) => n.id)).size).toBe(WEAVE.nodes.length); // unique ids
     for (const n of WEAVE.nodes) expect(n.cost).toBe(1);
   });
 
-  it('every node has a valid arm, ring band, coords and a small payload', () => {
+  it('every node has a valid arm, ring band, coords and a bounded payload', () => {
     for (const n of WEAVE.nodes) {
       expect(constIds.has(n.constellation)).toBe(true);
-      expect([1, 2, 3]).toContain(n.band);
+      expect([1, 2, 3, 4]).toContain(n.band);
       expect(typeof n.x).toBe('number');
       expect(typeof n.y).toBe('number');
+      // coords stay inside the 0..100 board so nothing renders off-canvas
+      expect(n.x).toBeGreaterThanOrEqual(0);
+      expect(n.x).toBeLessThanOrEqual(100);
+      expect(n.y).toBeGreaterThanOrEqual(0);
+      expect(n.y).toBeLessThanOrEqual(100);
       expect(n.payload && typeof n.payload).toBe('object');
       const keys = Object.keys(n.payload);
       expect(keys.length).toBeGreaterThan(0);
@@ -46,7 +51,7 @@ describe('WEAVE.nodes', () => {
         const v = n.payload[k];
         expect(typeof v).toBe('number');
         expect(v).toBeGreaterThan(0);
-        expect(v).toBeLessThanOrEqual(20); // modest / bounded
+        expect(v).toBeLessThanOrEqual(40); // bounded — apex nodes pay a little more
       }
     }
   });
@@ -77,9 +82,9 @@ describe('WEAVE.nodes', () => {
 describe('WEAVE.keystones', () => {
   const constIds = new Set(WEAVE.constellations.map((c) => c.id));
 
-  it('has ~8 keystones, each on a real arm with a gate and a stable id', () => {
-    expect(WEAVE.keystones.length).toBeGreaterThanOrEqual(6);
-    expect(WEAVE.keystones.length).toBeLessThanOrEqual(10);
+  it('has many keystones, each on a real arm with a gate and a stable id', () => {
+    expect(WEAVE.keystones.length).toBeGreaterThanOrEqual(20);
+    expect(WEAVE.keystones.length).toBeLessThanOrEqual(32);
     expect(new Set(WEAVE.keystones.map((k) => k.id)).size).toBe(WEAVE.keystones.length);
     for (const ks of WEAVE.keystones) {
       expect(constIds.has(ks.constellation)).toBe(true);
@@ -87,20 +92,27 @@ describe('WEAVE.keystones', () => {
       expect(typeof ks.desc).toBe('string');
       expect(typeof ks.effectId).toBe('string');
     }
+    // every arm carries at least a couple of keystones so no arm is a dead end
+    for (const c of WEAVE.constellations) {
+      const n = WEAVE.keystones.filter((k) => k.constellation === c.id).length;
+      expect(n).toBeGreaterThanOrEqual(2);
+    }
   });
 
-  it('each gate is either an attribute threshold or an in-arm point count', () => {
+  it('each gate combines one or more real conditions (attr total, in-arm pts, board pts)', () => {
     for (const ks of WEAVE.keystones) {
       const g = ks.gate;
       expect(g && typeof g).toBe('object');
       const attrGate = g.attr != null && g.total != null;
       const ptsGate = g.n != null;
-      expect(attrGate || ptsGate).toBe(true);
+      const boardGate = g.boardPts != null;
+      expect(attrGate || ptsGate || boardGate).toBe(true); // at least one real condition
       if (attrGate) {
         expect(ATTRS.has(g.attr)).toBe(true);
         expect(g.total).toBeGreaterThan(0);
       }
       if (ptsGate) expect(g.n).toBeGreaterThan(0);
+      if (boardGate) expect(g.boardPts).toBeGreaterThan(0);
     }
   });
 
@@ -117,16 +129,9 @@ describe('WEAVE.keystones', () => {
   });
 });
 
-describe('WEAVE.sockets', () => {
-  it('has a core socket plus positioned, reach-bearing sockets', () => {
-    expect(WEAVE.sockets.length).toBeGreaterThanOrEqual(2);
-    expect(WEAVE.sockets.some((s) => s.id === 'core')).toBe(true);
-    expect(new Set(WEAVE.sockets.map((s) => s.id)).size).toBe(WEAVE.sockets.length);
-    for (const s of WEAVE.sockets) {
-      expect(typeof s.x).toBe('number');
-      expect(typeof s.y).toBe('number');
-      expect(s.radius).toBeGreaterThan(0);
-    }
+describe('WEAVE has no glyph sockets (feature removed)', () => {
+  it('does not carry a sockets table', () => {
+    expect(WEAVE.sockets).toBeUndefined();
   });
 });
 

@@ -3,33 +3,24 @@
 // Pure functions over a plain BOARD object + injected values (earned boss points,
 // attribute totals) + the WEAVE tuning table. No globals, no RNG, no clock, no DOM,
 // no fetch/localStorage. The legacy shell owns the live `player` state (the earned
-// pool, the persisted board, the socketed glyphs) and calls in here to answer
-// "can I light this?", "what's active?", and "what does the whole board contribute?".
+// pool, the persisted board) and calls in here to answer "can I light this?",
+// "what's active?", and "what does the whole board contribute?".
 //
 // The BOARD is intentionally tiny and save-friendly:
 //     { nodes: { [nodeId]: 1 } }         // 1 == "this node is lit" (cost is always 1)
-// Glyphs are passed in SEPARATELY (an array of socketed glyphs), because they are
-// loot living on the item side, not board allocation.
 //
 // The board is the sole spender of boss points and draws from the FULL earned pool,
 // so boardPointsAvailable() takes the raw earned count (earned − lit-node count),
 // never a shared "remaining".
 import { WEAVE } from '../data/ascendantWeave.js';
-import { glyphPower } from './glyphRoll.js';
 
 // ── internal indexing ────────────────────────────────────────────────────────
-// Build id→node and id→socket lookups from the tuning table. The board is ~25 nodes
-// so rebuilding per call is trivially cheap and keeps these functions stateless.
+// Build an id→node lookup from the tuning table. The board is a few dozen nodes so
+// rebuilding per call is trivially cheap and keeps these functions stateless.
 function nodeIndex(data) {
   const byId = new Map();
   const list = Array.isArray(data && data.nodes) ? data.nodes : [];
   for (const n of list) if (n && n.id) byId.set(n.id, n);
-  return byId;
-}
-function socketIndex(data) {
-  const byId = new Map();
-  const list = Array.isArray(data && data.sockets) ? data.sockets : [];
-  for (const s of list) if (s && s.id) byId.set(s.id, s);
   return byId;
 }
 
@@ -191,8 +182,14 @@ export function refundAll() {
  * Which keystones are currently active. A keystone ignites only when BOTH hold:
  *   1) its arm has been ENTERED (≥1 lit node there) — this is what guarantees an
  *      untouched board contributes nothing even to a high-attribute hero, and
- *   2) its GATE is met: { attr, total } vs the hero's attribute total, or { n } vs
- *      points spent in that arm.
+ *   2) its GATE is met. A gate may carry any combination of conditions, ALL of which
+ *      must hold, so the same field-set powers a cheap entry keystone and a steep,
+ *      multi-condition apex one:
+ *        • { attr, total } → the hero's TOTAL of that attribute reaches `total`,
+ *        • { n }           → points spent in THIS arm reach `n`,
+ *        • { boardPts }    → nodes lit across the WHOLE board reach `boardPts`.
+ *      A gate with no recognized condition never activates (an entered arm alone is
+ *      never enough — a keystone always demands a real threshold).
  * Returns an array of keystone ids.
  * @param {object} board
  * @param {{[attr:string]:number}} attrs live attribute totals (might/vitality/…)
@@ -201,52 +198,32 @@ export function refundAll() {
 export function keystonesActive(board, attrs, data = WEAVE) {
   const list = Array.isArray(data && data.keystones) ? data.keystones : [];
   const A = (attrs && typeof attrs === 'object') ? attrs : {};
+  const totalPts = boardPointsSpent(board);
   const out = [];
   for (const ks of list) {
     if (!ks || !ks.id) continue;
     const inArm = pointsInConstellation(board, ks.constellation, data);
     if (inArm < 1) continue; // arm not entered → dormant (keeps empty board a no-op)
     const gate = ks.gate || {};
-    let met = false;
+    // AND every present condition; require at least one so a keystone can't fire on a
+    // bare entered arm.
+    let conditions = 0;
+    let met = true;
     if (gate.attr != null && gate.total != null) {
-      met = (Number(A[gate.attr]) || 0) >= gate.total;
-    } else if (gate.n != null) {
-      met = inArm >= gate.n;
+      conditions++;
+      if ((Number(A[gate.attr]) || 0) < gate.total) met = false;
     }
-    if (met) out.push(ks.id);
+    if (gate.n != null) {
+      conditions++;
+      if (inArm < gate.n) met = false;
+    }
+    if (gate.boardPts != null) {
+      conditions++;
+      if (totalPts < gate.boardPts) met = false;
+    }
+    if (conditions > 0 && met) out.push(ks.id);
   }
   return out;
-}
-
-// ── glyph geometry ───────────────────────────────────────────────────────────
-
-/**
- * The node ids within a socket's reach — the nodes a glyph placed there would touch
- * (whether lit or not). `radiusOverride` lets a caller substitute a glyph's own reach
- * (glyphs project their tier radius); omit it to use the socket's inherent radius.
- * @param {string} socketId
- * @param {typeof WEAVE} data
- * @param {number} [radiusOverride]
- * @returns {string[]}
- */
-export function glyphRadiusNodes(socketId, data = WEAVE, radiusOverride) {
-  const sock = socketIndex(data).get(socketId);
-  if (!sock) return [];
-  const radius = (typeof radiusOverride === 'number' && isFinite(radiusOverride)) ? radiusOverride : sock.radius;
-  const r2 = radius * radius;
-  const out = [];
-  const list = Array.isArray(data && data.nodes) ? data.nodes : [];
-  for (const n of list) {
-    const dx = n.x - sock.x;
-    const dy = n.y - sock.y;
-    if (dx * dx + dy * dy <= r2) out.push(n.id);
-  }
-  return out;
-}
-
-// Round a summed flat value to 3 decimals to keep glyph-multiplied totals tidy.
-function round3(n) {
-  return Math.round(n * 1000) / 1000;
 }
 
 /**
@@ -254,56 +231,32 @@ function round3(n) {
  *   { flat: { [key]: sum }, mult: { [statKey]: product } }
  * where a `key` is either one of the five attribute names or a gear stat code.
  *
- *   • Every LIT node adds its payload to `flat`. If a socketed glyph physically
- *     covers that node, the node's payload is multiplied by glyphPower(glyph) first —
- *     so WHERE a glyph sits determines which nodes it amplifies (the core mechanic).
+ *   • Every LIT node adds its payload to `flat`.
  *   • Every ACTIVE keystone with statKey+mult folds a ×mult into `mult`; one carrying
  *     a flat `effect` map folds those into `flat` instead.
  *
  * CRITICAL INVARIANT: an EMPTY board returns { flat:{}, mult:{} } — a true no-op,
- * byte-identical to the game without the feature, even if glyphs are socketed (they
- * cover no lit nodes) and even if the hero's attributes clear every gate (no arm is
- * entered, so no keystone ignites).
+ * byte-identical to the game without the feature, even if the hero's attributes clear
+ * every gate (no arm is entered, so no keystone ignites).
  *
  * @param {object} board
- * @param {Array<{socketId:string, value?:number, radius?:number}>} glyphs socketed glyphs
  * @param {{[attr:string]:number}} attrs live attribute totals
  * @param {typeof WEAVE} data
  */
-export function weaveStatContribution(board, glyphs, attrs, data = WEAVE) {
+export function weaveStatContribution(board, attrs, data = WEAVE) {
   const flat = {};
   const mult = {};
   const byId = nodeIndex(data);
-  const sockById = socketIndex(data);
   const lit = nodesAllocated(board).filter((id) => byId.has(id));
 
-  // Pre-resolve socketed glyphs to { center, r2, power }, skipping any with no known
-  // socket. A glyph uses its own radius if it carries one, else the socket's reach.
-  const placed = [];
-  const glyphList = Array.isArray(glyphs) ? glyphs : [];
-  for (const g of glyphList) {
-    if (!g) continue;
-    const sock = sockById.get(g.socketId);
-    if (!sock) continue;
-    const radius = (typeof g.radius === 'number' && isFinite(g.radius)) ? g.radius : sock.radius;
-    placed.push({ x: sock.x, y: sock.y, r2: radius * radius, power: glyphPower(g) });
-  }
-
-  // Node payloads → flat, amplified by any covering glyphs.
+  // Node payloads → flat.
   for (const id of lit) {
     const node = byId.get(id);
     const payload = (node && node.payload && typeof node.payload === 'object') ? node.payload : null;
     if (!payload) continue;
-    // Product of every glyph whose reach covers this node's position.
-    let m = 1;
-    for (const p of placed) {
-      const dx = node.x - p.x;
-      const dy = node.y - p.y;
-      if (dx * dx + dy * dy <= p.r2) m *= p.power;
-    }
     for (const k in payload) {
       const v = Number(payload[k]) || 0;
-      flat[k] = (flat[k] || 0) + v * m;
+      flat[k] = (flat[k] || 0) + v;
     }
   }
 
@@ -322,8 +275,6 @@ export function weaveStatContribution(board, glyphs, attrs, data = WEAVE) {
     }
   }
 
-  // Tidy the flat sums (glyph products introduce float noise).
-  for (const k in flat) flat[k] = round3(flat[k]);
   return { flat, mult };
 }
 
