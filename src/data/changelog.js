@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "small", v: "Double Strike now works with ranged weapons", by: "Jeff Louie", notes: [
+    "Double Strike's bonus hit can now trigger on ranged weapon attacks — bow shots and staff/wand bolts — not just melee swings. Bows already rolled the stat, so it finally pays off.",
+    "It stays a weapon-attack effect: cast spells still don't gain extra hits from it.",
+  ] },
   { date: "2026-07-11", size: "small", v: "History keeps every run", by: "Claude", notes: [
     "Deleting a save slot — or starting a New Game over one — now files a headstone in History first, so a past run is no longer erased along with its slot (Reset Run already did this).",
     "History holds many more runs before the oldest ones age off.",
