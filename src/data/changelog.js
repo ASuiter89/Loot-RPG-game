@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "medium", v: "Healer Blessings & the Rested bonus", by: "Jeff Louie", notes: [
+    "Every paid Full Rest now leaves you Rested — +25% XP for the next 3 floors — so the rest fee buys a lasting edge, not just topped-off bars.",
+    "The Healer now sells Blessings: costly, impactful buffs that last a few floors — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot). Only one Blessing runs at a time; buying another replaces it, and the price climbs steeply with your level.",
+    "Healer wording cleaned up — the rest still clears lingering poison as it restores you, it just no longer advertises curing curses (curses are a gear property, never a status the Healer could lift).",
+  ] },
   { date: "2026-07-11", size: "small", v: "Quick How to Play trimmed to the essentials", by: "Jeff Louie", notes: [
     "The How to Play card is now a fast getting-started guide — goal, controls, loot colours, skills & potions, and how to go deeper. Terrain footing, set pieces, hazards and the town-services rundown drop off it; all still live behind \"Open the full guide\".",
   ] },
