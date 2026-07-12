@@ -137,6 +137,15 @@ describe('authored town data', () => {
     }
   });
 
+  it('sits the Town Portal mid-clearing on the main avenue, not at the bottom edge', () => {
+    // Portaling in drops the hero out of the return portal ONTO this tile, so it must
+    // be a walkable avenue tile up in the clearing — never tucked against the bottom
+    // wall by the entrance.
+    const onAvenue = TOWN_PATHS.some((p) => p.x === TOWN_PORTAL.x && p.y === TOWN_PORTAL.y);
+    expect(onAvenue).toBe(true);
+    expect(TOWN_PORTAL.y).toBeLessThan(TOWN_SPAWN.y - 2);   // clearly above the bottom entrance
+  });
+
   it('places every service keeper on a unique interior tile', () => {
     const seen = new Set();
     for (const n of TOWN_NPCS) {
