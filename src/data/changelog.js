@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "small", v: "Unspent skill points glow on the SKILLS tab", by: "Jeff Louie", notes: [
+    "Dropped the \"N points to spend!\" text nudge on the Skills tab. When you have points waiting, the POINTS box itself now glows gold with wisps of light circling its border — the call-to-action lives right on the number.",
+    "The glow tracks whichever pool the open tab spends: skill points on Active/Passive, ascendancy points on the Path tab.",
+  ] },
   { date: "2026-07-11", size: "small", v: "Skills tab: denser trees, tighter layout", by: "Jeff Louie", notes: [
     "Skill-tree nodes are smaller and denser, matching the compact spell-slot tiles — more of a branch fits on screen at once.",
     "Removed the empty gap above every tree: the first row of skills now sits right under the tabs (and the Skill slots), instead of a wasted band below them.",

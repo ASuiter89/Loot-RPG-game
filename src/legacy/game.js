@@ -26552,7 +26552,6 @@ function renderSkills(el) {
   // passive OR path), not the passive+active total — the number tracks the tree
   // you're looking at. pointsInTree keys off the same view string as the tabs.
   const learned = pointsInTree(skillView);
-  const ptWord = onPath ? 'ascendancy point' : 'skill point';
   const asc = ascData();
   // Sub-tab selector across the three trees.
   const tabBtn = (v, label) => `<button class="sk-vtab ${skillView === v ? 'on' : ''}" onclick="setSkillView('${v}')">${label}</button>`;
@@ -26574,23 +26573,23 @@ function renderSkills(el) {
   }
 
   // The point pool sits BESIDE the class / subclass identity in a two-column strip
-  // (was three stacked full-width rows that ate vertical space). The no-points nudge
-  // is gone — the "N to spend!" call-to-action rides the identity line, and only when
-  // there is actually something to spend.
+  // (was three stacked full-width rows that ate vertical space). Unspent points are
+  // signalled by the point card ITSELF — a `.has-points` gold glow with wisps of
+  // light circling its border — rather than a "N to spend!" text nudge on the
+  // identity line, so the call-to-action lives right where the number is.
   // Class only — the ascension (e.g. Crusader) already names itself on the PATH
   // sub-tab just below, so repeating it here was redundant. The identity line is
   // centred in its box (see .sk-id).
   const idLine = `${dlIcon(cls.icon, 16)} ${cls.name}`;
-  const spend = pts > 0 ? ` · <span class="sk-spend">${pts} ${ptWord}${pts > 1 ? 's' : ''} to spend!</span>` : '';
   const header = `
     <div class="sk-head">
-      <div class="sk-pts">
+      <div class="sk-pts${pts > 0 ? ' has-points' : ''}">
         <span class="sk-pts-label">${onPath ? 'ASCENDANCY' : 'SKILL'} POINTS</span>
         <span class="sk-pts-value">${pts}</span>
       </div>
       <div class="sk-id">
         <div class="sk-id-cls">${idLine}</div>
-        <div class="sk-id-meta">${learned} learned${spend}</div>
+        <div class="sk-id-meta">${learned} learned</div>
       </div>
     </div>
     ${tabs}${branchTabs}`;
