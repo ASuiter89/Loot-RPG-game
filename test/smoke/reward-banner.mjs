@@ -120,8 +120,12 @@ async function main() {
       });
 
       // Bounty: a trivially-complete slay contract; RNG=0 makes rollTier() return
-      // the first check ('unique').
+      // the first check ('unique'). rollTier now gates colour behind the early
+      // bosses (systems/rarityGate.js), so mark the first two guardians beaten
+      // (floors 5 & 10) — otherwise every coloured tier is locked and RNG=0 would
+      // fall through to a plain normal.
       window.player.gold = 1e9;
+      window.player.bossFirstKills = Object.assign({}, window.player.bossFirstKills, { '5': 1, '10': 1 });
       window.player.bounty = { kind: 'slay', need: 0, snap: 0, gold: 5, mat: null, ilvl: 6, desc: 'test' };
       res.sources.bounty = drive(() => {
         Math.random = () => 0;
