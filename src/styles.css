@@ -1667,11 +1667,14 @@
   /* Denser nodes (5 wide × 6 bands) with a 10-pip rank gauge. */
   .sk-tree { height: 520px; }
   .sk-tnode { width: 46px; height: 46px; border-radius: 9px; }
-  /* A single branch web — and the ascendancy path tree — fills the whole panel.
-     Nodes stay compact (matching the small active-spell slot tiles) so the tree
-     reads dense rather than oversized; names sit under the icon with room to
-     breathe (the path tree shares the web's layout so its nodes read the same). */
-  .sk-tree.web .sk-tnode, .sk-tree.path .sk-tnode { width: 48px; height: 48px; }
+  /* A single branch web — and the ascendancy path tree — fills the whole panel, so
+     on desktop its nodes are roomy: names sit under the icon with room to breathe
+     (the path tree shares the web's layout so its nodes read the same). On the touch
+     layer they shrink to the compact active-spell slot size so more of a branch fits
+     a phone screen — desktop keeps the larger icons (body.touch never matches on a
+     mouse/keyboard machine, so desktop stays byte-identical to the roomy default). */
+  .sk-tree.web .sk-tnode, .sk-tree.path .sk-tnode { width: 66px; height: 66px; }
+  body.touch .sk-tree.web .sk-tnode, body.touch .sk-tree.path .sk-tnode { width: 48px; height: 48px; }
   .sk-tree.web .sk-tnode .nm, .sk-tree.path .sk-tnode .nm { font-size: 1.2rem; top: calc(100% + 3px); bottom: auto; left: -22px; right: -22px;
     max-width: none; white-space: normal; line-height: 1.05; text-shadow: 0 1px 2px var(--ink);
     background: none; padding: 0; }
