@@ -7,6 +7,17 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-12", size: "small", v: "A soft tick when you press a button", by: "Claude", notes: [
+    "Menu and panel buttons now answer a click with a soft tick, so presses feel responsive. It's clicks only — no hover noise — and rides your sound-effect volume, so mute or the Audio faders turn it off.",
+    "Only interface controls tick: moving, dashing and casting stay clean, keeping their own cues.",
+  ] },
+  { date: "2026-07-12", size: "small", v: "Gold and XP count up instead of snapping", by: "Claude", notes: [
+    "Your gold now rolls up to its new total when you cash in, and the XP bar fills up smoothly as you earn it, instead of jumping in one step — so a reward reads as a reward. Spending gold and levelling up still update instantly.",
+  ] },
+  { date: "2026-07-12", size: "small", v: "A heartbeat when death is near", by: "Claude", notes: [
+    "Drop below a quarter of your health and a low heartbeat now thumps beneath the red danger glow — and quickens the closer you are to dying, so you feel the edge coming, not just see it. It fades the instant you climb back to safety.",
+    "Rides your sound-effect volume like every other cue, and goes quiet whenever a menu pauses the game.",
+  ] },
   { date: "2026-07-11", size: "large", v: "Town opens after the Floor 5 boss — keepers arrive in waves", by: "Jeff Louie", notes: [
     "The town is now sealed until you fell the Floor 5 guardian. Until then the Town Portal is refused — the only way is down.",
     "Beat that first boss and leaving the floor carries you up into town for a one-time welcome: the townsfolk cheer, the first keepers arrive, and a Town Portal there sends you on to Floor 6.",

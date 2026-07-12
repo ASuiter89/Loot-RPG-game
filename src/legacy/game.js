@@ -58,6 +58,8 @@ import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection,
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
 import { lockedTiers } from '../systems/rarityGate.js';
 import { salvageVariance, salvageIlvlCurve, salvageRanges as salvageRangesPure } from '../systems/salvage.js';
+import { dangerLevel, heartbeatDue } from '../systems/dangerPulse.js';
+import { rollTo } from '../systems/counterRoll.js';
 import { isSsf, walletGain, walletSpend } from '../systems/ssf.js';
 import { foodGains } from '../systems/foodRestore.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
@@ -7440,6 +7442,7 @@ window.gameGuide = function gameGuide(topic) {
       `INSTANT sources land immediately, as before: deliberate active HEAL skills you cast (e.g. Divine Storm, Final Judgment, Blood Drinker) and EMERGENCY low-HP triggers (a passive that heals when you drop below 25% HP). A skill's detail card tags which kind it grants (heal — instant / leech — over time). A cast heal's SIZE now scales off SPIRIT and Spell Power (class-scaled: Mage > Templar > Rogue > Warrior) with no flat cap — so a high-Spirit healer mends far more per cast (still capped only by the HP you're actually missing).`,
       `The Health Potion mends 35% of max HP over a few seconds (Potency raises the amount; shared 6s cooldown, down to 2s via Recharge). It is INTERRUPTIBLE: one DIRECT hit above 18% of max HP spills half the remaining sip ("SIP SPILLED"). Damage-over-time (lava/poison/burn) never interrupts it, and earned leech is never interrupted — only the potion sip is fragile.`,
       `Because you can no longer burst back to full, don't wait until you're low: sip EARLY, keep moving, and let the pending pool refill the slope while you avoid the next hit.`,
+      `DANGER CUE: drop below a quarter of your max HP and the screen edges pulse red (the danger halo) while a heartbeat thumps — and quickens the closer you are to dying. It's your prompt to disengage and sip. The red glow also colour-cycles with any active poison/burn/stun. The heartbeat rides the SFX channel (mute or the Audio-tab faders silence it) and pauses when a menu holds the game.`,
       `MANA is a RATIONED resource now: a smaller pool (less MP per Spirit, lower base), higher skill costs, and slower regen — and MP regen is HALVED while you're "in combat" (a few seconds after dealing or taking damage — gameState().player.inCombat), so sustained casting genuinely drains you.`,
       `The Mana Potion restores 40% of max MP OVER TIME (gameState().player.pendingMana shows MP still incoming) and shares the health potion's cooldown — so quaffing mana means forgoing a heal, a real triage choice. Mana Shield converts damage to MP more efficiently the more you invest in it. Carry mana potions if you lean on spells.`,
     ],
@@ -7974,6 +7977,12 @@ function sfx(name) {
     case 'attack':  tone(220, 0.09, t, 'square', 0.4, 140); noise(0.05, t, 0.16); break;
     case 'crit':    tone(330, 0.13, t, 'sawtooth', 0.5, 660); tone(660, 0.13, t + 0.02, 'square', 0.3); noise(0.09, t, 0.25); break;
     case 'hurt':    tone(200, 0.18, t, 'sawtooth', 0.45, 70); break;
+    case 'heartbeat': { // soft, muffled low "lub-dub" under the low-HP danger halo — two quick thumps
+      tone(58, 0.13, t,        'sine', 0.42, 40); // lub
+      tone(52, 0.15, t + 0.15, 'sine', 0.34, 36); // dub
+      break;
+    }
+    case 'uiclick': tone(1250, 0.022, t, 'triangle', 0.13); break; // soft, short press tick for UI chrome (clicks, not hover)
     case 'kill':    tone(160, 0.18, t, 'square', 0.4, 50); noise(0.16, t, 0.28); break;
     case 'boss':    tone(90, 0.5, t, 'sawtooth', 0.5, 40); tone(120, 0.5, t + 0.05, 'square', 0.3, 55); noise(0.3, t, 0.2); break;
     case 'loot':    [523, 659, 784].forEach((f, i) => tone(f, 0.1, t + i * 0.06, 'square', 0.4)); break;
@@ -20422,7 +20431,9 @@ const HALO_COLORS = {
 const HALO_SLOT_MS = 1100; // one colour's fade-in-and-out before the next
 function activeHalos() {
   const halos = [];
-  if (player.hp > 0 && player.hp < player.maxHp * 0.25) halos.push('lowhp');
+  // Low-HP danger: the threshold lives in dangerPulse.js (DANGER_HP_FRAC) so the
+  // red halo and the heartbeat that rides it always agree on when danger begins.
+  if (dangerLevel(player.hp, player.maxHp) > 0) halos.push('lowhp');
   for (const s of statusEffects) {
     if (s.target !== 'player') continue;
     if ((s.effect === 'poison' || s.effect === 'burn' || s.effect === 'stun') && !halos.includes(s.effect))
@@ -20432,11 +20443,22 @@ function activeHalos() {
 }
 // Last written vignette styles — the halo runs every frame, so skip the CSSOM
 // writes when the computed values haven't changed (idle/paused is the common case).
-let _haloShadow = null, _haloOpacity = null;
+let _haloShadow = null, _haloOpacity = null, _lastHeartbeatAt = 0;
 function updateHaloVignette() {
   const vig = hudEl('low-hp-vignette');
   if (!vig) return;
   const halos = activeHalos();
+  // Heartbeat: while the low-HP danger halo is up, thump on a danger-scaled beat —
+  // slow and ominous just under a quarter HP, racing to a flutter near death. Runs
+  // on animNow() (the world animation clock), which freezes when a menu holds the
+  // world, so the pulse pauses with the scene. Reset the beat clock when out of
+  // danger so dropping back into the red thumps at once rather than mid-interval.
+  if (halos.includes('lowhp')) {
+    const danger = dangerLevel(player.hp, player.maxHp);
+    if (heartbeatDue(danger, animNow(), _lastHeartbeatAt)) { _lastHeartbeatAt = animNow(); sfx('heartbeat'); }
+  } else {
+    _lastHeartbeatAt = 0;
+  }
   if (!halos.length) {
     if (_haloOpacity !== '0') { _haloOpacity = '0'; vig.style.opacity = '0'; }
     return;
@@ -25962,6 +25984,16 @@ let _hpFillW = null, _mpFillW = null;       // last written fill widths (skip un
 let _hpShieldW = null;                       // last written Spirit Veil mask width (skip unchanged)
 const VITAL_EASE_TAU = 0.14;   // seconds — ease time constant for a rate-less instant sub-burst
 const VITAL_SNAP_FRAC = 0.30;  // a gain bigger than this share of max is a burst, not a trickle → snap
+// ── Rolling HUD counters (gold chip + XP bar) ──
+// The shown values ease toward the real ones every frame (rollTo, unit-tested in
+// systems/counterRoll.js) so a reward COUNTS UP instead of snapping. null → snap on
+// the first frame / a fresh load. Gains roll; a spend (gold down) or a level-up
+// (XP bar resets) SNAPS so the drop reads instantly and never unwinds backwards.
+let _goldShownF = null;   // eased HUD gold (float; display is Math.round)
+let _xpShownPct = null;   // eased XP-bar fill percent (0..100)
+let _goldTextShown = null, _xpFillW = null;   // last written strings (skip unchanged writes)
+const GOLD_ROLL = { rate: 9, minPerSec: 8 };  // gold ticks briskly; minPerSec floors small gaps
+const XP_ROLL = { rate: 10, minPerSec: 10 };  // XP bar fills a touch snappier
 // Live HP recovery rate (points/sec): passive regen while below max, plus each pending
 // heal pool draining at HEAL_DRAIN_PCT (the potion and the leech pools drain in
 // parallel — mirror drainPendingRecovery so the fill glides at the true fill rate).
@@ -26049,6 +26081,43 @@ function updateVitalFills(dt) {
       const e = hudEl(id); if (e) e.style.width = shieldW;
     }
   }
+}
+
+// The XP bar's real target fill percent (0..100) from the hero's per-level XP.
+function xpPctTarget() {
+  const need = xpForLevel(player.level);
+  return need > 0 ? Math.max(0, Math.min(100, player.xp / need * 100)) : 0;
+}
+// Write the HUD gold chip from the eased shown value (only on a changed string).
+// Shared by the per-frame roller AND updateBars() so a dirty-event refresh mid-roll
+// shows the current rolled value rather than snapping to the final gold.
+function writeHudGold() {
+  const el = document.getElementById('gold-count');
+  if (!el) return;
+  const shown = _goldShownF == null ? (player.gold || 0) : Math.round(_goldShownF);
+  const s = fmtGold(shown);
+  if (s !== _goldTextShown) { _goldTextShown = s; el.textContent = s; }
+}
+// Write both XP bars (mobile #xp-bar + desktop #dh-xp-fill) from the eased percent.
+function writeHudXp() {
+  const pct = _xpShownPct == null ? xpPctTarget() : _xpShownPct;
+  const w = Math.max(0, Math.min(100, pct)) + '%';
+  if (w === _xpFillW) return;
+  _xpFillW = w;
+  const a = document.getElementById('xp-bar'); if (a) a.style.width = w;
+  const b = document.getElementById('dh-xp-fill'); if (b) b.style.width = w;
+}
+// Ease the HUD gold chip and XP bar toward their real values every frame so a reward
+// COUNTS UP. A gain rolls; a spend (gold falls) or a level-up (the XP bar resets to a
+// low fill) SNAPS down so the drop is instant and never animates backwards.
+function updateCounterRolls(dt) {
+  if (typeof player !== 'object' || !player) return;
+  const gTarget = player.gold || 0;
+  if (_goldShownF == null || gTarget < _goldShownF) { _goldShownF = gTarget; writeHudGold(); }
+  else if (_goldShownF !== gTarget) { _goldShownF = rollTo(_goldShownF, gTarget, dt, GOLD_ROLL); writeHudGold(); }
+  const xTarget = xpPctTarget();
+  if (_xpShownPct == null || xTarget < _xpShownPct) { _xpShownPct = xTarget; writeHudXp(); }
+  else if (_xpShownPct !== xTarget) { _xpShownPct = rollTo(_xpShownPct, xTarget, dt, XP_ROLL); writeHudXp(); }
 }
 // ── Active buffs & debuffs HUD strip ────────────────────────────────────────
 // A little row of status icons showing every timed effect on the hero
@@ -26177,7 +26246,7 @@ function updateBars() {
   const dm = diffMeta();
   setPending('hp-pending', player.hp, player.maxHp, pendHeal);
   setPending('mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
-  document.getElementById('gold-count').textContent = fmtGold(player.gold);
+  writeHudGold();   // gold chip rolls up to its new value (updateCounterRolls eases it every frame)
   // Any open town / shop / mystic overlay mirrors gold + materials — keep those
   // copies current too, so a transaction never leaves a stale count behind.
   refreshWallet();
@@ -26195,8 +26264,7 @@ function updateBars() {
     dset('dh-mp-val', `${abbreviateNumber(player.mp)}/${abbreviateNumber(player.maxMp)}`);
     setPending('dh-hp-pending', player.hp, player.maxHp, pendHeal);
     setPending('dh-mp-pending', player.mp, player.maxMp, player.pendingMana || 0);
-    const dhXp = document.getElementById('dh-xp-fill');
-    if (dhXp) dhXp.style.width = Math.min(100, player.xp / xpForLevel(player.level) * 100) + '%';
+    // #dh-xp-fill width is eased by updateCounterRolls() (writeHudXp) so the XP bar fills up.
     dset('dh-xp-lvl', 'Lv ' + player.level);
     // Power now reads from the HERO tab and gold from the LOOT tab, so neither is
     // mirrored on the bottom HUD anymore; the name moved to the map-top banner.
@@ -26226,8 +26294,7 @@ function updateBars() {
     fd.style.background = dm.color + '22'; // faint tint of the tier colour behind the pill
   }
   setText('level-num', player.level);
-  const xpBar = document.getElementById('xp-bar');
-  if (xpBar) xpBar.style.width = Math.min(100, player.xp / xpForLevel(player.level) * 100) + '%';
+  writeHudXp();   // #xp-bar + #dh-xp-fill widths roll up to the new fill (eased in updateCounterRolls)
   const foeCount = (enemies || []).filter(e => !e.dead).length;
   setText('enemies-num', foeCount);
   // Seal indicator (mobile header): a locked door while hostiles block the exit,
@@ -28669,6 +28736,28 @@ document.addEventListener('click', (e) => {
     else renderHoverTip(tipEl);
   }
 });
+
+// ── UI click tick ──────────────────────────────────────────────────────────
+// A soft press cue when you activate a menu/panel control (buttons, tabs,
+// clickable rows). CLICKS ONLY — never a hover sound. We fire on `click`, not
+// pointerdown, so a scroll-start or the touch long-press-to-inspect (whose
+// synthesized click is swallowed) never ticks — only a genuine activation does.
+// Gameplay input is excluded: the map canvas isn't a matched control, and the
+// skill belt + touch movement/action controls are skipped (they carry their own
+// cues and fire in rapid succession). Rides the SFX channel like every other
+// sound, so mute / the Audio-tab faders silence it. Capture phase so it runs
+// before a handler that might reload the page or remove the clicked node.
+const UI_TICK_SKIP = '#skill-bar, #touch-cluster, #touch-hud, #touch-topbar, #joy-base, #joy-knob';
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if (!t || t.nodeType !== 1) return;
+  if (t.closest('input, textarea, select')) return;          // typing / dragging a field, not a click cue
+  const ctrl = t.closest('button, .act-btn, [role="button"], [onclick]');
+  if (!ctrl) return;                                          // not an interactive control
+  if (ctrl.disabled || ctrl.getAttribute('aria-disabled') === 'true') return;
+  if (ctrl.closest(UI_TICK_SKIP)) return;                    // gameplay controls, not UI chrome
+  sfx('uiclick');
+}, true);
 
 // Build the data-tip + handlers for a styled hover popup (the gear-card look),
 // so JS-rendered buttons share the same hover UI as everything else instead of
@@ -33934,6 +34023,7 @@ function gameLoop(ts) {
   safeStep('hudFlush', () => flushHudDirty());     // damage events mark the HUD dirty; one updateBars() lands here same-frame
   safeStep('stamina', () => renderStaminaBar());   // stamina drains/refills continuously — keep the END bar live
   safeStep('vitalBars', () => updateVitalFills(dt)); // ease HP/MP fills so over-time recovery climbs fluidly
+  safeStep('counterRolls', () => updateCounterRolls(dt)); // roll the gold chip + XP bar up to their new values
   safeStep('cdDials', () => updateCooldownDials()); // animate the skill/potion cooldown dials in real time
   safeStep('halo', () => updateHaloVignette());     // the danger halo is a DOM overlay — pulse it every frame
   safeStep('panel', () => flushPanel());            // rebuild the bag at most once per frame, only while it's on-screen
