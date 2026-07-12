@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "medium", v: "Enchanter: randomized material costs + escalating rerolls", by: "Jeff Louie", notes: [
+    "Enchanting no longer always bills the same Scrap + Glimmer + Core. Every piece now draws its OWN material mix — a small random subset of Scrap, Glimmer, Core and (new to the Enchanter) Chaos Orbs — so two pieces of the same rarity can cost quite different materials.",
+    "Rarer gear can call on the rarer materials: Core enters on rare and up, a Chaos Orb only on legendary reforges. A piece never asks for a material far rarer than itself.",
+    "Every value, modifier or full reroll now permanently raises that piece's future enchant costs — each reroll compounds the price by ~15%. Chasing a flawless roll gets steadily, then steeply, more expensive, so a huge stockpile can no longer brute-force a perfect item for cheap.",
+    "The piece's panel shows how many times it's been reforged and its current cost multiplier.",
+  ] },
   { date: "2026-07-11", size: "small", v: "Mystic: twelve pacts, a random pair per meeting, steeper multi-floor pricing", by: "Jeff Louie", notes: [
     "Six new Mystic pacts join the roster (twelve total): Swarm, Hunter's Solitude, Alchemist's, Warlord's Gambit, Ironhide Ward, and Reaper's Toll.",
     "Each mystic you find now offers just TWO pacts, drawn at random from the twelve — the choice changes every encounter, so meeting a mystic is worth a look.",
