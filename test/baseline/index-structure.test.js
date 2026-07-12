@@ -116,6 +116,42 @@ describe('enemy sprite-key integrity', () => {
   });
 });
 
+describe('History records every ended run (graveyard headstones)', () => {
+  // REGRESSION GUARD — a hero that ends via Reset Run has always earned a History
+  // headstone (recordFallenHero), but deleting a save slot or overwriting one with
+  // a New Game used to destroy the hero WITHOUT recording it, so those runs
+  // vanished from History. Every intentional slot-destruction path must file a
+  // headstone before it clears the slot. We slice each function's source and
+  // assert the record call is present.
+  const fnBody = (src, name) => {
+    const start = src.indexOf(`function ${name}(`);
+    expect(start, `missing function ${name}`).toBeGreaterThan(-1);
+    // Up to the next top-level function declaration — enough to cover the body.
+    const rest = src.slice(start + 1);
+    const next = rest.indexOf('\nfunction ');
+    return next === -1 ? rest : rest.slice(0, next);
+  };
+
+  it('files a headstone when a slot is deleted', () => {
+    expect(fnBody(game, 'deleteSlot')).toMatch(/recordFallen/);
+  });
+
+  it('files a headstone when a slot is overwritten by a New Game', () => {
+    expect(fnBody(game, 'newGameInSlot')).toMatch(/recordFallen/);
+  });
+
+  it('still files a headstone on Reset Run', () => {
+    expect(fnBody(game, 'wipeSave')).toMatch(/recordFallenHero/);
+  });
+
+  it('can record a fallen hero from a saved slot, not just the live player', () => {
+    // recordFallenHero takes a player arg (defaulting to the live `player`) so a
+    // slot you are NOT currently playing can still be recorded from its bytes.
+    expect(game).toMatch(/function recordFallenHero\(p\b/);
+    expect(game).toMatch(/function recordFallenSlot\(/);
+  });
+});
+
 describe('index.html module wiring', () => {
   it('loads the game as an ES module entry via a RELATIVE path', () => {
     // Relative paths keep the app working at any mount point — the domain root

@@ -29891,7 +29891,9 @@ function loadGame() {
 // class, name, level, deepest floor reached, gold and play-time. Newest first,
 // capped so the list can't grow without bound.
 const GRAVEYARD_KEY = 'dungeonLoot_graveyard_v1';
-const GRAVEYARD_MAX = 60;
+// History is meant to hold every run a player has ever ended, so keep the cap
+// high enough that a heavy player's older runs don't quietly fall off the list.
+const GRAVEYARD_MAX = 200;
 function loadGraveyard() {
   try { const a = JSON.parse(localStorage.getItem(GRAVEYARD_KEY)); return Array.isArray(a) ? a : []; }
   catch (e) { return []; }
@@ -29899,28 +29901,44 @@ function loadGraveyard() {
 function saveGraveyard(list) {
   try { localStorage.setItem(GRAVEYARD_KEY, JSON.stringify(list.slice(0, GRAVEYARD_MAX))); } catch (e) {}
 }
-// Record the currently-loaded hero as a fallen run, if they actually got going.
-function recordFallenHero() {
-  if (typeof player !== 'object' || !player || !saveStarted({ player })) return;
+// Record a hero as a fallen run, if they actually got going. Defaults to the
+// live `player`, but any parsed save's `.player` can be passed (with that save's
+// `dungeonLevel` as the floor fallback) so a hero deleted or overwritten from a
+// slot you're NOT currently playing still earns a headstone — History keeps every
+// ended run, not only the ones ended from the active seat.
+function recordFallenHero(p, fallbackFloor) {
+  if (p == null) p = (typeof player === 'object') ? player : null;
+  if (!p || !saveStarted({ player: p })) return;
   const list = loadGraveyard();
   // Don't double-record the same hero — replace any existing entry sharing this
   // character id with the fresher snapshot.
-  const filtered = player.cid ? list.filter(e => e.cid !== player.cid) : list;
+  const filtered = p.cid ? list.filter(e => e.cid !== p.cid) : list;
   filtered.unshift({
-    cid: player.cid || null,
-    name: player.name || null,
-    cls: (player.class && CLASSES[player.class]) ? player.class : null,
-    sex: (player.sex === 'female' || player.sex === 'male') ? player.sex : 'male',
-    asc: (player.ascension && typeof ASCENSIONS === 'object' && ASCENSIONS[player.ascension]) ? player.ascension : null,
-    level: player.level || 1,
-    floor: player.maxFloor || (typeof dungeonLevel === 'number' ? dungeonLevel : 1) || 1,
-    gold: player.maxGold || player.gold || 0,
-    playMs: player.playMs || 0,
-    hardcore: !!player.hardcore,
-    ssf: !!player.ssf,
+    cid: p.cid || null,
+    name: p.name || null,
+    cls: (p.class && CLASSES[p.class]) ? p.class : null,
+    sex: (p.sex === 'female' || p.sex === 'male') ? p.sex : 'male',
+    asc: (p.ascension && typeof ASCENSIONS === 'object' && ASCENSIONS[p.ascension]) ? p.ascension : null,
+    level: p.level || 1,
+    floor: p.maxFloor || fallbackFloor || (typeof dungeonLevel === 'number' ? dungeonLevel : 1) || 1,
+    gold: p.maxGold || p.gold || 0,
+    playMs: p.playMs || 0,
+    hardcore: !!p.hardcore,
+    ssf: !!p.ssf,
     ts: Date.now(),
   });
   saveGraveyard(filtered);
+}
+// File a headstone for the hero saved in slot `i` (if it holds a real run),
+// reading straight from its saved bytes so a slot you're NOT actively playing is
+// still recorded. Called wherever the player intentionally destroys a slot
+// (delete, or overwrite via New Game) — the same courtesy Reset Run already
+// extends, so no ended run silently vanishes from History.
+function recordFallenSlot(i) {
+  let d;
+  try { d = JSON.parse(localStorage.getItem(slotKey(i))); } catch (e) { return; }
+  if (!saveStarted(d)) return;
+  try { recordFallenHero(d.player, d.dungeonLevel); } catch (e) {}
 }
 
 // ── HARDCORE MODE (permadeath) ──────────────────────────────────────────────
@@ -30126,13 +30144,10 @@ function backfillAccountAchievements() {
 // `d` is a parsed save object; bury it as if it were the active hero.
 function hcBuryDeadSave(d, slot) {
   if (slot == null) slot = activeSlot;
-  // recordFallenHero() works off the global `player`; point it at the dead save just
-  // long enough to file the headstone (it dedups by cid, so re-burying an already-
-  // recorded hero is a harmless no-op), then always restore it.
-  const savedPlayer = player;
-  try { player = d.player; recordFallenHero(); }
-  catch (e) {}
-  finally { player = savedPlayer; }
+  // File the headstone straight from the parsed save (recordFallenHero dedups by
+  // cid, so re-burying an already-recorded hero is a harmless refresh), then scrub
+  // the playable slot locally and in the cloud.
+  try { recordFallenHero(d && d.player, d && d.dungeonLevel); } catch (e) {}
   try { localStorage.removeItem(slotKey(slot)); } catch (e) {}
   try { cloudDeleteSlot(slot); } catch (e) {}
 }
@@ -30427,6 +30442,9 @@ async function newGameInSlot(i) {
   // the outgoing hero's state, then clear the slot locally and in the cloud.
   _switchingSlot = true;
   const displaced = slotCid(i); // usually null (New Game is offered on empties), but tombstone anything real
+  // If this slot did hold a real hero we're about to overwrite, keep them in
+  // History first — the same headstone Reset Run and Delete file.
+  recordFallenSlot(i);
   try { localStorage.removeItem(slotKey(i)); } catch (e) {}
   // Tombstone any hero being overwritten and clear its cloud row first, so the boot
   // sync won't restore it and no other device resurrects it.
@@ -30455,6 +30473,10 @@ function deleteSlot(i) {
   // delete sticks across devices — no other device can resurrect it, and the boot
   // sync can't pull it back.
   const cid = slotCid(i);
+  // A deleted hero still earns a headstone — History is the record of every past
+  // run, so removing a save slot should preserve the run, not erase it (matching
+  // Reset Run). Recorded from the slot's saved bytes BEFORE the slot is cleared.
+  recordFallenSlot(i);
   if (i === activeSlot) {
     _switchingSlot = true;
     try { localStorage.removeItem(slotKey(i)); } catch (e) {}
@@ -36655,6 +36677,7 @@ const __DL_FN_BRIDGE = {
   loadGraveyard,
   saveGraveyard,
   recordFallenHero,
+  recordFallenSlot,
   loadHcMeta,
   writeHcMeta,
   hcIsDead,

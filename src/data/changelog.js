@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "small", v: "History keeps every run", by: "Claude", notes: [
+    "Deleting a save slot — or starting a New Game over one — now files a headstone in History first, so a past run is no longer erased along with its slot (Reset Run already did this).",
+    "History holds many more runs before the oldest ones age off.",
+  ] },
   { date: "2026-07-11", size: "small", v: "Bigger skill-tree icons on desktop", by: "Jeff Louie", notes: [
     "Skill-tree nodes are large again on desktop — the recent shrink now applies only on phones, where the compact size fits more of a branch on a small screen.",
   ] },
