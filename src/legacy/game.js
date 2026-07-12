@@ -12681,7 +12681,7 @@ function warpToTown() {
   captureHeldFloor();   // freeze this floor so "Return to Last Floor" can restore it
   dungeonReturn = dungeonLevel;
   bossHazards = []; bossTelegraphs = [];
-  buildTown();
+  buildTown(true);   // step out of the return portal, mid-clearing — not the bottom entrance
   sfx('stairs');
   beginPortalArrival();   // blue-pillar materialise, like any arrival
   log('<span data-spr=feat_gate_red></span> You step through the portal into town.', 'important');
@@ -12691,8 +12691,11 @@ function warpToTown() {
   saveGame();
 }
 
-// Lay out the walled town plaza and place its NPCs.
-function buildTown() {
+// Lay out the walled town plaza and place its NPCs. `atPortal` is set on a Town-
+// Portal arrival (a floor is held): the hero steps out ONTO the return portal in the
+// middle of the clearing instead of the bottom-centre entrance (used by a death
+// revive or a reload that resumes in town).
+function buildTown(atPortal = false) {
   inTown = true;
   clearGreed(); updateObjectiveChip();   // town is a safe hub — no streak/greed/chip
   startTownAmbient();  // the town comes alive with anvils, clucks, laughter…
@@ -12767,9 +12770,13 @@ function buildTown() {
   // stamped: they stay walkable so you can step straight into them.
   for (const n of townNpcs) furnitureMap[n.y + ',' + n.x] = 1;
 
-  // Materialise at the authored arrival tile (bottom-centre, by the gate avenue).
-  setPlayerCell(TOWN_SPAWN.x, TOWN_SPAWN.y);
-  player.faceDir = 'up'; player.faceDx = 0; player.faceDy = -1;  // face up the avenue toward the gate
+  // Materialise at the arrival tile. On a Town-Portal arrival you step out ONTO the
+  // return portal (townPortalPos) up in the clearing; otherwise you appear at the
+  // authored bottom-centre entrance by the gate avenue.
+  const arrival = atPortal ? townPortalPos : TOWN_SPAWN;
+  setPlayerCell(arrival.x, arrival.y);
+  if (atPortal) { player.faceDir = 'down'; player.faceDx = 0; player.faceDy = 1; }  // stepped out into the clearing
+  else { player.faceDir = 'up'; player.faceDx = 0; player.faceDy = -1; }            // face up the avenue toward the gate
   startPos = { x: player.x, y: player.y };
   // Invalidate the static-floor caches now that mapData/decor/furniture are the
   // town's (visuals + AI/path grid), per the hot-path invalidate-don't-recheck rule.

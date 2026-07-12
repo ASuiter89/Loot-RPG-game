@@ -18,10 +18,14 @@
 export const TOWN_W = 30;
 export const TOWN_H = 22;
 
-// Arrival tile (bottom-centre, on the entrance trail) and the two exits.
+// Arrival tile (bottom-centre, on the entrance trail — used on a death revive or a
+// reload that resumes in town) and the two exits.
 export const TOWN_SPAWN = { x: 15, y: 19 };
 export const TOWN_GATE = { x: 15, y: 2, name: 'Dungeon Gate' };     // walk in / interact to descend
-export const TOWN_PORTAL = { x: 12, y: 19, name: 'Town Portal' };   // shown only when a floor is held
+// The return portal sits mid-clearing on the central avenue (NOT tucked at the
+// bottom): when you portal in with a floor held you step out ONTO this tile, so the
+// way home is right where you land. Shown/interactable only when a floor is held.
+export const TOWN_PORTAL = { x: 15, y: 15, name: 'Town Portal' };
 
 // Keepers, scattered organically (no grid lines). `kind` maps 1:1 to
 // openTownService(kind); `name` is the label + prompt text. The six late-game
