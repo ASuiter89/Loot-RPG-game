@@ -58,6 +58,7 @@ import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection,
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
 import { lockedTiers } from '../systems/rarityGate.js';
 import { salvageVariance, salvageIlvlCurve, salvageRanges as salvageRangesPure } from '../systems/salvage.js';
+import { dangerLevel, heartbeatDue } from '../systems/dangerPulse.js';
 import { isSsf, walletGain, walletSpend } from '../systems/ssf.js';
 import { foodGains } from '../systems/foodRestore.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
@@ -7440,6 +7441,7 @@ window.gameGuide = function gameGuide(topic) {
       `INSTANT sources land immediately, as before: deliberate active HEAL skills you cast (e.g. Divine Storm, Final Judgment, Blood Drinker) and EMERGENCY low-HP triggers (a passive that heals when you drop below 25% HP). A skill's detail card tags which kind it grants (heal — instant / leech — over time). A cast heal's SIZE now scales off SPIRIT and Spell Power (class-scaled: Mage > Templar > Rogue > Warrior) with no flat cap — so a high-Spirit healer mends far more per cast (still capped only by the HP you're actually missing).`,
       `The Health Potion mends 35% of max HP over a few seconds (Potency raises the amount; shared 6s cooldown, down to 2s via Recharge). It is INTERRUPTIBLE: one DIRECT hit above 18% of max HP spills half the remaining sip ("SIP SPILLED"). Damage-over-time (lava/poison/burn) never interrupts it, and earned leech is never interrupted — only the potion sip is fragile.`,
       `Because you can no longer burst back to full, don't wait until you're low: sip EARLY, keep moving, and let the pending pool refill the slope while you avoid the next hit.`,
+      `DANGER CUE: drop below a quarter of your max HP and the screen edges pulse red (the danger halo) while a heartbeat thumps — and quickens the closer you are to dying. It's your prompt to disengage and sip. The red glow also colour-cycles with any active poison/burn/stun. The heartbeat rides the SFX channel (mute or the Audio-tab faders silence it) and pauses when a menu holds the game.`,
       `MANA is a RATIONED resource now: a smaller pool (less MP per Spirit, lower base), higher skill costs, and slower regen — and MP regen is HALVED while you're "in combat" (a few seconds after dealing or taking damage — gameState().player.inCombat), so sustained casting genuinely drains you.`,
       `The Mana Potion restores 40% of max MP OVER TIME (gameState().player.pendingMana shows MP still incoming) and shares the health potion's cooldown — so quaffing mana means forgoing a heal, a real triage choice. Mana Shield converts damage to MP more efficiently the more you invest in it. Carry mana potions if you lean on spells.`,
     ],
@@ -7974,6 +7976,11 @@ function sfx(name) {
     case 'attack':  tone(220, 0.09, t, 'square', 0.4, 140); noise(0.05, t, 0.16); break;
     case 'crit':    tone(330, 0.13, t, 'sawtooth', 0.5, 660); tone(660, 0.13, t + 0.02, 'square', 0.3); noise(0.09, t, 0.25); break;
     case 'hurt':    tone(200, 0.18, t, 'sawtooth', 0.45, 70); break;
+    case 'heartbeat': { // soft, muffled low "lub-dub" under the low-HP danger halo — two quick thumps
+      tone(58, 0.13, t,        'sine', 0.42, 40); // lub
+      tone(52, 0.15, t + 0.15, 'sine', 0.34, 36); // dub
+      break;
+    }
     case 'kill':    tone(160, 0.18, t, 'square', 0.4, 50); noise(0.16, t, 0.28); break;
     case 'boss':    tone(90, 0.5, t, 'sawtooth', 0.5, 40); tone(120, 0.5, t + 0.05, 'square', 0.3, 55); noise(0.3, t, 0.2); break;
     case 'loot':    [523, 659, 784].forEach((f, i) => tone(f, 0.1, t + i * 0.06, 'square', 0.4)); break;
@@ -20422,7 +20429,9 @@ const HALO_COLORS = {
 const HALO_SLOT_MS = 1100; // one colour's fade-in-and-out before the next
 function activeHalos() {
   const halos = [];
-  if (player.hp > 0 && player.hp < player.maxHp * 0.25) halos.push('lowhp');
+  // Low-HP danger: the threshold lives in dangerPulse.js (DANGER_HP_FRAC) so the
+  // red halo and the heartbeat that rides it always agree on when danger begins.
+  if (dangerLevel(player.hp, player.maxHp) > 0) halos.push('lowhp');
   for (const s of statusEffects) {
     if (s.target !== 'player') continue;
     if ((s.effect === 'poison' || s.effect === 'burn' || s.effect === 'stun') && !halos.includes(s.effect))
@@ -20432,11 +20441,22 @@ function activeHalos() {
 }
 // Last written vignette styles — the halo runs every frame, so skip the CSSOM
 // writes when the computed values haven't changed (idle/paused is the common case).
-let _haloShadow = null, _haloOpacity = null;
+let _haloShadow = null, _haloOpacity = null, _lastHeartbeatAt = 0;
 function updateHaloVignette() {
   const vig = hudEl('low-hp-vignette');
   if (!vig) return;
   const halos = activeHalos();
+  // Heartbeat: while the low-HP danger halo is up, thump on a danger-scaled beat —
+  // slow and ominous just under a quarter HP, racing to a flutter near death. Runs
+  // on animNow() (the world animation clock), which freezes when a menu holds the
+  // world, so the pulse pauses with the scene. Reset the beat clock when out of
+  // danger so dropping back into the red thumps at once rather than mid-interval.
+  if (halos.includes('lowhp')) {
+    const danger = dangerLevel(player.hp, player.maxHp);
+    if (heartbeatDue(danger, animNow(), _lastHeartbeatAt)) { _lastHeartbeatAt = animNow(); sfx('heartbeat'); }
+  } else {
+    _lastHeartbeatAt = 0;
+  }
   if (!halos.length) {
     if (_haloOpacity !== '0') { _haloOpacity = '0'; vig.style.opacity = '0'; }
     return;

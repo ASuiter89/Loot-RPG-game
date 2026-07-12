@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-12", size: "small", v: "A heartbeat when death is near", by: "Claude", notes: [
+    "Drop below a quarter of your health and a low heartbeat now thumps beneath the red danger glow — and quickens the closer you are to dying, so you feel the edge coming, not just see it. It fades the instant you climb back to safety.",
+    "Rides your sound-effect volume like every other cue, and goes quiet whenever a menu pauses the game.",
+  ] },
   { date: "2026-07-11", size: "large", v: "Town opens after the Floor 5 boss — keepers arrive in waves", by: "Jeff Louie", notes: [
     "The town is now sealed until you fell the Floor 5 guardian. Until then the Town Portal is refused — the only way is down.",
     "Beat that first boss and leaving the floor carries you up into town for a one-time welcome: the townsfolk cheer, the first keepers arrive, and a Town Portal there sends you on to Floor 6.",
