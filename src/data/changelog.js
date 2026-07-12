@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "small", v: "Bigger skill-tree icons on desktop", by: "Jeff Louie", notes: [
+    "Skill-tree nodes are large again on desktop — the recent shrink now applies only on phones, where the compact size fits more of a branch on a small screen.",
+  ] },
   { date: "2026-07-11", size: "large", v: "Ascendant Weave: bigger board, more keystones, glyphs gone", by: "Jeff Louie", notes: [
     "Retired glyphs and sockets entirely — no more hunting deep Endless for gems to slot. The board's power now comes purely from the nodes you light and the keystones you ignite, so the whole system reads at a glance.",
     "Every arm grows from three rings to four — seven nodes each, ending in a deep apex pair — so there's far more to pour boss points into as your pool grows.",
