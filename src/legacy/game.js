@@ -143,6 +143,9 @@ import { planReconcile, planSlotPush, freshDelMeta, sanitizeDelMeta, isTombstone
 import { freshStash, sanitizeStash, mergeStash, depositGold, withdrawGold, depositMaterial, withdrawMaterial, materialsValue, foldHeroMaterials } from '../persistence/stashSync.js';
 import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
 import { mercCost } from '../systems/mercPricing.js';
+import { PROSPECTOR_LOTS, REFINE_CHAIN } from '../data/prospector.js';
+import { unitPrice as prospectorUnitPrice, lotPrice as prospectorLotPrice,
+  refineCost as prospectorRefineCost, refineYield as prospectorRefineYield } from '../systems/prospector.js';
 import { heroSilhouetteTint, ENEMY_SILHOUETTE_TINT } from '../data/silhouetteTints.js';
 import { elementOf, paletteFor, castArchetype, weaponArchetype, projectileElement, bossFxFor,
   archetypeIsProjectile, castSignature, clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
@@ -1184,6 +1187,7 @@ const TOWN_NPC_ART = {
   bounty: "data:image/png;base64,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",
   marks: "data:image/png;base64,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",
   warden: "data:image/png;base64,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",
+  prospector: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAAwCAYAAABHTnUeAAACgUlEQVR42u2dMUvDQBiGO4uIiHQoIiKdHIpIp07iWMHJSZwdHDp3EFwcHZwcxcHB2UGcxMEf4CT+BH+CW+QCX41nkiZn9b7LPS+8YC8Oz/vmu5KmrbZaCCGEEEIIIYQQQghFp/mFTlJmGqL/xgYwfJej7VKHkIH+CeDMP9rrlVo7P/0T4NfDk8c93FqZWHMG+icA/PATAH74CVDjBWNvbbmWtb2wpH8CzHRg6thnBvr31H9TBij7zOhiBijO/psRIOe++fPFQfL+MP5hs26s6b46/Su4lAs+gJXFMK4szaUWdnks/NqY6Z8AM+WfNkD0T/+NHiD44Y8ugOF6vL/9ZmG21zVnoH8CzITd9vnZeOJQMtA/AeCHnwDww0+AEvaT/U0na8pA/wRwYje+Gu2kFq5hfz11v9tOLY/l+OFgLbWWN8PonwBO7MJcl9+sGX7J4vuzQPTv6bNAIQdw5Rf2UPnpnwDO/Obn7DMoAxRv/9ENkLCHvAHonwBO/JIhyy+/I/7vDPTvt//oBsjmz2Yz1sxP/wRw4v94HSdvd8NC/tOXJIgNQP8EKOXfWF3KtWE3zjsm3MndLgMUYf+NGKDXm6PU9r10+/IgO0By/WyYn66PGaBI+2/EAP2W3/clBP23w94AXgNYXyeMcQPQf+wBrMuJOvwavltL/0q+2xx6gCy/fevQvp2Y5W8pEf0rOQF58EUhtP51BftZsWhNGzv9KwiQB1oUoqVQVU9ASOz07xG+yjFOAP2zARRlGGx8WU6AvUb/9F85QNk6J+Dvu696nP7ZAClnt7P4zUVrbAD6rxwgpBB5twdD+Edz0zoOaSOH2H9pgOBCBKppHXMOEEIIIdEniWFuZ+enJDoAAAAASUVORK5CYII=",
   // Endgame service keepers — front-facing 4-frame walk strips (192x48), same
   // format as the townsfolk above; keyed by service kind so townWalkIcon()
   // and drawTownWalk() animate them like the built-in NPCs.
@@ -6588,6 +6592,11 @@ let townShopStock = null;
 // can't dodge the surcharge by leaving and re-entering the shop; resets on a new
 // town visit alongside townShopStock.
 let townRestocks = 0;
+// How many of each crafting material you've BOUGHT from the Prospector this town
+// visit — each buy compounds that material's price (see prospector.unitPrice), so
+// you can't drain the trader cheaply in one sitting. Resets on a new town visit
+// alongside townShopStock/townRestocks.
+let prospectorBought = {};
 let mystic = null;    // { x, y } — the Wandering Mystic, when present this floor
 let pact = null;      // active pact: { id, icon, name, desc, floors, fx } or null
 let hasFountain = false;
@@ -6722,6 +6731,7 @@ const TOWN_SVC_TAG = {
   merchant: 'ic_money', forge: 'ic_mallet', healer: 'ic_heart', mystic: 'ic_orb',
   trainer: 'ic_wand', gambler: 'ic_coffer', enchanter: 'ic_wand', stash: 'ic_coffer',
   ramen: 'ramen_bowl', transmuter: 'mat_chaos', mirrorforge: 'mat_core', sellsword: 'w_sword',
+  prospector: 'mat_scrap',
   bounty: 'ic_target', covenants: 'ic_cursed', weave: 'ui_spirit', pantheon: 'ui_power',
   cycles: 'ic_up', deeds: 'ui_trophy', gate: 'feat_gate_red', portal: 'feat_portal',
 };
@@ -7533,7 +7543,8 @@ window.gameGuide = function gameGuide(topic) {
       `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1, 5 or 10 floors (more damage/loot/gold, or an easier stretch). Each mystic offers just TWO pacts, rolled at random from twelve, so the choice changes every time you find one; a longer pact costs MORE per floor (the price climbs exponentially with floors sealed). gameState().npcs lists the two pacts a nearby mystic offers. Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Sellsword (Brutal+): hire a combat companion for 1/10/30 floors. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentle bulk discount, so a long hire stays a serious sum). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (Hardened+): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
-      `Every keeper stands in the town from the start, but a service unlocks as you progress: Healer, Merchant, Ramen House and Vault are open immediately; Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked keeper stands GREYED with a padlock badge and, on interact, announces its unlock requirement instead of opening. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
+      `Prospector (level 5+): trades GOLD for raw crafting materials, and refines commons up a tier. BUY Scrap, Glimmer, Core or Chaos Orbs outright — the price climbs steeply with the material's rarity, grows with the deepest floor you've reached, and rises a little with every purchase you make this visit (resetting when you next enter town) — a bulk lot is priced flat, so it's always the cheapest way to buy a quantity. You can only buy a material your progression could already DROP — the same difficulty gate as kills (Scrap/Glimmer from Normal, Core from Hardened, Chaos from Brutal) — so it tops up what you farm, never a tier you couldn't yet earn. REFINE fuses a stack of a common material into ONE of the next tier up (Scrap→Glimmer→Core→Chaos); it's deliberately lossy, so it never beats simply buying the rarer material — it's a way to spend an overflow of commons. Bought/refined materials land in your shared stash pool (or an SSF hero's private wallet), same as drops.`,
+      `Every keeper stands in the town from the start, but a service unlocks as you progress: Healer, Merchant, Ramen House and Vault are open immediately; Craftsman & Prospector at level 5; Gambler at depth 10; Trainer & Enchanter at level 10; Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened (conquer Normal); Sellsword on reaching Brutal. A locked keeper stands GREYED with a padlock badge and, on interact, announces its unlock requirement instead of opening. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim its reward. Each contract pays a DIFFERENT MIX of 1–3 rewards — gold, a crafting material (any of scrap/glimmer/core/chaos, scaled by depth), a lump of XP, or a gear piece scaled to your depth (the toughest boss contracts guarantee a rarer piece) — and a contract paying fewer things pays more of each. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract, its live progress (including menu.bounty.done once it's ready to claim), and menu.bounty.rewards listing exactly what it pays. In town, clicking the belt's BOUNTY module opens the board (even with no active contract).`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
@@ -12662,6 +12673,7 @@ function buildTown() {
   quest = null; teleporters = {}; shrineData = {};
   floorThemeOverride = null; floorIslandTheme = null; furnitureMap = {}; decorMap = {}; // town is never an indoor/island floor
   townShopStock = null; townRestocks = 0; // fresh merchant wares + reset restock surcharge each town visit
+  prospectorBought = {}; // reset the Prospector's per-visit material-price surcharge too
   traps = []; projectiles = []; bossHazards = []; bossTelegraphs = []; clearAttackFx(); // real-time hazards / fx never linger into town
   hasFountain = false; groundKey = null; hasKey = false; deepStair = null; vaultInfo = null;
   floorMod = FLOOR_MODS[0]; floorTint = 'rgba(120,90,40,0.10)';
@@ -12826,6 +12838,106 @@ function hireMerc(id, floors) {
   sfx('buy');
   log(`<span data-spr=a_shield></span> Hired ${t.name} — <span data-spr=ic_money></span>${fmtGold(cost)}, joins for ${dur.floors} floor${dur.floors === 1 ? '' : 's'}.`, 'important');
   updateBars(); renderMercCamp(); saveGame();
+}
+
+// ══════════════════════════════════════════
+// PROSPECTOR (materials trader — buy raw crafting materials for gold, and refine
+// commons up into rarer ones)
+// ══════════════════════════════════════════
+// A grizzled dealer in the raw stuff of crafting. BUY any material your progression
+// already lets you earn — the difficulty gate that governs kill-drops still holds,
+// so you can top up Scrap/Glimmer/Core/Chaos but never buy a tier you couldn't yet
+// drop. Or REFINE a surplus of a common material up into one of the next tier. The
+// pricing + refine ratios are pure math in src/systems/prospector.js; spends go
+// through the shared gold/material wallet helpers. Each buy this visit compounds
+// that material's price (prospectorBought, reset in buildTown).
+function openProspector() { openTownModal('Prospector', 'mat_scrap'); renderProspector(); }
+// Whether the hero's DEEPEST difficulty lets them buy `mat` — the SAME gate as
+// kill-drops (MATERIAL_MIN_DIFF), so the trader never sells a tier your progress
+// couldn't produce. Returns { ok, needName } (the difficulty to reach if locked).
+function prospectorBuyable(mat) {
+  const need = MATERIAL_MIN_DIFF[mat] || 1;
+  const reached = diffOf(player.maxFloor || 1);
+  return { ok: reached >= need, needName: (DIFFS[need - 1] || {}).name || 'a deeper tier' };
+}
+function renderProspector() {
+  const depth = player.maxFloor || 1;
+  const mats = heroMaterials();
+  // ── Buy: one row per material, priced by rarity, depth reached and how many of
+  // it you've already bought this visit. A locked tier shows what to reach instead.
+  const buyRows = CRAFT_MAT_KEYS.map((k) => {
+    const mat = CRAFT_MATERIALS[k];
+    const icon = `<span class="loot-icon"><span data-spr=mat_${k}></span></span>`;
+    const gate = prospectorBuyable(k);
+    if (!gate.ok) {
+      return `<div class="shop-row has-actions cant-afford">
+        ${icon}
+        <div class="shop-row-info"><div class="shop-row-name" style="color:${mat.color}">${mat.name}</div>
+          <div class="shop-row-sub"><span data-spr=feat_lock></span> Reach ${gate.needName} to buy ${mat.name}.</div></div>
+      </div>`;
+    }
+    const bought = prospectorBought[k] || 0;
+    const unit = prospectorUnitPrice(k, depth, bought);
+    const lots = PROSPECTOR_LOTS[k] || [1];
+    const buttons = lots.map((q) => {
+      const cost = prospectorLotPrice(k, q, depth, bought);
+      const afford = spendableGold() >= cost;
+      return `<button class="act-btn sm ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="prospectorBuy('${k}', ${q})">+${q}&nbsp;<span data-spr=ic_money></span>${fmtGold(cost)}</button>`;
+    }).join('');
+    return `<div class="shop-row has-actions">
+      ${icon}
+      <div class="shop-row-info"><div class="shop-row-name" style="color:${mat.color}">${mat.name} <span style="opacity:0.6;font-weight:normal">· have&nbsp;${abbreviateNumber(mats[k] || 0)}</span></div>
+        <div class="shop-row-sub"><span data-spr=ic_money></span>${fmtGold(unit)}&nbsp;each</div></div>
+      <div class="row-actions">${buttons}</div>
+    </div>`;
+  }).join('');
+  // ── Refine: spend N of a material to forge 1 of the next tier up. A lossy
+  // upcycle for a surplus of commons (ratios in systems/prospector.js).
+  const refineRows = REFINE_CHAIN.map((k) => {
+    const need = prospectorRefineCost(k);
+    if (need == null) return ''; // top tier — nothing above Chaos Orb
+    const up = prospectorRefineYield(k);
+    const from = CRAFT_MATERIALS[k], to = CRAFT_MATERIALS[up];
+    const have = mats[k] || 0;
+    const can = have >= need;
+    return `<div class="shop-row has-actions ${can ? '' : 'cant-afford'}">
+      <span class="loot-icon"><span data-spr=mat_${up}></span></span>
+      <div class="shop-row-info"><div class="shop-row-name">Refine <span style="color:${to.color}">${to.name}</span></div>
+        <div class="shop-row-sub"><span class="${can ? '' : 'cost-short'}">${need}<span data-spr=mat_${k}></span></span> → 1<span data-spr=mat_${up}></span> · have&nbsp;${abbreviateNumber(have)} ${from.name}</div></div>
+      <button class="act-btn ${can ? '' : 'short'}" ${can ? '' : 'disabled'} onclick="prospectorRefine('${k}')">Refine</button>
+    </div>`;
+  }).join('');
+  setTownContent(`
+    <div class="town-blurb">The Prospector deals in the raw stuff of the deep. Buy crafting materials outright for gold — the price climbs with rarity, with how far you've delved, and a little with every purchase you make this visit — or refine a surplus of a common material up into a scarcer one.</div>
+    <div class="cook-sec"><span data-spr=ic_money></span> Buy materials</div>
+    ${buyRows}
+    <div class="cook-sec"><span data-spr=mat_glimmer></span> Refine up a tier</div>
+    <div class="town-blurb" style="opacity:0.8">Fuse a stack of a common material into one of the next tier up — a way to spend an overflow of Scrap you'll never craft with. Deliberately lossy, so it never beats simply buying the rarer material.</div>
+    ${refineRows}`);
+}
+function prospectorBuy(mat, qty) {
+  if (!prospectorBuyable(mat).ok) { sfx('denied'); return; }
+  qty = Math.max(1, qty | 0);
+  const purchases = prospectorBought[mat] || 0;
+  const cost = prospectorLotPrice(mat, qty, player.maxFloor || 1, purchases);
+  if (spendableGold() < cost) { log(`Need <span data-spr=ic_money></span>${fmtGold(cost)} for ${qty}× ${CRAFT_MATERIALS[mat].name}.`); sfx('denied'); return; }
+  spendGold(cost);
+  gainMaterial(mat, qty);
+  prospectorBought[mat] = purchases + 1; // one more PURCHASE this visit (markup is per-buy, not per-unit)
+  sfx('buy');
+  log(`<span data-spr=mat_${mat}></span> Bought ${qty}× ${CRAFT_MATERIALS[mat].name} — <span data-spr=ic_money></span>${fmtGold(cost)}.`, 'loot');
+  updateBars(); renderProspector(); saveGame();
+}
+function prospectorRefine(mat) {
+  const need = prospectorRefineCost(mat);
+  const up = prospectorRefineYield(mat);
+  if (need == null || !up) return;
+  if ((heroMaterials()[mat] || 0) < need) { log(`Need ${need} ${CRAFT_MATERIALS[mat].name} to refine.`); sfx('denied'); return; }
+  spendCost({ [mat]: need });
+  gainMaterial(up, 1);
+  sfx('buy');
+  log(`<span data-spr=mat_${up}></span> Refined ${need} ${CRAFT_MATERIALS[mat].name} into 1 ${CRAFT_MATERIALS[up].name}.`, 'loot');
+  updateBars(); renderProspector(); saveGame();
 }
 
 // ══════════════════════════════════════════
@@ -13305,6 +13417,7 @@ function openTownService(kind) {
   if (kind === 'ramen')   { openRamen();   return; }
   if (kind === 'gate')    { openGate();    return; }
   if (kind === 'sellsword') { openMercCamp();  return; }
+  if (kind === 'prospector'){ openProspector(); return; }
   if (kind === 'transmuter'){ openTransmuter(); return; }
   if (kind === 'bounty')  { openBounty();    return; }
   // ── Endgame services ──
@@ -13341,6 +13454,8 @@ const TOWN_MENU = [
     req: { ok: () => (player.level || 1) >= 10,         need: 'Reach level 10' } },
   { kind: 'enchanter', name: 'Enchanter',   desc: 'Add & reroll affixes',
     req: { ok: () => (player.level || 1) >= 10,         need: 'Reach level 10' } },
+  { kind: 'prospector', name: 'Prospector',  desc: 'Trade gold for materials',
+    req: { ok: () => (player.level || 1) >= 5,          need: 'Reach level 5' } },
   { kind: 'transmuter',       name: 'Transmuter',  desc: 'Fuse 3 items into 1 rarer',
     req: { ok: () => diffOf(player.maxFloor || 1) >= 2, need: 'Reach Hardened' } },
   { kind: 'bounty',      name: 'Bounty Board',desc: 'Take a bounty for a reward',
@@ -36079,6 +36194,11 @@ const __DL_FN_BRIDGE = {
   openMercCamp,
   renderMercCamp,
   hireMerc,
+  openProspector,
+  prospectorBuyable,
+  renderProspector,
+  prospectorBuy,
+  prospectorRefine,
   transmuteCost,
   openTransmuter,
   renderTransmuter,

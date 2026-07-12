@@ -43,6 +43,7 @@ export const TOWN_NPCS = [
   { x: 25, y: 7, kind: 'healer', name: 'Healer' },
   { x: 21, y: 11, kind: 'gambler', name: 'Gambler' },
   { x: 7, y: 13, kind: 'forge', name: 'Craftsman' },
+  { x: 9, y: 12, kind: 'prospector', name: 'Prospector' },
   { x: 24, y: 14, kind: 'bounty', name: 'Bounty Board' },
   { x: 4, y: 16, kind: 'transmuter', name: 'Transmuter' },
   { x: 20, y: 16, kind: 'enchanter', name: 'Enchanter' },
