@@ -22443,8 +22443,10 @@ function attackEnemy(e, opts = {}) {
   // Double Strike (gear): a chance for a free extra swing at the main target. A rating
   // on the asymptotic curve — rated(DBLSTRIKE, SCALE) climbs toward but never reaches a
   // guaranteed second hit, so stacking it always helps and never wastes past 100%.
+  // Applies to any weapon attack, melee OR ranged (the second shot resolves at the
+  // same target); spells never reach this path — they resolve through applyOffenseMods.
   const dbl = rated(totalStat('DBLSTRIKE'), DBLSTRIKE_SCALE);
-  if (dbl > 0 && !ranged && !e.dead && Math.random() < dbl) {
+  if (dbl > 0 && !e.dead && Math.random() < dbl) {
     const before = dealtTotal;
     swing(e);
     if (dealtTotal > before) {
