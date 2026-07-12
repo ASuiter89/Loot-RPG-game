@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-11", size: "small", v: "Loot bag filter tabs name their category on hover", by: "Claude", notes: [
+    "Hovering a filter tab in the LOOT bag now pops a tip naming that category — All, Weapon, Off-Hand, Head, Chest, Hands, Legs, Ring, Amulet — and the kinds of gear it holds, so the icon-only tabs are no longer a guess.",
+  ] },
   { date: "2026-07-11", size: "small", v: "Settings menu fits the screen — no more page-scrolling", by: "Jeff Louie", notes: [
     "A tall Settings tab (like Visuals) now anchors near the top of the screen and stretches to use the full height, instead of opening centred with its bottom hanging off the edge.",
     "No more double scrollbar: the page behind the card no longer scrolls — only the card scrolls, and only when its options genuinely can't all fit at once.",

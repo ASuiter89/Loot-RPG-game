@@ -151,6 +151,7 @@ import { elementOf, paletteFor, castArchetype, weaponArchetype, projectileElemen
   archetypeIsProjectile, castSignature, clamp01, easeOutCubic, easeInCubic, easeOutBack, bump } from '../systems/vfx.js';
 import { UNIQUES, uniqueForBase, uniquesForSlot } from '../data/uniques.js';
 import { ITEM_SETS } from '../data/itemSets.js';
+import { LOOT_CATEGORY_BLURB } from '../data/lootCategories.js';
 import { setPieceCount, setComplete as setIsComplete, setStatContribution,
   rollSetPiece } from '../systems/itemSets.js';
 import { isBestiaryFieldKnown, speciesDiscovered, bestiaryRevealRatio, emptyDex, sanitizeDex, foldLegacyBestiary, recordKill } from '../systems/bestiary.js';
@@ -26406,12 +26407,23 @@ function renderPanel() {
     // paints for that slot (SLOTS[s].sprite), falling back to the flat vector
     // icon only while the atlas is still loading.
     const slotTabIcon = s => dlIcon(SLOTS[s].sprite, 16) || iconMarkup(SLOT_ICONS[s], ICON_EMPTY_COLOR, false);
+    // Each slot tab is icon-only, so a hover tip is the only place its category name is
+    // spelled out. Build the card from SLOTS (label + sprite) and the LOOT_CATEGORY_BLURB
+    // copy; icons use the [data-spr] form (not dlIcon) because hoverTip() quote-escapes the
+    // card, which would mangle the quoted attributes dlIcon emits.
+    const subtabTip = key => {
+      const line = `<div class='ht-line'>${LOOT_CATEGORY_BLURB[key]}</div>`;
+      const head = key === 'all'
+        ? `<div class='ht-name'>All Loot</div>`
+        : `<div class='ht-name'><span data-spr=${SLOTS[key].sprite}></span> ${SLOTS[key].label}</div>`;
+      return head + line;
+    };
     const tabDefs = [{ key: 'all', icon: '', name: 'All', n: inventory.length }];
     SLOT_KEYS.forEach(s => {
       tabDefs.push({ key: s, icon: slotTabIcon(s), name: '', n: counts[s] || 0 });
     });
     const subtabs = '<div class="loot-subtabs">' + tabDefs.map(t =>
-      `<button class="loot-subtab ${lootFilter===t.key?'active':''}" onclick="setLootFilter('${t.key}')">${t.icon}${t.name}<span class="st-count">${t.n}</span></button>`
+      `<button class="loot-subtab ${lootFilter===t.key?'active':''}" onclick="setLootFilter('${t.key}')" ${hoverTip(subtabTip(t.key))}>${t.icon}${t.name}<span class="st-count">${t.n}</span></button>`
     ).join('') + '</div>';
     // Sort + stat-filter controls: two dropdown buttons, each opening an inline
     // options panel below the row (so nothing floats over the list on mobile).
