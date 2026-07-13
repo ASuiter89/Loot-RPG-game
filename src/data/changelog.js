@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-12", size: "small", v: "Town button unveiled on your first visit; tidier arrivals banner", by: "Claude", notes: [
+    "Town Portal button hidden until you first reach the camp; then it appears and glows that visit so you spot the new button.",
+    "First town arrival adds a welcome — the townsfolk thank you and point out you can teleport back any time.",
+    "Keeper-arrival popup is a rounded bar (was a giant circle); multi-keeper text no longer spills past the border.",
+  ] },
   { date: "2026-07-12", size: "small", v: "Townsfolk stop overlapping each other", by: "Claude", notes: [
     "Strolling keepers steer around one another — no two ever stand on the same tile.",
     "Wanderers never stray into the endgame sanctum; that hedged grove stays the endgame keepers' own.",

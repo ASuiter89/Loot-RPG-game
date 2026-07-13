@@ -577,14 +577,17 @@
     100% { opacity: 0; transform: scale(1.02); }
   }
 
-  /* Town-keeper ARRIVALS banner — a small pill that slides down from the top when a
-     fresh wave of townsfolk unlocks (fires even mid-dungeon), then fades. Gold-lit to
-     read as a happy, welcoming event, distinct from the big center-screen banners. */
+  /* Town-keeper ARRIVALS banner — a horizontal bar with rounded corners that slides
+     down from the top when a fresh wave of townsfolk unlocks (fires even mid-dungeon),
+     then fades. Gold-lit to read as a happy, welcoming event, distinct from the big
+     center-screen banners. A modest corner radius (not a pill) keeps multi-keeper
+     titles — which wrap to two or three lines — squarely inside the border instead of
+     spilling past a giant rounded end. */
   #npc-banner {
     position: fixed; top: 10px; left: 50%; z-index: 322;
     transform: translate(-50%, -140%); opacity: 0;
     pointer-events: none; display: flex; align-items: center; gap: 12px;
-    max-width: min(92vw, 460px); padding: 9px 16px; border-radius: var(--radius-pill);
+    max-width: min(92vw, 460px); padding: 9px 16px; border-radius: var(--radius-lg);
     background: color-mix(in srgb, var(--panel) 92%, transparent);
     border: 1px solid color-mix(in srgb, var(--gold) 60%, var(--frame));
     box-shadow: 0 6px 22px color-mix(in srgb, var(--ink) 55%, transparent),
@@ -1822,6 +1825,17 @@
   }
   .skillbar-btn.town.channeling { border-color: var(--blue-300); background: var(--blue-800); color: var(--blue-100); animation: portalCharging 1s ease-in-out infinite; }
   .action-btn.town-action.channeling { animation: portalCharging 1s ease-in-out infinite; }
+  /* First-visit highlight: the Town Portal button is brand new the very first time
+     the hero reaches the camp, so it pulses a warm gold to draw the eye. Only lit
+     during that first town visit (see townIntroGlow). While in the hub the button is
+     inert & greyed (town-locked) — the .town-new override below lifts that dimming so
+     the glow still reads as a bright, obvious "new button". */
+  @keyframes townNewGlow {
+    0%,100% { box-shadow: 0 0 4px color-mix(in srgb, var(--gold) 40%, transparent);  border-color: var(--gold); }
+    50%     { box-shadow: 0 0 14px 2px color-mix(in srgb, var(--gold) 85%, transparent); border-color: var(--gold-350); }
+  }
+  .skillbar-btn.town.town-new { animation: townNewGlow 1.3s ease-in-out infinite; }
+  .skillbar-btn.town.town-new.town-locked { opacity: 0.9; filter: none; animation: townNewGlow 1.3s ease-in-out infinite; }
 
   /* ── DESKTOP BOTTOM HUD (flanking HP/MP bars) ──
      Shown only on the web layout (the desktop media query flips it on, places it
