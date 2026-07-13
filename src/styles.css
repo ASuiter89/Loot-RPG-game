@@ -954,7 +954,7 @@
   #death-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--magenta-800) 78%, transparent); z-index: 500; display: none; align-items: center; justify-content: center; padding: 20px; }
   #death-overlay.open { display: flex; animation: deathFade 0.35s ease; }
   @keyframes deathFade { from { opacity: 0; } to { opacity: 1; } }
-  #death-card { background: linear-gradient(180deg, var(--magenta-750), var(--ink)); border: 2px solid var(--red-800); border-radius: 12px; max-width: 400px; width: 100%; max-height: calc(100dvh - 40px); overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 22px 18px; text-align: center; box-shadow: 0 0 40px color-mix(in srgb, var(--hp) 50%, transparent); }
+  #death-card { background: linear-gradient(180deg, var(--magenta-750), var(--ink)); border: 2px solid var(--red-800); border-radius: 12px; max-width: 540px; width: 100%; max-height: calc(100dvh - 40px); overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 24px 28px; text-align: center; box-shadow: 0 0 40px color-mix(in srgb, var(--hp) 50%, transparent); }
   .death-title { color: var(--hp); font-size: 2.6rem; font-weight: bold; letter-spacing: 3px; text-shadow: 0 0 12px color-mix(in srgb, var(--hp) 70%, transparent); margin-bottom: 8px; }
   .death-sub { font-size: 1.4rem; color: var(--normal); line-height: 1.45; margin-bottom: 14px; }
   .death-sub b { color: var(--gold-350); }
