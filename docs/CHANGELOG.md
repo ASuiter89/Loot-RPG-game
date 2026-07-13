@@ -8,6 +8,17 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Tooling — hands-off PR pipeline (auto-open on push)
+
+- 🏗️ New `.github/workflows/auto-pr.yml`: a push to a `claude/*` branch opens its
+  PR into `main` (idempotent) and dispatches `auto-merge.yml`, so a session's job
+  ends at "push" — CI opens the PR and merges it on green. Closes the loop
+  push → auto-pr → auto-merge → deploy with no human step. Uses the built-in
+  `GITHUB_TOKEN`, or an `AUTO_PR_TOKEN` PAT secret when the repo's "Actions may
+  create PRs" setting is unavailable.
+- 📄 `CLAUDE.md` PR rule + feature checklist updated: sessions don't open or ask
+  about the PR — a green, pushed branch is "done".
+
 ## Feature — Floor-5 town unlock; keeper waves; strolling townsfolk
 
 - 📦 New leaf module `src/systems/townWander.js`: pure helpers for the town's
