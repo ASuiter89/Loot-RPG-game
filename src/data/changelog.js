@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-12", size: "small", v: "Townsfolk stop overlapping each other", by: "Claude", notes: [
+    "Strolling keepers steer around one another — no two ever stand on the same tile.",
+    "Wanderers never stray into the endgame sanctum; that hedged grove stays the endgame keepers' own.",
+  ] },
   { date: "2026-07-12", size: "small", v: "Roomier death recap", by: "Claude", notes: [
     "Death screen widened so the killed-by line and damage recap stop cramping.",
     "Damage recap now reads '196 (1 hit)'; was 'over 1 hit'.",

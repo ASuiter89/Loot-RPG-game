@@ -121,6 +121,14 @@ export const TOWN_SERVICE_WAVES = {
 // in the open clearing are the ones who get randomized spots and stroll about.
 export const TOWN_ENDGAME_KINDS = ['covenants', 'weave', 'pantheon', 'mirrorforge', 'deeds', 'cycles'];
 
+// Bounding box (inclusive tile coords) of the hedged endgame sanctum — the grove the
+// six endgame keepers occupy, walled by the hedge with a single south doorway. This
+// is the one region a wandering regular keeper must NEVER stroll into: buildTown
+// blocks it from the wander free-set, and updateTownNpcs double-guards on it, so the
+// open-clearing folk keep out of the endgame grove. Keep it covering every hedge tile
+// and every endgame-keeper tile (a data test enforces both).
+export const TOWN_SANCTUM = { x0: 3, y0: 3, x1: 11, y1: 10 };
+
 // Slow-stroll tuning for the wandering regular keepers (buildTown + updateTownNpcs).
 // speed in tiles/sec (unhurried amble); radius is how far (Chebyshev) a keeper drifts
 // from its arrival spot; dwell is the pause (seconds) between steps.

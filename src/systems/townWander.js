@@ -21,23 +21,28 @@ export function randomDistinctTiles(freeTiles, n, rng) {
 // The walkable orthogonal neighbours of `cur` that stay within Chebyshev `radius`
 // of `home` (so a keeper drifts around its own patch, never across the whole camp).
 // `isFree(x,y)` reports whether a tile is a legal wander tile (interior, off decor,
-// outside the sanctum). Diagonal-free so a stroll never clips a wall corner.
-export function wanderNeighbors(cur, home, radius, isFree) {
+// outside the sanctum). Optional `isBlocked(x,y)` rejects a tile that's momentarily
+// taken — a tile another keeper is standing on or heading to — so two townsfolk never
+// amble onto the same tile. Diagonal-free so a stroll never clips a wall corner.
+export function wanderNeighbors(cur, home, radius, isFree, isBlocked) {
   const out = [];
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   for (const [dx, dy] of dirs) {
     const nx = cur.x + dx, ny = cur.y + dy;
     if (Math.abs(nx - home.x) > radius || Math.abs(ny - home.y) > radius) continue;
     if (!isFree(nx, ny)) continue;
+    if (isBlocked && isBlocked(nx, ny)) continue;
     out.push({ x: nx, y: ny });
   }
   return out;
 }
 
 // Choose the keeper's next step (an adjacent walkable tile within its patch), or
-// null when it's boxed in and should simply wait. Deterministic for a seeded rng.
-export function pickWanderTarget(cur, home, radius, isFree, rng) {
-  const opts = wanderNeighbors(cur, home, radius, isFree);
+// null when it's boxed in and should simply wait. `isBlocked` (optional) fences off
+// tiles other keepers occupy or have claimed, so a keeper never steps onto another.
+// Deterministic for a seeded rng.
+export function pickWanderTarget(cur, home, radius, isFree, rng, isBlocked) {
+  const opts = wanderNeighbors(cur, home, radius, isFree, isBlocked);
   if (!opts.length) return null;
   return opts[Math.floor(rng() * opts.length)];
 }
