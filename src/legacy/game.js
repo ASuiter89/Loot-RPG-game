@@ -94,8 +94,8 @@ import { renderProcMap } from '../render/procTerrain.js';
 import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
 import { TOWN_W, TOWN_H, TOWN_SPAWN, TOWN_GATE, TOWN_PORTAL,
   TOWN_PATHS, TOWN_NPCS, TOWN_DECOR, TOWN_DECOR_FAMILIES,
-  TOWN_SERVICE_WAVES, TOWN_ENDGAME_KINDS, TOWN_WANDER } from '../data/townLayout.js';
-import { townObjects, nearestInteractable, pickDecorVariant, reachableTiles } from '../systems/townLayout.js';
+  TOWN_SERVICE_WAVES, TOWN_ENDGAME_KINDS, TOWN_WANDER, TOWN_SANCTUM } from '../data/townLayout.js';
+import { townObjects, nearestInteractable, pickDecorVariant, reachableTiles, inSanctum } from '../systems/townLayout.js';
 import { randomDistinctTiles, pickWanderTarget, joinNames } from '../systems/townWander.js';
 import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
 import { SKILL_ICON_COLS, SKILL_ICON_ROWS, SKILL_ICON_TS, SKILL_ICON_INDEX, SKILL_ICON_ATLAS } from '../assets/skillIconsAtlas.js';
@@ -12845,7 +12845,7 @@ function buildTown(atPortal = false) {
   // Free tiles a wanderer may occupy: interior, off any solid decor/furniture, outside
   // the sanctum grove (reserved for the fixed endgame keepers), and off the spawn/gate/
   // portal — then keep only those actually reachable from the arrival tile.
-  const sanctum = (x, y) => x >= 3 && x <= 11 && y >= 3 && y <= 10;
+  const sanctum = (x, y) => inSanctum(x, y, TOWN_SANCTUM);
   const reserved = new Set([
     TOWN_SPAWN.x + ',' + TOWN_SPAWN.y,
     townGatePos.x + ',' + townGatePos.y,
@@ -33794,7 +33794,10 @@ function glideActor(a, tx, ty, dt) {
 // allocation) and only runs while the walkable town is on screen.
 function updateTownNpcs(dt) {
   if (!inTown || !townNpcs.length) return;
-  const isFree = (x, y) => townFreeSet != null && townFreeSet.has(x + ',' + y);
+  // A legal wander tile is a reachable free tile that is NOT inside the endgame
+  // sanctum — the free-set already excludes the grove, but re-checking here keeps
+  // the strolling keepers out of the endgame room even if that set ever drifts.
+  const isFree = (x, y) => townFreeSet != null && townFreeSet.has(x + ',' + y) && !inSanctum(x, y, TOWN_SANCTUM);
   for (const n of townNpcs) {
     if (!n.wander) continue;
     const dx = n.tx - n.fx, dy = n.ty - n.fy;
@@ -33805,7 +33808,18 @@ function updateTownNpcs(dt) {
       n.fx = n.tx; n.fy = n.ty; n.x = n.tx; n.y = n.ty;
       n.dwell -= dt;
       if (n.dwell <= 0) {
-        const next = pickWanderTarget({ x: n.x, y: n.y }, { x: n.homeX, y: n.homeY }, TOWN_WANDER.radius, isFree, Math.random);
+        // Every OTHER keeper's tile is off-limits — both where it stands now (x,y) and
+        // where it's headed (tx,ty) — so two townsfolk never amble onto the same tile
+        // or cross straight through each other. Includes the standing (stall) keepers
+        // and the fixed endgame keepers, so a wanderer never overlaps them either.
+        const taken = new Set();
+        for (const o of townNpcs) {
+          if (o === n) continue;
+          taken.add(o.x + ',' + o.y);
+          taken.add(o.tx + ',' + o.ty);
+        }
+        const isBlocked = (x, y) => taken.has(x + ',' + y);
+        const next = pickWanderTarget({ x: n.x, y: n.y }, { x: n.homeX, y: n.homeY }, TOWN_WANDER.radius, isFree, Math.random, isBlocked);
         if (next) { n.tx = next.x; n.ty = next.y; }
         n.dwell = TOWN_WANDER.dwellMin + Math.random() * (TOWN_WANDER.dwellMax - TOWN_WANDER.dwellMin);
       }

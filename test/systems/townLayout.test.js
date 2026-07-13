@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   expandPaths, townObjects, nearestInteractable, pickDecorVariant,
-  reachableTiles, isApproachable,
+  reachableTiles, isApproachable, inSanctum,
 } from '../../src/systems/townLayout.js';
 import {
   TOWN_W, TOWN_H, TOWN_SPAWN, TOWN_GATE, TOWN_PORTAL,
   TOWN_PATHS, TOWN_NPCS, TOWN_DECOR, TOWN_DECOR_FAMILIES,
+  TOWN_SANCTUM, TOWN_ENDGAME_KINDS,
 } from '../../src/data/townLayout.js';
 import { DECOR_INDEX } from '../../src/assets/decorAtlas.js';
 
@@ -87,6 +88,21 @@ describe('pickDecorVariant', () => {
   });
   it('handles a single-element list', () => {
     expect(pickDecorVariant([42], 3, 9)).toBe(42);
+  });
+});
+
+describe('inSanctum', () => {
+  const b = { x0: 3, y0: 3, x1: 11, y1: 10 };
+  it('is true on the corners and interior of the inclusive box', () => {
+    expect(inSanctum(3, 3, b)).toBe(true);
+    expect(inSanctum(11, 10, b)).toBe(true);
+    expect(inSanctum(7, 7, b)).toBe(true);
+  });
+  it('is false just outside every edge', () => {
+    expect(inSanctum(2, 5, b)).toBe(false);   // west of x0
+    expect(inSanctum(12, 5, b)).toBe(false);  // east of x1
+    expect(inSanctum(7, 2, b)).toBe(false);   // north of y0
+    expect(inSanctum(7, 11, b)).toBe(false);  // south of y1
   });
 });
 
@@ -190,6 +206,17 @@ describe('authored town data', () => {
       if (border && !hedges.has(key(x, y))) gaps++;
     }
     expect(gaps).toBe(1);
+  });
+
+  it('TOWN_SANCTUM bounds enclose the whole grove — every hedge tile and endgame keeper, no regular one', () => {
+    // The wander guard keys off TOWN_SANCTUM (buildTown blocks it from the free-set,
+    // updateTownNpcs re-checks it), so the box must cover the entire endgame room. If
+    // it ever fell short of the hedge or a keeper, a strolling townsperson could slip
+    // into the endgame grove — this pins the bounds to the authored layout.
+    const inBox = (x, y) => inSanctum(x, y, TOWN_SANCTUM);
+    for (const d of TOWN_DECOR.filter((dd) => dd.c === 'h')) expect(inBox(d.x, d.y)).toBe(true);
+    const endgame = new Set(TOWN_ENDGAME_KINDS);
+    for (const n of TOWN_NPCS) expect(inBox(n.x, n.y)).toBe(endgame.has(n.kind));
   });
 
   it('every decor entry resolves to a real atlas piece and is in bounds', () => {

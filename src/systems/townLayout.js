@@ -79,3 +79,11 @@ export function isApproachable(o, reach) {
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   return dirs.some((d) => reach.has((o.x + d[0]) + ',' + (o.y + d[1])));
 }
+
+// Is tile (x,y) inside the endgame sanctum's inclusive bounding box `b`
+// ({x0,y0,x1,y1}, e.g. TOWN_SANCTUM)? The endgame keepers own this hedged grove;
+// buildTown walls it off from the wander free-set and updateTownNpcs re-checks it,
+// so a strolling regular keeper never wanders into the endgame room.
+export function inSanctum(x, y, b) {
+  return x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
+}

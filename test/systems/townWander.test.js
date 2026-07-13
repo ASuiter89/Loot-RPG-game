@@ -67,6 +67,20 @@ describe('wanderNeighbors', () => {
     const out = wanderNeighbors({ x: 5, y: 5 }, { x: 5, y: 5 }, 3, allFree);
     for (const t of out) expect(Math.abs(t.x - 5) + Math.abs(t.y - 5)).toBe(1);
   });
+
+  it('excludes tiles another keeper occupies (isBlocked) so two never overlap', () => {
+    const isBlocked = (x, y) => (x === 6 && y === 5) || (x === 5 && y === 6);
+    const out = wanderNeighbors({ x: 5, y: 5 }, { x: 5, y: 5 }, 3, allFree, isBlocked);
+    expect(out.some((t) => t.x === 6 && t.y === 5)).toBe(false);
+    expect(out.some((t) => t.x === 5 && t.y === 6)).toBe(false);
+    expect(out).toEqual(expect.arrayContaining([{ x: 4, y: 5 }, { x: 5, y: 4 }]));
+    expect(out).toHaveLength(2);
+  });
+
+  it('treats an omitted isBlocked as "nothing taken" (back-compatible)', () => {
+    const out = wanderNeighbors({ x: 5, y: 5 }, { x: 5, y: 5 }, 3, allFree, undefined);
+    expect(out).toHaveLength(4);
+  });
 });
 
 describe('pickWanderTarget', () => {
@@ -85,6 +99,23 @@ describe('pickWanderTarget', () => {
   it('is deterministic for a seeded stream', () => {
     expect(pickWanderTarget({ x: 2, y: 2 }, { x: 2, y: 2 }, 2, () => true, mulberry32(5)))
       .toEqual(pickWanderTarget({ x: 2, y: 2 }, { x: 2, y: 2 }, 2, () => true, mulberry32(5)));
+  });
+
+  it('never targets a tile a neighbouring keeper occupies', () => {
+    // Three of the four neighbours are taken by other keepers; only (4,5) is open, so
+    // every pick must land there — the keeper can never step onto another.
+    const taken = new Set(['6,5', '5,6', '5,4']);
+    const isBlocked = (x, y) => taken.has(x + ',' + y);
+    const rng = mulberry32(3);
+    for (let i = 0; i < 25; i++) {
+      const t = pickWanderTarget({ x: 5, y: 5 }, { x: 5, y: 5 }, 3, () => true, rng, isBlocked);
+      expect(t).toEqual({ x: 4, y: 5 });
+    }
+  });
+
+  it('waits (returns null) when every neighbour is taken by another keeper', () => {
+    const isBlocked = () => true;
+    expect(pickWanderTarget({ x: 5, y: 5 }, { x: 5, y: 5 }, 3, () => true, mulberry32(1), isBlocked)).toBeNull();
   });
 });
 
