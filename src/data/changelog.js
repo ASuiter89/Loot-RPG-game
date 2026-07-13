@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-12", size: "small", v: "Roomier death recap", by: "Claude", notes: [
+    "Death screen widened so the killed-by line and damage recap stop cramping.",
+    "Damage recap now reads '196 (1 hit)'; was 'over 1 hit'.",
+  ] },
   { date: "2026-07-12", size: "small", v: "A soft tick when you press a button", by: "Claude", notes: [
     "Menu and panel buttons now answer a click with a soft tick, so presses feel responsive. It's clicks only — no hover noise — and rides your sound-effect volume, so mute or the Audio faders turn it off.",
     "Only interface controls tick: moving, dashing and casting stay clean, keeping their own cues.",

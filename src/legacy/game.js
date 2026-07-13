@@ -25338,7 +25338,7 @@ function deathSummaryLines() {
   const ranked = Object.keys(totals).map(l => ({ label: l, amount: totals[l].amount, hits: totals[l].hits })).sort((a, b) => b.amount - a.amount);
   const lines = ['<span data-spr=ic_cursed></span> Killed by <b>' + killer.label + '</b> &mdash; ' + abbreviateNumber(killer.amount) + ' dmg'];
   const top = ranked.slice(0, 4);
-  for (const r of top) lines.push(r.label + ': ' + abbreviateNumber(r.amount) + ' over ' + r.hits + ' hit' + (r.hits === 1 ? '' : 's'));
+  for (const r of top) lines.push(r.label + ': ' + abbreviateNumber(r.amount) + ' (' + r.hits + ' hit' + (r.hits === 1 ? '' : 's') + ')');
   if (ranked.length > top.length) lines.push('&hellip;and ' + (ranked.length - top.length) + ' more');
   return lines;
 }
