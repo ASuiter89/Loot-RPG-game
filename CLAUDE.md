@@ -55,21 +55,25 @@ lives in `src/legacy/game.js` and shrinks as code is extracted.)
     nothing buried by z-index or pushed off-screen). Verify the extremes (a ~280px
     cover screen and an ~840px foldable), not just one phone width.
   - Touch is verified end-to-end by `test/smoke/touch-controls.mjs` — keep it green.
-- **Pull latest `main` before starting; work on a branch and open a PR — never
+- **Pull latest `main` before starting; work on a `claude/*` branch — never
   commit straight to `main`.** Make reasonable decisions and implement them; land
-  every change through a feature branch + PR so GitHub gates the merge. Resolve
+  every change through a feature branch so GitHub gates the merge. Resolve
   conflicts yourself, keeping both sides' intent. Only stop to ask if a request is
   genuinely impossible or self-contradictory.
-  - **ALWAYS open a PR when you finish — then see it MERGED; don't stop at an open
-    PR.** Once the work is committed, pushed, and green, open the PR into `main` (no
-    need to ask first). A `claude/*` PR then auto-merges via
-    `.github/workflows/auto-merge.yml`, which re-runs the full gate suite against the
-    PR head and squash-merges only on green. That workflow fires on the PR event
-    **and** on a 15-minute `schedule` sweep — the sweep is the backstop, because
-    GitHub silently drops the per-PR `pull_request` event often enough that, without
-    it, PRs are never evaluated and pile up open (this is exactly what stranded a
-    batch of PRs before 2026-07-12). Pushing the branch is not "done", and neither is
-    an open PR; a *merged* PR is.
+  - **You don't open the PR, and you NEVER ask permission to — CI opens it. Your
+    turn is done when the branch is committed, pushed, and green.** Pushing a
+    `claude/*` branch triggers `.github/workflows/auto-pr.yml`, which opens the PR
+    into `main`; `.github/workflows/auto-merge.yml` then re-runs the full gate suite
+    against the PR head and squash-merges only on green, and `deploy.yml` ships the
+    result. Auto-merge fires on the PR event **and** on a 15-minute `schedule` sweep
+    — the sweep is the backstop, because GitHub silently drops the per-PR
+    `pull_request` event often enough that, without it, PRs are never evaluated and
+    pile up open (this stranded a batch before 2026-07-12). The session harness may
+    carry a standing "don't open a PR unless the user asks" rule; that's fine and no
+    longer blocks anything — you are not the one opening it, so just push and stop.
+    **Never end a turn by asking the human to open, approve, or merge the PR** —
+    that's the exact stall this pipeline exists to remove. (Opening one by hand is
+    harmless if you ever want to; it flows into the same auto-merge.)
   - **A stalled PR is yours to finish — don't leave it dirty.** Every change adds a
     `CHANGELOG` entry at the top of the same array, so any two PRs open at once
     conflict on `src/data/changelog.js` — only the first can merge cleanly; the rest
@@ -325,8 +329,10 @@ Apply this proactively on every UI change.
 8. **Verify green:** `npm test`, `npm run build`, `npm run smoke` — all pass and the
    game boots. Update `docs/CHANGELOG.md` if you moved code between modules.
 9. **Commit** with a clear message (`feat:`/`fix:`/`balance:`/`ui:`/`refactor:`/
-   `docs:`), **push the branch, open a PR into `main`**, resolve any conflicts, and
-   merge once green.
+   `docs:`) and **push the branch — that's done.** `auto-pr.yml` opens the PR into
+   `main` and `auto-merge.yml` merges it once green; don't open or ask about the PR
+   yourself. If your PR later goes dirty (usually a `changelog.js` collision),
+   rebase onto latest `main` and push again.
 
 ## Before pushing
 
