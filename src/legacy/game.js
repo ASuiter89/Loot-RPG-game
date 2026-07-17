@@ -20717,7 +20717,7 @@ function screenFlash(color) {
 }
 
 // Big, unmissable LEVEL UP banner that pops in the center of the screen and
-// fades out, pointing the player to the bag to spend their fresh stat points.
+// fades out, nudging the player to spend their fresh hero (attribute) and skill points.
 let levelupBannerTimer;
 function showLevelUpBanner(level) {
   const el = document.getElementById('levelup-banner');
@@ -20727,7 +20727,7 @@ function showLevelUpBanner(level) {
   // The "spend your points" hint only teaches the first few levels — after that
   // it's just a nag, so drop it and let the banner simply celebrate the level.
   const sub = el.querySelector('.lvl-sub');
-  if (sub) sub.innerHTML = level <= 3 ? `Open the ${dlIcon('chest', 14)} BAG → HERO tab to spend your points!` : '';
+  if (sub) sub.innerHTML = level <= 3 ? 'Spend your hero and skill points!' : '';
   // Restart the animation cleanly even if banners stack from multi-level gains.
   el.classList.remove('show');
   void el.offsetWidth; // force reflow so the animation re-triggers

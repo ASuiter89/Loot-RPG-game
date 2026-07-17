@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "Level-up hint names hero & skill points", by: "Claude", notes: [
+    "Level-up banner reads \"Spend your hero and skill points!\" (was HERO-tab only).",
+  ] },
   { date: "2026-07-16", size: "small", v: "Ramp finishing touches for new heroes", by: "Claude", notes: [
     "A new hero's first skill auto-casts itself, so there's less cooldown juggling early.",
     "Arrow traps hold off until floor 6, fire vents until floor 9; trap-themed floors wait too.",
