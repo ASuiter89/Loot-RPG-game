@@ -123,15 +123,14 @@ export const HINTS = {
     text: `Out of Mana for that skill — it regenerates over time (slower in a fight).`,
     wiki: 'mana',
   },
-  // First shrine met. (Copy stays neutral — the hero must read the shrine's kind;
-  // a blood shrine costs Health.)
+  // First shrine stepped on (shrines activate on contact; a blood shrine costs Health).
   shrine: {
-    text: `A <b>shrine</b> — walk up to read its boon before you take it; some ask a price.`,
+    text: `A <b>shrine</b>'s boon is now yours — watch the log for its effect. Some shrines cost Health.`,
     wiki: 'shrines',
   },
-  // First fountain met.
+  // First fountain used (heals on contact).
   fountain: {
-    text: `A <b>fountain</b> fully heals you once — save it for when you're hurt.`,
+    text: `A <b>fountain</b> fully restored you — each works once, so save the next for when you're hurt.`,
     wiki: 'shrines',
   },
   // First teleporter pad.
@@ -149,16 +148,8 @@ export const HINTS = {
     text: `A <b>cracked wall</b> — strike it a few times to break through to what's sealed behind.`,
     wiki: 'vaults',
   },
-  // First greed / cursed floor prompt.
-  greed: {
-    text: `A <b>greed</b> pact: tougher foes for doubled loot. Take it only when you're strong.`,
-    wiki: 'special-floors',
-  },
-  // First boss gate (the seal-the-arena confirm).
-  bossGate: {
-    text: `Every 5th floor is a <b>boss</b> — the arena seals until it falls or you do.`,
-    wiki: 'boss-floors',
-  },
+  // (The greed / cursed-floor prompt and the boss-gate confirm are world-pausing
+  // overlays that already explain themselves, so they need no separate chip.)
   // First treasure goblin.
   goblin: {
     text: `A <b>treasure goblin</b> — it flees, then drops a jackpot. Chase it down before it escapes.`,

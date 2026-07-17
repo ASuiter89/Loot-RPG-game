@@ -966,6 +966,8 @@
   .dc-head b { color: var(--gold-350); }
   .dc-list { display: flex; flex-direction: column; gap: 3px; background: color-mix(in srgb, var(--ink) 25%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent); border-radius: 7px; padding: 7px 9px; }
   .dc-row { font-size: 1.3rem; color: var(--red-150); text-align: left; }
+  /* Ramp: a teaching tip on the death screen for a Guided hero. */
+  .dc-tip { font-size: 1.3rem; color: var(--info); text-align: left; margin-top: 8px; line-height: 1.4; }
   #death-penalties { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
   .death-pen { font-size: 1.4rem; color: var(--red-150); }
   .death-btn { background: var(--red-800); border: 1px solid var(--red-350); color: var(--paper); font-family: var(--font-ui); font-size: 1.5rem; letter-spacing: 1px; padding: 9px 22px; border-radius: 8px; cursor: pointer; }
@@ -1673,6 +1675,26 @@
     color: var(--blue-350); font-family: inherit; font-size: 1.2rem; letter-spacing: .3px; cursor: pointer;
     -webkit-tap-highlight-color: transparent; touch-action: manipulation; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sk-vtab.on { border-color: var(--interactive); background: var(--panel-raised); color: var(--purple-50); box-shadow: 0 0 8px color-mix(in srgb, var(--interactive) 40%, transparent); }
+  /* Ramp: for a new hero's first few level-ups, ACTIVE & PASSIVE glow with a wisp
+     ring to point at where skill points are spent. Reuses the --sk-wisp animation. */
+  .sk-vtab-glow { position: relative; border-color: color-mix(in srgb, var(--gold-350) 55%, var(--panel));
+    animation: sk-pts-glow 1.9s ease-in-out infinite; }
+  .sk-vtab-glow::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none;
+    background: conic-gradient(from var(--sk-wisp),
+      transparent 0deg,
+      color-mix(in srgb, var(--gold-350) 90%, transparent) 28deg,
+      transparent 66deg,
+      transparent 180deg,
+      color-mix(in srgb, var(--gold-200) 80%, transparent) 208deg,
+      transparent 246deg,
+      transparent 360deg);
+    -webkit-mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    mask-composite: exclude;
+    animation: sk-wisps 3.4s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { .sk-vtab-glow, .sk-vtab-glow::before { animation: none; } }
   /* Branch (specialization) sub-tabs under PASSIVE/ACTIVE — one per build path. */
   /* Auto-fitting grid: tiles size to hold the full branch name and wrap onto a
      second row when they won't all fit across, so names are never cut off. */
@@ -4864,6 +4886,8 @@
   }
   #tutorial-hint .th-text { flex: 1 1 auto; min-width: 0; }
   #tutorial-hint b { color: var(--gold); }
+  /* "Learn more ›" affordance on a ramp hint chip — links to the wiki article. */
+  #tutorial-hint .th-more { color: var(--info); white-space: nowrap; opacity: 0.9; }
   @keyframes tutHintIn {
     from { opacity: 0; transform: translateX(-50%) translateY(8px); }
     to   { opacity: 1; transform: translateX(-50%) translateY(0); }

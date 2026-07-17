@@ -7,6 +7,14 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-16", size: "medium", v: "Guided intro — hints, glows & a starter checklist for new heroes", by: "Claude", notes: [
+    "New heroes start Guided; a CLASSIC toggle on the name screen skips it all (for veterans).",
+    "First-encounter hints appear once each — shrines, fountains, teleporters, vault doors, the Spirit Veil, and more.",
+    "A starter checklist rides the objective chip until you're rolling; SKILLS tabs glow your first few level-ups.",
+    "Early tooltips read simpler; the crafting-material strip stays hidden until you own some.",
+    "The first boss winds up slower with a 'Watch out!' on its first telegraph.",
+    "Death screen adds a tip matched to what got you.",
+  ] },
   { date: "2026-07-16", size: "large", v: "New heroes ease in — a gentler opening ramp", by: "Claude", notes: [
     "First floors breathe: fewer, softer foes on 1–5, climbing to full strength by floor 6.",
     "No elites or elite affixes before floor 4; foes shrug no damage school until floor 8.",
