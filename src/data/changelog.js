@@ -7,6 +7,14 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-16", size: "large", v: "New heroes ease in — a gentler opening ramp", by: "Claude", notes: [
+    "First floors breathe: fewer, softer foes on 1–5, climbing to full strength by floor 6.",
+    "No elites or elite affixes before floor 4; foes shrug no damage school until floor 8.",
+    "Early gear (dropped below floor 5) needs no attributes to wear; requirements begin at floor 5.",
+    "Loot kinds stagger — set & cursed pieces ~floor 10, one-of-a-kind uniques by floor 12.",
+    "Hotbar slots open as you descend (1→2 at 3, →3 at 8, →4 at 13); second weapon set at floor 20.",
+    "Pacing keys on deepest floor reached — a returning hero and every existing save is unchanged.",
+  ] },
   { date: "2026-07-12", size: "small", v: "Town button unveiled on your first visit; tidier arrivals banner", by: "Claude", notes: [
     "Town Portal button hidden until you first reach the camp; then it appears and glows that visit so you spot the new button.",
     "First town arrival adds a welcome — the townsfolk thank you and point out you can teleport back any time.",

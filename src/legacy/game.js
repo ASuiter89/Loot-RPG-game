@@ -57,6 +57,14 @@ import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMa
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
 import { lockedTiers } from '../systems/rarityGate.js';
+import {
+  rampDepth, featureUnlocked, unlockedSkillSlots, elitesAllowed, gearRequirementsActive,
+  setItemsAllowed, cursedItemsAllowed, uniqueItemsAllowed, loadoutSwapUnlocked,
+  detailedTooltips, hazardAllowed, earlyRelief, earlyPackCap,
+  firstHint, keeperIntro, starterChain, tip as rampTip, deathTip as rampDeathTip,
+  rampStatus,
+} from '../systems/onboarding.js';
+import { HINTS, KEEPER_INTRO } from '../data/onboarding.js';
 import { salvageVariance, salvageIlvlCurve, salvageRanges as salvageRangesPure } from '../systems/salvage.js';
 import { dangerLevel, heartbeatDue } from '../systems/dangerPulse.js';
 import { rollTo } from '../systems/counterRoll.js';
@@ -4663,6 +4671,10 @@ function attrReqValue(ilvl, w, tier) {
 // (non-gear, or an unrecognisable legacy item → fail OPEN so a save never bricks).
 function itemAttrReq(item) {
   if (!item) return null;
+  // Ramp: gear that dropped on the opening floors carries NO attribute gate, so a
+  // new hero equips freely before the requirement game begins. Keyed on the item's
+  // own level (stable per-item), so a piece never retroactively becomes unwearable.
+  if (player.guided && !gearRequirementsActive(item.ilvl)) return null;
   let def = null;
   if (item.slot === 'weapon') {
     const sub = weaponSubType(item);
@@ -6346,6 +6358,16 @@ let player = { x: 5, y: 5,
   // by buildTown on the first arrival (persisted); the transient `townIntroGlow`
   // module flag lights the freshly-revealed button through that first visit.
   townVisited: false,
+  // ── ONBOARDING / RAMP (see src/data/onboarding.js + systems/onboarding.js) ──
+  // `guided` is the master switch chosen at hero creation: a Guided hero (the
+  // default) gets the full ramp — gentler opening floors, staggered mechanics, and
+  // a teaching layer of first-encounter hints, tab glows, keeper intros, a starter
+  // checklist and death-screen tips. A Classic hero sets it false and plays the
+  // unramped game (byte-identical to before). Existing saves migrate to Classic on
+  // load, so a veteran is never re-taught. `taught` latches each one-time hint /
+  // intro so it fires at most once; `levelUpsSeen` counts early level-ups (the
+  // first few glow the skill tabs); `starterDone` retires the starter checklist.
+  guided: true, taught: {}, levelUpsSeen: 0, starterDone: false,
   // ── ENDGAME state (a fresh hero starts empty; loadGame() migrates old saves) ──
   covenantsActive: [],        // Dread Covenants sworn for the next descent
   dreadGrid: {},              // per-class "highest Dread cleared" checklist
@@ -7247,6 +7269,13 @@ window.gameState = function gameState(radius) {
       mult: (typeof floorGreed !== 'undefined' ? floorGreed : 1),
       pending: ovOpen('greed-overlay'),
     },
+    // Onboarding RAMP: what the progressive introduction still has gated at this
+    // hero's depth (deepest floor reached). A brand-new hero eases in — fewer/softer
+    // foes, no elites or gear requirements yet, loot kinds and hotbar slots staged
+    // in — and everything opens by the floors named in gameGuide("onboarding"). A
+    // deep save has it all unlocked. `guided` is the teaching layer (hints/tours);
+    // Classic heroes set it false. See gameGuide("onboarding").
+    ramp: Object.assign({ guided: !!player.guided }, rampStatus(player.maxFloor)),
     // Menu / DOM-panel state, so an agent never has to read the bag, shop or
     // town screen off the rendered pixels. `i` indexes into the live list.
     menu: {
@@ -7634,6 +7663,11 @@ window.gameGuide = function gameGuide(topic) {
       `A window you leave OPEN but stop playing goes idle after a minute (or the moment its tab is hidden): while idle it stops writing and stops mirroring saves, so it can't overwrite newer progress. The instant you return and play again — or switch back to its tab — it re-checks the account first and pulls down anything a second device advanced, reloading into that newer copy if needed. So it's safe to leave the game open on one machine and keep playing on another; come back and it catches up instead of clobbering.`,
       `Use Settings ▸ Account ▸ Sync Now to force an immediate reconcile. Because a stale tab defers to the account, the safe habit across devices is simply: play, then let the other device catch up on its own when you return to it.`,
     ],
+    onboarding: [
+      `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Classic when you create the hero (gameState().ramp.guided).`,
+      `Opening-floor content pacing (Normal, floors 1–25): foes are fewer and softer on floors 1–5 and climb to full strength by floor 6; the first crowds are capped small. No glowing ELITES or elite affixes until floor 4. Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13). The second weapon LOADOUT (and its swap button) is introduced on floor 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
+      `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
+    ],
   };
   if (topic == null) return Object.assign({ topics: Object.keys(G) }, G);
   const t = String(topic).toLowerCase().replace(/[^a-z]/g, '');
@@ -7668,6 +7702,7 @@ window.gameGuide = function gameGuide(topic) {
     drive: 'driving', driving: 'driving', api: 'driving', act: 'driving', acting: 'driving', input: 'driving',
     cloud: 'cloud', cloudsave: 'cloud', cloudsaves: 'cloud', save: 'cloud', saves: 'cloud', saving: 'cloud', sync: 'cloud', syncing: 'cloud', account: 'cloud', login: 'cloud', signin: 'cloud', crossdevice: 'cloud', device: 'cloud', devices: 'cloud', backup: 'cloud', idle: 'cloud', afk: 'cloud',
     tip: 'tips', strategy: 'tips', help: 'overview', start: 'overview', intro: 'overview', goal: 'overview',
+    onboarding: 'onboarding', ramp: 'onboarding', rampup: 'onboarding', newplayer: 'onboarding', beginner: 'onboarding', beginners: 'onboarding', guided: 'onboarding', tutorial: 'onboarding', ease: 'onboarding', unlock: 'onboarding', unlocks: 'onboarding', progression2: 'onboarding',
   };
   const sel = G[t] || G[alias[t]];
   return sel || { error: `Unknown topic "${topic}".`, topics: Object.keys(G) };
@@ -16106,7 +16141,10 @@ function spawnFloorMob(ex, ey) {
   const dmg = Math.max(1, Math.round(floorMobSpec.dmg * (beh.dmgMult || 1)));
   const mob = { x: ex, y: ey, hp, maxHp: hp, type: t, level: floorMobSpec.level, dmg, dead: false, behavior: behaviorFor(t),
     name: _md ? _md.name : undefined, mColor: _md ? _md.color : null };
-  if (Math.random() < 0.22) applyAffix(mob); // ~22% carry a fight-shaking affix
+  // Elite affixes stay out of the opening floors (ramp) so the first fights read
+  // cleanly; they begin once the hero has reached the elites gate (see onboarding).
+  // A Classic hero (guided off) bypasses the ramp entirely.
+  if ((!player.guided || elitesAllowed(player.maxFloor)) && Math.random() < 0.22) applyAffix(mob); // ~22% carry a fight-shaking affix
   enemies.push(mob);
   return mob;
 }
@@ -16140,6 +16178,10 @@ function spawnEnemies() {
   // Final safety ceiling (after modifiers): no floor, however large or heavily
   // modified, spawns an unplayable swarm.
   if (!isBossFloor) count = Math.min(count, 48);
+  // Ramp: a brand-new hero (still in the opening floors) meets smaller packs so the
+  // first crowds don't overwhelm. Keyed on deepest-reached, so a returning deep
+  // hero is uncapped — and an existing save, already past the ramp, is unaffected.
+  if (!isBossFloor && player.guided) { const _packCap = earlyPackCap(player.maxFloor); if (_packCap != null) count = Math.min(count, _packCap); }
 
   // Pick 2-3 enemy types for this floor from the depth-appropriate band, so
   // each floor has variety while every monster stays around the same level.
@@ -16152,7 +16194,8 @@ function spawnEnemies() {
   // ~20% of non-boss floors feature a single glowing "elite" with better loot;
   // certain floor modifiers raise that chance.
   const eliteChance = 0.2 + (floorMod.eliteBonus || 0) + pfx('elite', 0) + egCovEliteAdd();  // + Dread Covenant elite pressure
-  const eliteIndex = (!isBossFloor && Math.random() < eliteChance) ? rnd(0, count - 1) : -1;
+  // Ramp: no glowing elite on the opening floors (until the elites gate is reached).
+  const eliteIndex = (!isBossFloor && (!player.guided || elitesAllowed(player.maxFloor)) && Math.random() < eliteChance) ? rnd(0, count - 1) : -1;
 
   // Difficulty tracks the hero, not just the floor: once you out-level the depth
   // (e.g. by grinding lower floors from town), foes toughen so fights stay real.
@@ -16193,8 +16236,12 @@ function spawnEnemies() {
   // sworn, so an un-covenanted descent is byte-identical). Malaise is applied to
   // damage over time in takePlayerDamage(); here elapsed≈0 at build, so it's neutral.
   const _fe = (Date.now() - (_egFloorEnterMs || Date.now())) / 1000;
-  const baseHp = Math.max(1, Math.round(egCovSpawnHp((14 + mobLevel * BALANCE.enemyHpPerFloor) * threat * (floorMod.hpMult || 1) * pfx('hp', 1) * threatScale * reliefEase * BALANCE.enemyHpMult, _fe)));
-  const baseDmg = Math.max(1, Math.round(egCovSpawnDmg((3.5 + mobLevel * BALANCE.enemyDmgPerFloor + bandIdx) * threat * (floorMod.dmgMult || 1) * pfx('dmg', 1) * threatScale * earlyBite * reliefEase * BALANCE.enemyDmgMult, _fe)));
+  // Ramp: a gentler opening curve for a brand-new hero — foe HP and damage are
+  // eased on the first floors and climb back to full strength by floor 6. Keyed on
+  // deepest-reached, so a returning deep hero (and every existing save) sees ×1.
+  const _rampEase = player.guided ? earlyRelief(player.maxFloor) : 1;
+  const baseHp = Math.max(1, Math.round(egCovSpawnHp((14 + mobLevel * BALANCE.enemyHpPerFloor) * threat * (floorMod.hpMult || 1) * pfx('hp', 1) * threatScale * reliefEase * _rampEase * BALANCE.enemyHpMult, _fe)));
+  const baseDmg = Math.max(1, Math.round(egCovSpawnDmg((3.5 + mobLevel * BALANCE.enemyDmgPerFloor + bandIdx) * threat * (floorMod.dmgMult || 1) * pfx('dmg', 1) * threatScale * earlyBite * reliefEase * _rampEase * BALANCE.enemyDmgMult, _fe)));
   floorMobSpec = { types: floorTypes, hp: baseHp, dmg: baseDmg, level: mobLevel };
 
   for (let i = 0; i < count; i++) {
@@ -16768,7 +16815,12 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   // definition, not a roll. A set piece additionally carries its set membership so
   // it feeds the worn-count set bonuses.
   if (tier === 'unique') {
-    if (Math.random() < UNIQUE_SET_CHANCE) {
+    // Ramp: the first red-tier drops arrive as chase SET pieces; one-of-a-kind
+    // uniques hold back until the uniques gate, so the loot ladder introduces them
+    // one at a time. Once past it, both roll normally (UNIQUE_SET_CHANCE split).
+    // Keyed on deepest-reached (an existing deep save rolls the usual split).
+    const wantUnique = !player.guided || uniqueItemsAllowed(player.maxFloor);
+    if (!wantUnique || Math.random() < UNIQUE_SET_CHANCE) {
       const sp = pickSetPiece(forceSlot);
       if (sp) return buildSetPiece(sp, lvl);
     }
@@ -16823,7 +16875,9 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   // penalty share that one size. A curse binds power to price: cursed items can't be
   // augmented or reforged at the Enchanter (see isEnchantLocked), so the trade sticks.
   const tierRank = Object.keys(TIERS).indexOf(tier);
-  if (tierRank >= 2 && Math.random() < 0.12) {
+  // Ramp: cursed items (a boost paired with a real drawback) hold back until the
+  // cursed gate, so a new hero meets plain affixes first. Keyed on deepest-reached.
+  if (tierRank >= 2 && (!player.guided || cursedItemsAllowed(player.maxFloor)) && Math.random() < 0.12) {
     const pool = itemStatPool(item).length ? itemStatPool(item) : STAT_NAMES.filter(s => s !== 'DMG');
     const boostStat = pick(pool);
     // The penalty must land where a NEGATIVE value is actually FELT: most gear stats are
@@ -22440,6 +22494,11 @@ function rollPlayerHit(e) {
 // Penetration earns its slot. Scales gently with the foe's level/depth. Uncapped here —
 // the per-school functions below apply the multiplier then clamp.
 function enemyArmorBase(e) {
+  // Ramp: a brand-new hero's foes carry negligible typed defence (both schools) so
+  // a "wrong" damage type never silently punishes while they learn. Keyed on
+  // deepest-reached — a returning deep hero (and any existing save) is unaffected.
+  // Bosses still keep their guardrail so the school lesson can land at the first boss.
+  if (player.guided && !(e && e.isBoss) && !featureUnlocked('typedDefense', player.maxFloor)) return 0.01;
   let pct = 0.03 + Math.min(0.10, ((e && e.level) || dungeonLevel) * 0.0035);
   if (e && e.isElite) pct += 0.06;
   if (e && e.isBoss)  pct += 0.12;
@@ -27822,6 +27881,7 @@ let _sbCdEls = null, _sbCdTextEls = null;
 
 // Loadout swap (Set 1 / Set 2) — body reuses the GEAR-tab widget.
 function beltLoadoutHtml() {
+  if (!loadoutRevealed()) return '';   // ramp: second loadout not yet introduced
   return `<div class="sb-mod sb-mod-loadout"><span class="sb-pill sb-mod-pill">GEAR</span><div class="sb-mod-body sb-loadout-body">${gearSetBarHTML()}</div></div>`;
 }
 // Meal quick-slots — MEAL_SLOT_COUNT tiles the same size as the skill buttons: filled
@@ -27977,7 +28037,15 @@ function renderSkillBar() {
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
     </button>`);
   };
-  const skillsHtml = slots.map((id, i) => slotBtnHtml(id, i)).join('');
+  // Ramp: a Guided hero's hotbar reveals slots as they descend (1 → 2 → 3 → 4),
+  // so a new player never faces four empty boxes at once. Never hide a slot that
+  // already holds a skill; a Classic hero always sees all four.
+  let _slotsShown = slots.length;
+  if (player.guided) {
+    const filled = slots.reduce((n, id, i) => id ? i + 1 : n, 0);
+    _slotsShown = Math.min(slots.length, Math.max(unlockedSkillSlots(player.maxFloor), filled));
+  }
+  const skillsHtml = slots.slice(0, _slotsShown).map((id, i) => slotBtnHtml(id, i)).join('');
   // The lone auto-cast slot in the middle. Whatever sits here fires itself the
   // moment it's ready — no key, no manual cast: clicking it opens the picker so you
   // can change or clear the skill. Drag a learned active onto it to fill it.
@@ -28296,10 +28364,11 @@ function renderPaperdoll() {
     const [x, y] = POS[slot];
     return `<div class="pda-wrap" style="left:${x}%;top:${y}%">${renderDollSlot(slot)}</div>`;
   }).join('');
-  return `<div class="gear-equip">${gearSetBarHTML()}` +
+  const twoSets = loadoutRevealed();
+  return `<div class="gear-equip">${twoSets ? gearSetBarHTML() : ''}` +
     `<div class="pda-stage"><div class="paperdoll-anat">${bodyHTML}${slots}</div></div>` +
     `<div class="pd-hint">Tap a slot for details · ✕ to unequip · EQUIP loot from the LOOT tab</div>` +
-    `<div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div>` +
+    (twoSets ? `<div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div>` : '') +
     `</div>`;
 }
 // The Enchanter's Equipped section reuses the same paper-doll body, but each worn
@@ -28338,6 +28407,9 @@ function gearSetPower(set) {
 }
 function gearSetCount(set) { return SLOT_KEYS.reduce((n, k) => n + (set[k] ? 1 : 0), 0); }
 // The active set is lit gold; tapping the other one swaps your whole loadout.
+// Ramp: the second weapon loadout (and its swap UI) is introduced on floor 20 for
+// a Guided hero — one set to master first. A Classic hero always has both.
+function loadoutRevealed() { return !player.guided || loadoutSwapUnlocked(player.maxFloor); }
 function gearSetBarHTML() {
   return `<div class="gearset-bar">${[0, 1].map(i => {
     const set = gearSets[i];
@@ -28362,6 +28434,7 @@ function gearSwapInDanger() {
 // flip to the other set; with 0/1 from the on-screen buttons to pick one.
 function toggleGearSet(idx) {
   if (portalTransiting() || mapWarping()) return;   // hero is mid-teleport — no gear swaps
+  if (!loadoutRevealed()) return;                    // ramp: second loadout not yet introduced
   const target = (idx === 0 || idx === 1) ? idx : (activeGearSet === 0 ? 1 : 0);
   hideTooltip();
   if (target === activeGearSet) return;
@@ -30342,6 +30415,15 @@ function loadGame() {
     // feed only the Ascendant Weave. Drop the stored per-set slot levels so an old
     // save loads clean and no vestigial field lingers.
     if (player.slotLevels !== undefined) delete player.slotLevels;
+    // Onboarding ramp: these fields are new, so a save that predates them is an
+    // existing (veteran) hero — default them to Classic (guided off) with the
+    // teaching layer already "seen", so the ramp and its hints never re-engage on
+    // an established hero. A fresh hero created after this ships carries guided=true
+    // (and empty taught/counters) straight from the player literal.
+    if (typeof player.guided !== 'boolean') player.guided = false;
+    if (!player.taught || typeof player.taught !== 'object') player.taught = {};
+    if (typeof player.levelUpsSeen !== 'number') player.levelUpsSeen = 99;
+    if (typeof player.starterDone !== 'boolean') player.starterDone = true;
     // ── ENDGAME save migration ── every new field defaults gracefully so old
     // saves load byte-identical (each sanitizer tolerates undefined → empty).
     // Dread Covenants: the sworn set for the next descent + the per-class checklist.
