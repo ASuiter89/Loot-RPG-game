@@ -7,6 +7,34 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-16", size: "small", v: "Ramp finishing touches for new heroes", by: "Claude", notes: [
+    "A new hero's first skill auto-casts itself, so there's less cooldown juggling early.",
+    "Arrow traps hold off until floor 6, fire vents until floor 9; trap-themed floors wait too.",
+    "First death is forgiven its gold cost while you're finding your feet.",
+    "The ascendancy PATH tree stays hidden until it opens at level 20.",
+  ] },
+  { date: "2026-07-16", size: "small", v: "Endgame keepers introduce themselves; title-screen tips", by: "Claude", notes: [
+    "First time you open the Weave, Covenants, Mirrorforge and other deep keepers, a one-line intro says what it's for.",
+    "Your first learned skill adds a nudge: focus one skill, ranks 3/7/10 spike it.",
+    "A rotating strategy tip now sits under the title-screen tagline.",
+    "New 'Guided & Classic' wiki page under Getting Started.",
+  ] },
+  { date: "2026-07-16", size: "medium", v: "Guided intro — hints, glows & a starter checklist for new heroes", by: "Claude", notes: [
+    "New heroes start Guided; a CLASSIC toggle on the name screen skips it all (for veterans).",
+    "First-encounter hints appear once each — shrines, fountains, teleporters, vault doors, the Spirit Veil, and more.",
+    "A starter checklist rides the objective chip until you're rolling; SKILLS tabs glow your first few level-ups.",
+    "Early tooltips read simpler; the crafting-material strip stays hidden until you own some.",
+    "The first boss winds up slower with a 'Watch out!' on its first telegraph.",
+    "Death screen adds a tip matched to what got you.",
+  ] },
+  { date: "2026-07-16", size: "large", v: "New heroes ease in — a gentler opening ramp", by: "Claude", notes: [
+    "First floors breathe: fewer, softer foes on 1–5, climbing to full strength by floor 6.",
+    "No elites or elite affixes before floor 4; foes shrug no damage school until floor 8.",
+    "Early gear (dropped below floor 5) needs no attributes to wear; requirements begin at floor 5.",
+    "Loot kinds stagger — set & cursed pieces ~floor 10, one-of-a-kind uniques by floor 12.",
+    "Hotbar slots open as you descend (1→2 at 3, →3 at 8, →4 at 13); second weapon set at floor 20.",
+    "Pacing keys on deepest floor reached — a returning hero and every existing save is unchanged.",
+  ] },
   { date: "2026-07-16", size: "small", v: "Town keepers arrive one per boss kill", by: "Claude", notes: [
     "Each boss floor felled brings exactly 1 new keeper (was 2–4 at once) — camp grows a steady one at a time.",
     "Arrival order: Healer, Merchant, Vault, Ramen House, Craftsman, Prospector, Trainer, Gambler, Enchanter, Bounty Board, Transmuter, Sellsword, then the endgame keepers.",
