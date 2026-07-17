@@ -13602,6 +13602,36 @@ let _objChipLast = null;
 // updateObjectiveChip(true) to force an immediate fresh read, so a real layout
 // change is never left stale by the throttle.
 let _beltVisAt = -1e9, _beltShowsBounty = false, _beltBountyPresent = false;
+// The starter-checklist context: which of the guided steps are already done. Shared
+// by the chip painter and its click handler so both read one source of truth.
+function starterCtx() {
+  const p = player;
+  return {
+    kill: bountyKills() >= 3,
+    equip: !!(equipped && Object.keys(equipped).some(s => equipped[s])),
+    skill: !!(p && p.skills && Object.keys(p.skills).length > 0),
+    descend: ((p && p.maxFloor) || 1) > 1,
+    boss: !!(p && p.bossFirstKills && p.bossFirstKills['5']),
+  };
+}
+// True when the bag holds at least one gear piece (any item with a gear slot). Gates
+// the starter checklist's "Equip a piece of gear" step so it never nags on an empty
+// bag with nothing to equip — it surfaces only once a wearable drop is in hand.
+function bagHasEquippable() {
+  return Array.isArray(inventory) && inventory.some(it => it && SLOT_KEYS.includes(it.slot));
+}
+// Deep-link the persistent bag / side panel to a tab (LOOT 'inv', GEAR 'equip', HERO
+// 'hero', SKILLS 'skills'). On touch the bag is a full-screen sheet that must be
+// opened; on desktop it's a permanent column — just make sure it isn't collapsed.
+function openBagTo(tab) {
+  switchTab(tab);
+  if (isTouchMode()) {
+    if (!document.body.classList.contains('bag-open')) toggleBag();
+  } else {
+    setPanelCollapsed(false);
+  }
+  if (typeof sfx === 'function') sfx('click');
+}
 function updateObjectiveChip(force) {
   checkBountyComplete();   // one-shot "bounty complete" cue on the not-done → done edge
   const chip = document.getElementById('objective-chip');
@@ -13627,16 +13657,16 @@ function updateObjectiveChip(force) {
   // a short STARTER CHECKLIST for a Guided hero — one step at a time — retiring
   // itself once every step is done.
   if (p && p.guided && !p.starterDone && !b && !inTown && !titleOpen && !tutorialActive) {
-    const chain = starterChain({
-      kill: bountyKills() >= 3,
-      equip: !!(equipped && Object.keys(equipped).some(s => equipped[s])),
-      skill: !!(p.skills && Object.keys(p.skills).length > 0),
-      descend: (p.maxFloor || 1) > 1,
-      boss: !!(p.bossFirstKills && p.bossFirstKills['5']),
-    });
+    const chain = starterChain(starterCtx());
     if (chain.complete) { p.starterDone = true; }
     else {
       const step = chain.steps[chain.activeIndex];
+      // Hold the "Equip a piece of gear" nudge until the bag actually holds a wearable
+      // piece — otherwise it fires on an empty inventory with nothing to equip.
+      if (step.id === 'equip' && !bagHasEquippable()) {
+        if (_objChipLast !== 'off') { chip.style.display = 'none'; _objChipLast = 'off'; }
+        return;
+      }
       const doneCount = chain.steps.filter(s => s.done).length;
       const icHtml = (typeof dlIcon === 'function' && dlIcon('scroll', 14)) || '';
       const txtHtml = `<b>Getting started</b> — ${escapeHtml(step.label)} <span style="opacity:.7">(${doneCount}/${chain.steps.length})</span>`;
@@ -13681,7 +13711,19 @@ function updateObjectiveChip(force) {
 function objectiveChipClick() {
   if (inTown) { openBounty(); return; }
   const b = (typeof player === 'object' && player) ? player.bounty : null;
-  if (!b) { if (player && player.guided && !player.starterDone) showHowTo(); return; }
+  if (!b) {
+    // Guided starter checklist: deep-link to where the current step gets DONE rather
+    // than the generic How-to. "Equip a piece of gear" opens the LOOT bag (gear lives
+    // there); "Spend a skill point" opens the SKILLS tab; anything else falls back to
+    // the guide.
+    if (player && player.guided && !player.starterDone) {
+      const step = starterChain(starterCtx()).steps.find(s => !s.done);
+      if (step && step.id === 'equip') openBagTo('inv');
+      else if (step && step.id === 'skill') openBagTo('skills');
+      else showHowTo();
+    }
+    return;
+  }
   const prog = Math.min(bountyProgress(b), b.need);
   log(`<span data-spr=scroll></span> Bounty: ${b.desc.replace('{n}', b.need)} — ${prog}/${b.need}.`);
 }
@@ -26072,7 +26114,11 @@ function pickup() {
   if (portalChanneling() || portalTransiting() || mapWarping()) return;
   if (merchant && Math.abs(merchant.x - player.x) <= 1 && Math.abs(merchant.y - player.y) <= 1) { openShop(); return; }
   if (mystic && Math.abs(mystic.x - player.x) <= 1 && Math.abs(mystic.y - player.y) <= 1) { openMystic(); return; }
-  if (pickupChestsAt(player.x, player.y) > 0) { renderPanelSoon(); updateBars(); saveGameSoon(); }
+  if (pickupChestsAt(player.x, player.y) > 0) {
+    renderPanelSoon(); updateBars(); saveGameSoon();
+    // A fresh gear pickup may unlock the guided "Equip a piece of gear" nudge.
+    try { updateObjectiveChip(); } catch (_) {}
+  }
 }
 
 // Install the re-entrancy / halt guard around every player-action entry point.
