@@ -5913,8 +5913,13 @@ function buySkill(id) {
   if (skillTreeKindOf(node) === 'path') player.ascPoints--; else player.skillPoints--;
   bumpLoadout();   // skill ranks feed the cached active-skill list / gear resolve
   // A newly-learned active drops onto the first open hotkey slot so it reaches the
-  // bar without a manual assign (the player can re-slot it any time).
-  if (firstRank && node.type === 'active') autoSlotSkill(id);
+  // bar without a manual assign (the player can re-slot it any time). Ramp: a Guided
+  // hero's FIRST active instead drops into the auto-cast slot, so it fires itself —
+  // less cooldown juggling while learning. They can move or clear it any time.
+  if (firstRank && node.type === 'active') {
+    if (player.guided && !normAutoSkill()) setAutoSkill(id);
+    else autoSlotSkill(id);
+  }
   // Passives that raise max HP/MP grant the new headroom immediately.
   const beforeHp = player.maxHp, beforeMp = player.maxMp;
   recomputeMaxStats();
@@ -5947,8 +5952,11 @@ function buySkill(id) {
   if (player.guided && firstRank && !(player.taught && player.taught.firstSkill)) {
     if (!player.taught) player.taught = {};
     player.taught.firstSkill = true;
-    if (node.type === 'active') log('<span data-spr=ic_stun></span> Your first skill is on the hotbar — fire it with its number key. Pour points into one skill before branching out.', 'important');
-    else log('<span data-spr=a_shield></span> Passive learned — its bonus is always on. Pour points into one line before branching out; ranks 3, 7 and 10 spike it.', 'important');
+    if (node.type === 'active') {
+      // The first active auto-cast itself (ramp) unless the auto-slot was taken.
+      if (normAutoSkill() === id) log('<span data-spr=ic_stun></span> Your first skill drops into the auto-cast slot — it fires itself when ready, no button needed. Pour points into one skill before branching out.', 'important');
+      else log('<span data-spr=ic_stun></span> Your first skill is on the hotbar — fire it with its number key. Pour points into one skill before branching out.', 'important');
+    } else log('<span data-spr=a_shield></span> Passive learned — its bonus is always on. Pour points into one line before branching out; ranks 3, 7 and 10 spike it.', 'important');
   }
   updateBars(); renderPanel(); renderSkillBar(); saveGame();
 }
@@ -6189,8 +6197,19 @@ function rollFloorMod() {
     floorMod = FLOOR_MODS[FLOOR_MODS.length - 1];
     return;
   }
-  // Otherwise a random non-nightmare theme.
-  floorMod = pick(FLOOR_MODS.slice(1, FLOOR_MODS.length - 1));
+  // Otherwise a random non-nightmare theme. Ramp: a Guided hero doesn't meet a
+  // trap-THEMED floor (Spike Gauntlet / Arrow Gallery / Vent Works) until that
+  // hazard has been introduced, so the opening floors stay simple to read.
+  let pool = FLOOR_MODS.slice(1, FLOOR_MODS.length - 1);
+  if (player.guided) {
+    pool = pool.filter(m => {
+      if (m.trapTheme === 'arrows') return hazardAllowed('arrowTrap', player.maxFloor);
+      if (m.trapTheme === 'fire') return hazardAllowed('fireVent', player.maxFloor);
+      if (m.trapTheme === 'spikes') return hazardAllowed('spikes', player.maxFloor);
+      return true;
+    });
+  }
+  floorMod = pool.length ? pick(pool) : FLOOR_MODS[0];
 }
 
 // Mystic pacts — bargains struck with the Wandering Mystic that reshape the
@@ -7679,7 +7698,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Classic when you create the hero (gameState().ramp.guided).`,
-      `Opening-floor content pacing (Normal, floors 1–25): foes are fewer and softer on floors 1–5 and climb to full strength by floor 6; the first crowds are capped small. No glowing ELITES or elite affixes until floor 4. Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13). The second weapon LOADOUT (and its swap button) is introduced on floor 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
+      `Opening-floor content pacing (Normal, floors 1–25): foes are fewer and softer on floors 1–5 and climb to full strength by floor 6; the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. No glowing ELITES or elite affixes until floor 4. Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
   };
@@ -10693,6 +10712,9 @@ function placeTraps(reach) {
   if (theme === 'arrows') arrows = rnd(TRAP_THEME.arrows.min, TRAP_THEME.arrows.max);
   else if (theme) arrows = 0;
   else arrows = Math.random() < 0.4 ? Math.min(3, 1 + Math.floor(dungeonLevel / 6)) : 0;
+  // Ramp: hold arrow traps back until their intro floor for a Guided hero, so the
+  // opening floors have one fewer thing to read (keyed on deepest-reached).
+  if (player.guided && !hazardAllowed('arrowTrap', player.maxFloor)) arrows = 0;
   // A themed floor searches longer and relaxes the hallway preference sooner, so
   // it can actually seat that many emitters even on a wall-sparse map.
   const maxTries = theme === 'arrows' ? 2400 : 600;
@@ -10728,6 +10750,8 @@ function placeTraps(reach) {
   if (theme === 'fire') vents = rnd(TRAP_THEME.fire.min, TRAP_THEME.fire.max);
   else if (theme) vents = 0;
   else vents = Math.random() < 0.22 ? rnd(1, 3) : 0;
+  // Ramp: fire vents introduce a floor later than arrow traps for a Guided hero.
+  if (player.guided && !hazardAllowed('fireVent', player.maxFloor)) vents = 0;
   for (let placed = 0, ft = 0; placed < vents && ft < vents * 40; ft++) {
     const c = randomFloorTile(reach);
     if (!c || taken(c.x, c.y) || (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) < 6) continue;
@@ -25587,7 +25611,15 @@ function handleDeath() {
   const dTier = currentDifficulty();
   const GOLD_FRAC = [0.5, 0.65, 0.8, 1.0][dTier - 1];
   const XP_FRAC   = [0.25, 0.4, 0.6, 0.9][dTier - 1];
-  const lostGold = Math.floor(player.gold * GOLD_FRAC);
+  let lostGold = Math.floor(player.gold * GOLD_FRAC);
+  // Ramp: a Guided hero's FIRST death is forgiven its gold cost — a stumble while
+  // still learning shouldn't sting. (The bag still drops as a reclaimable grave and
+  // XP still dips; only the coin loss is waived, once.)
+  if (player.guided && !(player.taught && player.taught.firstDeath)) {
+    if (!player.taught) player.taught = {};
+    player.taught.firstDeath = true;
+    lostGold = 0;
+  }
   player.gold -= lostGold;
   const lostXp = Math.min(player.xp, Math.round(xpForLevel(player.level) * XP_FRAC));
   player.xp = Math.max(0, player.xp - lostXp);
@@ -27263,7 +27295,12 @@ function renderSkills(el) {
   const skGlow = player.guided && (player.levelUpsSeen || 0) <= 3 && (player.skillPoints || 0) > 0;
   const tabBtn = (v, label) => `<button class="sk-vtab ${skillView === v ? 'on' : ''}${skGlow && (v === 'active' || v === 'passive') ? ' sk-vtab-glow' : ''}" onclick="setSkillView('${v}')">${label}</button>`;
   const pathLabel = asc ? `${dlIcon(asc.icon,16)||''} ${asc.name.toUpperCase()}` : '<span data-spr=feat_door></span> PATH';
-  const tabs = `<div class="sk-vtabs">${tabBtn('active', '<span data-spr=ic_stun></span> ACTIVE')}${tabBtn('passive', '<span data-spr=a_shield></span> PASSIVE')}${tabBtn('path', pathLabel)}</div>`;
+  // Ramp: the ascendancy PATH tree is meaningless before it opens (level 20), so a
+  // Guided hero who hasn't reached it — and hasn't ascended — doesn't see the tab
+  // yet. It appears the moment ascension is on the table. Classic always shows it.
+  const hidePath = player.guided && !player.ascension && (player.level || 1) < ASCEND_LEVEL;
+  if (hidePath && skillView === 'path') skillView = 'active';   // never strand the view on a hidden tab
+  const tabs = `<div class="sk-vtabs">${tabBtn('active', '<span data-spr=ic_stun></span> ACTIVE')}${tabBtn('passive', '<span data-spr=a_shield></span> PASSIVE')}${hidePath ? '' : tabBtn('path', pathLabel)}</div>`;
   // Second-level selector: one sub-tab per specialization branch, so each branch's
   // web gets the whole panel (five double-wide webs never share a screen).
   const bNames = (skillView === 'passive' || skillView === 'active') ? SKILL_BRANCHES[player.class] : null;

@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-16", size: "small", v: "Ramp finishing touches for new heroes", by: "Claude", notes: [
+    "A new hero's first skill auto-casts itself, so there's less cooldown juggling early.",
+    "Arrow traps hold off until floor 6, fire vents until floor 9; trap-themed floors wait too.",
+    "First death is forgiven its gold cost while you're finding your feet.",
+    "The ascendancy PATH tree stays hidden until it opens at level 20.",
+  ] },
   { date: "2026-07-16", size: "small", v: "Endgame keepers introduce themselves; title-screen tips", by: "Claude", notes: [
     "First time you open the Weave, Covenants, Mirrorforge and other deep keepers, a one-line intro says what it's for.",
     "Your first learned skill adds a nudge: focus one skill, ranks 3/7/10 spike it.",
