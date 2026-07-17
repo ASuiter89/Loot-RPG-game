@@ -35,6 +35,10 @@ export const CHANGELOG = [
     "Hotbar slots open as you descend (1→2 at 3, →3 at 8, →4 at 13); second weapon set at floor 20.",
     "Pacing keys on deepest floor reached — a returning hero and every existing save is unchanged.",
   ] },
+  { date: "2026-07-16", size: "small", v: "Town keepers arrive one per boss kill", by: "Claude", notes: [
+    "Each boss floor felled brings exactly 1 new keeper (was 2–4 at once) — camp grows a steady one at a time.",
+    "Arrival order: Healer, Merchant, Vault, Ramen House, Craftsman, Prospector, Trainer, Gambler, Enchanter, Bounty Board, Transmuter, Sellsword, then the endgame keepers.",
+  ] },
   { date: "2026-07-12", size: "small", v: "Town button unveiled on your first visit; tidier arrivals banner", by: "Claude", notes: [
     "Town Portal button hidden until you first reach the camp; then it appears and glows that visit so you spot the new button.",
     "First town arrival adds a welcome — the townsfolk thank you and point out you can teleport back any time.",
