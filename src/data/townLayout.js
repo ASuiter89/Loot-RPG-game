@@ -95,25 +95,26 @@ export const TOWN_DECOR = [
   { x: 27, y: 4, c: 'b' }, { x: 27, y: 6, c: 'b' }, { x: 27, y: 8, c: 'b' }, { x: 27, y: 10, c: 'b' }, { x: 2, y: 12, c: 'b' }, { x: 27, y: 12, c: 'b' }, { x: 27, y: 14, c: 'b' }, { x: 27, y: 16, c: 'b' }, { x: 2, y: 18, c: 'b' },
 ];
 
-// ── SERVICE UNLOCK WAVES ──────────────────────────────────────────────────────
-// The town is a CAMP that fills in as the hero proves themselves against the
-// dungeon's guardians. Every keeper belongs to a WAVE: wave N arrives once N
-// distinct boss floors have been first-cleared (the floor-5 guardian is boss #1,
-// floor 10 is #2, …). Wave 1 is the town-unlock itself — before the floor-5
+// ── SERVICE UNLOCK ORDER ──────────────────────────────────────────────────────
+// The town is a CAMP that fills in ONE keeper at a time as the hero proves
+// themselves against the dungeon's guardians. Every keeper has an ARRIVAL number:
+// keeper N arrives once N distinct boss floors have been first-cleared (the floor-5
+// guardian is boss #1, floor 10 is #2, …), so exactly ONE new keeper joins after
+// each boss kill — never a batch. Arrival 1 IS the town-unlock: before the floor-5
 // guardian falls, the camp offers no services and the Town Portal is sealed.
-//   Wave 1 (floor 5):  Vault, Merchant, Healer — the essentials.
-//   Wave 2 (floor 10): Ramen House, Craftsman, Trainer.
-//   Wave 3 (floor 15): Gambler, Enchanter, Bounty Board.
-//   Wave 4 (floor 20): Transmuter, Sellsword — the last regular keepers.
-//   Wave 5 (floor 25): Ascendant Weave, Cycles, Hall of Deeds (endgame sanctum).
-//   Wave 6-8 (deeper tiers): Covenant Altar, Mirrorforge, Pantheon.
-export const TOWN_SERVICE_WAVES = {
-  healer: 1, merchant: 1, stash: 1,
-  ramen: 2, forge: 2, prospector: 2, trainer: 2,
-  gambler: 3, enchanter: 3, bounty: 3,
-  transmuter: 4, sellsword: 4,
-  weave: 5, cycles: 5, deeds: 5,
-  covenants: 6, mirrorforge: 7, pantheon: 8,
+//   1 Healer · 2 Merchant · 3 Vault            — the essentials (boss floors 5, 10, 15)
+//   4 Ramen House · 5 Craftsman · 6 Prospector · 7 Trainer
+//   8 Gambler · 9 Enchanter · 10 Bounty Board
+//   11 Transmuter · 12 Sellsword
+//   13 Ascendant Weave · 14 Cycles · 15 Hall of Deeds   — endgame sanctum
+//   16 Covenant Altar · 17 Mirrorforge · 18 Pantheon    — the deepest keepers
+export const TOWN_SERVICE_ARRIVALS = {
+  healer: 1, merchant: 2, stash: 3,
+  ramen: 4, forge: 5, prospector: 6, trainer: 7,
+  gambler: 8, enchanter: 9, bounty: 10,
+  transmuter: 11, sellsword: 12,
+  weave: 13, cycles: 14, deeds: 15,
+  covenants: 16, mirrorforge: 17, pantheon: 18,
 };
 
 // The late-game keepers who gather in the hedged ENDGAME SANCTUM (top-left grove).

@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-16", size: "small", v: "Town keepers arrive one per boss kill", by: "Claude", notes: [
+    "Each boss floor felled brings exactly 1 new keeper (was 2–4 at once) — camp grows a steady one at a time.",
+    "Arrival order: Healer, Merchant, Vault, Ramen House, Craftsman, Prospector, Trainer, Gambler, Enchanter, Bounty Board, Transmuter, Sellsword, then the endgame keepers.",
+  ] },
   { date: "2026-07-12", size: "small", v: "Town button unveiled on your first visit; tidier arrivals banner", by: "Claude", notes: [
     "Town Portal button hidden until you first reach the camp; then it appears and glows that visit so you spot the new button.",
     "First town arrival adds a welcome — the townsfolk thank you and point out you can teleport back any time.",
