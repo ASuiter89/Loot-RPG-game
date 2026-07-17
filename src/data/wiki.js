@@ -91,6 +91,23 @@ export const WIKI = [
           { note: 'Bank gold and prized gear in the town Vault before a risky push, so a death can\'t take them.' },
         ],
       },
+      {
+        id: 'guided-classic',
+        title: 'Guided & Classic',
+        keywords: ['guided', 'classic', 'onboarding', 'ramp', 'tutorial', 'hints', 'beginner', 'new', 'ease', 'unlock'],
+        body: [
+          { p: 'When you create a hero you can start <b>Guided</b> (the default) or tick <b>Classic</b>. Guided eases you into the game; Classic hands you everything from floor 1.' },
+          { h: 'What Guided does' },
+          { ul: [
+            'The opening floors are gentler — fewer, softer foes on floors 1&ndash;5, back to full strength by floor 6.',
+            'Mechanics arrive one at a time: elites from floor 4, gear requirements from floor 5, set &amp; cursed pieces around floor 10, unique artifacts by floor 12.',
+            'Hotbar slots open as you descend; the second weapon set is introduced on floor 20.',
+            'One-line hints appear the first time you meet a shrine, fountain, teleporter, boss telegraph and more, and a short checklist gets you started.',
+          ] },
+          { p: 'The pacing keys on the deepest floor you have reached, so it only ever affects a fresh hero on the way down &mdash; once you have been deep enough, everything is open even on early floors.' },
+          { note: 'Pick Classic if you have played before and want the full game immediately. Everything Guided teaches also lives here in the wiki.' },
+        ],
+      },
     ],
   },
 

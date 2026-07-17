@@ -5942,6 +5942,14 @@ function buySkill(id) {
     : '';
   if (ms) screenFlash('#ffd27a');
   log(`<span data-spr=mat_glimmer></span> Learned ${node.name}${(node.max || 1) > 1 ? ` (rank ${newRank}/${node.max})` : ''}${summary ? ` — now ${summary}.` : '.'}${gainStr}${msStr}`, 'important');
+  // Ramp: a Guided hero's very first learned skill earns a one-time nudge — where it
+  // sits, and that focusing one skill (ranks 3/7/10 spike it) beats spreading thin.
+  if (player.guided && firstRank && !(player.taught && player.taught.firstSkill)) {
+    if (!player.taught) player.taught = {};
+    player.taught.firstSkill = true;
+    if (node.type === 'active') log('<span data-spr=ic_stun></span> Your first skill is on the hotbar — fire it with its number key. Pour points into one skill before branching out.', 'important');
+    else log('<span data-spr=a_shield></span> Passive learned — its bonus is always on. Pour points into one line before branching out; ranks 3, 7 and 10 spike it.', 'important');
+  }
   updateBars(); renderPanel(); renderSkillBar(); saveGame();
 }
 
@@ -13671,6 +13679,18 @@ function openTownService(kind) {
   townServiceKind = kind;
   // Greeting a keeper clears its "just arrived" exclamation mark for good.
   if (kind && kind !== 'gate' && kind !== 'portal') greetTownNpc(kind);
+  // Ramp: the first time a Guided hero opens one of the intimidating endgame
+  // keepers (unlocked deep, across Hardened), log a one-line "what this is" intro
+  // so it isn't a wall of unfamiliar systems. Latches per keeper; regular keepers
+  // (which self-explain in their own panels) have no intro and are skipped.
+  if (kind && player.guided) {
+    const intro = keeperIntro(kind, player.taught);
+    if (intro) {
+      if (!player.taught) player.taught = {};
+      player.taught[intro.key] = true;
+      log(`<span data-spr=q_relic></span> <b>${intro.title}</b> — ${intro.text}`, 'important');
+    }
+  }
   if (kind === 'merchant') {
     // A well-stocked town merchant: several gear pieces geared to the deepest
     // floor you've reached, so shopping stays relevant. (Potions are a built-in
@@ -33245,9 +33265,14 @@ function renderSettingsHero() {
   if (html) { el.innerHTML = html; el.style.display = ''; }
   else { el.innerHTML = ''; el.style.display = 'none'; }
 }
+let _titleTipN = 0;
 function showTitle() {
   const ov = document.getElementById('title-overlay');
   if (!ov) return;
+  // A rotating one-line strategy tip under the tagline — a gentle bit of teaching
+  // on the way in, cycling a new one each time the title is shown.
+  const tipEl = document.getElementById('title-tip');
+  if (tipEl) tipEl.innerHTML = `<span data-spr=scroll></span> ${rampTip((player && (player.level || 0)) + _titleTipN++)}`;
   // Seed the drifting-ember background once (decorative, behind the content).
   const emb = document.getElementById('title-embers');
   if (emb && !emb.childElementCount) {

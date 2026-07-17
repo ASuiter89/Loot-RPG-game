@@ -3821,6 +3821,9 @@
     display: inline-block; width: calc(9px * var(--ui-scale,1)); height: calc(9px * var(--ui-scale,1)); border-radius: 2px;
     margin: 0 1px; vertical-align: middle; transform: rotate(45deg);
   }
+  /* Rotating strategy tip under the tagline. */
+  #title-tip { color: var(--info); font-size: 1.3rem; line-height: 1.45; margin: -12px auto 20px; max-width: 34em; opacity: 0.92; }
+  #title-tip:empty { display: none; }
   /* Hero / journey card — the "who you're playing" panel: who you are (left) +
      a walking hero sprite on the right, sized to stand as tall as the stacked
      text. Shared by the title screen (#title-hero, above CONTINUE) and the

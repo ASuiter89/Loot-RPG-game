@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-16", size: "small", v: "Endgame keepers introduce themselves; title-screen tips", by: "Claude", notes: [
+    "First time you open the Weave, Covenants, Mirrorforge and other deep keepers, a one-line intro says what it's for.",
+    "Your first learned skill adds a nudge: focus one skill, ranks 3/7/10 spike it.",
+    "A rotating strategy tip now sits under the title-screen tagline.",
+    "New 'Guided & Classic' wiki page under Getting Started.",
+  ] },
   { date: "2026-07-16", size: "medium", v: "Guided intro — hints, glows & a starter checklist for new heroes", by: "Claude", notes: [
     "New heroes start Guided; a CLASSIC toggle on the name screen skips it all (for veterans).",
     "First-encounter hints appear once each — shrines, fountains, teleporters, vault doors, the Spirit Veil, and more.",
