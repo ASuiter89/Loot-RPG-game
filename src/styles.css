@@ -4080,6 +4080,14 @@
      them via the UI SIZE multiplier so they scale like the emoji-based tiles. */
   .title-set-btn .tsb-ic svg { width: calc(21px * var(--ui-scale,1)); height: calc(21px * var(--ui-scale,1)); }
   .title-set-btn .tsb-lbl { font-size: 1.2rem; letter-spacing: .5px; line-height: 1.2; white-space: nowrap; }
+  /* Achievements tile: its icon is a pixel-art relic sprite, not an SVG. The
+     [data-spr] painter sizes the sprite off this span's font-size, so pin it in
+     px (like the SVG tiles' 21px) instead of the 2.2rem emoji-fallback size —
+     which would balloon the sprite at the wider breakpoint's 15px root. */
+  .title-set-btn .tsb-ic--spr { font-size: calc(20px * var(--ui-scale, 1)); }
+  /* Earned / total feats, shown at a glance under the label — gold, never the
+     hardcore crimson (the popup still distinguishes the two tabs inside). */
+  .title-set-btn .tsb-count { font-size: 1.1rem; line-height: 1; letter-spacing: .5px; white-space: nowrap; font-weight: bold; color: var(--gold); }
   /* ── MONOCHROME UI EMOJI ── Menu/HUD emoji that aren't game-thing icons render
      as flat single-colour symbols instead of colourful emoji (or being dropped).
      `font-variant-emoji: text` asks for the monochrome text glyph where the

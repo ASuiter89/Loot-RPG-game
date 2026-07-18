@@ -33403,11 +33403,11 @@ function selectAchTab(mode) {
   if (np) np.style.display = mode === 'hc' ? 'none' : '';
   if (hp) hp.style.display = mode === 'hc' ? '' : 'none';
 }
-// Build the two-tab badge popup (Kitten Mode + Hardcore) and decide whether the
-// title screen's Achievements button is worth showing. The button carries the
-// active hero's own-mode progress count so players see "5 / 100" without opening it.
+// Build the two-tab badge popup (Kitten Mode + Hardcore) and refresh the title
+// grid's Achievements tile count. The tile carries the active hero's own-mode
+// progress ("5 / 100") so players see it without opening the popup.
 function renderTitleAchievements() {
-  const btn = document.getElementById('title-achievements-btn');
+  const cnt = document.getElementById('title-ach-count');
   const body = document.getElementById('achievements-body');
   const p = (typeof player === 'object' && player) || {};
   const total = ACHIEVEMENTS.length;
@@ -33418,12 +33418,6 @@ function renderTitleAchievements() {
   // Hardcore feats persist account-wide (hcMeta.ach) and survive death; the live
   // hardcore hero also lights up anything it currently qualifies for.
   const hc = achModeHtml(a => hcHasAch(a.id) || (p.hardcore && !!a.test(p)), true);
-  const anyHc = hc.earned > 0 || !!p.hardcore;
-  if (!p.class && !anyHc && normal.earned === 0) {  // truly fresh account — nothing earned anywhere
-    if (btn) btn.style.display = 'none';
-    if (body) body.innerHTML = '';
-    return;
-  }
   if (_achTab == null) _achTab = p.hardcore ? 'hc' : 'normal';
   // Kitten tab wears a paw (matches the badge line-icon style); Hardcore wears the
   // game's skull brand sprite, falling back to a shield outline before it loads.
@@ -33439,16 +33433,14 @@ function renderTitleAchievements() {
       + `<div id="ach-panel-hc"><div class="ta-head ta-total hc">Hardcore <b>${hc.earned}</b> / ${total}</div>${hc.sections}</div>`;
     selectAchTab(_achTab);
   }
-  if (btn) {
-    // The button carries a progress count so it shows at a glance without opening the
+  if (cnt) {
+    // The tile carries a progress count so it reads at a glance without opening the
     // popup: the hardcore tally for a hardcore hero (or an account whose only progress
     // is hardcore — e.g. a fallen hero at the title screen), otherwise the account-wide
-    // Kitten tally (which stands even at the title screen with no active hero).
+    // Kitten tally (which stands even at the title screen with no active hero). Always
+    // gold — the tile never wears the hardcore crimson; the popup tabs mark the mode.
     const showHc = p.hardcore || (normal.earned === 0 && hc.earned > 0);
-    btn.innerHTML = showHc
-      ? `<span data-spr=q_relic></span> Achievements <b style="color:var(--red-350)">${hc.earned}</b> / ${total}`
-      : `<span data-spr=q_relic></span> Achievements <b style="color:var(--gold)">${normal.earned}</b> / ${total}`;
-    btn.style.display = '';
+    cnt.textContent = `${showHc ? hc.earned : normal.earned} / ${total}`;
   }
 }
 function showAchievements() {
