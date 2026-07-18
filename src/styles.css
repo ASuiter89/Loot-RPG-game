@@ -695,6 +695,49 @@
     #tut-popup::before, #tab-inv.tut-tab-glow::before, #tb-bag.tut-bag-wisp::before, .equip-row-btn.tut-equip-wisp::before { animation: none; }
   }
 
+  /* A freshly-crafted HUD readout (from the Craftsman's Field Kit) wears the SAME
+     circling "new" wisp as the tutorial nudges, until the hero next leaves town (see
+     _newHudUpgrades / applyHudWisps in game.js). Applied to whichever HUD element the
+     upgrade reveals. The minimap is a <canvas> (can't carry ::before) so it pulses a
+     glow instead. .hud-new sets position:relative, but the already-positioned
+     #minimap / #buff-overlay keep their own (id-level) position by specificity. */
+  .hud-new {
+    position: relative; border-radius: var(--radius-md);
+    box-shadow: 0 0 9px color-mix(in srgb, var(--gold-350) 60%, transparent);
+    animation: hud-new-glow 1.7s ease-in-out infinite;
+  }
+  @keyframes hud-new-glow {
+    0%, 100% { box-shadow: 0 0 5px color-mix(in srgb, var(--gold-350) 42%, transparent); }
+    50% { box-shadow: 0 0 13px color-mix(in srgb, var(--gold-350) 78%, transparent); }
+  }
+  .hud-new::before {
+    content: ''; position: absolute; inset: -2px; border-radius: var(--radius-md);
+    padding: 1.5px; pointer-events: none; z-index: 6;
+    background: conic-gradient(from var(--tut-wisp),
+      transparent 0deg,
+      color-mix(in srgb, var(--gold-350) 92%, transparent) 26deg,
+      transparent 62deg,
+      transparent 180deg,
+      color-mix(in srgb, var(--gold-200) 82%, transparent) 206deg,
+      transparent 242deg,
+      transparent 360deg);
+    -webkit-mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    mask-composite: exclude;
+    animation: tut-wisp-spin 3.2s linear infinite;
+  }
+  #minimap.hud-new {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold-350) 85%, transparent),
+                0 0 12px color-mix(in srgb, var(--gold-350) 60%, transparent);
+    animation: hud-mm-glow 1.8s ease-in-out infinite;
+  }
+  @keyframes hud-mm-glow {
+    0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold-350) 66%, transparent), 0 0 8px color-mix(in srgb, var(--gold-350) 42%, transparent); }
+    50% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold-350) 96%, transparent), 0 0 16px color-mix(in srgb, var(--gold-350) 72%, transparent); }
+  }
+  @media (prefers-reduced-motion: reduce) { .hud-new, .hud-new::before, #minimap.hud-new { animation: none; } }
+
   /* The nudge pill itself — one reusable element, filled per beat by showTutPopup().
      Fluid width, safe-area aware, prominent at the top; hidden until .show. */
   #tut-popup {
@@ -3092,6 +3135,8 @@
   .gold-vault-note { font-size: 1.2rem; opacity: 0.72; }
   #shop-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px; }
   #shop-tabs { display: flex; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--border); }
+  /* Craftsman bench switch (GEAR · HUD KIT) — reuses the .shop-tab pill inside the town panel. */
+  #forge-tabs { display: flex; gap: 6px; margin-bottom: var(--space-5); }
   .shop-tab { flex: 1; padding: 7px 0; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--orange-400); font-family: var(--font-ui); font-weight: bold; font-size: 1.4rem; letter-spacing: 1px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .shop-tab.active { border-color: var(--gold); background: var(--orange-850); color: var(--gold); }
   .shop-sell-btn { background: var(--frame); }
@@ -5167,7 +5212,7 @@
        phone yet shrinks on a ~280px foldable cover screen (where a fixed 58px would
        shove the tiles onto the vitals). Floors at 46px so it never drops below a
        comfortable touch target. */
-    --tutil-sz: clamp(46px, 15vw, 58px);
+    --tutil-sz: clamp(44px, 13.5vw, 52px);
     --tbar-w: calc(var(--tutil-sz) * 2 + 12px);  /* the two tiles + the 12px gap between them */
   }
   body.touch #main { position: relative; flex: 1 1 auto; min-height: 0; }
@@ -5201,6 +5246,18 @@
     box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 55%, transparent);
     pointer-events: none;
   }
+  /* Minimap not on screen (not yet unlocked, or in town/title): its reserved slot at
+     the header's left becomes dead space and the readouts float off-centre. Reclaim
+     the slot and centre whatever readouts remain, so every HUD permutation — down to
+     just the HP/MP bars — sits balanced in the band rather than adrift. (drawMinimap
+     toggles body.hud-mm-on.) The right slot for bag/settings is always reserved. */
+  body.touch:not(.hud-mm-on) #header {
+    padding-left: calc(env(safe-area-inset-left, 0px) + 12px);
+    justify-content: center;
+  }
+  /* Give the vitals their own centred row so HP/MP sit symmetrically (with or without
+     the numbers) instead of drifting to one edge; the remaining chips centre under it. */
+  body.touch:not(.hud-mm-on) #stats { flex: 1 1 100%; justify-content: center; }
   body.touch #stats { gap: 4px 10px; font-size: 1.2rem; flex-wrap: wrap; }
   body.touch .bar-track { width: 58px; height: 12px; }
   body.touch #header .hud-item { font-size: 1.2rem; }
@@ -5266,7 +5323,7 @@
     box-shadow: var(--shadow-sm); cursor: pointer;
     -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   }
-  .touch-util svg { width: 30px; height: 30px; }
+  .touch-util svg { width: 26px; height: 26px; }
   .touch-util:active { background: color-mix(in srgb, var(--interactive) 32%, var(--panel)); }
   /* Unspent-points badge: a gold circle carrying the count. It PULSES and a bright
      wisp orbits its border so the player can't miss that hero/skill points are
