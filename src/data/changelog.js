@@ -7,6 +7,13 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "HERO tab Status section; Stats moves to GEAR", by: "Claude", notes: [
+    "HERO tab gains Status — active buffs, debuffs and boons with icon, magnitude and time left; top-right icons kept.",
+    "First-shrine tip points to the HERO tab's Status (was the log).",
+    "Stats section moves to the GEAR tab under the paper-doll; drops its header icon.",
+    "Warrior lore trimmed; class-name icon dropped.",
+    "\"Damage scales with <stat>\" now a hover tip on the ★dmg tag, not a line under the class.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Reset Run removed", by: "Claude", notes: [
     "Dropped Reset Run (Settings ▸ Progress; title screen) — no in-place hero wipe.",
     "New run: Save Slots → ＋ New Game in a free slot; old heroes stay saved, load to continue.",

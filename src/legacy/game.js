@@ -4504,7 +4504,7 @@ const CLASSES = {
   warrior: {
     name: 'Warrior', icon: 'w_sword', color: '#e08a3c',
     blurb: 'A frontline bruiser — hits hardest of the melee, lightly armoured.',
-    lore: 'Forged in a hundred battles, the Warrior meets every foe head-on. Where others plan, they charge — trusting steel, muscle, and an unbreakable will.',
+    lore: 'Meets every foe head-on — steel, muscle, and an unbreakable will.',
     passive: '+10% damage dealt · −10% damage taken',
     dmgAttrs: { primary: 'might', secondary: 'vitality' },
     // Loot lean (offhands = off-hand families, armor = light/heavy) tilts drops,
@@ -26593,17 +26593,42 @@ for (const _hb of [RESTED_BUFF, ...HEALER_BLESSINGS]) {
 }
 // Order the combat buffs read tidily in the strip (sustain/defence first).
 const COMBAT_BUFF_ORDER = ['shield', 'regen', 'defUp', 'dmgUp', 'spellUp', 'critUp', 'dodgeUp', 'lifestealUp', 'thorns'];
+// Magnitude label for a status: shield/regen/thorns carry a flat value, the rest a
+// percentage; null mag → ''. Shared by the strip chips and the HERO-tab Status rows.
+function statusMagLabel(id, mag) {
+  if (mag == null) return '';
+  const flat = (id === 'shield' || id === 'regen' || id === 'thorns');
+  return flat ? '+' + abbreviateNumber(mag) : '+' + Math.round(mag * 100) + '%';
+}
+// Every active status on the hero, normalized to { id, remaining, unit, mag } in a
+// stable order: debuffs → combat buffs → shrine boons → healer buffs. Debuffs and
+// combat buffs count real SECONDS; shrine and healer boons count FLOORS. Single source
+// of truth so the top-right strip and the HERO-tab Status section can never drift.
+function activeStatusList() {
+  const out = [];
+  for (const s of statusEffects) {
+    if (s.target !== 'player' || s.secs <= 0) continue;
+    if (STATUS_META[s.effect]) out.push({ id: s.effect, remaining: Math.ceil(s.secs), unit: 'second', mag: null });
+  }
+  for (const id of COMBAT_BUFF_ORDER) {
+    const b = combatBuffs[id];
+    if (b && b.secs > 0) out.push({ id, remaining: Math.ceil(b.secs), unit: 'second', mag: b.mag });
+  }
+  for (const k of ['power', 'guard', 'fortune']) {
+    if (buffs[k] > 0) out.push({ id: 's_' + k, remaining: buffs[k], unit: 'floor', mag: null });
+  }
+  for (const b of (player.healerBuffs || [])) {
+    if (b && b.floors > 0 && STATUS_META[b.id]) out.push({ id: b.id, remaining: b.floors, unit: 'floor', mag: null });
+  }
+  return out;
+}
 function buffChipHTML(id, remaining, unit, mag) {
   const m = STATUS_META[id];
   if (!m) return '';
   const icon = dlIcon(m.icon, 32) || '';
   if (!icon) return ''; // atlas not ready yet — skip; the strip refreshes next tick
-  let magLine = '';
-  if (mag != null) {
-    // shield/regen/thorns carry a flat magnitude; the rest are a percentage.
-    const flat = (id === 'shield' || id === 'regen' || id === 'thorns');
-    magLine = `<div class='ht-line'>${flat ? '+' + abbreviateNumber(mag) : '+' + Math.round(mag * 100) + '%'}</div>`;
-  }
+  const magLbl = statusMagLabel(id, mag);
+  const magLine = magLbl ? `<div class='ht-line'>${magLbl}</div>` : '';
   const left = `${remaining} ${unit}${remaining === 1 ? '' : 's'} left.`;
   const color = m.kind === 'debuff' ? '#ff9a9a' : '#9fe6a0';
   const tip = `<div class='ht-name' style='color:${color}'>${m.name}</div><div class='ht-line'>${m.desc}</div>${magLine}<div class='ht-line'>${left}</div>`;
@@ -26612,26 +26637,9 @@ function buffChipHTML(id, remaining, unit, mag) {
 function renderStatusStrip() {
   const el = document.getElementById('buff-overlay');
   if (!el) return;
-  const chips = [];
-  // Debuffs first — they're the urgent ones to watch tick down.
-  for (const s of statusEffects) {
-    if (s.target !== 'player' || s.secs <= 0) continue;
-    if (STATUS_META[s.effect]) chips.push(buffChipHTML(s.effect, Math.ceil(s.secs), 'second', null));
-  }
-  // Combat buffs, in a fixed order.
-  for (const id of COMBAT_BUFF_ORDER) {
-    const b = combatBuffs[id];
-    if (b && b.secs > 0) chips.push(buffChipHTML(id, Math.ceil(b.secs), 'second', b.mag));
-  }
-  // Floor-based shrine boons.
-  for (const k of ['power', 'guard', 'fortune']) {
-    if (buffs[k] > 0) chips.push(buffChipHTML('s_' + k, buffs[k], 'floor', null));
-  }
-  // Floor-based healer buffs (Rested + any Blessing).
-  for (const b of (player.healerBuffs || [])) {
-    if (b && b.floors > 0 && STATUS_META[b.id]) chips.push(buffChipHTML(b.id, b.floors, 'floor', null));
-  }
-  const html = chips.join('');
+  // Same enumeration the HERO-tab Status section uses (activeStatusList), rendered as
+  // compact icon chips here rather than full rows.
+  const html = activeStatusList().map(s => buffChipHTML(s.id, s.remaining, s.unit, s.mag)).join('');
   if (html === _statusStripHtml) return;   // identical chips — skip the innerHTML teardown
   _statusStripHtml = html;
   el.innerHTML = html;
@@ -27343,6 +27351,50 @@ function heroStatData() {
   };
 }
 
+// The derived-stats "Stats" card (attack power, defense, crit, regen, gear extras).
+// Lives on the GEAR tab beneath the paper-doll. Data-driven via heroStatData() so it
+// renders identically from a live build or a serialized leaderboard copy.
+function heroStatsPanelHTML() {
+  const stat = (label, val) => `<div class="hc-line" style="display:flex;justify-content:space-between"><span style="opacity:0.8">${label}</span><b>${val}</b></div>`;
+  const sd = heroStatData();
+  const extRows = sd.gear.map(r => stat(r.label, r.val)).join('');
+  return `<div class="hero-class" style="border-color:var(--btn-off)">
+      <div class="hc-head"><span class="hc-name">Stats</span></div>
+      <div class="hc-line" style="opacity:0.55;font-size:1.3rem;margin:-2px 0 3px">${sd.note}</div>
+      ${sd.main.map(r => stat(r.label, r.val)).join('')}
+      ${sd.scars ? `<div class="hc-line" style="display:flex;justify-content:space-between;color:var(--red-250);margin-top:4px"><span><span data-spr=w_sword></span> Conqueror's scars</span><b>−${sd.scars.pct}%</b></div>
+      <div class="hc-line" style="opacity:0.62;font-size:1.2rem;color:var(--red-250)">${sd.scars.count} difficult${sd.scars.count === 1 ? 'y' : 'ies'} conquered — lowers Max&nbsp;HP &amp; damage dealt.</div>` : ''}
+      ${extRows ? `<div class="hc-line" style="opacity:0.5;margin-top:4px">— from gear —</div>${extRows}` : ''}
+    </div>`;
+}
+
+// The "Status" section on the HERO tab: every active buff, debuff and boon laid out as
+// a readable row (icon · name · magnitude · time left) so effects are legible without
+// hovering the tiny top-right strip (which is kept). Shares activeStatusList() with it.
+function heroStatusPanelHTML() {
+  const rows = activeStatusList().map(s => {
+    const m = STATUS_META[s.id];
+    if (!m) return '';
+    const icon = dlIcon(m.icon, 28) || '';
+    const col = m.kind === 'debuff' ? 'var(--red-250)' : 'var(--green-400)';
+    const magLbl = statusMagLabel(s.id, s.mag);
+    const magStr = magLbl ? ` <span style="opacity:0.85">${magLbl}</span>` : '';
+    const left = `${s.remaining} ${s.unit}${s.remaining === 1 ? '' : 's'} left`;
+    return `<div class="hc-status-row">
+        <span class="hc-status-ic">${icon}</span>
+        <div class="hc-status-txt">
+          <div class="hc-status-name" style="color:${col}">${m.name}${magStr}</div>
+          <div class="hc-status-desc">${m.desc}</div>
+        </div>
+        <span class="hc-status-left">${left}</span>
+      </div>`;
+  }).join('');
+  return `<div class="hero-class" style="border-color:var(--btn-off)">
+      <div class="hc-head"><span class="hc-name">Status</span></div>
+      ${rows || `<div class="hc-line" style="opacity:0.6">No active effects.</div>`}
+    </div>`;
+}
+
 // HERO tab: overall power, derived stats, and the attributes you can raise.
 function renderHero(el) {
   const pts = player.attrPoints || 0;
@@ -27356,7 +27408,7 @@ function renderHero(el) {
     const at = ATTRIBUTES[key];
     const own = player.attributes?.[key] || 0;
     const gear = totalAttr(key) - own;
-    const tag = key === dmgAttr ? ' <span style="color:var(--gold-350)">★dmg</span>' : '';
+    const tag = key === dmgAttr ? ` <span style="color:var(--gold-350);cursor:help" title="Damage scales with ${at.label}">★dmg</span>` : '';
     const gearStr = gear ? ` <span style="color:var(--green-400)">+${abbreviateNumber(gear)}</span>` : '';
     return `<div class="attr-row">
       <div class="attr-info">
@@ -27367,28 +27419,14 @@ function renderHero(el) {
       <button class="attr-plus" ${pts > 0 ? '' : 'disabled'} onclick="spendAttr('${key}', event)">+</button>
     </div>`;
   }).join('');
-  // Derived combat stats so the player can see what their attributes/gear produce.
-  const stat = (label, val) => `<div class="hc-line" style="display:flex;justify-content:space-between"><span style="opacity:0.8">${label}</span><b>${val}</b></div>`;
-  // The Stats panel is data-driven via heroStatData() so a leaderboard snapshot can
-  // render the EXACT same rows from a serialized copy (see lbLoadoutFromPlayer).
-  const sd = heroStatData();
-  const extRows = sd.gear.map(r => stat(r.label, r.val)).join('');
-  const derived = `<div class="hero-class" style="border-color:var(--btn-off)">
-      <div class="hc-head"><span class="hc-name">📊 Stats</span></div>
-      <div class="hc-line" style="opacity:0.55;font-size:1.3rem;margin:-2px 0 3px">${sd.note}</div>
-      ${sd.main.map(r => stat(r.label, r.val)).join('')}
-      ${sd.scars ? `<div class="hc-line" style="display:flex;justify-content:space-between;color:var(--red-250);margin-top:4px"><span><span data-spr=w_sword></span> Conqueror's scars</span><b>−${sd.scars.pct}%</b></div>
-      <div class="hc-line" style="opacity:0.62;font-size:1.2rem;color:var(--red-250)">${sd.scars.count} difficult${sd.scars.count === 1 ? 'y' : 'ies'} conquered — lowers Max&nbsp;HP &amp; damage dealt.</div>` : ''}
-      ${extRows ? `<div class="hc-line" style="opacity:0.5;margin-top:4px">— from gear —</div>${extRows}` : ''}
-    </div>`;
+  // The derived-stats "Stats" panel now lives on the GEAR tab under the paper-doll
+  // (heroStatsPanelHTML); the HERO tab shows a live "Status" section instead.
   const cls = playerClass();
   const classBlock = cls ? `
     <div class="hero-class" style="border-color:${cls.color}">
-      <div class="hc-head"><span class="hc-icon">${dlIcon(cls.icon, 28)}</span>
-        <span class="hc-name" style="color:${cls.color}">${cls.name}</span></div>
+      <div class="hc-head"><span class="hc-name" style="color:${cls.color}">${cls.name}</span></div>
       ${cls.lore ? `<div class="hc-line" style="opacity:0.75;font-style:italic">${cls.lore}</div>` : ''}
       <div class="hc-line">${cls.passive}</div>
-      <div class="hc-line"><span data-spr=w_sword></span> Damage scales with <b>${ATTRIBUTES[dmgAttr].label}</b></div>
     </div>` : '';
   el.innerHTML = `
     <div class="hero-nameplate">${escapeHtml(player.name || 'Adventurer')}</div>
@@ -27400,7 +27438,7 @@ function renderHero(el) {
     ${classBlock}
     <div class="hero-points">${pts > 0 ? `${pts} point${pts>1?'s':''} to spend!` : 'No points to spend — level up for more.'}</div>
     ${rows}
-    ${derived}`;
+    ${heroStatusPanelHTML()}`;
 }
 
 // SKILLS tab: separate PASSIVE / ACTIVE / PATH trees, each drawn as a band-gated
@@ -28736,6 +28774,7 @@ function renderPaperdoll() {
     `<div class="pda-stage"><div class="paperdoll-anat">${bodyHTML}${slots}</div></div>` +
     `<div class="pd-hint">Tap a slot for details · ✕ to unequip · EQUIP loot from the LOOT tab</div>` +
     (twoSets ? `<div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div>` : '') +
+    heroStatsPanelHTML() +
     `</div>`;
 }
 // The Enchanter's Equipped section reuses the same paper-doll body, but each worn

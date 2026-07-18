@@ -125,7 +125,7 @@ export const HINTS = {
   },
   // First shrine stepped on (shrines activate on contact; a blood shrine costs Health).
   shrine: {
-    text: `A <b>shrine</b>'s boon is now yours — watch the log for its effect. Some shrines cost Health.`,
+    text: `A <b>shrine</b>'s boon is now yours — see it under Status on the HERO tab. Some shrines cost Health.`,
     wiki: 'shrines',
   },
   // First fountain used (heals on contact).
