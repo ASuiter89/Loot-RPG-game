@@ -117,12 +117,11 @@ describe('enemy sprite-key integrity', () => {
 });
 
 describe('History records every ended run (graveyard headstones)', () => {
-  // REGRESSION GUARD — a hero that ends via Reset Run has always earned a History
-  // headstone (recordFallenHero), but deleting a save slot or overwriting one with
-  // a New Game used to destroy the hero WITHOUT recording it, so those runs
-  // vanished from History. Every intentional slot-destruction path must file a
-  // headstone before it clears the slot. We slice each function's source and
-  // assert the record call is present.
+  // REGRESSION GUARD — deleting a save slot or overwriting one with a New Game
+  // used to destroy the hero WITHOUT recording it, so those runs vanished from
+  // History. Every intentional slot-destruction path must file a headstone before
+  // it clears the slot. We slice each function's source and assert the record
+  // call is present.
   const fnBody = (src, name) => {
     const start = src.indexOf(`function ${name}(`);
     expect(start, `missing function ${name}`).toBeGreaterThan(-1);
@@ -138,10 +137,6 @@ describe('History records every ended run (graveyard headstones)', () => {
 
   it('files a headstone when a slot is overwritten by a New Game', () => {
     expect(fnBody(game, 'newGameInSlot')).toMatch(/recordFallen/);
-  });
-
-  it('still files a headstone on Reset Run', () => {
-    expect(fnBody(game, 'wipeSave')).toMatch(/recordFallenHero/);
   });
 
   it('can record a fallen hero from a saved slot, not just the live player', () => {

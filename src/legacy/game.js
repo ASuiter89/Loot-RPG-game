@@ -6960,7 +6960,7 @@ window.gameState = function gameState(radius) {
     ['hc-death-overlay', 'dead'], ['death-overlay', 'dead'],
     ['settings-menu', 'settings'], ['version-overlay', 'changelog'],
     ['howto-overlay', 'howto'], ['wiki-overlay', 'wiki'], ['autoloot-overlay', 'autoloot'], ['keybind-overlay', 'keybinds'],
-    ['slotpick-overlay', 'slotpick'], ['newrun-overlay', 'newrun'], ['slots-overlay', 'slots'],
+    ['slotpick-overlay', 'slotpick'], ['slots-overlay', 'slots'],
     ['account-overlay', 'account'], ['lb-hero-overlay', 'heroSnapshot'], ['lb-overlay', 'leaderboard'], ['graveyard-overlay', 'graveyard'],
     ['conquest-overlay', 'conquest'], ['greed-overlay', 'greed'], ['boss-gate-overlay', 'bossgate'],
     ['equip-tut-overlay', 'tutEquip'], ['beach-levelup-overlay', 'tutLevelUp'],
@@ -7101,7 +7101,7 @@ window.gameState = function gameState(radius) {
   return {
     // What's on screen and whether walking keys work right now. If canMove is
     // false, interact with the menu/overlay instead of pressing movement keys.
-    mode,            // dungeon|town|title|classSelect|nameSelect|dead|shop|mystic|settings|changelog|howto|autoloot|keybinds|slotpick|newrun|slots|account|leaderboard|heroSnapshot|graveyard|conquest|greed
+    mode,            // dungeon|town|title|classSelect|nameSelect|dead|shop|mystic|settings|changelog|howto|autoloot|keybinds|slotpick|slots|account|leaderboard|heroSnapshot|graveyard|conquest|greed
     canMove,         // true only when mode === 'dungeon' and not mid-teleport
     blockingOverlay, // DOM id of the open modal, or null
     // Teleport ANIMATION in flight, else null. 'out' (fading out to town) or 'in'
@@ -7492,7 +7492,7 @@ window.gameGuide = function gameGuide(topic) {
       `Cast hotbar skills: number keys ${key('skill1')}-${key('skill' + SKILL_SLOTS)} fire the ${SKILL_SLOTS} manual slots on the RIGHT of the bar (or click a slot). One extra skill sits in a dedicated auto-cast slot in the MIDDLE and fires itself — see the "autocast" topic.`,
       `Esc closes the top menu/overlay, or opens Settings. Settings is split into tabs (Play / Visuals / Audio / Progress / About); non-movement keys are remappable under the Play tab → KEYS (◀ Back or Esc there returns to Settings). The keys shown here are your CURRENT bindings.`,
       `The About tab holds PATCH NOTES and HOW TO PLAY — the latter opens a full, categorised, searchable guide (this same reference for a human): browse a category or type to search any topic. It's a world-pausing overlay (gameState().mode 'wiki'); this gameGuide() is the machine-readable twin of that guide.`,
-      `The Play tab's TITLE SCREEN button (at the very top) saves your progress and returns you to the title/landing screen without abandoning the run — hit CONTINUE there to drop straight back in. (This is separate from Reset Run on the Progress tab, which wipes the hero.)`,
+      `The Play tab's TITLE SCREEN button (at the very top) saves your progress and returns you to the title/landing screen without abandoning the run — hit CONTINUE there to drop straight back in. To start another hero, open Save Slots (Progress tab or title screen) and hit ＋ New Game in a fresh slot — your current hero stays saved in its own slot; load it any time to continue.`,
       `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds MINIMAP (the top-left floor-sketch box size — Small / Medium / Large), UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker plus CURSOR SIZE (a 1x–2x multiplier that enlarges the mouse pointer on top of the UI scale; default 1x).`,
     ],
     movement: [
@@ -7680,7 +7680,7 @@ window.gameGuide = function gameGuide(topic) {
     bestiary: [
       `Every foe is recorded in a BESTIARY — a codex opened from the pause menu (Bestiary). Hovering a foe in the dungeon already pops an inspect card; the Bestiary collects one card per species so you can browse the whole roster, filter it (creatures / bosses / discovered), and track completion. gameState().menu.bestiary reports species discovered out of the total.`,
       `A species' stats stay hidden as "???" until you've slain enough of it to learn them — each stat field reveals at its own kill threshold, fully known at ${BESTIARY_FULL} kills. A BOSS is all-or-nothing: its card is a sealed silhouette until your FIRST kill, then opens completely. The depth-scaled numbers (level/HP/damage/typed defence) are recorded from the DEEPEST specimen of each species you've slain.`,
-      `The bestiary is ACCOUNT-WIDE: kills accumulate across every hero and save slot, so slaying a species on one hero reveals its card for all of them, and it survives death, a Reset Run, or switching slots — like the shared town stash. Kill counts are cumulative lifetime totals across your heroes.`,
+      `The bestiary is ACCOUNT-WIDE: kills accumulate across every hero and save slot, so slaying a species on one hero reveals its card for all of them, and it survives death, deleting a slot, or switching slots — like the shared town stash. Kill counts are cumulative lifetime totals across your heroes.`,
     ],
     collection: [
       `The Vault has a COLLECTION tab: one slot for every unique and set piece in the game. A slot is a darkened silhouette (hover to preview the fixed properties it can roll — labels only, since the values roll with drop depth) until you store a matching piece there; then it lights up with your best-rolled copy. Storing a unique/set piece always files it here instead of ordinary Storage; a slot can hold MULTIPLE copies (it shows the strongest with a ×N badge, and clicking lists them all to withdraw).`,
@@ -9072,7 +9072,7 @@ function updateScreenFlashButton() {
   if (btn) btn.classList.toggle('on', showScreenFlash);
 }
 
-// Settings modal: a centred overlay holding sound, saves, Reset Run and options.
+// Settings modal: a centred overlay holding sound, saves and options.
 // There's no on-screen button — it opens only with Esc (see handleEscape) and,
 // being an RT-blocking overlay, pausing the game while it's up. The scrim
 // swallows every click behind it; clicking the scrim or pressing Esc closes it.
@@ -9091,7 +9091,7 @@ function closeSettingsMenu() {
 // "Title Screen" button on Settings ▸ Play — snapshot progress, close the
 // settings overlay, and raise the title/landing screen. The run is NOT
 // abandoned: the title's CONTINUE (see titlePlay) resumes this exact hero right
-// where they left off; only Reset Run there wipes anything.
+// where they left off. Nothing here wipes a hero.
 function settingsToTitle() {
   saveGame();
   closeSettingsMenu();
@@ -9947,8 +9947,8 @@ function bestiaryKey(e) { return (e.type || e.name || '?').replace(/️/g, ''); 
 // The kill tally + specimen lore that drive the codex are ACCOUNT-WIDE, not per
 // hero: slaying a species on ANY hero reveals its card for EVERY hero — exactly
 // like the shared town stash and account-wide achievements. The ledger lives in its
-// own localStorage key OUTSIDE the save slots, so it survives a death, a Reset Run,
-// or a slot switch, and every hero reads/writes the one shared copy. `kills` is a
+// own localStorage key OUTSIDE the save slots, so it survives a death, a slot
+// deletion or a slot switch, and every hero reads/writes the one shared copy. `kills` is a
 // cumulative lifetime count per species key; `lore` keeps the DEEPEST specimen seen.
 // The pure shape + merge algebra lives in systems/bestiary.js.
 const BESTIARY_KEY = 'dungeonLoot_bestiary_v1';
@@ -29912,7 +29912,7 @@ function padPlayInspect(axes) {
 const PAD_MODAL_IDS = [
   'title-overlay','name-overlay','class-overlay','hc-death-overlay','death-overlay',
   'shop-overlay','mystic-overlay','town-overlay','settings-menu','version-overlay','howto-overlay','wiki-overlay',
-  'autoloot-overlay','newrun-overlay','keybind-overlay','conquest-overlay','slots-overlay',
+  'autoloot-overlay','keybind-overlay','conquest-overlay','slots-overlay',
   'account-overlay','lb-overlay','lb-hero-overlay','graveyard-overlay','slotpick-overlay',
   'greed-overlay','boss-gate-overlay','equip-tut-overlay','beach-levelup-overlay','bestiary-overlay','achievements-overlay','pad-kbd',
 ];
@@ -30566,7 +30566,7 @@ function saveGame() {
     // localStorage unavailable (e.g. inside artifact preview) — fail silently
   }
   // Grant any achievements the hero now qualifies for, persisted OUTSIDE the save so
-  // they're account-wide (survive a permadeath, a Reset Run, or a slot switch) and
+  // they're account-wide (survive a permadeath, a slot deletion, or a slot switch) and
   // never diverge between slots. Hardcore heroes also fill the hardcore feat set.
   // Cheap once everything's earned.
   if (player.hardcore) checkHardcoreAchievements();
@@ -30913,8 +30913,8 @@ function loadGame() {
 }
 
 // ── GRAVEYARD (fallen heroes) ───────────────────────────────────────────────
-// When a run ends (a Reset Run wipes the current hero) we tuck a summary of that
-// hero into a local "graveyard" so players can look back on past runs — the
+// When a run ends (permadeath, or a slot is deleted/overwritten) we tuck a summary
+// of that hero into a local "graveyard" so players can look back on past runs — the
 // class, name, level, deepest floor reached, gold and play-time. Newest first,
 // capped so the list can't grow without bound.
 const GRAVEYARD_KEY = 'dungeonLoot_graveyard_v1';
@@ -30959,8 +30959,8 @@ function recordFallenHero(p, fallbackFloor) {
 // File a headstone for the hero saved in slot `i` (if it holds a real run),
 // reading straight from its saved bytes so a slot you're NOT actively playing is
 // still recorded. Called wherever the player intentionally destroys a slot
-// (delete, or overwrite via New Game) — the same courtesy Reset Run already
-// extends, so no ended run silently vanishes from History.
+// (delete, or overwrite via New Game), so no ended run silently vanishes from
+// History.
 function recordFallenSlot(i) {
   let d;
   try { d = JSON.parse(localStorage.getItem(slotKey(i))); } catch (e) { return; }
@@ -31115,7 +31115,7 @@ function checkHardcoreAchievements() {
 // ── Account-wide achievements ── The Kitten-mode twin of the hardcore check above.
 // Grants into hcMeta.nach any feat the ACTIVE hero (of ANY mode) now qualifies for,
 // so the Kitten tab is the account's full "have I ever done this" set — persisted and
-// cloud-synced, surviving death, a Reset Run, or switching save slots. Called from
+// cloud-synced, surviving death, a slot deletion, or switching save slots. Called from
 // saveGame() for every started hero. A hardcore hero populates BOTH sets, but its
 // crimson feat line comes from checkHardcoreAchievements(); we don't double-announce.
 function checkAchievements() {
@@ -31206,23 +31206,6 @@ async function propagateDelete(cid, slot) {
     if (cid) { await cloudDeleteCid(cid); await cloudPushDeleted(); }
     else { await cloudDeleteSlot(slot); }
   } catch (e) {}
-}
-
-async function wipeSave() {
-  // The hero you're abandoning earns a headstone in the graveyard first.
-  recordFallenHero();
-  // Clears the slot you're currently playing, then reloads into a fresh hero.
-  // Latch _wipingSave first so the pagehide/visibilitychange autosaves that fire
-  // during reload can't re-write the slot we're about to clear.
-  _wipingSave = true;
-  const cid = slotCid(activeSlot);
-  try { localStorage.removeItem(slotKey(activeSlot)); } catch (e) {}
-  // Tombstone the abandoned hero and drop its cloud row (awaited) so neither this
-  // device's boot reconcile nor any other device can pull the wiped hero back.
-  // Resolves instantly when signed out.
-  tombstoneDeleted(cid, activeSlot);
-  await propagateDelete(cid, activeSlot);
-  location.reload();
 }
 
 // ── Idle detection (drives save/sync safety) ─────────────────────────────────
@@ -31470,7 +31453,7 @@ async function newGameInSlot(i) {
   _switchingSlot = true;
   const displaced = slotCid(i); // usually null (New Game is offered on empties), but tombstone anything real
   // If this slot did hold a real hero we're about to overwrite, keep them in
-  // History first — the same headstone Reset Run and Delete file.
+  // History first — the same headstone Delete files.
   recordFallenSlot(i);
   try { localStorage.removeItem(slotKey(i)); } catch (e) {}
   // Tombstone any hero being overwritten and clear its cloud row first, so the boot
@@ -31501,8 +31484,8 @@ function deleteSlot(i) {
   // sync can't pull it back.
   const cid = slotCid(i);
   // A deleted hero still earns a headstone — History is the record of every past
-  // run, so removing a save slot should preserve the run, not erase it (matching
-  // Reset Run). Recorded from the slot's saved bytes BEFORE the slot is cleared.
+  // run, so removing a save slot should preserve the run, not erase it. Recorded
+  // from the slot's saved bytes BEFORE the slot is cleared.
   recordFallenSlot(i);
   if (i === activeSlot) {
     _switchingSlot = true;
@@ -31515,25 +31498,6 @@ function deleteSlot(i) {
   tombstoneDeleted(cid, i);
   propagateDelete(cid, i);
   renderSlots();
-}
-
-let newGameArmed = false;
-function confirmNewGame() {
-  const btn = document.querySelector('.newgame-action');
-  const label = btn.querySelector('.action-label');
-  if (!newGameArmed) {
-    newGameArmed = true;
-    btn.classList.add('armed');
-    label.textContent = 'SURE?';
-    log('Tap SURE? again to wipe your save and start over.', 'important');
-    setTimeout(() => {
-      newGameArmed = false;
-      btn.classList.remove('armed');
-      label.textContent = 'RESET RUN';
-    }, 3000);
-    return;
-  }
-  wipeSave();
 }
 
 // ══════════════════════════════════════════
@@ -33528,13 +33492,13 @@ function showTitle() {
   // Crest is the pixel sword tile (atlas), referenced directly by its key.
   const crest = document.getElementById('title-crest');
   if (crest) { const ic = (typeof dlIcon === 'function') ? dlIcon('w_sword', 46) : ''; crest.innerHTML = ic; }
-  // A returning hero gets CONTINUE + a Reset Run option; a fresh save gets one
-  // "enter the dungeon" button that flows straight into name/class onboarding.
+  // A returning hero gets CONTINUE; a fresh save gets one "enter the dungeon"
+  // button that flows straight into name/class onboarding. To start another hero,
+  // players open Save Slots and begin a new run in a fresh slot (their current
+  // hero stays saved in its own slot).
   const resuming = !!(player && player.class);
   const play = document.getElementById('title-play');
-  const newrun = document.getElementById('title-newrun');
   if (play) play.innerHTML = `<span class="tp-label">${resuming ? '▶ CONTINUE' : 'ENTER'}</span>`;
-  if (newrun) newrun.style.display = resuming ? '' : 'none';
   // Hero / journey card — identity + how far this hero has delved.
   const hero = document.getElementById('title-hero');
   if (hero) {
@@ -33563,23 +33527,6 @@ function titlePlay() {
   else if (!player.name) showNameEntry();
   else updateObjectiveChip();   // returning hero resumes — surface any active bounty
 }
-// Reset Current Run from the title screen wipes the CURRENT save slot, so confirm
-// first (mirrors the in-game Settings ▸ Reset Run guard) and point players at Save
-// Slots if they actually want a second hero in a fresh slot.
-function titleNewRun() {
-  const ov = document.getElementById('newrun-overlay');
-  if (!ov) { wipeSave(); return; }
-  const label = document.getElementById('newrun-slot');
-  if (label) {
-    const s = slotSummary(activeSlot);
-    const who = s ? (s.name || 'Adventurer') : null;
-    label.textContent = 'Slot ' + (activeSlot + 1) + (who ? ' · ' + who : '');
-  }
-  ov.classList.add('open');
-}
-function closeNewRun() { const ov = document.getElementById('newrun-overlay'); if (ov) ov.classList.remove('open'); }
-function openSlotsFromNewRun() { closeNewRun(); openSlots(); }
-function confirmTitleNewRun() { closeNewRun(); closeTitle(); wipeSave(); }   // wipeSave() reloads into a fresh hero
 function titleSound() { toggleSound(); refreshTitleToggles(); }
 
 // ── Endgame-systems mutable state (wired up in the ENDGAME SYSTEMS BLOCK below) ──
@@ -33683,7 +33630,7 @@ try {
   // Never let a boot hiccup strand the player behind unresponsive controls. Log it
   // (so it's diagnosable in the console), lift the splash, and paint the landing
   // page — the handler bridge + game loop below still wire up, so the title's
-  // buttons (incl. Reset Current Run) and the controller stay live for recovery.
+  // buttons and the controller stay live for recovery.
   try { console.error('[boot] game boot failed — recovering to a usable title:', bootErr); } catch (_e) {}
   try { hideBootLoader(); } catch (_e) {}
   try { showTitle(); } catch (_e) {}
@@ -34051,7 +33998,7 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => draw
 // separately (clockPaused) so time keeps flowing in town — see gameLoop.
 const RT_BLOCKING_OVERLAYS = ['title-overlay','name-overlay','class-overlay','hc-death-overlay','death-overlay',
   'shop-overlay','mystic-overlay','town-overlay','settings-menu','version-overlay','howto-overlay','wiki-overlay',
-  'autoloot-overlay','newrun-overlay','keybind-overlay',
+  'autoloot-overlay','keybind-overlay',
   // Reachable mid-dungeon (e.g. from the menu or on a tier conquest) — these
   // close the settings menu, so they must pause the world on their own.
   'conquest-overlay','slots-overlay','account-overlay','lb-overlay','lb-hero-overlay','graveyard-overlay','slotpick-overlay',
@@ -37787,7 +37734,6 @@ const __DL_FN_BRIDGE = {
   checkAchievements,
   backfillAccountAchievements,
   hcBuryDeadSave,
-  wipeSave,
   playTimeBeat,
   fmtGold,
   formatPlayTime,
@@ -37799,7 +37745,6 @@ const __DL_FN_BRIDGE = {
   renderSlots,
   newGameInSlot,
   deleteSlot,
-  confirmNewGame,
   lbFloorLabel,
   lbEnabled,
   lbHeaders,
@@ -37885,10 +37830,6 @@ const __DL_FN_BRIDGE = {
   showTitle,
   closeTitle,
   titlePlay,
-  titleNewRun,
-  closeNewRun,
-  openSlotsFromNewRun,
-  confirmTitleNewRun,
   titleSound,
   rtPaused,
   clockPaused,
@@ -37945,7 +37886,6 @@ __dlLive("lbTab", () => lbTab, (v) => { lbTab = v; });
 __dlLive("stashHc", () => stashHc, (v) => { stashHc = v; });   // Hardcore ladder pool (Standard is `stash` when active)
 __dlLive("merchant", () => merchant, (v) => { merchant = v; });
 __dlLive("moveTarget", () => moveTarget, undefined);   // read-only handle (a const object) — lets tests inspect the click-to-move route
-__dlLive("newGameArmed", () => newGameArmed, (v) => { newGameArmed = v; });
 __dlLive("pact", () => pact, (v) => { pact = v; });
 __dlLive("player", () => player, (v) => { player = v; });
 __dlLive("selectedItem", () => selectedItem, (v) => { selectedItem = v; });
