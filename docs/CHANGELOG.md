@@ -8,6 +8,16 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Tooling — changelog merge conflicts auto-resolve (`merge=union`)
+
+- 🏗️ New `.gitattributes` marks `src/data/changelog.js` `merge=union`: git keeps
+  BOTH sides' prepended entries when merging/rebasing instead of conflicting, so two
+  open `claude/*` PRs no longer collide on the changelog (only same-day order may
+  shuffle — cosmetic; the data test pins date order only). GitHub honors this
+  server-side, so PRs stop going "dirty" on the changelog and auto-merge stops
+  skipping them. Verified with an isolated two-branch prepend/merge test.
+- 📄 `CLAUDE.md` "stalled PR" rule updated to describe the union-merge behavior.
+
 ## Feature — name screen requires a hero name
 
 - 📦 New leaf module `src/systems/heroName.js`: pure `normalizeHeroName` (trim +
