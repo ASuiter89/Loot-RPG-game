@@ -772,13 +772,13 @@
 
 <!-- Beach tutorial nudge — one reusable, NON-blocking "typical tutorial popup":
      a pill in the hint-chip style dressed with a circling-wisp border. Its icon +
-     copy are filled by showTutPopup() for the weapon-drop and first level-up beats;
-     tapping the body runs tutPopupClick() (opens the matching bag tab), the ✕ runs
-     tutPopupDismiss(). Shown/hidden purely from live state by refreshTutorialCues. -->
-<div id="tut-popup" role="button" tabindex="0" aria-live="polite" onclick="tutPopupClick()">
+     copy are filled by showTutPopup() for the weapon-drop and first level-up beats.
+     It's PASSIVE — it does not navigate on tap (the wisps on the bag / LOOT tab /
+     EQUIP button carry that cue); only the ✕ (tutPopupDismiss) catches a pointer.
+     Shown/hidden purely from live state by refreshTutorialCues. -->
+<div id="tut-popup" aria-live="polite">
   <span class="tp-ic" aria-hidden="true"></span>
   <span class="tp-text"></span>
-  <span class="tp-go" aria-hidden="true">›</span>
   <button class="tp-x" aria-label="Dismiss tip" onclick="tutPopupDismiss(event)">✕</button>
 </div>
 

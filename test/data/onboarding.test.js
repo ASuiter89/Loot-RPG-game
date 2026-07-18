@@ -59,6 +59,19 @@ describe('teaching copy validity', () => {
     }
   });
 
+  it('every hint is one short, glanceable sentence', () => {
+    // A ramp chip is glanced, not read — keep each to a single short sentence. Strip
+    // the inline <b>/<span> markup, then cap the visible length and allow at most one
+    // sentence terminator (so a "…tab. Some shrines cost Health." two-sentence chip
+    // fails). The "Learn more ›" link carries any extra detail.
+    for (const [id, h] of Object.entries(HINTS)) {
+      const visible = h.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      expect(visible.length, `hint ${id} too long (${visible.length} chars): ${visible}`).toBeLessThanOrEqual(90);
+      const enders = (visible.match(/[.!?]/g) || []).length;
+      expect(enders, `hint ${id} is more than one sentence: ${visible}`).toBeLessThanOrEqual(1);
+    }
+  });
+
   it('every hint "learn more" target is a real wiki article', () => {
     for (const [id, h] of Object.entries(HINTS)) {
       if (h.wiki) expect(ARTICLE_IDS.has(h.wiki), `hint ${id} → wiki ${h.wiki}`).toBe(true);
