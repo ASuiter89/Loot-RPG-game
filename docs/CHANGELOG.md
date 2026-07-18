@@ -8,6 +8,16 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — name screen requires a hero name
+
+- 📦 New leaf module `src/systems/heroName.js`: pure `normalizeHeroName` (trim +
+  collapse whitespace + 16-char cap) and `isValidHeroName`, lifted out of the
+  inline name-parsing in `submitName()`. Unit-tested
+  (`test/systems/heroName.test.js`, 100% cov).
+- 🧪 `submitName()` now rejects a blank name and nudges the box (scroll-to-top +
+  shake with a danger border) instead of silently defaulting to "Adventurer";
+  name-screen copy trimmed, and the leaderboards link + play glyph dropped.
+
 ## Tooling — hands-off PR pipeline (auto-open on push)
 
 - 🏗️ New `.github/workflows/auto-pr.yml`: a push to a `claude/*` branch opens its

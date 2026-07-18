@@ -69,6 +69,7 @@ import { salvageVariance, salvageIlvlCurve, salvageRanges as salvageRangesPure }
 import { dangerLevel, heartbeatDue } from '../systems/dangerPulse.js';
 import { rollTo } from '../systems/counterRoll.js';
 import { isSsf, walletGain, walletSpend } from '../systems/ssf.js';
+import { normalizeHeroName } from '../systems/heroName.js';
 import { foodGains } from '../systems/foodRestore.js';
 import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
 import { moatCells, seaMargin } from '../systems/islandFloor.js';
@@ -32978,10 +32979,28 @@ function refreshSexPreviews() {
   draw1('sex-prev-female', set.female);
   draw1('sex-prev-male', set.male);
 }
+// Nudge the player back to an unfilled name box: scroll the (mobile-scrolled)
+// modal up so the field is on screen, shake it with a danger-tinted border, and
+// focus it. A brief timer clears the cue so a repeat click can replay it.
+let _nameShakeTimer = null;
+function nudgeNameInput() {
+  const modal = document.getElementById('name-modal');
+  const input = document.getElementById('name-input');
+  if (modal) { if (modal.scrollTo) modal.scrollTo({ top: 0, behavior: 'smooth' }); else modal.scrollTop = 0; }
+  if (!input) return;
+  input.classList.remove('shake');
+  void input.offsetWidth;            // reflow so re-adding the class restarts the animation
+  input.classList.add('shake');
+  try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); }
+  clearTimeout(_nameShakeTimer);
+  _nameShakeTimer = setTimeout(() => input.classList.remove('shake'), 600);
+}
 function submitName() {
   const input = document.getElementById('name-input');
-  let name = ((input && input.value) || '').trim().replace(/\s+/g, ' ').slice(0, 16);
-  if (!name) name = 'Adventurer';
+  const name = normalizeHeroName(input && input.value);
+  // A hero needs a real name before the quest begins — an empty box nudges the
+  // player back to it (was: silently defaulted to "Adventurer").
+  if (!name) { nudgeNameInput(); return; }
   player.name = name;
   // Lock in the chosen body type (drives which hero sprite is drawn). Defaults to
   // male if somehow unset.

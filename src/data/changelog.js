@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "Name screen requires a hero name", by: "Claude", notes: [
+    "\"Begin Your Quest\" needs a name first — blank box scrolls back up and shakes to prompt you.",
+    "Trimmed name-screen copy; dropped the leaderboards link and the play glyph.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Touch header: livelier points badge, roomier buttons", by: "Claude", notes: [
     "Unspent-points badge pulses with a wisp orbiting its border — points to spend stand out.",
     "Bag & settings buttons swap sides, bigger and centred in the header, off the corner.",
