@@ -11910,9 +11910,16 @@ function tutorialStage(stage) {
     setTutorialHint(`Step into the <b>cave</b> (<span data-spr=ic_down></span>) up north to descend into the dungeon.`);
   }
 }
-function setTutorialHint(html) {
+// `ramp` marks a first-encounter ramp popup — informational, no "?" help badge,
+// and a click anywhere dismisses it (handler wired in showRampHint). The beach
+// tutorial chip (ramp=false) keeps its "?" badge and opens How to Play on click.
+function setTutorialHint(html, ramp = false) {
   const el = document.getElementById('tutorial-hint');
   if (!el) return;
+  el.classList.toggle('ramp', ramp);
+  el.setAttribute('aria-label', ramp ? 'Tip — tap to dismiss' : 'How to play — open the guide');
+  el.title = ramp ? '' : 'How to play';
+  if (!ramp) el.onclick = () => showHowTo();   // ramp overrides this with its own handler below
   const txt = el.querySelector('.th-text');
   if (txt) txt.innerHTML = html; else el.innerHTML = html;
   el.classList.add('show');
@@ -11924,8 +11931,9 @@ function hideTutorialHint() {
 
 // ── RAMP HINTS ── one-line first-encounter teaching chips for a Guided hero. Each
 // fires at most once (latched in player.taught[id]) and reuses the tutorial-hint
-// chip; clicking it opens the matching wiki article. A no-op for a Classic hero,
-// an unknown id, or one already taught. See src/data/onboarding.js HINTS.
+// chip; clicking anywhere dismisses it, while its "Learn more" link opens the
+// matching wiki article. A no-op for a Classic hero, an unknown id, or one already
+// taught. See src/data/onboarding.js HINTS.
 let _rampHintTimer = null;
 function showRampHint(id) {
   if (!player.guided || tutorialActive) return;   // Classic bypasses; the beach owns the chip
@@ -11936,8 +11944,14 @@ function showRampHint(id) {
   const el = document.getElementById('tutorial-hint');
   if (!el) return;
   const learn = h.wiki ? ` <span class="th-more">Learn more ›</span>` : '';
-  setTutorialHint(h.text + learn);
-  el.onclick = () => { if (h.wiki) openWikiTo(h.wiki); else showHowTo(); };
+  setTutorialHint(h.text + learn, true);
+  // Click anywhere on the popup dismisses it; clicking "Learn more" also opens the
+  // matching wiki article. (The "?" badge is hidden for ramp popups — see CSS.)
+  el.onclick = (e) => {
+    if (_rampHintTimer) { clearTimeout(_rampHintTimer); _rampHintTimer = null; }
+    hideTutorialHint();
+    if (h.wiki && e.target.closest('.th-more')) openWikiTo(h.wiki);
+  };
   if (_rampHintTimer) clearTimeout(_rampHintTimer);
   _rampHintTimer = setTimeout(() => { hideTutorialHint(); }, 8500);
   sfx('blip');
