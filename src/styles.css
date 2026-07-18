@@ -5008,7 +5008,7 @@
      map. Portrait only (landscape shows the rotate notice). */
   body.touch {
     --hdr-h: 104px;   /* header band content height (minimap + vitals) */
-    --ftr-h: 134px;   /* footer band content height (2×2 tiles + pill row) */
+    --ftr-h: 150px;   /* footer band content height (2×2 tiles + RUN/AUTO pill row, with clearance so the pills never clip onto the map) */
     --mm-w: 88px;     /* minimap box (fits inside the header band) */
     --tbar-w: 104px;  /* settings + bag, side by side, top-right */
   }
@@ -5315,16 +5315,25 @@
      full-screen sheet is open. */
   body.touch #tutorial-hint {
     top: calc(env(safe-area-inset-top, 0px) + 96px); bottom: auto;
-    left: 50%; transform: translateX(-50%); max-width: 82vw; font-size: var(--fs-sub);
+    left: 50%; transform: translateX(-50%);
+    /* An explicit content width is what lets the box use the full max-width: with a
+       bare left:50% + translateX(-50%) and no width, shrink-to-fit caps the box at
+       ~50vw, squishing the copy into a tall column. `max-content` sizes it to the
+       text (so short ramp hints stay small) and the cap keeps it readable. */
+    width: max-content; max-width: min(90vw, 460px); font-size: var(--fs-sub);
   }
   body.touch.bag-open #tutorial-hint { display: none; }
 
-  /* Objective/bounty chip: dock it just above the bottom action bar on touch so it
-     never sits under the top vitals or the menu/bag buttons. */
+  /* Objective/bounty chip: a quiet cue that sits fully CLEAR of the footer action
+     bar (not over its tiles), compact so it never dominates the bottom of the map.
+     Lifted by the full footer height + a gap; sized to content up to a modest cap. */
   body.touch #objective-chip {
-    top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
-    max-width: 82vw;
+    top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + var(--ftr-h) + var(--space-4));
+    max-width: min(82vw, 340px);
+    font-size: var(--fs-sub); gap: var(--space-2);
+    padding: var(--space-1) var(--space-4);
   }
+  body.touch #objective-chip .obj-ic { font-size: var(--fs-body); }
 
   /* ══════════════════════════════════════════════════════════════════════════
      CONTROLLER (gamepad) layer — shown only under body.pad, revealed on the first

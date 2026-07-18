@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "Mobile onboarding & action-bar polish", by: "Claude", notes: [
+    "Getting-started cue opens the LOOT bag (was How to Play), and shows only once you're holding gear.",
+    "Getting-started cue slimmed and lifted clear of the action bar.",
+    "Taller touch footer — AUTO pill and skill slots no longer clip the bottom edge.",
+    "Wider tutorial tip box; copy breaks over 2 lines, not a cramped column.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Level-up hint names hero & skill points", by: "Claude", notes: [
     "Level-up banner reads \"Spend your hero and skill points!\" (was HERO-tab only).",
   ] },
