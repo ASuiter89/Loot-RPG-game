@@ -4519,7 +4519,7 @@ const CLASSES = {
   rogue: {
     name: 'Rogue', icon: 'w_dagger', color: '#5ec27a',
     blurb: 'A nimble striker — the deadliest weapon hits, but fragile.',
-    lore: 'A shadow that moves between the torchlight, the Rogue kills before the enemy knows the fight has begun. Speed and a whispered blade are the only armour worth trusting.',
+    lore: 'Kills before the foe knows the fight began — speed and a whispered blade, never armour.',
     passive: '+12% damage · crits & dodge that scale with level',
     dmgAttrs: { primary: 'agility', secondary: 'might' },
     weapons: ['Dagger','Sword','Bow'], offhands: ['ranged','dual'], armor: 'light',
@@ -4527,7 +4527,7 @@ const CLASSES = {
   mage: {
     name: 'Mage', icon: 'ic_orb', color: '#7d9bff',
     blurb: 'A glass-cannon caster — a deep mana pool and ranged fire.',
-    lore: 'Bound to the deep currents of magic, the Mage bends raw arcane force to will. Armour is traded away for command over fire, frost, and the spaces between — power that unravels the moment focus breaks.',
+    lore: 'Bends fire, frost, and the space between to will — power, but no armour.',
     passive: '+30% max MP · +15% spell power · −10% damage taken',
     dmgAttrs: { primary: 'spirit', secondary: 'luck' },
     weapons: ['Staff','Dagger'], offhands: ['caster'], armor: 'light',
@@ -4535,7 +4535,7 @@ const CLASSES = {
   templar: {
     name: 'Templar', icon: 'a_shield', color: '#e8c95a',
     blurb: 'A holy veil — the sturdiest hero, and mends its own wounds.',
-    lore: 'Sworn to a holy light, the Templar stands as the last wall between the innocent and the dark. Faith mends every wound as fast as the enemy can open it.',
+    lore: 'The last wall between the innocent and the dark — faith mends wounds as fast as they open.',
     passive: '+20% max HP · −15% damage taken · stronger regen',
     dmgAttrs: { primary: 'vitality', secondary: 'spirit' },
     weapons: ['Sword','Mace','Spear'], offhands: ['shield'], armor: 'heavy',
