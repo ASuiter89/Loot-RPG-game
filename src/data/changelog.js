@@ -10,6 +10,9 @@ export const CHANGELOG = [
   { date: "2026-07-18", size: "small", v: "Vault & cracked-wall rooms stay fully reachable", by: "Claude", notes: [
     "Furniture can no longer seal off part of a vault or cracked-wall room — every tile stays reachable.",
   ] },
+  { date: "2026-07-18", size: "small", v: "Vault keys carry across floors", by: "Claude", notes: [
+    "Unspent vault keys carry to deeper floors (were wiped each descent); stockpile several.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Click anywhere to close a menu", by: "Claude", notes: [
     "Pop-up menus close on a click of any blank area — no scrolling back up to the ✕.",
     "Buttons, toggles, and fields still act; only non-controls dismiss.",

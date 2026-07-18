@@ -30,6 +30,7 @@ import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { restockCost } from '../systems/restockCost.js';
+import { hasVaultKey, addVaultKey, spendVaultKey } from '../systems/vaultKeys.js';
 import { isCritical } from '../systems/crit.js';
 import { favouredBases, armorWeight, rollFavouredBase } from '../systems/classLoot.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
@@ -6326,6 +6327,10 @@ let player = { x: 5, y: 5,
   // recharges after a damage-free window. _noDmgSecs is the calm-timer accumulator.
   shield: 0, maxShield: 0, _noDmgSecs: 0,
   facing: 'left', hp: 100, maxHp: 100, mp: 52, maxMp: 52, gold: 0, level: 1, xp: 0,
+  // Vault keys carried. Persists across floors and through saves (see
+  // systems/vaultKeys.js), so a key found where its door isn't worth the trip
+  // isn't lost — spend it on a locked '+' door on any floor below, or hoard a few.
+  keys: 0,
   // Potions are no longer hoarded consumables — they're an always-available
   // skill gated by a shared 5-second cooldown (see useHealthPotion/useManaPotion),
   // so you can't spam potions back-to-back. `potionCd` is that cooldown, in seconds.
@@ -6744,7 +6749,8 @@ let groundGold = []; // scattered coin piles: { x, y, amount } — grabbed by wa
 let floorTint = null; // optional atmospheric colour overlay for the current floor
 let teleporters = {}; // "y,x" -> { x, y } partner pad for warp tiles
 let groundKey = null; // { x, y } of the vault key on this floor, if any
-let hasKey = false;   // whether the player is currently carrying a vault key
+// Carried keys now live on player.keys (persist across floors + saves); this
+// floor only tracks where an un-picked-up key sits (groundKey, above).
 let deepStair = null; // { x, y } of an express staircase inside a vault (drops 2 floors)
 let vaultInfo = null; // { kind, openMsg } of this floor's locked vault, for the reveal on unlock
 let startPos = { x: 5, y: 5 }; // this floor's safe entry tile (where death sends you)
@@ -7244,7 +7250,8 @@ window.gameState = function gameState(radius) {
     coins: (groundGold || []).map(g => ({ x: g.x, y: g.y, amount: g.amount })),
     food: (typeof groundFood !== 'undefined' ? groundFood || [] : []).map(f => ({ x: f.x, y: f.y, name: f.name })),
     vaultKey: (typeof groundKey !== 'undefined' && groundKey) ? { x: groundKey.x, y: groundKey.y } : null,
-    carryingKey: (typeof hasKey !== 'undefined') ? !!hasKey : false,       // can open a locked '+' vault door
+    carryingKey: hasVaultKey(player.keys),       // holding ≥1 vault key — can open a locked '+' door
+    keys: hasVaultKey(player.keys) ? (player.keys | 0) : 0,   // stockpiled vault keys; persist across floors
     grave: (typeof graveMarker !== 'undefined' && graveMarker) ? { x: graveMarker.x, y: graveMarker.y } : null, // reclaim your dropped bag on THIS floor
     // Your persistent death-drop wherever it lies — survives leaving the floor, and
     // the town Dungeon Gate flags this floor/tier. Null once reclaimed.
@@ -11248,8 +11255,7 @@ function generateMap() {
   // ~35% of floors get a subtle colour wash for atmosphere.
   floorTint = Math.random() < 0.35 ? pick(FLOOR_TINTS) : null;
   teleporters = {};
-  groundKey = null;
-  hasKey = false;
+  groundKey = null;   // where THIS floor's key sits; carried keys ride on player.keys
   deepStair = null; vaultInfo = null;
   quest = null;
   bossHazards = []; bossTelegraphs = [];
@@ -11714,7 +11720,7 @@ function buildBossArena() {
   // ── Floor-scoped resets ── a boss floor carries none of the usual clutter.
   merchant = null; mystic = null;
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null;
-  shrineData = {}; hasFountain = false; groundKey = null; hasKey = false; deepStair = null; vaultInfo = null;
+  shrineData = {}; hasFountain = false; groundKey = null; deepStair = null; vaultInfo = null;
   quest = null; teleporters = {}; nextDiffPortal = null; floorRooms = [];
   bossHazards = []; bossTelegraphs = []; projectiles = []; clearAttackFx();
   floorThemeOverride = null;      // a bare stone arena, not a themed interior
@@ -11769,7 +11775,7 @@ function buildTutorialMap() {
   enemies = []; merchant = null; mystic = null; minions = []; combatBuffs = {};
   groundItems = []; groundFood = []; groundGold = []; graveMarker = null;
   quest = null; teleporters = {}; shrineData = {}; bossHazards = []; bossTelegraphs = [];
-  hasFountain = false; groundKey = null; hasKey = false; deepStair = null; vaultInfo = null;
+  hasFountain = false; groundKey = null; deepStair = null; vaultInfo = null;
   floorMod = FLOOR_MODS[0]; floorTint = null;
   floatingTexts = [];
   statusEffects = (statusEffects || []).filter(s => s.target === 'player');
@@ -12962,7 +12968,7 @@ function captureHeldFloor() {
     MAP_W, MAP_H,
     mapData, wallCracks, furnitureMap, decorMap, teleporters, shrineData, floorVariantMap,
     floorThemeOverride, floorTint, floorMod, floorRooms, floorMobSpec,
-    hasFountain, groundKey, hasKey, deepStair, vaultInfo, startPos,
+    hasFountain, groundKey, deepStair, vaultInfo, startPos,
     dungeonLevel, floorCleared, floorGreed,
     enemies, minions, merchant, mystic, quest,
     groundItems, groundFood, groundGold, graveMarker, nextDiffPortal,
@@ -12996,7 +13002,7 @@ function returnToHeldFloor() {
   teleporters = h.teleporters; shrineData = h.shrineData;
   floorThemeOverride = h.floorThemeOverride; floorTint = h.floorTint;
   floorMod = h.floorMod; floorRooms = h.floorRooms; floorMobSpec = h.floorMobSpec;
-  hasFountain = h.hasFountain; groundKey = h.groundKey; hasKey = h.hasKey;
+  hasFountain = h.hasFountain; groundKey = h.groundKey;
   deepStair = h.deepStair; vaultInfo = h.vaultInfo;
   startPos = h.startPos; dungeonLevel = h.dungeonLevel; floorCleared = h.floorCleared;
   floorGreed = h.floorGreed;   // greed buffs foes IN PLACE on the enemy objects we restore, so restore the multiplier too or the doubled loot/gold silently vanishes while the buffed roster stays
@@ -13132,7 +13138,7 @@ function buildTown(atPortal = false) {
   townShopStock = null; townRestocks = 0; // fresh merchant wares + reset restock surcharge each town visit
   prospectorBought = {}; // reset the Prospector's per-visit material-price surcharge too
   traps = []; projectiles = []; bossHazards = []; bossTelegraphs = []; clearAttackFx(); // real-time hazards / fx never linger into town
-  hasFountain = false; groundKey = null; hasKey = false; deepStair = null; vaultInfo = null;
+  hasFountain = false; groundKey = null; deepStair = null; vaultInfo = null;
   floorMod = FLOOR_MODS[0]; floorTint = 'rgba(120,90,40,0.10)';
   statusEffects = statusEffects.filter(s => s.target === 'player');
 
@@ -21736,17 +21742,19 @@ function playerSolidCell(cx, cy, ignoreFoes) {
 }
 // Unlock a vault door the hero is deliberately pushing INTO (an axis-blocked cell
 // directly in the press direction). Kept out of the pure collision test so a
-// glancing corner never spends the one-time vault key. Cracked walls are NOT
+// glancing corner never spends a carried vault key. Cracked walls are NOT
 // smashed here anymore — they take several paced shoves from any angle, handled by
 // trySmashWalls so approach direction and momentum don't matter.
 function breakAhead(cx, cy) {
   if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
   const t = mapData[cy][cx];
   if (t === 11) showRampHint('vaultDoor');   // ramp: first locked vault door taught (even without a key)
-  if (t === 11 && hasKey) {
-    hasKey = false; mapData[cy][cx] = 0; bumpMapEpochIfChanged(t, 0); pathGridDirty();
+  if (t === 11 && hasVaultKey(player.keys)) {
+    player.keys = spendVaultKey(player.keys).keys;
+    mapData[cy][cx] = 0; bumpMapEpochIfChanged(t, 0); pathGridDirty();
     const reveal = (vaultInfo && vaultInfo.openMsg) || 'A fat chest waits inside!';
     log(`<span data-spr=ic_key></span> Vault door unlocked! ${reveal}`, 'important');
+    saveGameSoon();
   }
 }
 
@@ -22398,11 +22406,14 @@ function onEnterCell(nx, ny) {
     renderPanel();
     updateBars();
   }
-  // Auto-pickup the vault key
+  // Auto-pickup the vault key. Keys stockpile on player.keys and ride along to
+  // deeper floors, so an unspent key is never wasted.
   if (groundKey && groundKey.x === nx && groundKey.y === ny) {
-    groundKey = null; hasKey = true;
+    groundKey = null; player.keys = addVaultKey(player.keys);
     spawnFloatingText(player.x, player.y, 'KEY', '#ffd24b');
-    log('<span data-spr=ic_key></span> Found a vault key! Seek the locked door.', 'important');
+    const held = player.keys > 1 ? ` (${player.keys} held)` : '';
+    log(`<span data-spr=ic_key></span> Found a vault key!${held} Seek a locked door.`, 'important');
+    saveGameSoon();
   }
   // Auto-pickup chests — walk onto a tile and every chest on it opens itself.
   if (pickupChestsAt(nx, ny) > 0) { renderPanelSoon(); updateBars(); }
@@ -30758,6 +30769,9 @@ function loadGame() {
     if (hcDeadSave(data)) { hcBuryDeadSave(data); return false; }
     player = data.player;
     if (player.gold == null) player.gold = 0;
+    // Vault keys used to be a per-floor boolean wiped on every descent; they now
+    // persist across floors as a carried count. Seed it on saves that predate this.
+    if (typeof player.keys !== 'number' || !(player.keys >= 0)) player.keys = 0;
     // Potions used to be hoarded consumables; they're a cooldown-gated skill now.
     // Drop the old counters from older saves and seed the shared potion cooldown.
     delete player.healPotions; delete player.manaPotions; delete player.healthPotionsBought;
