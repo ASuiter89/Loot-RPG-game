@@ -50,3 +50,13 @@ export function rollFavouredBase(names, favoured, rng, bias = CLASS_BASE_BIAS) {
   const roll = arr => arr[Math.floor(rng() * arr.length)];
   return (favoured && favoured.length && rng() < bias) ? roll(favoured) : roll(names);
 }
+
+// Pick a base name GUARANTEED from the favoured subset (no bias gate), falling back
+// to the full list only when the class favours none for this slot. For drops that
+// must be build-relevant EVERY time — e.g. the beach tutorial's first-weapon gift,
+// which hands a new hero a weapon their class actually wants — rather than the
+// mostly-favoured mix rollFavouredBase gives.
+export function rollForcedFavouredBase(names, favoured, rng) {
+  const pool = (favoured && favoured.length) ? favoured : names;
+  return pool[Math.floor(rng() * pool.length)];
+}

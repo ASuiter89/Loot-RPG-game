@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { armorWeight, favouredBases, rollFavouredBase, CLASS_BASE_BIAS, ARMOR_HEAVY_DEF }
+import { armorWeight, favouredBases, rollFavouredBase, rollForcedFavouredBase, CLASS_BASE_BIAS, ARMOR_HEAVY_DEF }
   from '../../src/systems/classLoot.js';
 
 // Tiny stand-ins mirroring the game's real data shape, so the lean can be checked
@@ -75,5 +75,24 @@ describe('rollFavouredBase', () => {
     const rng = () => { calls++; return 0.5; }; // only the pick draw should run
     expect(rollFavouredBase(['a', 'b', 'c'], [], rng)).toBe('b');
     expect(calls).toBe(1); // no wasted gate draw when there is no favoured set
+  });
+});
+
+describe('rollForcedFavouredBase', () => {
+  it('ALWAYS picks from the favoured set — no bias gate to fall through', () => {
+    // Even an rng that would fail rollFavouredBase's gate every time still lands
+    // inside the favoured pool, and consumes a single draw (the pick).
+    let calls = 0;
+    const rng = () => { calls++; return 0.99; };
+    expect(rollForcedFavouredBase(['a', 'b', 'c'], ['x', 'y'], rng)).toBe('y');
+    expect(calls).toBe(1);
+  });
+  it('picks each favoured entry by index off the one draw', () => {
+    expect(rollForcedFavouredBase(['a', 'b', 'c'], ['x', 'y', 'z'], () => 0)).toBe('x');
+    expect(rollForcedFavouredBase(['a', 'b', 'c'], ['x', 'y', 'z'], () => 0.5)).toBe('y');
+  });
+  it('falls back to the full list when the class favours nothing', () => {
+    expect(rollForcedFavouredBase(['a', 'b', 'c'], [], () => 0.5)).toBe('b');
+    expect(rollForcedFavouredBase(['a', 'b', 'c'], null, () => 0)).toBe('a');
   });
 });
