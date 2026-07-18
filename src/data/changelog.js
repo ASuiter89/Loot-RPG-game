@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "Beach tutorial: wisp cues, and the cave gates on spending your points", by: "Claude", notes: [
+    "Weapon-drop & level-up prompts are non-blocking pills ringed by a circling wisp; tap one to jump to the right tab.",
+    "LOOT tab and the first weapon's EQUIP button wisp until you equip.",
+    "Cave won't open until your Level-2 stat & skill points are spent — warns if you try early.",
+    "Beach and floors 1–3: every foe takes at least 3 hits to kill.",
+  ] },
   { date: "2026-07-17", size: "small", v: "HERO tab Status section; Stats moves to GEAR", by: "Claude", notes: [
     "HERO tab gains Status — active buffs, debuffs and boons with icon, magnitude and time left; top-right icons kept.",
     "First-shrine tip points to the HERO tab's Status (was the log).",
