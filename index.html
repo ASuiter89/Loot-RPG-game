@@ -75,6 +75,7 @@
     <div class="xp-track"><div class="xp-fill" id="xp-bar" style="width:0%"></div></div>
   </div>
   <div class="hud-item" id="enemies-hud" data-tip="<div class='ht-name'><span data-spr='ui_foes'></span> Foes Remaining</div><div class='ht-line'>How many enemies are still alive on this floor. The stairs down stay sealed (<span data-spr=feat_door></span>) until every foe is cleared (<span data-spr=feat_door></span>).</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr="ui_foes"></span> <span class="hud-val" id="enemies-num">0</span> <span id="clear-status"><span data-spr=feat_door></span></span></div>
+  <div class="hud-item" id="chests-hud" style="display:none" data-tip="<div class='ht-name'><span data-spr=chest></span> Chests Remaining</div><div class='ht-line'>How many unopened chests are still waiting on this floor — walk over one to grab its loot.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr=chest></span> <span class="hud-val" id="chests-num">0</span></div>
   <div class="hud-item" id="power-hud" data-tip="<div class='ht-name'><span data-spr='ui_power'></span> Power</div><div class='ht-line'>A rough measure of your overall strength, combining your level, equipped gear, attributes and skills.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr="ui_power"></span> <span class="hud-val" id="power-num">0</span></div>
   <div class="hud-item" id="pact-hud" style="display:none" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr=ic_orb></span> <span class="hud-val" id="pact-num"></span></div>
   <div class="hud-item" id="food-hud" style="display:none" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"></div>
@@ -95,6 +96,7 @@
     <div id="map-info">
       <div id="map-floor"><span data-spr=feat_gate_red></span> <span id="map-floor-num">1</span><span class="floor-diff" id="map-floor-diff"></span></div>
       <div id="map-foes"><span data-spr="ui_foes"></span> <span id="map-foes-num">0</span> foes</div>
+      <div id="map-chests" style="display:none"><span data-spr=chest></span> <span id="map-chests-num">0</span> chests</div>
     </div>
     <!-- Active buffs & debuffs, overlaid on the top-right of the map and kept
          right-aligned (effects fill in from the right corner). Populated by
@@ -621,7 +623,7 @@
       </div>
       <div id="shop-gold">Your gold: <span data-spr=ic_money></span><span id="shop-gold-count">0</span><span id="shop-gold-vault"></span></div>
       <div id="shop-mats"></div>
-      <div id="shop-tabs"><button class="shop-tab active" id="shoptab-buy" onclick="shopTab('buy')">BUY</button><button class="shop-tab" id="shoptab-sell" onclick="shopTab('sell')">SELL</button></div>
+      <div id="shop-tabs"><button class="shop-tab active" id="shoptab-buy" onclick="shopTab('buy')">BUY</button><button class="shop-tab" id="shoptab-sell" onclick="shopTab('sell')">SELL</button><button class="shop-tab" id="shoptab-kit" onclick="shopTab('kit')">KIT</button></div>
       <div id="shop-content"></div>
     </div>
   </div>
