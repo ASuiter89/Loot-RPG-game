@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "Title screen: no rotating tip", by: "Claude", notes: [
+    "Dropped the one-line strategy tip that cycled under the tagline.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Name box hints \"Enter a name\"", by: "Claude", notes: [
     "Name field placeholder reads \"Enter a name\" (was \"Adventurer\").",
   ] },
