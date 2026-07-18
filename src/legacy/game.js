@@ -61,7 +61,7 @@ import {
   rampDepth, featureUnlocked, unlockedSkillSlots, elitesAllowed, gearRequirementsActive,
   setItemsAllowed, cursedItemsAllowed, uniqueItemsAllowed, loadoutSwapUnlocked,
   detailedTooltips, hazardAllowed, earlyRelief, earlyPackCap,
-  firstHint, keeperIntro, starterChain, tip as rampTip, deathTip as rampDeathTip,
+  firstHint, keeperIntro, starterChain, deathTip as rampDeathTip,
   rampStatus,
 } from '../systems/onboarding.js';
 import { HINTS, KEEPER_INTRO } from '../data/onboarding.js';
@@ -33369,14 +33369,9 @@ function renderSettingsHero() {
   if (html) { el.innerHTML = html; el.style.display = ''; }
   else { el.innerHTML = ''; el.style.display = 'none'; }
 }
-let _titleTipN = 0;
 function showTitle() {
   const ov = document.getElementById('title-overlay');
   if (!ov) return;
-  // A rotating one-line strategy tip under the tagline — a gentle bit of teaching
-  // on the way in, cycling a new one each time the title is shown.
-  const tipEl = document.getElementById('title-tip');
-  if (tipEl) tipEl.innerHTML = `<span data-spr=scroll></span> ${rampTip((player && (player.level || 0)) + _titleTipN++)}`;
   // Seed the drifting-ember background once (decorative, behind the content).
   const emb = document.getElementById('title-embers');
   if (emb && !emb.childElementCount) {
