@@ -436,6 +436,7 @@
   }
   #map-floor { color: var(--info); }
   #map-foes { color: var(--red-200); }
+  #map-chests { color: var(--gold); }
 
   /* Active buffs & debuffs, overlaid across the TOP-RIGHT of the map and kept
      right-aligned: chips fill from the right edge leftward (row-reverse), so as
@@ -3198,6 +3199,10 @@
   .ench-act:disabled { opacity: 0.5; cursor: not-allowed; }
   .shop-sell-btn:active { background: var(--gold); }
   .shop-empty { color: var(--junk); text-align: center; padding: 24px 0; font-size: 1.4rem; }
+  /* Merchant Field Kit (KIT tab): buy the HUD readout instruments. */
+  .kit-intro { color: var(--text-muted); font-size: var(--fs-sub); line-height: 1.4; padding: var(--space-4) var(--space-3) var(--space-5); }
+  .kit-owned { color: var(--green-450); font-weight: bold; font-size: var(--fs-sub); white-space: nowrap; }
+  .shop-row.owned { opacity: 0.8; }
   .shop-sell-all-bar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
   .shop-sell-all-btn {
     border: none; border-radius: 5px; cursor: pointer;
