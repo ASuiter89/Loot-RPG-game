@@ -3710,6 +3710,20 @@
     font-size: 1.8rem; text-align: center; letter-spacing: 1px; padding: 11px 12px; margin-bottom: 12px;
   }
   #name-input:focus { outline: none; border-color: var(--gold); }
+  /* Empty-name nudge: hitting "Begin Your Quest" with a blank box scrolls the
+     field back into view and shakes it with a danger-tinted border so the
+     player knows to fill it in. Placed after :focus so its border wins while
+     the class is applied. */
+  @keyframes nameShake {
+    0%, 100% { transform: translateX(0); }
+    15% { transform: translateX(-7px); }
+    30% { transform: translateX(6px); }
+    45% { transform: translateX(-5px); }
+    60% { transform: translateX(4px); }
+    80% { transform: translateX(-2px); }
+  }
+  #name-input.shake { animation: nameShake 0.5s ease-in-out; border-color: var(--danger); }
+  @media (prefers-reduced-motion: reduce) { #name-input.shake { animation: none; } }
   /* Body-type picker on the name screen — two balanced options. The Warrior shows
      its female/male sprite preview; other classes hide the thumbnail (.no-prev). */
   .sex-pick { display: flex; gap: 8px; margin-bottom: 12px; }
