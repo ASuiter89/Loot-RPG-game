@@ -13,6 +13,10 @@ export const CHANGELOG = [
   { date: "2026-07-18", size: "small", v: "Vault keys carry across floors", by: "Claude", notes: [
     "Unspent vault keys carry to deeper floors (were wiped each descent); stockpile several.",
   ] },
+  { date: "2026-07-18", size: "small", v: "New Run on the title", by: "Claude", notes: [
+    "NEW RUN under CONTINUE starts a fresh hero in next free slot; current hero stays saved.",
+    "Drop ▶ play glyph before CONTINUE and Load.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Click anywhere to close a menu", by: "Claude", notes: [
     "Pop-up menus close on a click of any blank area — no scrolling back up to the ✕.",
     "Buttons, toggles, and fields still act; only non-controls dismiss.",

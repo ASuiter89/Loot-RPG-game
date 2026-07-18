@@ -3951,6 +3951,20 @@
     -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   }
   .title-play:active { background: var(--orange-850); }
+  /* New Run — the secondary CTA directly under CONTINUE (returning heroes only).
+     Same full width and rounded shape as the play button but deliberately calmer:
+     a muted panel fill, a thin border and a smaller label, and none of the golden
+     pulse/wisp animation below — so CONTINUE stays the unmistakable primary action
+     while New Run is one tap away. */
+  .title-newrun {
+    width: 100%; box-sizing: border-box; padding: 11px; margin: 0 0 10px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--orange-850); color: var(--gold-200);
+    font-family: var(--font-ui); font-size: 1.5rem; font-weight: bold;
+    letter-spacing: 1.5px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .title-newrun:active { background: var(--orange-850); }
   /* Primary CTA (ENTER / CONTINUE) — the one action that starts the game, so it
      gets extra pull: the whole frame breathes with a pulsing golden glow while
      two bright wisps of light chase each other around the border. Scoped to
