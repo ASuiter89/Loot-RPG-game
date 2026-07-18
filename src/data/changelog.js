@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "Beach starter weapon fits your class", by: "Claude", notes: [
+    "First beach skeleton felled drops the starter weapon — whichever of the five, not a fixed one.",
+    "That weapon is now always a base your class favours (Warrior sword/axe; Mage staff/dagger; etc.).",
+  ] },
   { date: "2026-07-18", size: "small", v: "Spirit Veil comes from gear, not raw Spirit", by: "Claude", notes: [
     "Spirit no longer grants innate Spirit Veil; fresh heroes have none (no stray blue HUD number).",
     "Veil comes only from gear/spells; Spirit boosts it +2%/pt over baseline (class-scaled, Mage best).",

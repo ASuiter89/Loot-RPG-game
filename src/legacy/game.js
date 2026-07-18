@@ -32,7 +32,7 @@ import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { restockCost } from '../systems/restockCost.js';
 import { hasVaultKey, addVaultKey, spendVaultKey } from '../systems/vaultKeys.js';
 import { isCritical } from '../systems/crit.js';
-import { favouredBases, armorWeight, rollFavouredBase } from '../systems/classLoot.js';
+import { favouredBases, armorWeight, rollFavouredBase, rollForcedFavouredBase } from '../systems/classLoot.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
 import { rollDamage, spreadRange } from '../systems/damageRoll.js';
@@ -7741,7 +7741,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall sandy shore where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals the first of five skeletons. Felling that first one drops your first weapon — a non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The other four wait further north, and the cave down to floor 1 stays SEALED until all five fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall sandy shore where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals the first of five skeletons. Felling your FIRST skeleton — whichever of the five you strike down first — drops your first weapon, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger); a non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The other four wait further north, and the cave down to floor 1 stays SEALED until all five fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view.`,
       `Opening-floor content pacing (Normal, floors 1–25): foes are fewer and softer on floors 1–5 and climb to full strength by floor 6; the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. TRAINING WHEELS: on the beach and floors 1–3, no single blow can fell a foe in fewer than 3 hits (per-hit damage is capped to leave it alive through its first two), so a new player always trades a few real blows rather than one-shotting trash. No glowing ELITES or elite affixes until floor 4. Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -11837,15 +11837,18 @@ function buildTutorialMap() {
   // (slow). The `tutorial` flag routes their death through the beach handler
   // (no XP/loot spam; the clear grants the level-up instead).
   //   • The FIRST sits well up the empty beach, OFF-SCREEN at spawn, so the hero
-  //     has to walk to meet it. Felling it drops a weapon to equip (`tutorialGear`).
+  //     has to walk to meet it — the lone foe they'd normally fell first.
   //   • The other FOUR cluster further north again — up by the cave and off-screen
   //     from the first — and the cave stays sealed until all five fall.
+  // Whichever one falls FIRST hands over the starter weapon (see onEnemyDefeated /
+  // _beachGearDropped), so the gift never hinges on kill order.
+  _beachGearDropped = false;
   const mkSkeleton = (x, y, extra) => Object.assign({
     x, y, type: 'skeleton', name: 'Skeleton', hp: 20, maxHp: 20, level: 1, dmg: 3,
     dead: false, behavior: 'chaser', passive: true, provoked: false, slow: true,
     tutorial: true,
   }, extra || {});
-  enemies.push(mkSkeleton(caveX, 20, { hp: 24, maxHp: 24, dmg: 4, tutorialGear: true }));
+  enemies.push(mkSkeleton(caveX, 20, { hp: 24, maxHp: 24, dmg: 4 }));
   enemies.push(mkSkeleton(caveX, 9));
   enemies.push(mkSkeleton(caveX - 2, 7));
   enemies.push(mkSkeleton(caveX + 2, 7));
@@ -11896,6 +11899,11 @@ const _tutDismissed = { equip: false, levelup: false };
 // SHARES the lower banner slot with the actionable popup, so syncBeachHint() reveals
 // it only when no popup is up.
 let _beachHintStage = null;
+// Whether the beach's one starter weapon has already dropped this tutorial. The
+// FIRST skeleton felled — whichever of the five it is — hands it over, so the gift
+// never depends on kill order. Reset per tutorial in buildTutorialMap; the save
+// doesn't persist enemies, so a mid-beach reload rebuilds the shore and re-arms it.
+let _beachGearDropped = false;
 
 // Whether the "go equip your first weapon" cue is live: on the beach with the
 // starter weapon still sitting unequipped in the bag. Clears the instant it's worn.
@@ -11909,11 +11917,26 @@ function beachSpendCueOn() {
     ((player.attrPoints || 0) > 0 || (player.skillPoints || 0) > 0));
 }
 
+// The weapon base the hero's class actually wants — a Sword/Axe/… for a Warrior, a
+// Staff/Dagger for a Mage, and so on (see CLASSES[*].weapons). Reuses the tested
+// class-lean helpers, but GUARANTEES the pick lands in the favoured set rather than
+// leaning ~60% toward it, so the beach gift is a build-relevant weapon every time.
+function classStarterWeaponBase() {
+  const names = SLOTS.weapon.names;
+  const favoured = favouredBases('weapon', names, playerClass(), {
+    categoryOf: weaponCategoryOf,
+    familyOf: n => (BASE_STATS[n] || {}).off,
+    weightOf: n => armorWeight((BASE_STATS[n] || {}).def),
+  });
+  return rollForcedFavouredBase(names, favoured, Math.random);
+}
+
 function dropTutorialGear(e) {
   // The hero starts UNARMED, so the first skeleton's drop is their very first
-  // weapon. Force an uncommon (green), class-favoured weapon — a clear upgrade —
-  // and flag it a starter gift so it's always wearable (no stat gate to stumble on).
-  const item = generateItem(1, 1, 'uncommon', 'weapon');
+  // weapon. Force an uncommon (green) weapon of a base the chosen class favours — a
+  // clear, build-relevant upgrade — and flag it a starter gift so it's always
+  // wearable (no stat gate to stumble on).
+  const item = generateItem(1, 1, 'uncommon', 'weapon', classStarterWeaponBase());
   item.tutorialGift = true;
   recordWardrobe(item);
   inventory.push(item);
@@ -17301,7 +17324,7 @@ function isFixedItem(item) { return !!(item && item.fixed); }
 // on this, so the two locked kinds behave identically (read-only, no reroll/augment).
 function isEnchantLocked(item) { return isFixedItem(item) || !!(item && item.cursed); }
 
-function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null) {
+function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null, forceBase = null) {
   // Item level: how deep this drop is geared for. Higher item level means
   // bigger raw stats regardless of rarity, so loot from deeper floors steadily
   // outweighs rarer loot found earlier. Defaults to the current dungeon depth.
@@ -17330,7 +17353,10 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
     return buildUnique(pickUnique(forceSlot), lvl);
   }
   const slot = (forceSlot && SLOTS[forceSlot]) ? forceSlot : weighted(SLOT_WEIGHTS);
-  const baseName = rollBaseName(slot);
+  // forceBase pins the base type (must be valid for the resolved slot) — used by the
+  // beach tutorial to hand over a guaranteed class-favoured weapon; otherwise the base
+  // is rolled with the usual class lean.
+  const baseName = (forceBase && SLOTS[slot].names.includes(forceBase)) ? forceBase : rollBaseName(slot);
 
   let name = baseName;
   if (tier === 'uncommon') name = pick(PREFIXES) + ' ' + baseName;
@@ -23163,14 +23189,15 @@ function onEnemyDefeated(e) {
   // ── Beach tutorial ── the five shore skeletons pay out a scripted, gentle
   // reward, NOT the full loot routine: no XP or drop spam (so the first level-up
   // fires exactly on the fifth kill — see updateFloorClear — rather than trickling
-  // in from kill XP), just a puff of bone dust. The FIRST one hands over a weapon
-  // to equip. Clears the tile and re-checks the floor, same as any kill.
+  // in from kill XP), just a puff of bone dust. The FIRST one felled — whichever of
+  // the five — hands over a weapon to equip (tracked by _beachGearDropped, so kill
+  // order can't strand the gift). Clears the tile and re-checks the floor.
   if (tutorialActive && e.tutorial) {
     sfx('kill');
     spawnParticles(e.x, e.y, '#e6ebf2', 12, 0.13);   // bone-dust burst
     // The weapon drop's own popup (+ bag/LOOT/EQUIP wisps) carries the guidance now,
     // so park the ambient "?" hint rather than stacking a second banner on it.
-    if (e.tutorialGear) { dropTutorialGear(e); if (!floorCleared) tutorialStage('quiet'); }
+    if (!_beachGearDropped) { _beachGearDropped = true; dropTutorialGear(e); if (!floorCleared) tutorialStage('quiet'); }
     updateObjectiveChip();
     renderPanelSoon();
     updateFloorClear();
