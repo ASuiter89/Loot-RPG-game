@@ -10679,8 +10679,15 @@ function clearCorridorPlugs() {
 // stretch an object walled OFF (disconnection); phase 2 (clearCorridorPlugs) frees
 // any object left sitting IN a 1-wide hall it fully plugs even with a detour.
 function clearObjectBlockedPaths() {
-  const enter = (x, y) => isEnterable(mapData[y][x]);
-  const through = (x, y) => isWalkThrough(mapData[y][x]);
+  // Breakable/openable terrain (a cracked wall 10, a vault door 11) is reachable in
+  // play — you smash or unlock it — so an object walling off floor BEHIND one is a
+  // real, if rare, strand the heal must reopen too. Cross it for connectivity, the
+  // same "reachable in play" model __connCheck audits against. Terminal tiles
+  // (stairs / teleporter pads) stay excluded via isEnterable/isWalkThrough: you
+  // can't walk on past them, so nothing is reachable "through" them.
+  const breakable = (t) => t === 10 || t === 11;
+  const enter = (x, y) => { const t = mapData[y][x]; return isEnterable(t) || breakable(t); };
+  const through = (x, y) => { const t = mapData[y][x]; return isWalkThrough(t) || breakable(t); };
   const objectSolid = (x, y) => tileBlockedByObject(x, y);
   for (let pass = 0; pass < 400; pass++) {
     // The first EMPTY floor tile the bare terrain reaches but an object walled off
@@ -34084,10 +34091,14 @@ try {
     // footprint straddles a true 1-wide through-corridor tile, so a smoke test can
     // assert both are zero. outside:0 && corridor:0 means no piece plugs a path.
     window.__decorPlugCheck = function () {
-      const isFloor = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && mapData[y][x] === 0;
-      // A genuine 1-wide straight passage tile: open on two OPPOSITE sides, walled
-      // on the other two (a corner is open on ADJACENT sides — not a through-tile).
-      const throughTile = (x, y) => isThroughCorridor(x, y, MAP_W, MAP_H, isFloor);
+      // Judge a 1-wide passage by what the hero can walk THROUGH (isWalkThrough) —
+      // matching the heal (clearCorridorPlugs/onThroughCorridor), __corridorPlugCheck,
+      // and isThroughCorridor's own contract. A walkable perpendicular neighbour
+      // (spike/shrine/fountain/lava) means a detour exists, so the tile isn't truly
+      // 1-wide: a room piece merely adjacent to such a hazard is NOT a plug. (Judging
+      // by strict floor flagged those as false positives — the sweep's flake.)
+      const walk = (x, y) => isWalkThrough(mapData[y][x]);
+      const throughTile = (x, y) => isThroughCorridor(x, y, MAP_W, MAP_H, walk);
       let outside = 0, corridor = 0; const detail = [];
       for (const k in decorMap) {
         const id = decorMap[k]; if (!DECOR_SOLID[id]) continue;
