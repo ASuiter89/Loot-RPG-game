@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "Town welcome hint", by: "Claude", notes: [
+    "First climb into town shows a one-time hint-chip greeting — safe haven; tap the Town button to teleport back any time.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Bestiary joins the title menu grid", by: "Claude", notes: [
     "Bestiary is a grid tile beside Achievements (was pause menu only); fills the 3×3 grid.",
     "Discovered/total foe count reads gold.",

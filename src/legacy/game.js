@@ -6400,6 +6400,9 @@ let player = { x: 5, y: 5,
   // by buildTown on the first arrival (persisted); the transient `townIntroGlow`
   // module flag lights the freshly-revealed button through that first visit.
   townVisited: false,
+  // One-time "welcome to your safe haven" hint chip shown on the very first town
+  // arrival (after the Floor 5 guardian falls). Latched here so it fires once ever.
+  townWelcomed: false,
   // ── ONBOARDING / RAMP (see src/data/onboarding.js + systems/onboarding.js) ──
   // `guided` is the master switch chosen at hero creation: a Guided hero (the
   // default) gets the full ramp — gentler opening floors, staggered mechanics, and
@@ -7647,7 +7650,7 @@ window.gameGuide = function gameGuide(topic) {
       `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
     ],
     town: [
-`The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived — and the HUD's Town button stays HIDDEN until you first set foot in the camp (player.townVisited flips true on that first arrival, revealing the button). That first kill opens the camp — and when you then leave Floor 5 you climb up into town for a one-time celebration (the townsfolk cheer and thank you, the first keeper — the Healer — arrives, and the newly-revealed Town button glows for that visit) before a Town Portal there carries you on to Floor 6. `
+`The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived — and the HUD's Town button stays HIDDEN until you first set foot in the camp (player.townVisited flips true on that first arrival, revealing the button). That first kill opens the camp — and when you then leave Floor 5 you climb up into town for a one-time celebration (the townsfolk cheer and thank you, a one-time WELCOME hint chip greets you — town is your safe haven and the Town button teleports you home — the first keeper — the Healer — arrives, and the newly-revealed Town button glows for that visit) before a Town Portal there carries you on to Floor 6. `
       + `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the regular service keepers milling about the green at FRESH random spots every visit (most of them slowly strolling around) and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all. A keeper only appears once it has ARRIVED (one joins per boss kill) — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
       `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff, healerBuffs and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
@@ -12005,6 +12008,33 @@ function openWikiTo(artId) {
   if (catId) wikiOpenArticle(catId, artId);
 }
 
+// ── TOWN WELCOME ── a one-time greeting the very first time the hero climbs into
+// town (the Floor 5 guardian has fallen and the camp opened). Reuses the small,
+// non-blocking tutorial-hint chip (NOT a world-pausing modal) — the same pill the
+// ramp hints use — so it's a glanceable banner, not a wall. Unlike the guided ramp
+// hints it shows for EVERY hero (a genuine milestone), latched by player.townWelcomed
+// so it appears exactly once, ever. Called from both first-arrival paths
+// (graduateToTown via the stairs, warpToTown via the Town button); both save
+// afterward, persisting the latch. Tapping it (or "Learn more ›") opens the town wiki.
+function showTownWelcome() {
+  if (player.townWelcomed) return;
+  player.townWelcomed = true;
+  const el = document.getElementById('tutorial-hint');
+  if (!el) return;
+  const text = `<b>Welcome to town</b> — a safe haven where no foe treads. Tap the <b>Town</b> button from any floor to teleport back to rest, shop and resupply.`;
+  setTutorialHint(text + ` <span class="th-more">Learn more ›</span>`, true);   // ramp-style: informational, no "?" badge
+  // Click anywhere dismisses; clicking "Learn more" also opens the town wiki
+  // (mirrors showRampHint's handler — see the tap-to-dismiss change in #652).
+  el.onclick = (e) => {
+    if (_rampHintTimer) { clearTimeout(_rampHintTimer); _rampHintTimer = null; }
+    hideTutorialHint();
+    if (e.target.closest('.th-more')) openWikiTo('town');
+  };
+  if (_rampHintTimer) clearTimeout(_rampHintTimer);
+  _rampHintTimer = setTimeout(() => { hideTutorialHint(); }, 12000);
+  sfx('blip');
+}
+
 // Build a standard floor-level foe at a tile (used for quest hordes).
 function makeQuestFoe(x, y) {
   const bandIdx = Math.min(Math.floor((dungeonLevel - 1) / 3), ENEMY_POOL.length - 1);
@@ -13008,6 +13038,7 @@ function warpToTown() {
     player.pendingTownGraduation = false;
     log('<span data-spr=q_relic></span> The townsfolk greet the guardian-slayer with open arms — their services are yours.', 'important');
     log(`<span data-spr=feat_gate_red></span> Town is your haven now — from any floor, tap the glowing <b>Town</b> button (${kbLabel('portal')}) to teleport back here any time to rest, shop and resupply.`, 'important');
+    showTownWelcome();   // one-time "welcome to your safe haven" hint chip on the first arrival
     saveGameSoon();
   }
   updateBars(); renderSkillBar();
@@ -13048,6 +13079,7 @@ function graduateToTown() {
   log('<span data-spr=q_relic></span> Word of the fallen guardian races ahead of you. The townsfolk pour out cheering — grateful, the <b>Healer</b> opens their door first; more keepers arrive with each guardian you fell.', 'important');
   log(`<span data-spr=feat_gate_red></span> Town is your haven now — from any floor, tap the glowing <b>Town</b> button (${kbLabel('portal')}) to teleport back here any time to rest, shop and resupply.`, 'important');
   log('Rest and resupply, then step into the <span data-spr=feat_portal></span> Town Portal when you\'re ready to press on to <b>Floor 6</b>.');
+  showTownWelcome();   // one-time "welcome to your safe haven" hint chip on the first arrival
   updateBars(); renderSkillBar();
   draw();
   saveGame();
@@ -30889,6 +30921,13 @@ function loadGame() {
     if (typeof player.townVisited !== 'boolean') {
       player.townVisited = townUnlocked() && !player.pendingTownGraduation;
     }
+    // The one-time town-welcome hint chip is new: a hero who has already set foot in
+    // the camp has seen (or played past) that moment, so mark it shown — only a
+    // hero still owed their first arrival (graduation pending, or not yet visited)
+    // is due it. Prevents replaying the greeting for established saves.
+    if (typeof player.townWelcomed !== 'boolean') {
+      player.townWelcomed = !!player.townVisited;
+    }
     // Retire the boss-point gear-slot investment (feature removed): boss points now
     // feed only the Ascendant Weave. Drop the stored per-set slot levels so an old
     // save loads clean and no vestigial field lingers.
@@ -37233,6 +37272,7 @@ const __DL_FN_BRIDGE = {
   bossGateCancel,
   tutPopupClick,
   tutPopupDismiss,
+  showTownWelcome,
   openTownService,
   // ── Endgame panel handlers (inline onclick=) ──
   openCovenants, covToggle, covClearAll,
