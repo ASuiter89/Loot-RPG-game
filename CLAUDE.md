@@ -81,6 +81,12 @@ lives in `src/legacy/game.js` and shrinks as code is extracted.)
     than force-merge it. So land one change at a time, and if your PR falls behind
     `main` (usually just that changelog collision), rebase it onto latest `main` —
     re-stack the entry newest-first, keeping both sides — and push so it can merge.
+  - **When your change has merged and nothing's left to do, tell the user they can
+    archive this session** — Claude Code has no tool to archive a session itself, so
+    this can't be automatic. The PR subscription delivers a merged event
+    (`Outcome: merged`) into the session; on seeing it (or otherwise confirming the
+    squash landed), close out with a one-line "merged & shipped — you can archive
+    this session" sign-off rather than ending silently.
 - **All on-screen art is real pixel art — never an emoji as the thing itself.**
   Every game asset (heroes, enemies, bosses, NPCs, minions, items, pickups,
   projectiles, status icons, world objects) must be actual pixel-art imagery on the
