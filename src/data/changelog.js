@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "Touch header: livelier points badge, roomier buttons", by: "Claude", notes: [
+    "Unspent-points badge pulses with a wisp orbiting its border — points to spend stand out.",
+    "Bag & settings buttons swap sides, bigger and centred in the header, off the corner.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Mobile onboarding & action-bar polish", by: "Claude", notes: [
     "Getting-started cue opens the LOOT bag (was How to Play), and shows only once you're holding gear.",
     "Getting-started cue slimmed and lifted clear of the action bar.",

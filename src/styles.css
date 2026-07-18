@@ -5010,7 +5010,12 @@
     --hdr-h: 104px;   /* header band content height (minimap + vitals) */
     --ftr-h: 150px;   /* footer band content height (2×2 tiles + RUN/AUTO pill row, with clearance so the pills never clip onto the map) */
     --mm-w: 88px;     /* minimap box (fits inside the header band) */
-    --tbar-w: 104px;  /* settings + bag, side by side, top-right */
+    /* Bag/settings tile diameter — fluid so it's a big 58px target on a normal
+       phone yet shrinks on a ~280px foldable cover screen (where a fixed 58px would
+       shove the tiles onto the vitals). Floors at 46px so it never drops below a
+       comfortable touch target. */
+    --tutil-sz: clamp(46px, 15vw, 58px);
+    --tbar-w: calc(var(--tutil-sz) * 2 + 12px);  /* the two tiles + the 12px gap between them */
   }
   body.touch #main { position: relative; flex: 1 1 auto; min-height: 0; }
   /* The map lives strictly between the two bands. Absolute (not fixed) so it does
@@ -5030,7 +5035,7 @@
   body.touch #map-info { display: none !important; }
 
   /* ── Header band ── solid bar across the top. Minimap at the left, the vitals
-     (HP/MP · floor · foes · gold) just right of it, and settings + bag at the
+     (HP/MP · floor · foes · gold) just right of it, and bag + settings at the
      far right. Sized to contain all of that. */
   body.touch #header {
     position: fixed; top: 0; left: 0; right: 0; z-index: var(--z-touch);
@@ -5061,10 +5066,12 @@
     background: var(--bg); opacity: 1;   /* solid so it reads on the dark header band */
   }
   body.touch #minimap.collapsed { width: 30px !important; height: 30px !important; }
-  /* Settings + bag: top-right of the header band, side by side. */
+  /* Bag + settings: upper-right of the header band, side by side, vertically
+     centred in the band (level with the minimap) so the two tiles read clear of
+     the corner instead of jammed against the top edge. */
   body.touch #touch-topbar {
-    position: fixed; pointer-events: auto; display: flex; flex-direction: row; gap: 8px;
-    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    position: fixed; pointer-events: auto; display: flex; flex-direction: row; gap: 12px;
+    top: calc(env(safe-area-inset-top, 0px) + (var(--hdr-h) - var(--tutil-sz)) / 2);
     right: calc(env(safe-area-inset-right, 0px) + 8px); left: auto;
     z-index: calc(var(--z-touch) + 1);
   }
@@ -5097,24 +5104,57 @@
     z-index: var(--z-touch);
   }
 
-  /* Utility buttons (menu, bag): 48px round translucent tiles. */
+  /* Utility buttons (bag, menu): round translucent tiles sized by --tutil-sz. */
   .touch-util {
-    width: 48px; height: 48px; border-radius: var(--radius-pill); position: relative;
+    width: var(--tutil-sz); height: var(--tutil-sz); border-radius: var(--radius-pill); position: relative;
     display: flex; align-items: center; justify-content: center;
     background: color-mix(in srgb, var(--panel-raised) 76%, transparent);
     border: 1px solid var(--border); color: var(--purple-200);
     box-shadow: var(--shadow-sm); cursor: pointer;
     -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   }
-  .touch-util svg { width: 24px; height: 24px; }
+  .touch-util svg { width: 30px; height: 30px; }
   .touch-util:active { background: color-mix(in srgb, var(--interactive) 32%, var(--panel)); }
+  /* Unspent-points badge: a gold circle carrying the count. It PULSES and a bright
+     wisp orbits its border so the player can't miss that hero/skill points are
+     waiting to spend. Hidden (:empty) at zero. The wisp is two orbiting sparks — a
+     bright head (::after) trailed by a dimmer spark (::before). */
   .tb-badge {
-    position: absolute; top: -3px; right: -3px; min-width: 16px; height: 16px; padding: 0 3px;
+    position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 4px;
+    box-sizing: border-box;
     border-radius: var(--radius-pill); background: var(--gold); color: var(--ink);
-    font-size: 1.1rem; font-weight: bold; line-height: 16px; text-align: center;
-    box-shadow: 0 0 5px color-mix(in srgb, var(--gold) 70%, transparent);
+    font-size: 1.2rem; font-weight: bold; line-height: 20px; text-align: center;
+    box-shadow: 0 0 6px color-mix(in srgb, var(--gold-350) 80%, transparent);
+    animation: tbBadgePulse 1.7s ease-in-out infinite;
   }
   .tb-badge:empty { display: none; }
+  .tb-badge::before, .tb-badge::after {
+    content: ''; position: absolute; left: 50%; top: 50%; border-radius: var(--radius-pill);
+    pointer-events: none;
+  }
+  .tb-badge::after {   /* wisp head — bright spark */
+    width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px;
+    background: radial-gradient(circle, var(--paper) 15%, var(--gold-350) 55%, transparent 100%);
+    box-shadow: 0 0 6px 1px color-mix(in srgb, var(--gold-350) 90%, transparent);
+    animation: tbWisp 1.7s linear infinite;
+  }
+  .tb-badge::before {  /* wisp trail — dimmer, a step behind the head */
+    width: 3.5px; height: 3.5px; margin: -1.75px 0 0 -1.75px;
+    background: radial-gradient(circle, var(--gold-350) 35%, transparent 100%);
+    opacity: 0.5; animation: tbWispTrail 1.7s linear infinite;
+  }
+  @keyframes tbBadgePulse {
+    0%, 100% { transform: scale(1);    box-shadow: 0 0 5px color-mix(in srgb, var(--gold-350) 55%, transparent); }
+    50%      { transform: scale(1.09); box-shadow: 0 0 12px color-mix(in srgb, var(--gold-350) 100%, transparent); }
+  }
+  @keyframes tbWisp {       /* orbit the badge border, radius 13px from centre */
+    from { transform: rotate(0deg)   translateX(13px); }
+    to   { transform: rotate(360deg) translateX(13px); }
+  }
+  @keyframes tbWispTrail {  /* same orbit, lagging the head by ~24° */
+    from { transform: rotate(-24deg)  translateX(13px); }
+    to   { transform: rotate(336deg)  translateX(13px); }
+  }
 
   /* RUN sprint toggle (rendered as a skill tile leading the left group): lights
      gold when auto-sprint is latched. */
@@ -5275,7 +5315,7 @@
     padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   body.touch #town-content, body.touch #shop-content, body.touch #mystic-content { overflow-x: hidden; }
-  /* Keep the top-right utilities (Settings gear + Bag) reachable while a full-screen
+  /* Keep the top-right utilities (Bag + Settings gear) reachable while a full-screen
      town / shop / mystic sheet is open — otherwise the sheet buries them and there's
      no way to open Settings or the Bag from town on a phone. #touch-topbar lives
      inside #touch-hud, a fixed + z-indexed STACKING CONTEXT, so bumping the topbar's
