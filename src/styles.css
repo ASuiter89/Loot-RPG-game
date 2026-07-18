@@ -3725,6 +3725,12 @@
   #name-modal { max-width: 420px; }
   .ov-title { color: var(--xp); font-size: 1.8rem; font-weight: bold; text-align: center; display: block; }
   .ov-sub { color: var(--orange-400); font-size: 1.3rem; text-align: center; margin: 6px 0 12px; line-height: 1.4; }
+  /* The new-hero name screen STACKS its header: Back sits on its own top-left row
+     with the title on a full-width line below, so the long "Name Your Hero" title
+     never ellipsizes on a narrow modal the way the shared centered single-row
+     .modal-head would. A deliberate one-off — every other modal keeps .modal-head. */
+  .name-head { text-align: left; margin-bottom: var(--space-5); }
+  .name-head .ov-title { margin-top: var(--space-4); }
   #name-input {
     width: 100%; box-sizing: border-box; background: var(--orange-850); border: 1px solid var(--border);
     border-radius: 6px; color: var(--xp); font-family: var(--font-ui);

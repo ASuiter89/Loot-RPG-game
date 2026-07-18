@@ -7706,7 +7706,7 @@ window.gameGuide = function gameGuide(topic) {
       `Use Settings ▸ Account ▸ Sync Now to force an immediate reconcile. Because a stale tab defers to the account, the safe habit across devices is simply: play, then let the other device catch up on its own when you return to it.`,
     ],
     onboarding: [
-      `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Classic when you create the hero (gameState().ramp.guided).`,
+      `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
       `A brand-new hero begins on a one-time BEACH before floor 1: a tall sandy shore where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals the first of five skeletons. Felling that first one drops a weapon to equip (a prompt offers to). The other four wait further north, and the cave down to floor 1 stays SEALED until all five fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, with a prompt to go spend them.`,
       `Opening-floor content pacing (Normal, floors 1–25): foes are fewer and softer on floors 1–5 and climb to full strength by floor 6; the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. No glowing ELITES or elite affixes until floor 4. Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
@@ -33055,19 +33055,15 @@ function showNameEntry() {
   const input = document.getElementById('name-input');
   if (input && !input.value) input.value = player.name || '';
   // Fresh hero → Hardcore starts off. Reflect any in-progress pick (a typed name
-  // or armed toggle survives backing out to the class pick and returning), brand
-  // the label with the skull, and sync the toggle styling.
+  // or armed toggle survives backing out to the class pick and returning) and sync
+  // the toggle styling. The label is static text (no icon) straight from the HTML.
   const cb = document.getElementById('hc-checkbox');
   if (cb) cb.checked = !!(player.hardcore || cb.checked);
-  const lbl = document.getElementById('hc-tog-label');
-  if (lbl) lbl.innerHTML = `${hcIcon(14)} HARDCORE`;
   syncHardcoreToggle();
-  // Solo Self-Found rides the same pattern: an armed toggle survives backing out,
-  // the label wears the pixel bag, and the row styling tracks the checkbox.
+  // Solo Self-Found rides the same pattern: an armed toggle survives backing out
+  // and the row styling tracks the checkbox.
   const scb = document.getElementById('ssf-checkbox');
   if (scb) scb.checked = !!(player.ssf || scb.checked);
-  const slbl = document.getElementById('ssf-tog-label');
-  if (slbl) slbl.innerHTML = `${ssfIcon(14)} SOLO SELF-FOUND`;
   syncSsfToggle();
   // Body-type picker: default to any previous/in-progress choice, else male.
   // Classes with bespoke male/female art show the sprite previews; the rest hide
@@ -33165,8 +33161,8 @@ function submitName() {
   // fresh hero, so there's never a path to un-SSF an existing one.
   const scb = document.getElementById('ssf-checkbox');
   if (scb && scb.checked) player.ssf = true;
-  // Guided vs Classic: the onboarding ramp + teaching layer is ON by default; a
-  // returning player can tick CLASSIC to skip it and play the unramped game. Like
+  // Guided vs Veteran: the onboarding ramp + teaching layer is ON by default; a
+  // returning player can tick VETERAN to skip it and play the unramped game. Like
   // Hardcore/SSF this only shows for a fresh hero, so it locks in here.
   const ccb = document.getElementById('classic-checkbox');
   player.guided = !(ccb && ccb.checked);

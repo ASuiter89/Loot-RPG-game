@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "Name-screen polish", by: "Claude", notes: [
+    "Header stacks — Back on its own row so \"Name Your Hero\" no longer clips.",
+    "Dropped sword icon, \"Choose your hero\" label, and the mode-tile icons.",
+    "Game-mode toggles grouped under an \"Optional Game Modes\" heading.",
+    "Classic → Veteran (\"Skip the tutorials\"); trimmed Solo Self-Found copy.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Starter cue ends at first equip", by: "Claude", notes: [
     "Starter checklist retires the moment you equip your first gear.",
     "Its cue drops the \"Getting started\" label.",
