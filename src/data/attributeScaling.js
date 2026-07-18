@@ -1,7 +1,7 @@
 // Attribute → stat scaling, made CLASS-AWARE.
 //
 // This is the single hand-tunable source of truth for how each of the five
-// attributes converts into the hero's derived stats, and for the Spirit-fuelled
+// attributes converts into the hero's derived stats, and for the Spirit-boosted
 // Spirit Veil shield + Spirit-scaled healing. Pure data: no logic, no imports. The
 // pure lookup helpers live in src/systems/attributeScaling.js; the legacy shell
 // reads them through a thin `attrCoef()` adapter.
@@ -88,22 +88,26 @@ export const LUCK_FX = {
 // A blue over-HP buffer that soaks damage before health and recharges after a
 // clean, damage-free window. Nothing else refills it (no potions/skills).
 //
-// Max Veil scales LINEARLY off total Spirit (class-scaled), SEPARATELY from HP and
-// with NO HP-relative cap. The per-point amounts are an ABSOLUTE range across the
-// classes that get it — Mage ~8, Templar ~6, Rogue ~4.4, Warrior ~3 per point of
-// Spirit — which sits UNDER the per-point HP-from-Vitality range (~6–16), so the Veil
-// is a "slower than HP overall" defensive layer rather than scaled to each class's own
-// HP growth. Uncapped, so a Spirit-stacked, Vitality-light build's Veil can exceed HP.
+// The Veil pool comes ONLY from OTHER sources — the flat +Spirit Veil (VEIL) affix on
+// gear and shield-granting spells/buffs. Spirit itself no longer grants a flat pool
+// (a fresh hero with no VEIL gear has NO Veil, and none appears on the HUD). Instead
+// Spirit BOOSTS whatever Veil those sources give: each point above the baseline adds a
+// class-scaled % to the max, SEPARATELY from HP and with NO HP-relative cap. The boost
+// is class-ranked Mage > Templar > Rogue > Warrior, so a caster who both stacks VEIL
+// gear and invests Spirit can end up with a Veil larger than their health, while a
+// Warrior barely amplifies what little Veil they carry.
 export const SHIELD = {
-  perSpirit:   8.0,    // max Spirit Veil per point of total Spirit for the top class (Mage);
-                       // other classes take a share via classMult below.
-  classMult:   { mage: 1.0, templar: 0.75, rogue: 0.55, warrior: 0.375 }, // → 8 / 6 / 4.4 / 3 per pt
+  // Fractional boost to max Spirit Veil per point of Spirit ABOVE the baseline, for
+  // the top class (Mage); other classes take a share via classMult below. e.g. a Mage
+  // 50 Spirit over baseline → +100% max Veil (doubled); a Warrior → +37.5%.
+  spiritBoostPerPoint: 0.02,
+  classMult:   { mage: 1.0, templar: 0.75, rogue: 0.55, warrior: 0.375 }, // → 2 / 1.5 / 1.1 / 0.75 %/pt
   classMultDefault: 0.55, // classless fallback (mid of the range)
   rechargeDelay: 3.5,  // seconds without taking ANY damage before recharge starts
   baseRechargePct: 0.125, // fraction of max Spirit Veil restored per second (~8s to full)
   // Spirit speeds the recharge a little (class-scaled by classMult). Measured from
   // the starting Spirit baseline so a fresh hero sits at baseRechargePct.
-  spiritBase: 10,      // == ATTR_BASE; recharge speed-up counts Spirit above this
+  spiritBase: 10,      // == ATTR_BASE; the Veil boost & recharge speed-up count Spirit above this
   rechargePctPerSpirit: 0.0011,
   rechargeMaxPct: 0.30, // cap recharge at 30%/sec no matter how much Spirit
 };

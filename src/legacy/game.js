@@ -43,7 +43,7 @@ import { activeSurgePerks, applySurgeCastMods, surgeHasteFrac } from '../systems
 import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/gearPower.js';
 import { equipSwapDelta } from '../systems/gearCompare.js';
 import { GEAR_POWER } from '../data/gearPower.js';
-import { channelCoef, classDamageAttr, attrDamageFor, shieldMax, shieldRechargePerSec,
+import { channelCoef, classDamageAttr, attrDamageFor, shieldMax, spiritVeilMult, shieldRechargePerSec,
   shieldRechargeDelay, shieldPerSpiritPoint, healAmount as calcHealAmount,
   ATTR_DMG_PER_POINT } from '../systems/attributeScaling.js';
 import { LUCK_FX } from '../data/attributeScaling.js';
@@ -3527,10 +3527,10 @@ function buildPowerContext() {
     accRating: playerAccuracyRating(),
     // Defense aggregates.
     maxHp,
-    // Spirit Veil shield as extra effective HP — Spirit-scaled and class-multiplied, plus
-    // flat +Spirit Veil from gear, so both the shield +Spirit buys and a rolled +Veil are
-    // valued (derived, not class-hardcoded).
-    maxShield: shieldMax(totalAttr('spirit'), player.class) + totalStat('VEIL'),
+    // Spirit Veil shield as extra effective HP — the flat +Spirit Veil from gear/spells,
+    // Spirit-boosted and class-multiplied, so both a rolled +Veil and the boost +Spirit
+    // buys on it are valued (derived, not class-hardcoded). No source Veil → no shield.
+    maxShield: shieldMax(totalStat('VEIL'), totalAttr('spirit'), player.class),
     def: totalStat('DEF') + totalAttr('might') * attrCoef('def'),   // Defense now from Might
     dodgeRating: totalAttr('agility') * attrCoef('evasion') + totalStat('SPD') + totalStat('DODGE')
       + ratePct(skillBonus('dodge')) + classInnateEvasionRating(),
@@ -3550,7 +3550,7 @@ function buildPowerContext() {
 // Combat-axis delta an attribute affix (+v of `key`) adds, folding the class's
 // single damage attribute and each attribute's (class-scaled) derived-stat package
 // — so +Luck is worth Power only to a build that crits, +Spirit only where it feeds
-// spells + Spirit Veil, +Might only where it hardens defence (and damage, for the class
+// spells (and boosts a Spirit Veil the hero already has), +Might only where it hardens defence (and damage, for the class
 // that scales off it). Mirrors the live derived-stat functions exactly.
 function attrPowerAxes(key, v, ctx, add) {
   // Damage: ONLY the class's single damage attribute adds attack power.
@@ -3565,7 +3565,7 @@ function attrPowerAxes(key, v, ctx, add) {
     add('accRating', v * attrCoef('accuracy'));
   } else if (key === 'spirit') {
     add('spellCore', v * attrCoef('spellPower'));               // Spirit → spell power…
-    add('maxShield', v * shieldPerSpiritPoint(player.class));   // …and the Spirit Veil shield
+    add('maxShield', v * shieldPerSpiritPoint(totalStat('VEIL'), player.class)); // …and boosts the gear/spell Spirit Veil
   } else if (key === 'luck') {
     add('critRating', v * LUCK_FX.critPerLuck);
   }
@@ -3586,7 +3586,7 @@ function itemPowerContribution(item, ctx) {
     } else if (typeof v !== 'number') { /* non-numeric (e.g. a legendary tag) — skip */ }
     else if (k === 'CRITDMG') add('critMult', v / 100);
     else if (k === 'HP') add('maxHp', v * ctx.hpScale);
-    else if (k === 'VEIL') add('maxShield', v);   // flat +Spirit Veil → shield axis (1:1)
+    else if (k === 'VEIL') add('maxShield', v * spiritVeilMult(totalAttr('spirit'), player.class)); // +Spirit Veil → shield, Spirit-boosted
     else if (POWER_STAT_AXIS[k]) add(POWER_STAT_AXIS[k], v);
   }
   const attrs = item.attrs || {};
@@ -3919,11 +3919,12 @@ function recomputeMaxStats() {
   if (player.stamina > player.maxStamina) player.stamina = player.maxStamina;
   if ((player.shield || 0) > player.maxShield) player.shield = player.maxShield;
 }
-// Max Spirit Veil shield: scales LINEARLY off total Spirit and the (steep) class
-// multiplier, separate from HP and uncapped, PLUS any flat +Spirit Veil rolled on
-// Spirit gear (totalStat('VEIL')). See src/systems/attributeScaling.js.
+// Max Spirit Veil shield: the flat +Spirit Veil from gear/spells (totalStat('VEIL')),
+// amplified by the class-scaled Spirit boost — Spirit grants no Veil on its own, so a
+// hero with no VEIL source has none. Separate from HP and uncapped. See
+// src/systems/attributeScaling.js.
 function baseMaxShield() {
-  return Math.round(shieldMax(totalAttr('spirit'), player.class)) + totalStat('VEIL');
+  return Math.round(shieldMax(totalStat('VEIL'), totalAttr('spirit'), player.class));
 }
 
 // HP/MP regeneration as a REAL per-second rate. Single source of truth so the
@@ -7538,10 +7539,10 @@ window.gameGuide = function gameGuide(topic) {
     ],
     veil: [
       `SPIRIT VEIL is a persistent blue SHIELD that sits ON TOP of your HP: every hit, damage-over-time and hazard is soaked by the Spirit Veil FIRST, and only the overflow bites your health (a blow that empties it spills the remainder into HP). gameState().player reports shield / maxShield / shieldRecharging; the HP bar shows it as a shimmering blue mask over the bar, with its own number beside HP.`,
-      `Its pool is fuelled by SPIRIT: more Spirit → a bigger pool and a slightly faster recharge, class-scaled Mage > Templar > Rogue > Warrior — so it's a real second health bar for casters and near-trivial for a Warrior who never invests Spirit. It scales SEPARATELY from HP and is UNCAPPED: per point it grows slower than Vitality feeds HP, but stack Spirit and skip Vitality and your Veil can exceed your health outright.`,
-      `GEAR can add to it too: a "Spirit Veil" affix (a flat +max shield, the shield twin of flat +HP) rolls only on SPIRIT-identity bases — Crown/Circlet, Robe, Leggings, Loop, Necklace, Tome/Focus — so caster gear stacks a bigger buffer on top of the Spirit-scaled pool.`,
+      `Its pool comes ONLY from OTHER sources — the "Spirit Veil" gear affix and shield spells/buffs — NOT from Spirit itself: a fresh hero with no Veil gear has NO Veil (and no blue number on the HUD). What SPIRIT does is BOOST that pool: each point above the starting baseline adds a class-scaled % to the max, Mage > Templar > Rogue > Warrior — so a caster who stacks Veil gear AND Spirit gets a real second health bar, while a Warrior barely amplifies what little Veil they carry. It scales SEPARATELY from HP and is UNCAPPED: pile on Veil gear and Spirit and your Veil can exceed your health outright.`,
+      `GEAR is the main source: a "Spirit Veil" affix (a flat +max shield, the shield twin of flat +HP) rolls only on SPIRIT-identity bases — Crown/Circlet, Robe, Leggings, Loop, Necklace, Tome/Focus — and some spells/buffs grant a temporary Veil; Spirit then multiplies whatever those give.`,
       `RECHARGE is automatic and the ONLY way to refill it — no potion, skill, heal or leech ever touches the Spirit Veil. After ~${shieldRechargeDelay()}s without taking ANY damage it refills toward full over a few seconds (Spirit speeds the RATE, not the delay). Taking any damage — even a poison tick or a step into lava — resets that timer, so you top it up by DISENGAGING for a moment, not by out-healing.`,
-      `Because it soaks before HP and comes back free between fights, Spirit is now a defensive investment as much as an offensive one — and both +Spirit and +Spirit Veil gear are valued for the shield they grant (see the "power" topic).`,
+      `Because it soaks before HP and comes back free between fights, +Spirit Veil gear is the shield's source and +Spirit is valued for the boost it adds ON TOP — but only once you actually carry some Veil (see the "power" topic).`,
     ],
     skills: [
       `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready and grey out while recharging or when you can't afford the MP. Trying to cast one without enough mana faintly pulses the mana bar (and logs why).`,

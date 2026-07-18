@@ -37,16 +37,31 @@ export function attrDamageFor(attrTotal, cls, perPoint = ATTR_DMG_PER_POINT) {
 }
 
 /**
- * Max Spirit Veil: total Spirit × per-point × class multiplier. Scales LINEARLY off
- * Spirit, independently of HP and with NO cap — a Spirit-stacked build's Veil can
- * exceed its HP. Per point it is deliberately below Vitality→HP, so it accrues slower.
+ * The Spirit boost to max Veil, as a MULTIPLIER on the Veil granted by other sources.
+ * 1.0 at (or below) the baseline Spirit; each point above adds a class-scaled fraction,
+ * so Spirit amplifies gear/spell Veil rather than creating any on its own.
+ * @param {number} spirit total Spirit (incl. base + gear)
+ * @param {string} cls hero class id
+ * @returns {number} multiplier (≥ 1)
+ */
+export function spiritVeilMult(spirit, cls) {
+  const mult = SHIELD.classMult[cls] ?? SHIELD.classMultDefault;
+  const above = Math.max(0, spirit - SHIELD.spiritBase);
+  return 1 + above * SHIELD.spiritBoostPerPoint * mult;
+}
+
+/**
+ * Max Spirit Veil: the Veil pool from OTHER sources (gear's +Spirit Veil affix,
+ * shield spells/buffs), amplified by the Spirit boost. Spirit grants NO Veil on its
+ * own — with no source Veil this is 0. Scales independently of HP and is UNCAPPED, so a
+ * caster who stacks both VEIL gear and Spirit can end up with a Veil larger than its HP.
+ * @param {number} veil Veil from other sources (gear/spells), before the Spirit boost
  * @param {number} spirit total Spirit (incl. base + gear)
  * @param {string} cls hero class id
  * @returns {number} max shield (≥ 0)
  */
-export function shieldMax(spirit, cls) {
-  const mult = SHIELD.classMult[cls] ?? SHIELD.classMultDefault;
-  return Math.max(0, spirit) * SHIELD.perSpirit * mult;
+export function shieldMax(veil, spirit, cls) {
+  return Math.max(0, veil) * spiritVeilMult(spirit, cls);
 }
 
 /**
@@ -71,13 +86,16 @@ export function shieldRechargeDelay() {
 
 /**
  * Max Spirit Veil gained per point of Spirit for a class — the marginal used by the
- * gear Power model to value +Spirit's shield.
+ * gear Power model to value +Spirit's shield. Because Spirit now only BOOSTS the Veil
+ * from other sources, the marginal scales with how much source Veil the hero carries:
+ * with no VEIL gear/spells, +Spirit buys no shield.
+ * @param {number} veil Veil from other sources (gear/spells), before the Spirit boost
  * @param {string} cls hero class id
  * @returns {number}
  */
-export function shieldPerSpiritPoint(cls) {
+export function shieldPerSpiritPoint(veil, cls) {
   const mult = SHIELD.classMult[cls] ?? SHIELD.classMultDefault;
-  return SHIELD.perSpirit * mult;
+  return Math.max(0, veil) * SHIELD.spiritBoostPerPoint * mult;
 }
 
 /**

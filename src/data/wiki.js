@@ -278,7 +278,7 @@ export const WIKI = [
         keywords: ['veil', 'spirit veil', 'shield', 'overshield', 'ward', 'spirit', 'recharge', 'defense', 'ehp'],
         body: [
           { p: 'The <b>Spirit Veil</b> is a persistent blue shield that sits <b>on top of your HP</b>: every hit, damage-over-time and hazard is soaked by the Veil first, and only the overflow bites your health. It shows as a shimmering blue mask over the HP bar.' },
-          { p: 'The pool is fuelled by the <b>Spirit</b> attribute — more Spirit means a bigger Veil and slightly faster recharge. It scales separately from HP and is uncapped, so a Spirit-stacking caster can end up with a Veil larger than their health, while a Warrior who never invests Spirit barely has one.' },
+          { p: 'The pool comes from <b>gear and spells</b> — a "Spirit Veil" affix (a flat +max shield) on Spirit-identity pieces, plus any shield-granting buffs. A hero with none has no Veil. The <b>Spirit</b> attribute doesn\'t create Veil; it <b>boosts</b> whatever those sources give — each point above the starting baseline adds a class-scaled %, Mage best, and speeds recharge slightly. It scales separately from HP and is uncapped, so a caster who stacks Veil gear and Spirit can end up with a Veil larger than their health.' },
           { h: 'How it refills' },
           { p: 'Recharge is automatic and the <b>only</b> way to refill it — no potion, skill or leech touches the Veil. After a few seconds without taking <b>any</b> damage it refills toward full. Taking a single hit — even a poison tick — resets that timer, so you top it up by disengaging for a moment, not by out-healing.' },
         ],
@@ -400,7 +400,7 @@ export const WIKI = [
             '<b>Might</b> — Defense (and the Warrior\'s damage).',
             '<b>Vitality</b> — max HP, HP regen, Stamina (and the Templar\'s damage).',
             '<b>Agility</b> — evasion, accuracy, move & attack speed (and the Rogue\'s damage).',
-            '<b>Spirit</b> — max MP, MP regen, spell power, healing, Spirit Veil (and the Mage\'s damage).',
+            '<b>Spirit</b> — max MP, MP regen, spell power, healing, Spirit Veil boost (and the Mage\'s damage).',
             '<b>Luck</b> — crit chance and loot quality.',
           ] },
         ],
