@@ -369,13 +369,10 @@
         </div>
         </div>
 
-        <!-- ── PROGRESS ── Reset Run, saves, cloud sync and leaderboards. -->
+        <!-- ── PROGRESS ── saves, cloud sync and leaderboards. To start another
+             hero, open Save Slots and begin a new run in a fresh slot — the
+             current hero stays saved in its own slot. -->
         <div class="settings-pane" data-pane="progress">
-        <!-- Start a fresh run — destructive (wipes the current hero), so it shouts
-             and pulses red. Guarded by a confirm (first click arms). -->
-        <button class="settings-item newgame-action" onclick="confirmNewGame()" data-tip="<div class='ht-name' style='color:var(--red-350)'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='vertical-align:-2px'><polyline points='23 4 23 10 17 10'/><path d='M20.5 15a9 9 0 1 1-2-9.6L23 10'/></svg> Reset Run</div><div class='ht-line'>Wipe the current hero and start fresh. Click again to confirm.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
-          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2-9.6L23 10"/></svg></span><span class="action-label">RESET RUN</span>
-        </button>
         <div class="settings-grid">
           <button class="settings-item slots-action" onclick="openSlots()">
             <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span><span class="action-label">SLOTS</span>
@@ -843,7 +840,6 @@
     <!-- Hero / journey card — shown above CONTINUE for a returning hero, filled by showTitle(). -->
     <div id="title-hero" class="hero-card" style="display:none"></div>
     <button class="title-play" id="title-play" onclick="titlePlay()"><span class="tp-label">ENTER</span></button>
-    <button class="title-play secondary" id="title-newrun" style="display:none" onclick="titleNewRun()">↻ Reset Current Run</button>
     <div id="title-settings">
       <button class="title-set-btn" onclick="toggleSettingsMenu(event)"><span class="tsb-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="tsb-lbl">Settings</span></button>
       <button class="title-set-btn" onclick="showHowTo()"><span class="tsb-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 1 1 4.4 3.4c-.8.5-1.5 1.1-1.5 2.1"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg></span><span class="tsb-lbl">How to Play</span></button>
@@ -971,22 +967,6 @@
     </div>
     <div class="ov-sub">Keep as many heroes as you like. Load a slot to play it, or start a new adventure in a fresh slot — your current game is saved automatically.</div>
     <div class="slot-list" id="slot-list"></div>
-  </div>
-</div>
-
-<!-- Reset-run confirmation (title screen). Resetting the run reuses the CURRENT
-     save slot and wipes the hero in it, so we confirm and point players at Save
-     Slots if they actually want a second character in a fresh slot. -->
-<div id="newrun-overlay" onclick="if(event.target===this)closeNewRun()">
-  <div id="newrun-modal">
-    <span class="ov-title">↻ Reset Current Run?</span>
-    <div class="ov-sub">This starts over <b>in your current save slot</b> (<span id="newrun-slot">Slot 1</span>) and <b>permanently deletes</b> the hero saved there. This can't be undone.</div>
-    <div class="ov-sub">Want to keep this hero and start a <i>second</i> one? Use <b>Save Slots</b> and pick a fresh slot instead — nothing gets wiped.</div>
-    <button class="ov-btn" onclick="openSlotsFromNewRun()">💾 Open Save Slots</button>
-    <div class="lb-foot" style="display:flex;gap:8px;">
-      <button class="ov-btn acct-btn-alt" onclick="closeNewRun()">Cancel</button>
-      <button class="ov-btn danger" onclick="confirmTitleNewRun()">Wipe &amp; Start Over</button>
-    </div>
   </div>
 </div>
 

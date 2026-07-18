@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "Reset Run removed", by: "Claude", notes: [
+    "Dropped Reset Run (Settings ▸ Progress; title screen) — no in-place hero wipe.",
+    "New run: Save Slots → ＋ New Game in a free slot; old heroes stay saved, load to continue.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Name-screen polish", by: "Claude", notes: [
     "Header stacks — Back on its own row so \"Name Your Hero\" no longer clips.",
     "Dropped sword icon, \"Choose your hero\" label, and the mode-tile icons.",

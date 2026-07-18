@@ -82,7 +82,7 @@ export function delCloudHasAll(local, cloud) {
 // are account-wide and synced identically — monotonic, so a stale device can never
 // shrink them. The feat sets live HERE, not in a per-slot save, precisely so
 // achievements are ACCOUNT-WIDE: earned on any hero or slot, they light up on every
-// hero and slot and survive that hero's death or a Reset Run. The set algebra is
+// hero and slot and survive that hero's death or a slot deletion. The set algebra is
 // pure and unit-tested here; the shell owns the storage + cloud plumbing.
 
 /** A blank meta ledger: no deaths, no feats, never written. */

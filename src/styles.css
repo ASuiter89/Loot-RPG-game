@@ -855,7 +855,7 @@
     box-shadow: 0 8px 30px color-mix(in srgb, var(--ink) 65%, transparent);
   }
   /* Every settings row shares ONE neutral look — same tile background, border
-     and text colour. Only meaningful *states* tint (muted sound, armed Reset Run);
+     and text colour. Only meaningful *states* tint (e.g. muted sound);
      nothing is colour-coded just to stand out. */
   .settings-item {
     display: flex;
@@ -1340,22 +1340,6 @@
   .monsterarrows-action.on,
   .mute-action.on,
   .crosshair-action.on { background: var(--orange-850); border-color: var(--gold-350); color: var(--xp); }
-
-  /* Reset Run wipes the current hero, so it shouts: red-tinted and gently pulsing at
-     rest (top of the Settings › Progress tab), then solid red once armed/pressed. */
-  .newgame-action {
-    border-color: var(--red-800);
-    background: linear-gradient(180deg, var(--magenta-800), var(--magenta-800));
-    color: var(--red-150);
-    animation: newrunPulse 1.5s ease-in-out infinite;
-  }
-  .newgame-action .action-label { color: var(--red-200); font-weight: bold; letter-spacing: 1px; }
-  @keyframes newrunPulse {
-    0%,100% { box-shadow: 0 0 6px color-mix(in srgb, var(--hp) 40%, transparent);  border-color: var(--red-800); }
-    50%     { box-shadow: 0 0 16px color-mix(in srgb, var(--hp) 90%, transparent);  border-color: var(--red-350); }
-  }
-  .newgame-action.armed,
-  .newgame-action:active { background: var(--hp); color: var(--paper); border-color: var(--paper); animation: none; }
 
   .skill-btn {
     background: var(--panel-raised);
@@ -3657,21 +3641,18 @@
   .class-card .cc-detail { font-size: 1.1rem; color: var(--orange-500); line-height: 1.5; }
 
   /* ── CHARACTER NAME + LEADERBOARD + SAVE SLOTS overlays (share the class-overlay look) ── */
-  #name-overlay, #lb-overlay, #slots-overlay, #account-overlay, #newrun-overlay {
+  #name-overlay, #lb-overlay, #slots-overlay, #account-overlay {
     position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 85%, transparent);
     display: none; align-items: center; justify-content: center;
     z-index: 410; padding: 16px;
   }
-  #name-overlay.open, #lb-overlay.open, #slots-overlay.open, #account-overlay.open, #newrun-overlay.open { display: flex; }
-  #name-modal, #lb-modal, #slots-modal, #account-modal, #newrun-modal {
+  #name-overlay.open, #lb-overlay.open, #slots-overlay.open, #account-overlay.open { display: flex; }
+  #name-modal, #lb-modal, #slots-modal, #account-modal {
     background: var(--ink); border: 2px solid var(--orange-550); border-radius: 10px;
     width: 100%; max-width: 400px; max-height: 88vh; max-height: 88dvh; overflow-y: auto;
     -webkit-overflow-scrolling: touch; padding: 16px;
     box-shadow: 0 0 30px color-mix(in srgb, var(--gold) 30%, transparent);
   }
-  /* New-run confirmation sits above the title overlay. */
-  #newrun-overlay { z-index: 460; }
-  #newrun-modal { max-width: 360px; }
   /* Desktop has far more room than a phone-width column: widen the class-pick,
      name, leaderboard, save-slots, keybind and title modals so their text/tables
      fill comfortably instead of sitting as a narrow strip marooned in dead space
@@ -3937,11 +3918,6 @@
     .town-menu-btn.tm-gate .gate-wisp { display: none; }
     .sk-tnode.avail .badge { animation: none; }
   }
-  .title-play.secondary {
-    padding: 11px; font-size: 1.5rem; letter-spacing: 1px; border-width: 1px;
-    background: var(--orange-850); color: var(--orange-300); box-shadow: none;
-  }
-  .title-play.secondary:active { background: var(--orange-850); }
   /* ── Boot loader ──────────────────────────────────────────────────────────
      Full-screen splash shown from the first painted frame (see #boot-overlay in
      index.html) that masks the window while the game module bundle downloads,

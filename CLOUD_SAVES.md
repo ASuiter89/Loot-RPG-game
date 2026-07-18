@@ -125,8 +125,8 @@ used by the leaderboard cover cloud saves too.
   twice. While a newer copy is being pulled into the slot you're playing, local
   saving is frozen until the game reloads onto it, so an in-flight autosave can't
   clobber the copy you just pulled.
-- **Deletions sync across devices.** Deleting a hero (Save Slots → Del, Reset Run,
-  or starting a New Game over a slot) records the character's `cid` in an
+- **Deletions sync across devices.** Deleting a hero (Save Slots → Del, or starting
+  a New Game over a slot) records the character's `cid` in an
   append-only **deletion ledger** that mirrors to its own account row (like the
   hardcore death ledger) and is **union-merged** on every sync — it only ever
   grows. On sync, a hero whose `cid` is in the ledger is scrubbed from **both**
