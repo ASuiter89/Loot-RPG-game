@@ -48,6 +48,7 @@ import { channelCoef, classDamageAttr, attrDamageFor, shieldMax, shieldRechargeP
 import { LUCK_FX } from '../data/attributeScaling.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { KILL_LOOT, killLootParams } from '../systems/bossLoot.js';
+import { capEarlyHit } from '../systems/earlyGame.js';
 import { pointsEarned } from '../systems/bossPoints.js';
 import { resistFraction, penFraction, mitigate, physicalShare } from '../systems/defense.js';
 import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js';
@@ -6963,7 +6964,6 @@ window.gameState = function gameState(radius) {
     ['slotpick-overlay', 'slotpick'], ['slots-overlay', 'slots'],
     ['account-overlay', 'account'], ['lb-hero-overlay', 'heroSnapshot'], ['lb-overlay', 'leaderboard'], ['graveyard-overlay', 'graveyard'],
     ['conquest-overlay', 'conquest'], ['greed-overlay', 'greed'], ['boss-gate-overlay', 'bossgate'],
-    ['equip-tut-overlay', 'tutEquip'], ['beach-levelup-overlay', 'tutLevelUp'],
     ['shop-overlay', 'shop'], ['mystic-overlay', 'mystic'], ['town-overlay', 'town'],
   ];
   let mode = 'dungeon', blockingOverlay = null;
@@ -7707,8 +7707,8 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall sandy shore where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals the first of five skeletons. Felling that first one drops a weapon to equip (a prompt offers to). The other four wait further north, and the cave down to floor 1 stays SEALED until all five fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, with a prompt to go spend them.`,
-      `Opening-floor content pacing (Normal, floors 1–25): foes are fewer and softer on floors 1–5 and climb to full strength by floor 6; the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. No glowing ELITES or elite affixes until floor 4. Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall sandy shore where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals the first of five skeletons. Felling that first one drops your first weapon — a non-blocking tutorial nudge points you to the LOOT tab to equip it, and the LOOT tab plus that item's EQUIP button wear a circling wisp until you do. The other four wait further north, and the cave down to floor 1 stays SEALED until all five fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and re-surfaces the nudge.`,
+      `Opening-floor content pacing (Normal, floors 1–25): foes are fewer and softer on floors 1–5 and climb to full strength by floor 6; the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. TRAINING WHEELS: on the beach and floors 1–3, no single blow can fell a foe in fewer than 3 hits (per-hit damage is capped to leave it alive through its first two), so a new player always trades a few real blows rather than one-shotting trash. No glowing ELITES or elite affixes until floor 4. Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
   };
@@ -11807,6 +11807,7 @@ function finishTutorial() {
   tutorialActive = false;
   player.tutorialDone = true;
   hideTutorialHint();
+  refreshTutorialCues();   // tutorial over — drop the loot-tab glow + hide any nudge
   dungeonLevel = 1;
   arrivalDir = 'down';
   statusEffects = [];
@@ -11819,15 +11820,35 @@ function finishTutorial() {
   updateBars(); renderPanel(); saveGame(); draw();
 }
 
-// ── BEACH TUTORIAL POPUPS ── two world-pausing prompts unique to the shore, both
-// reusing the greed-card overlay styling (and registered in RT_BLOCKING_OVERLAYS
-// so play freezes while they're up): the first skeleton's weapon drop (equip it
-// now, or stow it) and, once all five fall, the first level-up (go spend your new
-// points). See buildTutorialMap / onEnemyDefeated / updateFloorClear.
+// ── BEACH TUTORIAL POPUPS & CUES ── the shore teaches through non-blocking
+// "typical tutorial popup" nudges (the same pill look as the hint chip, dressed
+// with a circling-wisp border) plus persistent wisps on the very controls the
+// player needs. Two beats:
+//   1. the first skeleton's weapon drop → "tap to open Loot & equip", with the
+//      LOOT tab + that item's EQUIP button wisping until something is worn;
+//   2. clearing all five → the first level-up → "tap to spend your points", and
+//      the beach cave stays shut until those points are spent (see goDownStairs).
+// The popups are driven purely by live state (refreshTutorialCues), so they never
+// desync and survive a reload; a player can dismiss a popup and the tab wisps
+// carry the reminder. See buildTutorialMap / onEnemyDefeated / updateFloorClear.
 
-// The weapon the felled first skeleton dropped, awaiting the player's Equip / Keep
-// choice (held here so the button handlers can act on it).
-let pendingTutorialGear = null;
+// Which popup variant is on screen ('equip' | 'levelup' | null), and which
+// variants the player has already dismissed (the tab wisps still carry the cue).
+let _tutPopupVariant = null;
+const _tutDismissed = { equip: false, levelup: false };
+
+// Whether the "go equip your first weapon" cue is live: on the beach with the
+// starter weapon still sitting unequipped in the bag. Clears the instant it's worn.
+function beachEquipCueOn() {
+  return !!(tutorialActive && inventory.some(it => it && it.tutorialGift));
+}
+// Whether the "go spend your Level-2 points" cue is live: on the beach, levelled,
+// with attribute or skill points still unspent.
+function beachSpendCueOn() {
+  return !!(tutorialActive && player.level >= 2 &&
+    ((player.attrPoints || 0) > 0 || (player.skillPoints || 0) > 0));
+}
+
 function dropTutorialGear(e) {
   // The hero starts UNARMED, so the first skeleton's drop is their very first
   // weapon. Force an uncommon (green), class-favoured weapon — a clear upgrade —
@@ -11836,63 +11857,82 @@ function dropTutorialGear(e) {
   item.tutorialGift = true;
   recordWardrobe(item);
   inventory.push(item);
+  _tutDismissed.equip = false;   // a fresh drop re-surfaces the nudge
   renderPanelSoon();
   log(`<span data-spr=chest></span> The skeleton drops ${logItem(item)}!`, 'loot');
-  openTutorialEquip(item);
-}
-function openTutorialEquip(item) {
-  pendingTutorialGear = item;
-  const body = document.getElementById('equip-tut-body');
-  if (body) body.innerHTML = `The skeleton dropped ${logItem(item)} — your first weapon! <b>Equip it</b> to hit harder.`;
-  const el = document.getElementById('equip-tut-overlay');
-  if (el) el.classList.add('open');
-  sfx('loot');
-}
-function tutorialEquipNow() {
-  const el = document.getElementById('equip-tut-overlay'); if (el) el.classList.remove('open');
-  const item = pendingTutorialGear; pendingTutorialGear = null;
-  const i = item ? inventory.indexOf(item) : -1;
-  if (i >= 0) quickEquip(i);            // handles the equip sfx, log, redraw and save
-  else sfx('click');
-  flushPendingBeachLevelUp();
-}
-function tutorialEquipKeep() {
-  const el = document.getElementById('equip-tut-overlay'); if (el) el.classList.remove('open');
-  pendingTutorialGear = null;
-  sfx('click');
-  log('Kept it in your bag — open the LOOT bag to equip it whenever you like.');
-  flushPendingBeachLevelUp();
+  refreshTutorialCues();
 }
 
 // Beach graduation: felling all five skeletons is the hero's FIRST level-up — the
 // first skill point and stat points, EARNED here rather than handed out at spawn.
 // Grant a real 1→2 level (the beach banks no kill XP, so this is exactly one
-// level), suppressing the fly-in banner in favour of the fuller tutorial popup.
-let _beachLevelUpPending = false;
+// level), suppressing the fly-in banner in favour of the tutorial popup.
 function grantBeachLevelUp() {
   _skipLevelBanner = true;
   player.xp += xpForLevel(player.level);
   checkLevelUp();               // +1 skill point, +5 stat points, stat recompute, save
   _skipLevelBanner = false;
-  // Normally the equip prompt is long gone (the gear skeleton is closest to spawn,
-  // so it falls first). But if a player skirted it and felled it LAST, its prompt
-  // is still up — chain behind it (opened when that prompt is dismissed) so the two
-  // never stack. Otherwise show the level-up tip now.
-  if (document.getElementById('equip-tut-overlay')?.classList.contains('open')) _beachLevelUpPending = true;
-  else openBeachLevelUp();
+  _tutDismissed.levelup = false;
+  refreshTutorialCues();
 }
-function openBeachLevelUp() {
-  const el = document.getElementById('beach-levelup-overlay');
-  if (el) el.classList.add('open');
+
+// Reconcile every beach cue against live state: the LOOT-tab wisp, and which (if
+// any) popup is showing. Cheap and idempotent — safe to call from renderPanel and
+// after any equip / point spend. Off the beach it just tears the cues down.
+function refreshTutorialCues() {
+  const equipCue = beachEquipCueOn();
+  const spendCue = beachSpendCueOn();
+  const tabInv = document.getElementById('tab-inv');
+  if (tabInv) tabInv.classList.toggle('tut-tab-glow', equipCue);   // LOOT tab wisps until worn
+  // Equip first, then the level-up nudge; a dismissed variant stays hidden while
+  // its tab wisp carries the reminder.
+  const want = (equipCue && !_tutDismissed.equip) ? 'equip'
+    : (spendCue && !_tutDismissed.levelup) ? 'levelup'
+      : null;
+  if (want !== _tutPopupVariant) {
+    if (want) showTutPopup(want); else hideTutPopup();
+  }
 }
-function flushPendingBeachLevelUp() {
-  if (!_beachLevelUpPending) return;
-  _beachLevelUpPending = false;
-  openBeachLevelUp();
+
+// Paint the reusable #tut-popup pill for a variant and reveal it. Icon is set as a
+// fresh [data-spr] node so the painter hydrates it.
+function showTutPopup(variant) {
+  const el = document.getElementById('tut-popup');
+  if (!el) return;
+  const prev = _tutPopupVariant;
+  _tutPopupVariant = variant;
+  const cfg = variant === 'equip'
+    ? { spr: 'chest', html: 'You found your <b>first weapon</b>! Tap to open the <b>Loot</b> tab and equip&nbsp;it.' }
+    : { spr: 'ui_level', html: '<b>Level&nbsp;2!</b> Tap to spend your stat &amp; skill points in the <b>Hero</b> &amp; <b>Skills</b>&nbsp;tabs.' };
+  const icon = el.querySelector('.tp-ic');
+  const txt = el.querySelector('.tp-text');
+  if (icon) icon.innerHTML = `<span data-spr="${cfg.spr}"></span>`;
+  if (txt) txt.innerHTML = cfg.html;
+  el.classList.add('show');
+  paintDataSpr(el);
+  if (variant !== prev) sfx(variant === 'equip' ? 'loot' : 'levelup');
 }
-function beachLevelUpAck() {
-  const el = document.getElementById('beach-levelup-overlay'); if (el) el.classList.remove('open');
+function hideTutPopup() {
+  _tutPopupVariant = null;
+  const el = document.getElementById('tut-popup');
+  if (el) el.classList.remove('show');
+}
+// Tapping the pill body: run its action (open the relevant bag tab) and dismiss it;
+// the tab wisp lingers as the standing cue.
+function tutPopupClick() {
+  const v = _tutPopupVariant;
+  if (v === 'equip') { _tutDismissed.equip = true; openBagTo('inv'); }
+  else if (v === 'levelup') { _tutDismissed.levelup = true; openBagTo('hero'); }
+  else sfx('click');
+  refreshTutorialCues();
+}
+// The little ✕ — dismiss without navigating (the tab wisp still guides).
+function tutPopupDismiss(ev) {
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  if (_tutPopupVariant === 'equip') _tutDismissed.equip = true;
+  else if (_tutPopupVariant === 'levelup') _tutDismissed.levelup = true;
   sfx('click');
+  refreshTutorialCues();
 }
 
 // ── TUTORIAL HINT CHIP ── a small "?" help affordance that updates its one-line
@@ -22393,6 +22433,19 @@ function performAscend(nx, ny) {
 function goDownStairs(nx, ny) {
   if (tutorialActive) {
     if (!floorCleared) { const left = hostilesRemaining(); log(`<span data-spr=b_deathknight></span> The cave is sealed — defeat ${left === 1 ? 'the last skeleton' : `all ${left} skeletons`} first.`, 'important'); sfx('click'); return; }
+    // The cave won't take you until your Level-2 points are spent — a new hero
+    // learns to build BEFORE descending. Warn, and re-surface the nudge.
+    const unspentA = player.attrPoints || 0, unspentS = player.skillPoints || 0;
+    if (unspentA > 0 || unspentS > 0) {
+      const parts = [];
+      if (unspentA > 0) parts.push(`${unspentA} stat point${unspentA === 1 ? '' : 's'}`);
+      if (unspentS > 0) parts.push(`${unspentS} skill point${unspentS === 1 ? '' : 's'}`);
+      log(`<span data-spr=ui_level></span> Spend your ${parts.join(' and ')} first — open the <b>Hero</b> and <b>Skills</b> tabs before the cave will take you.`, 'important');
+      sfx('denied');
+      _tutDismissed.levelup = false;   // bring the nudge back as the reminder
+      refreshTutorialCues();
+      return;
+    }
     finishTutorial();
     return;
   }
@@ -22835,6 +22888,10 @@ function dealDamage(e, dmg, isCrit) {
   if (e.shieldT > 0) dmg = Math.max(1, Math.round(dmg * 0.5)); // boss ward halves the blow
   // Vulnerable (cursed/marked) foes take amplified damage from every source.
   if (statusEffects.some(s => s.target === e && s.effect === 'vuln')) dmg = Math.round(dmg * 1.35);
+  // Early-game training wheels: on the beach and floors 1–3, no single blow may
+  // fell a foe in fewer than MIN_EARLY_HITS hits — cap the bite so a new player
+  // trades a few blows rather than one-shotting trash (see systems/earlyGame.js).
+  dmg = capEarlyHit(dmg, e.maxHp, dungeonLevel, tutorialActive);
   e.hp -= dmg;
   // Vampiric (item power): siphon a slice of the damage dealt back as health.
   const vamp = itemPowerCount('vampiric');
@@ -23191,7 +23248,9 @@ function attackEnemy(e, opts = {}) {
       return;
     }
     const h = rollPlayerHit(target);
-    const d = Math.max(1, Math.round(h.dmg * mult));
+    // Cap the swing on the early floors (matching dealDamage) so the combat-log
+    // total and the floating hit number agree when the bite is clamped.
+    const d = capEarlyHit(Math.max(1, Math.round(h.dmg * mult)), target.maxHp, dungeonLevel, tutorialActive);
     if (h.isCrit) anyCrit = true;
     dealtTotal += d;
     dealDamage(target, d, h.isCrit);
@@ -27154,8 +27213,13 @@ function flushPanel() { if (_panelDirty && panelVisible()) renderPanel(); }
 
 function renderPanel() {
   _panelDirty = false;   // any render (direct or flushed) satisfies a pending request
+  refreshTutorialCues();   // beach loot-tab wisp + nudge track live state — up here so the
+                           // empty-bag early return below can't strand a stale cue on screen
   const el = document.getElementById('panel-content');
   if (currentTab === 'inv') {
+    // Beach tutorial: the starter weapon's EQUIP button wears a circling wisp
+    // until the hero equips it (same cue as the wisping LOOT tab).
+    const equipCueOn = beachEquipCueOn();
     const strip = matStripHTML();
     // Gold rides in its own pill to the LEFT of the material strip — the LOOT tab's
     // wallet row. refreshWallet() keeps #bag-gold-count live between panel rebuilds.
@@ -27279,7 +27343,7 @@ function renderPanel() {
         ${lockBtn}
         ${equipable
           ? (!cantEquip
-              ? `<button class="row-btn equip-row-btn ${isUpgrade?'upgrade-btn':''}" onclick="quickEquip(${i})">${equippedHere && isUpgrade?'SWAP':'EQUIP'}</button>`
+              ? `<button class="row-btn equip-row-btn ${isUpgrade?'upgrade-btn':''} ${(equipCueOn && item.tutorialGift)?'tut-equip-wisp':''}" onclick="quickEquip(${i})">${equippedHere && isUpgrade?'SWAP':'EQUIP'}</button>`
               : `<button class="row-btn locked-row-btn" ${hoverTip(`<div class='ht-name'><span data-spr=feat_door></span> Can't Equip</div><div class='ht-line'>${equipLockReason(item)}</div>`)} onclick="quickEquip(${i})"><span data-spr=feat_door></span></button>`)
           : ''}
       </div>
@@ -29953,7 +30017,7 @@ const PAD_MODAL_IDS = [
   'shop-overlay','mystic-overlay','town-overlay','settings-menu','version-overlay','howto-overlay','wiki-overlay',
   'autoloot-overlay','keybind-overlay','conquest-overlay','slots-overlay',
   'account-overlay','lb-overlay','lb-hero-overlay','graveyard-overlay','slotpick-overlay',
-  'greed-overlay','boss-gate-overlay','equip-tut-overlay','beach-levelup-overlay','bestiary-overlay','achievements-overlay','pad-kbd',
+  'greed-overlay','boss-gate-overlay','bestiary-overlay','achievements-overlay','pad-kbd',
 ];
 function padTopModal() {
   let best = null, bestZ = -Infinity;
@@ -34042,8 +34106,8 @@ const RT_BLOCKING_OVERLAYS = ['title-overlay','name-overlay','class-overlay','hc
   // close the settings menu, so they must pause the world on their own.
   'conquest-overlay','slots-overlay','account-overlay','lb-overlay','lb-hero-overlay','graveyard-overlay','slotpick-overlay',
   'greed-overlay',    // the risk/reward cursed-floor choice pauses the world while open
-  'boss-gate-overlay',   // the "are you ready?" boss-floor threshold prompt pauses the world too
-  'equip-tut-overlay', 'beach-levelup-overlay'];   // beach-tutorial prompts (weapon drop, first level-up) pause the world too
+  'boss-gate-overlay'];   // the "are you ready?" boss-floor threshold prompt pauses the world too
+  // (Beach-tutorial nudges are non-blocking pills now — see refreshTutorialCues — so they no longer pause play.)
 // The blocking overlays are all static shell divs (only their 'open' class
 // toggles), so resolve id → element ONCE and reuse — rtPaused/clockPaused run
 // several times per frame and were re-querying every id on every call.
@@ -37155,9 +37219,8 @@ const __DL_FN_BRIDGE = {
   declineGreed,
   bossGateReady,
   bossGateCancel,
-  tutorialEquipNow,
-  tutorialEquipKeep,
-  beachLevelUpAck,
+  tutPopupClick,
+  tutPopupDismiss,
   openTownService,
   // ── Endgame panel handlers (inline onclick=) ──
   openCovenants, covToggle, covClearAll,

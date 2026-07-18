@@ -661,24 +661,88 @@
   .greed-no { background: var(--panel); border-color: var(--border); color: var(--purple-150); }
   .greed-no:active { background: var(--panel-raised); }
 
-  /* Beach tutorial prompts — the first weapon drop and the first level-up. Reuse
-     the greed gate's structure (centered, world-pausing card + .greed-btns button
-     base) but wear a friendly GOLD tone, since these are welcoming teaching
-     moments, not danger. A deliberate, cohesion-preserving variant of the modal. */
-  #equip-tut-card, #beach-levelup-card {
-    max-width: 340px; width: 100%; padding: 20px 18px;
-    max-height: calc(100dvh - 40px); overflow-y: auto; -webkit-overflow-scrolling: touch;
-    background: linear-gradient(180deg, var(--panel-raised), var(--bg));
-    border: 2px solid var(--gold); border-radius: 12px; text-align: center;
-    box-shadow: 0 0 30px color-mix(in srgb, var(--gold) 34%, transparent);
+  /* ── BEACH TUTORIAL CUES ── the shore teaches with a NON-blocking "typical
+     tutorial popup" (the hint-chip pill look, lifted to a top banner) plus a
+     circling wisp of light on the very controls the player needs — the LOOT tab
+     and the first EQUIP button — so the eye is drawn without freezing play.
+     Shared wisp ring: a conic gradient with two bright gold arcs 180° apart,
+     masked to just the border so two wisps chase the rim (same trick as the
+     skill-tab ramp glow). --tut-wisp animates the sweep. */
+  @property --tut-wisp { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+  @keyframes tut-wisp-spin { to { --tut-wisp: 360deg; } }
+  #tut-popup::before,
+  #tab-inv.tut-tab-glow::before,
+  .equip-row-btn.tut-equip-wisp::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    padding: 1.5px; pointer-events: none; z-index: 1;
+    background: conic-gradient(from var(--tut-wisp),
+      transparent 0deg,
+      color-mix(in srgb, var(--gold-350) 92%, transparent) 26deg,
+      transparent 62deg,
+      transparent 180deg,
+      color-mix(in srgb, var(--gold-200) 82%, transparent) 206deg,
+      transparent 242deg,
+      transparent 360deg);
+    -webkit-mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    mask-composite: exclude;
+    animation: tut-wisp-spin 3.2s linear infinite;
   }
-  .tut-title { font-family: var(--font-ui); font-weight: bold; font-size: 2.2rem; letter-spacing: 1px; color: var(--gold); margin-bottom: 8px; text-shadow: 0 0 12px color-mix(in srgb, var(--gold) 55%, transparent); }
-  .tut-body { font-size: 1.4rem; line-height: 1.5; color: var(--text); margin-bottom: 16px; }
-  .tut-body b { color: var(--gold); }
-  .tut-yes { background: var(--gold); border-color: var(--gold); color: var(--ink); font-weight: bold; }
-  .tut-yes:active { background: color-mix(in srgb, var(--gold) 80%, var(--ink)); }
-  .tut-no { background: var(--panel); border-color: var(--border); color: var(--text); }
-  .tut-no:active { background: var(--panel-raised); }
+  @media (prefers-reduced-motion: reduce) {
+    #tut-popup::before, #tab-inv.tut-tab-glow::before, .equip-row-btn.tut-equip-wisp::before { animation: none; }
+  }
+
+  /* The nudge pill itself — one reusable element, filled per beat by showTutPopup().
+     Fluid width, safe-area aware, prominent at the top; hidden until .show. */
+  #tut-popup {
+    position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + var(--space-5));
+    transform: translateX(-50%) translateY(-8px);
+    z-index: calc(var(--z-modal) + 6);
+    display: none; align-items: center; gap: var(--space-4);
+    width: max-content; max-width: min(92vw, 420px);
+    padding: var(--space-3) var(--space-5) var(--space-3) var(--space-3);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+    border: 1px solid var(--gold);
+    color: var(--text); font-size: var(--fs-body); line-height: 1.4; text-align: left;
+    cursor: pointer; pointer-events: auto; -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 6px 20px color-mix(in srgb, var(--ink) 62%, transparent),
+                0 0 14px color-mix(in srgb, var(--gold) 30%, transparent);
+  }
+  #tut-popup.show { display: inline-flex; animation: tutPopIn 0.4s ease-out; }
+  @keyframes tutPopIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(-16px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(-8px); }
+  }
+  #tut-popup .tp-ic {
+    flex: 0 0 auto; position: relative; z-index: 2;
+    width: calc(30px * var(--ui-scale, 1)); height: calc(30px * var(--ui-scale, 1));
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 40%, var(--xp), var(--gold));
+    box-shadow: 0 0 8px color-mix(in srgb, var(--gold) 60%, transparent);
+  }
+  #tut-popup .tp-text { flex: 1 1 auto; min-width: 0; position: relative; z-index: 2; }
+  #tut-popup .tp-text b { color: var(--gold); font-weight: bold; }
+  #tut-popup .tp-go { flex: 0 0 auto; position: relative; z-index: 2; color: var(--gold); font-size: var(--fs-head); font-weight: bold; opacity: 0.85; }
+  #tut-popup .tp-x {
+    flex: 0 0 auto; position: relative; z-index: 2; margin-left: var(--space-1);
+    width: calc(20px * var(--ui-scale, 1)); height: calc(20px * var(--ui-scale, 1));
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; border-radius: 50%;
+    color: color-mix(in srgb, var(--text) 65%, transparent);
+    font-size: var(--fs-sub); line-height: 1; cursor: pointer;
+    font-family: var(--font-ui); -webkit-tap-highlight-color: transparent;
+  }
+  #tut-popup .tp-x:hover, #tut-popup .tp-x:active { color: var(--text); background: color-mix(in srgb, var(--panel) 90%, transparent); }
+
+  /* LOOT tab wisps + a gold text glow until the starter weapon is worn. */
+  #tab-inv.tut-tab-glow {
+    position: relative; color: var(--gold); border-radius: var(--radius-sm);
+    animation: tabGlow 1.1s ease-in-out infinite;
+  }
+  /* The first EQUIP button wears the same wisp so the eye lands on the exact press. */
+  .equip-row-btn.tut-equip-wisp { position: relative; }
 
   /* Persistent badge on the BAG button counting unspent attribute points */
   .bag-btn { position: relative; }
