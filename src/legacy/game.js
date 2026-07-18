@@ -6421,7 +6421,7 @@ let player = { x: 5, y: 5,
   // intro so it fires at most once; `levelUpsSeen` counts early level-ups (the
   // first few glow the skill tabs); `starterDone` retires the starter checklist.
   guided: true, taught: {}, levelUpsSeen: 0, starterDone: false,
-  // HUD "Field Kit": which readout instruments this hero has bought from the Merchant
+  // HUD "Field Kit": which readout instruments this hero has crafted at the Craftsman
   // (minimap, foes/chest counters, depth & difficulty labels, vital numbers, status
   // icons — see src/data/hudUpgrades.js). A fresh hero starts with a BARE HUD (owns
   // none); each key flips on for good on purchase. loadGame() grants the whole set to
@@ -7450,12 +7450,12 @@ window.gameState = function gameState(radius) {
         };
       }) : null,
     },
-    // HUD "Field Kit" — which readout instruments this hero has BOUGHT from the
-    // Merchant, so an agent knows what the human's on-screen HUD actually shows. The
+    // HUD "Field Kit" — which readout instruments this hero has CRAFTED at the
+    // Craftsman, so an agent knows what the human's on-screen HUD actually shows. The
     // underlying data (floor, hostilesLeft, chests, effects, player.hp/mp) is reported
     // here regardless of whether its readout is fitted. `owned` maps each key
-    // true/false; `fitted`/`total` tally them; `forSale` is the shop's KIT tab (name +
-    // the HUD piece it reveals + gold price). See gameGuide("town").
+    // true/false; `fitted`/`total` tally them; `forSale` is the Craftsman's HUD-KIT
+    // bench (name + the HUD piece it reveals + gold price). See gameGuide("town").
     hud: (() => {
       const owned = (player && player.hudUpgrades) || {};
       return {
@@ -7681,17 +7681,17 @@ window.gameGuide = function gameGuide(topic) {
       `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
     ],
     town: [
-`The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived — and the HUD's Town button stays HIDDEN until you first set foot in the camp (player.townVisited flips true on that first arrival, revealing the button). That first kill opens the camp — and when you then leave Floor 5 you climb up into town for a one-time celebration (the townsfolk cheer and thank you, a one-time WELCOME hint chip greets you — town is your safe haven and the Town button teleports you home — the first keeper — the Merchant, whose KIT tab sells the HUD Field Kit to outfit your bare heads-up display — arrives, and the newly-revealed Town button glows for that visit) before a Town Portal there carries you on to Floor 6. `
+`The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived — and the HUD's Town button stays HIDDEN until you first set foot in the camp (player.townVisited flips true on that first arrival, revealing the button). That first kill opens the camp — and when you then leave Floor 5 you climb up into town for a one-time celebration (the townsfolk cheer and thank you, a one-time WELCOME hint chip greets you — town is your safe haven and the Town button teleports you home — the first keeper — the Craftsman, whose HUD-KIT bench crafts the Field Kit to outfit your bare heads-up display — arrives, and the newly-revealed Town button glows for that visit) before a Town Portal there carries you on to Floor 6. `
       + `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the regular service keepers milling about the green at FRESH random spots every visit (most of them slowly strolling around) and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all. A keeper only appears once it has ARRIVED (one joins per boss kill) — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
       `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff, healerBuffs and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
-      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). The Merchant is the FIRST keeper to arrive, and its KIT tab sells the HUD "Field Kit" — one-time gold buys that each switch on a heads-up-display readout (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana numbers, status-effect icons). A fresh hero starts with a BARE HUD (no numbers, no minimap, no counters, no depth/difficulty labels, no status icons) and fits these as gold allows; each is kept for that hero. gameState().hud lists what's owned + the KIT prices; call buyHudUpgrade(key). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
+      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is the FIRST keeper to arrive, and its HUD-KIT bench crafts the HUD "Field Kit" — one-time gold buys that each switch on a heads-up-display readout (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana numbers, status-effect icons). A fresh hero starts with a BARE HUD (no numbers, no minimap, no counters, no depth/difficulty labels, no status icons) and fits these as gold allows; each is kept for that hero, and a freshly-fitted piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + the KIT prices; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1, 5 or 10 floors (more damage/loot/gold, or an easier stretch). Each mystic offers just TWO pacts, rolled at random from twelve, so the choice changes every time you find one; a longer pact costs MORE per floor (the price climbs exponentially with floors sealed). gameState().npcs lists the two pacts a nearby mystic offers. Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Sellsword (arrives with your 12th boss kill): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (arrives with your 11th boss kill): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Prospector (level 5+): trades GOLD for raw crafting materials, and refines commons up a tier. BUY Scrap, Glimmer, Core or Chaos Orbs outright — the price climbs steeply with the material's rarity, grows with the deepest floor you've reached, and rises a little with every purchase you make this visit (resetting when you next enter town) — a bulk lot is priced flat, so it's always the cheapest way to buy a quantity. You can only buy a material your progression could already DROP — the same difficulty gate as kills (Scrap/Glimmer from Normal, Core from Hardened, Chaos from Brutal) — so it tops up what you farm, never a tier you couldn't yet earn. REFINE fuses a stack of a common material into ONE of the next tier up (Scrap→Glimmer→Core→Chaos); it's deliberately lossy, so it never beats simply buying the rarer material — it's a way to spend an overflow of commons. Bought/refined materials land in your shared stash pool (or an SSF hero's private wallet), same as drops.`,
-      `Keepers arrive ONE PER BOSS KILL as you fell boss floors — each guardian you beat (Floor 5 is the first, Floor 10 the second, and so on) brings exactly ONE new keeper, announced by a pop-up banner the instant the boss dies (even mid-fight down in the dungeon). The arrival order is: 1 Merchant, 2 Healer, 3 Vault, 4 Ramen House, 5 Craftsman, 6 Prospector, 7 Trainer, 8 Gambler, 9 Enchanter, 10 Bounty Board, 11 Transmuter, 12 Sellsword, then the endgame keepers 13 Ascendant Weave, 14 Cycles, 15 Hall of Deeds, 16 Covenant Altar, 17 Mirrorforge, 18 Pantheon. (The Merchant lands first so its HUD Field Kit is on offer the moment town opens.) So the keeper waiting after your Nth boss kill is arrival #N. (A Solo Self-Found hero's Vault stays sealed for life.) A still-locked keeper is ABSENT from the walkable camp; in the Town directory it shows GREYED with a padlock and its unlock hint. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
+      `Keepers arrive ONE PER BOSS KILL as you fell boss floors — each guardian you beat (Floor 5 is the first, Floor 10 the second, and so on) brings exactly ONE new keeper, announced by a pop-up banner the instant the boss dies (even mid-fight down in the dungeon). The arrival order is: 1 Craftsman, 2 Healer, 3 Merchant, 4 Vault, 5 Ramen House, 6 Prospector, 7 Trainer, 8 Gambler, 9 Enchanter, 10 Bounty Board, 11 Transmuter, 12 Sellsword, then the endgame keepers 13 Ascendant Weave, 14 Cycles, 15 Hall of Deeds, 16 Covenant Altar, 17 Mirrorforge, 18 Pantheon. (The Craftsman lands first so its HUD Field Kit is on offer the moment town opens.) So the keeper waiting after your Nth boss kill is arrival #N. (A Solo Self-Found hero's Vault stays sealed for life.) A still-locked keeper is ABSENT from the walkable camp; in the Town directory it shows GREYED with a padlock and its unlock hint. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim its reward. Each contract pays a DIFFERENT MIX of 1–3 rewards — gold, a crafting material (any of scrap/glimmer/core/chaos, scaled by depth), a lump of XP, or a gear piece scaled to your depth (the toughest boss contracts guarantee a rarer piece) — and a contract paying fewer things pays more of each. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract, its live progress (including menu.bounty.done once it's ready to claim), and menu.bounty.rewards listing exactly what it pays. In town, clicking the belt's BOUNTY module opens the board (even with no active contract).`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
@@ -12607,14 +12607,10 @@ function renderShop() {
   setMatStrip('shop-mats'); // materials show at the merchant too, so scrapping here has visible feedback
   const el = document.getElementById('shop-content');
   if (!merchant) { closeShop(); return; }
-  const _bt = document.getElementById('shoptab-buy'), _st = document.getElementById('shoptab-sell'), _kt = document.getElementById('shoptab-kit');
-  if (_bt) _bt.classList.toggle('active', shopMode === 'buy');
+  const _bt = document.getElementById('shoptab-buy'), _st = document.getElementById('shoptab-sell');
+  if (_bt) _bt.classList.toggle('active', shopMode !== 'sell');
   if (_st) _st.classList.toggle('active', shopMode === 'sell');
-  if (_kt) _kt.classList.toggle('active', shopMode === 'kit');
   if (shopMode === 'sell') { el.innerHTML = renderShopSellHTML(); return; }
-  // The Field Kit tab: buy the HUD readout instruments (minimap, counters, depth &
-  // difficulty labels, vital numbers, status icons). One-time purchases, not wares.
-  if (shopMode === 'kit') { el.innerHTML = renderHudKitHTML(); return; }
 
   // Pay-to-restock button — re-rolls the wares for gold (the stock otherwise
   // stays put when you close and reopen).
@@ -12751,11 +12747,13 @@ function buyItem(i) {
   saveGame();
 }
 
-// ── MERCHANT FIELD KIT ── the KIT tab. The Merchant (first keeper to arrive) sells
-// the HUD readout instruments — one-time gold buys that switch a piece of the
-// heads-up display on for good (persisted per hero on player.hudUpgrades). The
-// element gating lives in updateBars / drawMinimap / renderStatusStrip; here we just
-// render the shop rows and take the payment. Catalog: src/data/hudUpgrades.js.
+// ── CRAFTSMAN HUD FIELD KIT ── the Craftsman's HUD-KIT bench (see renderForge tabs).
+// The Craftsman (first keeper to arrive) CRAFTS the HUD readout instruments — one-time
+// gold buys that switch a piece of the heads-up display on for good (persisted per
+// hero on player.hudUpgrades). The element gating lives in updateBars / drawMinimap /
+// renderStatusStrip; here we just render the rows and take the payment. A freshly-
+// fitted piece is flagged in _newHudUpgrades so its HUD element wears a "new" wisp
+// until the hero next leaves town. Catalog: src/data/hudUpgrades.js.
 function renderHudKitHTML() {
   const owned = (player && player.hudUpgrades) || {};
   const fitted = HUD_UPGRADES.reduce((n, u) => n + (owned[u.key] ? 1 : 0), 0);
@@ -12788,9 +12786,10 @@ function buyHudUpgrade(key) {
   spendGold(price);
   sfx('buy');
   player.hudUpgrades[key] = true;
+  _newHudUpgrades.add(key);   // its HUD element wears a "new" wisp until we leave town
   log(`Fitted the <b>${u.name}</b> — ${u.hud} now on your HUD.`, 'loot');
-  updateBars();     // reveal the freshly-bought readout at once (gates re-read hudOwned)
-  renderShop();
+  updateBars();       // reveal the freshly-bought readout at once (gates re-read hudOwned)
+  renderCraftsman();  // refresh the Craftsman's HUD-KIT bench (owned state + tally)
   saveGame();
 }
 
@@ -13175,9 +13174,9 @@ function warpToTown() {
 // GRADUATE TO TOWN — the one-time victory lap the very first time the Floor 5 guardian
 // is felled and the hero leaves the floor. Instead of stepping straight onto Floor 6,
 // they climb out into the newly-opened camp: the townsfolk celebrate, the first keeper
-// (the Merchant — its Field Kit outfits the bare HUD) is milling about — the rest arrive
-// one per boss kill as the hero descends — and the Town Portal is primed to press on.
-// We quietly build Floor 6 first
+// (the Craftsman — their Field Kit outfits the bare HUD) is milling about — the rest
+// arrive one per boss kill as the hero descends — and the Town Portal is primed to
+// press on. We quietly build Floor 6 first
 // and FREEZE it as the held floor, so the Town Portal drops the hero onto Floor 6.
 function graduateToTown() {
   player.pendingTownGraduation = false;
@@ -13203,7 +13202,7 @@ function graduateToTown() {
   screenFlash('#ffd24b');
   sfx('levelup');
   log('<span data-spr=feat_gate_red></span> You climb from the guardian\'s lair — and step into <b>town</b> for the very first time.', 'important');
-  log('<span data-spr=q_relic></span> Word of the fallen guardian races ahead of you. The townsfolk pour out cheering — grateful, the <b>Merchant</b> sets up shop first, their <b>Field Kit</b> ready to outfit your bare HUD; more keepers arrive with each guardian you fell.', 'important');
+  log('<span data-spr=q_relic></span> Word of the fallen guardian races ahead of you. The townsfolk pour out cheering — grateful, the <b>Craftsman</b> sets up their bench first, their <b>Field Kit</b> ready to outfit your bare HUD; more keepers arrive with each guardian you fell.', 'important');
   log(`<span data-spr=feat_gate_red></span> Town is your haven now — from any floor, tap the glowing <b>Town</b> button (${kbLabel('portal')}) to teleport back here any time to rest, shop and resupply.`, 'important');
   log('Rest and resupply, then step into the <span data-spr=feat_portal></span> Town Portal when you\'re ready to press on to <b>Floor 6</b>.');
   showTownWelcome();   // one-time "welcome to your safe haven" hint chip on the first arrival
@@ -14134,9 +14133,9 @@ function openTownService(kind) {
 // for life to a Solo Self-Found hero — its one bespoke exception is in townServiceReq.
 const TOWN_MENU = [
   { kind: 'healer',    name: 'Healer',      desc: 'Rest, cure & potions' },
-  { kind: 'merchant',  name: 'Merchant',    desc: 'Gear, plus HUD Field-Kit upgrades' },
+  { kind: 'merchant',  name: 'Merchant',    desc: 'Buy & sell fresh gear' },
   { kind: 'ramen',     name: 'Ramen House', desc: 'Cook toppings into buffs' },
-  { kind: 'forge',     name: 'Craftsman',   desc: 'Forge blank gear from mats' },
+  { kind: 'forge',     name: 'Craftsman',   desc: 'Forge gear; craft HUD Field Kit' },
   { kind: 'prospector', name: 'Prospector',  desc: 'Trade gold for materials' },
   { kind: 'gambler',   name: 'Gambler',     desc: 'Wager gold for loot' },
   { kind: 'trainer',   name: 'Trainer',     desc: 'Respec & change class' },
@@ -14670,9 +14669,12 @@ let forgeSlot = null;   // chosen item type (slot); null → nothing picked yet
 let forgeBase = null;   // chosen base name within the slot (drives look + name)
 let forgeCat = null;    // chosen weapon category (Sword, Axe …) for the two-step weapon picker
 let forgeTier = 'normal';
-// The Craftsman has a single bench: Forge (build blank gear). Breaking gear
-// back down into materials moved onto the bag itself — you scrap straight from
-// the LOOT drawer now — so there's no longer a Salvage bench here.
+// The Craftsman has TWO benches, switched by a tab: 'gear' (forge blank gear) and
+// 'kit' (craft HUD Field-Kit readouts — the minimap, counters, depth/difficulty
+// labels, vital numbers, status icons; see renderHudKitHTML). Breaking gear back
+// down into materials moved onto the bag itself — you scrap straight from the LOOT
+// drawer now — so there's no longer a Salvage bench here.
+let forgeView = 'gear';   // 'gear' | 'kit'
 
 // Your deepest reached / current return depth as a FLOOR NUMBER. The game treats
 // "gear for floor N" as item level N+1 (see depthItemLevel), so this floor number
@@ -14771,8 +14773,23 @@ function craftCost(tier, slot = forgeSlot, baseName = forgeBase) {
 // Open the bench with a clean slate — no item type, base or category picked, so
 // only the item-type picker shows. Rarity resets to its cheapest default; it stays
 // hidden until a base is chosen.
-function openForge() { forgeSlot = null; forgeBase = null; forgeCat = null; forgeTier = 'normal'; openTownModal('Craftsman', 'ic_mallet'); renderCraftsman(); }
-function renderCraftsman() { renderForge(); }
+function openForge() { forgeView = 'gear'; forgeSlot = null; forgeBase = null; forgeCat = null; forgeTier = 'normal'; openTownModal('Craftsman', 'ic_mallet'); renderCraftsman(); }
+function renderCraftsman() { if (forgeView === 'kit') renderForgeKit(); else renderForge(); }
+function forgeSetView(view) { forgeView = (view === 'kit') ? 'kit' : 'gear'; sfx('click'); renderCraftsman(); }
+// The Craftsman's two-bench switch: GEAR (forge blank gear) · HUD KIT (craft the
+// heads-up-display readouts). Reuses the shared .shop-tab pill component.
+function forgeTabsHTML() {
+  return `<div id="forge-tabs">`
+    + `<button class="shop-tab ${forgeView === 'gear' ? 'active' : ''}" onclick="forgeSetView('gear')"><span data-spr=ic_mallet></span> GEAR</button>`
+    + `<button class="shop-tab ${forgeView === 'kit' ? 'active' : ''}" onclick="forgeSetView('kit')"><span data-spr=ui_bag></span> HUD KIT</button>`
+    + `</div>`;
+}
+// The HUD-KIT bench: a short blurb + the Field-Kit rows (renderHudKitHTML), under the bench tabs.
+function renderForgeKit() {
+  setTownContent(forgeTabsHTML()
+    + `<div class="town-blurb">The Craftsman tinkers your heads-up display into shape — each instrument a one-time build, fitted for good on this hero. A fresh hero reads the world off the raw map; kit out the readouts as gold allows.</div>`
+    + renderHudKitHTML());
+}
 function forgeSelectSlot(slot) { forgeSlot = slot; forgeBase = null; forgeCat = null; renderForge(); }
 function forgeSelectBase(name) {
   forgeBase = name; renderForge();
@@ -14914,6 +14931,7 @@ function renderForge() {
   }
 
   setTownContent(`
+    ${forgeTabsHTML()}
     <div class="town-blurb">The Craftsman forges a <b>blank</b> piece at your current depth (ilvl ${depthItemLevel()}) — its base damage or defense set by the base you pick, with empty modifier slots. Take it to the <span data-spr=ic_wand></span> Enchanter to fill them in. Rarity sets how many modifiers it can hold. Heftier bases drink more materials; finer ones bill more for the delicate&nbsp;labour.</div>
     <div class="forge-label">Item type</div>
     <div class="forge-grid forge-slots">${slotBtns}</div>
@@ -19338,9 +19356,13 @@ function drawMinimap() {
   // screen, between floors): hide it.
   if (!hudOwned('minimap') || inTown || !Array.isArray(mapData) || !mapData.length || !MAP_W || !MAP_H) {
     if (el.style.display !== 'none') el.style.display = 'none';
+    // The touch header reserves the minimap's top-left slot; when it's absent that
+    // slot is dead space, so flag it off (CSS re-centres the remaining readouts).
+    if (document.body.classList.contains('hud-mm-on')) document.body.classList.remove('hud-mm-on');
     return;
   }
   if (el.style.display === 'none') el.style.display = 'block';
+  if (!document.body.classList.contains('hud-mm-on')) document.body.classList.add('hud-mm-on');
   // Keep the collapsed thumbnail state in sync with the saved preference.
   if (el.classList.contains('collapsed') !== minimapCollapsed) el.classList.toggle('collapsed', minimapCollapsed);
   const PX = 3;                              // device pixels per tile
@@ -26862,10 +26884,51 @@ function buffChipHTML(id, remaining, unit, mag) {
   const tip = `<div class='ht-name' style='color:${color}'>${m.name}</div><div class='ht-line'>${m.desc}</div>${magLine}<div class='ht-line'>${left}</div>`;
   return `<span class="buff-ic ${m.kind}" data-tip="${tip}" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">${icon}<span class="buff-time">${remaining}</span></span>`;
 }
-// Does this hero own a given HUD Field-Kit instrument (bought from the Merchant)?
+// Does this hero own a given HUD Field-Kit instrument (crafted at the Craftsman)?
 // The gate for every purchasable HUD element — a bare-HUD hero owns none; buying
 // flips the flag on player.hudUpgrades for good. See src/data/hudUpgrades.js.
 function hudOwned(key) { return hudOwns(player && player.hudUpgrades, key); }
+// HUD pieces fitted THIS town visit — their on-screen element wears a "new" glowing
+// wisp until the hero next leaves town (cleared in clearNewHudWisps). Transient UI
+// nudge only, never persisted. Maps upgrade key → the DOM element id(s) to glow.
+let _newHudUpgrades = new Set();
+const HUD_WISP_TARGETS = {
+  vitals: ['stats'],
+  floor: ['floor-hud', 'map-floor'],
+  difficulty: ['floor-hud', 'map-floor'],
+  foes: ['enemies-hud', 'map-foes'],
+  chests: ['chests-hud', 'map-chests'],
+  status: ['buff-overlay'],
+  minimap: ['minimap'],
+};
+let _hudWispsPainted = false;   // are any .hud-new classes currently on the DOM?
+let _hudWispTown = false;       // last-seen inTown, to catch the leave-town transition
+// Paint (or strip) the "new" wisp on each freshly-fitted HUD element. Cheap no-op when
+// there's nothing new and nothing left painted. Called from updateBars.
+function applyHudWisps() {
+  const anyNew = _newHudUpgrades.size > 0;
+  if (!anyNew && !_hudWispsPainted) return;   // nothing to show, nothing to clear
+  // An element can back more than one key (floor + difficulty share #floor-hud), so
+  // glow it when ANY of its keys is new — union first, then paint once per id, or a
+  // still-locked key would toggle a sibling upgrade's wisp back off.
+  const onIds = new Set(), allIds = new Set();
+  for (const key in HUD_WISP_TARGETS) {
+    const fresh = _newHudUpgrades.has(key);
+    for (const id of HUD_WISP_TARGETS[key]) { allIds.add(id); if (fresh) onIds.add(id); }
+  }
+  for (const id of allIds) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('hud-new', onIds.has(id));
+  }
+  _hudWispsPainted = anyNew;
+}
+// A freshly-fitted HUD piece glows only until the hero next LEAVES town — drop the
+// flags so the wisps clear on the way back into the dungeon.
+function clearNewHudWisps() {
+  if (!_newHudUpgrades.size) return;
+  _newHudUpgrades.clear();
+  applyHudWisps();
+}
 
 function renderStatusStrip() {
   const el = document.getElementById('buff-overlay');
@@ -26912,8 +26975,8 @@ function updateBars() {
     el.style.width = (curPct + pendPct) + '%';
   };
   const hpBar = document.getElementById('hp-bar');
-  // HUD Field-Kit gates — which readout instruments this hero has bought from the
-  // Merchant (a bare HUD owns none; each purchase flips its piece on). The bars,
+  // HUD Field-Kit gates — which readout instruments this hero has crafted at the
+  // Craftsman (a bare HUD owns none; each purchase flips its piece on). The bars,
   // danger pulse and fills stay live regardless — only the NUMBERS/labels/counters
   // are gated. See hudOwned() / src/data/hudUpgrades.js.
   const ownVitals = hudOwned('vitals'), ownFloor = hudOwned('floor'), ownDiff = hudOwned('difficulty'),
@@ -27060,6 +27123,12 @@ function updateBars() {
 
   // Active buffs & debuffs icon strip (combat buffs, status debuffs, shrine boons).
   renderStatusStrip();
+
+  // "New HUD piece" wisps: a just-crafted readout glows until the hero LEAVES town —
+  // clear the flags on the town→dungeon transition, then paint whatever's still new.
+  if (_hudWispTown && !inTown) clearNewHudWisps();
+  _hudWispTown = inTown;
+  applyHudWisps();
 
   // Show how many items are in the bag right in the LOOT tab label, in the same
   // tab font (a dim bracket, not a badge).
@@ -30932,7 +31001,7 @@ function loadGame() {
     if (typeof player.vy !== 'number') player.vy = 0;
     // Per-character set of actives hidden from the skill bar (added later).
     if (!player.hiddenSkills || typeof player.hiddenSkills !== 'object') player.hiddenSkills = {};
-    // HUD "Field Kit" (bought from the Merchant). A save that predates the feature
+    // HUD "Field Kit" (crafted at the Craftsman). A save that predates the feature
     // has no `hudUpgrades` map — GRANT the whole set so a returning hero keeps the
     // full HUD they always had (minimap, counters, depth/difficulty, vital numbers,
     // status icons). Brand-new heroes get an empty map from the player template and
@@ -37531,6 +37600,7 @@ const __DL_FN_BRIDGE = {
   craftCost,
   openForge,
   renderCraftsman,
+  forgeSetView,
   forgeSelectSlot,
   forgeSelectBase,
   forgeSelectCat,

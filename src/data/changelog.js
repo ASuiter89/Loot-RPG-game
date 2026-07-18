@@ -11,10 +11,11 @@ export const CHANGELOG = [
     "Spirit no longer grants innate Spirit Veil; fresh heroes have none (no stray blue HUD number).",
     "Veil comes only from gear/spells; Spirit boosts it +2%/pt over baseline (class-scaled, Mage best).",
   ] },
-  { date: "2026-07-18", size: "medium", v: "Merchant sells a HUD Field Kit — and arrives first", by: "Claude", notes: [
-    "Merchant is now keeper #1 (Healer #2); its KIT tab outfits your heads-up display.",
-    "Fresh hero starts bare-HUD; buy back minimap, foes/chest counters, floor & difficulty, HP/MP numbers, status icons.",
-    "New chests-remaining counter. One-time buys, kept per hero; existing heroes keep every readout.",
+  { date: "2026-07-18", size: "medium", v: "HUD Field Kit — crafted at the Craftsman", by: "Claude", notes: [
+    "Craftsman is keeper #1; its new HUD KIT bench crafts your readouts (moved off the Merchant).",
+    "Fresh hero starts bare-HUD; craft back minimap, foes/chest counters, floor & difficulty, HP/MP numbers, status icons.",
+    "New readouts glow with a wisp until you leave town; existing heroes keep every readout.",
+    "Top HUD recenters when the minimap's off; new chests counter; smaller bag/gear icons on mobile.",
   ] },
   { date: "2026-07-18", size: "small", v: "Mobile tutorial-tip & HUD fixes", by: "Claude", notes: [
     "Tutorial tips sit on the map, never over the HUD; each trimmed to one short sentence.",
