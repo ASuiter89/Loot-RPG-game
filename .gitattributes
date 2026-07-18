@@ -1,0 +1,10 @@
+# Every user-facing change prepends one entry to the top of the CHANGELOG array in
+# src/data/changelog.js, so any two open PRs would otherwise ALWAYS conflict there —
+# only the first merges clean; the rest go "dirty" and auto-merge.yml skips them
+# (see CLAUDE.md ▸ "A stalled PR is yours to finish"). `merge=union` tells git to
+# keep BOTH sides' added lines when merging/rebasing this file instead of raising a
+# conflict, so both new entries land in the array (valid JS; the only cost is that
+# same-day order may shuffle — cosmetic, and the data test pins only date order).
+# This is the standard fix for changelog merge conflicts and is honored by GitHub's
+# server-side merge, so concurrent PRs stop colliding on the changelog.
+src/data/changelog.js merge=union

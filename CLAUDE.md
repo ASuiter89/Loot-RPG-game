@@ -74,13 +74,14 @@ lives in `src/legacy/game.js` and shrinks as code is extracted.)
     **Never end a turn by asking the human to open, approve, or merge the PR** —
     that's the exact stall this pipeline exists to remove. (Opening one by hand is
     harmless if you ever want to; it flows into the same auto-merge.)
-  - **A stalled PR is yours to finish — don't leave it dirty.** Every change adds a
-    `CHANGELOG` entry at the top of the same array, so any two PRs open at once
-    conflict on `src/data/changelog.js` — only the first can merge cleanly; the rest
-    go "dirty", and the auto-merge sweep deliberately SKIPS a conflicting PR rather
-    than force-merge it. So land one change at a time, and if your PR falls behind
-    `main` (usually just that changelog collision), rebase it onto latest `main` —
-    re-stack the entry newest-first, keeping both sides — and push so it can merge.
+  - **A stalled PR is yours to finish — don't leave it dirty.** Changelog entries all
+    prepend to the top of one array, but `.gitattributes` marks
+    `src/data/changelog.js` `merge=union`, so git keeps BOTH sides' new entries on a
+    merge/rebase instead of conflicting — concurrent PRs no longer collide there
+    (same-day order may shuffle; that's cosmetic, and the data test pins only date
+    order). If a PR still goes "dirty" for some other reason, the auto-merge sweep
+    deliberately SKIPS it rather than force-merge, so rebase onto latest `main`,
+    keeping both sides' intent, and push so it can merge.
   - **When your change has merged and nothing's left to do, tell the user they can
     archive this session** — Claude Code has no tool to archive a session itself, so
     this can't be automatic. The PR subscription delivers a merged event
@@ -337,8 +338,7 @@ Apply this proactively on every UI change.
 9. **Commit** with a clear message (`feat:`/`fix:`/`balance:`/`ui:`/`refactor:`/
    `docs:`) and **push the branch — that's done.** `auto-pr.yml` opens the PR into
    `main` and `auto-merge.yml` merges it once green; don't open or ask about the PR
-   yourself. If your PR later goes dirty (usually a `changelog.js` collision),
-   rebase onto latest `main` and push again.
+   yourself. If your PR later goes dirty, rebase onto latest `main` and push again.
 
 ## Before pushing
 
