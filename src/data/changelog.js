@@ -16,6 +16,12 @@ export const CHANGELOG = [
     "Fresh hero starts bare-HUD; buy back minimap, foes/chest counters, floor & difficulty, HP/MP numbers, status icons.",
     "New chests-remaining counter. One-time buys, kept per hero; existing heroes keep every readout.",
   ] },
+  { date: "2026-07-18", size: "small", v: "Mobile tutorial-tip & HUD fixes", by: "Claude", notes: [
+    "Tutorial tips sit on the map, never over the HUD; each trimmed to one short sentence.",
+    "AUTO / RUN pills sit clear above their tiles; health & mana potions share a row under RUN.",
+    "Weapon nudge reads \"Open Loot to equip it\"; passive (no tap-to-navigate); BAG button wisps on touch.",
+    "Level-up nudge holds the slot; shakes if you try to descend with points unspent.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Vault & cracked-wall rooms stay fully reachable", by: "Claude", notes: [
     "Furniture can no longer seal off part of a vault or cracked-wall room — every tile stays reachable.",
   ] },

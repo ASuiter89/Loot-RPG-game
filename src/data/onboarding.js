@@ -91,68 +91,69 @@ export const EARLY_PACK_CAP = { 1: 3, 2: 4, 3: 5, 4: 6, 5: 7 };
 // <span data-spr=…> sprite icons — never a raw emoji as the asset). `wiki`, when
 // present, is the wiki article id the chip's "learn more" deep-links to. Ordered
 // roughly by when a hero meets them. Kept terse — a chip is glanced, not read.
+// Each is ONE short glanceable sentence — the "Learn more ›" link carries the rest.
 export const HINTS = {
   // Floors 1–2: after clearing every foe, point at the way down. (The beach
   // tutorial already teaches move+attack; this carries the lesson into floor 1–2.)
   descend: {
-    text: `Floor clear! Step onto the <span data-spr=ic_down></span> down-stairs to descend.`,
+    text: `Floor clear — step onto the <span data-spr=ic_down></span> down-stairs to descend.`,
     wiki: 'core-loop',
   },
   // Floor 6–7: nudge toward auto-loot if it is still fully manual.
   autoloot: {
-    text: `Bag filling up? Set <b>Auto-Loot</b> rules in Settings to sort drops for you.`,
+    text: `Set <b>Auto-Loot</b> rules in Settings to sort your drops.`,
     wiki: 'auto-loot',
   },
   // First time a boss winds up a telegraphed attack.
   bossTelegraph: {
-    text: `<b>Watch out!</b> Step off the marked ground before it strikes.`,
+    text: `Step off the marked ground before it strikes.`,
     wiki: 'boss-floors',
   },
   // First item that needs more of an attribute than the hero has (renders red).
   requirement: {
-    text: `That gear needs more of an attribute to wear — raise it, or find a lighter base.`,
+    text: `That gear needs more of an attribute than you have.`,
     wiki: 'bases',
   },
   // First time the Spirit Veil shield breaks.
   veil: {
-    text: `Your <b>Spirit Veil</b> broke — it soaks hits before Health and refills once you stop taking damage.`,
+    text: `Your <b>Spirit Veil</b> broke — it soaks hits before Health.`,
     wiki: 'spirit-veil',
   },
   // First mana-gated skill the hero can't afford.
   mana: {
-    text: `Out of Mana for that skill — it regenerates over time (slower in a fight).`,
+    text: `Out of Mana — it regenerates over time.`,
     wiki: 'mana',
   },
   // First shrine stepped on (shrines activate on contact; a blood shrine costs Health).
   shrine: {
-    text: `A <b>shrine</b>'s boon is now yours — see it under Status on the HERO tab. Some shrines cost Health.`,
+    text: `A <b>shrine</b>'s boon is yours — see it under Status on the HERO tab.`,
     wiki: 'shrines',
   },
   // First fountain used (heals on contact).
   fountain: {
-    text: `A <b>fountain</b> fully restored you — each works once, so save the next for when you're hurt.`,
+    text: `A <b>fountain</b> fully healed you — each one works only once.`,
     wiki: 'shrines',
   },
   // First teleporter pad.
   teleporter: {
-    text: `A <b>teleporter</b> pad warps you to its partner elsewhere on the floor.`,
+    text: `A <b>teleporter</b> pad warps you to its partner across the floor.`,
     wiki: 'teleporters',
   },
   // First locked vault door.
   vaultDoor: {
-    text: `A <b>locked vault</b> — carry the vault key to open it for a richer haul.`,
+    text: `A <b>locked vault</b> — bring the vault key to open its richer haul.`,
     wiki: 'vaults',
   },
   // First cracked wall.
   crackedWall: {
-    text: `A <b>cracked wall</b> — strike it a few times to break through to what's sealed behind.`,
+    text: `A <b>cracked wall</b> — strike it a few times to break through.`,
     wiki: 'vaults',
   },
   // (The greed / cursed-floor prompt and the boss-gate confirm are world-pausing
   // overlays that already explain themselves, so they need no separate chip.)
   // First treasure goblin.
   goblin: {
-    text: `A <b>treasure goblin</b> — it flees, then drops a jackpot. Chase it down before it escapes.`,
+    text: `A <b>treasure goblin</b> — chase it down before it flees with the loot.`,
     wiki: 'goblins',
   },
 };

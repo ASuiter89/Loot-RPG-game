@@ -7741,7 +7741,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall sandy shore where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals the first of five skeletons. Felling that first one drops your first weapon — a non-blocking tutorial nudge points you to the LOOT tab to equip it, and the LOOT tab plus that item's EQUIP button wear a circling wisp until you do. The other four wait further north, and the cave down to floor 1 stays SEALED until all five fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and re-surfaces the nudge.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall sandy shore where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals the first of five skeletons. Felling that first one drops your first weapon — a non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The other four wait further north, and the cave down to floor 1 stays SEALED until all five fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view.`,
       `Opening-floor content pacing (Normal, floors 1–25): foes are fewer and softer on floors 1–5 and climb to full strength by floor 6; the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. TRAINING WHEELS: on the beach and floors 1–3, no single blow can fell a foe in fewer than 3 hits (per-hit damage is capped to leave it alive through its first two), so a new player always trades a few real blows rather than one-shotting trash. No glowing ELITES or elite affixes until floor 4. Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -11860,8 +11860,9 @@ function buildTutorialMap() {
 function finishTutorial() {
   tutorialActive = false;
   player.tutorialDone = true;
+  _beachHintStage = null;
   hideTutorialHint();
-  refreshTutorialCues();   // tutorial over — drop the loot-tab glow + hide any nudge
+  refreshTutorialCues();   // tutorial over — drop the loot-tab / bag wisps + hide any nudge
   dungeonLevel = 1;
   arrivalDir = 'down';
   statusEffects = [];
@@ -11890,6 +11891,11 @@ function finishTutorial() {
 // variants the player has already dismissed (the tab wisps still carry the cue).
 let _tutPopupVariant = null;
 const _tutDismissed = { equip: false, levelup: false };
+// The ambient "?" hint stage the shore wants to show ('move' at spawn, 'cave' once
+// cleared, or null between beats — the equip popup carries guidance there). It
+// SHARES the lower banner slot with the actionable popup, so syncBeachHint() reveals
+// it only when no popup is up.
+let _beachHintStage = null;
 
 // Whether the "go equip your first weapon" cue is live: on the beach with the
 // starter weapon still sitting unequipped in the bag. Clears the instant it's worn.
@@ -11930,22 +11936,41 @@ function grantBeachLevelUp() {
   refreshTutorialCues();
 }
 
-// Reconcile every beach cue against live state: the LOOT-tab wisp, and which (if
-// any) popup is showing. Cheap and idempotent — safe to call from renderPanel and
-// after any equip / point spend. Off the beach it just tears the cues down.
+// Reconcile every beach cue against live state: the LOOT-tab / bag-icon wisps, and
+// which (if any) popup is showing. Cheap and idempotent — safe to call from
+// renderPanel and after any equip / point spend. Off the beach it just tears the
+// cues down.
 function refreshTutorialCues() {
   const equipCue = beachEquipCueOn();
   const spendCue = beachSpendCueOn();
   const tabInv = document.getElementById('tab-inv');
-  if (tabInv) tabInv.classList.toggle('tut-tab-glow', equipCue);   // LOOT tab wisps until worn
+  if (tabInv) tabInv.classList.toggle('tut-tab-glow', equipCue);   // LOOT tab wisps until worn (desktop)
+  // On touch the LOOT tab lives inside the closed Bag sheet, so wisp the always-on
+  // BAG button instead — drawing the eye to open it. (The level-up beat already
+  // pulses the unspent-points badge on that same button.)
+  const tbBag = document.getElementById('tb-bag');
+  if (tbBag) tbBag.classList.toggle('tut-bag-wisp', equipCue);
   // Equip first, then the level-up nudge; a dismissed variant stays hidden while
-  // its tab wisp carries the reminder.
+  // its tab / bag wisp carries the reminder.
   const want = (equipCue && !_tutDismissed.equip) ? 'equip'
     : (spendCue && !_tutDismissed.levelup) ? 'levelup'
       : null;
   if (want !== _tutPopupVariant) {
     if (want) showTutPopup(want); else hideTutPopup();
   }
+  syncBeachHint();   // the popup and the "?" hint share one slot — keep them exclusive
+}
+
+// The shore's actionable popup and its ambient "?" hint occupy the SAME lower banner
+// slot, so only one shows at a time: the popup wins, and the hint fills in the moment
+// no popup is up and a stage still wants it. Toggles visibility only — the stage's
+// text/handler are set by tutorialStage(). A no-op off the shore (ramp hints own the
+// chip there).
+function syncBeachHint() {
+  if (!tutorialActive) return;
+  const el = document.getElementById('tutorial-hint');
+  if (!el) return;
+  el.classList.toggle('show', !!_beachHintStage && !_tutPopupVariant);
 }
 
 // Paint the reusable #tut-popup pill for a variant and reveal it. Icon is set as a
@@ -11956,8 +11981,8 @@ function showTutPopup(variant) {
   const prev = _tutPopupVariant;
   _tutPopupVariant = variant;
   const cfg = variant === 'equip'
-    ? { spr: 'chest', html: 'You found your <b>first weapon</b>! Tap to open the <b>Loot</b> tab and equip&nbsp;it.' }
-    : { spr: 'ui_level', html: '<b>Level&nbsp;2!</b> Tap to spend your stat &amp; skill points in the <b>Hero</b> &amp; <b>Skills</b>&nbsp;tabs.' };
+    ? { spr: 'chest', html: 'You found a weapon! Open <b>Loot</b> to equip&nbsp;it.' }
+    : { spr: 'ui_level', html: '<b>Level&nbsp;2!</b> Spend your points in the <b>Hero</b> &amp; <b>Skills</b>&nbsp;tabs.' };
   const icon = el.querySelector('.tp-ic');
   const txt = el.querySelector('.tp-text');
   if (icon) icon.innerHTML = `<span data-spr="${cfg.spr}"></span>`;
@@ -11971,16 +11996,18 @@ function hideTutPopup() {
   const el = document.getElementById('tut-popup');
   if (el) el.classList.remove('show');
 }
-// Tapping the pill body: run its action (open the relevant bag tab) and dismiss it;
-// the tab wisp lingers as the standing cue.
-function tutPopupClick() {
-  const v = _tutPopupVariant;
-  if (v === 'equip') { _tutDismissed.equip = true; openBagTo('inv'); }
-  else if (v === 'levelup') { _tutDismissed.levelup = true; openBagTo('hero'); }
-  else sfx('click');
-  refreshTutorialCues();
+// Shake + flare the popup once — fired when the hero tries to descend with points
+// still unspent, so the eye snaps back to the "spend your points" nudge. No-op if
+// the popup isn't currently on screen.
+function nudgeTutPopup() {
+  const el = document.getElementById('tut-popup');
+  if (!el || !el.classList.contains('show')) return;
+  el.classList.remove('tut-nudge');
+  void el.offsetWidth;                 // reflow so the animation restarts on re-add
+  el.classList.add('tut-nudge');
+  el.addEventListener('animationend', () => el.classList.remove('tut-nudge'), { once: true });
 }
-// The little ✕ — dismiss without navigating (the tab wisp still guides).
+// The little ✕ — dismiss without navigating (the wisps still guide).
 function tutPopupDismiss(ev) {
   if (ev && ev.stopPropagation) ev.stopPropagation();
   if (_tutPopupVariant === 'equip') _tutDismissed.equip = true;
@@ -11990,19 +12017,20 @@ function tutPopupDismiss(ev) {
 }
 
 // ── TUTORIAL HINT CHIP ── a small "?" help affordance that updates its one-line
-// nudge as the new player progresses (move → fight → enter the cave). Tapping it
-// opens the full How to Play menu (wired on the element's onclick).
+// nudge as the new player progresses (move → clear → enter the cave). Tapping it
+// opens the full How to Play menu (wired on the element's onclick). The chip shares
+// the lower banner slot with the popup, so syncBeachHint() masks it while a popup is
+// up; 'quiet' parks it (no ambient hint — the equip popup carries guidance).
 function tutorialStage(stage) {
   const moveHow = isTouchMode() ? 'the joystick (drag the map)' : 'WASD / arrows';
+  _beachHintStage = (stage === 'move' || stage === 'cave') ? stage : null;
   if (stage === 'move') {
     // The beach opens empty — teach walking first; the lone skeleton is a stroll north.
-    setTutorialHint(`Use <b>${moveHow}</b> to move. Head <b>north</b> up the beach — walk into a <b>skeleton</b> to attack it.`);
-  } else if (stage === 'more') {
-    // First skeleton down: point them at the rest, up by the cave.
-    setTutorialHint(`Nice hit! <b>More skeletons</b> lurk further north — defeat them all to open the cave.`);
+    setTutorialHint(`Use <b>${moveHow}</b> to head <b>north</b> into a <b>skeleton</b>.`);
   } else if (stage === 'cave') {
-    setTutorialHint(`Step into the <b>cave</b> (<span data-spr=ic_down></span>) up north to descend into the dungeon.`);
+    setTutorialHint(`Step into the <b>cave</b> (<span data-spr=ic_down></span>) up north to descend.`);
   }
+  syncBeachHint();   // a popup may need to mask it right away
 }
 // `ramp` marks a first-encounter ramp popup — informational, no "?" help badge,
 // and a click anywhere dismisses it (handler wired in showRampHint). The beach
@@ -22582,6 +22610,7 @@ function goDownStairs(nx, ny) {
       sfx('denied');
       _tutDismissed.levelup = false;   // bring the nudge back as the reminder
       refreshTutorialCues();
+      nudgeTutPopup();                 // shake + flare it so the "spend your points" cue can't be missed
       return;
     }
     finishTutorial();
@@ -23117,7 +23146,9 @@ function onEnemyDefeated(e) {
   if (tutorialActive && e.tutorial) {
     sfx('kill');
     spawnParticles(e.x, e.y, '#e6ebf2', 12, 0.13);   // bone-dust burst
-    if (e.tutorialGear) { dropTutorialGear(e); if (!floorCleared) tutorialStage('more'); }
+    // The weapon drop's own popup (+ bag/LOOT/EQUIP wisps) carries the guidance now,
+    // so park the ambient "?" hint rather than stacking a second banner on it.
+    if (e.tutorialGear) { dropTutorialGear(e); if (!floorCleared) tutorialStage('quiet'); }
     updateObjectiveChip();
     renderPanelSoon();
     updateFloorClear();
@@ -28633,7 +28664,10 @@ function renderSkillBar() {
   // Each tile rides in a cell with its hotkey pill stacked above the button. `label`
   // is the hotkey (or "AUTO" for the auto-cast slot); `tone` tints the pill to match
   // the button family ('' for a plain skill slot). The icon now fills the box below.
-  const cell = (label, tone, btn) => `<div class="sb-cell"><span class="sb-pill${tone ? ' ' + tone : ''}">${label}</span>${btn}</div>`;
+  // The tone also tags the CELL (sb-cell-hp / -mp / -sprint / -town / -auto) so the
+  // touch footer can grid-place the left cluster — RUN over the HP/MP potions on one
+  // row — regardless of whether the optional Town Portal cell is present.
+  const cell = (label, tone, btn) => `<div class="sb-cell${tone ? ' sb-cell-' + tone : ''}"><span class="sb-pill${tone ? ' ' + tone : ''}">${label}</span>${btn}</div>`;
   // The live countdown text ("4s" on a recharging potion, the portal timer) is
   // deliberately NOT baked into the markup: it changed every second and busted
   // the _lastSkillBarHtml cache, forcing a full bar rebuild each tick. The
@@ -37436,7 +37470,6 @@ const __DL_FN_BRIDGE = {
   declineGreed,
   bossGateReady,
   bossGateCancel,
-  tutPopupClick,
   tutPopupDismiss,
   showTownWelcome,
   openTownService,

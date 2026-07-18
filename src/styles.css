@@ -673,6 +673,7 @@
   @keyframes tut-wisp-spin { to { --tut-wisp: 360deg; } }
   #tut-popup::before,
   #tab-inv.tut-tab-glow::before,
+  #tb-bag.tut-bag-wisp::before,
   .equip-row-btn.tut-equip-wisp::before {
     content: ''; position: absolute; inset: 0; border-radius: inherit;
     padding: 1.5px; pointer-events: none; z-index: 1;
@@ -691,7 +692,7 @@
     animation: tut-wisp-spin 3.2s linear infinite;
   }
   @media (prefers-reduced-motion: reduce) {
-    #tut-popup::before, #tab-inv.tut-tab-glow::before, .equip-row-btn.tut-equip-wisp::before { animation: none; }
+    #tut-popup::before, #tab-inv.tut-tab-glow::before, #tb-bag.tut-bag-wisp::before, .equip-row-btn.tut-equip-wisp::before { animation: none; }
   }
 
   /* The nudge pill itself — one reusable element, filled per beat by showTutPopup().
@@ -707,7 +708,11 @@
     background: color-mix(in srgb, var(--bg) 94%, transparent);
     border: 1px solid var(--gold);
     color: var(--text); font-size: var(--fs-body); line-height: 1.4; text-align: left;
-    cursor: pointer; pointer-events: auto; -webkit-tap-highlight-color: transparent;
+    /* Informational banner, not a navigation button — it no longer opens the bag on
+       tap (the wisps on the bag / LOOT tab / EQUIP button carry that cue). So it
+       stays passive and lets touches fall through to the map beneath; only its ✕
+       catches a pointer. */
+    pointer-events: none; -webkit-tap-highlight-color: transparent;
     box-shadow: 0 6px 20px color-mix(in srgb, var(--ink) 62%, transparent),
                 0 0 14px color-mix(in srgb, var(--gold) 30%, transparent);
   }
@@ -715,6 +720,27 @@
   @keyframes tutPopIn {
     from { opacity: 0; transform: translateX(-50%) translateY(-16px); }
     to   { opacity: 1; transform: translateX(-50%) translateY(-8px); }
+  }
+  /* A brief shake + gold flare when the hero tries to descend with points still
+     unspent — draws the eye back to the "Level 2! spend your points" nudge. The
+     keyframe carries the resting translate(-50%,-8px) so centring is preserved. */
+  #tut-popup.tut-nudge {
+    animation: tutNudge 0.55s ease-in-out;
+    border-color: var(--xp);
+    box-shadow: 0 6px 20px color-mix(in srgb, var(--ink) 62%, transparent),
+                0 0 22px color-mix(in srgb, var(--gold) 65%, transparent);
+  }
+  @keyframes tutNudge {
+    0%, 100% { transform: translate(-50%, -8px); }
+    12% { transform: translate(calc(-50% - 6px), -8px); }
+    28% { transform: translate(calc(-50% + 6px), -8px); }
+    44% { transform: translate(calc(-50% - 4px), -8px); }
+    60% { transform: translate(calc(-50% + 4px), -8px); }
+    76% { transform: translate(calc(-50% - 2px), -8px); }
+    88% { transform: translate(calc(-50% + 2px), -8px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #tut-popup.tut-nudge { animation: none; }   /* keep the static gold flare, drop the shake */
   }
   #tut-popup .tp-ic {
     flex: 0 0 auto; position: relative; z-index: 2;
@@ -725,13 +751,14 @@
   }
   #tut-popup .tp-text { flex: 1 1 auto; min-width: 0; position: relative; z-index: 2; }
   #tut-popup .tp-text b { color: var(--gold); font-weight: bold; }
-  #tut-popup .tp-go { flex: 0 0 auto; position: relative; z-index: 2; color: var(--gold); font-size: var(--fs-head); font-weight: bold; opacity: 0.85; }
   #tut-popup .tp-x {
     flex: 0 0 auto; position: relative; z-index: 2; margin-left: var(--space-1);
     width: calc(20px * var(--ui-scale, 1)); height: calc(20px * var(--ui-scale, 1));
     display: flex; align-items: center; justify-content: center;
     background: transparent; border: none; border-radius: 50%;
     color: color-mix(in srgb, var(--text) 65%, transparent);
+    /* The popup is passive; the ✕ is the one thing that still catches a pointer. */
+    pointer-events: auto;
     font-size: var(--fs-sub); line-height: 1; cursor: pointer;
     font-family: var(--font-ui); -webkit-tap-highlight-color: transparent;
   }
@@ -5308,6 +5335,15 @@
     flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, var(--sb-size));
     gap: 6px; align-items: end; justify-items: center;
   }
+  /* Left cluster: pin RUN over the HP/MP potions so heal + mana ALWAYS share the
+     bottom row — explicit placement, so the layout holds whether or not the optional
+     Town Portal cell (row 1, col 2) is present. Without this, an absent Town cell let
+     auto-flow push mana onto its own row under RUN. */
+  body.touch #touch-cluster #skill-bar .sb-left { grid-template-rows: auto auto; }
+  body.touch #touch-cluster #skill-bar .sb-left .sb-cell-sprint { grid-column: 1; grid-row: 1; }
+  body.touch #touch-cluster #skill-bar .sb-left .sb-cell-town   { grid-column: 2; grid-row: 1; }
+  body.touch #touch-cluster #skill-bar .sb-left .sb-cell-hp     { grid-column: 1; grid-row: 2; }
+  body.touch #touch-cluster #skill-bar .sb-left .sb-cell-mp     { grid-column: 2; grid-row: 2; }
   body.touch #touch-cluster #skill-bar .sb-auto-wrap {
     flex: 0 0 auto; display: flex; align-items: end; justify-content: center;
   }
@@ -5321,9 +5357,14 @@
   body.touch #touch-cluster #skill-bar .sb-pill { display: none; }
   body.touch #touch-cluster #skill-bar .sb-pill.auto,
   body.touch #touch-cluster #skill-bar .sb-pill.sprint {
-    display: block; position: absolute; top: -15px; left: 50%; right: auto; margin: 0;
+    /* Sit the pill fully ABOVE its tile (bottom edge a hair over the tile top),
+       not overlapping into it — a fixed negative `top` let the tile, which paints
+       later in DOM order, clip the pill's bottom rim (the AUTO pill tucking under
+       the auto-cast slot). `bottom:100%` anchors to the tile top regardless of pill
+       height; z-index keeps it above the tile if they ever kiss. */
+    display: block; position: absolute; bottom: calc(100% + 2px); top: auto; left: 50%; right: auto; margin: 0;
     transform: translateX(-50%); width: max-content; max-width: none; overflow: visible;
-    text-align: center; white-space: nowrap; pointer-events: none;
+    text-align: center; white-space: nowrap; pointer-events: none; z-index: 2;
   }
 
   /* ── Landscape block ── Dungeon Loot is portrait-only on a phone held sideways.
@@ -5476,11 +5517,12 @@
   }
   body.touch #settings-card { max-height: none; overflow-y: visible; }
 
-  /* Tutorial hint chip: dock it clear of the top vitals strip (which can wrap to
-     2 rows on a narrow foldable) and of both thumb zones, and hide it while a
+  /* Tutorial hint chip: dock it just BELOW the header band, ON THE MAP — never over
+     the vitals / minimap / points badge. The map (#game-wrap) starts at hdr-h, so a
+     small gap past it lands the chip fully in the gameplay window. Hidden while a
      full-screen sheet is open. */
   body.touch #tutorial-hint {
-    top: calc(env(safe-area-inset-top, 0px) + 96px); bottom: auto;
+    top: calc(env(safe-area-inset-top, 0px) + var(--hdr-h) + 18px); bottom: auto;
     left: 50%; transform: translateX(-50%);
     /* An explicit content width is what lets the box use the full max-width: with a
        bare left:50% + translateX(-50%) and no width, shrink-to-fit caps the box at
@@ -5489,6 +5531,15 @@
     width: max-content; max-width: min(90vw, 460px); font-size: var(--fs-sub);
   }
   body.touch.bag-open #tutorial-hint { display: none; }
+  /* The beach nudge popup shares that SAME on-map slot (just below the header band),
+     NOT pinned to the very top where it overlapped the vitals strip. It and the "?"
+     hint are mutually exclusive here (the popup wins — see syncBeachHint), so they
+     never stack, and neither ever covers the HUD. */
+  body.touch #tut-popup {
+    top: calc(env(safe-area-inset-top, 0px) + var(--hdr-h) + 18px); bottom: auto;
+    max-width: min(92vw, 460px);
+  }
+  body.touch.bag-open #tut-popup { display: none; }
 
   /* Objective/bounty chip: a quiet cue that sits fully CLEAR of the footer action
      bar (not over its tiles), compact so it never dominates the bottom of the map.
