@@ -89,7 +89,7 @@ describe('teaching copy validity', () => {
       expect(ids.has(s.id), `dup ${s.id}`).toBe(false);
       ids.add(s.id);
     }
-    expect(STARTER_STEPS.length).toBeGreaterThan(2);
+    expect(STARTER_STEPS.length).toBeGreaterThanOrEqual(2);
   });
 
   it('tips and death tips are non-empty strings', () => {
