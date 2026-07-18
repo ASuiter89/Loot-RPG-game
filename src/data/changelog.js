@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "Achievements moves into the title menu grid", by: "Claude", notes: [
+    "Achievements is a grid tile beside History (was a full-width bar under Reset Run).",
+    "Earned/total count reads gold, not crimson.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Beach tutorial — walk first, five skeletons, then your first level-up", by: "Claude", notes: [
     "Beach far taller — walk the empty shore a while before the first skeleton scrolls into view.",
     "First skeleton drops a weapon, with a prompt to equip it (you start unarmed).",
