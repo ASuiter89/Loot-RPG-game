@@ -7681,7 +7681,7 @@ window.gameGuide = function gameGuide(topic) {
       `Consequences an agent should expect: an item's pow can differ across two heroes and shrinks as your build saturates a stat (diminishing returns); the overall player.power still climbs monotonically with any real upgrade. To raise Power, stack stats your build actually uses (your class's damage lane, crit damage only once you have crit chance, more HP/mitigation for survivability), not just bigger rarities.`,
     ],
     bestiary: [
-      `Every foe is recorded in a BESTIARY — a codex opened from the pause menu (Bestiary). Hovering a foe in the dungeon already pops an inspect card; the Bestiary collects one card per species so you can browse the whole roster, filter it (creatures / bosses / discovered), and track completion. gameState().menu.bestiary reports species discovered out of the total.`,
+      `Every foe is recorded in a BESTIARY — a codex opened from the pause menu (Bestiary). Hovering a foe in the dungeon already pops an inspect card; the Bestiary collects one card per species so you can browse the whole roster, filter it (creatures / bosses / discovered), and track completion. A card's name colour marks its rank — gold for a creature, red for a boss — and its footer tallies your lifetime kills of that species. gameState().menu.bestiary reports species discovered out of the total.`,
       `A species' stats stay hidden as "???" until you've slain enough of it to learn them — each stat field reveals at its own kill threshold, fully known at ${BESTIARY_FULL} kills. A BOSS is all-or-nothing: its card is a sealed silhouette until your FIRST kill, then opens completely. The depth-scaled numbers (level/HP/damage/typed defence) are recorded from the DEEPEST specimen of each species you've slain.`,
       `The bestiary is ACCOUNT-WIDE: kills accumulate across every hero and save slot, so slaying a species on one hero reveals its card for all of them, and it survives death, deleting a slot, or switching slots — like the shared town stash. Kill counts are cumulative lifetime totals across your heroes.`,
     ],
@@ -10061,7 +10061,9 @@ function renderEnemyCard(e) {
   const icon = ((!e.isBoss && monsterIcon(e.type, 18)) || (e.isBoss && bossIcon(e.type, 18)) || (spr && dlIcon(spr, 18)))
     || `<span style="display:inline-block;width:1.8rem;height:1.8rem;border-radius:4px;background:${e.mColor || ICON_EMPTY_COLOR};border:1px solid rgba(0,0,0,0.5);vertical-align:middle"></span>`;
   const name = e.isBoss ? (e.name || 'Boss') : (e.name || 'Unknown foe');
-  const sub = e.isBoss ? 'BOSS' : (e.isElite ? 'ELITE' : 'CREATURE');
+  // Rank reads from the NAME COLOUR (boss = red, creature = gold); only ELITE — a
+  // live-combat distinction the colour can't carry — keeps a text tag.
+  const sub = (e.isElite && !e.isBoss) ? 'ELITE' : '';
   // The stat rows, each gated by its own learn-threshold.
   const styleLbl = ENEMY_STYLE_LABEL[e.behavior] || 'Hunter';
   const rangedLbl = (BEHAVIORS[e.behavior] && BEHAVIORS[e.behavior].ranged) ? 'Ranged' : 'Melee';
@@ -10082,20 +10084,14 @@ function renderEnemyCard(e) {
     const known = statKnown(e, k, kills);
     return `<span class="ec-k">${label}</span><span class="ec-v${known ? '' : ' hidden'}">${known ? val : '???'}</span>`;
   }).join('');
-  // Footer: discovery progress. A boss is all-or-nothing — sealed until its first
-  // kill, then fully known; a regular species fills in over ten kills.
-  let foot;
-  if (e.isBoss) {
-    foot = kills >= 1
-      ? `<div class="ec-foot">Boss vanquished — fully known</div>`
-      : `<div class="ec-foot">Boss — defeat it once to record its lore</div>`;
-  } else {
-    const cap = Math.min(kills, BESTIARY_FULL);
-    const pct = Math.round(cap / BESTIARY_FULL * 100);
-    foot = `<div class="ec-foot">Slain ${cap}/${BESTIARY_FULL}<span class="ec-bar"><i style="width:${pct}%"></i></span></div>`;
-  }
+  // Footer: a lifetime kill tally (account-wide), not a reveal bar — how many of
+  // this foe you have felled across every hero. Undiscovered foes read the prompt.
+  const foot = kills >= 1
+    ? `<div class="ec-foot">Slain <b>${kills}</b></div>`
+    : `<div class="ec-foot">${e.isBoss ? 'Defeat it once to record its lore' : 'Not yet slain'}</div>`;
+  const subHtml = sub ? `<div class="ec-sub">${sub}</div>` : '';
   el.innerHTML =
-    `<div class="ec-head">${icon}<div><div class="ec-name">${name}</div><div class="ec-sub">${sub}</div></div></div>` +
+    `<div class="ec-head">${icon}<div><div class="ec-name${e.isBoss ? ' boss' : ''}">${name}</div>${subHtml}</div></div>` +
     `<div class="ec-grid">${rows}</div>${foot}`;
   // The hover card is a passive read-out — never eats a map click.
   el.style.pointerEvents = 'none';
@@ -10204,20 +10200,16 @@ function bestiaryCardHTML(stub) {
     const shown = known ? (val == null ? '—' : val) : '???';
     return `<span class="bst-k">${label}</span><span class="bst-v${known ? '' : ' hidden'}">${shown}</span>`;
   }).join('');
-  const sub = stub.isBoss ? 'BOSS' : 'CREATURE';
-  let foot;
-  if (stub.isBoss) {
-    foot = disc ? `<div class="bst-foot">Vanquished — fully known</div>`
-                : `<div class="bst-foot">Undiscovered — defeat it once to record its lore</div>`;
-  } else {
-    const cap = Math.min(kills, BESTIARY_FULL);
-    const pct = Math.round(cap / BESTIARY_FULL * 100);
-    foot = `<div class="bst-foot">Slain ${cap}/${BESTIARY_FULL}<span class="bst-bar"><i style="width:${pct}%"></i></span></div>`;
-  }
+  // Footer is a lifetime kill tally (account-wide), not a reveal bar or a "fully
+  // known" banner — the clutter the codex tiles were drowning in.
+  const foot = disc
+    ? `<div class="bst-foot">Slain <b>${kills}</b></div>`
+    : `<div class="bst-foot">Undiscovered</div>`;
   const blurb = (disc && stub.isBoss && stub.blurb) ? `<div class="bst-blurb">${escapeHtml(stub.blurb)}</div>` : '';
+  // Rank is read from the name COLOUR (creature = gold, boss = red) — no text tag.
   return `<div class="bst-card${disc ? '' : ' locked'}${stub.isBoss ? ' boss' : ''}">
     <div class="bst-head"><span class="bst-ic">${bestiaryIcon(stub, 26)}</span>
-      <div class="bst-htext"><div class="bst-name">${disc ? escapeHtml(stub.name) : '???'}</div><div class="bst-sub">${sub}</div></div></div>
+      <div class="bst-htext"><div class="bst-name">${disc ? escapeHtml(stub.name) : '???'}</div></div></div>
     <div class="bst-grid">${rows}</div>${foot}${blurb}</div>`;
 }
 function renderBestiary() {
@@ -10248,6 +10240,28 @@ function showBestiary() {
   if (ov) ov.classList.add('open');
 }
 function closeBestiary() { const ov = document.getElementById('bestiary-overlay'); if (ov) ov.classList.remove('open'); }
+
+// ── DISMISS-ANYWHERE OVERLAYS ────────────────────────────────────────────────
+// Pop-up menus (bestiary, patch notes, shops, settings sheets…) can grow taller
+// than the viewport, stranding the ✕ off-screen — you had to scroll back to the
+// top to close. So a click anywhere on an overlay that ISN'T an interactive
+// control dismisses it: the whole non-interactive surface (backdrop, card chrome,
+// stat text, scenery) becomes a close target. Everything you actually operate —
+// buttons, links, form fields, [role=button], and any element carrying its own
+// on*click (clickable rows like the shop transmute picks / cursor swatches) — is
+// excluded, so filters, toggles, buy/sell and key rebinding still work. The
+// overlay's OWN dismiss handler (the on*click that calls this) is the one hit
+// that still counts as "blank", so backdrop + chrome clicks close as intended.
+// Mark anything that must never dismiss on click with data-keep-open. Wired into
+// each dismissable overlay's inline onclick in index.html.
+const OVERLAY_KEEP_OPEN_SEL = 'button,a,input,select,textarea,label,[role=button],[contenteditable],[onclick],[data-keep-open]';
+function overlayBlankClick(ev) {
+  if (!ev || !ev.target || !ev.target.closest) return false;
+  const hit = ev.target.closest(OVERLAY_KEEP_OPEN_SEL);
+  // No control under the pointer, or the only match is the overlay's own dismiss
+  // handler (a backdrop / blank-chrome click) → treat as a close.
+  return !hit || hit === ev.currentTarget;
+}
 
 // Keep the loot drawer populated and open.
 function syncWebPanel() {
@@ -37109,6 +37123,7 @@ const __DL_FN_BRIDGE = {
   renderChangelogList,
   showVersionHistory,
   closeVersion,
+  overlayBlankClick,
   showHowTo,
   closeHowTo,
   openWiki,

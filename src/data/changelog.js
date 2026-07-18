@@ -7,6 +7,15 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "Click anywhere to close a menu", by: "Claude", notes: [
+    "Pop-up menus close on a click of any blank area — no scrolling back up to the ✕.",
+    "Buttons, toggles, and fields still act; only non-controls dismiss.",
+  ] },
+  { date: "2026-07-17", size: "small", v: "Bestiary tiles tidied", by: "Claude", notes: [
+    "Rank reads from the name colour — creature gold, boss red; CREATURE/BOSS tag dropped.",
+    "Footer tallies lifetime kills per foe (was a 0/10 reveal bar); \"vanquished\" line cut.",
+    "Long stat values wrap instead of spilling past the tile.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Town welcome hint", by: "Claude", notes: [
     "First climb into town shows a one-time hint-chip greeting — safe haven; tap the Town button to teleport back any time.",
   ] },

@@ -1,41 +1,20 @@
-# Auto-open a PR for every pushed `claude/*` branch, so a build session's job
-# ends at "push" — never at "please open a PR for me."
+# Open a pull request for every pushed `claude/*` branch, so a build session's job
+# ends at "push" — the model never has to open a PR itself. `auto-merge.yml` then
+# gates the same push and squash-merges once green.
 #
-# Why this file exists: the Claude Code harness that runs these sessions injects
-# a standing rule — "do NOT open a pull request unless the user explicitly asks"
-# — that directly conflicts with this repo's practice of landing every change
-# through a PR. Caught between the two, sessions stopped and asked the human to
-# open the PR, every single time. Moving PR-creation OFF the model and ONTO CI
-# dissolves the conflict: the model only has to commit and push (which the
-# harness always permits), and this workflow opens the PR.
+# Idempotent: a branch that already has an open PR is left alone (GitHub updates it
+# in place on the next push). Only same-repo `claude/*` branches are ever touched.
 #
-# The full hands-off loop is now:
-#   push `claude/*`  ->  auto-pr.yml opens the PR  ->  auto-merge.yml squash-
-#   merges on green  ->  deploy.yml ships to Pages / Netlify.
-#
-# Idempotent: pushing more commits to a branch that already has an open PR just
-# updates that PR (GitHub does this natively), so we detect the existing PR and
-# do nothing. Only same-repo `claude/*` branches are ever touched.
-#
-# Token: uses the built-in GITHUB_TOKEN by default. Because a PR opened by
-# GITHUB_TOKEN does NOT emit a `pull_request` event, auto-merge.yml's fast path
-# won't fire on its own — so we dispatch auto-merge.yml explicitly with the new
-# PR number (its 15-minute sweep is the backstop either way). If you configure a
-# repo secret AUTO_PR_TOKEN (a PAT with `repo` scope), we use that instead: a
-# PAT-opened PR both triggers events natively AND sidesteps the "Allow GitHub
-# Actions to create and approve pull requests" setting.
-#
-# One external prerequisite when using the default token: Settings -> Actions ->
-# General -> "Allow GitHub Actions to create and approve pull requests" must be
-# ON, or `gh pr create` returns 403. The create step turns that 403 into a
-# clear, actionable error in the run log.
+# Token: the built-in GITHUB_TOKEN. Requires Settings → Actions → General → "Allow
+# GitHub Actions to create and approve pull requests" = ON (the create step turns
+# the 403 into a clear error otherwise). Set an AUTO_PR_TOKEN secret (a PAT with
+# `repo` scope) to bypass that setting.
 
 name: Auto-open Claude PRs
 
 on:
   push:
-    branches:
-      - 'claude/**'
+    branches: ['claude/**']
   workflow_dispatch:
     inputs:
       branch:
@@ -43,14 +22,11 @@ on:
         required: true
         type: string
 
-# Least-privilege: read the repo, open the PR, dispatch the auto-merge workflow.
 permissions:
   contents: read
   pull-requests: write
-  actions: write
 
-# One run per branch; never cancel a create mid-flight (a duplicate PR is worse
-# than a few seconds of wait, and a second push just updates the same PR).
+# One run per branch; never cancel mid-create (a duplicate PR is worse than a wait).
 concurrency:
   group: autopr-${{ github.event_name == 'push' && github.ref_name || github.event.inputs.branch }}
   cancel-in-progress: false
@@ -58,88 +34,54 @@ concurrency:
 jobs:
   open-pr:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.AUTO_PR_TOKEN || secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ github.event_name == 'push' && github.ref_name || github.event.inputs.branch }}
     steps:
-      - name: Resolve target branch
-        id: branch
+      # Checkout-free: title/body and the ahead-of-main check come from the API, so
+      # this job stays a few seconds — no full-history clone.
+      - name: Open PR into main if the branch is ahead and none is open
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "push" ]; then
-            BRANCH='${{ github.ref_name }}'
-          else
-            BRANCH='${{ github.event.inputs.branch }}'
-          fi
           case "$BRANCH" in
-            claude/*) echo "branch=$BRANCH" >> "$GITHUB_OUTPUT" ;;
-            *) echo "Branch '$BRANCH' is not a claude/* branch — nothing to do."
-               echo "skip=true" >> "$GITHUB_OUTPUT" ;;
+            claude/*) ;;
+            *) echo "Branch '$BRANCH' is not a claude/* branch — nothing to do."; exit 0 ;;
           esac
 
-      - name: Check out repository
-        if: steps.branch.outputs.skip != 'true'
-        uses: actions/checkout@v4
-        with:
-          # Full history so we can compare the branch against main and read the
-          # tip commit message for the PR title/body.
-          fetch-depth: 0
-          ref: ${{ steps.branch.outputs.branch }}
-
-      - name: Open PR into main if needed
-        if: steps.branch.outputs.skip != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.AUTO_PR_TOKEN || secrets.GITHUB_TOKEN }}
-          BRANCH: ${{ steps.branch.outputs.branch }}
-        run: |
-          set -euo pipefail
+          # Already open? Pushes update it in place — done.
+          EXISTING=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            echo "PR #$EXISTING already open for '$BRANCH'."
+            exit 0
+          fi
 
           # Nothing to propose if the branch isn't ahead of main.
-          AHEAD=$(git rev-list --count "origin/main..origin/$BRANCH" 2>/dev/null || echo 0)
-          if [ "$AHEAD" -eq 0 ]; then
+          AHEAD=$(gh api "repos/$REPO/compare/main...$BRANCH" --jq '.ahead_by' 2>/dev/null || echo 0)
+          if [ "${AHEAD:-0}" -eq 0 ]; then
             echo "Branch '$BRANCH' has no commits ahead of main — no PR to open."
             exit 0
           fi
 
-          # Idempotent: if an open PR already exists for this head, the push that
-          # triggered us also emitted a `synchronize` event that auto-merge.yml
-          # already handles — so we're done, no nudge needed.
-          EXISTING=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" \
-            --state open --json number --jq '.[0].number' 2>/dev/null || true)
-          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
-            echo "PR #$EXISTING already open for '$BRANCH' — pushes update it in place."
-            exit 0
-          fi
-
-          # Title from the tip commit subject; body from its message body plus a
-          # provenance line. Keep it short — auto-merge.yml re-runs every gate.
-          TITLE=$(git log -1 --format='%s' "origin/$BRANCH")
+          # Title = tip commit subject; body = its message body + a provenance line.
+          MSG=$(gh api "repos/$REPO/commits/$BRANCH" --jq '.commit.message')
+          TITLE=$(printf '%s\n' "$MSG" | head -1)
           {
-            git log -1 --format='%b' "origin/$BRANCH"
-            printf '\n---\nOpened automatically by `auto-pr.yml` on push to `%s`. ' "$BRANCH"
-            printf '`auto-merge.yml` squash-merges once the gate suite is green.\n'
+            printf '%s\n' "$MSG" | tail -n +3
+            printf '\n---\nOpened automatically by `auto-pr.yml`. `auto-merge.yml` squash-merges once the gate suite is green.\n'
           } > /tmp/pr-body.md
 
           set +e
-          URL=$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
+          URL=$(gh pr create --repo "$REPO" --base main --head "$BRANCH" \
             --title "$TITLE" --body-file /tmp/pr-body.md 2>/tmp/pr-err)
           RC=$?
           set -e
           if [ "$RC" -ne 0 ]; then
             if grep -qi 'not permitted to create or approve pull requests' /tmp/pr-err; then
-              echo "::error::GitHub Actions is not permitted to create PRs. Turn ON Settings -> Actions -> General -> 'Allow GitHub Actions to create and approve pull requests', or add an AUTO_PR_TOKEN secret (PAT with repo scope)."
+              echo "::error::GitHub Actions can't create PRs. Turn ON Settings → Actions → General → 'Allow GitHub Actions to create and approve pull requests', or add an AUTO_PR_TOKEN secret (PAT with repo scope)."
             fi
             cat /tmp/pr-err >&2
             exit "$RC"
           fi
           echo "Opened $URL"
-          echo "PR_NUMBER=${URL##*/}" >> "$GITHUB_ENV"
-
-      - name: Nudge auto-merge to evaluate the new PR now
-        if: steps.branch.outputs.skip != 'true' && env.PR_NUMBER != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # A GITHUB_TOKEN-opened PR doesn't emit a `pull_request` event, so
-        # dispatch auto-merge.yml explicitly — it gates and (on green) merges
-        # within a minute instead of waiting for the 15-minute sweep.
-        run: |
-          gh workflow run auto-merge.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f pr="$PR_NUMBER" \
-            || echo "::warning::Could not dispatch auto-merge.yml; the 15-minute sweep will still pick up PR #$PR_NUMBER."

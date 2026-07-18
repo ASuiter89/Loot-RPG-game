@@ -190,7 +190,7 @@
          A full-screen scrim centres the card, pauses the game (it's an
          RT-blocking overlay) and makes everything behind it unclickable; click
          the scrim or press Esc to close. -->
-    <div id="settings-menu" onclick="if(event.target.id==='settings-menu')closeSettingsMenu()">
+    <div id="settings-menu" onclick="if(overlayBlankClick(event))closeSettingsMenu()">
       <div id="settings-stack">
       <!-- Character info card — the same hero/journey panel from the title screen,
            surfaced above the settings card while the game is paused. Filled by
@@ -418,7 +418,7 @@
     </div>
 
   <!-- Keybinding settings — remap action hotkeys (movement stays WASD / arrows). -->
-  <div id="keybind-overlay" onclick="if(event.target.id==='keybind-overlay')keybindsBack()">
+  <div id="keybind-overlay" onclick="if(overlayBlankClick(event))keybindsBack()">
     <div id="keybind-card">
       <div class="kb-head">
         <button class="kb-back" onclick="keybindsBack()" aria-label="Back to Settings" title="Back to Settings">◀</button>
@@ -436,7 +436,7 @@
   <!-- Skill-slot assign picker — click a slot (bar or SKILLS-tab tray) to choose
        which learned active fills it, or clear it. The counterpart to dragging a
        skill onto the slot. -->
-  <div id="slotpick-overlay" onclick="if(event.target.id==='slotpick-overlay')closeSlotPicker()">
+  <div id="slotpick-overlay" onclick="if(overlayBlankClick(event))closeSlotPicker()">
     <div id="slotpick-card"><div id="slotpick-body"></div></div>
   </div>
 
@@ -499,7 +499,7 @@
   </div>
 
   <!-- Version history popup, opened from the <span data-spr=ic_mallet></span> settings menu. -->
-  <div id="version-overlay" onclick="if(event.target===this)closeVersion()">
+  <div id="version-overlay" onclick="if(overlayBlankClick(event))closeVersion()">
     <div id="version-card">
       <div class="version-head"><span data-spr=scroll></span> Patch Notes <button class="version-x" onclick="closeVersion()">✕</button></div>
       <div id="version-body"></div>
@@ -508,7 +508,7 @@
 
   <!-- Achievements popup — progress badges, opened from the title screen's
        full-width Achievements button. Filled by renderTitleAchievements(). -->
-  <div id="achievements-overlay" onclick="closeAchievements()">
+  <div id="achievements-overlay" onclick="if(overlayBlankClick(event))closeAchievements()">
     <div id="achievements-card">
       <div class="version-head"><span data-spr=q_relic></span> Achievements <button class="version-x" onclick="closeAchievements()">✕</button></div>
       <div id="achievements-body"></div>
@@ -517,7 +517,7 @@
 
   <!-- Bestiary codex — every foe in the game, revealed as you slay more of each
        species. Opened from the pause menu. Filled by renderBestiary(). -->
-  <div id="bestiary-overlay" onclick="if(event.target===this)closeBestiary()">
+  <div id="bestiary-overlay" onclick="if(overlayBlankClick(event))closeBestiary()">
     <div id="bestiary-card">
       <div class="version-head"><span data-spr='ui_foes'></span> Bestiary <button class="version-x" onclick="closeBestiary()">✕</button></div>
       <div id="bestiary-body"></div>
@@ -525,7 +525,7 @@
   </div>
 
   <!-- How to Play — quick onboarding, opened from the title screen. -->
-  <div id="howto-overlay" onclick="closeHowTo()">
+  <div id="howto-overlay" onclick="if(overlayBlankClick(event))closeHowTo()">
     <div id="howto-card">
       <div class="version-head">How to Play <button class="version-x" onclick="closeHowTo()">✕</button></div>
       <div class="howto-sec"><span data-spr=ui_agility></span> Goal</div>
@@ -551,7 +551,7 @@
        system in the game. Opened from Settings ▸ About. Content lives in
        src/data/wiki.js; renderWiki() builds the panes; searchWiki() powers the
        search box. -->
-  <div id="wiki-overlay" onclick="if(event.target===this)closeWiki()">
+  <div id="wiki-overlay" onclick="if(overlayBlankClick(event))closeWiki()">
     <div id="wiki-card">
       <div class="version-head">
         <button class="wiki-back" id="wiki-back" onclick="wikiBack()" aria-label="Back" title="Back">◀</button>
@@ -573,7 +573,7 @@
 
   <!-- Graveyard of fallen heroes — every past run and how far it got. Opened
        from the title screen and the in-game <span data-spr=ic_mallet></span> settings menu. -->
-  <div id="graveyard-overlay" onclick="if(event.target===this)closeGraveyard()">
+  <div id="graveyard-overlay" onclick="if(overlayBlankClick(event))closeGraveyard()">
     <div id="graveyard-card">
       <div class="version-head"><span data-spr=scroll></span> History <button class="version-x" onclick="closeGraveyard()">✕</button></div>
       <div id="graveyard-total"></div>
@@ -583,7 +583,7 @@
 
   <!-- Auto-loot settings, opened from the <span data-spr=ic_mallet></span> settings menu. Per-rarity choice of
        Keep / Scrap / Sell applied the moment loot drops. Off (all Keep) by default. -->
-  <div id="autoloot-overlay" onclick="if(event.target===this)closeAutoLoot()">
+  <div id="autoloot-overlay" onclick="if(overlayBlankClick(event))closeAutoLoot()">
     <div id="autoloot-card">
       <div class="version-head"><span data-spr=mat_scrap></span> Auto-Loot <button class="version-x" onclick="closeAutoLoot()">✕</button></div>
       <div class="autoloot-blurb">When loot drops, instantly <b>Scrap</b> it into crafting materials or <b>Sell</b> it for gold by rarity, so your bag doesn't fill with junk. Default is <b>Keep</b> (off). Locked gear is never touched, and you can still Sell or Scrap by hand from the LOOT bag at&nbsp;any&nbsp;time.</div>
@@ -612,7 +612,7 @@
   <!-- Town / shop / mystic service menus live INSIDE #main so they can fill
        exactly the MAP column (between the log and the loot drawer) and leave the
        header, log, and LOOT/GEAR/HERO tabs fully usable. -->
-  <div id="shop-overlay" onclick="if(event.target===this)closeShop()">
+  <div id="shop-overlay" onclick="if(overlayBlankClick(event))closeShop()">
     <div id="shop-modal">
       <div id="shop-header">
         <button id="shop-back" onclick="shopBack()" style="display:none" data-tip="<div class='ht-name'>← Back</div><div class='ht-line'>Return to the town menu.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">←</button>
@@ -626,7 +626,7 @@
     </div>
   </div>
 
-  <div id="mystic-overlay" onclick="if(event.target===this)closeMystic()">
+  <div id="mystic-overlay" onclick="if(overlayBlankClick(event))closeMystic()">
     <div id="mystic-modal">
       <div id="mystic-header">
         <button id="mystic-back" onclick="mysticBack()" style="display:none" data-tip="<div class='ht-name'>← Back</div><div class='ht-line'>Return to the town menu.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">←</button>
@@ -639,7 +639,7 @@
     </div>
   </div>
 
-  <div id="town-overlay" onclick="if(event.target===this)townBack()">
+  <div id="town-overlay" onclick="if(overlayBlankClick(event))townBack()">
     <div id="town-modal">
       <div id="town-bg" aria-hidden="true"></div>
       <div id="town-header" class="modal-head">
@@ -903,7 +903,7 @@
 </div>
 
 <!-- Global leaderboards — deepest floor, highest level, most gold across all players. -->
-<div id="lb-overlay" onclick="if(event.target===this)closeLeaderboard()">
+<div id="lb-overlay" onclick="if(overlayBlankClick(event))closeLeaderboard()">
   <div id="lb-modal">
     <div class="modal-head">
       <span class="modal-head__flank"></span>
@@ -932,7 +932,7 @@
 
 <!-- Hero snapshot — click a leaderboard row to inspect that hero's gear,
      attributes and skills. Opens over the board; ✕ or a backdrop tap returns. -->
-<div id="lb-hero-overlay" onclick="if(event.target===this)closeLbHero()">
+<div id="lb-hero-overlay" onclick="if(overlayBlankClick(event))closeLbHero()">
   <div id="lb-hero-modal">
     <div class="modal-head">
       <span class="modal-head__flank"></span>
@@ -946,7 +946,7 @@
 
 <!-- Save slots — keep several characters side by side; load one, start a fresh
      hero in an empty slot, or wipe a slot. The slot you're playing is marked. -->
-<div id="slots-overlay" onclick="if(event.target===this)closeSlots()">
+<div id="slots-overlay" onclick="if(overlayBlankClick(event))closeSlots()">
   <div id="slots-modal">
     <div class="modal-head">
       <span class="modal-head__flank"></span>
@@ -962,7 +962,7 @@
      links your save slots to an account so progress carries across devices.
      Body is rendered by renderAccount(): a sign-in form when logged out, or the
      signed-in summary + Log Out when logged in. -->
-<div id="account-overlay" onclick="if(event.target===this)closeAccount()">
+<div id="account-overlay" onclick="if(overlayBlankClick(event))closeAccount()">
   <div id="account-modal">
     <div class="modal-head">
       <span class="modal-head__flank"></span>

@@ -2722,16 +2722,20 @@
     -webkit-tap-highlight-color: transparent;
   }
   #enemy-card .ec-head { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; }
+  /* Rank reads from the NAME COLOUR — creature gold, boss red — so the card needs
+     no "CREATURE"/"BOSS" tag line under it. */
   #enemy-card .ec-name { font-weight: bold; font-size: 1.3rem; color: var(--gold-350); line-height: 1.15; }
+  #enemy-card .ec-name.boss { color: var(--danger); }
   #enemy-card .ec-sub  { font-size: 1.1rem; color: var(--orange-500); letter-spacing: 0.5px; }
-  #enemy-card .ec-grid { display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; }
-  #enemy-card .ec-k { color: var(--meta); }
-  #enemy-card .ec-v { color: var(--purple-50); text-align: right; font-variant-numeric: tabular-nums; }
+  /* Value column may shrink below its content (minmax(0,…)) and a long single-word
+     value wraps instead of spilling past the card edge. */
+  #enemy-card .ec-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1px 8px; }
+  #enemy-card .ec-k { color: var(--meta); white-space: nowrap; }
+  #enemy-card .ec-v { color: var(--purple-50); text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
   #enemy-card .ec-v.hidden { color: var(--junk); letter-spacing: 1px; }
   #enemy-card .ec-foot { margin-top: 5px; padding-top: 4px; border-top: 1px solid var(--panel);
-    font-size: 1.1rem; color: var(--orange-500); display: flex; align-items: center; gap: 5px; }
-  #enemy-card .ec-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--blue-800); overflow: hidden; }
-  #enemy-card .ec-bar > i { display: block; height: 100%; background: linear-gradient(90deg,var(--orange-550),var(--gold)); }
+    font-size: 1.1rem; color: var(--orange-500); }
+  #enemy-card .ec-foot b { color: var(--gold); }
 
   /* ── Bestiary codex ── a browsable card per foe. The card grid keeps a fixed
      tile width and adds columns only as the screen widens (auto-fill with a
@@ -2757,17 +2761,21 @@
   #bestiary-body .bst-sprite { display: block; image-rendering: pixelated; object-fit: contain; }
   #bestiary-body .bst-blank { display: inline-block; width: 26px; height: 26px; border-radius: var(--radius-xs); border: 1px solid var(--tint-black); }
   #bestiary-body .bst-card.locked .bst-ic { filter: brightness(0) contrast(0.2); opacity: 0.5; }
+  /* Rank by NAME COLOUR: creatures gold, bosses red — no "CREATURE"/"BOSS" tag.
+     A locked (undiscovered) card greys the silhouette name regardless of rank, so
+     its rule comes last to win the specificity tie against the boss rule. */
   #bestiary-body .bst-name { font-weight: bold; font-size: var(--fs-body); color: var(--gold-350); line-height: 1.15; overflow-wrap: break-word; }
+  #bestiary-body .bst-card.boss .bst-name { color: var(--danger); }
   #bestiary-body .bst-card.locked .bst-name { color: var(--junk); letter-spacing: 2px; }
-  #bestiary-body .bst-sub { font-size: var(--fs-fine); color: var(--orange-500); letter-spacing: 0.5px; }
-  #bestiary-body .bst-card.boss .bst-sub { color: var(--danger); }
-  #bestiary-body .bst-grid { display: grid; grid-template-columns: auto 1fr; gap: 1px var(--space-4); }
-  #bestiary-body .bst-k { color: var(--meta); }
-  #bestiary-body .bst-v { color: var(--purple-50); text-align: right; font-variant-numeric: tabular-nums; }
+  /* Value column may shrink below its content (minmax(0,…)); a long single-word
+     value (AMBUSHER, ERRATIC) wraps instead of spilling past the card edge, and
+     labels stay on one line. */
+  #bestiary-body .bst-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1px var(--space-4); }
+  #bestiary-body .bst-k { color: var(--meta); white-space: nowrap; }
+  #bestiary-body .bst-v { color: var(--purple-50); text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
   #bestiary-body .bst-v.hidden { color: var(--junk); letter-spacing: 1px; }
-  #bestiary-body .bst-foot { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--panel); font-size: var(--fs-fine); color: var(--orange-500); display: flex; align-items: center; gap: var(--space-3); }
-  #bestiary-body .bst-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--blue-800); overflow: hidden; }
-  #bestiary-body .bst-bar > i { display: block; height: 100%; background: linear-gradient(90deg,var(--orange-550),var(--gold)); }
+  #bestiary-body .bst-foot { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--panel); font-size: var(--fs-fine); color: var(--orange-500); }
+  #bestiary-body .bst-foot b { color: var(--gold); }
   #bestiary-body .bst-blurb { margin-top: var(--space-3); font-size: var(--fs-fine); color: var(--meta); font-style: italic; line-height: 1.3; }
   /* Wraps a (possibly disabled) reroll button so the hover popup still fires —
      disabled buttons swallow mouse events on their own. */
