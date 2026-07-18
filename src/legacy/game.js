@@ -7502,7 +7502,7 @@ window.gameGuide = function gameGuide(topic) {
       `Cast hotbar skills: number keys ${key('skill1')}-${key('skill' + SKILL_SLOTS)} fire the ${SKILL_SLOTS} manual slots on the RIGHT of the bar (or click a slot). One extra skill sits in a dedicated auto-cast slot in the MIDDLE and fires itself — see the "autocast" topic.`,
       `Esc closes the top menu/overlay, or opens Settings. Settings is split into tabs (Play / Visuals / Audio / Progress / About); non-movement keys are remappable under the Play tab → KEYS (◀ Back or Esc there returns to Settings). The keys shown here are your CURRENT bindings.`,
       `The About tab holds PATCH NOTES and HOW TO PLAY — the latter opens a full, categorised, searchable guide (this same reference for a human): browse a category or type to search any topic. It's a world-pausing overlay (gameState().mode 'wiki'); this gameGuide() is the machine-readable twin of that guide.`,
-      `The Play tab's TITLE SCREEN button (at the very top) saves your progress and returns you to the title/landing screen without abandoning the run — hit CONTINUE there to drop straight back in. To start another hero, open Save Slots (Progress tab or title screen) and hit ＋ New Game in a fresh slot — your current hero stays saved in its own slot; load it any time to continue.`,
+      `The Play tab's TITLE SCREEN button (at the very top) saves your progress and returns you to the title/landing screen without abandoning the run — hit CONTINUE there to drop straight back in. To start another hero, hit NEW RUN (under CONTINUE on the title) or open Save Slots (Progress tab or title screen) and hit ＋ New Game in a fresh slot — either way your current hero stays saved in its own slot; load it any time to continue.`,
       `Settings → Visuals → UI SIZE scales the whole interface — all menu/HUD/panel text AND icons — from 1x to 2x in 0.25 steps (default 1x). Purely cosmetic; the game map/canvas is unaffected. Stored per device. The Visuals tab also holds MINIMAP (the top-left floor-sketch box size — Small / Medium / Large), UI FONT (a dropdown of faces), the CROSSHAIR toggle (a red reticle over your auto-attack's current target; on by default), the HERO BARS toggle (slim HP/MP bars under the hero), the PATHING LINE toggle (faint gold breadcrumbs along the click-to-move route; on by default) and, on mouse, the CURSOR picker plus CURSOR SIZE (a 1x–2x multiplier that enlarges the mouse pointer on top of the UI scale; default 1x).`,
     ],
     movement: [
@@ -31586,7 +31586,7 @@ function renderSlots() {
     const time = slotTimeAgo(s.ts);
     const playBtn = isActive
       ? `<button class="slot-btn current" disabled>● Playing</button>`
-      : `<button class="slot-btn" onclick="activateSlot(${i})">▶ Load</button>`;
+      : `<button class="slot-btn" onclick="activateSlot(${i})">Load</button>`;
     const armed = slotDeleteArmed === i;
     const delBtn = `<button class="slot-btn danger${armed ? ' armed' : ''}" onclick="deleteSlot(${i})">${armed ? 'Sure?' : 'Del'}</button>`;
     const hcMark = s.hardcore ? `<span class="hc-tag">${hcIcon(10)} HC</span>` : '';
@@ -33680,13 +33680,16 @@ function showTitle() {
   // Crest is the pixel sword tile (atlas), referenced directly by its key.
   const crest = document.getElementById('title-crest');
   if (crest) { const ic = (typeof dlIcon === 'function') ? dlIcon('w_sword', 46) : ''; crest.innerHTML = ic; }
-  // A returning hero gets CONTINUE; a fresh save gets one "enter the dungeon"
-  // button that flows straight into name/class onboarding. To start another hero,
-  // players open Save Slots and begin a new run in a fresh slot (their current
-  // hero stays saved in its own slot).
+  // A returning hero gets CONTINUE plus a New Run button underneath (start another
+  // hero in a fresh slot without opening Save Slots first); a fresh save gets one
+  // "enter the dungeon" ENTER button that flows straight into name/class onboarding
+  // and needs no separate New Run. The current hero always stays saved in its own
+  // slot, so New Run never discards it.
   const resuming = !!(player && player.class);
   const play = document.getElementById('title-play');
-  if (play) play.innerHTML = `<span class="tp-label">${resuming ? '▶ CONTINUE' : 'ENTER'}</span>`;
+  if (play) play.innerHTML = `<span class="tp-label">${resuming ? 'CONTINUE' : 'ENTER'}</span>`;
+  const newRun = document.getElementById('title-newrun');
+  if (newRun) newRun.style.display = resuming ? '' : 'none';
   // Hero / journey card — identity + how far this hero has delved.
   const hero = document.getElementById('title-hero');
   if (hero) {
@@ -33715,6 +33718,15 @@ function titlePlay() {
   if (!player.class) showClassPick();
   else if (!player.name) showNameEntry();
   else updateObjectiveChip();   // returning hero resumes — surface any active bounty
+}
+// New Run — start a fresh hero in the LOWEST FREE save slot, so the returning hero
+// on the title stays saved in its own slot (load them again any time via CONTINUE or
+// Save Slots). Offered under CONTINUE so a player can begin another run without
+// opening Save Slots first; newGameInSlot() reloads into name/class onboarding.
+function titleNewRun() {
+  audioUnlock();
+  const used = new Set(allLocalSlotIndices());
+  newGameInSlot(lowestFreeSlot(used));
 }
 function titleSound() { toggleSound(); refreshTitleToggles(); }
 
@@ -38025,6 +38037,7 @@ const __DL_FN_BRIDGE = {
   showTitle,
   closeTitle,
   titlePlay,
+  titleNewRun,
   titleSound,
   rtPaused,
   clockPaused,

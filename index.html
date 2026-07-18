@@ -823,6 +823,11 @@
     <!-- Hero / journey card — shown above CONTINUE for a returning hero, filled by showTitle(). -->
     <div id="title-hero" class="hero-card" style="display:none"></div>
     <button class="title-play" id="title-play" onclick="titlePlay()"><span class="tp-label">ENTER</span></button>
+    <!-- New Run — secondary CTA sitting directly under CONTINUE (revealed only for a
+         returning hero by showTitle()). Starts a fresh hero in the next free save slot,
+         leaving the current one saved in its own slot. Hidden on a first-run ENTER,
+         which already begins a new run. -->
+    <button class="title-newrun" id="title-newrun" onclick="titleNewRun()" style="display:none"><span class="tp-label">New Run</span></button>
     <div id="title-settings">
       <button class="title-set-btn" onclick="toggleSettingsMenu(event)"><span class="tsb-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="tsb-lbl">Settings</span></button>
       <button class="title-set-btn" onclick="showHowTo()"><span class="tsb-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 1 1 4.4 3.4c-.8.5-1.5 1.1-1.5 2.1"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg></span><span class="tsb-lbl">How to Play</span></button>
