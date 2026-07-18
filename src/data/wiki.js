@@ -561,6 +561,7 @@ export const WIKI = [
         keywords: ['vault', 'locked door', 'key', 'cracked wall', 'shortcut', 'smash', 'hoard', 'express stair'],
         body: [
           { p: '<b>Locked vault doors</b> need the vault key (it glows and bobs on the floor). Carry the key over and shove into the door to open it. What\'s behind varies wildly — a rich hoard, an armory, a healing fountain, a room of elite guards, or even an express staircase that plunges you two floors deeper.' },
+          { note: 'Keys you don\'t spend are <b>carried down with you</b> — a key found where its door isn\'t worth the trip opens a locked door on any floor below, and you can stockpile several.' },
           { p: 'Vault foes are <b>optional</b> — they never seal the stairs, so opening a combat vault is always your choice.' },
           { h: 'Cracked walls' },
           { p: '<b>Cracked walls</b> are shortcuts you smash open: shove into one from any direction (walk or dash) and it chips away over a few hits, growing visibly more cracked each time, until it collapses.' },
