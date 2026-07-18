@@ -633,13 +633,15 @@
   @keyframes objDonePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
   #objective-chip .obj-streak { color: var(--orange-800); font-weight: bold; }
 
-  /* Greed gate — the risk/reward "cursed floor" choice modal. */
-  #greed-overlay, #boss-gate-overlay {
+  /* Greed gate — the risk/reward "cursed floor" choice modal. The beach-tutorial
+     prompts (weapon drop, first level-up) share this world-pausing overlay shell. */
+  #greed-overlay, #boss-gate-overlay, #equip-tut-overlay, #beach-levelup-overlay {
     position: fixed; inset: 0; z-index: 470; display: none;
     align-items: center; justify-content: center; padding: 20px;
     background: color-mix(in srgb, var(--ink) 72%, transparent);
   }
-  #greed-overlay.open, #boss-gate-overlay.open { display: flex; }
+  #greed-overlay.open, #boss-gate-overlay.open,
+  #equip-tut-overlay.open, #beach-levelup-overlay.open { display: flex; }
   #greed-card, #boss-gate-card {
     max-width: 340px; width: 100%; padding: 20px 18px;
     /* Cap to the visible viewport (overlay pads 20px top+bottom) and scroll a tall
@@ -658,6 +660,25 @@
   .greed-yes:active { background: var(--red-800); }
   .greed-no { background: var(--panel); border-color: var(--border); color: var(--purple-150); }
   .greed-no:active { background: var(--panel-raised); }
+
+  /* Beach tutorial prompts — the first weapon drop and the first level-up. Reuse
+     the greed gate's structure (centered, world-pausing card + .greed-btns button
+     base) but wear a friendly GOLD tone, since these are welcoming teaching
+     moments, not danger. A deliberate, cohesion-preserving variant of the modal. */
+  #equip-tut-card, #beach-levelup-card {
+    max-width: 340px; width: 100%; padding: 20px 18px;
+    max-height: calc(100dvh - 40px); overflow-y: auto; -webkit-overflow-scrolling: touch;
+    background: linear-gradient(180deg, var(--panel-raised), var(--bg));
+    border: 2px solid var(--gold); border-radius: 12px; text-align: center;
+    box-shadow: 0 0 30px color-mix(in srgb, var(--gold) 34%, transparent);
+  }
+  .tut-title { font-family: var(--font-ui); font-weight: bold; font-size: 2.2rem; letter-spacing: 1px; color: var(--gold); margin-bottom: 8px; text-shadow: 0 0 12px color-mix(in srgb, var(--gold) 55%, transparent); }
+  .tut-body { font-size: 1.4rem; line-height: 1.5; color: var(--text); margin-bottom: 16px; }
+  .tut-body b { color: var(--gold); }
+  .tut-yes { background: var(--gold); border-color: var(--gold); color: var(--ink); font-weight: bold; }
+  .tut-yes:active { background: color-mix(in srgb, var(--gold) 80%, var(--ink)); }
+  .tut-no { background: var(--panel); border-color: var(--border); color: var(--text); }
+  .tut-no:active { background: var(--panel-raised); }
 
   /* Persistent badge on the BAG button counting unspent attribute points */
   .bag-btn { position: relative; }

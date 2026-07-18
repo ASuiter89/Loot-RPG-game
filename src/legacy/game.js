@@ -4676,6 +4676,10 @@ function attrReqValue(ilvl, w, tier) {
 // (non-gear, or an unrecognisable legacy item → fail OPEN so a save never bricks).
 function itemAttrReq(item) {
   if (!item) return null;
+  // The beach starter weapon is a guaranteed teaching gift — always wearable, for
+  // a Guided or Classic hero alike, so "found it → equip it" never stumbles on a
+  // stat gate the fresh hero can't yet meet.
+  if (item.tutorialGift) return null;
   // Ramp: gear that dropped on the opening floors carries NO attribute gate, so a
   // new hero equips freely before the requirement game begins. Keyed on the item's
   // own level (stable per-item), so a piece never retroactively becomes unwearable.
@@ -6061,7 +6065,7 @@ let floorCleared = false;
 // generateMap()/buildTutorialMap(); cleared at the end of the first runEnemyTurn.
 let entryGuard = false;
 // True while the player is on the one-time beach tutorial map (a fresh hero's
-// very first "floor"): a sandy shore with a lone skeleton to fight and a cave
+// very first "floor"): a tall sandy shore with five skeletons to fight and a cave
 // to the north that drops them into the real dungeon. See buildTutorialMap().
 let tutorialActive = false;
 // ── TOWN GATE ACCESS ──
@@ -6096,9 +6100,12 @@ function updateFloorClear() {
       sfx('bosskill');
       conquerDifficulty();
     } else if (tutorialActive) {
-      // Beach tutorial: point the new player at the cave instead of "stairs".
-      log('<span data-spr=feat_door></span> Skeleton falls — cave to the north opens!', 'important');
+      // Beach tutorial: the last skeleton just fell. Grant the hero's first
+      // LEVEL-UP (their first skill + stat points, earned here — see
+      // grantBeachLevelUp), unseal the cave, and point them north to it.
+      log('<span data-spr=feat_door></span> The last skeleton falls — the cave to the north opens!', 'important');
       sfx('floorclear');
+      grantBeachLevelUp();
       tutorialStage('cave');
     } else {
       // Clearing this floor unsealed its down-stairs, which opens the NEXT floor at
@@ -6956,6 +6963,7 @@ window.gameState = function gameState(radius) {
     ['slotpick-overlay', 'slotpick'], ['newrun-overlay', 'newrun'], ['slots-overlay', 'slots'],
     ['account-overlay', 'account'], ['lb-hero-overlay', 'heroSnapshot'], ['lb-overlay', 'leaderboard'], ['graveyard-overlay', 'graveyard'],
     ['conquest-overlay', 'conquest'], ['greed-overlay', 'greed'], ['boss-gate-overlay', 'bossgate'],
+    ['equip-tut-overlay', 'tutEquip'], ['beach-levelup-overlay', 'tutLevelUp'],
     ['shop-overlay', 'shop'], ['mystic-overlay', 'mystic'], ['town-overlay', 'town'],
   ];
   let mode = 'dungeon', blockingOverlay = null;
@@ -7699,6 +7707,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Classic when you create the hero (gameState().ramp.guided).`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall sandy shore where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals the first of five skeletons. Felling that first one drops a weapon to equip (a prompt offers to). The other four wait further north, and the cave down to floor 1 stays SEALED until all five fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, with a prompt to go spend them.`,
       `Opening-floor content pacing (Normal, floors 1–25): foes are fewer and softer on floors 1–5 and climb to full strength by floor 6; the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. No glowing ELITES or elite affixes until floor 4. Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -11718,10 +11727,12 @@ function buildBossArena() {
 }
 
 // ── BEACH TUTORIAL ───────────────────────────────────────────────────────────
-// A fresh hero's very first map. They wake on a sandy shore (sand to the north,
-// sea to the south), learn to move, fight one lone skeleton, then step into the
-// cave set into the northern wall — which descends into the real dungeon. Built
-// once per new hero; `player.tutorialDone` keeps it from ever showing again.
+// A fresh hero's very first map: a TALL sandy shore (sea to the south, a long
+// beach reaching north). They wake at the water's edge and learn to MOVE across
+// an empty beach before the follow-camera scrolls the first skeleton into view;
+// felling it drops a weapon to equip. Four more skeletons wait further north, and
+// only once all five fall does the northern cave unseal — and the hero take their
+// first level-up. Built once per new hero; `player.tutorialDone` retires it.
 function buildTutorialMap() {
   tutorialActive = true;
   inTown = false;
@@ -11739,34 +11750,54 @@ function buildTutorialMap() {
   floatingTexts = [];
   statusEffects = (statusEffects || []).filter(s => s.target === 'player');
 
-  // Solid rock border, sandy beach up top, sea along the bottom.
-  const SHORE = 12; // first row (from the top) that is water
+  // A TALL sandy shore. The hero wakes at the water's edge in the SOUTH with an
+  // empty beach stretching far to the north, so the very first thing they do is
+  // learn to WALK — no foe in sight — before the follow-camera scrolls the lone
+  // skeleton into view. Solid rock border, sand across the middle, sea along the
+  // bottom. Made deliberately taller than a normal floor for that opening stroll.
+  MAP_W = 20; MAP_H = 40;
+  const SHORE = MAP_H - 7;   // first row (from the top) that is water — a thin southern sea
   mapData = []; wallCracks = {};
   for (let y = 0; y < MAP_H; y++) {
     mapData[y] = [];
     for (let x = 0; x < MAP_W; x++) {
       if (x === 0 || y === 0 || x === MAP_W - 1 || y === MAP_H - 1) mapData[y][x] = 1; // wall
       else if (y >= SHORE) mapData[y][x] = 6; // water (south)
-      else mapData[y][x] = 0;                 // sand (north)
+      else mapData[y][x] = 0;                 // sand
     }
   }
-  // The cave: a down-stair near the northern end of the beach, dead centre.
+  // The cave: a down-stair at the far NORTHERN end of the beach, dead centre — a
+  // long walk up from the shore, past every skeleton, so the fight can't be rushed.
   const caveX = MAP_W >> 1;
-  mapData[4][caveX] = 2;       // down-stairs tile (the cave mouth)
+  mapData[3][caveX] = 2;       // down-stairs tile (the cave mouth)
   mapData[0][caveX] = 1;       // northern border wall behind it
 
-  // Spawn the hero a few tiles up from the shoreline, facing the cave.
-  setPlayerCell(caveX, SHORE - 1);               // sand, with water directly below (syncs fx/fy)
-  // A lone skeleton a few steps north, between the hero and the cave. It's
-  // neutral — static and harmless until the player strikes it, so a brand-new
-  // hero can approach safely and learn combat on their own terms. Once hit it
-  // wakes up and fights back, but only ever shambles (slow).
-  const skl = { x: caveX, y: SHORE - 5, type: 'skeleton', name: 'Skeleton',
-    hp: 24, maxHp: 24, level: 1, dmg: 4, dead: false, behavior: 'chaser',
-    passive: true, provoked: false, slow: true };
-  enemies.push(skl);
+  // Spawn the hero one tile up from the southern shoreline, facing the long beach.
+  const spawnY = SHORE - 1;
+  setPlayerCell(caveX, spawnY);                  // sand, with water directly below (syncs fx/fy)
+  startPos = { x: caveX, y: spawnY };            // a beach death returns you to the shore
 
-  // Seal the cave until the skeleton falls, so the fight can't be skipped.
+  // Five skeletons bar the way north. They're NEUTRAL — static and harmless until
+  // the hero strikes them — so a brand-new player approaches on their own terms
+  // and learns combat one foe at a time; once hit, each wakes and only shambles
+  // (slow). The `tutorial` flag routes their death through the beach handler
+  // (no XP/loot spam; the clear grants the level-up instead).
+  //   • The FIRST sits well up the empty beach, OFF-SCREEN at spawn, so the hero
+  //     has to walk to meet it. Felling it drops a weapon to equip (`tutorialGear`).
+  //   • The other FOUR cluster further north again — up by the cave and off-screen
+  //     from the first — and the cave stays sealed until all five fall.
+  const mkSkeleton = (x, y, extra) => Object.assign({
+    x, y, type: 'skeleton', name: 'Skeleton', hp: 20, maxHp: 20, level: 1, dmg: 3,
+    dead: false, behavior: 'chaser', passive: true, provoked: false, slow: true,
+    tutorial: true,
+  }, extra || {});
+  enemies.push(mkSkeleton(caveX, 20, { hp: 24, maxHp: 24, dmg: 4, tutorialGear: true }));
+  enemies.push(mkSkeleton(caveX, 9));
+  enemies.push(mkSkeleton(caveX - 2, 7));
+  enemies.push(mkSkeleton(caveX + 2, 7));
+  enemies.push(mkSkeleton(caveX, 5));
+
+  // Seal the cave until every skeleton falls, so the fight can't be skipped.
   floorCleared = false;
   tutorialStage('move');
 }
@@ -11788,13 +11819,93 @@ function finishTutorial() {
   updateBars(); renderPanel(); saveGame(); draw();
 }
 
+// ── BEACH TUTORIAL POPUPS ── two world-pausing prompts unique to the shore, both
+// reusing the greed-card overlay styling (and registered in RT_BLOCKING_OVERLAYS
+// so play freezes while they're up): the first skeleton's weapon drop (equip it
+// now, or stow it) and, once all five fall, the first level-up (go spend your new
+// points). See buildTutorialMap / onEnemyDefeated / updateFloorClear.
+
+// The weapon the felled first skeleton dropped, awaiting the player's Equip / Keep
+// choice (held here so the button handlers can act on it).
+let pendingTutorialGear = null;
+function dropTutorialGear(e) {
+  // The hero starts UNARMED, so the first skeleton's drop is their very first
+  // weapon. Force an uncommon (green), class-favoured weapon — a clear upgrade —
+  // and flag it a starter gift so it's always wearable (no stat gate to stumble on).
+  const item = generateItem(1, 1, 'uncommon', 'weapon');
+  item.tutorialGift = true;
+  recordWardrobe(item);
+  inventory.push(item);
+  renderPanelSoon();
+  log(`<span data-spr=chest></span> The skeleton drops ${logItem(item)}!`, 'loot');
+  openTutorialEquip(item);
+}
+function openTutorialEquip(item) {
+  pendingTutorialGear = item;
+  const body = document.getElementById('equip-tut-body');
+  if (body) body.innerHTML = `The skeleton dropped ${logItem(item)} — your first weapon! <b>Equip it</b> to hit harder.`;
+  const el = document.getElementById('equip-tut-overlay');
+  if (el) el.classList.add('open');
+  sfx('loot');
+}
+function tutorialEquipNow() {
+  const el = document.getElementById('equip-tut-overlay'); if (el) el.classList.remove('open');
+  const item = pendingTutorialGear; pendingTutorialGear = null;
+  const i = item ? inventory.indexOf(item) : -1;
+  if (i >= 0) quickEquip(i);            // handles the equip sfx, log, redraw and save
+  else sfx('click');
+  flushPendingBeachLevelUp();
+}
+function tutorialEquipKeep() {
+  const el = document.getElementById('equip-tut-overlay'); if (el) el.classList.remove('open');
+  pendingTutorialGear = null;
+  sfx('click');
+  log('Kept it in your bag — open the LOOT bag to equip it whenever you like.');
+  flushPendingBeachLevelUp();
+}
+
+// Beach graduation: felling all five skeletons is the hero's FIRST level-up — the
+// first skill point and stat points, EARNED here rather than handed out at spawn.
+// Grant a real 1→2 level (the beach banks no kill XP, so this is exactly one
+// level), suppressing the fly-in banner in favour of the fuller tutorial popup.
+let _beachLevelUpPending = false;
+function grantBeachLevelUp() {
+  _skipLevelBanner = true;
+  player.xp += xpForLevel(player.level);
+  checkLevelUp();               // +1 skill point, +5 stat points, stat recompute, save
+  _skipLevelBanner = false;
+  // Normally the equip prompt is long gone (the gear skeleton is closest to spawn,
+  // so it falls first). But if a player skirted it and felled it LAST, its prompt
+  // is still up — chain behind it (opened when that prompt is dismissed) so the two
+  // never stack. Otherwise show the level-up tip now.
+  if (document.getElementById('equip-tut-overlay')?.classList.contains('open')) _beachLevelUpPending = true;
+  else openBeachLevelUp();
+}
+function openBeachLevelUp() {
+  const el = document.getElementById('beach-levelup-overlay');
+  if (el) el.classList.add('open');
+}
+function flushPendingBeachLevelUp() {
+  if (!_beachLevelUpPending) return;
+  _beachLevelUpPending = false;
+  openBeachLevelUp();
+}
+function beachLevelUpAck() {
+  const el = document.getElementById('beach-levelup-overlay'); if (el) el.classList.remove('open');
+  sfx('click');
+}
+
 // ── TUTORIAL HINT CHIP ── a small "?" help affordance that updates its one-line
 // nudge as the new player progresses (move → fight → enter the cave). Tapping it
 // opens the full How to Play menu (wired on the element's onclick).
 function tutorialStage(stage) {
   const moveHow = isTouchMode() ? 'the joystick (drag the map)' : 'WASD / arrows';
   if (stage === 'move') {
-    setTutorialHint(`Use <b>${moveHow}</b> to move. Walk into the <b>skeleton</b> to attack it.`);
+    // The beach opens empty — teach walking first; the lone skeleton is a stroll north.
+    setTutorialHint(`Use <b>${moveHow}</b> to move. Head <b>north</b> up the beach — walk into a <b>skeleton</b> to attack it.`);
+  } else if (stage === 'more') {
+    // First skeleton down: point them at the rest, up by the cave.
+    setTutorialHint(`Nice hit! <b>More skeletons</b> lurk further north — defeat them all to open the cave.`);
   } else if (stage === 'cave') {
     setTutorialHint(`Step into the <b>cave</b> (<span data-spr=ic_down></span>) up north to descend into the dungeon.`);
   }
@@ -20762,7 +20873,11 @@ function screenFlash(color) {
 // Big, unmissable LEVEL UP banner that pops in the center of the screen and
 // fades out, nudging the player to spend their fresh hero (attribute) and skill points.
 let levelupBannerTimer;
+// Set while the beach graduation grants its scripted 1→2 level, so that milestone
+// shows ONLY its fuller tutorial popup, not the fly-in banner on top of it.
+let _skipLevelBanner = false;
 function showLevelUpBanner(level) {
+  if (_skipLevelBanner) return;
   const el = document.getElementById('levelup-banner');
   if (!el) return;
   const title = el.querySelector('.lvl-title');
@@ -22259,7 +22374,7 @@ function performAscend(nx, ny) {
 // last-finite-floor guards.
 function goDownStairs(nx, ny) {
   if (tutorialActive) {
-    if (!floorCleared) { log('<span data-spr=b_deathknight></span> Defeat the skeleton first to pass.', 'important'); sfx('click'); return; }
+    if (!floorCleared) { const left = hostilesRemaining(); log(`<span data-spr=b_deathknight></span> The cave is sealed — defeat ${left === 1 ? 'the last skeleton' : `all ${left} skeletons`} first.`, 'important'); sfx('click'); return; }
     finishTutorial();
     return;
   }
@@ -22781,6 +22896,20 @@ function onEnemyDefeated(e) {
   // Summoned minions are pure threat — they drop NO XP, gold or loot, so a
   // summoner boss can't be farmed by killing the fodder it spawns endlessly.
   if (e.minion) { sfx('kill'); updateFloorClear(); return; }
+  // ── Beach tutorial ── the five shore skeletons pay out a scripted, gentle
+  // reward, NOT the full loot routine: no XP or drop spam (so the first level-up
+  // fires exactly on the fifth kill — see updateFloorClear — rather than trickling
+  // in from kill XP), just a puff of bone dust. The FIRST one hands over a weapon
+  // to equip. Clears the tile and re-checks the floor, same as any kill.
+  if (tutorialActive && e.tutorial) {
+    sfx('kill');
+    spawnParticles(e.x, e.y, '#e6ebf2', 12, 0.13);   // bone-dust burst
+    if (e.tutorialGear) { dropTutorialGear(e); if (!floorCleared) tutorialStage('more'); }
+    updateObjectiveChip();
+    renderPanelSoon();
+    updateFloorClear();
+    return;
+  }
   fireSkillTrigger('kill', { enemy: e }); // on-kill procs: charges, heals, frenzy…
   // Bestiary: chalk up this species so the inspect card reveals more of its stats,
   // and record a specimen's depth-scaled numbers (level/HP/damage/typed defence)
@@ -29763,7 +29892,7 @@ const PAD_MODAL_IDS = [
   'shop-overlay','mystic-overlay','town-overlay','settings-menu','version-overlay','howto-overlay','wiki-overlay',
   'autoloot-overlay','newrun-overlay','keybind-overlay','conquest-overlay','slots-overlay',
   'account-overlay','lb-overlay','lb-hero-overlay','graveyard-overlay','slotpick-overlay',
-  'greed-overlay','boss-gate-overlay','bestiary-overlay','achievements-overlay','pad-kbd',
+  'greed-overlay','boss-gate-overlay','equip-tut-overlay','beach-levelup-overlay','bestiary-overlay','achievements-overlay','pad-kbd',
 ];
 function padTopModal() {
   let best = null, bestZ = -Infinity;
@@ -33917,7 +34046,8 @@ const RT_BLOCKING_OVERLAYS = ['title-overlay','name-overlay','class-overlay','hc
   // close the settings menu, so they must pause the world on their own.
   'conquest-overlay','slots-overlay','account-overlay','lb-overlay','lb-hero-overlay','graveyard-overlay','slotpick-overlay',
   'greed-overlay',    // the risk/reward cursed-floor choice pauses the world while open
-  'boss-gate-overlay'];   // the "are you ready?" boss-floor threshold prompt pauses the world too
+  'boss-gate-overlay',   // the "are you ready?" boss-floor threshold prompt pauses the world too
+  'equip-tut-overlay', 'beach-levelup-overlay'];   // beach-tutorial prompts (weapon drop, first level-up) pause the world too
 // The blocking overlays are all static shell divs (only their 'open' class
 // toggles), so resolve id → element ONCE and reuse — rtPaused/clockPaused run
 // several times per frame and were re-querying every id on every call.
@@ -37029,6 +37159,9 @@ const __DL_FN_BRIDGE = {
   declineGreed,
   bossGateReady,
   bossGateCancel,
+  tutorialEquipNow,
+  tutorialEquipKeep,
+  beachLevelUpAck,
   openTownService,
   // ── Endgame panel handlers (inline onclick=) ──
   openCovenants, covToggle, covClearAll,

@@ -76,19 +76,24 @@ export function skillManaCost(node, rank) {
 
 // ── Skill-point economy ──────────────────────────────────────────────────────
 // Two separate pools. NORMAL skill points fund the passive + active trees: one
-// at creation plus one per level. ASCENDANCY points fund only the ascendancy
-// "path" tree: one every ASC_POINT_EVERY levels, starting at ASCEND_LEVEL — the
-// level at which a hero can first ascend. The pools are earned and spent
-// independently, so normal points can never buy path skills and vice-versa.
+// per level, none handed out at creation — a fresh hero EARNS their first point
+// by reaching level 2 (the beach-tutorial clear grants that level, so a new hero
+// spends their first point right after learning to fight, not for free at spawn).
+// ASCENDANCY points fund only the ascendancy "path" tree: one every
+// ASC_POINT_EVERY levels, starting at ASCEND_LEVEL — the level at which a hero
+// can first ascend. The pools are earned and spent independently, so normal
+// points can never buy path skills and vice-versa.
 export const SKILL_POINTS_PER_LEVEL = 1;
-export const SKILL_POINTS_AT_START = 1;
+export const SKILL_POINTS_AT_START = 0;
 export const ASCEND_LEVEL = 20; // level at which the Trainer offers ascension
 export const ASC_POINT_EVERY = 5; // one ascendancy point per this many levels
 
 /**
  * Total NORMAL skill points a hero of the given level has earned over its
- * lifetime (the starting point plus one per level gained). Used to grant the
- * right pool on a new game and to reconcile older saves on load.
+ * lifetime (one per level above the first; none at creation). Used to grant the
+ * right pool on a new game and to reconcile older saves on load. (Older saves
+ * only ever gain points here — the reconciliation never removes any — so a
+ * veteran who banked the old starting point keeps it.)
  */
 export function earnedSkillPoints(level) {
   return SKILL_POINTS_AT_START + Math.max(0, (level || 1) - 1) * SKILL_POINTS_PER_LEVEL;
