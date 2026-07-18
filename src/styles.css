@@ -4931,6 +4931,12 @@
   #tutorial-hint b { color: var(--gold); }
   /* "Learn more ›" affordance on a ramp hint chip — links to the wiki article. */
   #tutorial-hint .th-more { color: var(--info); white-space: nowrap; opacity: 0.9; }
+  /* A ramp-hint popup is informational (it carries its own "Learn more ›" link),
+     not a "tap for help" affordance — drop the "?" badge and even out the padding
+     the badge used to fill. A click anywhere dismisses it (wired in showRampHint);
+     the beach tutorial chip keeps its "?" badge. */
+  #tutorial-hint.ramp .th-q { display: none; }
+  #tutorial-hint.ramp { padding-left: 13px; }
   @keyframes tutHintIn {
     from { opacity: 0; transform: translateX(-50%) translateY(8px); }
     to   { opacity: 1; transform: translateX(-50%) translateY(0); }
