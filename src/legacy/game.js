@@ -12005,10 +12005,13 @@ function showTutPopup(variant) {
   _tutPopupVariant = variant;
   const cfg = variant === 'equip'
     ? { spr: 'chest', html: 'You found a weapon! Open <b>Loot</b> to equip&nbsp;it.' }
-    : { spr: 'ui_level', html: '<b>Level&nbsp;2!</b> Spend your points in the <b>Hero</b> &amp; <b>Skills</b>&nbsp;tabs.' };
+    : { spr: null, html: '<b>You gained a level!</b> Spend your points in the <b>Hero</b> &amp; <b>Skills</b>&nbsp;tabs.' };
   const icon = el.querySelector('.tp-ic');
   const txt = el.querySelector('.tp-text');
-  if (icon) icon.innerHTML = `<span data-spr="${cfg.spr}"></span>`;
+  // A null sprite means no left badge (the level-up nudge is text-only); toggle the
+  // no-icon layout so the empty .tp-ic circle isn't left showing.
+  el.classList.toggle('tp-noicon', !cfg.spr);
+  if (icon) icon.innerHTML = cfg.spr ? `<span data-spr="${cfg.spr}"></span>` : '';
   if (txt) txt.innerHTML = cfg.html;
   el.classList.add('show');
   paintDataSpr(el);

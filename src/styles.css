@@ -765,8 +765,8 @@
     to   { opacity: 1; transform: translateX(-50%) translateY(-8px); }
   }
   /* A brief shake + gold flare when the hero tries to descend with points still
-     unspent — draws the eye back to the "Level 2! spend your points" nudge. The
-     keyframe carries the resting translate(-50%,-8px) so centring is preserved. */
+     unspent — draws the eye back to the "You gained a level! spend your points"
+     nudge. The keyframe carries the resting translate(-50%,-8px) so centring holds. */
   #tut-popup.tut-nudge {
     animation: tutNudge 0.55s ease-in-out;
     border-color: var(--xp);
@@ -792,7 +792,9 @@
     background: radial-gradient(circle at 50% 40%, var(--xp), var(--gold));
     box-shadow: 0 0 8px color-mix(in srgb, var(--gold) 60%, transparent);
   }
-  #tut-popup .tp-text { flex: 1 1 auto; min-width: 0; position: relative; z-index: 2; }
+  /* Text-only variants (the level-up nudge) drop the left badge entirely. */
+  #tut-popup.tp-noicon .tp-ic { display: none; }
+  #tut-popup .tp-text { flex: 1 1 auto; min-width: 0; position: relative; z-index: 2; text-align: center; }
   #tut-popup .tp-text b { color: var(--gold); font-weight: bold; }
   #tut-popup .tp-x {
     flex: 0 0 auto; position: relative; z-index: 2; margin-left: var(--space-1);

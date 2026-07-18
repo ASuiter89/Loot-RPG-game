@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "Cleaner beach level-up nudge", by: "Claude", notes: [
+    "Level-up popup reads \"You gained a level!\" (was \"Level 2!\").",
+    "Drops its left star badge; tutorial nudge text now centered.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Beach starter weapon fits your class", by: "Claude", notes: [
     "First beach skeleton felled drops the starter weapon — whichever of the five, not a fixed one.",
     "That weapon is now always a base your class favours (Warrior sword/axe; Mage staff/dagger; etc.).",
