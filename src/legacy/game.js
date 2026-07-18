@@ -33528,6 +33528,17 @@ function renderTitleAchievements() {
     cnt.textContent = `${showHc ? hc.earned : normal.earned} / ${total}`;
   }
 }
+// Bestiary tile count — discovered / total foes, so the codex reads at a glance
+// from the title (mirrors the Achievements tile). bestiaryDex is account-wide, so
+// the tally stands even at the title screen with no active hero. Always gold (the
+// .tsb-count colour); the popup itself distinguishes creatures vs bosses.
+function renderTitleBestiary() {
+  const cnt = document.getElementById('title-bst-count');
+  if (!cnt) return;
+  const roster = bestiaryRoster();
+  const discovered = roster.filter(s => speciesDiscovered(bestiaryKills(s))).length;
+  cnt.textContent = roster.length ? `${discovered} / ${roster.length}` : '';
+}
 function showAchievements() {
   renderTitleAchievements();  // refresh in case progress changed
   const ov = document.getElementById('achievements-overlay');
@@ -33610,6 +33621,7 @@ function showTitle() {
     else hero.style.display = 'none';
   }
   renderTitleAchievements();
+  renderTitleBestiary();
   refreshTitleToggles();
   ov.classList.add('open');
 }
@@ -37922,6 +37934,7 @@ const __DL_FN_BRIDGE = {
   achModeHtml,
   selectAchTab,
   renderTitleAchievements,
+  renderTitleBestiary,
   showAchievements,
   closeAchievements,
   showBestiary,

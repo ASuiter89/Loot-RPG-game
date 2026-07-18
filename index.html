@@ -834,6 +834,11 @@
       <!-- Achievements — pixel-art relic tile carrying the earned/total count
            (gold, never crimson); label + count set by renderTitleAchievements(). -->
       <button class="title-set-btn" onclick="showAchievements()"><span class="tsb-ic tsb-ic--spr"><span data-spr=q_relic></span></span><span class="tsb-lbl">Achievements</span><span class="tsb-count" id="title-ach-count"></span></button>
+      <!-- Bestiary — pixel-art foe sprite tile carrying the discovered/total count
+           (gold); label + count set by renderTitleBestiary(). Completes the 3×3 grid
+           beside Achievements; the codex ledger is account-wide, so the tally stands
+           at the title with no active hero. -->
+      <button class="title-set-btn" onclick="showBestiary()"><span class="tsb-ic tsb-ic--spr"><span data-spr=ui_foes></span></span><span class="tsb-lbl">Bestiary</span><span class="tsb-count" id="title-bst-count"></span></button>
     </div>
     <!-- Optional sign-in callout — updated by refreshAccountUi() to reflect login state. -->
     <div id="title-cloud" onclick="openAccount()"></div>
