@@ -113,14 +113,14 @@ describe('skillManaCost', () => {
 });
 
 describe('earnedSkillPoints', () => {
-  it('grants one point at creation (level 1)', () => {
-    expect(earnedSkillPoints(1)).toBe(1);
-    expect(earnedSkillPoints(0)).toBe(1); // guards a missing/zero level
+  it('grants no point at creation (level 1) — the first is earned at level 2', () => {
+    expect(earnedSkillPoints(1)).toBe(0);
+    expect(earnedSkillPoints(0)).toBe(0); // guards a missing/zero level
   });
-  it('adds one per level gained', () => {
-    expect(earnedSkillPoints(2)).toBe(2);
-    expect(earnedSkillPoints(20)).toBe(20);
-    expect(earnedSkillPoints(50)).toBe(50);
+  it('adds one per level gained above the first', () => {
+    expect(earnedSkillPoints(2)).toBe(1);
+    expect(earnedSkillPoints(20)).toBe(19);
+    expect(earnedSkillPoints(50)).toBe(49);
   });
 });
 

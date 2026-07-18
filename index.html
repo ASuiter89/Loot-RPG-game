@@ -771,6 +771,35 @@
   </div>
 </div>
 
+<!-- Beach tutorial: the first skeleton's weapon drop — a friendly, world-pausing
+     prompt to equip it now or stow it. Shares the greed gate's overlay structure
+     but wears a welcoming GOLD tone (not the cursed red). Body filled by
+     openTutorialEquip() with the dropped item's name; buttons bridge to
+     tutorialEquipNow()/tutorialEquipKeep(). -->
+<div id="equip-tut-overlay">
+  <div id="equip-tut-card">
+    <div class="tut-title"><span data-spr=chest></span> A Weapon!</div>
+    <div class="tut-body" id="equip-tut-body">The skeleton dropped a weapon — your first! Equip it to hit harder.</div>
+    <div class="greed-btns">
+      <button class="tut-yes" onclick="tutorialEquipNow()">Equip it</button>
+      <button class="tut-no" onclick="tutorialEquipKeep()">Keep in bag</button>
+    </div>
+  </div>
+</div>
+
+<!-- Beach tutorial: the first LEVEL-UP, earned by clearing all five skeletons — a
+     friendly, world-pausing tip to go spend the new points. Opened by
+     grantBeachLevelUp(); the button bridges to beachLevelUpAck(). -->
+<div id="beach-levelup-overlay">
+  <div id="beach-levelup-card">
+    <div class="tut-title"><span data-spr=ui_level></span> Level 2 — Well Fought!</div>
+    <div class="tut-body">The beach is clear! You reached <b>Level&nbsp;2</b> and earned your first <b>skill point</b> and <b>5 stat points</b>. Open the <b>HERO</b> tab to raise your stats and the <b>SKILLS</b> tab to learn a skill.</div>
+    <div class="greed-btns">
+      <button class="tut-yes" onclick="beachLevelUpAck()">Got it!</button>
+    </div>
+  </div>
+</div>
+
 <!-- Objective chip — a compact "what am I working toward" banner pinned near the
      top. Shows your active bounty's live progress, or a nudge to grab one, plus a
      daily-goal streak. Updated by updateObjectiveChip(); tap to open the board. -->

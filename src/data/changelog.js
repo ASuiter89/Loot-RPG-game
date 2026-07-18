@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-17", size: "small", v: "Beach tutorial — walk first, five skeletons, then your first level-up", by: "Claude", notes: [
+    "Beach far taller — walk the empty shore a while before the first skeleton scrolls into view.",
+    "First skeleton drops a weapon, with a prompt to equip it (you start unarmed).",
+    "Five skeletons now; the cave stays sealed until all five fall.",
+    "Clearing them grants your first level-up: skill point + 5 stat points — earned, not free at spawn.",
+  ] },
   { date: "2026-07-17", size: "small", v: "Title screen: no rotating tip", by: "Claude", notes: [
     "Dropped the one-line strategy tip that cycled under the tagline.",
   ] },
