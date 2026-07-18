@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   channelCoef, classDamageAttr, attrDamageFor,
-  shieldMax, shieldRechargePerSec, shieldRechargeDelay, healAmount,
+  shieldMax, spiritVeilMult, shieldPerSpiritPoint,
+  shieldRechargePerSec, shieldRechargeDelay, healAmount,
   ATTR_DMG_PER_POINT,
 } from '../../src/systems/attributeScaling.js';
 import {
@@ -87,30 +88,72 @@ describe('attrDamageFor', () => {
   });
 });
 
-describe('shieldMax', () => {
-  it('scales linearly off Spirit and the class multiplier (mage > templar > rogue > warrior)', () => {
-    const spirit = 400;
-    const m = shieldMax(spirit, 'mage');
-    const t = shieldMax(spirit, 'templar');
-    const r = shieldMax(spirit, 'rogue');
-    const w = shieldMax(spirit, 'warrior');
+describe('spiritVeilMult', () => {
+  it('is 1.0 at (or below) the baseline Spirit — Spirit grants no Veil on its own', () => {
+    for (const cls of CLASSES) {
+      expect(spiritVeilMult(SHIELD.spiritBase, cls)).toBeCloseTo(1, 10);
+      expect(spiritVeilMult(0, cls)).toBeCloseTo(1, 10);
+    }
+  });
+  it('adds a class-scaled boost above the baseline (mage > templar > rogue > warrior)', () => {
+    const s = SHIELD.spiritBase + 100;
+    const m = spiritVeilMult(s, 'mage');
+    const t = spiritVeilMult(s, 'templar');
+    const r = spiritVeilMult(s, 'rogue');
+    const w = spiritVeilMult(s, 'warrior');
     expect(m).toBeGreaterThan(t);
     expect(t).toBeGreaterThan(r);
     expect(r).toBeGreaterThan(w);
-    expect(m).toBeCloseTo(spirit * SHIELD.perSpirit * SHIELD.classMult.mage, 6);
-    expect(w).toBeCloseTo(spirit * SHIELD.perSpirit * SHIELD.classMult.warrior, 6);
+    expect(m).toBeCloseTo(1 + 100 * SHIELD.spiritBoostPerPoint * SHIELD.classMult.mage, 6);
   });
-  it('is linear in Spirit, independent of HP and UNCAPPED — can exceed any HP pool', () => {
-    expect(shieldMax(200, 'mage')).toBeCloseTo(2 * shieldMax(100, 'mage'), 6);
-    // A Spirit-stacked build's Veil dwarfs a modest HP pool — there is no HP ceiling.
-    expect(shieldMax(5000, 'mage')).toBeGreaterThan(3000);
+});
+
+describe('shieldMax', () => {
+  it('is the source Veil times the Spirit boost — 0 when there is no source Veil', () => {
+    // No matter how much Spirit, no gear/spell Veil means no shield.
+    expect(shieldMax(0, 5000, 'mage')).toBe(0);
+    expect(shieldMax(-10, 5000, 'mage')).toBe(0);
   });
-  it('is 0 at zero Spirit and never negative', () => {
-    expect(shieldMax(0, 'mage')).toBe(0);
-    expect(shieldMax(-10, 'mage')).toBe(0);
+  it('equals the source Veil exactly at baseline Spirit (no innate pool)', () => {
+    for (const cls of CLASSES) {
+      expect(shieldMax(120, SHIELD.spiritBase, cls)).toBeCloseTo(120, 6);
+    }
+  });
+  it('boosts the source Veil above baseline, class-scaled (mage > templar > rogue > warrior)', () => {
+    const veil = 100, spirit = 400;
+    const m = shieldMax(veil, spirit, 'mage');
+    const t = shieldMax(veil, spirit, 'templar');
+    const r = shieldMax(veil, spirit, 'rogue');
+    const w = shieldMax(veil, spirit, 'warrior');
+    expect(m).toBeGreaterThan(t);
+    expect(t).toBeGreaterThan(r);
+    expect(r).toBeGreaterThan(w);
+    expect(m).toBeCloseTo(veil * spiritVeilMult(spirit, 'mage'), 6);
+  });
+  it('is uncapped — a Veil-and-Spirit stack can exceed any HP pool', () => {
+    expect(shieldMax(200, 5000, 'mage')).toBeGreaterThan(3000);
   });
   it('uses the classless default multiplier for unknown classes', () => {
-    expect(shieldMax(50, 'druid')).toBeCloseTo(50 * SHIELD.perSpirit * SHIELD.classMultDefault, 6);
+    const spirit = SHIELD.spiritBase + 50;
+    expect(shieldMax(80, spirit, 'druid'))
+      .toBeCloseTo(80 * (1 + 50 * SHIELD.spiritBoostPerPoint * SHIELD.classMultDefault), 6);
+  });
+});
+
+describe('shieldPerSpiritPoint', () => {
+  it('is 0 without source Veil — +Spirit buys no shield with nothing to boost', () => {
+    expect(shieldPerSpiritPoint(0, 'mage')).toBe(0);
+    expect(shieldPerSpiritPoint(-5, 'mage')).toBe(0);
+  });
+  it('is the class-scaled boost fraction of the source Veil (mage > warrior)', () => {
+    const veil = 100;
+    expect(shieldPerSpiritPoint(veil, 'mage'))
+      .toBeCloseTo(veil * SHIELD.spiritBoostPerPoint * SHIELD.classMult.mage, 6);
+    expect(shieldPerSpiritPoint(veil, 'mage')).toBeGreaterThan(shieldPerSpiritPoint(veil, 'warrior'));
+  });
+  it('uses the classless default multiplier for unknown classes', () => {
+    expect(shieldPerSpiritPoint(60, 'druid'))
+      .toBeCloseTo(60 * SHIELD.spiritBoostPerPoint * SHIELD.classMultDefault, 6);
   });
 });
 

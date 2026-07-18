@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "Spirit Veil comes from gear, not raw Spirit", by: "Claude", notes: [
+    "Spirit no longer grants innate Spirit Veil; fresh heroes have none (no stray blue HUD number).",
+    "Veil comes only from gear/spells; Spirit boosts it +2%/pt over baseline (class-scaled, Mage best).",
+  ] },
   { date: "2026-07-18", size: "small", v: "Vault & cracked-wall rooms stay fully reachable", by: "Claude", notes: [
     "Furniture can no longer seal off part of a vault or cracked-wall room — every tile stays reachable.",
   ] },
