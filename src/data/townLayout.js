@@ -102,18 +102,18 @@ export const TOWN_DECOR = [
 // guardian is boss #1, floor 10 is #2, …), so exactly ONE new keeper joins after
 // each boss kill — never a batch. Arrival 1 IS the town-unlock: before the floor-5
 // guardian falls, the camp offers no services and the Town Portal is sealed.
-//   The CRAFTSMAN arrives FIRST — besides forging blank gear, they CRAFT the HUD
-//   "Field Kit" (the minimap, counters, depth/difficulty labels and vital numbers you
-//   build out a bare heads-up display with; see src/data/hudUpgrades.js), so the
-//   readout tools are on offer from the moment town opens.
-//   1 Craftsman · 2 Healer · 3 Merchant · 4 Vault   — the essentials (boss floors 5–20)
+//   The HEALER arrives FIRST; the CRAFTSMAN arrives SECOND — besides forging blank
+//   gear, they CRAFT the HUD "Field Kit" (the minimap, counters, depth/difficulty
+//   labels and vital numbers you build out a bare heads-up display with; see
+//   src/data/hudUpgrades.js), so the readout tools open up with the second keeper.
+//   1 Healer · 2 Craftsman · 3 Merchant · 4 Vault   — the essentials (boss floors 5–20)
 //   5 Ramen House · 6 Prospector · 7 Trainer
 //   8 Gambler · 9 Enchanter · 10 Bounty Board
 //   11 Transmuter · 12 Sellsword
 //   13 Ascendant Weave · 14 Cycles · 15 Hall of Deeds   — endgame sanctum
 //   16 Covenant Altar · 17 Mirrorforge · 18 Pantheon    — the deepest keepers
 export const TOWN_SERVICE_ARRIVALS = {
-  forge: 1, healer: 2, merchant: 3, stash: 4,
+  healer: 1, forge: 2, merchant: 3, stash: 4,
   ramen: 5, prospector: 6, trainer: 7,
   gambler: 8, enchanter: 9, bounty: 10,
   transmuter: 11, sellsword: 12,

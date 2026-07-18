@@ -12,7 +12,7 @@ export const CHANGELOG = [
     "Veil comes only from gear/spells; Spirit boosts it +2%/pt over baseline (class-scaled, Mage best).",
   ] },
   { date: "2026-07-18", size: "medium", v: "HUD Field Kit — crafted at the Craftsman", by: "Claude", notes: [
-    "Craftsman is keeper #1; its new HUD KIT bench crafts your readouts (moved off the Merchant).",
+    "Craftsman is keeper #2 (Healer #1); its new HUD KIT bench crafts your readouts (moved off the Merchant).",
     "Fresh hero starts bare-HUD; craft back minimap, foes/chest counters, floor & difficulty, HP/MP numbers, status icons.",
     "New readouts glow with a wisp until you leave town; existing heroes keep every readout.",
     "Top HUD recenters when the minimap's off; new chests counter; smaller bag/gear icons on mobile.",
