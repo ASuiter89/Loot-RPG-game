@@ -13783,8 +13783,12 @@ function updateObjectiveChip(force) {
   // a short STARTER CHECKLIST for a Guided hero — one step at a time — retiring
   // itself once every step is done.
   if (p && p.guided && !p.starterDone && !b && !inTown && !titleOpen && !tutorialActive) {
-    const chain = starterChain(starterCtx());
-    if (chain.complete) { p.starterDone = true; }
+    const ctx = starterCtx();
+    const chain = starterChain(ctx);
+    // The starter checklist bows out the moment the hero equips their first gear —
+    // its final step — so the cue never lingers past first-equip (even if a hero
+    // equips a ground-chest drop before clearing the opening foes).
+    if (chain.complete || ctx.equip) { p.starterDone = true; }
     else {
       const step = chain.steps[chain.activeIndex];
       // Hold the "Equip a piece of gear" nudge until the bag actually holds a wearable
@@ -13795,7 +13799,7 @@ function updateObjectiveChip(force) {
       }
       const doneCount = chain.steps.filter(s => s.done).length;
       const icHtml = (typeof dlIcon === 'function' && dlIcon('scroll', 14)) || '';
-      const txtHtml = `<b>Getting started</b> — ${escapeHtml(step.label)} <span style="opacity:.7">(${doneCount}/${chain.steps.length})</span>`;
+      const txtHtml = `${escapeHtml(step.label)} <span style="opacity:.7">(${doneCount}/${chain.steps.length})</span>`;
       const key = 'starter\x1f' + txtHtml;
       if (_objChipLast !== key) {
         _objChipLast = key;
@@ -28872,6 +28876,10 @@ function quickEquip(i) {
   if (player.mp > player.maxMp) player.mp = player.maxMp;
   updateBars();
   renderPanel();
+  // Equipping the hero's first gear is the starter checklist's final step, so
+  // refresh the objective chip now — its cue retires the instant the piece goes
+  // on, rather than lingering until the next kill/floor event.
+  try { updateObjectiveChip(); } catch (_) {}
   refreshTownService();  // keep an open Enchanter/Stash paper doll in sync
   draw();          // re-skin the sprite with the newly worn gear
   saveGame();

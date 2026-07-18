@@ -177,14 +177,13 @@ export const KEEPER_INTRO_FLOOR = { weave: 25, cycles: 25, deeds: 25, covenants:
 // ── STARTER CHECKLIST ────────────────────────────────────────────────────────
 // A short first-run chain shown in the objective chip, generalising the old
 // "spend your points" nudge into a guided spine. Each step self-completes; the
-// chain retires once every step is done. `done(ctx)` is evaluated in legacy
-// against a small context object (see systems/onboarding.starterStep).
+// chain retires the moment the hero equips their first piece of gear — its final
+// step — so the cue never lingers once a new hero is geared up (legacy also
+// force-retires on the equip step; see updateObjectiveChip). `done(ctx)` is
+// evaluated in legacy against a small context object (systems/onboarding).
 export const STARTER_STEPS = [
   { id: 'kill', label: 'Defeat 3 foes' },
   { id: 'equip', label: 'Equip a piece of gear' },
-  { id: 'skill', label: 'Spend a skill point' },
-  { id: 'descend', label: 'Take the stairs down' },
-  { id: 'boss', label: 'Beat the floor 5 boss' },
 ];
 
 // ── ROTATING TIPS ─────────────────────────────────────────────────────────────
