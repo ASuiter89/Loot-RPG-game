@@ -109,9 +109,9 @@ import { renderProcMap } from '../render/procTerrain.js';
 import { DECOR_INDEX, DECOR_ATLAS } from '../assets/decorAtlas.js';
 import { TOWN_W, TOWN_H, TOWN_SPAWN, TOWN_GATE, TOWN_PORTAL,
   TOWN_PATHS, TOWN_NPCS, TOWN_DECOR, TOWN_DECOR_FAMILIES,
-  TOWN_SERVICE_ARRIVALS, TOWN_ENDGAME_KINDS, TOWN_WANDER, TOWN_SANCTUM } from '../data/townLayout.js';
+  TOWN_SERVICE_ARRIVALS, TOWN_ENDGAME_KINDS, TOWN_FIXED_KINDS, TOWN_WANDER, TOWN_SANCTUM } from '../data/townLayout.js';
 import { townObjects, nearestInteractable, pickDecorVariant, reachableTiles, inSanctum } from '../systems/townLayout.js';
-import { HUD_UPGRADES } from '../data/hudUpgrades.js';
+import { HUD_UPGRADES, HUD_UPGRADE_GROUPS } from '../data/hudUpgrades.js';
 import { hudUpgradeById, hudUpgradeCost, hudOwns, allHudUpgradesOwned } from '../systems/hudUpgrades.js';
 import { randomDistinctTiles, pickWanderTarget, joinNames } from '../systems/townWander.js';
 import { INTERIORS_FLOORS, INTERIORS_WALLS, INTERIORS_ATLAS } from '../assets/interiorsAtlas.js';
@@ -6704,7 +6704,7 @@ let shopMode = 'buy';  // merchant tab: 'buy' | 'sell'
 // Merchant Sort / Filter — mirrors the LOOT drawer's controls but keeps its own
 // independent state, so ordering/narrowing the wares never disturbs the bag's
 // view. Shared across the BUY (wares) and SELL (bag) tabs.
-let shopSort = 'power';         // 'rarity' | 'power' | 'slot' | 'value' — default matches the loot drawer
+let shopSort = 'power';         // 'rarity' | 'power' | 'slot' | 'value' — the wares view has no pickup order
 let shopStatFilter = [];        // stat/attr keys to narrow to (empty = no filter)
 let shopSortOpen = false, shopFilterOpen = false;
 // The town Merchant's wares persist for the whole town visit (so closing and
@@ -6798,8 +6798,11 @@ let currentTab = 'inv';
 // Which gear slot the LOOT tab is filtered to ('all', a SLOT_KEYS value, or
 // 'other' for non-equipable items like potions).
 let lootFilter = 'all';
-// How the LOOT list is ordered: 'power' (default) | 'rarity' | 'slot' | 'value' | 'name'.
-let lootSort = 'power';
+// How the LOOT list is ordered: 'pickup' (default — the order you found them in) |
+// 'rarity' | 'power' | 'slot' | 'value'. Sorting other than pickup order needs the
+// Quartermaster's Ledger HUD upgrade (hudOwned('sortfilter')); until then the bag
+// stays in pickup order and the Sort/Filter controls are hidden.
+let lootSort = 'pickup';
 // Stat/attribute keys the LOOT list is narrowed to (empty = no stat filter). An
 // item shows if it carries ANY selected stat, so builds can surface relevant gear.
 let lootStatFilter = [];
@@ -7636,12 +7639,12 @@ window.gameGuide = function gameGuide(topic) {
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
       `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
       `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. The drawback always lands on a property you'll actually FEEL — a core stat (Attack, Defense, Max HP/MP, Speed) or a damage amp (Increased/Boss Damage, Spell/Skill Power) — never on a benefit-only rating whose negative would just floor to zero, so a curse's price is always paid. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — a curse hits ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
-      `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
+      `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). The on-screen Power number, the +/- stat-compare line, and the bag Sort/Filter controls are all one-time Craftsman HUD upgrades (Appraiser's Loupe, Gauging Calipers, Quartermaster's Ledger — see gameGuide("town")); a fresh hero reads gear by its raw stats until they're crafted, but gameState always reports pow + full stats regardless of what's fitted. gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Loot LEANS to your class: drops, the merchant and the gambler favour build-relevant bases (~60%, the rest random) — a Mage sees more staves/wands, robes and tomes; a Warrior/Templar more of their melee weapons, plate and shields; a Rogue more daggers/bows, light armour and quivers. Off-favoured bases still turn up, and picking a slot at the gambler still leans the base within it.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
-      `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
+      `The LOOT bag holds items in PICKUP order (the order you found them) by default. Crafting the Quartermaster's Ledger HUD upgrade at the Craftsman adds the LOOT tab's Sort button (pickup / rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
       `A red badge on the LOOT tab (a red pip on the touch Bag button) counts loot that landed in the bag while you were on another tab; it clears the instant you open the LOOT list. gameState().menu.newLoot mirrors the count.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. SAFEGUARD: while enemies are near you can't swap onto an EMPTY or much-weaker set (it would strip your armor mid-fight) — break away first, or swap where it's safe; gearing UP to a stronger set is always allowed. Off-class weapons can be carried and sold but not equipped.`,
       `Bosses spill the MOST loot of any foe, and the FIRST time you clear a given boss FLOOR its guardian pays a jackpot — ~3x the drops at noticeably better quality (a one-time windfall per boss floor). In Endless, where boss species recur, this tracks by floor, so every new or deeper boss floor keeps paying; farming a floor you've already cleared drops at the normal boss rate. gameState().enemies[i].firstKill flags a boss whose floor windfall is still unclaimed. See gameGuide("enemies") for the boss rules.`,
@@ -7649,7 +7652,7 @@ window.gameGuide = function gameGuide(topic) {
       `Crafting materials (Scrap → Glimmer → Core → Chaos, common→rare) come mainly two ways. Foes DROP them, gated by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four). SALVAGING gear sheds them by the item's rarity regardless of difficulty — so a lucky high-rarity find is your main early route to a material your tier can't yet drop. Bounty rewards and Treasure Goblins are bonus exceptions that ignore the gate — they can hand you a rarer material early. Materials are deliberately scarce; see gameGuide("autoloot") for the salvage bands.`,
     ],
     autoloot: [
-      `AUTO-LOOT applies a per-rarity rule the instant gear drops: Keep (default), Scrap (into materials), or Sell (50% value gold). Set it on the LOOT tab (Auto-Loot). gameState().menu.autoLoot shows the rules.`,
+      `AUTO-LOOT applies a per-rarity rule the instant gear drops: Keep (default), Scrap (into materials), or Sell (50% value gold). It unlocks by crafting the Sorting Sieve HUD upgrade at the Craftsman (see gameGuide("town")); until then every drop is simply kept and the Auto-Loot button is hidden. Once unlocked, set it on the LOOT tab (Auto-Loot). gameState().menu.autoLoot shows the rules.`,
       `The picker has a row per rarity plus a "set" row (right above unique) for set pieces — they drop at the top tier alongside uniques but answer to their own rule, so you can keep chase set pieces while still auto-selling plain uniques.`,
       `It only touches organically-found drops (chests, kills) — never shop buys or forged gear — and never locked items.`,
       `Auto-scrap only works on equippable gear; non-gear set to Scrap falls back to Keep. Use Sell to auto-dispose of non-gear.`,
@@ -7708,10 +7711,10 @@ window.gameGuide = function gameGuide(topic) {
     ],
     town: [
 `The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived — and the HUD's Town button stays HIDDEN until you first set foot in the camp (player.townVisited flips true on that first arrival, revealing the button). That first kill opens the camp — and when you then leave Floor 5 you climb up into town for a one-time celebration (the townsfolk cheer and thank you, a one-time WELCOME hint chip greets you — town is your safe haven and the Town button teleports you home — the first keeper — the Healer — arrives, and the newly-revealed Town button glows for that visit) before a Town Portal there carries you on to Floor 6. `
-      + `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the regular service keepers milling about the green at FRESH random spots every visit (most of them slowly strolling around) and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all. A keeper only appears once it has ARRIVED (one joins per boss kill) — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
+      + `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the regular service keepers milling about the green at FRESH random spots every visit (most of them slowly strolling around — except the Craftsman, pinned just north of the Town Portal so you always find it) and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all. A keeper only appears once it has ARRIVED (one joins per boss kill) — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
       `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff, healerBuffs and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
-      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is the SECOND keeper to arrive (right after the Healer), and its HUD-KIT bench crafts the HUD "Field Kit" — one-time gold buys that each switch on a heads-up-display readout (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana numbers, status-effect icons). A fresh hero starts with a BARE HUD (no numbers, no minimap, no counters, no depth/difficulty labels, no status icons) and fits these as gold allows; each is kept for that hero, and a freshly-fitted piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + the KIT prices; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
+      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is the SECOND keeper to arrive (right after the Healer), and stands PINNED just north of the Town Portal on the central avenue — it never wanders, so a hero returning by portal steps out right in front of it and can never lose it. Its HUD-KIT bench crafts the "Field Kit" in two groups: HUD READOUTS that each switch on a heads-up-display piece (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana numbers, status-effect icons), and BAG & LOOT TOOLS (Appraiser's Loupe = item Power ratings, Gauging Calipers = +/- stat compare vs equipped, Quartermaster's Ledger = bag sort & filter, Sorting Sieve = auto-loot rules). A fresh hero starts BARE — no HUD numbers/minimap/counters/labels/status icons, and a plain pickup-order bag with no Power ratings, stat compare, sort/filter or auto-loot — and fits these as gold allows; each is kept for that hero, and a freshly-fitted HUD piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + the KIT prices; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1, 5 or 10 floors (more damage/loot/gold, or an easier stretch). Each mystic offers just TWO pacts, rolled at random from twelve, so the choice changes every time you find one; a longer pact costs MORE per floor (the price climbs exponentially with floors sealed). gameState().npcs lists the two pacts a nearby mystic offers. Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Sellsword (arrives with your 12th boss kill): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
@@ -11270,8 +11273,10 @@ function generateMap() {
   stopTownAmbient();  // leave the town's chatter behind at the dungeon door
   updateObjectiveChip();   // re-surface the bounty chip once back on a dungeon floor
   // Ramp: on a mid-early floor, nudge a Guided hero toward Auto-Loot if theirs is
-  // still fully manual (all "keep"), so the bag doesn't overflow unmanaged.
+  // still fully manual (all "keep"), so the bag doesn't overflow unmanaged. Only once
+  // the Sorting Sieve is crafted — no point nudging a feature they can't use yet.
   if (player.guided && !tutorialActive && (dungeonLevel === 6 || dungeonLevel === 7)
+      && hudOwned('autoloot')
       && player.autoLoot && AUTO_LOOT_CATS.every(t => player.autoLoot[t] === 'keep')) {
     showRampHint('autoloot');
   }
@@ -12584,6 +12589,16 @@ function stockPrice(s) {
 // would render as the stun glyph. Reused by every power badge.
 const PWR_GLYPH = '<span class="pwr-g" data-spr="ui_power"></span>';
 
+// The compact per-item Power badge — the swirl marker + the item's Power number —
+// shown beside gear in the bag, worn slots and the town shops. Gated on the
+// Appraiser's Loupe HUD upgrade (hudOwned('rankings')): before it's crafted, no item
+// shows a Power number anywhere, so a new hero reads gear by its stats, not a score.
+// `extraCls` lets a caller tack on a positioning class (e.g. the paperdoll 'pd-pwr').
+function itemPowerBadge(item, extraCls) {
+  if (!item || !item.slot || !hudOwned('rankings')) return '';
+  return `<span class="item-power${extraCls ? ' ' + extraCls : ''}">${PWR_GLYPH}${abbreviateNumber(itemPower(item))}</span>`;
+}
+
 // "14 · 8-12 DMG · +3 ATK · +5 MIG".
 // Pass {noPower:true} to omit the leading Power marker (for rows that show Power
 // separately elsewhere, so it isn't printed twice).
@@ -12605,7 +12620,9 @@ function itemStatLine(item, opts) {
   const body = parts.join(' · ');
   const powHtml = itemPowerFront(item);   // glowing special power — leads the line
   const setTag = itemSetTag(item);        // set membership — trails the line
-  const lead = (item.slot && !(opts && opts.noPower)) ? `${PWR_GLYPH}${abbreviateNumber(itemPower(item))}` : '';
+  // Power lead is gated on the Appraiser's Loupe (hudOwned('rankings')), same as the
+  // standalone item-power badges — no Power number surfaces until it's crafted.
+  const lead = (item.slot && !(opts && opts.noPower) && hudOwned('rankings')) ? `${PWR_GLYPH}${abbreviateNumber(itemPower(item))}` : '';
   return [lead, powHtml, body].filter(Boolean).join(' · ') + setTag;
 }
 
@@ -12751,13 +12768,13 @@ function renderShop() {
       cls = rarityClass(s.item);
       stats = itemStatLine(s.item);
       // Compare against the currently-equipped piece in the same slot so the
-      // buyer can spot upgrades at a glance, just like loot in the bag.
-      const ip = itemPower(s.item);
+      // buyer can spot upgrades at a glance, just like loot in the bag. Both the
+      // Power badge and the stat compare mirror the bag's HUD-upgrade gating.
       const equippedHere = equipped[s.item.slot];
       const delta = equipUpgradeDelta(s.item);
       isUpgrade = delta > 0;
-      sub += ` <span class="item-power">${PWR_GLYPH}${abbreviateNumber(ip)}</span>`;
-      if (equippedHere) sub += `  ${statDiffLine(s.item)}`;
+      sub += ` ${itemPowerBadge(s.item)}`;
+      if (equippedHere && hudOwned('compare')) sub += `  ${statDiffLine(s.item)}`;
     }
     const sicon = itemIcon(s.item);
     const scolor = tierColor(s.item);
@@ -12859,8 +12876,8 @@ function buyItem(i) {
 function renderHudKitHTML() {
   const owned = (player && player.hudUpgrades) || {};
   const fitted = HUD_UPGRADES.reduce((n, u) => n + (owned[u.key] ? 1 : 0), 0);
-  const intro = `<div class="kit-intro">Field instruments that build out your heads-up display — one-time buys, kept for this hero. <b>${fitted}/${HUD_UPGRADES.length}</b> fitted.</div>`;
-  const rows = HUD_UPGRADES.map((u) => {
+  const tally = `<div class="kit-intro">One-time buys, kept for this hero. <b>${fitted}/${HUD_UPGRADES.length}</b> fitted.</div>`;
+  const rowHTML = (u) => {
     const have = !!owned[u.key];
     const price = hudUpgradeCost(u.key);
     const afford = spendableGold() >= price;
@@ -12874,8 +12891,15 @@ function renderHudKitHTML() {
       </div>
       ${action}
     </div>`;
+  };
+  // One .shop-grid per bench section (HUD readouts, then bag & loot tools), each led
+  // by its blurb. Skip an empty section so nothing renders a stray header.
+  const sections = HUD_UPGRADE_GROUPS.map((g) => {
+    const items = HUD_UPGRADES.filter((u) => (u.group || 'readout') === g.id);
+    if (!items.length) return '';
+    return `<div class="kit-intro">${g.blurb}</div><div class="shop-grid">${items.map(rowHTML).join('')}</div>`;
   }).join('');
-  return intro + '<div class="shop-grid">' + rows + '</div>';
+  return tally + sections;
 }
 
 function buyHudUpgrade(key) {
@@ -13387,11 +13411,15 @@ function buildTown(atPortal = false) {
   // still-locked keeper is simply ABSENT (no greyed placeholder), so the camp fills in
   // one keeper at a time as the hero fells deeper guardians.
   //   • ENDGAME keepers keep their authored tiles inside the hedged sanctum, fixed.
-  //   • REGULAR keepers get a FRESH random spot in the open clearing every visit, and
-  //     most of them slowly stroll around it (see updateTownNpcs). Wanderers don't
-  //     block — you interact from within a tile — so the camp feels alive without ever
-  //     penning the hero in behind a moving body.
+  //   • FIXED regular keepers (TOWN_FIXED_KINDS — the Craftsman) keep their authored
+  //     tile out in the open clearing and never wander, so the hero always finds them
+  //     in the same place (the Craftsman sits just north of the Town Portal).
+  //   • Other REGULAR keepers get a FRESH random spot in the open clearing every
+  //     visit, and most of them slowly stroll around it (see updateTownNpcs).
+  //     Wanderers don't block — you interact from within a tile — so the camp feels
+  //     alive without ever penning the hero in behind a moving body.
   const endgameKinds = new Set(TOWN_ENDGAME_KINDS);
+  const fixedKinds = new Set(TOWN_FIXED_KINDS);
   const available = TOWN_NPCS.filter((n) => townServiceAvailable(n.kind));
   const mkNpc = (n, x, y, wander) => ({
     x, y, kind: n.kind, name: n.name, tag: TOWN_SVC_TAG[n.kind] || 'npc_quest',
@@ -13405,6 +13433,9 @@ function buildTown(atPortal = false) {
     TOWN_SPAWN.x + ',' + TOWN_SPAWN.y,
     townGatePos.x + ',' + townGatePos.y,
     townPortalPos.x + ',' + townPortalPos.y,
+    // Fixed keepers own their authored tile — keep the wander free-set off it so no
+    // strolling keeper is randomly placed on top of the pinned Craftsman.
+    ...available.filter((n) => fixedKinds.has(n.kind)).map((n) => n.x + ',' + n.y),
   ]);
   const blocked = new Set();
   for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
@@ -13419,10 +13450,14 @@ function buildTown(atPortal = false) {
     freeTiles.push({ x: +key.split(',')[0], y: +key.split(',')[1] });
     townFreeSet.add(key);
   }
-  const regulars = available.filter((n) => !endgameKinds.has(n.kind));
+  // Regulars that stroll = everyone except the sanctum keepers AND the pinned fixed
+  // keepers (both keep their authored tile and never wander).
+  const regulars = available.filter((n) => !endgameKinds.has(n.kind) && !fixedKinds.has(n.kind));
   const spots = randomDistinctTiles(freeTiles, regulars.length, Math.random);
   townNpcs = [];
   for (const n of available) if (endgameKinds.has(n.kind)) townNpcs.push(mkNpc(n, n.x, n.y, false));
+  // Fixed regular keepers (Craftsman): authored tile, never wander, out in the open.
+  for (const n of available) if (fixedKinds.has(n.kind)) townNpcs.push(mkNpc(n, n.x, n.y, false));
   regulars.forEach((n, i) => {
     const s = spots[i] || { x: n.x, y: n.y };
     // Most regulars amble; a few keep a "stall" and stand put — but all still take a
@@ -13717,7 +13752,7 @@ function renderTransmutePick(indices) {
       <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
       <div class="shop-row-info ${rarityClass(it)}">
         <div class="shop-row-name">${it.name}${craftedMark(it)}</div>
-        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${abbreviateNumber(itemPower(it))}</span></div>
+        <div class="shop-row-sub">${slotLabel}${itemPowerBadge(it)}</div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
       </div>
     </div>`;
@@ -15142,8 +15177,10 @@ function warnBagFull() {
 function acquireLoot(item) {
   recordWardrobe(item);
   lootReveal(item);   // escalating drop-moment payoff by rarity (blue → red)
-  const cfg = autoLootConfig();
-  let action = cfg[autoLootKey(item)] || 'keep';
+  // Auto-loot rules apply only once the Sorting Sieve HUD upgrade is crafted at the
+  // Craftsman (hudOwned('autoloot')); before that every drop is simply kept.
+  const cfg = hudOwned('autoloot') ? autoLootConfig() : null;
+  let action = cfg ? (cfg[autoLootKey(item)] || 'keep') : 'keep';
   // Scrapping only makes sense for salvageable gear; anything else falls back to keep.
   if (action === 'scrap' && !(item.slot && TIERS[item.tier])) action = 'keep';
   if (action === 'scrap') {
@@ -16116,7 +16153,7 @@ function renderEnchanter() {
       <span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>
       <div class="shop-row-info ${rarityClass(it)}">
         <div class="shop-row-name">${it.name}${craftedMark(it)}</div>
-        <div class="shop-row-sub">${slotLabel}<span class="item-power">${PWR_GLYPH}${abbreviateNumber(itemPower(it))}</span></div>
+        <div class="shop-row-sub">${slotLabel}${itemPowerBadge(it)}</div>
         ${stats ? `<div class="shop-row-stats">${stats}</div>` : ''}
         ${reqBadge}
       </div>
@@ -27460,6 +27497,10 @@ const LOOT_SORTS = [
   { key: 'slot',   label: 'Slot'   },
   { key: 'value',  label: 'Value'  },
 ];
+// The LOOT bag's own sort menu leads with 'Pickup' (the order items were found in —
+// the default, and where the list sits before the Quartermaster's Ledger is crafted).
+// The merchant keeps the base LOOT_SORTS (its stock has no pickup order).
+const BAG_SORTS = [{ key: 'pickup', label: 'Pickup' }, ...LOOT_SORTS];
 function setLootSort(k) { lootSort = k; renderPanel(); }
 function toggleLootSortMenu() { lootSortOpen = !lootSortOpen; if (lootSortOpen) lootFilterOpen = false; renderPanel(); }
 function toggleLootFilterMenu() { lootFilterOpen = !lootFilterOpen; if (lootFilterOpen) lootSortOpen = false; renderPanel(); }
@@ -27470,6 +27511,9 @@ function toggleLootFilterMenu() { lootFilterOpen = !lootFilterOpen; if (lootFilt
 function makeRowCompare(sort) {
   return (a, b) => {
     switch (sort) {
+      // Pickup order = the bag's storage order (inventory index), i.e. the order you
+      // found the items. Decorated rows carry their inventory index as `i`.
+      case 'pickup': return a.i - b.i;
       case 'power': return b.pow - a.pow || b.tr - a.tr || a.so - b.so;
       case 'slot':  return a.so - b.so || b.tr - a.tr || b.pow - a.pow;
       case 'value': return (b.item.value || 0) - (a.item.value || 0) || b.tr - a.tr || b.pow - a.pow;
@@ -27486,12 +27530,13 @@ function makeRowCompare(sort) {
 //   { sort, sortOpen, statFilter, filterOpen, items, fns, sortHint, emptyHint }
 // fns = { sort, sortMenu, filterMenu, stat, clear } — window handler names.
 function sortFilterCtrlsHTML(m) {
-  const sortLabel = (LOOT_SORTS.find(s => s.key === m.sort) || LOOT_SORTS[0]).label;
+  const sorts = m.sorts || LOOT_SORTS;
+  const sortLabel = (sorts.find(s => s.key === m.sort) || sorts[0]).label;
   const controls = `<div class="loot-controls">
       <button class="loot-ctrl-btn ${m.sortOpen ? 'open' : ''}" onclick="${m.fns.sortMenu}()" ${hoverTip(`<div class='ht-name'>⇅ Sort</div><div class='ht-line'>${m.sortHint}</div>`)}>⇅ Sort <span class="lc-val">${sortLabel}</span><span class="lc-caret">${m.sortOpen ? '▾' : '▸'}</span></button>
       <button class="loot-ctrl-btn ${m.filterOpen ? 'open' : ''} ${m.statFilter.length ? 'on' : ''}" onclick="${m.fns.filterMenu}()" ${hoverTip(`<div class='ht-name'>⚑ Filter</div><div class='ht-line'>Show only gear that carries the stats you pick.</div>`)}>⚑ Filter${m.statFilter.length ? ` <span class="lc-val">${m.statFilter.length}</span>` : ''}<span class="lc-caret">${m.filterOpen ? '▾' : '▸'}</span></button>
     </div>`;
-  const sortPop = m.sortOpen ? '<div class="loot-ctrl-pop">' + LOOT_SORTS.map(s =>
+  const sortPop = m.sortOpen ? '<div class="loot-ctrl-pop">' + sorts.map(s =>
     `<button class="loot-ctrl-opt ${m.sort === s.key ? 'active' : ''}" onclick="${m.fns.sort}('${s.key}')">${s.label}</button>`
   ).join('') + '</div>' : '';
   // Stat-filter options = the stat/attribute codes actually present in `items`,
@@ -27704,15 +27749,23 @@ function renderPanel() {
       `<button class="loot-subtab ${lootFilter===t.key?'active':''}" onclick="setLootFilter('${t.key}')" ${hoverTip(subtabTip(t.key))}>${t.icon}${t.name}<span class="st-count">${t.n}</span></button>`
     ).join('') + '</div>';
     // Sort + stat-filter controls: two dropdown buttons, each opening an inline
-    // options panel below the row (so nothing floats over the list on mobile).
-    const lootCtrls = sortFilterCtrlsHTML({
+    // options panel below the row (so nothing floats over the list on mobile). Gated
+    // on the Quartermaster's Ledger crafted at the Craftsman (hudOwned('sortfilter'));
+    // until then the controls are hidden, the bag holds pickup order, and no stat
+    // filter narrows the list.
+    const sfOwned = hudOwned('sortfilter');
+    const lootCtrls = sfOwned ? sortFilterCtrlsHTML({
+      sorts: BAG_SORTS,
       sort: lootSort, sortOpen: lootSortOpen,
       statFilter: lootStatFilter, filterOpen: lootFilterOpen,
       items: inventory,
       fns: { sort: 'setLootSort', sortMenu: 'toggleLootSortMenu', filterMenu: 'toggleLootFilterMenu', stat: 'toggleLootStat', clear: 'clearLootStats' },
-      sortHint: 'Order the bag by rarity, power, slot or value.',
+      sortHint: 'Order the bag by pickup, rarity, power, slot or value.',
       emptyHint: 'No stats to filter yet — pick up some gear first.',
-    });
+    }) : '';
+    // With the Ledger unowned, only the slot subtab narrows the list — the stat
+    // filter is inert (its controls are hidden), so items show in pickup order.
+    const bagRowVisible = sfOwned ? lootRowVisible : (it) => itemRowVisible(it, lootFilter, []);
     // Rarity rank for sorting: junk 0 → unique 6 (higher = rarer).
     const TIER_KEYS = Object.keys(TIERS);
     // One pass over the bag: build the visible rows, decorating each with its sort
@@ -27722,7 +27775,7 @@ function renderPanel() {
     const rows = [];
     let bulkN = 0, bulkScrapN = 0, bulkGold = 0;
     inventory.forEach((item, i) => {
-      if (!lootRowVisible(item)) return;
+      if (!bagRowVisible(item)) return;
       rows.push({
         item, i,
         pow: item.slot ? itemPower(item) : -1,
@@ -27735,19 +27788,22 @@ function renderPanel() {
         bulkGold += Math.max(1, Math.round(item.value * 0.5));
       }
     });
-    // Order the decorated rows by the chosen sort key (shared with the merchant).
-    rows.sort(makeRowCompare(lootSort));
+    // Order the decorated rows by the chosen sort key — but only if the Ledger is
+    // owned; otherwise the bag holds pickup order (the order items were found in).
+    rows.sort(makeRowCompare(sfOwned ? lootSort : 'pickup'));
     const mMoney = '<span data-spr=ic_money></span>', mScrap = '<span data-spr=mat_scrap></span>';
     const bulkBar = bulkN ? `<div class="loot-bulk-bar">
       <button class="loot-bulk-btn" onclick="bagBulk('sell')">${mMoney} Sell all · <span data-spr=ic_money></span>${fmtGold(bulkGold)}</button>
       ${bulkScrapN ? `<button class="loot-bulk-btn" onclick="bagBulk('scrap')">${mScrap} Scrap all · ${bulkScrapN}</button>` : ''}
     </div>` : '';
     // Auto-Loot entry point — lives here on the LOOT tab (not in settings) since it
-    // governs how loot is handled. Always shown, with its on/off state inline.
+    // governs how loot is handled. Gated on the Sorting Sieve HUD upgrade crafted at
+    // the Craftsman (hudOwned('autoloot')); until then loot always lands in the bag
+    // and the button is hidden. See acquireLoot for the matching rule gate.
     const alSum = autoLootSummary();
-    const autoBar = `<div class="loot-auto-bar">
+    const autoBar = hudOwned('autoloot') ? `<div class="loot-auto-bar">
       <button class="loot-auto-btn${alSum === 'off' ? '' : ' on'}" onclick="openAutoLoot()" ${hoverTip(`<div class='ht-name'><span data-spr=mat_scrap></span> Auto-Loot</div><div class='ht-line'>Auto-scrap or auto-sell loot of chosen rarities the moment it drops.</div>`)}><span data-spr=mat_scrap></span> Auto-Loot <span class="la-status">${alSum}</span></button>
-    </div>`;
+    </div>` : '';
     // Everything above the item rows rides in one sticky wrapper, so the
     // subtabs / sort / filter / Auto-Loot / bulk / stat-key controls stay
     // frozen at the top of the drawer while the list scrolls beneath them.
@@ -27766,12 +27822,13 @@ function renderPanel() {
       const slotName = item.slot ? SLOTS[item.slot].label : 'potion';
       // Compare this item's power to whatever currently fills its slot, so we can
       // flag upgrades and show the power swing (▲+5 / ▼-2).
-      const ip = equipable ? itemPower(item) : 0;
       const equippedHere = equipable ? equipped[item.slot] : null;
       const delta = equipable ? equipUpgradeDelta(item) : 0;
       const isUpgrade = equipable && delta > 0;
-      const pwr = equipable ? `<span class="item-power">${PWR_GLYPH}${abbreviateNumber(ip)}</span>` : '';
-      const diff = equipable ? `<div class="item-diff">${statDiffLine(item)}</div>` : '';
+      // Power badge (Appraiser's Loupe) and stat compare (Gauging Calipers) are each
+      // gated on their own crafted HUD upgrade; both stay blank until bought.
+      const pwr = itemPowerBadge(item);
+      const diff = (equipable && hudOwned('compare')) ? `<div class="item-diff">${statDiffLine(item)}</div>` : '';
       const lockBtn = `<button class="row-btn lock-toggle-btn ${item.locked?'on':''}" onclick="toggleLock(${i})" ${hoverTip(item.locked
         ? `<div class='ht-name'><span data-spr=feat_door></span> Locked</div><div class='ht-line'>Safe from selling, scrapping &amp; auto-loot. Tap to unlock.</div>`
         : `<div class='ht-name'><span data-spr=feat_door></span> Unlocked</div><div class='ht-line'>Tap to lock — keeps it from being sold or scrapped.</div>`)}>${dlIcon('key', 20) || (item.locked ? '<span data-spr=feat_door></span>' : '<span data-spr=feat_door></span>')}</button>`;
@@ -29232,7 +29289,7 @@ function renderDollSlot(slot, mode) {
   const pwrBadge = !item ? ''
     : inactive
       ? `<span class="item-power pd-pwr" style="background:var(--magenta-800);color:var(--red-350)">⚠</span>`
-      : `<span class="item-power pd-pwr">${PWR_GLYPH}${abbreviateNumber(itemPower(item))}</span>`;
+      : itemPowerBadge(item, 'pd-pwr');   // gated on the Appraiser's Loupe (hudOwned('rankings'))
   const capHTML = !item
     ? `<div class="pd-cap">${cap}</div>`
     : inactive
@@ -29664,7 +29721,7 @@ function itemCardHTML(item, opts = {}) {
     <div class="tt-name" style="color:${tierColor(item)}">${curseMark(item)}${item.name}</div>
     <div class="tt-tier" style="color:${tierColor(item)}">${item.slot ? `<span data-spr=${SLOTS[item.slot].sprite}></span> ${SLOTS[item.slot].label}` : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</div>
     ${weaponTypeLine}
-    ${item.slot && !begin ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${abbreviateNumber(power)}</div>` : ''}
+    ${item.slot && !begin && hudOwned('rankings') ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${abbreviateNumber(power)}</div>` : ''}
     ${powerLine}
     ${uniqueLine}
     ${reqLine}
