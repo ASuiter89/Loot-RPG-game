@@ -7698,7 +7698,7 @@ window.gameGuide = function gameGuide(topic) {
     progression: [
       `Four classes, each with ONE damage attribute: Warrior (Might, tanky melee), Rogue (Agility, crit & dodge), Mage (Spirit, spells & big MP), Templar (Vitality, durable hybrid). Class gates which weapons you can equip.`,
       `Five attributes (gameState().player.attributes), with re-homed roles: Might (+Defense; the Warrior's damage), Vitality (+max HP, +HP regen, +Stamina; the Templar's damage), Agility (+evasion, +accuracy, +move/attack speed; the Rogue's damage), Spirit (+max MP, +MP regen, +spell power, +healing, +Spirit Veil shield; the Mage's damage), Luck (+crit, +loot quality). How much each point gives is CLASS-SCALED — e.g. Vitality gives the Templar the most HP, Spirit gives the Mage the most spell power. Pump your class's single damage attribute for damage; every attribute also pays a defensive/utility role.`,
-      `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend). Spend attributes on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
+      `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend), and FULLY restores the hero — HP, MP and Stamina all top off to max — a clean second wind. Spend attributes on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
       `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives. From level 20 you also earn a SEPARATE ascendancy point every 5 levels (20, 25, 30…; gameState().menu.pointsToSpend.ascendancy), spent only on the ascendancy path tree. Normal skill points can't buy path skills and ascendancy points can't buy passive/active skills. Path skills carry NO level requirement — they're gated only by the earlier skills in the path tree.`,
       `Respec attributes/skills or change class at the Trainer for gold that scales with your level (points refund). Switching to your class's other ascension afterwards costs a lot of gold (also scales with level and depth; path points refund) — the first ascension stays free, but re-ascending is a deliberate, costly choice, as is retraining class. After a respec, check that worn gear still meets its attribute requirement (under-req pieces turn red and are ignored).`,
       `BOSS POINTS are a separate progression track that rewards new depth: every boss floor you clear for the FIRST time grants ONE point (farming a floor you've already cleared grants none — it's the same first-clear ledger as the boss loot jackpot). Spend them at the ASCENDANT WEAVE, a town service that opens once you've cleared your first boss floor: a constellation board of stat nodes, attribute-threshold keystones and socketed Glyphs where every point is a real, opportunity-cost choice — see gameGuide('weave'). gameState().menu.bossPointsEarned reports the total earned all-time; gameState().endgame.weave reports points available, lit nodes and active keystones.`,
@@ -26731,10 +26731,12 @@ function checkLevelUp() {
     const ascGained = (player.level >= ASCEND_LEVEL && (player.level - ASCEND_LEVEL) % ASC_POINT_EVERY === 0) ? 1 : 0;
     if (ascGained) player.ascPoints = (player.ascPoints || 0) + ascGained;
     recomputeMaxStats();        // level grants more base HP/MP
-    // A level-up mends a chunk of HP/MP — a real relief mid-fight, but no longer
-    // a free full reset, so health and mana stay finite resources you manage.
-    player.hp = Math.min(player.maxHp, player.hp + Math.round(player.maxHp * 0.4));
-    player.mp = Math.min(player.maxMp, player.mp + Math.round(player.maxMp * 0.4));
+    // A level-up fully restores the hero — HP, MP, and Stamina all top off to their
+    // (freshly recomputed) maxima, a clean second wind that rewards the milestone.
+    player.hp = player.maxHp;
+    player.mp = player.maxMp;
+    player.stamina = player.maxStamina || MAX_STAMINA;
+    player._stamDelay = 0;      // and a ready Stamina bar — no lingering exertion delay
     // A level that also banks an ascendancy point gets its own ethereal sting so the
     // milestone stands out from an ordinary level-up fanfare.
     if (ascGained) sfx('ascpoint'); else sfx('levelup');
