@@ -7,153 +7,156 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
-  { date: "2026-07-18", size: "small", v: "Chest rooms rarer; some floors hold two", by: "Claude", notes: [
+  { date: "2026-07-18", size: "small", v: "Patch Notes credit the right author", by: "Jeff Louie", notes: [
+    "Version History badge reads each entry's real author; JL work no longer shows AS.",
+  ] },
+  { date: "2026-07-18", size: "small", v: "Chest rooms rarer; some floors hold two", by: "Jeff Louie", notes: [
     "Treasure-hoard room appears less often; a lucky floor can now hold two.",
   ] },
-  { date: "2026-07-18", size: "small", v: "Hint popups center their text", by: "Claude", notes: [
+  { date: "2026-07-18", size: "small", v: "Hint popups center their text", by: "Jeff Louie", notes: [
     "Tutorial/ramp hint popups centre their text (was left-aligned).",
     "Floor-clear hint reads \"descend deeper down the dungeon\".",
   ] },
-  { date: "2026-07-18", size: "small", v: "Beach foes randomized each new game", by: "Claude", notes: [
+  { date: "2026-07-18", size: "small", v: "Beach foes randomized each new game", by: "Jeff Louie", notes: [
     "Opening pack is now four of one random low-level species (rats, slimes, etc.) — not always skeletons.",
     "Cave elite rolls its own random type too; no two new games open the same fight.",
   ] },
-  { date: "2026-07-18", size: "small", v: "Rogue, Mage, Templar lore trimmed", by: "Claude", notes: [
+  { date: "2026-07-18", size: "small", v: "Rogue, Mage, Templar lore trimmed", by: "Jeff Louie", notes: [
     "Rogue, Mage and Templar lore cut to a single line each, matching the Warrior's.",
   ] },
-  { date: "2026-07-18", size: "small", v: "Beach reworked — 3 skeletons, an elite, water shore", by: "Claude", notes: [
+  { date: "2026-07-18", size: "small", v: "Beach reworked — 3 skeletons, an elite, water shore", by: "Jeff Louie", notes: [
     "Three skeletons open the beach, turning hostile as you approach (was one, struck-only).",
     "A lone elite now guards the cave (was a pack of four).",
     "First weapon drop is grey, not green — greens stay locked until the first boss falls.",
     "Beach is narrower; sea rings the shore with a ragged, non-rectangular coastline.",
   ] },
-  { date: "2026-07-18", size: "small", v: "Cleaner beach level-up nudge", by: "Claude", notes: [
+  { date: "2026-07-18", size: "small", v: "Cleaner beach level-up nudge", by: "Jeff Louie", notes: [
     "Level-up popup reads \"You gained a level!\" (was \"Level 2!\").",
     "Drops its left star badge; tutorial nudge text now centered.",
   ] },
-  { date: "2026-07-18", size: "small", v: "Beach starter weapon fits your class", by: "Claude", notes: [
+  { date: "2026-07-18", size: "small", v: "Beach starter weapon fits your class", by: "Jeff Louie", notes: [
     "First beach skeleton felled drops the starter weapon — whichever of the five, not a fixed one.",
     "That weapon is now always a base your class favours (Warrior sword/axe; Mage staff/dagger; etc.).",
   ] },
-  { date: "2026-07-18", size: "small", v: "Spirit Veil comes from gear, not raw Spirit", by: "Claude", notes: [
+  { date: "2026-07-18", size: "small", v: "Spirit Veil comes from gear, not raw Spirit", by: "Jeff Louie", notes: [
     "Spirit no longer grants innate Spirit Veil; fresh heroes have none (no stray blue HUD number).",
     "Veil comes only from gear/spells; Spirit boosts it +2%/pt over baseline (class-scaled, Mage best).",
   ] },
-  { date: "2026-07-18", size: "medium", v: "HUD Field Kit — crafted at the Craftsman", by: "Claude", notes: [
+  { date: "2026-07-18", size: "medium", v: "HUD Field Kit — crafted at the Craftsman", by: "Jeff Louie", notes: [
     "Craftsman is keeper #2 (Healer #1); its new HUD KIT bench crafts your readouts (moved off the Merchant).",
     "Fresh hero starts bare-HUD; craft back minimap, foes/chest counters, floor & difficulty, HP/MP numbers, status icons.",
     "New readouts glow with a wisp until you leave town; existing heroes keep every readout.",
     "Top HUD recenters when the minimap's off; new chests counter; smaller bag/gear icons on mobile.",
   ] },
-  { date: "2026-07-18", size: "small", v: "Mobile tutorial-tip & HUD fixes", by: "Claude", notes: [
+  { date: "2026-07-18", size: "small", v: "Mobile tutorial-tip & HUD fixes", by: "Jeff Louie", notes: [
     "Tutorial tips sit on the map, never over the HUD; each trimmed to one short sentence.",
     "AUTO / RUN pills sit clear above their tiles; health & mana potions share a row under RUN.",
     "Weapon nudge reads \"Open Loot to equip it\"; passive (no tap-to-navigate); BAG button wisps on touch.",
     "Level-up nudge holds the slot; shakes if you try to descend with points unspent.",
   ] },
-  { date: "2026-07-18", size: "small", v: "Vault & cracked-wall rooms stay fully reachable", by: "Claude", notes: [
+  { date: "2026-07-18", size: "small", v: "Vault & cracked-wall rooms stay fully reachable", by: "Jeff Louie", notes: [
     "Furniture can no longer seal off part of a vault or cracked-wall room — every tile stays reachable.",
   ] },
-  { date: "2026-07-18", size: "small", v: "Vault keys carry across floors", by: "Claude", notes: [
+  { date: "2026-07-18", size: "small", v: "Vault keys carry across floors", by: "Jeff Louie", notes: [
     "Unspent vault keys carry to deeper floors (were wiped each descent); stockpile several.",
   ] },
-  { date: "2026-07-18", size: "small", v: "New Run on the title", by: "Claude", notes: [
+  { date: "2026-07-18", size: "small", v: "New Run on the title", by: "Jeff Louie", notes: [
     "NEW RUN under CONTINUE starts a fresh hero in next free slot; current hero stays saved.",
     "Drop ▶ play glyph before CONTINUE and Load.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Click anywhere to close a menu", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Click anywhere to close a menu", by: "Jeff Louie", notes: [
     "Pop-up menus close on a click of any blank area — no scrolling back up to the ✕.",
     "Buttons, toggles, and fields still act; only non-controls dismiss.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Bestiary tiles tidied", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Bestiary tiles tidied", by: "Jeff Louie", notes: [
     "Rank reads from the name colour — creature gold, boss red; CREATURE/BOSS tag dropped.",
     "Footer tallies lifetime kills per foe (was a 0/10 reveal bar); \"vanquished\" line cut.",
     "Long stat values wrap instead of spilling past the tile.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Town welcome hint", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Town welcome hint", by: "Jeff Louie", notes: [
     "First climb into town shows a one-time hint-chip greeting — safe haven; tap the Town button to teleport back any time.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Bestiary joins the title menu grid", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Bestiary joins the title menu grid", by: "Jeff Louie", notes: [
     "Bestiary is a grid tile beside Achievements (was pause menu only); fills the 3×3 grid.",
     "Discovered/total foe count reads gold.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Beach tutorial: wisp cues, and the cave gates on spending your points", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Beach tutorial: wisp cues, and the cave gates on spending your points", by: "Jeff Louie", notes: [
     "Weapon-drop & level-up prompts are non-blocking pills ringed by a circling wisp; tap one to jump to the right tab.",
     "LOOT tab and the first weapon's EQUIP button wisp until you equip.",
     "Cave won't open until your Level-2 stat & skill points are spent — warns if you try early.",
     "Beach and floors 1–3: every foe takes at least 3 hits to kill.",
   ] },
-  { date: "2026-07-17", size: "small", v: "HERO tab Status section; Stats moves to GEAR", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "HERO tab Status section; Stats moves to GEAR", by: "Jeff Louie", notes: [
     "HERO tab gains Status — active buffs, debuffs and boons with icon, magnitude and time left; top-right icons kept.",
     "First-shrine tip points to the HERO tab's Status (was the log).",
     "Stats section moves to the GEAR tab under the paper-doll; drops its header icon.",
     "Warrior lore trimmed; class-name icon dropped.",
     "\"Damage scales with <stat>\" now a hover tip on the ★dmg tag, not a line under the class.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Reset Run removed", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Reset Run removed", by: "Jeff Louie", notes: [
     "Dropped Reset Run (Settings ▸ Progress; title screen) — no in-place hero wipe.",
     "New run: Save Slots → ＋ New Game in a free slot; old heroes stay saved, load to continue.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Name-screen polish", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Name-screen polish", by: "Jeff Louie", notes: [
     "Header stacks — Back on its own row so \"Name Your Hero\" no longer clips.",
     "Dropped sword icon, \"Choose your hero\" label, and the mode-tile icons.",
     "Game-mode toggles grouped under an \"Optional Game Modes\" heading.",
     "Classic → Veteran (\"Skip the tutorials\"); trimmed Solo Self-Found copy.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Starter cue ends at first equip", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Starter cue ends at first equip", by: "Jeff Louie", notes: [
     "Starter checklist retires the moment you equip your first gear.",
     "Its cue drops the \"Getting started\" label.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Teaching popups: tap to dismiss", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Teaching popups: tap to dismiss", by: "Jeff Louie", notes: [
     "First-encounter tip popups drop the \"?\" badge — informational, not a help button.",
     "Tap anywhere on a tip to dismiss it; \"Learn more\" still opens its wiki page.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Achievements moves into the title menu grid", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Achievements moves into the title menu grid", by: "Jeff Louie", notes: [
     "Achievements is a grid tile beside History (was a full-width bar under Reset Run).",
     "Earned/total count reads gold, not crimson.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Beach tutorial — walk first, five skeletons, then your first level-up", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Beach tutorial — walk first, five skeletons, then your first level-up", by: "Jeff Louie", notes: [
     "Beach far taller — walk the empty shore a while before the first skeleton scrolls into view.",
     "First skeleton drops a weapon, with a prompt to equip it (you start unarmed).",
     "Five skeletons now; the cave stays sealed until all five fall.",
     "Clearing them grants your first level-up: skill point + 5 stat points — earned, not free at spawn.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Title screen: no rotating tip", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Title screen: no rotating tip", by: "Jeff Louie", notes: [
     "Dropped the one-line strategy tip that cycled under the tagline.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Name box hints \"Enter a name\"", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Name box hints \"Enter a name\"", by: "Jeff Louie", notes: [
     "Name field placeholder reads \"Enter a name\" (was \"Adventurer\").",
   ] },
-  { date: "2026-07-17", size: "small", v: "Name screen requires a hero name", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Name screen requires a hero name", by: "Jeff Louie", notes: [
     "\"Begin Your Quest\" needs a name first — blank box scrolls back up and shakes to prompt you.",
     "Trimmed name-screen copy; dropped the leaderboards link and the play glyph.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Touch header: livelier points badge, roomier buttons", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Touch header: livelier points badge, roomier buttons", by: "Jeff Louie", notes: [
     "Unspent-points badge pulses with a wisp orbiting its border — points to spend stand out.",
     "Bag & settings buttons swap sides, bigger and centred in the header, off the corner.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Mobile onboarding & action-bar polish", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Mobile onboarding & action-bar polish", by: "Jeff Louie", notes: [
     "Getting-started cue opens the LOOT bag (was How to Play), and shows only once you're holding gear.",
     "Getting-started cue slimmed and lifted clear of the action bar.",
     "Taller touch footer — AUTO pill and skill slots no longer clip the bottom edge.",
     "Wider tutorial tip box; copy breaks over 2 lines, not a cramped column.",
   ] },
-  { date: "2026-07-17", size: "small", v: "Level-up hint names hero & skill points", by: "Claude", notes: [
+  { date: "2026-07-17", size: "small", v: "Level-up hint names hero & skill points", by: "Jeff Louie", notes: [
     "Level-up banner reads \"Spend your hero and skill points!\" (was HERO-tab only).",
   ] },
-  { date: "2026-07-16", size: "small", v: "Ramp finishing touches for new heroes", by: "Claude", notes: [
+  { date: "2026-07-16", size: "small", v: "Ramp finishing touches for new heroes", by: "Jeff Louie", notes: [
     "A new hero's first skill auto-casts itself, so there's less cooldown juggling early.",
     "Arrow traps hold off until floor 6, fire vents until floor 9; trap-themed floors wait too.",
     "First death is forgiven its gold cost while you're finding your feet.",
     "The ascendancy PATH tree stays hidden until it opens at level 20.",
   ] },
-  { date: "2026-07-16", size: "small", v: "Endgame keepers introduce themselves; title-screen tips", by: "Claude", notes: [
+  { date: "2026-07-16", size: "small", v: "Endgame keepers introduce themselves; title-screen tips", by: "Jeff Louie", notes: [
     "First time you open the Weave, Covenants, Mirrorforge and other deep keepers, a one-line intro says what it's for.",
     "Your first learned skill adds a nudge: focus one skill, ranks 3/7/10 spike it.",
     "A rotating strategy tip now sits under the title-screen tagline.",
     "New 'Guided & Classic' wiki page under Getting Started.",
   ] },
-  { date: "2026-07-16", size: "medium", v: "Guided intro — hints, glows & a starter checklist for new heroes", by: "Claude", notes: [
+  { date: "2026-07-16", size: "medium", v: "Guided intro — hints, glows & a starter checklist for new heroes", by: "Jeff Louie", notes: [
     "New heroes start Guided; a CLASSIC toggle on the name screen skips it all (for veterans).",
     "First-encounter hints appear once each — shrines, fountains, teleporters, vault doors, the Spirit Veil, and more.",
     "A starter checklist rides the objective chip until you're rolling; SKILLS tabs glow your first few level-ups.",
@@ -161,7 +164,7 @@ export const CHANGELOG = [
     "The first boss winds up slower with a 'Watch out!' on its first telegraph.",
     "Death screen adds a tip matched to what got you.",
   ] },
-  { date: "2026-07-16", size: "large", v: "New heroes ease in — a gentler opening ramp", by: "Claude", notes: [
+  { date: "2026-07-16", size: "large", v: "New heroes ease in — a gentler opening ramp", by: "Jeff Louie", notes: [
     "First floors breathe: fewer, softer foes on 1–5, climbing to full strength by floor 6.",
     "No elites or elite affixes before floor 4; foes shrug no damage school until floor 8.",
     "Early gear (dropped below floor 5) needs no attributes to wear; requirements begin at floor 5.",
@@ -169,31 +172,31 @@ export const CHANGELOG = [
     "Hotbar slots open as you descend (1→2 at 3, →3 at 8, →4 at 13); second weapon set at floor 20.",
     "Pacing keys on deepest floor reached — a returning hero and every existing save is unchanged.",
   ] },
-  { date: "2026-07-16", size: "small", v: "Town keepers arrive one per boss kill", by: "Claude", notes: [
+  { date: "2026-07-16", size: "small", v: "Town keepers arrive one per boss kill", by: "Jeff Louie", notes: [
     "Each boss floor felled brings exactly 1 new keeper (was 2–4 at once) — camp grows a steady one at a time.",
     "Arrival order: Healer, Merchant, Vault, Ramen House, Craftsman, Prospector, Trainer, Gambler, Enchanter, Bounty Board, Transmuter, Sellsword, then the endgame keepers.",
   ] },
-  { date: "2026-07-12", size: "small", v: "Town button unveiled on your first visit; tidier arrivals banner", by: "Claude", notes: [
+  { date: "2026-07-12", size: "small", v: "Town button unveiled on your first visit; tidier arrivals banner", by: "Jeff Louie", notes: [
     "Town Portal button hidden until you first reach the camp; then it appears and glows that visit so you spot the new button.",
     "First town arrival adds a welcome — the townsfolk thank you and point out you can teleport back any time.",
     "Keeper-arrival popup is a rounded bar (was a giant circle); multi-keeper text no longer spills past the border.",
   ] },
-  { date: "2026-07-12", size: "small", v: "Townsfolk stop overlapping each other", by: "Claude", notes: [
+  { date: "2026-07-12", size: "small", v: "Townsfolk stop overlapping each other", by: "Jeff Louie", notes: [
     "Strolling keepers steer around one another — no two ever stand on the same tile.",
     "Wanderers never stray into the endgame sanctum; that hedged grove stays the endgame keepers' own.",
   ] },
-  { date: "2026-07-12", size: "small", v: "Roomier death recap", by: "Claude", notes: [
+  { date: "2026-07-12", size: "small", v: "Roomier death recap", by: "Jeff Louie", notes: [
     "Death screen widened so the killed-by line and damage recap stop cramping.",
     "Damage recap now reads '196 (1 hit)'; was 'over 1 hit'.",
   ] },
-  { date: "2026-07-12", size: "small", v: "A soft tick when you press a button", by: "Claude", notes: [
+  { date: "2026-07-12", size: "small", v: "A soft tick when you press a button", by: "Jeff Louie", notes: [
     "Menu and panel buttons now answer a click with a soft tick, so presses feel responsive. It's clicks only — no hover noise — and rides your sound-effect volume, so mute or the Audio faders turn it off.",
     "Only interface controls tick: moving, dashing and casting stay clean, keeping their own cues.",
   ] },
-  { date: "2026-07-12", size: "small", v: "Gold and XP count up instead of snapping", by: "Claude", notes: [
+  { date: "2026-07-12", size: "small", v: "Gold and XP count up instead of snapping", by: "Jeff Louie", notes: [
     "Your gold now rolls up to its new total when you cash in, and the XP bar fills up smoothly as you earn it, instead of jumping in one step — so a reward reads as a reward. Spending gold and levelling up still update instantly.",
   ] },
-  { date: "2026-07-12", size: "small", v: "A heartbeat when death is near", by: "Claude", notes: [
+  { date: "2026-07-12", size: "small", v: "A heartbeat when death is near", by: "Jeff Louie", notes: [
     "Drop below a quarter of your health and a low heartbeat now thumps beneath the red danger glow — and quickens the closer you are to dying, so you feel the edge coming, not just see it. It fades the instant you climb back to safety.",
     "Rides your sound-effect volume like every other cue, and goes quiet whenever a menu pauses the game.",
   ] },
@@ -205,10 +208,10 @@ export const CHANGELOG = [
     "Regular keepers now take fresh random spots every visit, and most of them slowly stroll about the clearing, so the camp feels alive. The endgame keepers keep their grove.",
     "The HUD BOUNTY and MEALS chips now appear only once the Bounty Board and Ramen House have opened.",
   ] },
-  { date: "2026-07-12", size: "small", v: "Environmental hazards hit twice as hard", by: "Claude", notes: [
+  { date: "2026-07-12", size: "small", v: "Environmental hazards hit twice as hard", by: "Jeff Louie", notes: [
     "Every passive damage dealer now bites for double — arrow traps, fire vents, lava, spikes, hidden traps, trapped chests and the odd hazard puddle or web. Footing matters more; route around the burn and mind the firing lanes.",
   ] },
-  { date: "2026-07-11", size: "small", v: "Magic Find is rarity-only; leaner boss windfall", by: "Claude", notes: [
+  { date: "2026-07-11", size: "small", v: "Magic Find is rarity-only; leaner boss windfall", by: "Jeff Louie", notes: [
     "Magic Find now shifts only how RARE your drops roll, never how many — matching what the stat always promised. Stack it for better gear, not bigger piles.",
     "A boss's first-clear windfall spills fewer items (about a third less) so it stays a treat, not a mountain — the quality bump on that windfall is unchanged.",
   ] },
@@ -223,7 +226,7 @@ export const CHANGELOG = [
   { date: "2026-07-11", size: "small", v: "Quick How to Play trimmed to the essentials", by: "Jeff Louie", notes: [
     "The How to Play card is now a fast getting-started guide — goal, controls, loot colours, skills & potions, and how to go deeper. Terrain footing, set pieces, hazards and the town-services rundown drop off it; all still live behind \"Open the full guide\".",
   ] },
-  { date: "2026-07-11", size: "small", v: "Loot bag filter tabs name their category on hover", by: "Claude", notes: [
+  { date: "2026-07-11", size: "small", v: "Loot bag filter tabs name their category on hover", by: "Jeff Louie", notes: [
     "Hovering a filter tab in the LOOT bag now pops a tip naming that category — All, Weapon, Off-Hand, Head, Chest, Hands, Legs, Ring, Amulet — and the kinds of gear it holds, so the icon-only tabs are no longer a guess.",
   ] },
   { date: "2026-07-11", size: "small", v: "Settings menu fits the screen — no more page-scrolling", by: "Jeff Louie", notes: [
@@ -231,7 +234,7 @@ export const CHANGELOG = [
     "No more double scrollbar: the page behind the card no longer scrolls — only the card scrolls, and only when its options genuinely can't all fit at once.",
     "Short tabs still open neatly centred.",
   ] },
-  { date: "2026-07-11", size: "medium", v: "New town keeper: the Prospector, a materials trader", by: "Claude", notes: [
+  { date: "2026-07-11", size: "medium", v: "New town keeper: the Prospector, a materials trader", by: "Jeff Louie", notes: [
     "A new keeper joins the camp near the Craftsman: the Prospector trades gold for raw crafting materials — buy Scrap, Glimmer, Core or Chaos Orbs outright instead of grinding them.",
     "Prices climb with the material's rarity, with how deep you've delved, and a little with every purchase you make each visit (resetting when you next enter town), so it tops up your stock without trivializing it.",
     "You can only buy a material your progress could already drop — the same tier gate as kills (Scrap/Glimmer from Normal, Core from Hardened, Chaos from Brutal).",
@@ -256,7 +259,7 @@ export const CHANGELOG = [
     "Double Strike's bonus hit can now trigger on ranged weapon attacks — bow shots and staff/wand bolts — not just melee swings. Bows already rolled the stat, so it finally pays off.",
     "It stays a weapon-attack effect: cast spells still don't gain extra hits from it.",
   ] },
-  { date: "2026-07-11", size: "small", v: "History keeps every run", by: "Claude", notes: [
+  { date: "2026-07-11", size: "small", v: "History keeps every run", by: "Jeff Louie", notes: [
     "Deleting a save slot — or starting a New Game over one — now files a headstone in History first, so a past run is no longer erased along with its slot (Reset Run already did this).",
     "History holds many more runs before the oldest ones age off.",
   ] },
@@ -266,7 +269,7 @@ export const CHANGELOG = [
     "Scrapping: the finer materials' drop chance now climbs steeply with an item's rarity. Breaking down greys, whites and greens no longer floods you with Glimmer and Core — save the rarer finds for the mats you want.",
     "Deep saves are unaffected — anything already past those bosses keeps the full colour range.",
   ] },
-  { date: "2026-07-11", size: "small", v: "Patch notes trimmed for skimming", by: "Claude", notes: ["Every past entry rewritten to terse fragments — same facts, far less to read; long lists split into glanceable bullets."] },
+  { date: "2026-07-11", size: "small", v: "Patch notes trimmed for skimming", by: "Jeff Louie", notes: ["Every past entry rewritten to terse fragments — same facts, far less to read; long lists split into glanceable bullets."] },
   { date: "2026-07-11", size: "small", v: "Bigger skill-tree icons on desktop", by: "Jeff Louie", notes: ["Skill-tree nodes big again on desktop; compact size is phones-only."] },
   { date: "2026-07-11", size: "large", v: "Ascendant Weave: bigger board, more keystones, glyphs gone", by: "Jeff Louie", notes: [
     "Glyphs and sockets retired; power comes from lit nodes and ignited keystones.",
@@ -463,7 +466,7 @@ export const CHANGELOG = [
     "Casting without enough mana pulses the mana bar faint blue — a nudge toward why nothing fired.",
     "Skill buttons already grey out while recharging or unaffordable; this points to the mana pool as the reason.",
   ] },
-  { date: "2026-07-06", size: "medium", v: "Cloud saves survive playing on two devices", by: "Claude", notes: [
+  { date: "2026-07-06", size: "medium", v: "Cloud saves survive playing on two devices", by: "Andrew Suiter", notes: [
     "An open window no longer overwrites progress made on another device; it catches up instead of clobbering.",
     "Idle windows (after a minute or when the tab is hidden) stop writing/mirroring saves; on return they re-check your account and pull down newer progress.",
     "Cloud saves defer to your account before uploading; the longer-played copy always wins.",
@@ -471,7 +474,7 @@ export const CHANGELOG = [
   ] },
   { date: "2026-07-06", size: "small", v: "Sealed stairs marked with a padlock", by: "Andrew Suiter", notes: ["Down-stairs show a brass padlock while the floor is sealed (was door marker); 'stairs are sealed' messages carry the same padlock."] },
   { date: "2026-07-06", size: "small", v: "Beaten boss floors unlock the next warp checkpoint", by: "Andrew Suiter", notes: ["Heroes who cleared a boss floor get the next warp checkpoint at the Dungeon Gate on load — no need to descend to it first; heals older saves that predated the unlock."] },
-  { date: "2026-07-06", size: "small", v: "Cursor options fixed up", by: "Claude", notes: [
+  { date: "2026-07-06", size: "small", v: "Cursor options fixed up", by: "Andrew Suiter", notes: [
     "Settings cursor picker shows its style swatches again (had gone blank).",
     "Cursor options: blade, sword, dagger, spear, staff; dagger pointer aims up-left (was down-right).",
     "Bow art (skeleton archers, quiver, ranged combat log) no longer shows a grey patch between bow and string.",
@@ -554,7 +557,7 @@ export const CHANGELOG = [
     "Auto-attacks and melee-range skills connect from a half tile away; hit gate follows the sprites, not snapped tiles.",
     "Weapon reach numbers and tooltips unchanged.",
   ] },
-  { date: "2026-07-05", size: "small", v: "See a weapon's swing speed before you equip it", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "See a weapon's swing speed before you equip it", by: "Andrew Suiter", notes: [
     "Weapon tooltips and Forge preview show base swing rate — attacks/sec plus Slow/Normal/Fast tag — beside the reach grid.",
     "Rate is base speed before Attack Speed and Agility: daggers fastest, two-handers/staves slowest.",
   ] },
@@ -578,7 +581,7 @@ export const CHANGELOG = [
     "Cook ×3 / ×5 / ×10 batches, up to what your toppings afford.",
     "Assign a bowl to a meal slot by dragging onto a slot or HUD belt (desktop); on touch, SLOT button stays and row buttons stack vertically.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Bestiary opens on top of the menu; long names fit", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Bestiary opens on top of the menu; long names fit", by: "Andrew Suiter", notes: [
     "Bestiary/Achievements open on top of the pause menu, not behind it.",
     "Long single-word foe names (Constrictor, Bloodhound) wrap inside their card.",
   ] },
@@ -588,7 +591,7 @@ export const CHANGELOG = [
     "Stacks on rank-3/7/10 spikes, folds into same combat math; detail card names it in the Rank bonuses ladder, log calls out maxing.",
     "Keystones unchanged — single-rank build-definers, never surge.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Bounty completion is unmissable", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Bounty completion is unmissable", by: "Andrew Suiter", notes: [
     "Finishing a contract pops a centre-screen 'Bounty complete!' banner with chime and flash.",
     "Belt tracker shows a done bounty as a full green bar, green ✓, and a glow.",
   ] },
@@ -598,7 +601,7 @@ export const CHANGELOG = [
     "Opening the Bestiary no longer freezes — foe portraits pre-baked, roster paints instantly.",
   ] },
   { date: "2026-07-05", size: "small", v: "HP, MP & Spirit Veil fill at a steady pace", by: "Andrew Suiter", notes: ["HP, MP and Spirit Veil fill at one consistent rate, including the final sliver (was a jump at the top)."] },
-  { date: "2026-07-05", size: "small", v: "Furniture never blocks a hallway", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Furniture never blocks a hallway", by: "Andrew Suiter", notes: [
     "Wide solid furniture (beds, tables, sofas) only settles inside a room, never across a doorway or corridor.",
     "Fixes a wide piece plugging a corridor that had a long way around.",
   ] },
@@ -614,38 +617,38 @@ export const CHANGELOG = [
     "Storing a unique/set piece files it in Collection — a slot holds copies, shows your strongest with a count badge, withdraw any. Filter by slot, unique vs set, set, acquired/missing; shared, separate Standard/Hardcore.",
   ] },
   { date: "2026-07-05", size: "small", v: "Shorter Spirit Veil tooltip", by: "Andrew Suiter", notes: ["Trimmed Spirit Veil blurb on the HP bar tooltip to a couple of tight sentences, matching the HP line."] },
-  { date: "2026-07-05", size: "small", v: "Cleaner empty bounty tile", by: "Claude", notes: ["Belt bounty tile drops the figure icon when idle; 'No bounty yet' prompt stands on its own."] },
-  { date: "2026-07-05", size: "small", v: "ACTIVE skill tab now sits first", by: "Claude", notes: ["SKILLS tab order: ACTIVE, PASSIVE, then class path — matching the tree you open on."] },
-  { date: "2026-07-05", size: "small", v: "Belt module polish", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Cleaner empty bounty tile", by: "Jeff Louie", notes: ["Belt bounty tile drops the figure icon when idle; 'No bounty yet' prompt stands on its own."] },
+  { date: "2026-07-05", size: "small", v: "ACTIVE skill tab now sits first", by: "Jeff Louie", notes: ["SKILLS tab order: ACTIVE, PASSIVE, then class path — matching the tree you open on."] },
+  { date: "2026-07-05", size: "small", v: "Belt module polish", by: "Andrew Suiter", notes: [
     "Belt bounty/meals/gear modules match skill buttons — label pill above a same-height tile; meal slots read like skill slots (filled bowls, dashed empties).",
     "AUTO slot stays dead-centre; modules fill gaps beside it only when there's room, each sized to its contents without clipping.",
     "Empty states ('No bounty yet', 'Go cook something!') overlay a same-size slot.",
     "Trimmed the stamina bar to about half an HP/MP bar's width.",
   ] },
   { date: "2026-07-05", size: "small", v: "Attribute values no longer clip under the + button", by: "Andrew Suiter", notes: ["HERO tab: attribute value and green gear bonus right-align flush to the + button and stack, so 125 (+47) reads in full; description gives up a sliver of width."] },
-  { date: "2026-07-05", size: "large", v: "Belt fills its empty space: loadout, meals & bounty", by: "Claude", notes: [
+  { date: "2026-07-05", size: "large", v: "Belt fills its empty space: loadout, meals & bounty", by: "Andrew Suiter", notes: [
     "Wide-screen skill belt fills empty gaps with three modules that appear only when there's room.",
     "Loadout toggle swaps Set 1 / Set 2 from the belt; meal slots assign a Ramen House bowl (SLOT sends whole stack) and eat mid-run.",
     "Bounty tracker moves the active objective and live progress off the map corner into the belt (corner fallback when too narrow).",
     "Stamina bar widened to about double; HP and MP give up a little.",
   ] },
-  { date: "2026-07-05", size: "medium", v: "Big numbers now read at a glance", by: "Claude", notes: [
+  { date: "2026-07-05", size: "medium", v: "Big numbers now read at a glance", by: "Andrew Suiter", notes: [
     "Numbers in the thousands+ show short everywhere — 14,523 reads '14k', 2,400,000 reads '2.4M'. Applies to damage, gold, HP/MP, Power, item stats, tooltips, shop/forge prices, leaderboard, combat log.",
     "Under a thousand shows in full; short forms round DOWN, never claiming more than you have.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Spirit Veil rolls on caster gear", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Spirit Veil rolls on caster gear", by: "Andrew Suiter", notes: [
     "Gear can roll flat +Spirit Veil — the shield twin of flat +Max HP — adding onto max Spirit Veil shield.",
     "Gated by SPECIFIC base, not slot: only Spirit bases roll it — Crown & Circlet, Robe, Leggings, Loop, Necklace, Tome & Focus off-hands. Weapons and gloves never.",
     "Roll counts toward a piece's Power as extra effective health.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Arcing crits obey line of sight", by: "Claude", notes: ["Arcing crit fork jumps from the struck foe by line of sight, like chain lightning; no arcing through a wall."] },
+  { date: "2026-07-05", size: "small", v: "Arcing crits obey line of sight", by: "Jeff Louie", notes: ["Arcing crit fork jumps from the struck foe by line of sight, like chain lightning; no arcing through a wall."] },
   { date: "2026-07-05", size: "small", v: "Area spells blast from the point of impact", by: "Andrew Suiter", notes: [
     "Impact-burst spells (Meteor, Fireball, Blizzard, Firestorm, Condemn, Plague Bomb, Death Rain, etc.) spread radius damage from where they LAND, catching packs behind walls; aim at the nearest foe you can SEE, so a hidden closer foe won't fizzle the cast.",
     "Mark detonations (Immolation, Death Blossom, Final Judgment) burst from the marked foe, no longer through walls.",
     "Chain spells (Chain Spark, Thunderstorm, Apocalypse) arc foe-to-foe from each struck target, bending around corners.",
     "Novas still radiate from you; a blast's projectile still needs a clear line to the foe it lands on.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Cleaner desktop HUD layout", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Cleaner desktop HUD layout", by: "Andrew Suiter", notes: [
     "Gold moves off the bottom HUD into its own pill on the LOOT tab, left of crafting materials; Power drops (reads on HERO tab).",
     "HP and MP bars grow thicker to fill the gap; experience bar doubles in height.",
     "Hero name lifts to a centred banner across the top of the map.",
@@ -662,7 +665,7 @@ export const CHANGELOG = [
     "An off-hand in your bag no longer flags as an upgrade while a two-handed weapon fills your hands — no free slot to equip it.",
     "A two-handed weapon flags as an upgrade only when it beats your equipped weapon AND off-hand combined.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Foes hiding behind the same tree all stay visible", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Foes hiding behind the same tree all stay visible", by: "Andrew Suiter", notes: [
     "Fixed the see-through silhouette blinking out when two+ heroes/foes hid behind the SAME tree (the tree redrew over already-outlined ones).",
     "Tree now redrawn over everyone first, every silhouette stamped on top, so all read through the trunk at once.",
   ] },
@@ -670,7 +673,7 @@ export const CHANGELOG = [
     "Breakable-wall cracks clipped to the wall's own pixels, no longer spilling onto grass or dirt.",
     "Most visible on a lone rock where the ground wraps close on every side.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Grave-loot zombies show their real art", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Grave-loot zombies show their real art", by: "Andrew Suiter", notes: [
     "Disturbing a buried-treasure grave raises risen foes that render as proper zombies, not blank '?' boxes.",
     "Fixes up to three placeholder squares standing until you cut them down.",
   ] },
@@ -679,12 +682,12 @@ export const CHANGELOG = [
     "Solid decor knows shop NPCs are immovable; NPCs won't stand on a lone pinch point.",
     "Every floor gets a final walkability sweep after build — anything blocking is cleared or shoved aside.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Quaff potions in town", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Quaff potions in town", by: "Andrew Suiter", notes: [
     "Health and Mana potions (Q/E) work in town, not just the dungeon — top up before a dive.",
     "Share the same cooldown, so town sips can't be spammed.",
     "Combat skills stay parked for the dungeon — only potions unlocked in the hub.",
   ] },
-  { date: "2026-07-05", size: "small", v: "Boss Point nudges on the GEAR tab and gear-set buttons", by: "Claude", notes: [
+  { date: "2026-07-05", size: "small", v: "Boss Point nudges on the GEAR tab and gear-set buttons", by: "Andrew Suiter", notes: [
     "GEAR tab glows with a count when the WORN loadout has Boss Points left to spend.",
     "Each gear-set button (Set 1 / Set 2) shows its own count; the worn set lights both the tab and its button.",
   ] },
@@ -695,95 +698,95 @@ export const CHANGELOG = [
   { date: "2026-07-05", size: "small", v: "Skills you can't afford grey out on the bar", by: "Jeff Louie", notes: ["Skills you can't currently pay for grey out on the skill bar; tooltip reads 'Not enough mana'."] },
   { date: "2026-07-05", size: "small", v: "Gold outline on Sell all / Scrap all", by: "Jeff Louie", notes: ["Bag's Sell all and Scrap all buttons get a gold outline atop the LOOT drawer."] },
   { date: "2026-07-05", size: "small", v: "Nothing can wall off a one-tile hallway", by: "Jeff Louie", notes: ["Props and the wandering merchant/mystic never block a one-tile hall — any that would is moved to open space on floor build."] },
-  { date: "2026-07-04", size: "medium", v: "Boss Points — spend one per new boss floor to permanently level your gear slots", by: "Claude", notes: [
+  { date: "2026-07-04", size: "medium", v: "Boss Points — spend one per new boss floor to permanently level your gear slots", by: "Andrew Suiter", notes: [
     "First-time boss-floor clear grants a Boss Point (farming a cleared floor grants none); spend on the GEAR tab to level a slot.",
     "Each slot level permanently boosts that slot's gear stats, attributes and weapon damage +5%, no cap, while equipped.",
     "Both gear sets invest independently from one shared pool; slot investment lifts Power and shows in the leaderboard snapshot.",
     "Town Trainer resets all slots (both sets) to reassign points — deliberately expensive.",
   ] },
-  { date: "2026-07-04", size: "medium", v: "Empower gear at the Enchanter — raise an item's level to your depth", by: "Claude", notes: [
+  { date: "2026-07-04", size: "medium", v: "Empower gear at the Enchanter — raise an item's level to your depth", by: "Andrew Suiter", notes: [
     "Enchanter Empower raises item level by 1, 10, or up to max droppable; stats, modifiers and equip reqs scale as if dropped that deep.",
     "Capped at deepest floor +1 — never past what the dungeon would drop.",
     "Costs gold + Scrap (+ Core on rare and up), scaling with rarity and item level; jumping ten costs more.",
     "Works on any gear (uniques, set pieces, cursed) — only scales values, never changes modifiers; cursed drawback scales too.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Removed the Dev tuning tab", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Removed the Dev tuning tab", by: "Andrew Suiter", notes: [
     "Retired the Settings ▸ Dev difficulty-slider panel; ships on tuned defaults.",
     "Saved slider overrides cleared on load — every hero reverts to standard balance.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Hero snapshot now shows the full Stats panel and every learned skill", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Hero snapshot now shows the full Stats panel and every learned skill", by: "Andrew Suiter", notes: [
     "Leaderboard snapshot shows the full Stats panel: attack, defense, HP/MP, regen, ratings and their %, crit, tenacity, conqueror's scars, gear bonuses.",
     "Skills list shows all learned skills with ranks (passives included), grouped Actives/Passives, hot-barred picks marked.",
   ] },
-  { date: "2026-07-04", size: "medium", v: "Boss first-kill jackpot — the first time you clear a boss floor, it spills a windfall", by: "Claude", notes: [
+  { date: "2026-07-04", size: "medium", v: "Boss first-kill jackpot — the first time you clear a boss floor, it spills a windfall", by: "Andrew Suiter", notes: [
     "First clear of a boss floor drops a jackpot — ~3x loot at better quality, one-time per floor.",
     "Endless tracks by floor: each new or deeper boss floor pays its own; farming a cleared floor drops at normal boss rate (re-killing soon thins spoils).",
     "Existing heroes keep credit for cleared boss floors — only new or deeper ones pay the windfall.",
   ] },
-  { date: "2026-07-04", size: "medium", v: "Click a leaderboard hero to inspect their build", by: "Claude", notes: [
+  { date: "2026-07-04", size: "medium", v: "Click a leaderboard hero to inspect their build", by: "Andrew Suiter", notes: [
     "Click any leaderboard row for a build snapshot: worn gear (hover for full stats), attributes, learned skills with ranks.",
     "Board list unchanged and quick; full loadout fetched only when opened.",
   ] },
-  { date: "2026-07-04", size: "medium", v: "Crafting materials are shared across your heroes; Hardcore gets its own vault", by: "Claude", notes: [
+  { date: "2026-07-04", size: "medium", v: "Crafting materials are shared across your heroes; Hardcore gets its own vault", by: "Andrew Suiter", notes: [
     "Scrap, Glimmer, Core and Chaos Orbs are a shared wallet across all heroes — no depositing; new heroes craft from the pooled stockpile.",
     "Existing heroes' materials pool on first load; merges across devices when signed in.",
     "Standard and Hardcore keep separate vaults AND materials — nothing crosses; Hardcore starts fresh, walled-off pools.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Achievements are account-wide — no more per-slot drift", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Achievements are account-wide — no more per-slot drift", by: "Andrew Suiter", notes: [
     "Achievements belong to your account, not a save slot; existing feats merge into one tally on first load and stay unlocked everywhere — surviving death, Reset Run, save switches. Signed-in players sync across devices.",
     "Normal-play feat unlocks announce in the combat log, as Hardcore already did.",
   ] },
-  { date: "2026-07-04", size: "small", v: "See-through silhouettes render right behind overlapping trees", by: "Claude", notes: ["Behind two trees with overlapping leaves, no square patch — trees keep front-to-back order and the tinted silhouette reads cleanly through both."] },
-  { date: "2026-07-04", size: "medium", v: "Warp in at checkpoints; death no longer re-locks floors", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "See-through silhouettes render right behind overlapping trees", by: "Jeff Louie", notes: ["Behind two trees with overlapping leaves, no square patch — trees keep front-to-back order and the tinted silhouette reads cleanly through both."] },
+  { date: "2026-07-04", size: "medium", v: "Warp in at checkpoints; death no longer re-locks floors", by: "Andrew Suiter", notes: [
     "Warp to Dungeon drops in only on checkpoint floors — every fifth from 1 (1, 6, 11, 16, 21, onward in Endless), up to deepest reached; walk down the rest. Return to Last Floor unchanged.",
     "Death no longer re-locks deeper floors — depth stays; it sends you to the nearest checkpoint below where you fell.",
     "Grave marker sits only on the difficulty tab with the exact floor; floor tiles drop the tombstone; death screen drops the re-lock note.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Dungeon Gate tiles are big again on desktop", by: "Claude", notes: ["Dungeon Gate floor and difficulty tiles back to full desktop size — roomy 5-across floor grid; phones keep the fluid reflow."] },
-  { date: "2026-07-04", size: "large", v: "Gear stats overhaul — no more caps, rarity that matters, stronger curses", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Dungeon Gate tiles are big again on desktop", by: "Jeff Louie", notes: ["Dungeon Gate floor and difficulty tiles back to full desktop size — roomy 5-across floor grid; phones keep the fluid reflow."] },
+  { date: "2026-07-04", size: "large", v: "Gear stats overhaul — no more caps, rarity that matters, stronger curses", by: "Andrew Suiter", notes: [
     "Every gear stat grows with both item level and rarity — no hard caps; attack speed, leech, cleave, cooldown keep climbing, so a legendary rolls bigger than a common.",
     "Naturally-limited stats (crit rate, cooldown, mana cost, dodge, block, damage reduction, tenacity, double strike) ease off with diminishing returns, approaching but never 100% (or 0).",
     "Tenacity loses its flat 80% cap and Double Strike its waste past a guaranteed hit — both join the curve.",
     "Cursed items much stronger, scaling with rarity: swing a stat ~2.2× a normal roll on uncommon up to ~5× on legendary, with an equal drawback; still can't be reforged.",
     "Old saves repaired on load — over-inflated stats pulled back in-band.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Enchanter reroll buttons stack under the text on phones", by: "Claude", notes: ["On phones, Enchanter per-property rows read top to bottom — stat and roll range on top, Value and Type reroll buttons across the bottom; no more crowding or overlap."] },
-  { date: "2026-07-04", size: "small", v: "Bag opens over town menus on phones", by: "Claude", notes: ["On phones, opening the Bag from Town covers the menu — no longer slips behind the merchant or mystic."] },
-  { date: "2026-07-04", size: "small", v: "Touch: tap worn gear to enchant it", by: "Claude", notes: ["On phones, tap a worn piece at the Enchanter to select it (used to just flash its stat card); its properties open on the piece's own screen."] },
-  { date: "2026-07-04", size: "small", v: "Menus flow to any screen; foldables play unfolded", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Enchanter reroll buttons stack under the text on phones", by: "Jeff Louie", notes: ["On phones, Enchanter per-property rows read top to bottom — stat and roll range on top, Value and Type reroll buttons across the bottom; no more crowding or overlap."] },
+  { date: "2026-07-04", size: "small", v: "Bag opens over town menus on phones", by: "Jeff Louie", notes: ["On phones, opening the Bag from Town covers the menu — no longer slips behind the merchant or mystic."] },
+  { date: "2026-07-04", size: "small", v: "Touch: tap worn gear to enchant it", by: "Jeff Louie", notes: ["On phones, tap a worn piece at the Enchanter to select it (used to just flash its stat card); its properties open on the piece's own screen."] },
+  { date: "2026-07-04", size: "small", v: "Menus flow to any screen; foldables play unfolded", by: "Andrew Suiter", notes: [
     "Town and every menu reshape to any screen — narrow/folded drops to one scrollable column, wide unfolded fans into more columns; difficulty/floor pickers and craftsman tiles reflow too.",
     "Settings and Bag stay tappable over the town menu on phones.",
     "Unfolding no longer forces the rotate screen — a wide-but-tall display keeps playing; only a phone held sideways is asked to rotate.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Phones play fullscreen; menus scroll on small screens", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Phones play fullscreen; menus scroll on small screens", by: "Andrew Suiter", notes: [
     "On phones the game runs fullscreen (no browser bars) — enters on touch, any tap restores it, exit with your usual back or swipe gesture.",
     "Long menus scroll on phones — Settings tabs (especially Visuals) and the death, boss-gate and other pop-ups scroll in place.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Touch: steadier skill hold-to-read", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Touch: steadier skill hold-to-read", by: "Andrew Suiter", notes: [
     "Hold a skill to read it while steering with your other thumb — the joystick no longer cancels the hold.",
     "Fixed a touch-laptop case where a cancelled hold swallowed the next mouse click.",
     "Long-press a buff or info icon, then tap again, now cleanly closes the card instead of flickering it back open.",
   ] },
-  { date: "2026-07-04", size: "large", v: "Every guardian now has its own telegraphed moveset", by: "Claude", notes: [
+  { date: "2026-07-04", size: "large", v: "Every guardian now has its own telegraphed moveset", by: "Andrew Suiter", notes: [
     "All fifteen bosses now fight bespoke telegraphed movesets, not just the Rat King.",
     "Inferno Demon rains fire; Elder Dragon breathes cones and charges; Death Knight and Mortis Vane raise the dead behind bone-spear lanes; All-Seer and Cindra weave bullet-storms.",
     "Emberbound spreads burning floor; Masquerade splits into mirror-decoys; Magmaw slams toward lava; Vael and Ourok spin light pinwheels; Tidewarden floods and drags; Shrike blinks and executes; Kaggoroth shifts each phase.",
     "Every attack is a floor indicator beaten by MOVING — bullets through gaps, rings by clearing the edge, cones by stepping to the flank, decoys by reading which glows red; patterns tighten at two-thirds and one-third health.",
     "Boss attack speed scales with depth; Normal bosses carry lighter health pools, Hardened middling, Brutal and Endless the full deep pools.",
   ] },
-  { date: "2026-07-04", size: "large", v: "Skills, spells & hybrids — and enemies that resist them differently", by: "Claude", notes: [
+  { date: "2026-07-04", size: "large", v: "Skills, spells & hybrids — and enemies that resist them differently", by: "Andrew Suiter", notes: [
     "Every active has a school — SKILL (weapon, leeches, scales Skill Power), SPELL (magic, scales Spell Power, sped by Cast Speed), or the new HYBRID (weapon + magic in one cast); tooltips spell out the damage build and a hybrid's physical/magic split.",
     "Classes sit on a spectrum: Warrior pure weapon SKILLS, Mage pure SPELLS, Rogue leans skill with shadow/toxic hybrids (Blink Strike, Venom Nova, Plague Lord), Templar leans holy magic with holy-strike hybrids (Smite, Divine Storm, Redeemer).",
     "Every foe has separate physical ARMOR and MAGIC RESISTANCE — a stone golem resists blades but melts to magic, a wraith ignores steel not spells, beasts in between; a hybrid splits the difference and is never fully walled.",
     "New stat MAGIC PENETRATION pierces magic resistance (the caster's Armor Pen) — rolls on caster gear and enchants, sits on wands and staves like the Astral Needle.",
     "Bestiary card and gameState() report each foe's armor and magic-resist.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Touch: tap a skill to cast it, hold to read it", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Touch: tap a skill to cast it, hold to read it", by: "Andrew Suiter", notes: [
     "On phones, tapping a skill, potion or action button fires it — no tooltip on tap.",
     "Hold ~half a second to read: the tooltip pops beside it and won't cast or spend the potion.",
     "Keyboard-and-mouse untouched — hover still shows tooltips.",
   ] },
-  { date: "2026-07-04", size: "large", v: "Boss overhaul: 15 guardians, sealed arenas, and a fully telegraphed Rat King", by: "Claude", notes: [
+  { date: "2026-07-04", size: "large", v: "Boss overhaul: 15 guardians, sealed arenas, and a fully telegraphed Rat King", by: "Andrew Suiter", notes: [
     "Ten new bosses bring the roster to fifteen — each difficulty has its own five (Normal keeps the original, Hardened and Brutal get five new each, Endless rolls any of the fifteen), all bespoke pixel art.",
     "Every boss floor is a fixed circular arena: enter from stairs at the south, guardian holds centre, exit north, pillars for cover — no trash, no loot clutter.",
     "Stepping onto a boss floor asks first; every exit seals on entry — both staircases and the town portal lock until the guardian falls, all reopen when it dies.",
@@ -791,48 +794,48 @@ export const CHANGELOG = [
     "Enemies and companions glide between tiles at a steady pace like the hero — smooth in every direction.",
     "Rat King fully reworked as the first new-style fight: telegraphs every attack — ground-shaking slam, locking pounce, tail-whirl, erupting vermin; fiercer at two-thirds and one-third health. Rest of the roster coming next.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Town: Return to Last Floor + Warp to Dungeon", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Town: Return to Last Floor + Warp to Dungeon", by: "Andrew Suiter", notes: [
     "Town's top row has two gates: Return to Last Floor drops you back onto the exact floor you left — same enemies, loot, layout — instead of rebuilding it.",
     "Warp to Dungeon (was Return to Dungeon) opens the difficulty and floor picker.",
     "Return to Last Floor lights up only after you leave by portal or conquest; a death darkens it.",
     "Hub tagline moved up under the Town title, centred.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Skill milestone text now states exact numbers", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Skill milestone text now states exact numbers", by: "Andrew Suiter", notes: [
     "Rank 3/7/10 ladder states each milestone: +28% power (Empowered), +20% power & 20% faster recharge (Honed), +30% power plus +1 radius/range/target/hit (Mastered).",
     "Passive milestones read +8% / +10% / +12% to the bonus; the level-up log line shouts the specific gain.",
     "Skill cards gain Leech, Execute, Knockback and guaranteed-Crit chips showing actual percentages and tile counts.",
   ] },
-  { date: "2026-07-04", size: "large", v: "Play on your phone — a real touch interface", by: "Claude", notes: [
+  { date: "2026-07-04", size: "large", v: "Play on your phone — a real touch interface", by: "Andrew Suiter", notes: [
     "Full mobile layout — first touch switches to the phone interface, a mouse switches back; keyboard-and-mouse unchanged.",
     "Drag anywhere to raise a floating joystick and steer; a quick tap walks there and uses whatever's there on arrival (chest, NPC) or chases a tapped foe; a quick flick dashes.",
     "Header bar holds minimap, health/mana/floor/foes and settings & bag; footer holds a RUN auto-sprint toggle and town portal over potions, an auto-cast slot, and four skill slots; buffs/debuffs sit top-right of the map.",
     "Map fills the space between the bars, crisp on high-res; portrait-only — sideways asks you to rotate.",
     "Menus, shops and the bag open as full-screen sheets with big tap targets; merchant cards open on tap.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Skill cards show the full rank 3 / 7 / 10 bonus ladder", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Skill cards show the full rank 3 / 7 / 10 bonus ladder", by: "Andrew Suiter", notes: [
     "Skill detail card's Rank bonuses section lists all three milestones — Empowered (rank 3), Honed (rank 7), Mastered (rank 10) — and what each grants, always visible.",
     "Each milestone lights green with a ✓ once earned, showing the whole ladder ahead.",
     "The next-milestone line moved from the On-rank-up preview into this section; applies to every skill that surges — all actives and non-keystone passives.",
   ] },
-  { date: "2026-07-04", size: "large", v: "Power now reflects your build", by: "Claude", notes: [
+  { date: "2026-07-04", size: "large", v: "Power now reflects your build", by: "Andrew Suiter", notes: [
     "Gear Power is fully dynamic — a piece's Power is what its stats are worth to YOUR hero (attributes, skills, class, worn gear), not a near-fixed table.",
     "A stat your build can't use adds almost no Power — Crit Damage with no crit chance, Spell Power on pure melee, Attack Speed on a pure caster read close to nothing.",
     "A higher-rarity or higher-level piece can read LOWER Power than a plainer one that suits your build — sort by Power and trust the upgrade arrow.",
     "Life Leech is valued by how hard you hit, defenses by real survivability, each attribute affix by class value — the same ring is worth different Power to different heroes.",
     "POWER headline and its from-gear line reconcile exactly; gameState() reports player.power, player.gearPower and item pow + upgrade — see gameGuide('power').",
   ] },
-  { date: "2026-07-04", size: "large", v: "Sets reborn — 20 hand-crafted set collections", by: "Claude", notes: [
+  { date: "2026-07-04", size: "large", v: "Sets reborn — 20 hand-crafted set collections", by: "Andrew Suiter", notes: [
     "Set pieces are pre-defined, NAMED, fixed-stat artifacts built like uniques (fixed signature stat, six set modifiers, own special power, locked on drop, never reforgeable) — not random gear with a set tag.",
     "20 distinct sets, each a family of named pieces, sizes 2 to 6, covering every gear slot.",
     "Each set has escalating worn-count bonuses plus a completion power (and golden aura) when you wear every piece.",
     "'Worn: n / size' counts against the real piece count; the tooltip lists named pieces and ticks the ones worn.",
     "Set pieces read as fixed artifacts everywhere — the Enchanter leaves them alone; cards and gameState() flag them with set and piece ids.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Skill descriptions read their damage inline", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Skill descriptions read their damage inline", by: "Andrew Suiter", notes: [
     "Every damage skill's description weaves its damage range into the sentence — e.g. 'Hurl a bolt of flame that deals 16k–22k damage and sets a foe ablaze' — not a trailing line.",
     "A multi-strike skill shows a (×N) badge after the range, and the Damage pill reads 'per hit (×3)'.",
   ] },
-  { date: "2026-07-04", size: "large", v: "Spells roll a damage range; skill cards rebuilt around per-hit damage", by: "Claude", notes: [
+  { date: "2026-07-04", size: "large", v: "Spells roll a damage range; skill cards rebuilt around per-hit damage", by: "Andrew Suiter", notes: [
     "Spells roll a damage RANGE, not a fixed number — Arcane Missile tight, Meteor wild; the average is unchanged.",
     "Weapon and spell rolls are fine-grained before buffs and gear scale them, for varied hits; the final damage is still a whole number.",
     "Skill/spell cards show the true PER-HIT range; a multi-strike (twice-striking Firebolt) shows a ×N badge, not a multiplied range — a ~11k strike reads 11k, not ~32k.",
@@ -840,95 +843,95 @@ export const CHANGELOG = [
     "Every damage skill's description reads its base range ('deals X to Y damage'); the redundant synergy sentence moved out to its own pill.",
     "Ranking a damage skill up previews the new damage range, not a bare effect-power percent.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Top upgrade row's highlight no longer clipped", by: "Claude", notes: ["An upgrade in the first bag slot shows its full green top edge — no longer clipped under the frozen stat-key bar; a small gap clears the pinned header."] },
-  { date: "2026-07-04", size: "medium", v: "Desktop-only controls", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Top upgrade row's highlight no longer clipped", by: "Jeff Louie", notes: ["An upgrade in the first bag slot shows its full green top edge — no longer clipped under the frozen stat-key bar; a small gap clears the pinned header."] },
+  { date: "2026-07-04", size: "medium", v: "Desktop-only controls", by: "Andrew Suiter", notes: [
     "Built for mouse and keyboard only — the on-screen move pad, floating stick, tap-and-swipe steering, rotate prompt and touch settings gear all removed.",
     "Nothing changes for mouse-and-keyboard play.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Merchant wares read left-to-right, one icon size", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Merchant wares read left-to-right, one icon size", by: "Andrew Suiter", notes: [
     "Merchant buy cards realigned — gear icon inline at the head of the name; slot, stats and can't-equip note start at the left edge, not pushed past the icon.",
     "Every shop gear icon is drawn one size — off-hand shields no longer tower over rings.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Top loot row no longer opens the stat key", by: "Claude", notes: ["The frozen stat-key bar no longer overlaps the first bag item — clicking the top row selects it (Sell / Scrap / Lock) instead of toggling the Stat abbreviations panel."] },
-  { date: "2026-07-04", size: "small", v: "Skill damage pill always shows its real range", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Top loot row no longer opens the stat key", by: "Jeff Louie", notes: ["The frozen stat-key bar no longer overlaps the first bag item — clicking the top row selects it (Sell / Scrap / Lock) instead of toggling the Stat abbreviations panel."] },
+  { date: "2026-07-04", size: "small", v: "Skill damage pill always shows its real range", by: "Andrew Suiter", notes: [
     "The Damage pill always shows a low–high range — narrow spreads next to a big number add decimal precision to show the true span (16.0k–16.3k, not a lone 16k); a fixed-damage spell still shows one number.",
     "Damage and DPS pills drop their trailing explanation text — value right-aligned, tag on the left.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Transmuter lets you pick which pieces to fuse", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Transmuter lets you pick which pieces to fuse", by: "Andrew Suiter", notes: [
     "The Transmuter no longer grabs gear on its own — choose a rarity, tick exactly which unlocked pieces go in; a running count and gold cost show before you commit, and the fuse fires only when the recipe is full.",
     "Fuse count climbs with rarity: 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary to draw a unique (may roll a set piece).",
     "Locked keepers never appear in the picker.",
     "Removed the stray potion icon beside each fuse row.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Gold & materials update everywhere the moment you transact", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Gold & materials update everywhere the moment you transact", by: "Andrew Suiter", notes: [
     "Selling, buying or salvaging at the Merchant updates gold and material counts on the spot everywhere — town-menu header, bottom HUD and LOOT tab.",
     "The Merchant shows your crafting materials at the top, like the town menu, so salvaging gives an instant tally.",
   ] },
-  { date: "2026-07-04", size: "small", v: "The Craftsman opens one step at a time", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "The Craftsman opens one step at a time", by: "Andrew Suiter", notes: [
     "The Forge opens with nothing selected — only the item-type row; pick a type to open its base picker, then a base to reveal rarity, preview and the FORGE button.",
     "Weapons pick a category then a type — the type list opens only after a category, no base pre-selected.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Bounty board cards drop the left sprite", by: "Claude", notes: ["Bounty board contract cards drop the left figure — name, objective and reward use the full card width."] },
-  { date: "2026-07-04", size: "small", v: "Sellsword camp cards show a big mercenary portrait", by: "Claude", notes: ["Sellsword hire cards match the hero card: left-aligned name/description, tall walking sprite on the right (was a small icon)."] },
-  { date: "2026-07-04", size: "small", v: "Cooldown Reduction now reads as the honest % it cuts", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Bounty board cards drop the left sprite", by: "Jeff Louie", notes: ["Bounty board contract cards drop the left figure — name, objective and reward use the full card width."] },
+  { date: "2026-07-04", size: "small", v: "Sellsword camp cards show a big mercenary portrait", by: "Jeff Louie", notes: ["Sellsword hire cards match the hero card: left-aligned name/description, tall walking sprite on the right (was a small icon)."] },
+  { date: "2026-07-04", size: "small", v: "Cooldown Reduction now reads as the honest % it cuts", by: "Andrew Suiter", notes: [
     "Cooldown Reduction now reads like Crit/Evasion: gear shows a raw Cooldown Rating, hero sheet + skill tooltips show the real % cut (was a flat % that behaved like a rating).",
     "% is rating/(rating+100) — climbs toward but never reaches 100%, no hard cap; cooldown drops by exactly the amount shown.",
     "Actual cooldowns unchanged; only the displayed number was misleading.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Skill damage pills: a true range, clearer DPS, real cooldown", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Skill damage pills: a true range, clearer DPS, real cooldown", by: "Andrew Suiter", notes: [
     "Damage pill shows a real low–high range (min-max per cast at your depth); multi-strike hits summed into it (was a ×N tag).",
     "DPS is its own pill: range midpoint adjusted for crit chance/damage, times casts per second.",
     "Range excludes crit, chance-only effects and shrine buffs — a stable floor/ceiling; DPS folds crit back in.",
     "Tooltip cooldown is the real one after Cooldown Reduction and Cast Speed, not the base.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Floating combat numbers abbreviate when big", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Floating combat numbers abbreviate when big", by: "Andrew Suiter", notes: [
     "Floating damage/heal/gold numbers abbreviate past 1000 (15230 → 15k, 2500000 → 2.5M), matching tooltips and HUD gold.",
     "Small numbers, crit marks and labels (BLOCK, MISS, +50 MP) unchanged.",
   ] },
-  { date: "2026-07-04", size: "small", v: "Cracked walls break again; foe card sits under the minimap", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Cracked walls break again; foe card sits under the minimap", by: "Andrew Suiter", notes: [
     "Click/hold a cracked wall to walk into it and break it (walk-to-edge skips them); routes still go around.",
     "Hovered-foe codex card sits under the minimap (was bottom-centre).",
   ] },
-  { date: "2026-07-04", size: "small", v: "Click a wall or object to walk up to it", by: "Claude", notes: [
+  { date: "2026-07-04", size: "small", v: "Click a wall or object to walk up to it", by: "Andrew Suiter", notes: [
     "Click a solid tile — wall, water, closed/locked door, NPC, furniture — to walk up to its nearest edge and stop.",
     "Line up on a door, chest or shopkeeper with one click.",
   ] },
   { date: "2026-07-04", size: "small", v: "Can't-equip loot rows tinted red", by: "Jeff Louie", notes: ["Loot row you can't equip (attribute requirement unmet) gets a faint red wash, reinforcing the yellow lock button."] },
-  { date: "2026-07-03", size: "small", v: "Hover to inspect a foe, click to charge it", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Hover to inspect a foe, click to charge it", by: "Andrew Suiter", notes: [
     "Point at a foe (desktop) pops its codex card under the map, semi-transparent so it never covers the enemy.",
     "Clicking a foe paths you to it into weapon reach and auto-attack takes over (no longer opens the card).",
     "On touch, a tap still opens the codex card.",
   ] },
-  { date: "2026-07-03", size: "small", v: "The shared Vault syncs without losing anything", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "The shared Vault syncs without losing anything", by: "Andrew Suiter", notes: [
     "Account-wide Vault merges across devices (was one copy winning) — deposit on phone while PC is offline, keep both after sync; no deposit dropped.",
     "Removing an item sticks everywhere; a re-stored item won't vanish. Existing Vault carries over untouched.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Skill tooltips show damage and DPS", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Skill tooltips show damage and DPS", by: "Andrew Suiter", notes: [
     "Every damage skill's tooltip (action bar + skill-tree card) shows a raw per-hit damage range and effective single-target DPS.",
     "Range folds in weapon roll, Attack, class damage attributes, Increased/Skill/Spell Power, skill coefficient/rank, synergies, and typical foe armour at your depth — all but crit.",
     "DPS adds the randoms: range averaged with crit chance/damage, times hits per cast, times fire rate with Cooldown Reduction and Cast Speed.",
     "Big numbers abbreviate (1.2k, 3.4M); reflects current gear/attributes/skills — situational spikes (boss damage, execute, rage) excluded.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Spend menus flag gear you can't equip yet", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Spend menus flag gear you can't equip yet", by: "Andrew Suiter", notes: [
     "Merchant, Forge, Enchanter and Gambler show an amber 'Can't equip yet — needs N ATTR' warning with a left accent bar when your attributes fall short.",
     "Heads-up, not a block — buy or forge anyway and raise the attribute to grow into it.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Cloud saves are harder to lose", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Cloud saves are harder to lose", by: "Andrew Suiter", notes: [
     "Sync winner decided by total play-time, not the device clock — a wrong clock can't overwrite your more-played save.",
     "While a newer save loads onto your active hero, saving pauses until reload so autosave can't clobber it.",
     "A hero stored twice: sync keeps the more-advanced copy and clears the stale duplicate.",
     "Sign-in checks the hardcore death record first — a hero who fell elsewhere can't revive.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Fired attacks hit on impact, not on cast", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Fired attacks hit on impact, not on cast", by: "Andrew Suiter", notes: [
     "Bow/staff shots, ranged summon bolts, and bolt/blast spells deal damage when the projectile reaches the target — foe no longer dies before it connects.",
     "Release sound fires on loose; hit, numbers and crit land on arrival.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Deleting a hero now sticks across devices", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Deleting a hero now sticks across devices", by: "Andrew Suiter", notes: [
     "Fixed deleted heroes resurrecting: deleting on one device then opening another used to revive them and ping-pong forever.",
     "Deletions sync via a shared ledger every device merges on sign-in and Sync Now — scrubbed everywhere, never pushed back.",
     "Deletes target a hero by stable id, not slot number, so they can't hit the wrong character.",
   ] },
-  { date: "2026-07-03", size: "large", v: "Uniques reborn — one hand-crafted red for every gear type", by: "Claude", notes: [
+  { date: "2026-07-03", size: "large", v: "Uniques reborn — one hand-crafted red for every gear type", by: "Andrew Suiter", notes: [
     "Red items no longer random-rolled: every unique is a hand-crafted named artifact — one for every weapon, off-hand, armour and jewelry base.",
     "Each wears the same signature stat and same six modifiers, hand-picked for its class/fantasy, plus a signature power (legendary modifier like Vampiric); only numbers change, scaled to drop depth.",
     "Values lock on drop — never augmented, rerolled or transmuted; detail card flags the fixed properties and signature power.",
@@ -938,13 +941,13 @@ export const CHANGELOG = [
     "Roaming merchant lays out at least six gear pieces.",
     "Hover any ware to pop its full card beside your equipped piece — spot an upgrade before you spend.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Watch page loads again", by: "Claude", notes: ["Watch spectator page ships with the built site — no more 404."] },
+  { date: "2026-07-03", size: "small", v: "Watch page loads again", by: "Jeff Louie", notes: ["Watch spectator page ships with the built site — no more 404."] },
   { date: "2026-07-03", size: "small", v: "Enchanter: Esc backs out one step at a time", by: "Jeff Louie", notes: ["With an item picked in the Enchanter, Esc returns to the gear screen (not out to town)."] },
   { date: "2026-07-03", size: "small", v: "Leaderboard rows show class, subclass & all stats", by: "Jeff Louie", notes: [
     "Each board row gets a second line: ascension (subclass) in its signature colour, or base class, plus a sigil.",
     "Every row shows floor, level, gold and Power together (not just the ranked stat); big counts abbreviate (12.3k).",
   ] },
-  { date: "2026-07-03", size: "medium", v: "AI-play console tools see the whole game", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "AI-play console tools see the whole game", by: "Andrew Suiter", notes: [
     "gameState() adds floor quests and objective tiles, the cursed-floor greed choice, rainbow conquest gate, hired Sellsword, active bounty, boss enrage/berserk phases, enemy affixes, true weapon reach, and full survivability (defense, crit, dodge, block, damage reduction, tenacity).",
     "canMove flips false under every world-pausing overlay (greed prompt, tier-conquest banner, hardcore death, leaderboard), so an agent never fires dead keys.",
     "gameGuide() fixes per-sub-type weapon reach, Wisdom shrine's 50%-HP heal, pack rush, mana-cost-reduced costs; adds Transmuter, floor quests, greed gate, conquest scar.",
@@ -977,40 +980,40 @@ export const CHANGELOG = [
     "Clearing a floor's foes opens the next floor at the Dungeon Gate at once — it counts as your deepest immediately.",
     "Port to town after a clear and drop straight onto the opened floor, not the one you just finished.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Loading splash on startup", by: "Claude", notes: ["Brief loading screen covers the cold start — title no longer flashes its new-game look before recognising your save; land on CONTINUE with your character shown."] },
-  { date: "2026-07-03", size: "small", v: "Wider item tooltips", by: "Claude", notes: ["Item tooltips twice as wide — long stat lines and side-by-side compare stop wrapping mid-line."] },
-  { date: "2026-07-03", size: "small", v: "Hidden heroes glow their class colour", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Loading splash on startup", by: "Jeff Louie", notes: ["Brief loading screen covers the cold start — title no longer flashes its new-game look before recognising your save; land on CONTINUE with your character shown."] },
+  { date: "2026-07-03", size: "small", v: "Wider item tooltips", by: "Jeff Louie", notes: ["Item tooltips twice as wide — long stat lines and side-by-side compare stop wrapping mid-line."] },
+  { date: "2026-07-03", size: "small", v: "Hidden heroes glow their class colour", by: "Andrew Suiter", notes: [
     "Behind a tree or tall furniture, your see-through silhouette takes your class colour — Warrior red, Mage yellow, Templar blue, Rogue green.",
     "Enemies hidden behind scenery show a magenta silhouette, so a lurking foe never blurs into a red Warrior.",
   ] },
   { date: "2026-07-03", size: "small", v: "Cursor size setting", by: "Andrew Suiter", notes: ["Settings ▸ Visuals ▸ CURSOR SIZE: 1x–2x picker enlarges the pointer atop UI scale; defaults 1x, travels with your cursor across devices."] },
-  { date: "2026-07-03", size: "small", v: "Patch notes group by local day", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Patch notes group by local day", by: "Andrew Suiter", notes: [
     "Version History dates each update by its Pacific calendar day — evening changes no longer jump to the next day's heading.",
     "Re-dated recent entries that had rolled to the wrong day.",
   ] },
-  { date: "2026-07-03", size: "medium", v: "Five more electronic styles for the soundtrack", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "Five more electronic styles for the soundtrack", by: "Andrew Suiter", notes: [
     "Five new styles, each its own kit: Strobe (progressive house, hypnotic arp), Prism (warped future bass), Summit (chillwave with tribal drums), Levels (folk-tinged melodic house), Riddim (moombahton dembow).",
     "Pick from Settings ▸ Audio, or leave it on Shuffle.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Terrain & scenery fixes", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Terrain & scenery fixes", by: "Andrew Suiter", notes: [
     "Fixed a hard-edged square of base floor punching through accent ground — a terrain was missing its diagonal blend tile; added it, with a seamless-fill fallback if any blend tile is absent.",
     "Tall scenery (trees, furniture) keeps its crown drawing while any part is in view, instead of vanishing when its base scrolls off the bottom.",
     "Trees, tables and crates never drop on a monster's tile, so nothing spawns walled in.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Walk-through-portal teleporters", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Walk-through-portal teleporters", by: "Andrew Suiter", notes: [
     "Teleporter pad swallows you in a purple swirl, camera pans to the partner pad, you step out — reads as walking through, not a snap.",
     "Teleporting clears your click-to-move route (was auto-walking back toward the pad you'd clicked near).",
     "World holds still for the ~0.9s crossing; you can't be hit.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Icons fill their space instead of floating small", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Icons fill their space instead of floating small", by: "Andrew Suiter", notes: [
     "Menu/HUD icons size to their actual artwork, not the whole tile — read as tall as adjacent text, no shrunken icons stranded in transparent padding.",
     "Most visible on gold and crafting counts (Scrap, Glimmer, Core, Chaos); also sharpens the bag, shop, forge, enchanter, reward lines and message log.",
   ] },
-  { date: "2026-07-03", size: "medium", v: "Four dance styles join the soundtrack", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "Four dance styles join the soundtrack", by: "Andrew Suiter", notes: [
     "Four new styles, each its own kit: Pulse (deep house), Neon (festival EDM), Lagoon (tropical house), Rush (drum & bass).",
     "Four-on-the-floor kicks and off-beat bass for the house styles; fast breakbeat and deep sub for drum & bass. Pick from Settings ▸ Audio or Shuffle.",
   ] },
-  { date: "2026-07-03", size: "medium", v: "Sellsword: pick your contract, pay real wages", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "Sellsword: pick your contract, pay real wages", by: "Andrew Suiter", notes: [
     "Hire a companion for 1, 10 or 30 floors — pick a contract length like a Mystic pact (was one fixed run).",
     "Hiring costs far more and climbs steeply with your deepest floor; longer contracts shave a little off each floor's cost.",
     "Each merc gets its own hire card matching the Mystic's pact layout.",
@@ -1025,11 +1028,11 @@ export const CHANGELOG = [
     "Bigger lock toggle; Lock/Unlock button joins Sell & Scrap on a selected item.",
     "Gear your class can't wield sorts normally, no longer sinks to the bottom.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Mix the music — fade each layer to taste", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Mix the music — fade each layer to taste", by: "Andrew Suiter", notes: [
     "Audio settings adds four soundtrack faders: BASS, CHORDS, MELODY, DRUMS — each up, down or off independently.",
     "Each fader steps like volume (tap to raise a notch, wraps full to off) and remembers its setting.",
   ] },
-  { date: "2026-07-03", size: "medium", v: "Every music style gets a real bassline & chord groove", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "Every music style gets a real bassline & chord groove", by: "Andrew Suiter", notes: [
     "Every style plays a moving bassline (octave hops, syncopation, walk-ups) plus a rhythmic chord part, not one flat held chord per bar.",
     "All ten styles get distinct grooves: driving Cavern, machine-like Forge, martial March, swung Tide, still Mist/Veil, pounding boss theme.",
     "Keeps per-performance key, tempo and melody variation — never repeats note-for-note.",
@@ -1044,11 +1047,11 @@ export const CHANGELOG = [
     "Enemy pathfinding/collision share per-tick maps; health bars, skill bar and menus repaint only on change.",
     "Sparks capped and recycled; autosaves deduplicated; music no longer bursts after tabbing back.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Every skill has its own icon", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Every skill has its own icon", by: "Andrew Suiter", notes: [
     "Each skill shows a unique icon; before, some shared one (e.g. Mana Barrier and Spell Ward looked identical).",
     "Ascendancy PATH skills and each class's two specializations use generated class-coloured badges, not placeholder art.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Cracked walls look like real cracks", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Cracked walls look like real cracks", by: "Andrew Suiter", notes: [
     "Dropped the box outline; a cracked wall reads by its cracks alone.",
     "Fracture redrawn as thin hairline fissures fanning from an impact point, not one fat scratch.",
     "Each shove adds more cracks rather than fattening one, so the wall visibly shatters toward breaking.",
@@ -1090,39 +1093,39 @@ export const CHANGELOG = [
     "Returning through the Dungeon Gate plays it reversed: a blue pillar stabs the floor and the hero materializes out of it.",
     "Can't move or be hit during the teleport animation; the countdown's cancel rules (a foe's hit or a step) unchanged.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Enchanting spends materials, not just Glimmer", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Enchanting spends materials, not just Glimmer", by: "Andrew Suiter", notes: [
     "Every enchant costs materials alongside Glimmer + gold: Scrap on any action, a Core on rare gear and up, tuned to earn rates so no Scrap hoard piles up.",
     "Whole bill scales with rarity — a legendary costs far more than a normal.",
     "Augmenting costs more per property already on the piece; the last slot is dramatically pricier than the first.",
     "Rerolling a value or modifier spends Scrap (and a Core on rarer gear) too; Chaos Orbs are spent only at the Craftsman, never the Enchanter.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Wider death & skill cards", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Wider death & skill cards", by: "Andrew Suiter", notes: [
     "You-Died screen and skill detail popover are wider, so recaps and mechanics wrap far less.",
     "Clicking a skill node no longer leaves its hover label stuck over the detail card.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Walls read as raised", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Walls read as raised", by: "Jeff Louie", notes: [
     "Walls cast a soft shadow onto the floor in front, indoors and out, so wall reads as raised over sunken ground.",
     "Outdoor shadow follows the wall's real curved outline, indoor its square edges; light fixed top-left, only darkens floor, never a wall.",
     "Lighter grounds (snow, crystal) get a gentler shadow.",
   ] },
   { date: "2026-07-03", size: "small", v: "Title Screen button in Settings", by: "Andrew Suiter", notes: ["New TITLE SCREEN button atop Settings ▸ Play returns to the title screen without abandoning the run — progress saved, CONTINUE drops you back in."] },
   { date: "2026-07-03", size: "small", v: "Roomier attribute + buttons", by: "Andrew Suiter", notes: ["More space between each attribute's value and its + button on the HERO tab; the description column shrinks to make room, nothing else shifts."] },
-  { date: "2026-07-03", size: "small", v: "Furniture never walls off a path", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Furniture never walls off a path", by: "Jeff Louie", notes: [
     "Solid furniture and scenery refuse any spot where their footprint would seal a room or corridor — a wide table can't plug a hall, a chest or brazier can't close a pocket's last gap.",
     "Every floor stays fully walkable however densely furnished.",
   ] },
-  { date: "2026-07-03", size: "medium", v: "Furnished interiors & fuller scenery", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "Furnished interiors & fuller scenery", by: "Jeff Louie", notes: [
     "Built interiors (lodges, halls, crypts, keeps, kitchens) get real materials: wood-beam, stone-block, brick, panel, adobe walls over wood-plank, stone, marble, tile, cobble floors matched to the room.",
     "Laid out as a floor plan — separate rooms and halls joined by corridors, not one merged cave.",
     "Dressed with hand-made props (tables, chairs, sofas, beds, cabinets, barrels, chests, braziers, plants, rugs, clutter); solid furniture set off corridors, low clutter and rugs stay walkable.",
     "Much larger prop set indoors and out, so floors repeat less; all art from the CC-BY-SA [LPC] collections (credits in About).",
   ] },
-  { date: "2026-07-03", size: "medium", v: "Floors with depth, not one flat fill", by: "Claude", notes: [
+  { date: "2026-07-03", size: "medium", v: "Floors with depth, not one flat fill", by: "Jeff Louie", notes: [
     "Outdoor floors blend two or three ground types in natural patches (tan stone with grey mudstone and gravel path; sand into dry soil and rock), not one repeated tile.",
     "Each biome has a primary floor plus clustered secondary and tertiary floors, the tileset's edges smoothing transitions.",
     "Patches cluster, never confetti, so ground reads as a real place with wear and paths.",
   ] },
-  { date: "2026-07-03", size: "large", v: "Scenery, trees & see-through occlusion", by: "Claude", notes: [
+  { date: "2026-07-03", size: "large", v: "Scenery, trees & see-through occlusion", by: "Jeff Louie", notes: [
     "Outdoor floors grow hand-made scenery (trees, bushes, ferns, flowers, mushrooms, logs, cacti, agave, shells, driftwood) matched to biome: leafy woods on grass, cacti and shells on sand, pines in cold, bare trees in haunted woods.",
     "Tall obstacles (trees, big cacti) are solid — you and foes route around them; low clutter (flowers, grass, mushrooms) stays walkable.",
     "Placed naturally: sparse obstacles that never seal a corridor, plus a few ground-clutter clusters.",
@@ -1132,37 +1135,37 @@ export const CHANGELOG = [
     "Crits fire on every damage source — auto-attacks, martial skills, spells all roll crits, show the big number, and trigger on-crit passives (combo/zeal charges, primed crits, mana refunds).",
     "Before, only auto-attacks and guaranteed-crit skills surfaced a crit; caster and skill crit builds now pay off.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Leech is martial sustain", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Leech is martial sustain", by: "Andrew Suiter", notes: [
     "Life Leech and Mana Leech heal from weapon-based skills too, not just auto-attacks — a martial build sustains through its skills.",
     "Spell casts never leech: Life and Mana Leech are physical-attack and skill sustain only.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Mud & ice floors removed", by: "Claude", notes: ["Pulled mud and ice patch terrain for now — they didn't read clearly on the map; floors no longer slow you in mud or slide you on ice."] },
+  { date: "2026-07-03", size: "small", v: "Mud & ice floors removed", by: "Jeff Louie", notes: ["Pulled mud and ice patch terrain for now — they didn't read clearly on the map; floors no longer slow you in mud or slide you on ice."] },
   { date: "2026-07-03", size: "small", v: "Red gate for town & dungeon travel", by: "Andrew Suiter", notes: [
     "Town Portal, Return to Dungeon gate, Dungeon Gate and the depth readout show a red-swirl stone gate, distinct from the purple within-floor teleporters.",
     "Every town- and dungeon-bound icon shares the one red gate: sidebar TOWN, town menu, minimap, floor-1 exit, depth pill, log and tooltip messages.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Kraken & Tempest sprites refreshed", by: "Claude", notes: ["Kraken and Tempest use new bespoke pixel-art sprites in the packed monster sheet."] },
+  { date: "2026-07-03", size: "small", v: "Kraken & Tempest sprites refreshed", by: "Jeff Louie", notes: ["Kraken and Tempest use new bespoke pixel-art sprites in the packed monster sheet."] },
   { date: "2026-07-03", size: "small", v: "Legendary/unique banner for every source", by: "Andrew Suiter", notes: [
     "Centre-screen legendary/unique loot banner fires from any source, not just kills and chests.",
     "Gambler jackpots, bounty and escort rewards, and transmuter fuses pop the full banner (sting, flash, shake) on a legendary or unique.",
     "Lesser rewards keep their existing win cue; only the top two tiers get the banner.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Off-screen monster arrows", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Off-screen monster arrows", by: "Jeff Louie", notes: [
     "Small red arrows ride the map edge pointing at off-screen foes — track down stragglers sealing the stairs.",
     "Foes bunched one way merge into one arrow, only the nearest few show, kept smaller than the gold stairs arrow.",
     "Toggle in Settings ▸ Visuals (Monster Arrows); on by default.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Truly smooth HP/MP fill", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Truly smooth HP/MP fill", by: "Jeff Louie", notes: [
     "HP/MP over-time recovery rises at a steady constant rate — the fill glides up, no small steps.",
     "Damage and mana spend still snap the bar down at once; burst heals fill instantly.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Portal cancel & correct stair landings", by: "Claude", notes: [
+  { date: "2026-07-03", size: "small", v: "Portal cancel & correct stair landings", by: "Andrew Suiter", notes: [
     "Moving cancels a town portal for every control scheme — a click, keypress or joystick nudge all break the channel (click-to-move used to root you).",
     "The step or click that opens the floor-1 exit portal no longer cancels it — only a fresh move does.",
     "Climbing the up-stairs to floor 1 drops you on the stairs down, not the town portal.",
     "Every floor transition lands you on the matching stair: down-stairs after climbing up, up-stairs after going down.",
   ] },
-  { date: "2026-07-03", size: "small", v: "Enchanter tooltip no longer sticks", by: "Claude", notes: ["Tapping a worn piece at the Enchanter no longer leaves its gear tooltip floating over the reroll screen — the hover card clears on pick or back-out."] },
+  { date: "2026-07-03", size: "small", v: "Enchanter tooltip no longer sticks", by: "Jeff Louie", notes: ["Tapping a worn piece at the Enchanter no longer leaves its gear tooltip floating over the reroll screen — the hover card clears on pick or back-out."] },
   { date: "2026-07-03", size: "small", v: "Gentler screen shake & flash, with on/off toggles", by: "Jeff Louie", notes: [
     "Camera shake and full-screen colour flash toned down by default — hits, crits and boss beats nudge the view, not jolt it.",
     "Settings ▸ Visuals adds SCREEN SHAKE and SCREEN FLASH switches to turn either fully off.",
@@ -1172,331 +1175,331 @@ export const CHANGELOG = [
     "Item-type and base pickers go three across, not two; a lone last tile centres.",
   ] },
   { date: "2026-07-03", size: "small", v: "Fix: prisoner cells never sealed off", by: "Jeff Louie", notes: ["Decor can't spawn on the tile you must stand on to smash into a jailbreak cell — that approach tile is reserved, so a tree or rock can't wall the captive away."] },
-  { date: "2026-07-02", size: "small", v: "Deep gear gates harder", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Deep gear gates harder", by: "Jeff Louie", notes: [
     "Gear attribute requirements climb on a steepening curve — the per-level slope ramps up the deeper an item is found, so a deep piece demands a class-defining stake.",
     "Early gear unchanged; off-class pieces lock out ever harder the deeper you descend, rewarding a committed build.",
   ] },
-  { date: "2026-07-02", size: "medium", v: "Dev tab — live difficulty sliders", by: "Claude", notes: [
+  { date: "2026-07-02", size: "medium", v: "Dev tab — live difficulty sliders", by: "Jeff Louie", notes: [
     "New Settings ▸ Dev tab with 20 live sliders over core difficulty-scaling knobs — tune balance on the fly, no reload.",
     "Enemy knobs: global HP/damage/count multipliers, depth-threat exponent & divisor, HP/damage/accuracy per floor, boss & elite HP/damage.",
     "Run modifiers (anti-grind, conquest scar, endless ramp, hazard damage) and hero power (HP per Vitality, attack per primary attribute, max HP per level, points per level).",
     "Hero knobs apply instantly; enemy/floor knobs preview via a Respawn-floor button; per-slider ↺ and Reset all.",
     "Tuning saves across reloads; defaults leave balance unchanged.",
   ] },
-  { date: "2026-07-02", size: "medium", v: "Bespoke monster & boss art", by: "Claude", notes: [
+  { date: "2026-07-02", size: "medium", v: "Bespoke monster & boss art", by: "Jeff Louie", notes: [
     "All 161 monsters and 5 bosses use original transparent pixel-art sprites, replacing old atlas tiles and colour-square placeholders.",
     "Monsters share one packed sprite sheet; bosses use a higher-res sheet.",
   ] },
-  { date: "2026-07-02", size: "small", v: "\"Empty slot\" gear badge", by: "Claude", notes: ["Gold gear-slot badge renamed 'First Equip' → 'Empty Slot'."] },
-  { date: "2026-07-02", size: "medium", v: "Self-buffs are tactical, not sustained", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "\"Empty slot\" gear badge", by: "Jeff Louie", notes: ["Gold gear-slot badge renamed 'First Equip' → 'Empty Slot'."] },
+  { date: "2026-07-02", size: "medium", v: "Self-buffs are tactical, not sustained", by: "Andrew Suiter", notes: [
     "Self-buff cooldowns run longer than the buff — ~40% uptime at zero CDR; timed windows, not auras.",
     "Baseline uptime by skill: cheap/weak ~50%, standard ~42-45%, capstones/ultimates ~38-40%.",
     "CDR (and rank-7 faster recharge) raises uptime; permanent upkeep needs extreme CDR.",
     "Offensive/summon skills keep attack cadence — buff duration trimmed, not cooldown.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Depth shown with difficulty everywhere", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Depth shown with difficulty everywhere", by: "Jeff Louie", notes: [
     "Deepest-floor readouts name the tier — hero card shows 'Brutal 6', not 'Floor 56'.",
     "Depth banners, greed gate, reach-a-floor bounties, gambler blurb all read tier + floor.",
     "Depth achievements reworded to tier (e.g. 'Reach Hardened floor 5' for old floor 30).",
   ] },
-  { date: "2026-07-02", size: "small", v: "Fluid HP/MP recovery", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Fluid HP/MP recovery", by: "Jeff Louie", notes: [
     "Over-time HP/MP recovery eases up the bar every frame, not stepping once a second.",
     "Damage and mana spend snap the bar down instantly; burst heals still fill at once.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Monochrome settings menu icons", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Monochrome settings menu icons", by: "Jeff Louie", notes: [
     "Settings tabs (Play, Visuals, Audio, Progress, About) use monochrome line icons, matching action rows.",
     "Settings tooltips and Keybindings title swap emoji for line icons too.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Never stuck on an enemy", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Never stuck on an enemy", by: "Jeff Louie", notes: [
     "Fixed lockup where a foe hopping onto your tile trapped you until it died — you can always shove free.",
     "Ejection follows your input, popping you the way you're moving; normal melee unaffected.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Monochrome title settings icons", by: "Claude", notes: ["Save Slots, Leaderboards, Patch Notes use monochrome line icons matching the settings menu."] },
-  { date: "2026-07-02", size: "small", v: "No stale sprite flash on load", by: "Claude", notes: ["Hero portraits, in-world hero, and roaming vendors/mercenaries hold a blank slot until their animated sprite loads — no placeholder flash."] },
-  { date: "2026-07-02", size: "medium", v: "Town shops reordered & level-gated", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Monochrome title settings icons", by: "Jeff Louie", notes: ["Save Slots, Leaderboards, Patch Notes use monochrome line icons matching the settings menu."] },
+  { date: "2026-07-02", size: "small", v: "No stale sprite flash on load", by: "Jeff Louie", notes: ["Hero portraits, in-world hero, and roaming vendors/mercenaries hold a blank slot until their animated sprite loads — no placeholder flash."] },
+  { date: "2026-07-02", size: "medium", v: "Town shops reordered & level-gated", by: "Jeff Louie", notes: [
     "Fixed town order: Healer, Merchant, Ramen House, gated services, Vault last.",
     "Craftsman at level 5; Gambler at depth 10; Trainer & Enchanter at level 10.",
     "Transmuter on reaching Hardened; Bounty Board & Mystic on unlocking Hardened; Sellsword on reaching Brutal.",
     "Locked services show greyed, in order, with unlock requirement. Stash Vault renamed Vault.",
   ] },
-  { date: "2026-07-02", size: "medium", v: "Uncapped hits, tankier bosses, varied foes", by: "Claude", notes: [
+  { date: "2026-07-02", size: "medium", v: "Uncapped hits, tankier bosses, varied foes", by: "Jeff Louie", notes: [
     "Removed per-hit damage cap on enemies — big swings, skills, crits land full numbers.",
     "Bosses have deeper health pools and hit harder — HP, not a cap, is the limiter; enemies tougher across the board.",
     "Archetypes differ in toughness/punch: brutes tanky, slow, hard-hitting; swift/erratic frail and quick; casters squishy ranged; lurkers ambush harder; packs swarm.",
   ] },
-  { date: "2026-07-02", size: "big", v: "Healing over time & rationed mana", by: "Claude", notes: [
+  { date: "2026-07-02", size: "big", v: "Healing over time & rationed mana", by: "Jeff Louie", notes: [
     "Healing pays out over time — potions, life leech, Reap, Vampiric, Life-on-Kill fill a pending pool that mends on a slope; sources stack.",
     "HP/MP bars show incoming recovery as a translucent zone.",
     "Health potion mends 35% over a few seconds, interruptible — a heavy hit spills half; DoT never interrupts.",
     "Deliberate active heals and low-HP saves land instantly; skill cards tag Instant vs Over time.",
     "Mana rationed: smaller pool, pricier skills, slower regen, regen halves in combat; Mana Shield converts more efficiently with investment.",
   ] },
-  { date: "2026-07-02", size: "medium", v: "Pixel icons everywhere — no emoji fallbacks", by: "Claude", notes: [
+  { date: "2026-07-02", size: "medium", v: "Pixel icons everywhere — no emoji fallbacks", by: "Jeff Louie", notes: [
     "Every game icon renders its pixel sprite directly — items, gear, materials, food, currencies, HP/MP, enemies, bosses, NPCs, pets, summons, class/attribute, world features, status markers. Removed the emoji-to-sprite converter and all emoji fallbacks.",
     "Attribute icons fit: Might a power tile, Luck a shine (were warrior/chest). Decorative header glyphs without a sprite left as-is.",
   ] },
-  { date: "2026-07-02", size: "medium", v: "Material drops gated & scarcer", by: "Claude", notes: [
+  { date: "2026-07-02", size: "medium", v: "Material drops gated & scarcer", by: "Jeff Louie", notes: [
     "Kill-drops gate by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal; Endless drops all four.",
     "Salvage is the early route to a material your tier can't drop — sheds by rarity, not difficulty; rarer mats a lucky roll, not guaranteed.",
     "Salvage quantity scales with item level on a flattening curve; each item salvages a little differently.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Volume tiles step up", by: "Claude", notes: ["Tapping MUSIC or SFX raises volume a notch; wraps from full back to off."] },
-  { date: "2026-07-02", size: "small", v: "Fix: foes can't walk through furniture", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Volume tiles step up", by: "Jeff Louie", notes: ["Tapping MUSIC or SFX raises volume a notch; wraps from full back to off."] },
+  { date: "2026-07-02", size: "small", v: "Fix: foes can't walk through furniture", by: "Jeff Louie", notes: [
     "Enemies collide with solid furniture (crates, shelves, plants…) like you do — no clipping through.",
     "Foes path around furniture, won't squeeze a diagonal between two pieces; use it as a chokepoint to break a chase.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Stairs arrow toggle", by: "Claude", notes: ["Toggle the off-screen down-stairs arrow in Settings → Visuals (on by default); syncs across devices when signed in."] },
-  { date: "2026-07-02", size: "small", v: "Fix: title screen wouldn't offer Continue", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Stairs arrow toggle", by: "Jeff Louie", notes: ["Toggle the off-screen down-stairs arrow in Settings → Visuals (on by default); syncs across devices when signed in."] },
+  { date: "2026-07-02", size: "small", v: "Fix: title screen wouldn't offer Continue", by: "Jeff Louie", notes: [
     "Settings sync could crash boot before the title loaded, hiding Continue for returning heroes — fixed.",
     "Re-applying saved log/loot-drawer collapse state on load no longer counts as a fresh change, keeping sync timestamps accurate.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Smoother big fights", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Smoother big fights", by: "Jeff Louie", notes: [
     "Enemy status tints (burning, poisoned, chilled…), hit-flash, elite/boss auras and threat rings use cached art — much smoother with many foes.",
     "Elite/boss/affix auras read as a soft coloured halo.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Pathing line toggle", by: "Claude", notes: ["Toggle the click-to-move breadcrumb trail in Settings → Visuals (on by default); pulsing destination ring stays. Syncs across devices when signed in."] },
-  { date: "2026-07-02", size: "small", v: "Enemy stuns half as long", by: "Claude", notes: ["Enemy stuns on you last half as long; Tenacity shortens them further on top."] },
-  { date: "2026-07-02", size: "small", v: "Pause menu polish", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Pathing line toggle", by: "Jeff Louie", notes: ["Toggle the click-to-move breadcrumb trail in Settings → Visuals (on by default); pulsing destination ring stays. Syncs across devices when signed in."] },
+  { date: "2026-07-02", size: "small", v: "Enemy stuns half as long", by: "Jeff Louie", notes: ["Enemy stuns on you last half as long; Tenacity shortens them further on top."] },
+  { date: "2026-07-02", size: "small", v: "Pause menu polish", by: "Jeff Louie", notes: [
     "Settings tooltips sit on top of the menu, not behind its dimmed backdrop.",
     "Opening pause/settings freezes the world — sprites, glows, portals hold still, then resume where they left off.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Character card in the pause menu", by: "Claude", notes: ["Pause menu (Esc) shows your hero card — name, class, level, deepest floor, gold — above Settings, same panel as the title screen."] },
-  { date: "2026-07-02", size: "small", v: "See & shoot over water and open ground", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Character card in the pause menu", by: "Jeff Louie", notes: ["Pause menu (Esc) shows your hero card — name, class, level, deepest floor, gold — above Settings, same panel as the title screen."] },
+  { date: "2026-07-02", size: "small", v: "See & shoot over water and open ground", by: "Jeff Louie", notes: [
     "Line of sight blocked only by solid obstructions — walls, cracked walls, locked doors, boss barriers, furniture.",
     "Water, lava, spikes and other floor terrain no longer block shots or spells: if you can cross it, you can fire over it.",
     "Solid furniture and boss barriers give real cover, blocking bolts and spells like a wall.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Dodge enemy ranged shots", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Dodge enemy ranged shots", by: "Jeff Louie", notes: [
     "Ranged foes loose a real bolt aimed where you stand, not an unavoidable hit with a cosmetic arrow.",
     "Sidestep its path or break line behind a wall and it misses; damage, dodge and on-hit effects resolve on impact, so kiting works.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Minimap size + bigger status icons", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Minimap size + bigger status icons", by: "Jeff Louie", notes: [
     "New MINIMAP setting (Visuals) — Small, Medium or Large.",
     "Floor & foe count moved to the right of the minimap; top-right buff/debuff icons twice as big.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Target crosshair + Visuals tidy-up", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Target crosshair + Visuals tidy-up", by: "Jeff Louie", notes: [
     "Red crosshair marks your auto-attack target; toggle in Settings → Visuals (on by default).",
     "Hero Bars toggle moved from Play to Visuals beside it; UI FONT picker now a plain dropdown; History window wider so names/stats don't clip.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Settings sync to your account", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Settings sync to your account", by: "Jeff Louie", notes: [
     "Signed-in players carry preferences across devices — sound levels, keybinds, UI font, cursor, sprint mode, music vibe, hero bars, panel/minimap collapse.",
     "Newest change wins; UI scale and touch d-pad stay per-device. Optional — logged-out play unchanged, saves only on this device.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Gold shows a coin icon, not a trailing g", by: "Claude", notes: ["Every money amount — HUD, shops, tooltips, buttons, logs, combat pops — leads with the gold-coin icon, not a trailing 'g'."] },
-  { date: "2026-07-02", size: "small", v: "Off-screen stairs arrow", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Gold shows a coin icon, not a trailing g", by: "Jeff Louie", notes: ["Every money amount — HUD, shops, tooltips, buttons, logs, combat pops — leads with the gold-coin icon, not a trailing 'g'."] },
+  { date: "2026-07-02", size: "small", v: "Off-screen stairs arrow", by: "Jeff Louie", notes: [
     "Gold arrow rides the map edge between you and the down-stairs, pointing at them whenever the exit is off-screen.",
     "Slides around the border as you move, vanishes once the stairs scroll in; brighter once the floor is cleared.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Smoother combat frame rate", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Smoother combat frame rate", by: "Jeff Louie", notes: [
     "Screen-shake and the skill bar no longer force extra full redraws.",
     "Skill bar rebuilds only when it changes, not ~2.5×/sec — cuts steady background stutter.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Tidier Ramen toppings + wallet", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Tidier Ramen toppings + wallet", by: "Jeff Louie", notes: [
     "Ramen topping tiles are compact cards with a bigger topping icon, no longer stretched across the row.",
     "Crafting-materials wallet strip hugs its contents, not the full panel width.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Tidier foe inspect card", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Tidier foe inspect card", by: "Jeff Louie", notes: [
     "Tap-to-inspect creature card more compact — smaller box and text.",
     "Pressing elsewhere on the map closes it, including click-and-hold to move.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Consistent Power icon", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Consistent Power icon", by: "Jeff Louie", notes: [
     "Every Power number — item badges, character panel, tooltips, work list — uses the bottom-HUD icon, not a lightning glyph rendering as the stun icon.",
     "Fixed the work list showing an item's Power twice.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Break out when mobbed, not just fully ringed", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Break out when mobbed, not just fully ringed", by: "Jeff Louie", notes: [
     "Getting swarmed no longer freezes you: when foes plug your path and the side lanes, keep pushing and the hero shoves between bodies toward open ground.",
     "A lone foe with a real gap beside it still hard-blocks; corridors stay choke points.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Name-hero modal tweaks", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Name-hero modal tweaks", by: "Jeff Louie", notes: [
     "Body-type picker: Male left, Female right.",
     "Wider modal so the hardcore blurb and other text fit without cramping.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Bigger skill tiles on the HUD", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Bigger skill tiles on the HUD", by: "Jeff Louie", notes: [
     "Bottom-HUD skill buttons 50% larger with icons scaled to match.",
     "Even margin above and below the skill row; HUD grows to fit.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Chunkier floor buttons", by: "Claude", notes: ["Dungeon Gate floor buttons larger, taller, squarer with bigger numerals — easier to read and click."] },
-  { date: "2026-07-02", size: "small", v: "Smart click-to-move pathing", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Chunkier floor buttons", by: "Jeff Louie", notes: ["Dungeon Gate floor buttons larger, taller, squarer with bigger numerals — easier to read and click."] },
+  { date: "2026-07-02", size: "small", v: "Smart click-to-move pathing", by: "Jeff Louie", notes: [
     "Click behind a wall and the hero routes around it, not into the corner — faint gold breadcrumbs sketch the path.",
     "Prefers safe ground, steering around lava and spikes; drag past a wall while holding and the route re-plans to chase the cursor.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Line of sight required to hit at range", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Line of sight required to hit at range", by: "Jeff Louie", notes: [
     "Ranged skills and spells (bolt, blast, beam, nova, chain) need a clear line — no firing through walls, doors or solids.",
     "Ranged minions close in until they can see their target.",
     "More boss tricks (firewall, firestorm, shockwave, frost nova, quake, vortex) need line of sight, so cover breaks them.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Smoother pickups", by: "Claude", notes: ["Grabbing loot no longer hitches the frame — the bag rebuilds at most once per frame and only on-screen; rapid pickups save once, not per chest."] },
-  { date: "2026-07-02", size: "small", v: "Hover stat codes on the equip-compare line", by: "Claude", notes: ["Stat codes in the equip-compare line (bag & shop) reveal full name on hover, like the item's own stat line."] },
-  { date: "2026-07-02", size: "small", v: "Popup titles clear their nav buttons", by: "Claude", notes: ["Long popup titles (e.g. Name Your Hero) ellipsize instead of letting Back/Close spill over them on a narrow window."] },
-  { date: "2026-07-02", size: "small", v: "Depth banner no longer eaten by its cache", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Smoother pickups", by: "Jeff Louie", notes: ["Grabbing loot no longer hitches the frame — the bag rebuilds at most once per frame and only on-screen; rapid pickups save once, not per chest."] },
+  { date: "2026-07-02", size: "small", v: "Hover stat codes on the equip-compare line", by: "Jeff Louie", notes: ["Stat codes in the equip-compare line (bag & shop) reveal full name on hover, like the item's own stat line."] },
+  { date: "2026-07-02", size: "small", v: "Popup titles clear their nav buttons", by: "Jeff Louie", notes: ["Long popup titles (e.g. Name Your Hero) ellipsize instead of letting Back/Close spill over them on a narrow window."] },
+  { date: "2026-07-02", size: "small", v: "Depth banner no longer eaten by its cache", by: "Jeff Louie", notes: [
     "Depth-milestone cache rolling legendary/unique shows NEW DEPTH RECORD first, then the drop reveal.",
     "Loot banners queue and play in turn; each fires its sound, flash and shake as it appears.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Readable floating text", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Readable floating text", by: "Jeff Louie", notes: [
     "Simultaneous damage/gold/reward pops stack into a rising column, not a blob.",
     "Material and ingredient drops stay in the combat log only — no on-kill floater.",
     "Hard cap stops a big multi-hit burst from walling the screen with numbers.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Banners centre on the map", by: "Claude", notes: ["Level-up and loot banners centre over the dungeon map, not the window; stay centred with a side drawer open."] },
-  { date: "2026-07-02", size: "small", v: "Hardcore earns all 100 feats, two tabs", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Banners centre on the map", by: "Jeff Louie", notes: ["Level-up and loot banners centre over the dungeon map, not the window; stay centred with a side drawer open."] },
+  { date: "2026-07-02", size: "small", v: "Hardcore earns all 100 feats, two tabs", by: "Jeff Louie", notes: [
     "Hardcore earns the full achievement set, not a curated list.",
     "Achievements popup splits into two tabs — Kitten Mode and Hardcore.",
     "Hardcore feats persist through death, earned account-wide.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Font consistency fix", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Font consistency fix", by: "Jeff Louie", notes: [
     "Ramen House chips, sell/scrap trays and more follow the picked UI font, not browser sans-serif.",
     "Settings tabs and the Keybindings Back button drop a stray monospace font.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Health & Mana bars under hero", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Health & Mana bars under hero", by: "Jeff Louie", notes: [
     "Settings ▸ Play toggle adds slim red Health and blue Mana bars beneath your hero.",
     "Each shows only while that vital isn't full, like the stamina bar. Off by default; saved across sessions.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Refund skills for gold", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Refund skills for gold", by: "Jeff Louie", notes: [
     "Skill popover Refund button: hand back one rank for gold, reclaim the skill point to re-spend.",
     "Cost scales with hero level; blocked if a learned skill still needs that node (refund the dependent first).",
     "Surgical alternative to the Trainer's full one-shot respec.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Return to Dungeon stands out", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Return to Dungeon stands out", by: "Jeff Louie", notes: [
     "Taller Return to Dungeon button, centered text, margins above and below.",
     "Two glowing wisps circle its border.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Gear-doll polish", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Gear-doll polish", by: "Jeff Louie", notes: [
     "Faded the hero body behind the GEAR paper-doll so worn slots read clearer.",
     "Shrank the <span data-spr=ic_stun></span> marker beside every Power number so the digits stand out.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Settings opens on Play", by: "Claude", notes: ["Settings opens on the Play tab by default (was Audio)."] },
-  { date: "2026-07-02", size: "small", v: "Break out of a full surround", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Settings opens on Play", by: "Jeff Louie", notes: ["Settings opens on the Play tab by default (was Audio)."] },
+  { date: "2026-07-02", size: "small", v: "Break out of a full surround", by: "Jeff Louie", notes: [
     "Foes boxing you in on every side no longer pin you; keep pushing to shove between them toward open ground.",
     "A single foe still hard-blocks you; slide along it to get around.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Skill panel polish", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Skill panel polish", by: "Jeff Louie", notes: [
     "Skill-slots header, hint and slot boxes centered; skill names sit below each tile, not over the icon.",
     "Bigger skill-tree icons; dropped the redundant lock badge (greyed tiles read as locked).",
     "Clicking a tile hides the hover tooltip so it stops blocking the detail popup.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Settings gains a Visuals tab", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Settings gains a Visuals tab", by: "Jeff Louie", notes: [
     "UI SIZE, UI FONT and CURSOR move to a new Visuals tab; order is Play, Visuals, Audio, Progress, About.",
     "UI FONT is a collapsing dropdown showing current face; opens to a two-column grid of options.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Smoother side-panel collapse", by: "Claude", notes: ["Folding the combat log or loot drawer on desktop slides smoothly; map re-fit no longer double-draws each frame."] },
-  { date: "2026-07-02", size: "small", v: "Punchier level-up banner", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Smoother side-panel collapse", by: "Jeff Louie", notes: ["Folding the combat log or loot drawer on desktop slides smoothly; map re-fit no longer double-draws each frame."] },
+  { date: "2026-07-02", size: "small", v: "Punchier level-up banner", by: "Jeff Louie", notes: [
     "Level-up banner flares with golden light rays and a bloom, plus a fuller fanfare.",
     "'Spend your points' hint shows only through level 3.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Skill-tree tabs taller, with branch blurbs", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Skill-tree tabs taller, with branch blurbs", by: "Jeff Louie", notes: [
     "Passive/Active/Path and specialization tabs taller for easier clicking.",
     "Selecting a specialization (Slayer, Duelist, Pyro…) shows a one-line build-path blurb.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Livelier town background", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Livelier town background", by: "Jeff Louie", notes: [
     "Town ambient scenes paint a tinted breathing sky, moon or low sun, silhouetted skyline with waking windows, brighter particles.",
     "Ten distinct vignettes (dusk rooftops, starry night with shooting stars, rainy town, snowfall, aurora, lantern festival, blossoms…) replace one faint layer.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Auto-Loot set-piece rule", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Auto-Loot set-piece rule", by: "Jeff Louie", notes: [
     "<span data-spr=mat_scrap></span> Auto-Loot picker gains a teal 'set' row above unique; set pieces get their own Keep/Scrap/Sell rule.",
     "Keep chase sets while auto-selling plain uniques. Defaults to Keep; existing saves seed it to Keep.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Twin wisps on the ENTER button", by: "Claude", notes: ["Two glints of light circle the main button's border on opposite sides (was one)."] },
-  { date: "2026-07-02", size: "small", v: "Tidier loot sort menu", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Twin wisps on the ENTER button", by: "Jeff Louie", notes: ["Two glints of light circle the main button's border on opposite sides (was one)."] },
+  { date: "2026-07-02", size: "small", v: "Tidier loot sort menu", by: "Jeff Louie", notes: [
     "Dropped the Name sort; order the bag by rarity, power, slot or value.",
     "Sort menu stays open when you pick, so you can flip between orders.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Claude", notes: ["Title hero card left-aligns text; a big animated hero walks in place on the right."] },
-  { date: "2026-07-02", size: "small", v: "Punchier ENTER button", by: "Claude", notes: ["Title button reads just ENTER (sword icon gone), pulsing golden frame, wisp of light circling the border."] },
-  { date: "2026-07-02", size: "small", v: "Pick your UI font", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Walking hero on the title card", by: "Jeff Louie", notes: ["Title hero card left-aligns text; a big animated hero walks in place on the right."] },
+  { date: "2026-07-02", size: "small", v: "Punchier ENTER button", by: "Jeff Louie", notes: ["Title button reads just ENTER (sword icon gone), pulsing golden frame, wisp of light circling the border."] },
+  { date: "2026-07-02", size: "small", v: "Pick your UI font", by: "Jeff Louie", notes: [
     "UI FONT picker in <span data-spr=ic_mallet></span> Settings → Play: 11 embedded faces (Cinzel, Uncial Antiqua, MedievalSharp, Grenze Gotisch, Bangers, Fredoka, Orbitron, Press Start 2P, Pixelify Sans, Jersey 10, VT323), each shown in its own face.",
     "Default Cinzel, an elegant Roman serif. DUNGEON LOOT title stays Uncial Antiqua whatever you pick.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Bigger town service sprites", by: "Claude", notes: ["Animated town-service sprites twice as large, as tall as both lines of their button label."] },
+  { date: "2026-07-02", size: "small", v: "Bigger town service sprites", by: "Jeff Louie", notes: ["Animated town-service sprites twice as large, as tall as both lines of their button label."] },
   { date: "2026-07-02", size: "medium", v: "Way more special powers, up front & glowing", by: "Jeff Louie", notes: [
     "Gear special power (Vampiric, Brutal, Savage…) leads the stat line and pulses with a coloured glow (was trailing).",
     "~37 new build-defining powers across offense, crit, sustain, defense, casting, control, speed and fortune.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Materials tied to rarity bands", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Materials tied to rarity bands", by: "Jeff Louie", notes: [
     "Scrap, Glimmer and Core dialled back and made cleaner.",
     "Salvage reads by colour: grey/white give pure Scrap, green+ Glimmer, blue+ Core, only epic+ a Chaos Orb.",
     "Trimmed material kill-drops; capped the deep-floor Scrap bonus so it no longer balloons.",
   ] },
-  { date: "2026-07-02", size: "small", v: "UI SIZE scales icons too", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "UI SIZE scales icons too", by: "Jeff Louie", notes: [
     "Every menu/HUD/panel icon scales with UI SIZE from 1x to 2x — sprites, currency, materials, status badges, portraits, town-service art, cursor.",
     "Fixed icons that scaled twice and ballooned at higher UI SIZE.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Town & shop menus fill the screen", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Town & shop menus fill the screen", by: "Jeff Louie", notes: [
     "Town, shop and pact menus fill full width: cards add columns up to a cap, then stretch to consume the rest.",
     "Town hub lays out as a clean grid with no lone trailing tile.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Uniform skill-bar buttons", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Uniform skill-bar buttons", by: "Jeff Louie", notes: [
     "Potions, Town, skill slots and the auto-cast slot are equal-size squares, one even row.",
     "Dropped TOWN and AUTO word labels; the icon and key already say it.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Settings opens centred again", by: "Claude", notes: ["Settings modal opens vertically centred and keeps its top anchored; switching tabs grows it downward, no jump."] },
-  { date: "2026-07-02", size: "small", v: "Set pieces are their own teal rarity", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Settings opens centred again", by: "Jeff Louie", notes: ["Settings modal opens vertically centred and keeps its top anchored; switching tabs grows it downward, no jump."] },
+  { date: "2026-07-02", size: "small", v: "Set pieces are their own teal rarity", by: "Jeff Louie", notes: [
     "Set pieces drop only at top tier, rare as a unique, wearing their own teal everywhere (bag, tooltip, gear panel, hero sprite, drop banner).",
     "Hover or press-hold a set tag to see bonuses (active tiers lit), fillable slots, and pieces worn.",
     "Fixed set bonuses that never applied: 4-piece Block and Arcanist Spell Power now take effect.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Time flows in town", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Time flows in town", by: "Jeff Louie", notes: [
     "Time passes in town: HP/MP regen and skill/potion cooldowns keep ticking while you browse the hub.",
     "TOWN button stays on the bar in town, greyed out to mark where you are (was vanishing).",
   ] },
-  { date: "2026-07-02", size: "small", v: "Bangers UI font", by: "Claude", notes: ["Bold all-caps comic display font (Bangers) replaces the rounded one across menus, HUD and title logo."] },
-  { date: "2026-07-02", size: "small", v: "Combat log gets the gold edge too", by: "Claude", notes: ["Desktop combat-log column edges the map with the same gold frame as the loot drawer; both side columns match."] },
+  { date: "2026-07-02", size: "small", v: "Bangers UI font", by: "Jeff Louie", notes: ["Bold all-caps comic display font (Bangers) replaces the rounded one across menus, HUD and title logo."] },
+  { date: "2026-07-02", size: "small", v: "Combat log gets the gold edge too", by: "Jeff Louie", notes: ["Desktop combat-log column edges the map with the same gold frame as the loot drawer; both side columns match."] },
   { date: "2026-07-02", size: "small", v: "Hover a stat to see what it does", by: "Jeff Louie", notes: ["At the Enchanter (or any dotted-underline stat name), hover or press-hold a stat to see what it does — Speed, Crit Rating, Execute, Armor Pen — not just its full name."] },
-  { date: "2026-07-02", size: "small", v: "Side panels resize in step, no jump", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Side panels resize in step, no jump", by: "Jeff Louie", notes: [
     "Folding one side panel while the other stays open glides both contents to their new sizes with the slide (was snapping first).",
     "Closing a lone-open panel slides it away cleanly, no shrink first.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Enchanter no longer rerolls on a stray tap", by: "Claude", notes: ["Clicking a property name on the Enchanter no longer rerolls; rows with Value and Type buttons act only via the buttons."] },
-  { date: "2026-07-02", size: "small", v: "Tooltips pop to the side", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Enchanter no longer rerolls on a stray tap", by: "Jeff Louie", notes: ["Clicking a property name on the Enchanter no longer rerolls; rows with Value and Type buttons act only via the buttons."] },
+  { date: "2026-07-02", size: "small", v: "Tooltips pop to the side", by: "Jeff Louie", notes: [
     "Every hover card — item tooltips, skill detail card, button/stat popups — pops to the side (left, or right near the left edge), not over the cursor.",
     "Skill detail card is wider, no longer covers its node or adds a scrollbar that jostled the Skills menu.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Attack animations", by: "Claude", notes: ["Heroes, enemies and summoned allies lunge toward their target when they swing or shoot; attacks read at a glance."] },
-  { date: "2026-07-02", size: "small", v: "Consistent menu buttons", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Attack animations", by: "Jeff Louie", notes: ["Heroes, enemies and summoned allies lunge toward their target when they swing or shoot; attacks read at a glance."] },
+  { date: "2026-07-02", size: "small", v: "Consistent menu buttons", by: "Jeff Louie", notes: [
     "Every shop/service shows cost on one tappable button — red when unaffordable, gold ★ for current pick.",
     "Button rows no longer click as a whole bar; town menus use a clear Back button.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Unified color system", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Unified color system", by: "Jeff Louie", notes: [
     "All UI colors flow from one shared design-token palette; screens stay consistent.",
     "A few near-duplicate shades merged; look unchanged.",
   ] },
-  { date: "2026-07-02", size: "big", v: "New font + desktop UI overhaul", by: "Claude", notes: [
+  { date: "2026-07-02", size: "big", v: "New font + desktop UI overhaul", by: "Jeff Louie", notes: [
     "New warm rounded UI font (Fredoka) replaces monospace game-wide.",
     "<span data-spr=ic_mallet></span> Settings → UI SIZE scales whole interface (text and icons) 1x–2x in 0.25 steps (default 1x).",
     "Town menus (Merchant, Mystic, shops) fill width in multiple columns.",
     "Auto-Loot Keep/Scrap/Sell buttons, Achievements labels and loot-row buttons no longer clip; skill sub-tabs and tree names show in full; menus scroll on short windows.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Folding a panel grows its neighbour too", by: "Claude", notes: ["Collapsing either side panel splits freed width between map and the other panel; folding loot drawer grows combat log, and vice versa."] },
-  { date: "2026-07-02", size: "small", v: "Side panels slide without glitching", by: "Claude", notes: ["Log and loot-drawer contents slide with the panel instead of rewrapping; body pinned at open width and clipped as it folds."] },
-  { date: "2026-07-02", size: "small", v: "Armor Penetration loses its cap", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Folding a panel grows its neighbour too", by: "Jeff Louie", notes: ["Collapsing either side panel splits freed width between map and the other panel; folding loot drawer grows combat log, and vice versa."] },
+  { date: "2026-07-02", size: "small", v: "Side panels slide without glitching", by: "Jeff Louie", notes: ["Log and loot-drawer contents slide with the panel instead of rewrapping; body pinned at open width and clipped as it folds."] },
+  { date: "2026-07-02", size: "small", v: "Armor Penetration loses its cap", by: "Jeff Louie", notes: [
     "Armor Pen loses 90% cap — curves toward ignoring all foe armor without reaching it.",
     "Light pen plays as before; heavy pen pays off past the old wall, each point worth less than the last.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Haste stacks multiplicatively, no caps", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Haste stacks multiplicatively, no caps", by: "Jeff Louie", notes: [
     "Cooldown Reduction, Cast Speed and Mana Cost Reduction divide instead of subtracting a capped %, stacking multiplicatively — 60% CDR + 35% Cast Speed cuts cooldown ×1.6×1.35, not flat 95%.",
     "No hard ceilings: each point does less than the last; cooldowns and costs approach but never reach zero, like attack speed.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Side panels slide open & closed", by: "Claude", notes: ["Desktop log and loot drawer glide open/closed with ease-in-out instead of snapping; map stays crisp through the slide."] },
-  { date: "2026-07-02", size: "big", v: "Skill Power, Spell Power & Cast Speed", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Side panels slide open & closed", by: "Jeff Louie", notes: ["Desktop log and loot drawer glide open/closed with ease-in-out instead of snapping; map stays crisp through the slide."] },
+  { date: "2026-07-02", size: "big", v: "Skill Power, Spell Power & Cast Speed", by: "Jeff Louie", notes: [
     "Three damage lanes, each own scaling. Auto-attacks & martial skills run on weapon + Attack; spells run on Spirit — Attack no longer touches spells.",
     "New Skill Power % amps martial (weapon-based) actives — melee twin of Spell Power, which still amps spells. New Cast Speed % shortens spell-active recharge (caster mirror of Attack Speed); Cooldown Reduction still shortens every active.",
     "Power stats gated by gear: melee/ranged weapons roll only Skill Power & Attack Speed; wands/staves only Spell Power & Cast Speed. Gloves & rings lean martial; amulets & caster off-hands lean arcane.",
     "Every active reads as a <span data-spr=w_sword></span> SKILL or <span data-spr=ic_orb></span> SPELL on its tree node; hero sheet lists Skill/Spell Power, Attack/Cast Speed and Cooldown Reduction.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Settings opens centred", by: "Claude", notes: ["Settings modal opens vertically centred, then anchors its top; switching tabs grows it downward without re-centring."] },
-  { date: "2026-07-02", size: "big", v: "Armor bases now have distinct identities", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Settings opens centred", by: "Jeff Louie", notes: ["Settings modal opens vertically centred, then anchors its top; switching tabs grows it downward without re-centring."] },
+  { date: "2026-07-02", size: "big", v: "Armor bases now have distinct identities", by: "Jeff Louie", notes: [
     "Every armor base bakes in a protected signature stat; base choice matters beyond raw defense, no base strictly best.",
     "Heavy bases bank a defensive stat (Helm HP, Chestplate damage reduction, Gauntlets block, Greaves regen, Mail tenacity); light bases give evasion/crit/mana/cooldowns/leech/find (Hood dodge, Cap magic find, Circlet cooldowns, Robe/Leggings mana, Grips crit, Bracers leech).",
     "A base's equip-attribute is its price, steering builds to the base their attribute unlocks; farmer's Cap gates on Luck. DEF values unchanged.",
   ] },
-  { date: "2026-07-02", size: "small", v: "Re-ascending costs gold", by: "Claude", notes: ["First ascension stays free — earned at level 20. Switching to your class's other ascension costs heavy gold, scaling with level and depth. Path points still refund on switch."] },
-  { date: "2026-07-02", size: "small", v: "Settings header stays put", by: "Claude", notes: ["Settings modal anchors to top — tab bar no longer shifts on tab switch; window grows downward for taller panes."] },
-  { date: "2026-07-02", size: "small", v: "\"New Run\" renamed \"Reset Run\"", by: "Claude", notes: ["'New Run' renamed 'Reset Run' (Settings ▸ Progress) and 'Reset Current Run' (title screen) — wipes current hero, restarts in same slot."] },
-  { date: "2026-07-02", size: "small", v: "Shift/ctrl-click a skill to learn it", by: "Claude", notes: ["Shift-click, ctrl-click (⌘-click) or double-click a skill-tree node to learn/rank directly; plain click still opens details."] },
-  { date: "2026-07-02", size: "small", v: "Tabbed Settings + Keybindings back button", by: "Claude", notes: [
+  { date: "2026-07-02", size: "small", v: "Re-ascending costs gold", by: "Jeff Louie", notes: ["First ascension stays free — earned at level 20. Switching to your class's other ascension costs heavy gold, scaling with level and depth. Path points still refund on switch."] },
+  { date: "2026-07-02", size: "small", v: "Settings header stays put", by: "Jeff Louie", notes: ["Settings modal anchors to top — tab bar no longer shifts on tab switch; window grows downward for taller panes."] },
+  { date: "2026-07-02", size: "small", v: "\"New Run\" renamed \"Reset Run\"", by: "Jeff Louie", notes: ["'New Run' renamed 'Reset Run' (Settings ▸ Progress) and 'Reset Current Run' (title screen) — wipes current hero, restarts in same slot."] },
+  { date: "2026-07-02", size: "small", v: "Shift/ctrl-click a skill to learn it", by: "Jeff Louie", notes: ["Shift-click, ctrl-click (⌘-click) or double-click a skill-tree node to learn/rank directly; plain click still opens details."] },
+  { date: "2026-07-02", size: "small", v: "Tabbed Settings + Keybindings back button", by: "Jeff Louie", notes: [
     "Settings split into Audio / Play / Progress / About tabs; Reset Run lives under Progress.",
     "Keybindings gains a ◀ Back button (Esc / tap-outside too) returning to Settings.",
   ] },
-  { date: "2026-07-01", size: "small", v: "Cleaner stat-abbreviation key", by: "Claude", notes: [
+  { date: "2026-07-01", size: "small", v: "Cleaner stat-abbreviation key", by: "Jeff Louie", notes: [
     "Loot stat-abbreviation key groups stats by theme (Offense, Defense, Sustain, Caster, Utility/Find), alphabetical within each.",
     "Flows into two columns on desktop.",
   ] },
@@ -1505,38 +1508,38 @@ export const CHANGELOG = [
     "Completed set wraps hero in a faint golden aura; its set tag turns gold with a ✦.",
     "Set tooltip shows the power, a Worn n/4 count and a completion banner.",
   ] },
-  { date: "2026-07-01", size: "small", v: "Sort & stat-filter your loot", by: "Claude", notes: [
+  { date: "2026-07-01", size: "small", v: "Sort & stat-filter your loot", by: "Jeff Louie", notes: [
     "LOOT tab gains a Sort button — order bag by rarity, power, slot, value or name.",
     "New Filter button shows only gear with stats you pick (crit, leech, +Might…); picker lists only stats you own.",
     "Bulk Sell/Scrap respects active filters, hitting only visible rows.",
   ] },
   { date: "2026-07-01", size: "small", v: "Skill-bar key labels fit their boxes", by: "Jeff Louie", notes: ["Long key names (Space, arrow keys) show as short glyphs on the bar."] },
-  { date: "2026-07-01", size: "small", v: "Set items fully teal", by: "Claude", notes: ["Set pieces show teal set colour in chat log and paper-doll two-hand slot too, matching bag/drops/tooltips — no tier orange."] },
+  { date: "2026-07-01", size: "small", v: "Set items fully teal", by: "Jeff Louie", notes: ["Set pieces show teal set colour in chat log and paper-doll two-hand slot too, matching bag/drops/tooltips — no tier orange."] },
   { date: "2026-07-01", size: "small", v: "Skill tips: hover short, click for details", by: "Jeff Louie", notes: [
     "Hover a skill node for a short tooltip; click for the full detail card.",
     "Click node again, the card, or outside to close.",
   ] },
-  { date: "2026-07-01", size: "small", v: "Graveyard is now History", by: "Claude", notes: [
+  { date: "2026-07-01", size: "small", v: "Graveyard is now History", by: "Jeff Louie", notes: [
     "Graveyard popup renamed History.",
     "Lists living Continue heroes and their play time above the fallen.",
   ] },
-  { date: "2026-07-01", size: "small", v: "Materials sort commonest-first", by: "Claude", notes: ["Crafting materials list least-rare → rarest everywhere — Scrap, Glimmer, Core, Chaos Orb — in wallet strip and every forge/enchant cost."] },
-  { date: "2026-07-01", size: "small", v: "No stray scrollbar on the bottom HUD", by: "Claude", notes: ["Desktop bottom bar loses its phantom vertical scrollbar; skill belt makes room for the AUTO tile so nothing overflows."] },
-  { date: "2026-07-01", size: "small", v: "Bigger text everywhere — new type scale", by: "Claude", notes: [
+  { date: "2026-07-01", size: "small", v: "Materials sort commonest-first", by: "Jeff Louie", notes: ["Crafting materials list least-rare → rarest everywhere — Scrap, Glimmer, Core, Chaos Orb — in wallet strip and every forge/enchant cost."] },
+  { date: "2026-07-01", size: "small", v: "No stray scrollbar on the bottom HUD", by: "Jeff Louie", notes: ["Desktop bottom bar loses its phantom vertical scrollbar; skill belt makes room for the AUTO tile so nothing overflows."] },
+  { date: "2026-07-01", size: "small", v: "Bigger text everywhere — new type scale", by: "Jeff Louie", notes: [
     "Every font size moves up a tier — body 10→12px on phones, fine print 9→11px; headings keep weight so hierarchy stays clear.",
     "Map text (NPC names, damage numbers, portal countdown) bottoms out at 12px.",
     "AUTO slot gets headroom so its tag clears the icon; buff timers get a roomier badge.",
   ] },
-  { date: "2026-07-01", size: "small", v: "Game-wide minimum font size", by: "Claude", notes: [
+  { date: "2026-07-01", size: "small", v: "Game-wide minimum font size", by: "Jeff Louie", notes: [
     "No text renders below a readable floor — smallest labels (skill-tree names, AUTO tags, hotbar end-tag) raised.",
     "Map text has a hard minimum: NPC name tags, damage numbers, portal countdown no longer shrink too small on phones.",
   ] },
-  { date: "2026-07-01", size: "small", v: "Cleaner class-pick cards", by: "Claude", notes: ["Class cards no longer list a starting skill — heroes begin with none; spend your first skill point in the SKILLS tab."] },
-  { date: "2026-07-01", size: "small", v: "Bigger, legible text on desktop", by: "Claude", notes: [
+  { date: "2026-07-01", size: "small", v: "Cleaner class-pick cards", by: "Jeff Louie", notes: ["Class cards no longer list a starting skill — heroes begin with none; spend your first skill point in the SKILLS tab."] },
+  { date: "2026-07-01", size: "small", v: "Bigger, legible text on desktop", by: "Jeff Louie", notes: [
     "All menu, HUD, panel and popup text scales up ~20% on desktop — stat lines, blurbs, chips and labels no longer tiny on big screens; smallest labels raised everywhere.",
     "Skill-tree node names get more room — full names like Unbreakable show without truncating; How to Play widens to match the roomier Version History card.",
   ] },
-  { date: "2026-07-01", size: "small", v: "Back buttons on hero creation", by: "Claude", notes: [
+  { date: "2026-07-01", size: "small", v: "Back buttons on hero creation", by: "Jeff Louie", notes: [
     "Class-pick and name screens get a ◀ Back button — return to title or re-pick class. Typed name, body pick and armed Hardcore toggle survive the round trip.",
     "Esc mirrors Back on both screens; Esc also closes Leaderboards.",
   ] },
@@ -1547,45 +1550,45 @@ export const CHANGELOG = [
     "Locks out rubber-band scrolling that shoved the canvas off-screen. Name & login fields stay editable; skill-bar drag-to-reorder still works.",
   ] },
   { date: "2026-07-01", size: "small", v: "Epic ascension casts", by: "Jeff Louie", notes: ["Every ascension-path active casts with the full ultimate cinematic — themed spectacle, big sound, screen flash and camera shake — not just tree-bottom capstones."] },
-  { date: "2026-07-01", size: "big", v: "Loot payoffs, cursed floors & set gear", by: "Claude", notes: [
+  { date: "2026-07-01", size: "big", v: "Loot payoffs, cursed floors & set gear", by: "Jeff Louie", notes: [
     "Legendary & unique drops stop the world — rarity-coloured banner, jackpot sting, screen flash. Blue/purple finds get a brighter chime.",
     "Every 5 floors of new depth pays a milestone — fanfare, bonus gold, guaranteed cache. Some floors offer a Cursed-Floor choice: double loot & gold for deadlier foes.",
     "Legendary/unique pieces roll special powers (Vampiric, Arcing, Greedy, Stalwart, Attuned) and collectible sets with 2/4-piece bonuses.",
     "Crit hits pop bigger numbers; elite & boss kills land with a meaty finisher.",
   ] },
-  { date: "2026-07-01", size: "small", v: "Fix stuck title screen", by: "Claude", notes: [
+  { date: "2026-07-01", size: "small", v: "Fix stuck title screen", by: "Jeff Louie", notes: [
     "Game boots again — a broken startup call crashed load, sticking the title on Enter the Dungeon and hiding Continue for existing heroes.",
     "Objective chip works: shows active bounty's live progress plus a daily-play streak.",
   ] },
   { date: "2026-07-01", size: "small", v: "Clearer Enchanter buttons", by: "Jeff Louie", notes: ["Augment and Reroll-all are two distinct bordered buttons instead of two text links sharing one highlight bar."] },
-  { date: "2026-06-30", size: "small", v: "Scrapping pays out variety", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Scrapping pays out variety", by: "Jeff Louie", notes: [
     "Salvaging no longer dribbles just Scrap — every piece past grey sheds Glimmer, whites have a shot at Core, rarer gear reliably gives Core and Chaos.",
     "Richer, varied hauls make breaking down loot worthwhile at every rarity.",
   ] },
-  { date: "2026-06-30", size: "small", v: "Trainer price rework", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Trainer price rework", by: "Jeff Louie", notes: [
     "Retraining into a different class costs far more, scaling with level and depth.",
     "Attribute respec and Forget Skills also scale with level.",
     "Ascension is free — earned at level 20, never bought; switching specializations is free too.",
   ] },
-  { date: "2026-06-30", size: "small", v: "Cleaner town menus — click the tile", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Cleaner town menus — click the tile", by: "Jeff Louie", notes: [
     "Green ACCEPT/BUY/HIRE/WORK buttons gone; whole row is the button, right-side hint lights on hover.",
     "Town service lists (Bounty Board, Merchant, Mercenaries, Transmuter) lay out two columns on desktop.",
   ] },
-  { date: "2026-06-30", size: "small", v: "New Run up top; wider settings on desktop", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "New Run up top; wider settings on desktop", by: "Jeff Louie", notes: [
     "New Run at top of Settings, pulses bright red; still needs a confirm click.",
     "Settings menu wider on desktop.",
   ] },
-  { date: "2026-06-30", size: "small", v: "Clearer Mystic pact screen", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Clearer Mystic pact screen", by: "Jeff Louie", notes: [
     "Pacts in a colour-coded two-across grid, bigger headers, each its own colour.",
     "Duration buttons spell out 1 floor / 10 floors / 30 floors (was 1f/10f/30f).",
   ] },
-  { date: "2026-06-30", size: "small", v: "Clearer Achievements popup", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Clearer Achievements popup", by: "Jeff Louie", notes: [
     "Category headings centred, bolder, divided.",
     "Unearned feats fade back; earned ones stand out.",
     "Wider on desktop, several badges across (was one column).",
   ] },
-  { date: "2026-06-30", size: "small", v: "Patch Notes creator filter reads JL/AS", by: "Claude", notes: ["Creator filter lists JL and AS to match badges; AS includes every non-JL entry."] },
-  { date: "2026-06-30", size: "small", v: "Blue portals + move to cancel", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Patch Notes creator filter reads JL/AS", by: "Jeff Louie", notes: ["Creator filter lists JL and AS to match badges; AS includes every non-JL entry."] },
+  { date: "2026-06-30", size: "small", v: "Blue portals + move to cancel", by: "Jeff Louie", notes: [
     "Town Portal and Return to Dungeon gates glow blue (was red/orange), matching the home portal.",
     "Moving (WASD/arrows/stick) cancels a channeling town portal, like a hit.",
   ] },
@@ -1599,17 +1602,17 @@ export const CHANGELOG = [
     "Sellsword camp offers six companions (was three): adds Hound (fast melee), Flame Adept (ranged fire), Acolyte (ranged holy).",
     "Each has its own creature and price.",
   ] },
-  { date: "2026-06-30", size: "small", v: "Cinematic ultimate spells", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Cinematic ultimate spells", by: "Jeff Louie", notes: [
     "Skill-tree capstone spells cast with a full-screen cinematic: meteor, frost nova, lightning storm, searing beam, holy pillar, summoning vortex, ground slam.",
     "Each with a big themed sound, screen flash and camera shake.",
   ] },
-  { date: "2026-06-30", size: "small", v: "Settings on the title screen", by: "Claude", notes: ["Title-screen options grid gains a <span data-spr=ic_mallet></span> Settings tile opening full settings — Sound, Music vibe, Keybindings, Target focus and Zoom reachable before a run."] },
-  { date: "2026-06-30", size: "small", v: "Grouped settings + skip track", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Settings on the title screen", by: "Jeff Louie", notes: ["Title-screen options grid gains a <span data-spr=ic_mallet></span> Settings tile opening full settings — Sound, Music vibe, Keybindings, Target focus and Zoom reachable before a run."] },
+  { date: "2026-06-30", size: "small", v: "Grouped settings + skip track", by: "Jeff Louie", notes: [
     "Settings regrouped into Audio, Play, Progress, About, Danger; simple buttons in a 2-up grid.",
     "New ⏭ SKIP TRACK tile jumps the soundtrack to a fresh style.",
     "NEW RUN moved to its own Danger section at the bottom.",
   ] },
-  { date: "2026-06-30", size: "small", v: "Enchanter paper-doll", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Enchanter paper-doll", by: "Jeff Louie", notes: [
     "Enchanter shows worn gear as the GEAR-tab paper-doll; tap a slot to work on that piece.",
     "Bag loot lists below.",
   ] },
@@ -1624,7 +1627,7 @@ export const CHANGELOG = [
     "Board reposts a fresh set periodically.",
     "'Reach floor N' bounties show your current floor.",
   ] },
-  { date: "2026-06-30", size: "small", v: "Choose the music vibe", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Choose the music vibe", by: "Jeff Louie", notes: [
     "Settings music picker: Shuffle every style, or lock one — Cavern, Crystal, Forge, Mist, Hollow, March, Bloom, Veil, Tide.",
     "Boss floors still swap to the Boss track; choice saved.",
   ] },
@@ -1636,7 +1639,7 @@ export const CHANGELOG = [
     "Optional medieval-town ambience — anvils, chickens, laughter, cheers, shouts, birds, dogs — plays softly in town.",
     "Off by default; flip 🔕 Town sounds at the bottom of the town menu.",
   ] },
-  { date: "2026-06-30", size: "small", v: "Living town background", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Living town background", by: "Jeff Louie", notes: [
     "Town menu drifts an ambient scene — fireflies, chimney smoke, leaves, stars, rain, snow, lantern glow, clouds, petals, aurora.",
     "A different one each visit.",
   ] },
@@ -1646,7 +1649,7 @@ export const CHANGELOG = [
     "Mercenaries (Sellsword, Marksman, Warden) show animated sprites in the hire list and as your companion.",
   ] },
   { date: "2026-06-30", size: "small", v: "Bag holds 50", by: "Jeff Louie", notes: ["Bag caps at 50 items; a full bag leaves chests unopened and warns to sell or scrap."] },
-  { date: "2026-06-30", size: "small", v: "Auto-attack target focus", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Auto-attack target focus", by: "Jeff Louie", notes: [
     "Gear-menu setting picks the auto-attack target: Closest, Weakest (low HP), Toughest (high HP), Farthest, or Elites & bosses first.",
     "Click the <span data-spr=ui_agility></span> TARGET tile in Settings to cycle; saved per character.",
   ] },
@@ -1658,7 +1661,7 @@ export const CHANGELOG = [
     "Rebuilt synth voice: detuned oscillators, sub-bass, ADSR sustain and vibrato give bass, pad and lead distinct voices (was one soft flute).",
     "Backbeat snare gives drum styles a groove.",
   ] },
-  { date: "2026-06-30", size: "small", v: "Skill slots on the SKILLS screen", by: "Claude", notes: [
+  { date: "2026-06-30", size: "small", v: "Skill slots on the SKILLS screen", by: "Jeff Louie", notes: [
     "Skill slots tray (4 active + auto-cast) shows on desktop, above the skill tree.",
     "Drag a learned spell from its node into a slot, drag slots to rearrange, drag a slotted spell back to remove.",
   ] },
@@ -1672,7 +1675,7 @@ export const CHANGELOG = [
   { date: "2026-06-30", size: "small", v: "Time played folded into Graveyard", by: "Jeff Louie", notes: ["Graveyard shows full stats and play time per fallen hero, plus a total-time header; separate Time Played screen gone."] },
   { date: "2026-06-30", size: "small", v: "Mage hero art", by: "Andrew Suiter", notes: ["Mage gains animated female and male hero sprites."] },
   { date: "2026-06-30", size: "small", v: "Sell & scrap at the merchant", by: "Jeff Louie", notes: ["Merchant gains a SELL tab; sell or scrap loot there too, not just from the bag."] },
-  { date: "2026-06-30", size: "small", v: "Rarer gear demands more", by: "Claude", notes: ["Attribute requirement climbs with rarity, not only item level — ~8% more per rarity step above normal; legendary/unique demand noticeably more than a plain item of the same level."] },
+  { date: "2026-06-30", size: "small", v: "Rarer gear demands more", by: "Jeff Louie", notes: ["Attribute requirement climbs with rarity, not only item level — ~8% more per rarity step above normal; legendary/unique demand noticeably more than a plain item of the same level."] },
   { date: "2026-06-30", size: "small", v: "2x2 skill slots on mobile", by: "Jeff Louie", notes: ["Four skill tiles sit in a 2x2 block (was three-on-top, one-below)."] },
   { date: "2026-06-30", size: "small", v: "Rogue hero art", by: "Andrew Suiter", notes: ["Rogue gains animated female and male hero sprites."] },
   { date: "2026-06-30", size: "small", v: "Patch Notes date grouping", by: "Jeff Louie", notes: ["Entries sorted by date so each day groups under one heading; fixed a July 1 timezone slip."] },
@@ -1683,7 +1686,7 @@ export const CHANGELOG = [
     "Idle standing pose; walk speeds up with movement and sprinting.",
   ] },
   { date: "2026-06-30", size: "small", v: "Endurance is now Stamina", by: "Jeff Louie", notes: ["Endurance renamed Stamina everywhere; END label dropped from bar."] },
-  { date: "2026-06-30", size: "small", v: "Return to Dungeon, front and center", by: "Claude", notes: ["Dungeon Gate renamed Return to Dungeon, moved atop menu above shops, glowing gold border."] },
+  { date: "2026-06-30", size: "small", v: "Return to Dungeon, front and center", by: "Jeff Louie", notes: ["Dungeon Gate renamed Return to Dungeon, moved atop menu above shops, glowing gold border."] },
   { date: "2026-06-30", size: "small", v: "Wider version box", by: "Jeff Louie", notes: ["Version History box wider on desktop, easier to skim."] },
   { date: "2026-06-30", size: "medium", v: "Male/female heroes + walking animation", by: "Andrew Suiter", notes: [
     "Character creation two steps: pick class, then name hero and choose Female or Male.",
@@ -1746,7 +1749,7 @@ export const CHANGELOG = [
     "Town gets a <span data-spr=ic_mallet></span> Settings button (top-right) for sound, saves, keybinds without leaving town.",
     "Esc on main Town menu opens Settings; Esc in a service panel steps back to hub.",
   ] },
-  { date: "2026-06-30", size: "medium", v: "Reworked skill bar + auto-cast slot", by: "Claude", notes: [
+  { date: "2026-06-30", size: "medium", v: "Reworked skill bar + auto-cast slot", by: "Jeff Louie", notes: [
     "Bar in three parts: Town/Health/Mana left, four active slots (keys 1–4) right, auto-cast slot middle.",
     "Auto-cast no longer per-skill: drop a skill in middle slot, it casts when ready. Tap to change or clear.",
     "Rule is 'as soon as available', so buffs stay refreshed; heals wait until hurt, damage needs a target.",
