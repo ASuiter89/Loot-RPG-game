@@ -271,6 +271,13 @@ The in-game Version History popup is driven by the `CHANGELOG` array in
   "roguelike", etc.) — describe what the change does in plain terms. This is
   player-facing copy and must stand on its own. (A data-validity test enforces this.)
 - Keep the existing shape (`date`, `size`, `v`, `by`, `notes`), newest-first.
+- **Credit `by` to the human who DIRECTED the change — never `"Claude"`.** Each
+  maintainer ships Claude-assisted work under their own name, so `by` is `"Jeff
+  Louie"` or `"Andrew Suiter"` (the session's directing human). The Version History
+  badge/creator-filter collapses that name to JL/AS via `src/data/contributors.js`
+  + `src/systems/credit.js`; an entry left as `"Claude"` badges as the wrong author
+  (a data test rejects it). Add a person's identities to `contributors.js` if a new
+  `by`/git spelling appears.
 - **Date each entry by the Pacific (America/Los_Angeles) calendar day it ships —
   never UTC.** The Version History popup groups entries under a per-day heading, so
   a UTC date lands an evening change under the next day. Your environment clock is

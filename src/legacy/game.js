@@ -29,6 +29,7 @@ import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach
 import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
+import { creditInitials } from '../systems/credit.js';
 import { restockCost } from '../systems/restockCost.js';
 import { hasVaultKey, addVaultKey, spendVaultKey } from '../systems/vaultKeys.js';
 import { isCritical } from '../systems/crit.js';
@@ -9238,15 +9239,12 @@ function setClFilter(kind, val) {
   else if (kind === 'cat') clCat = val; else if (kind === 'text') clText = val;
   renderChangelogList();
 }
-// Both the per-entry badge and the creator filter collapse authors to the two
-// people who ship this game: Jeff Louie (JL) and Andrew Suiter / ASuiter89 (AS).
-// Each ships Claude-assisted work under their OWN name — an entry is credited to
-// whoever directed it (in practice, the committing git identity), never to the
-// tool — so `by` is one of the two humans, not "Claude". Jeff → JL; anyone else
-// (Andrew, or a legacy entry that predates per-person crediting) → AS.
-function clInitials(by) {
-  return (by === 'Jeff Louie' || by === 'JeffCLouie') ? 'JL' : 'AS';
-}
+// Both the per-entry badge and the creator filter collapse an entry's `by` (the
+// human who directed the change) to a two-letter badge. The name→initials table
+// and the matching live in src/data/contributors.js + src/systems/credit.js so it
+// is data-driven and unit-tested; each maintainer's work is credited under their
+// own name, never to the tool.
+const clInitials = creditInitials;
 function clEntryHtml(c) {
   const sizeBadge = (s) => s ? ` <span class="version-size sz-${s}">${s}</span>` : '';
   const ini = clInitials(c.by);

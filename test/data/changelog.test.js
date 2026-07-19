@@ -20,6 +20,18 @@ describe('CHANGELOG data validity', () => {
     }
   });
 
+  it('credits a human, never the tool', () => {
+    // `by` records the maintainer who DIRECTED the change (Jeff Louie / Andrew
+    // Suiter), never "Claude" — an entry credited to the tool badges as the wrong
+    // author (the creator filter buckets every non-JL name into AS). See
+    // src/data/contributors.js and src/systems/credit.js.
+    const tool = CHANGELOG.filter(e => /\bclaude\b/i.test(e.by));
+    expect(
+      tool.map(e => `${e.date}  ${e.v}`),
+      'changelog entries credited to the tool instead of a human',
+    ).toEqual([]);
+  });
+
   it('is ordered newest-first', () => {
     expect(CHANGELOG[0].date >= CHANGELOG[CHANGELOG.length - 1].date).toBe(true);
   });
