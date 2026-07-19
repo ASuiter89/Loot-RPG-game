@@ -11,6 +11,9 @@ export const CHANGELOG = [
     "Craftsman pinned beside the Town Portal, off the avenue — no longer blocks the path.",
     "Campfire log seating pulled off the trails; endgame grove moved up 1 so keepers can't strand above it.",
   ] },
+  { date: "2026-07-18", size: "small", v: "Kills drop 30% less gear", by: "Jeff Louie", notes: [
+    "Per-kill gear drop chance −30%: boss pick 56%→39%, elite 36%→25%, normal 8%→5.6%.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Esc closes title popups; reset local achievements & bestiary", by: "Jeff Louie", notes: [
     "Esc now closes Cloud Save, Save Slots, Achievements, Bestiary & History popups (matches the rest).",
     "New Settings ▸ Progress ▸ Reset wipes this device's achievement & bestiary progress to zero.",
