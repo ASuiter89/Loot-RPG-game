@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "New-loot badge on the LOOT tab", by: "Jeff Louie", notes: [
+    "Red count badge on the LOOT tab flags loot picked up while you were on another tab; clears when you open it.",
+    "Touch: red pip on the Bag button mirrors it while the tab's tucked away.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Patch Notes credit the right author", by: "Jeff Louie", notes: [
     "Version History badge reads each entry's real author; JL work no longer shows AS.",
   ] },

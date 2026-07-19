@@ -31,6 +31,7 @@ import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { creditInitials } from '../systems/credit.js';
 import { restockCost } from '../systems/restockCost.js';
+import { unseenLootCount } from '../systems/lootSeen.js';
 import { hasVaultKey, addVaultKey, spendVaultKey } from '../systems/vaultKeys.js';
 import { isCritical } from '../systems/crit.js';
 import { favouredBases, armorWeight, rollFavouredBase, rollForcedFavouredBase } from '../systems/classLoot.js';
@@ -7353,6 +7354,9 @@ window.gameState = function gameState(radius) {
     menu: {
       bagOpen: !!panelOpen,
       tab: currentTab,
+      // Count behind the LOOT tab's red "new loot" badge: bag items picked up while
+      // the player was looking elsewhere and hasn't opened the LOOT list since.
+      newLoot: newLootCount(),
       townView: inTown ? townView : null,
       // Walkable-town live state (null outside town). The hero roams a fixed map
       // (position in player.x/player.y) and walks up to a keeper to use it. `objects`
@@ -7628,6 +7632,7 @@ window.gameGuide = function gameGuide(topic) {
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
       `The LOOT tab has a Sort button (rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
+      `A red badge on the LOOT tab (a red pip on the touch Bag button) counts loot that landed in the bag while you were on another tab; it clears the instant you open the LOOT list. gameState().menu.newLoot mirrors the count.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. SAFEGUARD: while enemies are near you can't swap onto an EMPTY or much-weaker set (it would strip your armor mid-fight) — break away first, or swap where it's safe; gearing UP to a stronger set is always allowed. Off-class weapons can be carried and sold but not equipped.`,
       `Bosses spill the MOST loot of any foe, and the FIRST time you clear a given boss FLOOR its guardian pays a jackpot — ~3x the drops at noticeably better quality (a one-time windfall per boss floor). In Endless, where boss species recur, this tracks by floor, so every new or deeper boss floor keeps paying; farming a floor you've already cleared drops at the normal boss rate. gameState().enemies[i].firstKill flags a boss whose floor windfall is still unclaimed. See gameGuide("enemies") for the boss rules.`,
       `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them; each snack instantly restores a little HP, MP AND Stamina (the same amount to all three).`,
@@ -27058,6 +27063,12 @@ function flushHudDirty() { if (_hudDirty) { _hudDirty = false; updateBars(); } }
 let _statusStripHtml = null;
 let _clearStatusHtml = null, _pactHudKey = null, _foodHudKey = null;
 let _invTabHtml = null, _heroTabHtml = null, _skillsTabHtml = null;
+// "New loot" badge state: item object refs the player has already laid eyes on in
+// the LOOT list. A WeakSet, so it never touches the save shape and drops removed
+// items on its own — resets to empty on reload (nothing badges just after loading;
+// the loaded bag is seeded as seen). See newLootCount() / markLootSeen().
+const _seenLoot = new WeakSet();
+let _seenLootInit = false;
 let _skillBtnIconHtml = null;
 function updateBars() {
   renderStaminaBar();
@@ -27225,11 +27236,17 @@ function updateBars() {
   _hudWispTown = inTown;
   applyHudWisps();
 
-  // Show how many items are in the bag right in the LOOT tab label, in the same
-  // tab font (a dim bracket, not a badge).
+  // The LOOT tab label carries two readouts: a dim bracketed bag tally in the tab
+  // font, and — when loot has piled up unseen — a red count badge.
+  // Unseen-loot count drives both that badge and the touch Bag pip. Computed once
+  // here (it also snapshots the bag as "seen" while the list is open).
+  const newLoot = newLootCount();
   const invTab = document.getElementById('tab-inv');
   if (invTab) {
-    const html = `LOOT<span class="tab-num ${inventory.length>=BAG_MAX?'full':''}">(${inventory.length}/${BAG_MAX})</span>`;
+    // A red count badge — same component as the HERO / SKILLS point badges — flags
+    // loot that landed in the bag while the player was looking elsewhere.
+    const newBadge = newLoot > 0 ? `<span class="tab-count">${newLoot}</span>` : '';
+    const html = `LOOT<span class="tab-num ${inventory.length>=BAG_MAX?'full':''}">(${inventory.length}/${BAG_MAX})</span>${newBadge}`;
     if (html !== _invTabHtml) { _invTabHtml = html; invTab.innerHTML = html; }
   }
 
@@ -27266,6 +27283,11 @@ function updateBars() {
   // Mirror the unspent-points count onto the touch BAG button's badge.
   const tbBagBadge = document.getElementById('tb-bag-badge');
   if (tbBagBadge) tbBagBadge.textContent = totalPts > 0 ? String(totalPts) : '';
+  // On touch the LOOT tab hides inside the closed Bag sheet, so surface unseen loot
+  // as a small red pip on the always-visible Bag button (clear of the gold points
+  // badge). A dot, not a number — the exact count shows once the bag is open.
+  const tbBagNew = document.getElementById('tb-bag-newloot');
+  if (tbBagNew) tbBagNew.classList.toggle('show', newLoot > 0);
   // Plain item count in brackets next to the BAG label — same font, no glow.
   const bagCount = document.getElementById('bag-count');
   if (bagCount) {
@@ -27576,6 +27598,26 @@ let _panelDirty = false;
 function panelVisible() { return panelOpen && !document.body.classList.contains('panel-collapsed'); }
 function renderPanelSoon() { _panelDirty = true; }
 function flushPanel() { if (_panelDirty && panelVisible()) renderPanel(); }
+
+// ── "New loot" badge plumbing ───────────────────────────────────────────────
+// Is the LOOT list actually on-screen right now? On desktop that's the open,
+// un-collapsed drawer; on touch it's the open Bag sheet. Either way the tab must
+// be the active one — a GEAR/HERO/SKILLS view doesn't count as seeing the loot.
+function lootListVisible() {
+  if (currentTab !== 'inv') return false;
+  return isTouchMode() ? document.body.classList.contains('bag-open') : panelVisible();
+}
+// Mark everything currently in the bag as seen (bounded ≤ BAG_MAX, O(1) adds, no
+// allocation — safe to call every frame while the list is visible).
+function markLootSeen() { for (const item of inventory) if (item) _seenLoot.add(item); }
+// How many bag items has the player not yet seen in the LOOT list? Seeds the
+// loaded bag as seen on first call (so a reload never badges old loot), and keeps
+// the snapshot current whenever the list is visible (nothing is hidden then).
+function newLootCount() {
+  if (!_seenLootInit) { markLootSeen(); _seenLootInit = true; }
+  if (lootListVisible()) { markLootSeen(); return 0; }
+  return unseenLootCount(inventory, _seenLoot);
+}
 
 function renderPanel() {
   _panelDirty = false;   // any render (direct or flushed) satisfies a pending request
@@ -31318,6 +31360,9 @@ function loadGame() {
       : null;
     graveMarker = null;
     inventory = (data.inventory || []).filter(it => it && it.slot); // drop legacy typeKey-only items
+    // A loaded bag starts fully "seen" — the new-loot badge only flags items that
+    // arrive during THIS session, never the gear you already owned before reloading.
+    markLootSeen(); _seenLootInit = true;
     // The town stash is shared across every save slot, so it is NOT restored from
     // this character's save. loadStash() (called once at boot) loads it from its
     // own key and folds any per-character stashes from older saves into the pool.
