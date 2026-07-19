@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "small", v: "Cleaner item tooltip", by: "Jeff Louie", notes: [
+    "Slot & ilvl move up beside the item name; name + stats keep the display font, slot·ilvl & value go plain.",
+    "Equip requirement: only your current stat number is green (met) or red (short).",
+    "Base stats mark with a hover-labelled * (was a \"base\" word).",
+  ] },
   { date: "2026-07-19", size: "small", v: "Tidier town camp", by: "Jeff Louie", notes: [
     "Craftsman pinned beside the Town Portal, off the avenue — no longer blocks the path.",
     "Campfire log seating pulled off the trails; endgame grove moved up 1 so keepers can't strand above it.",
