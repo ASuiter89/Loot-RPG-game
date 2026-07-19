@@ -15,6 +15,7 @@ export const CHANGELOG = [
   ] },
   { date: "2026-07-18", size: "small", v: "Fountain restores Stamina", by: "Jeff Louie", notes: [
     "Fountain of Healing tops Stamina to full alongside HP and MP.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Auto slot & potions stop pulsing", by: "Jeff Louie", notes: [
     "Auto-cast slot and health/mana potions keep bright ready outline; pulse removed.",
     "Critical-HP potion alarm still pulses.",
