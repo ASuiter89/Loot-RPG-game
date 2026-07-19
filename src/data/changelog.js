@@ -11,6 +11,10 @@ export const CHANGELOG = [
     "Craftsman pinned beside the Town Portal, off the avenue — no longer blocks the path.",
     "Campfire log seating pulled off the trails; endgame grove moved up 1 so keepers can't strand above it.",
   ] },
+  { date: "2026-07-19", size: "small", v: "Learn the Dungeon Gate at graduation", by: "Jeff Louie", notes: [
+    "First town visit (floor-5 boss) no longer holds a return portal — press on through the Dungeon Gate.",
+    "Gate gains a Continue to Floor N button: one tap to your deepest checkpoint on the tier you're pushing.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Beach foes bite; first hit teaches the potion", by: "Jeff Louie", notes: [
     "Tutorial pack hits for 8 (was 3), cave elite 16 (was 6) — the opening actually threatens.",
     "First blow you take pops a one-time nudge naming the Health-Potion hotkey.",
