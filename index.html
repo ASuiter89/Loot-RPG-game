@@ -793,6 +793,22 @@
   <button class="tp-x" aria-label="Dismiss tip" onclick="tutPopupDismiss(event)">✕</button>
 </div>
 
+<!-- Tutorial spotlight GATE — a world-pausing "grey out everything but ONE control"
+     teaching moment (first-hit Health Potion, equip-your-weapon, first-spell Mana
+     Potion). Four blocker panels tile the viewport around a lit hole, both placed in
+     viewport px by positionTutGate(); the panels swallow every pointer OUTSIDE the
+     hole, so the only reachable control is the one being taught, and the world stays
+     paused (rtPaused) until the taught action fires. Purely state-driven
+     (syncTutGate) so it survives a reload. -->
+<div id="tut-gate" aria-hidden="true">
+  <div class="tg-block tg-top"></div>
+  <div class="tg-block tg-bottom"></div>
+  <div class="tg-block tg-left"></div>
+  <div class="tg-block tg-right"></div>
+  <div id="tg-hole"></div>
+  <div id="tg-msg"><span class="tg-msg-ic" aria-hidden="true"></span><span class="tg-msg-text"></span></div>
+</div>
+
 <!-- Objective chip — a compact "what am I working toward" banner pinned near the
      top. Shows your active bounty's live progress, or a nudge to grab one, plus a
      daily-goal streak. Updated by updateObjectiveChip(); tap to open the board. -->

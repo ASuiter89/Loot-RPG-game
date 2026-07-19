@@ -7053,6 +7053,11 @@ window.gameState = function gameState(radius) {
     else if (ovOpen('achievements-overlay')) { mode = 'achievements'; blockingOverlay = 'achievements-overlay'; }
     else if (ovOpen('bestiary-overlay')) { mode = 'bestiary'; blockingOverlay = 'bestiary-overlay'; }
   }
+  // A tutorial spotlight gate pauses the world until its one taught action fires —
+  // surface it so canMove reads false with a cause the agent can act on (see .tutorial
+  // below for which control to press). The equip beat rides atop the open Bag, so let
+  // that mode/overlay stand and only flag the gate for the flask beats.
+  if (_tutGate && mode !== 'bag') { mode = 'tutorial'; blockingOverlay = 'tut-gate'; }
   // Movement only does something in the live dungeon with no menu/overlay up — and
   // never mid-teleport, when the hero is off the map and can't move, act or be hit.
   // 'out' (→town) | 'in' (→dungeon) for the town gate, 'warp' while walking through
@@ -7175,9 +7180,14 @@ window.gameState = function gameState(radius) {
   return {
     // What's on screen and whether walking keys work right now. If canMove is
     // false, interact with the menu/overlay instead of pressing movement keys.
-    mode,            // dungeon|town|title|classSelect|nameSelect|dead|shop|mystic|settings|changelog|howto|autoloot|keybinds|slotpick|slots|account|leaderboard|heroSnapshot|graveyard|conquest|greed
+    mode,            // dungeon|town|title|classSelect|nameSelect|dead|shop|mystic|settings|changelog|howto|autoloot|keybinds|slotpick|slots|account|leaderboard|heroSnapshot|graveyard|conquest|greed|tutorial
     canMove,         // true only when mode === 'dungeon' and not mid-teleport
     blockingOverlay, // DOM id of the open modal, or null
+    // A world-pausing tutorial spotlight gate, or null. `kind` names the beat and
+    // `act` the one call that dismisses it — everything else on screen is greyed and
+    // inert until then. (potion → first-hit heal, equip → wear the starter weapon,
+    // mana → first-spell refill.)
+    tutorial: _tutGate ? { kind: _tutGate.kind, act: _tutGate.kind === 'equip' ? 'quickEquip(<starter weapon>)' : _tutGate.kind === 'mana' ? 'useManaPotion()' : 'useHealthPotion()' } : null,
     // Teleport ANIMATION in flight, else null. 'out' (fading out to town) or 'in'
     // (materializing back into the dungeon) for the TOWN gate; 'warp' while walking
     // THROUGH an in-level teleporter pad (the portal swallows the hero, the camera
@@ -7570,6 +7580,7 @@ window.gameGuide = function gameGuide(topic) {
       `gameState() only SEES; it never ACTS. There is no move()/act() API — you drive the game by dispatching real keyboard events.`,
       `To act, dispatch synthetic events on document, e.g. document.dispatchEvent(new KeyboardEvent("keydown",{key:"w"})), then later new KeyboardEvent("keyup",{key:"w"}) to stop. Use tokens the game expects: lowercase letters, " " for Space (dash), "\`" for the town portal.`,
       `Always check gameState().canMove before sending movement. If it is false, a menu/overlay is open (see .mode and .blockingOverlay) — drive that overlay's on-screen buttons instead; movement keys do nothing or are swallowed.`,
+      `A new Guided hero hits world-pausing TUTORIAL GATES that grey out everything but one control until you use it. When gameState().tutorial is set (mode 'tutorial'), call the one action in .tutorial.act — useHealthPotion() for kind 'potion', useManaPotion() for 'mana', or open the bag and quickEquip() the starter weapon for 'equip' — nothing else responds until then.`,
       `Movement is CONTINUOUS, not stepwise: hold a direction across frames to walk; send keyup to stop. One keydown does not equal one tile, and the hero keeps a little momentum after release.`,
       `window.haltAll() freezes the game and drops held keys (use it to think while paused); window.resumeAll() continues. window.gameBusy() is true while an action resolves — don't fire a new action then.`,
       `On big floors call gameState(20) (wider radius) so the exit falls in the ASCII window — or just read gameState().stairs for exact coordinates.`,
@@ -11309,6 +11320,13 @@ function placeFurniture(theme) {
 
 function generateMap() {
   inTown = false;
+  // A real floor build is NEVER the beach (the shore is laid out inline by
+  // buildTutorialMap, which never routes through here). Clear any leftover beach
+  // state so a stale tutorialActive can't fire the shore's teaching gates — or its
+  // theme — on a real floor when an entry path (the town Gate, a preview jump)
+  // skipped finishTutorial. Cheap and idempotent on an ordinary descent.
+  if (tutorialActive) { tutorialActive = false; _beachHintStage = null; _beachPotionCueOn = false; }
+  closeTutGate();
   townIntroGlow = false;   // left town for the dungeon — the first-visit button glow is done
   egOnFloorEnter();   // stamp the floor-enter clock (malaise ramp) + refresh the per-descent Dread Covenant caches
   clearHeldFloor();   // a freshly-built floor supersedes any snapshotted stage (Gate re-entry, stairs, conquest) — the sole chokepoint that keeps "Return to Last Floor" honest
@@ -11955,7 +11973,9 @@ function buildTutorialMap() {
   // Re-arm the first-hit Health-Potion teach for this fresh shore (it fires once,
   // the moment a foe first bites — see beachPotionHint / enemyAttackPlayer).
   _beachPotionTaught = false; _beachPotionCueOn = false;
-  if (_beachPotionTimer) { clearTimeout(_beachPotionTimer); _beachPotionTimer = null; }
+  _beachMoveTime = 0;                  // fresh shore → the 'move' hint re-earns its 2s
+  _manaGateWanted = false;             // no first-spell gate carrying over onto a new hero
+  closeTutGate();                      // tear down any lingering spotlight from a prior run
   const packType = pick(BEACH_FOE_TYPES);
   const eliteType = pick(BEACH_FOE_TYPES);
   // A gentle beach foe: the tutorial fixes its stats and slow melee gait; only the
@@ -11999,9 +12019,8 @@ function finishTutorial() {
   player.tutorialDone = true;
   _beachHintStage = null;
   _beachPotionCueOn = false;
-  if (_beachPotionTimer) { clearTimeout(_beachPotionTimer); _beachPotionTimer = null; }
   hideTutorialHint();
-  refreshTutorialCues();   // tutorial over — drop the loot-tab / bag wisps + hide any nudge
+  refreshTutorialCues();   // tutorial over — drop the loot-tab / bag wisps + hide any nudge + close any gate
   dungeonLevel = 1;
   arrivalDir = 'down';
   statusEffects = [];
@@ -12026,23 +12045,27 @@ function finishTutorial() {
 // desync and survive a reload; a player can dismiss a popup and the tab wisps
 // carry the reminder. See buildTutorialMap / onEnemyDefeated / updateFloorClear.
 
-// Which popup variant is on screen ('equip' | 'levelup' | 'potion' | null), and which
-// variants the player has already dismissed (the tab wisps still carry the cue).
+// Which popup variant is on screen ('levelup' | null), and which variants the player
+// has already dismissed. (The first-hit Health-Potion and equip beats are now
+// world-pausing spotlight GATES — see the TUTORIAL SPOTLIGHT GATE block below — so the
+// floating pill is left only for the non-blocking level-up nudge.)
 let _tutPopupVariant = null;
 const _tutDismissed = { equip: false, levelup: false };
-// First-hit Health-Potion teach: the moment a beach foe first bites, a one-time popup
-// names the Health-Potion hotkey so a new hero learns to heal under fire. `_taught`
-// latches it to once per shore; `_cueOn` drives the popup (highest priority so it
-// always surfaces on that first blow); the timer auto-retires it after a few seconds
-// so it never buries the equip beat that follows. Reset in buildTutorialMap.
+// First-hit Health-Potion teach: the moment a beach foe first bites, a one-time
+// world-pausing gate spotlights the Health-Potion flask so a new hero learns to heal
+// under fire. `_taught` latches it to once per shore; `_cueOn` drives the gate (it
+// holds until the hero quaffs — see beachPotionHint / activeTutGateKind). Reset in
+// buildTutorialMap.
 let _beachPotionTaught = false;
 let _beachPotionCueOn = false;
-let _beachPotionTimer = null;
 // The ambient "?" hint stage the shore wants to show ('move' at spawn, 'cave' once
 // cleared, or null between beats — the equip popup carries guidance there). It
 // SHARES the lower banner slot with the actionable popup, so syncBeachHint() reveals
 // it only when no popup is up.
 let _beachHintStage = null;
+// Cumulative seconds the hero has spent walking while the opening 'move' hint is up —
+// once it passes 2s the hint retires itself (see updatePlayer). Reset per tutorial.
+let _beachMoveTime = 0;
 // Whether the beach's one starter weapon has already dropped this tutorial. The
 // FIRST foe felled — whichever of the pack or the elite it is — hands it
 // over, so the gift never depends on kill order. Reset per tutorial in
@@ -12106,27 +12129,22 @@ function grantBeachLevelUp() {
   refreshTutorialCues();
 }
 
-// First beach blow: raise the one-time "here's how to heal" popup. Fired from
+// First beach blow: raise the one-time "here's how to heal" GATE. Fired from
 // enemyAttackPlayer the moment a foe's hit actually lands on the shore. Latched so it
-// shows once per shore, and self-retires after a few seconds so it hands the banner
-// back to the equip beat that follows the first kill.
+// arms once per shore; the gate then pauses the world and spotlights the Health-Potion
+// flask until the hero quaffs (clearBeachPotionCue), so the lesson can't be missed.
 function beachPotionHint() {
   if (!tutorialActive || _beachPotionTaught) return;
   _beachPotionTaught = true;
   _beachPotionCueOn = true;
-  refreshTutorialCues();                 // reconcile → surfaces the 'potion' popup
-  if (_beachPotionTimer) clearTimeout(_beachPotionTimer);
-  _beachPotionTimer = setTimeout(() => {
-    _beachPotionCueOn = false; _beachPotionTimer = null; refreshTutorialCues();
-  }, 7000);
+  refreshTutorialCues();                 // reconcile → syncTutGate opens the potion gate
 }
-// Retire the potion popup early — the hero has learned the lesson (quaffed a Health
-// Potion) or the shore is being torn down. No-op when the cue isn't up.
+// Retire the potion gate — the hero has learned the lesson (quaffed a Health Potion)
+// or the shore is being torn down. No-op when the cue isn't up.
 function clearBeachPotionCue() {
-  if (_beachPotionTimer) { clearTimeout(_beachPotionTimer); _beachPotionTimer = null; }
   if (!_beachPotionCueOn) return;
   _beachPotionCueOn = false;
-  refreshTutorialCues();
+  refreshTutorialCues();                 // → syncTutGate closes the gate, resuming play
 }
 
 // Reconcile every beach cue against live state: the LOOT-tab / bag-icon wisps, and
@@ -12143,18 +12161,15 @@ function refreshTutorialCues() {
   // pulses the unspent-points badge on that same button.)
   const tbBag = document.getElementById('tb-bag');
   if (tbBag) tbBag.classList.toggle('tut-bag-wisp', equipCue);
-  // The first-hit potion teach wins the banner (it fires before the first kill and
-  // self-retires); then equip, then the level-up nudge. A dismissed variant stays
-  // hidden while its tab / bag wisp carries the reminder.
-  const potionCue = tutorialActive && _beachPotionCueOn;
-  const want = potionCue ? 'potion'
-    : (equipCue && !_tutDismissed.equip) ? 'equip'
-      : (spendCue && !_tutDismissed.levelup) ? 'levelup'
-        : null;
+  // The first-hit potion and equip beats are world-pausing spotlight GATES now
+  // (syncTutGate below); the floating pill is left only for the non-blocking level-up
+  // nudge, which the player may dismiss (its bag badge still carries the reminder).
+  const want = (spendCue && !_tutDismissed.levelup) ? 'levelup' : null;
   if (want !== _tutPopupVariant) {
     if (want) showTutPopup(want); else hideTutPopup();
   }
   syncBeachHint();   // the popup and the "?" hint share one slot — keep them exclusive
+  syncTutGate();     // reconcile the world-pausing spotlight gate against live state
 }
 
 // The shore's actionable popup and its ambient "?" hint occupy the SAME lower banner
@@ -12169,22 +12184,181 @@ function syncBeachHint() {
   el.classList.toggle('show', !!_beachHintStage && !_tutPopupVariant);
 }
 
-// Paint the reusable #tut-popup pill for a variant and reveal it. Icon is set as a
-// fresh [data-spr] node so the painter hydrates it.
+// ── TUTORIAL SPOTLIGHT GATE ──────────────────────────────────────────────────
+// A world-pausing "grey out everything but ONE control" teaching moment. Three
+// beats use it: the first-hit Health Potion, equipping the starter weapon, and the
+// first-spell Mana Potion. It dims the whole screen, cuts a lit hole over the live
+// target, swallows every pointer OUTSIDE that hole (four blocker panels), and holds
+// the world paused (rtPaused/clockPaused) until the taught action fires. It's derived
+// purely from live state (activeTutGateKind), so it survives a reload — and the DOM
+// wiring lives here in the coverage-excluded legacy shell, never a new pure module.
+let _tutGate = null;               // { kind: 'potion' | 'equip' | 'mana' } or null
+let _manaGateWanted = false;       // the first-spell Mana-Potion beat is pending
+const TUT_GATE_PAD = 8;            // px of breathing room the lit hole leaves around a target
+
+// Which gate (if any) should be up right now. Priority: the standalone first-spell
+// mana beat, then the beach first-hit and equip beats (mana can't collide with them
+// in practice — the shore hands out no spells). null = no gate.
+function activeTutGateKind() {
+  if (_manaGateWanted && player.mp < player.maxMp) return 'mana';
+  if (!tutorialActive) return null;
+  if (_beachPotionCueOn) return 'potion';
+  if (beachEquipCueOn()) return 'equip';
+  return null;
+}
+// Is the loot drawer actually on screen (the Bag sheet on touch, the always-present
+// sidebar on desktop)? Drives the equip beat's two-step target (Bag button → list).
+function tutBagOpen() { return isTouchMode() ? document.body.classList.contains('bag-open') : true; }
+// The live element the gate should spotlight for the current kind (and, for the equip
+// beat, the current step). null if the target isn't on screen yet — the gate then dims
+// the whole screen until it appears.
+function tutGateTarget(kind) {
+  if (kind === 'potion') return document.querySelector('#skill-bar .skillbar-btn.potion:not(.mana)');
+  if (kind === 'mana')   return document.querySelector('#skill-bar .skillbar-btn.potion.mana');
+  if (kind === 'equip')  return tutBagOpen() ? document.getElementById('panel-content')
+                                             : document.getElementById('tb-bag');
+  return null;
+}
+// The gate's on-screen instruction, named for the input the player actually has (a
+// hotkey on desktop, a tap on touch). Terse — it's glanced, not read.
+function tutGateMessage(kind) {
+  const touch = isTouchMode();
+  if (kind === 'potion') return { spr: 'ic_heart', html: touch
+    ? `First blood! Tap the glowing <b>Health Potion</b> to heal.`
+    : `First blood! Press <b>${kbLabel('healthPotion')}</b> to quaff a <b>Health Potion</b>.` };
+  if (kind === 'mana') return { spr: 'potion_g', html: touch
+    ? `Spells cost <b>Mana</b> — tap the glowing <b>Mana Potion</b> to refill.`
+    : `Spells cost <b>Mana</b> — press <b>${kbLabel('manaPotion')}</b> for a <b>Mana Potion</b>.` };
+  if (kind === 'equip') return tutBagOpen()
+    ? { spr: 'chest', html: `Tap <b>EQUIP</b> on your new weapon.` }
+    : { spr: 'chest', html: `You found a weapon! Open your <b>Bag</b>.` };
+  return { spr: null, html: '' };
+}
+// Land on the LOOT tab without routing through switchTab() (which re-enters renderPanel
+// → refreshTutorialCues → syncTutGate). Sets the tab + defers the content rebuild.
+function forceLootTab() {
+  currentTab = 'inv';
+  const ids = { 'tab-inv': true, 'tab-equip': false, 'tab-hero': false, 'tab-skills': false };
+  for (const id in ids) { const el = document.getElementById(id); if (el) el.classList.toggle('active', ids[id]); }
+  renderPanelSoon();
+}
+// Paint the gate's message pill for a kind (and step). Icon is a fresh [data-spr] node
+// so the painter hydrates it.
+function setTutGateMsg(kind) {
+  const el = document.getElementById('tg-msg');
+  if (!el) return;
+  const cfg = tutGateMessage(kind);
+  const ic = el.querySelector('.tg-msg-ic');
+  const tx = el.querySelector('.tg-msg-text');
+  if (ic) ic.innerHTML = cfg.spr ? `<span data-spr="${cfg.spr}"></span>` : '';
+  if (tx) tx.innerHTML = cfg.html;
+  paintDataSpr(el);
+}
+// Place one blocker panel (viewport px). Clamped so a degenerate rect never leaks.
+function setTutBlock(el, x, y, w, h) {
+  if (!el) return;
+  el.style.left = x + 'px'; el.style.top = y + 'px';
+  el.style.width = Math.max(0, w) + 'px'; el.style.height = Math.max(0, h) + 'px';
+}
+// Measure the live target and lay out the lit hole + four blocker panels around it.
+// Runs every frame while a gate is up (cheap — one getBoundingClientRect), so it tracks
+// resize, the Bag opening, and the skill bar reflowing on its own.
+function positionTutGate() {
+  if (!_tutGate) return;
+  const gate = document.getElementById('tut-gate');
+  const hole = document.getElementById('tg-hole');
+  if (!gate || !hole) return;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const top = gate.querySelector('.tg-top'), bottom = gate.querySelector('.tg-bottom');
+  const left = gate.querySelector('.tg-left'), right = gate.querySelector('.tg-right');
+  const target = tutGateTarget(_tutGate.kind);
+  const r = target ? target.getBoundingClientRect() : null;
+  // No target on screen yet (or it collapsed to nothing) → one full-screen dim panel.
+  if (!r || r.width < 2 || r.height < 2) {
+    hole.style.display = 'none';
+    setTutBlock(top, 0, 0, vw, vh);
+    setTutBlock(bottom, 0, 0, 0, 0); setTutBlock(left, 0, 0, 0, 0); setTutBlock(right, 0, 0, 0, 0);
+    return;
+  }
+  const p = TUT_GATE_PAD;
+  const hl = Math.max(0, r.left - p), ht = Math.max(0, r.top - p);
+  const hr = Math.min(vw, r.right + p), hb = Math.min(vh, r.bottom + p);
+  hole.style.display = 'block';
+  hole.style.left = hl + 'px'; hole.style.top = ht + 'px';
+  hole.style.width = (hr - hl) + 'px'; hole.style.height = (hb - ht) + 'px';
+  setTutBlock(top, 0, 0, vw, ht);
+  setTutBlock(bottom, 0, hb, vw, vh - hb);
+  setTutBlock(left, 0, ht, hl, hb - ht);
+  setTutBlock(right, hr, ht, vw - hr, hb - ht);
+}
+// Open (or refresh) the spotlight gate for a kind. Idempotent: re-calling with the same
+// kind just re-points the message/hole (e.g. the equip beat stepping Bag → loot list).
+function openTutGate(kind) {
+  const first = !_tutGate || _tutGate.kind !== kind;
+  _tutGate = { kind };
+  const b = document.body.classList;
+  b.add('tut-gated');
+  b.toggle('tut-gate-potion', kind === 'potion');
+  b.toggle('tut-gate-mana', kind === 'mana');
+  b.toggle('tut-gate-equip', kind === 'equip');
+  // The world clock is frozen while the gate holds, so a lingering potion cooldown
+  // would deadlock the "quaff to continue" beat — clear it so the flask is ready NOW,
+  // and make sure the bar (and thus the flask the hole points at) is actually painted.
+  if (kind === 'potion' || kind === 'mana') { player.potionCd = 0; renderSkillBar(); }
+  // The equip beat only lets the LOOT tab work — land there and lock the others.
+  if (kind === 'equip') {
+    b.add('tut-loot-lock');
+    // Desktop's drawer can be collapsed to a spine — the spotlight needs the loot
+    // LIST on screen, so make sure it's expanded before the hole targets it.
+    if (!isTouchMode()) { b.remove('panel-collapsed'); const sp = document.getElementById('side-panel'); if (sp) sp.classList.remove('collapsed'); panelOpen = true; }
+    if (tutBagOpen() && currentTab !== 'inv') forceLootTab();
+  } else {
+    b.remove('tut-loot-lock');
+  }
+  setTutGateMsg(kind);
+  positionTutGate();
+  if (first) { sfx(kind === 'equip' ? 'loot' : 'blip'); updateBars(); }
+}
+// Tear the gate down (no-op if none is up), resuming play.
+function closeTutGate() {
+  if (!_tutGate) return;
+  _tutGate = null;
+  document.body.classList.remove('tut-gated', 'tut-gate-potion', 'tut-gate-mana', 'tut-gate-equip', 'tut-loot-lock');
+  const el = document.getElementById('tg-msg');
+  if (el) { const ic = el.querySelector('.tg-msg-ic'); const tx = el.querySelector('.tg-msg-text'); if (ic) ic.innerHTML = ''; if (tx) tx.innerHTML = ''; }
+  updateBars();
+}
+// Reconcile the gate against live state — open the wanted kind or close what's up.
+function syncTutGate() {
+  const kind = activeTutGateKind();
+  if (kind) openTutGate(kind); else closeTutGate();
+}
+// First-spell teach: the very first time a Guided hero casts a mana-costing spell —
+// AFTER graduating the beach — pause and spotlight the Mana Potion so they learn to
+// refill. The beach already teaches Health-Potion + equip; the mana lesson lands on a
+// real floor once they can cast, so it gates on tutorialDone (which also keeps it off
+// the synthetic mid-game heroes the smoke harnesses boot straight into the dungeon).
+// Latched once ever in player.taught; only arms when there's mana to restore (a bare
+// cast just spent some), so the flask the gate points at is usable.
+function maybeTeachFirstSpell() {
+  if (!player.guided || !player.tutorialDone) return;
+  if (player.taught && player.taught.firstSpell) return;
+  if (inTown || player.mp >= player.maxMp) return;   // nothing to teach yet — a later cast will
+  if (!player.taught) player.taught = {};
+  player.taught.firstSpell = true;
+  _manaGateWanted = true;
+  syncTutGate();
+}
+
+// Paint the reusable #tut-popup pill and reveal it. Only the non-blocking level-up
+// nudge rides the pill now (the potion/equip beats are spotlight gates); the icon is
+// set as a fresh [data-spr] node so the painter hydrates it.
 function showTutPopup(variant) {
   const el = document.getElementById('tut-popup');
   if (!el) return;
   const prev = _tutPopupVariant;
   _tutPopupVariant = variant;
-  const cfg = variant === 'equip'
-    ? { spr: 'chest', html: 'You found a weapon! Open <b>Loot</b> to equip&nbsp;it.' }
-    : variant === 'potion'
-      // First blow taken — name the Health-Potion control. Touch has no hotkey, so
-      // point at the footer potion button instead of a key.
-      ? { spr: 'ic_heart', html: isTouchMode()
-          ? 'Taking hits? Tap the <b>Health Potion</b> to heal.'
-          : `Taking hits? Press <b>${kbLabel('healthPotion')}</b> to quaff a Health&nbsp;Potion.` }
-      : { spr: null, html: '<b>You gained a level!</b> Spend your points in the <b>Hero</b> &amp; <b>Skills</b>&nbsp;tabs.' };
+  const cfg = { spr: null, html: '<b>Level up!</b> Open your bag and spend your Hero and Skill&nbsp;points.' };
   const icon = el.querySelector('.tp-ic');
   const txt = el.querySelector('.tp-text');
   // A null sprite means no left badge (the level-up nudge is text-only); toggle the
@@ -22691,6 +22865,14 @@ function updatePlayer(dt) {
   const moving = mag > 0.01;
   if (moving) { ix /= mag; iy /= mag; entryGuard = false; } // first move ends arrival grace
 
+  // Beach tutorial: the opening "head north" hint has done its job once the hero has
+  // actually walked for a couple of seconds — retire it so it doesn't linger the whole
+  // stroll up the shore. (Clearing the pack later still swaps in the 'cave' hint.)
+  if (moving && tutorialActive && _beachHintStage === 'move') {
+    _beachMoveTime += dt;
+    if (_beachMoveTime >= 2) { _beachHintStage = null; syncBeachHint(); }
+  }
+
   // Sprint: wanting it + moving + stamina. Held Shift or a latched auto-sprint
   // toggle counts. Drains stamina; otherwise it refills. Town is a safe hub —
   // sprint there is free (no drain) and stamina keeps refilling as if at rest.
@@ -23922,7 +24104,7 @@ function castSkillById(id, opts) {
   if (!fired) return false;
 
   if (bloodPact) { player.hp = Math.max(1, player.hp - cost); spawnFloatingText(player.x, player.y, `-${cost}`, '#ff5a6a'); }
-  else { player.mp -= cost; showRampHint('spellMana'); }   // ramp: first mana-spending cast teaches the mana resource (self-latches)
+  else player.mp -= cost;   // the first-cast mana lesson is taught by the spotlight gate (maybeTeachFirstSpell, below), not a ramp chip
   fireSkillTrigger('cast', {}); // on-cast procs
   updateBars();
   // Real-time: the cast just starts the recharge, which then burns down in real
@@ -23947,6 +24129,9 @@ function castSkillById(id, opts) {
   updateBars();
   renderSkillBar();
   saveGame();
+  // A deliberate cast (not the silent auto-cast probe) is the moment to teach a new
+  // hero that spells burn Mana — pause and spotlight the Mana Potion the first time.
+  if (!(opts && opts.silent)) maybeTeachFirstSpell();
   return true;
 }
 
@@ -27596,6 +27781,7 @@ function useManaPotion() {
   sfx('potion');
   log(`<span data-spr=potion_g></span> Quaffed a ${logPotion('Mana Potion')} — +${amt} MP over a few seconds.`, 'loot');
   spendPotionTurn();
+  if (_manaGateWanted) { _manaGateWanted = false; syncTutGate(); }   // first-spell lesson learned — resume
 }
 
 // A potion plays out like an active skill: a sip starts the shared cooldown,
@@ -29639,6 +29825,10 @@ function quickEquip(i) {
   refreshTownService();  // keep an open Enchanter/Stash paper doll in sync
   draw();          // re-skin the sprite with the newly worn gear
   saveGame();
+  // Beach equip gate: the starter weapon just went on — renderPanel above already
+  // closed the gate (beachEquipCueOn is false now). On touch, snap the Bag sheet shut
+  // too so play resumes straight back on the field instead of behind an open drawer.
+  if (item.tutorialGift && isTouchMode() && document.body.classList.contains('bag-open')) toggleBag();
 }
 
 // Lock / unlock a bag item. A locked item is shielded from selling, scrapping and
@@ -34328,6 +34518,9 @@ function renderSettingsHero() {
 function showTitle() {
   const ov = document.getElementById('title-overlay');
   if (!ov) return;
+  // Never strand a world-pausing tutorial gate over the title (e.g. bailing to the
+  // menu mid-lesson) — reset it so a fresh/continued run starts clean.
+  _manaGateWanted = false; closeTutGate();
   // Seed the drifting-ember background once (decorative, behind the content).
   const emb = document.getElementById('title-embers');
   if (emb && !emb.childElementCount) {
@@ -34921,6 +35114,7 @@ function touchMenuOpen() {
 }
 function rtPaused() {
   if (gameHalted || player.hp <= 0) return true;
+  if (_tutGate) return true;             // a tutorial spotlight gate freezes play until its lesson is done
   // The town is walkable now: movement runs while the hero roams the plaza, and
   // pauses only when a service overlay (shop/mystic/town) is opened on top — those
   // are in rtOverlayEls() below, so no explicit inTown freeze is needed. (Combat,
@@ -34945,6 +35139,7 @@ const TOWN_REST_OVERLAYS = ['town-overlay', 'shop-overlay', 'mystic-overlay'];
 // top of the hub, exactly as those same menus pause the world down below.
 function clockPaused() {
   if (gameHalted || player.hp <= 0) return true;
+  if (_tutGate) return true;             // freeze regen/cooldowns too, so the gated flask stays quaffable
   if (portalTransiting()) return true;   // freeze the scene (and ambient anim) while the hero teleports
   if (mapWarping()) return true;         // freeze the scene while the hero walks through a teleporter pad
   for (const o of rtOverlayEls()) {
@@ -35360,6 +35555,7 @@ function gameLoop(ts) {
   safeStep('cdDials', () => updateCooldownDials()); // animate the skill/potion cooldown dials in real time
   safeStep('halo', () => updateHaloVignette());     // the danger halo is a DOM overlay — pulse it every frame
   safeStep('panel', () => flushPanel());            // rebuild the bag at most once per frame, only while it's on-screen
+  if (_tutGate) safeStep('tutGate', () => positionTutGate());   // keep the spotlight hole tracking its live target
   // While a side panel is sliding open/closed its column width animates, so the
   // map's on-screen box changes every frame. Re-fit the backing buffer right
   // before the draw (same frame → guaranteed order, no blank flash) so the map

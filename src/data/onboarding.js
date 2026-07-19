@@ -137,16 +137,11 @@ export const HINTS = {
     text: `Your <b>Spirit Veil</b> broke — it soaks hits before Health.`,
     wiki: 'spirit-veil',
   },
-  // First mana-gated skill the hero can't afford.
+  // First mana-gated skill the hero can't afford. (The proactive first-successful-cast
+  // lesson is taught by the world-pausing Mana-Potion spotlight gate instead — see
+  // maybeTeachFirstSpell in the legacy shell — so it needs no ramp chip here.)
   mana: {
     text: `Out of Mana — it regenerates over time.`,
-    wiki: 'mana',
-  },
-  // First successful cast — the proactive counterpart to `mana` above: fired the
-  // first time a cast actually SPENDS mana, so a new hero learns the resource on
-  // the way up rather than only when they run dry.
-  spellMana: {
-    text: `That cast spent <b>Mana</b> — every skill draws on it; it refills over time.`,
     wiki: 'mana',
   },
   // First shrine stepped on (shrines activate on contact; a blood shrine costs Health).

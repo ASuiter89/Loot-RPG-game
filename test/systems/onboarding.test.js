@@ -143,12 +143,6 @@ describe('firstHint', () => {
     expect(firstHint('nope', {})).toBeNull();
     expect(firstHint('descend', null)).toBeTruthy();
   });
-  it('teaches the mana resource on the first cast, then latches', () => {
-    const h = firstHint('spellMana', {});
-    expect(h).toBeTruthy();
-    expect(h.text.toLowerCase()).toContain('mana');
-    expect(firstHint('spellMana', { spellMana: true })).toBeNull();
-  });
 });
 
 describe('keeperIntro', () => {
