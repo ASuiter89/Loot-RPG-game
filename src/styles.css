@@ -4533,6 +4533,25 @@
   }
   .gate-floor:active { background: var(--orange-650); }
   .gate-floor.current { border-color: var(--gold); color: var(--gold); }
+  /* Primary "Continue" CTA — a full-width gold gate button that drops you onto your
+     deepest unlocked checkpoint, so a hero fresh out of the boss fight has one obvious
+     way to press on through the Gate (no return portal). The numbered grid below stays
+     for jumping to any other checkpoint. Fluid: fills the sheet at any width. */
+  .gate-continue {
+    display: flex; align-items: center; justify-content: center; gap: var(--space-4);
+    width: 100%; min-height: 64px; margin: 2px 0 10px; padding: 14px 20px;
+    border: 2px solid var(--gold-350); border-radius: var(--radius-md);
+    background: linear-gradient(180deg, var(--gold-850), var(--orange-850));
+    color: var(--xp); font-family: var(--font-ui); font-weight: bold;
+    font-size: var(--fs-head); cursor: pointer;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+    box-shadow: 0 0 10px color-mix(in srgb, var(--gold-350) 40%, transparent);
+  }
+  .gate-continue:active { background: var(--gold-850); }
+  .gate-continue-icon { display: inline-flex; flex: 0 0 auto; }
+  .gate-continue-label { min-width: 0; }
+  /* Muted sub-label separating the Continue CTA from the checkpoint grid. */
+  .gate-grid-note { font-size: var(--fs-body); opacity: 0.85; margin: 2px 0 6px; }
   /* Difficulty tier holding your death-drop — a pulsing gold halo mirrors the
      in-world grave beacon so you can spot where to reclaim your lost bag. The grave
      lives on the tier chip only (its badge names the exact floor); the floor tiles

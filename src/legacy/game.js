@@ -13362,26 +13362,23 @@ function warpToTown() {
 // is felled and the hero leaves the floor. Instead of stepping straight onto Floor 6,
 // they climb out into the newly-opened camp: the townsfolk celebrate, the two founding
 // keepers (the Healer and the Craftsman, its HUD upgrades in hand) are milling about —
-// the rest arrive one per boss kill as the hero descends — and the Town Portal
-// is primed to press on. We quietly build Floor 6 first
-// and FREEZE it as the held floor, so the Town Portal drops the hero onto Floor 6.
+// the rest arrive one per boss kill as the hero descends. No return portal is held on
+// this first visit: the hero presses on through the Dungeon Gate (its "Continue to
+// Floor 6" button), learning the exit they'll use for the rest of the run.
 function graduateToTown() {
   player.pendingTownGraduation = false;
-  // Quietly advance to (and build) Floor 6, so the town's held-floor portal continues
-  // the descent onto it. No "Descended…" fanfare — the celebration is the town arrival.
+  // Advance PROGRESS to Floor 6 so the Dungeon Gate offers it as the next descent —
+  // but DON'T build or freeze the floor, so no return portal is held. This first town
+  // visit teaches the hero to press on through the Dungeon Gate (its "Continue to
+  // Floor 6" button), not a hand-held portal. recordDepth lifts maxFloor to 6 (so
+  // the Gate lists floor 6); dungeonReturn aims the Gate's Continue button there; the
+  // fresh Floor 6 is built when they warp in. No "Descended…" fanfare — the
+  // celebration is the town arrival.
   dungeonLevel += 1;
   recordDepth();
   statusEffects = [];
   tickBuffs();
-  setPlayerCell(5, 5);
-  player.faceDir = 'down'; player.faceDx = 0; player.faceDy = 1;
-  arrivalDir = 'down';
-  generateMap();
-  tickPact();
-  maybeFloorEvent();
-  // Freeze the fresh floor and step into the celebrating camp.
-  captureHeldFloor();
-  dungeonReturn = dungeonLevel;   // the Town Portal returns the hero here (Floor 6)
+  dungeonReturn = dungeonLevel;   // the Dungeon Gate's "Continue to Floor 6" lands here
   bossHazards = []; bossTelegraphs = [];
   buildTown();
   sfx('stairs');
@@ -13391,7 +13388,7 @@ function graduateToTown() {
   log('<span data-spr=feat_gate_red></span> You climb from the guardian\'s lair — and step into <b>town</b> for the very first time.', 'important');
   log('<span data-spr=q_relic></span> Word of the fallen guardian races ahead of you. The townsfolk pour out cheering — grateful, the <b>Healer</b> and the <b>Craftsman</b> (with their <b>HUD upgrades</b>) throw open their doors; more keepers arrive with each further guardian you fell.', 'important');
   log(`<span data-spr=feat_gate_red></span> Town is your haven now — from any floor, tap the glowing <b>Town</b> button (${kbLabel('portal')}) to teleport back here any time to rest, shop and resupply.`, 'important');
-  log('Rest and resupply, then step into the <span data-spr=feat_portal></span> Town Portal when you\'re ready to press on to <b>Floor 6</b>.');
+  log('Rest and resupply, then take the <span data-spr=feat_gate_red></span> <b>Dungeon Gate</b> up the avenue and press <b>Continue to Floor 6</b> when you\'re ready to press on.');
   showTownWelcome();   // one-time "welcome to your safe haven" hint chip on the first arrival
   updateBars(); renderSkillBar();
   draw();
@@ -16455,6 +16452,17 @@ function renderGate() {
   }
   const meta = DIFFS[gateDiff - 1];
   const conquered = diffClearedCount() >= gateDiff;
+  // Primary CTA — one prominent button that drops you straight onto your deepest
+  // unlocked checkpoint (the frontier, `topStop`) so pressing on is one obvious click.
+  // Shown only on the tier you're still PUSHING (not yet conquered): a conquered tier
+  // is replay/grind, so you pick a floor from the grid instead. This is how a hero
+  // fresh out of the floor-5 fight learns the Gate — no held return portal to lean on.
+  const continueCta = !conquered
+    ? `<button class="gate-continue" onclick="enterDungeonAt(${gateDiff},${topStop})">
+         <span class="gate-continue-icon">${dlIcon('feat_gate_red')}</span>
+         <span class="gate-continue-label">Continue to Floor ${topStop}</span>
+       </button>`
+    : '';
   let blurb;
   if (gateDiff === 4) {
     blurb = `Endless: the dungeon never ends. Floors climb from 1 forever, bosses are random, and the threat keeps ramping. Death here bites hardest. Warp in every fifth floor and walk the rest.`;
@@ -16473,6 +16481,8 @@ function renderGate() {
     <div class="gate-diffs">${tabs}</div>
     ${graveNote}
     <div class="town-blurb gate-tier-blurb" style="color:${meta.color}">${blurb}</div>
+    ${continueCta}
+    ${continueCta ? '<div class="town-blurb gate-grid-note">Or warp to a checkpoint:</div>' : ''}
     <div class="gate-grid">${buttons}</div>`);
 }
 function enterDungeonAt(diff, floor, opts) {
@@ -22861,7 +22871,8 @@ function goDownStairs(nx, ny) {
   if (!floorCleared) { log(`<span data-spr=feat_lock></span> Stairs sealed. ${clearConditionLabel()}`, 'important'); sfx('click'); return; }
   // Just felled the Floor 5 guardian for the first time? Leaving the floor doesn't
   // drop you onto Floor 6 — it carries you up into the newly-opened town to celebrate,
-  // and the Town Portal there continues the descent onto Floor 6 (see graduateToTown).
+  // and the hero presses on through the Dungeon Gate's "Continue to Floor 6" (no held
+  // return portal on this first visit; see graduateToTown).
   if (player.pendingTownGraduation && dungeonLevel === 5) { graduateToTown(); return; }
   if (isLastFiniteFloor()) {
     log(`<span data-spr=b_ratking></span> Deepest floor of the ${diffMeta().name} dungeon — beat its guardian, then take the next difficulty from town.`, 'important');
