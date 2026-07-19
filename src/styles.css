@@ -1054,6 +1054,14 @@
     text-align: center; justify-content: center; min-width: 0;
   }
   .settings-grid .settings-item .action-label { font-size: 1.3rem; letter-spacing: 0.4px; }
+  /* Destructive settings action (wiping local achievement + bestiary progress).
+     Danger-tinted like the slot Del button; the armed (2nd-tap) state flips to a
+     solid warning fill. The label may WRAP so the long copy never clips on a
+     narrow touch screen (the base .settings-item label is nowrap). */
+  .settings-item.danger { border-color: var(--red-650); color: var(--red-300); }
+  .settings-item.danger .action-label { white-space: normal; }
+  .settings-item.danger.armed { background: var(--hp); color: var(--paper); border-color: var(--paper); }
+  .settings-item.danger.armed .action-icon svg { stroke: var(--paper); }
 
   /* ── SETTINGS TABS ── a row of tab buttons at the top of the card switches
      between panes so the menu is a few short lists instead of one long scroll. */
