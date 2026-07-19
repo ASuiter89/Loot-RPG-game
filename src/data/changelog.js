@@ -7,6 +7,15 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "medium", v: "15 new Shrine boons", by: "Jeff Louie", notes: [
+    "Beyond power/guard/fortune: greed (+60% gold), insight (+50% xp), discovery (+50 Magic Find), harvest (+60% materials), precision (+18% crit), phantom (+15% dodge).",
+    "sorcery (+30% skill/spell power), leech (+15% lifesteal), brambles (reflect), bulwark (+Defense), swift (+18% move), haste (+25% attack speed).",
+    "renewal regens HP; clarity regens MP; vigor makes sprint & dash tireless and refills Stamina.",
+    "Classic boons stay common, new ones rarer; each kind folds into gameState().effects.",
+  ] },
+  { date: "2026-07-18", size: "small", v: "Fountain restores Stamina", by: "Jeff Louie", notes: [
+    "Fountain of Healing tops Stamina to full alongside HP and MP.",
+  ] },
   { date: "2026-07-18", size: "medium", v: "Craftsman crafts new HUD upgrades; pinned by the portal", by: "Jeff Louie", notes: [
     "Item Power, +/- stat compare, bag sort/filter & auto-loot are new one-time Craftsman HUD buys.",
     "Fresh hero starts without them; bag shows pickup order till you buy sort/filter.",

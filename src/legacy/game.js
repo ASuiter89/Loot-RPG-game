@@ -29,6 +29,8 @@ import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach
 import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
+import { SHRINE_DEFS } from '../data/shrines.js';
+import { defaultShrineBuffs, shrineFxFrom, activeShrineBuffs, pickShrineKind } from '../systems/shrineEffects.js';
 import { creditInitials } from '../systems/credit.js';
 import { restockCost } from '../systems/restockCost.js';
 import { unseenLootCount } from '../systems/lootSeen.js';
@@ -3788,7 +3790,7 @@ function staminaRegenPerSec() {
 // Total Defense: gear DEF plus a contribution from Might (class-scaled — Warriors
 // armour up hardest). Might moved here from Vitality in the attribute overhaul.
 function playerDefense() {
-  return totalStat('DEF') + totalAttr('might') * attrCoef('def') + foodFx('defFlat');
+  return totalStat('DEF') + totalAttr('might') * attrCoef('def') + foodFx('defFlat') + shrineFx('defLvl') * dungeonLevel; // + Bulwark shrine (flat DEF per floor depth)
 }
 
 // ── RATING-VS-LEVEL CHANCE SYSTEM ──
@@ -3841,7 +3843,7 @@ const ACC_BASE = 80, ACC_PER_LEVEL = 12;
 function playerEvasionRating() {
   let r = totalAttr('agility') * attrCoef('evasion')
     + totalStat('SPD') + totalStat('DODGE')
-    + ratePct(skillBonus('dodge')) + ratePct(buffMag('dodgeUp')) + ratePct(foodFx('dodgePct'));
+    + ratePct(skillBonus('dodge')) + ratePct(buffMag('dodgeUp')) + ratePct(foodFx('dodgePct')) + ratePct(shrineFx('dodgePct')); // + Phantom shrine
   // Rogue's innate evasion scales with level so "harder to pin down" stays true
   // at depth (a flat bonus would wash out as opposition climbs each floor).
   r += classInnateEvasionRating();
@@ -3872,7 +3874,7 @@ function agiAtkSpeedPct() {
 }
 function playerCritRating() {
   let r = totalAttr('luck') * LUCK_FX.critPerLuck + totalStat('CRIT') + totalStat('LCK')
-    + ratePct(skillBonus('crit')) + ratePct(buffMag('critUp')) + ratePct(foodFx('critPct')) + ratePct(healerFx('critPct'));
+    + ratePct(skillBonus('crit')) + ratePct(buffMag('critUp')) + ratePct(foodFx('critPct')) + ratePct(healerFx('critPct')) + ratePct(shrineFx('critPct')); // + Precision shrine
   // Rogue's innate crit scales with level so "keener crits" keeps pace with the
   // rising crit opposition of deeper floors instead of fading to nothing.
   r += classInnateCritRating();
@@ -3945,13 +3947,15 @@ function hpRegenPerSec() {
   r += buffMag('regen'); // Redeemer / Bastion regen buffs
   r += foodFx('regen'); // a warm bowl of ramen mends you between fights
   r += healerFx('regen'); // a healer Blessing (Vigor) keeps you mending
+  r += shrineFx('regenPctHp') * (player.maxHp || 0); // Renewal shrine: % of max HP per beat
   return r * TICKS_PER_SEC;
 }
 function mpRegenPerSec() {
   // A slow trickle on purpose: mana should run dry in sustained fights so mana
   // pots stay worth quaffing. Scaled to a real per-second rate; applyRegen banks
   // the fractional per-beat share so sub-1 regen works while MP stays an integer.
-  return (0.15 + totalAttr('spirit') * attrCoef('mpRegen') + skillBonus('mpRegen')) * TICKS_PER_SEC;
+  return (0.15 + totalAttr('spirit') * attrCoef('mpRegen') + skillBonus('mpRegen')
+    + shrineFx('mpRegenPctMp') * (player.maxMp || 0)) * TICKS_PER_SEC; // + Clarity shrine (% of max MP per beat)
 }
 
 // Every food drop shows the shared `food` pixel tile (referenced directly).
@@ -5610,7 +5614,7 @@ function applyCastMods(node, cast) {
 // multiplier (classDmgDealtMult) only touches physical hits, so without this a
 // caster Mage would have no class damage bonus at all.
 function spellPowerMult() {
-  return 1 + classSpellBonusFrac() + skillBonus('spell') + buffMag('spellUp') + totalStat('SPELLPWR') / 100;
+  return 1 + classSpellBonusFrac() + skillBonus('spell') + buffMag('spellUp') + totalStat('SPELLPWR') / 100 + shrineFx('spellUp'); // + Sorcery shrine
 }
 // Skill-damage multiplier — the MARTIAL twin of spellPowerMult(), applied only to
 // weapon-based active skills (see skillPhysDamage). Gear Skill Power lets you build
@@ -5618,7 +5622,7 @@ function spellPowerMult() {
 // attacks (those keep ATK + Increased Damage) and never touches spells. skillBonus
 // is future-proofing for any 'skillpwr' passive (returns 0 today).
 function skillPowerMult() {
-  return 1 + skillBonus('skillpwr') + buffMag('skillUp') + totalStat('SKILLPWR') / 100;
+  return 1 + skillBonus('skillpwr') + buffMag('skillUp') + totalStat('SKILLPWR') / 100 + shrineFx('skillUp'); // + Sorcery shrine
 }
 // The SCHOOL of an active node — 'skill' (martial, weapon-based), 'spell' (magic), or
 // 'hybrid' (a weapon strike that also channels magic, dealing BOTH). Explicit via
@@ -6721,9 +6725,10 @@ let mystic = null;    // { x, y } — the Wandering Mystic, when present this fl
 let pact = null;      // active pact: { id, icon, name, desc, floors, fx } or null
 let hasFountain = false;
 let shrineData = {};  // "y,x" -> { kind } for shrine tiles on this floor
-const SHRINE_KINDS = ['power','guard','fortune','blood','wisdom'];
-// Temporary shrine buffs, each counts down a number of floors.
-let buffs = { power: 0, guard: 0, fortune: 0 };
+// Temporary shrine buffs, each counts down a number of floors. One 0-floor slot
+// per non-instant kind in the catalog (src/data/shrines.js); new-style boons fold
+// into combat live via shrineFx().
+let buffs = defaultShrineBuffs();
 // Transient combat buffs from active skills (War Cry, Sanctuary, shields, …),
 // keyed by id to { secs: real seconds left, mag: magnitude }, aged on the world
 // clock (see worldTick). Purely in-combat and short-lived, so intentionally NOT
@@ -6734,6 +6739,12 @@ let buffs = { power: 0, guard: 0, fortune: 0 };
 let combatBuffs = {};
 function hasBuff(id) { const b = combatBuffs[id]; return !!b && b.secs > 0; }
 function buffMag(id) { const b = combatBuffs[id]; return (b && b.secs > 0) ? b.mag : 0; }
+// Summed magnitude of a shrine-boon effect key across all ACTIVE floor-boons — the
+// shrine twin of foodFx/healerFx, read live (boons lapse per floor). See the fx-key
+// table in src/data/shrines.js for what each key means and its hook site.
+function shrineFx(key) { return shrineFxFrom(buffs, key); }
+// Vigor boon active → sprint and dash spend no Stamina.
+function vigorFree() { return (buffs.vigor || 0) > 0; }
 // Buffs linger slightly longer than their base duration — a small global bump so
 // self-buffs, shields, regen etc. all last a touch more.
 const BUFF_DUR_MULT = 1.2;
@@ -7050,9 +7061,9 @@ window.gameState = function gameState(radius) {
     } }
   }
   if (typeof buffs !== 'undefined' && buffs) {
-    for (const k of ['power', 'guard', 'fortune']) if (buffs[k] > 0) {
-      const m = (typeof STATUS_META !== 'undefined' && STATUS_META['s_' + k]) || null;
-      effects.push({ id: 's_' + k, name: m ? m.name : k, kind: 'buff', floors: buffs[k] });
+    for (const b of activeShrineBuffs(buffs)) {
+      const m = (typeof STATUS_META !== 'undefined' && STATUS_META[b.id]) || null;
+      effects.push({ id: b.id, name: m ? m.name : b.name, kind: 'buff', floors: b.floors });
     }
   }
   if (typeof player !== 'undefined' && Array.isArray(player.healerBuffs)) {
@@ -7659,9 +7670,9 @@ window.gameGuide = function gameGuide(topic) {
       `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, the exit is north, and four pillars give cover. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
       `ISLAND FLOORS (gameState().island true) come up now and then on outdoor floors: the landmass is ringed by open SEA, so the whole map edge is deep water (~) instead of a rock wall. You can see and shoot across it but never walk off — the shore IS the boundary. Nothing reachable is lost; the sea only replaces the impassable frame, so play it like any other floor.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
-      `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom restores 50% of max HP and refills MP to full, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
+      `SHRINES (*): gameState().shrines gives each one's kind. Most are multi-floor boons that fold into your stats while active (see gameState().effects): power (+50% dmg), guard (−40% dmg taken), fortune (loot), greed (+60% gold), insight (+50% xp), discovery (+50 Magic Find), harvest (+60% materials), precision (+18% crit), phantom (+15% dodge), sorcery (+30% skill/spell power), leech (+15% lifesteal), thorns (reflect), renewal (HP regen), clarity (MP regen), bulwark (+Defense), swift (+18% move), haste (+25% attack speed), vigor (tireless sprint/dash + full Stamina). wisdom instantly restores 50% max HP and refills MP; but BLOOD costs 30% of current HP for XP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one plays a short walk-through-portal animation — the portal swallows you, the camera pans across to the partner pad, and you step out there (~0.9s, world frozen, unhittable; gameState().transit reads 'warp'). It also clears any click-to-move route, so you won't auto-walk back toward the pad you clicked. Use it deliberately, not while fleeing.`,
-      `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground — it glows and bobs; carryingKey true once held). Shove into the door while carrying the key to unlock it. What's behind varies wildly: a rich chest or hoard, an armory of gear, coins, food, a healing fountain, a blessing shrine, a room of elite guards or a swarm of weak foes, a champion, a spike- or lava-ringed prize — or an express staircase (») that plunges you two floors deeper. Vault foes are optional: they NEVER seal the stairs, so opening a combat vault is always your choice.`,
+      `FOUNTAINS (f) full-restore once — HP, MP, and Stamina to max, plus a potion-cooldown reset. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground — it glows and bobs; carryingKey true once held). Shove into the door while carrying the key to unlock it. What's behind varies wildly: a rich chest or hoard, an armory of gear, coins, food, a healing fountain, a blessing shrine, a room of elite guards or a swarm of weak foes, a champion, a spike- or lava-ringed prize — or an express staircase (») that plunges you two floors deeper. Vault foes are optional: they NEVER seal the stairs, so opening a combat vault is always your choice.`,
       `CURSED FLOOR (the "greed" gate): rarely, on descending to a non-boss floor from depth 3+, a WORLD-PAUSING prompt offers to brave the floor for DOUBLED loot & gold at the cost of tougher non-boss foes (more HP and damage). Movement freezes until you choose — gameState().greed.pending is true, mode is 'greed' and blockingOverlay is 'greed-overlay'; call acceptGreed() to take it (gameState().greed.active then reads true, mult 2) or declineGreed() to skip.`,
     ],
     enemies: [
@@ -11135,7 +11146,7 @@ function populateVault(variant, place) {
       mapData[back.y][back.x] = 3; hasFountain = true; chest(interior[1], 5);
       break;
     case 'shrine':
-      mapData[back.y][back.x] = 5; shrineData[back.y + ',' + back.x] = { kind: pick(SHRINE_KINDS) };
+      mapData[back.y][back.x] = 5; shrineData[back.y + ',' + back.x] = { kind: pickShrineKind(Math.random()) };
       break;
     case 'armory': {
       let n = 0;
@@ -11543,7 +11554,7 @@ function generateMap() {
   if (Math.random() < 0.25) {
     const c = randomFloorTile(reach);
     if (c && (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) >= 3) {
-      mapData[c.y][c.x] = 5; shrineData[c.y+','+c.x] = { kind: pick(SHRINE_KINDS) };
+      mapData[c.y][c.x] = 5; shrineData[c.y+','+c.x] = { kind: pickShrineKind(Math.random()) };
     }
   }
 
@@ -11630,7 +11641,7 @@ function generateMap() {
         if ((Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) >= 3) { spot = c; break; }
       }
       const c = spot || fallback;
-      if (c) { mapData[c.y][c.x] = 5; shrineData[c.y + ',' + c.x] = { kind: pick(SHRINE_KINDS) }; }
+      if (c) { mapData[c.y][c.x] = 5; shrineData[c.y + ',' + c.x] = { kind: pickShrineKind(Math.random()) }; }
     }
   }
 
@@ -17157,8 +17168,9 @@ function rollsQualityBonus(rolls) {
 function qualityMagicFind() {
   const gear = totalStat('MAGICFIND') + skillBonus('magicFind');
   const food = foodFx('magicPct') * 100;
+  const shrine = shrineFx('magicPct') * 100; // Discovery shrine
   const luck = Math.max(0, totalAttr('luck') - ATTR_BASE) * 1.5;
-  return Math.max(0, gear + food + luck);
+  return Math.max(0, gear + food + shrine + luck);
 }
 
 function rollTier(rolls = 1, ilvl = null) {
@@ -21650,10 +21662,27 @@ function activateShrine(nx, ny) {
       log(`<span data-spr=scroll></span> Shrine of Wisdom! Restored ${heal} HP and full MP.`, 'important');
       screenFlash('#aa66ff'); break;
     }
+    // Every other kind is a catalog-driven floor boon (greed, insight, precision,
+    // vigor, …): magnitudes live in src/data/shrines.js and fold into combat via
+    // shrineFx(). No bespoke case needed — one generic grant.
+    default: applyShrineBoon(kind);
   }
   updateBars();
   // Real-time: the world clock owns enemy/quest cadence — just persist the boon.
   saveGame();
+}
+
+// New-style shrine boon: latch the floor counter, run any one-shot on-grant effect
+// (Vigor tops Stamina to full), then log + flash from the catalog. The lasting
+// effect folds into the live combat formulas through shrineFx(); it counts down in
+// tickBuffs() and shows on the status strip like power/guard/fortune.
+function applyShrineBoon(kind) {
+  const def = SHRINE_DEFS[kind];
+  if (!def) return;
+  if (def.floors) buffs[kind] = Math.max(buffs[kind] || 0, def.floors);
+  if (def.stamina) { player.stamina = player.maxStamina; player._stamDelay = 0; }
+  log(`<span data-spr=${def.icon}></span> ${def.log}`, 'important');
+  if (def.flash) screenFlash(def.flash);
 }
 
 // Tiny on-descent vignettes — mostly atmosphere, some with a small mechanical
@@ -22411,7 +22440,7 @@ function regenStamina(dt) {
 // A burst of speed in the current input/facing direction, fuelled by stamina.
 function doDash() {
   if (inTown || portalChanneling() || portalTransiting() || mapWarping() || isPlayerStunned()) return;
-  if ((player.dashCd || 0) > 0 || player.stamina < DASH_COST) return;
+  if ((player.dashCd || 0) > 0 || (!vigorFree() && player.stamina < DASH_COST)) return; // Vigor shrine: dash for free
   let dx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let dy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
   // Touch: dash in the joystick's current push direction (a double-tap-drag on the
@@ -22433,7 +22462,7 @@ function doDash() {
   player.vx = dx * DASH_SPEED; player.vy = dy * DASH_SPEED;
   player.dashT = 0.16; player.dashCd = DASH_CD;
   entryGuard = false;   // dashing ends arrival grace
-  player.stamina = Math.max(0, player.stamina - DASH_COST); player._stamDelay = STAM_DELAY;
+  if (!vigorFree()) { player.stamina = Math.max(0, player.stamina - DASH_COST); player._stamDelay = STAM_DELAY; } // Vigor shrine spends no Stamina
   sfx('teleport'); spawnParticles(player.x, player.y, '#bfe3ff', 9, 0.13);
 }
 
@@ -22547,12 +22576,12 @@ function updatePlayer(dt) {
   // Sprint: wanting it + moving + stamina. Held Shift or a latched auto-sprint
   // toggle counts. Drains stamina; otherwise it refills. Town is a safe hub —
   // sprint there is free (no drain) and stamina keeps refilling as if at rest.
-  const wantSprint = moving && (inTown || player.stamina > 0) && (sprintHeld || sprintLatched);
-  if (wantSprint && !inTown) { player.stamina = Math.max(0, player.stamina - SPRINT_DRAIN * dt); player._stamDelay = STAM_DELAY; }
+  const wantSprint = moving && (inTown || vigorFree() || player.stamina > 0) && (sprintHeld || sprintLatched);
+  if (wantSprint && !inTown && !vigorFree()) { player.stamina = Math.max(0, player.stamina - SPRINT_DRAIN * dt); player._stamDelay = STAM_DELAY; } // Vigor shrine: sprint drains no Stamina
   else regenStamina(dt);
 
   // Agility quickens your stride on top of any MOVESPD gear.
-  let maxSpd = PLAYER_SPEED * (1 + totalStat('MOVESPD') / 100) * agiMoveMult();
+  let maxSpd = PLAYER_SPEED * (1 + totalStat('MOVESPD') / 100) * agiMoveMult() * (1 + shrineFx('movePct')); // × Swiftness shrine
   if (wantSprint) maxSpd *= SPRINT_MULT;
   if (isPlayerSlowed()) maxSpd *= 0.5;
 
@@ -22845,6 +22874,7 @@ function useFountain(nx, ny) {
   showRampHint('fountain');   // ramp: first fountain taught (self-latches)
   player.hp = player.maxHp;
   player.mp = player.maxMp;
+  player.stamina = player.maxStamina; player._stamDelay = 0; // …and a full, ready Stamina bar (no lingering exertion delay)
   player.potionCd = 0; // a sip also resets your potion cooldown
   const wasT = mapData[ny][nx];
   mapData[ny][nx] = 0; // fountain is spent
@@ -22852,7 +22882,7 @@ function useFountain(nx, ny) {
   pathGridDirty();     // …but the opened tile joins the pathfinding grid
   hasFountain = false;
   sfx('potion');
-  log(`<span data-spr=feat_shrine></span> Fountain of Healing — full HP and MP!`, 'important');
+  log(`<span data-spr=feat_shrine></span> Fountain of Healing — full HP, MP, and Stamina!`, 'important');
   updateBars();
   saveGame();
 }
@@ -23041,7 +23071,7 @@ function takePlayerDamage(dmg, label, { lethal = true, isDoT = false } = {}) {
 
 // Thorns (gear): reflect a flat amount back at a melee attacker after it hits you.
 function thornsReflect(e) {
-  const thorns = totalStat('THORNS') + Math.round(buffMag('thorns')) + Math.round(foodFx('thorns')); // gear + Iron Wall buff + ramen
+  const thorns = totalStat('THORNS') + Math.round(buffMag('thorns')) + Math.round(foodFx('thorns')) + Math.round(shrineFx('thornsLvl') * dungeonLevel); // gear + Iron Wall buff + ramen + Brambles shrine
   if (thorns > 0 && e && !e.dead) {
     spawnFloatingText(e.x, e.y, `${thorns}`, '#ffcc66');
     dealDamage(e, thorns, false);
@@ -23061,7 +23091,7 @@ function lifestealHeal(amount) {
   const lsMult = (floorMod && floorMod.lifestealMult) || 1;
   const lsCap = Math.max(1, Math.round(player.maxHp * 0.12));
   // Life leech: lifesteal passives + gear Life Leech % (+ any lifesteal buff).
-  const ls = (skillBonus('lifesteal') + buffMag('lifestealUp') + totalStat('LEECH') / 100 + foodFx('lifesteal')) * lsMult; // + Vampire/Tonkotsu ramen
+  const ls = (skillBonus('lifesteal') + buffMag('lifestealUp') + totalStat('LEECH') / 100 + foodFx('lifesteal') + shrineFx('lifesteal')) * lsMult; // + Vampire/Tonkotsu ramen + Leech shrine
   if (ls > 0 && player.hp < player.maxHp) {
     // Leech is a RATE, not a burst: bank the per-swing amount and let it pay out
     // over time (queueHeal), so a big AoE hit no longer snaps the bar up in one frame.
@@ -23361,10 +23391,10 @@ function onEnemyDefeated(e) {
   if (e.isBoss && farm < 1 && !firstBossKill) log(`⚠️ ${label} slain here recently — spoils thinner (${Math.round(farm * 100)}%). Rest or move on to reset.`, 'important');
   const xpMult = e.isBoss ? 5 : (e.isElite ? 2 : 1);
   const goldMult = e.isBoss ? 3 : (e.isElite ? 2 : 1);
-  const xp = Math.round(12 * dungeonLevel * xpMult * farm * pfx('xp', 1) * (1 + (totalStat('XPGAIN') + skillBonus('xpGain')) / 100 + foodFx('xpPct') + healerFx('xpPct')));
+  const xp = Math.round(12 * dungeonLevel * xpMult * farm * pfx('xp', 1) * (1 + (totalStat('XPGAIN') + skillBonus('xpGain')) / 100 + foodFx('xpPct') + healerFx('xpPct') + shrineFx('xpPct'))); // + Insight shrine
   player.xp += xp;
   // Greed gate (cursed floor) and the Greedy item power both fatten the purse.
-  const gold = Math.round((rnd(2, 8) + dungeonLevel * 3) * goldMult * farm * (floorMod.goldMult || 1) * greedGoldMult() * (1 + 0.4 * itemPowerCount('greedy')) * pfx('gold', 1) * (1 + (totalStat('GOLDFIND') + skillBonus('goldFind')) / 100 + foodFx('goldPct') + healerFx('goldPct')));
+  const gold = Math.round((rnd(2, 8) + dungeonLevel * 3) * goldMult * farm * (floorMod.goldMult || 1) * greedGoldMult() * (1 + 0.4 * itemPowerCount('greedy')) * pfx('gold', 1) * (1 + (totalStat('GOLDFIND') + skillBonus('goldFind')) / 100 + foodFx('goldPct') + healerFx('goldPct') + shrineFx('goldPct'))); // + Greed shrine
   player.gold += gold;
   // Lifetime counters that bounty contracts snapshot & track against.
   if (e.isBoss) player.bossKills = (player.bossKills || 0) + 1;
@@ -23458,7 +23488,7 @@ function onEnemyDefeated(e) {
     const add = (k, n) => { if (n > 0 && materialUnlocked(k)) gained[k] = (gained[k] || 0) + n; };
     const big = e.isBoss ? 3 : (e.isElite ? 2 : 1);
     // Material Find % (gear) boosts the odds of every crafting-material drop.
-    const matMult = lootMult * (1 + totalStat('MATFIND') / 100) * egCovMaterialMult();   // × Dread Covenant material find
+    const matMult = lootMult * (1 + totalStat('MATFIND') / 100 + shrineFx('matPct')) * egCovMaterialMult();   // × Dread Covenant material find + Harvest shrine
     if (Math.random() < 0.34 * matMult || e.isElite || e.isBoss)  add('scrap', rnd(1, 2) * big + Math.min(4, Math.floor(dungeonLevel / 12)));
     if (Math.random() < 0.09 * matMult || e.isBoss)               add('glimmer', e.isBoss ? rnd(1, 2) : 1);
     if (Math.random() < (0.018 + dungeonLevel * 0.0012) * matMult || (e.isBoss && Math.random() < 0.5)) add('core', e.isBoss ? rnd(1, 2) : 1);
@@ -26968,11 +26998,15 @@ const STATUS_META = {
   thorns:      { icon: 'ic_mallet',  kind: 'buff', name: 'Thorns',       desc: 'Reflect damage back at attackers.' },
   regen:       { icon: 'ic_heart',   kind: 'buff', name: 'Regeneration', desc: 'Recover HP each second.' },
   shield:      { icon: 'ic_orb',     kind: 'buff', name: 'Shield',       desc: 'Absorbs incoming damage.' },
-  // Shrine boons (the buffs{} object) — counted in floors, not seconds.
-  s_power:   { icon: 'ui_power', kind: 'buff', name: 'Power Shrine', desc: '+50% damage.' },
-  s_guard:   { icon: 'a_shield', kind: 'buff', name: 'Guarded',      desc: 'Take 40% less damage.' },
-  s_fortune: { icon: 'ic_money', kind: 'buff', name: 'Fortune',      desc: '+50% loot and an extra drop.' },
+  // Shrine boons (the buffs{} object, counted in floors not seconds) are folded in
+  // below from the shrine catalog so there's a single source of truth.
 };
+// Shrine boons — one s_<kind> chip per non-instant kind, straight from the catalog
+// (src/data/shrines.js), so a new shrine renders its strip chip with no edit here.
+for (const _kind in SHRINE_DEFS) {
+  const _d = SHRINE_DEFS[_kind];
+  if (!_d.instant) STATUS_META['s_' + _kind] = { icon: _d.icon, kind: 'buff', name: _d.name, desc: _d.desc };
+}
 // Healer buffs (Rested + Blessings) — counted in floors. Fold their metadata in from
 // the data catalog so their strip chips render name/icon/tooltip like any other buff,
 // with a single source of truth (src/data/healerBuffs.js).
@@ -27002,8 +27036,8 @@ function activeStatusList() {
     const b = combatBuffs[id];
     if (b && b.secs > 0) out.push({ id, remaining: Math.ceil(b.secs), unit: 'second', mag: b.mag });
   }
-  for (const k of ['power', 'guard', 'fortune']) {
-    if (buffs[k] > 0) out.push({ id: 's_' + k, remaining: buffs[k], unit: 'floor', mag: null });
+  for (const b of activeShrineBuffs(buffs)) {
+    out.push({ id: b.id, remaining: b.floors, unit: 'floor', mag: null });
   }
   for (const b of (player.healerBuffs || [])) {
     if (b && b.floors > 0 && STATUS_META[b.id]) out.push({ id: b.id, remaining: b.floors, unit: 'floor', mag: null });
@@ -31480,8 +31514,8 @@ function loadGame() {
     inventory.forEach(recordWardrobe);
     wornItems.forEach(recordWardrobe);
     dungeonLevel = data.dungeonLevel || 1;
-    // Restore shrine buffs, tolerating older saves that predate them.
-    buffs = Object.assign({ power: 0, guard: 0, fortune: 0 }, data.buffs || {});
+    // Restore shrine buffs, tolerating older saves that predate any kind.
+    buffs = Object.assign(defaultShrineBuffs(), data.buffs || {});
     // Restore an active mystic pact, tolerating older saves (and dropping a
     // malformed one rather than letting it break floor generation).
     pact = (data.pact && data.pact.fx && data.pact.floors > 0) ? data.pact : null;
@@ -34931,7 +34965,7 @@ function updateActorRender(dt) {
 // hero swings noticeably faster than a sluggish one.
 const PLAYER_ATK_BASE = 1.5;
 const STYLE_ATK_MULT = { flurry: 0.7, slash: 1, cleave: 1.25, crush: 1.4, reap: 1.2, thrust: 1.05, shot: 1.05, bolt: 1.15, fist: 0.85 };
-function playerAttackSpeedPct() { return Math.max(0, totalStat('ATKSPD')) + agiAtkSpeedPct(); }
+function playerAttackSpeedPct() { return Math.max(0, totalStat('ATKSPD')) + agiAtkSpeedPct() + shrineFx('atkSpdPct') * 100; } // + Haste shrine
 function playerAttackInterval() {
   const m = STYLE_ATK_MULT[weaponStyle()] || 1;
   return PLAYER_ATK_BASE * m / (1 + playerAttackSpeedPct() / 100);
@@ -38510,6 +38544,7 @@ __dlLive("stashHc", () => stashHc, (v) => { stashHc = v; });   // Hardcore ladde
 __dlLive("merchant", () => merchant, (v) => { merchant = v; });
 __dlLive("moveTarget", () => moveTarget, undefined);   // read-only handle (a const object) — lets tests inspect the click-to-move route
 __dlLive("pact", () => pact, (v) => { pact = v; });
+__dlLive("buffs", () => buffs, (v) => { buffs = v; });   // live shrine-boon counters (floors left per kind) — inspectable/drivable like pact
 __dlLive("player", () => player, (v) => { player = v; });
 __dlLive("selectedItem", () => selectedItem, (v) => { selectedItem = v; });
 __dlLive("selectedSkillId", () => selectedSkillId, (v) => { selectedSkillId = v; });
