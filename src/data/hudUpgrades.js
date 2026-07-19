@@ -1,8 +1,9 @@
 // ── HUD FIELD KIT — the Craftsman's readout instruments & bag tools ──
 // The heads-up display and loot bag start bare: a fresh hero reads the world off the
 // raw pixels — health/mana show as bars with no numbers, no minimap, no counters, no
-// depth or difficulty label, no status-effect icons — and the loot bag shows items in
-// plain pickup order with no Power ratings, stat compare, sort/filter or auto-loot.
+// depth or difficulty label, no status-effect icons — and the loot bag auto-groups
+// items by gear category (rarest first) but has no Power ratings, stat compare,
+// re-sort/filter or auto-loot.
 // The town Craftsman (a founding keeper, on hand from your first town visit) crafts
 // these one at a time; each
 // purchase switches a piece on for good (persisted per hero on player.hudUpgrades).
