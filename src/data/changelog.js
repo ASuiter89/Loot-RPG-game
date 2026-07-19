@@ -16,6 +16,9 @@ export const CHANGELOG = [
   { date: "2026-07-18", size: "small", v: "Fountain restores Stamina", by: "Jeff Louie", notes: [
     "Fountain of Healing tops Stamina to full alongside HP and MP.",
   ] },
+  { date: "2026-07-18", size: "small", v: "Level-up fully restores you", by: "Jeff Louie", notes: [
+    "Level up refills HP, MP & Stamina to full (was +40% HP/MP, no Stamina); Stamina bar rearms instantly.",
+  ] },
   { date: "2026-07-18", size: "medium", v: "Craftsman crafts new HUD upgrades; pinned by the portal", by: "Jeff Louie", notes: [
     "Item Power, +/- stat compare, bag sort/filter & auto-loot are new one-time Craftsman HUD buys.",
     "Fresh hero starts without them; bag shows pickup order till you buy sort/filter.",
