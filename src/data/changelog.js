@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "Beach foes bite; first hit teaches the potion", by: "Jeff Louie", notes: [
+    "Tutorial pack hits for 8 (was 3), cave elite 16 (was 6) — the opening actually threatens.",
+    "First blow you take pops a one-time nudge naming the Health-Potion hotkey.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Craftsman arrives with the Healer", by: "Jeff Louie", notes: [
     "Joins on first boss (floor 5), was 2nd (floor 10); HUD Field Kit ready from first town visit.",
   ] },
