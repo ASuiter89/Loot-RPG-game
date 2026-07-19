@@ -1006,7 +1006,14 @@ const UI_FONTS = [
 let uiFont = 'cinzel';
 try { const _uf = localStorage.getItem(UI_FONT_KEY); if (_uf && UI_FONTS.some(f => f.id === _uf)) uiFont = _uf; } catch (e) {}
 function currentUiFont() { return UI_FONTS.find(f => f.id === uiFont) || UI_FONTS[0]; }
+// Canvas mirror of --font-ui: world-space labels (NPC names, interaction prompts,
+// portal countdown, floating damage numbers) read the picked UI font too, so the
+// canvas matches the DOM instead of falling back to a browser sans-serif/monospace.
+// Cached as a plain string (refreshed only on a font change) so per-frame draws in
+// the hot loop never re-scan UI_FONTS.
+let uiFontCss = currentUiFont().css;
 function applyUiFont() {
+  uiFontCss = currentUiFont().css;
   document.documentElement.style.setProperty('--font-ui', currentUiFont().css);
 }
 function setUiFont(id) {
@@ -17013,7 +17020,7 @@ function drawTownWorld(offX, offY, tw, th, scale) {
     // bobbing "!" over their head until you walk up and open their service.
     if (npcNewlyArrived(n.kind)) drawTownArrivedMark(cx, footY, tw, th);
     // Name label, outlined for legibility on grass or cobble.
-    ctx.font = `bold ${Math.max(12, Math.round(tw * 0.2))}px monospace`;
+    ctx.font = `bold ${Math.max(12, Math.round(tw * 0.2))}px ${uiFontCss}`;
     ctx.lineWidth = Math.max(2, tw * 0.06); ctx.strokeStyle = 'rgba(0,0,0,0.7)';
     ctx.fillStyle = '#ffe9b0';
     ctx.strokeText(n.name, cx, footY + th * 0.18);
@@ -17044,7 +17051,7 @@ function drawTownPrompt(offX, offY, tw, th) {
   const what = obj.type === 'gate' ? 'Enter the dungeon' : obj.type === 'portal' ? 'Return to your floor' : obj.name;
   const keyHint = (typeof document !== 'undefined' && document.body.classList.contains('touch')) ? 'Tap' : kbLabel('interact');
   const txt = locked ? `Locked · ${what}` : `${keyHint} · ${what}`;
-  ctx.font = `bold ${Math.max(12, Math.round(tw * 0.22))}px monospace`;
+  ctx.font = `bold ${Math.max(12, Math.round(tw * 0.22))}px ${uiFontCss}`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
   ctx.lineWidth = Math.max(2, tw * 0.07); ctx.strokeStyle = 'rgba(0,0,0,0.78)';
   ctx.fillStyle = locked ? '#d7d7de' : '#fff4cf';
@@ -19585,7 +19592,7 @@ function draw() {
     const prog = chargeProgress(portalCharge, PORTAL_CHANNEL_SECS);
     drawPortalCharge(px + tw / 2, py + th / 2, tw, prog);
     ctx.save();
-    ctx.font = `bold ${Math.max(12, Math.round(tw * 0.34))}px sans-serif`;
+    ctx.font = `bold ${Math.max(12, Math.round(tw * 0.34))}px ${uiFontCss}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const ny = py - th * 0.18;
@@ -19661,7 +19668,7 @@ function draw() {
     ctx.save();
     ctx.globalAlpha = Math.max(0, alpha);
     const fsz = Math.max(12, Math.round(tw * 0.28 * (ft.size || 1)));
-    ctx.font = `${(ft.size || 1) > 1 ? 'bold ' : ''}${fsz}px sans-serif`;
+    ctx.font = `${(ft.size || 1) > 1 ? 'bold ' : ''}${fsz}px ${uiFontCss}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = 'rgba(0,0,0,0.5)';

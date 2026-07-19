@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "small", v: "Tooltip & world text drop the plain font", by: "Jeff Louie", notes: [
+    "Tooltip slot·ilvl, equip requirement & value read in the picked UI font (were plain sans).",
+    "Canvas labels match — NPC names, interaction prompts, portal countdown, damage numbers.",
+  ] },
   { date: "2026-07-19", size: "medium", v: "Tutorial pauses to teach one control at a time", by: "Jeff Louie", notes: [
     "Opening \"head north\" hint clears after ~2s of walking (was: stayed the whole shore).",
     "First hit, first weapon and first spell each PAUSE and spotlight one glowing control — Health Potion, your new gear, Mana Potion — greying the rest until you use it.",
