@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "small", v: "Ready-spell glow: thin dark-blue pulse", by: "Jeff Louie", notes: [
+    "Ready skill slots pulse a thin dark-blue border (was thick gold glow).",
+  ] },
   { date: "2026-07-19", size: "small", v: "Tooltip & world text drop the plain font", by: "Jeff Louie", notes: [
     "Tooltip slot·ilvl, equip requirement & value read in the picked UI font (were plain sans).",
     "Canvas labels match — NPC names, interaction prompts, portal countdown, damage numbers.",
