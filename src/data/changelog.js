@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "small", v: "HUD Upgrade gold costs ×3", by: "Jeff Louie", notes: [
+    "Craftsman HUD Upgrade gold prices tripled; materials unchanged. Minimap 480→1440g, vitals 120→360g.",
+  ] },
   { date: "2026-07-19", size: "small", v: "Tidier town camp", by: "Jeff Louie", notes: [
     "Craftsman pinned beside the Town Portal, off the avenue — no longer blocks the path.",
     "Campfire log seating pulled off the trails; endgame grove moved up 1 so keepers can't strand above it.",
