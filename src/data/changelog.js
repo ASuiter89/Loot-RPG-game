@@ -10,6 +10,11 @@ export const CHANGELOG = [
   { date: "2026-07-18", size: "small", v: "Auto slot & potions stop pulsing", by: "Jeff Louie", notes: [
     "Auto-cast slot and health/mana potions keep bright ready outline; pulse removed.",
     "Critical-HP potion alarm still pulses.",
+  { date: "2026-07-18", size: "small", v: "Early-game rebalance — real stats, not a hit cap", by: "Jeff Louie", notes: [
+    "Floors 1–5 trash carries more HP and the hero hits softer while weak; both ease to full by floor 6.",
+    "Kills now take a few blows organically — dropped the old \"min 3 hits\" per-hit cap.",
+    "Longer fights let foes land more of their (full-strength) hits, so the opening actually threatens.",
+    "Beach pack/elite HP raised to match; Rat King quake slam 1.5× dmg (was 1.7×).",
   ] },
   { date: "2026-07-18", size: "small", v: "Patch Notes credit the right author", by: "Jeff Louie", notes: [
     "Version History badge reads each entry's real author; JL work no longer shows AS.",

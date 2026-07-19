@@ -3,7 +3,7 @@ import {
   rampDepth, featureUnlocked, unlockedSkillSlots,
   elitesAllowed, gearRequirementsActive, setItemsAllowed, cursedItemsAllowed,
   uniqueItemsAllowed, loadoutSwapUnlocked, detailedTooltips,
-  hazardAllowed, earlyRelief, earlyPackCap,
+  hazardAllowed, earlyEnemyHp, playerEarlyDamage, earlyPackCap,
   firstHint, keeperIntro, starterChain, tip, deathTip, rampStatus,
 } from '../../src/systems/onboarding.js';
 import { RAMP_FLOOR, TIPS, HINTS, STARTER_STEPS } from '../../src/data/onboarding.js';
@@ -90,20 +90,42 @@ describe('hazardAllowed', () => {
   });
 });
 
-describe('earlyRelief / earlyPackCap', () => {
-  it('softens the opening floors, then bows out', () => {
-    expect(earlyRelief(1)).toBeLessThan(1);
-    expect(earlyRelief(5)).toBeLessThan(1);
-    expect(earlyRelief(6)).toBe(1);
-    expect(earlyRelief(20)).toBe(1);
+describe('earlyEnemyHp / earlyPackCap', () => {
+  it('toughens foes on the opening floors, then bows out to full strength', () => {
+    expect(earlyEnemyHp(1)).toBeGreaterThan(1);
+    expect(earlyEnemyHp(5)).toBeGreaterThan(1);
+    expect(earlyEnemyHp(6)).toBe(1);
+    expect(earlyEnemyHp(20)).toBe(1);
   });
-  it('relief eases upward toward full strength', () => {
-    expect(earlyRelief(1)).toBeLessThan(earlyRelief(5));
+  it('never eases HP below full strength (it is a boost, never a relief)', () => {
+    for (let f = 1; f <= 8; f++) expect(earlyEnemyHp(f)).toBeGreaterThanOrEqual(1);
+  });
+  it('the HP boost eases downward toward full strength as the hero descends', () => {
+    expect(earlyEnemyHp(1)).toBeGreaterThanOrEqual(earlyEnemyHp(5));
   });
   it('caps early pack size, then uncaps', () => {
     expect(earlyPackCap(1)).toBe(3);
     expect(earlyPackCap(5)).toBe(7);
     expect(earlyPackCap(6)).toBeNull();
+  });
+});
+
+describe('playerEarlyDamage', () => {
+  it('softens the hero hit on the opening floors, then bows out to full strength', () => {
+    expect(playerEarlyDamage(1)).toBeLessThan(1);
+    expect(playerEarlyDamage(5)).toBeLessThan(1);
+    expect(playerEarlyDamage(6)).toBe(1);
+    expect(playerEarlyDamage(20)).toBe(1);
+  });
+  it('never lifts the hero hit above full strength (it is a ramp, never a boost)', () => {
+    for (let f = 1; f <= 8; f++) expect(playerEarlyDamage(f)).toBeLessThanOrEqual(1);
+  });
+  it('ramps upward toward full strength as the hero descends', () => {
+    expect(playerEarlyDamage(1)).toBeLessThan(playerEarlyDamage(5));
+  });
+  it('treats a missing/garbage floor as the most-gated floor 1', () => {
+    expect(playerEarlyDamage(undefined)).toBe(playerEarlyDamage(1));
+    expect(playerEarlyDamage(0)).toBe(playerEarlyDamage(1));
   });
 });
 
