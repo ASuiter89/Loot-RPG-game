@@ -46,7 +46,10 @@ export const TOWN_NPCS = [
   { x: 19, y: 7, kind: 'ramen', name: 'Ramen House' },
   { x: 25, y: 7, kind: 'healer', name: 'Healer' },
   { x: 21, y: 11, kind: 'gambler', name: 'Gambler' },
-  { x: 7, y: 13, kind: 'forge', name: 'Craftsman' },
+  // The Craftsman stands on the central avenue two tiles NORTH of the Town Portal
+  // (15,15) — pinned and never wandering (see TOWN_FIXED_KINDS) so a returning hero
+  // steps out of the portal right in front of the forge and can never miss it.
+  { x: 15, y: 13, kind: 'forge', name: 'Craftsman' },
   { x: 9, y: 12, kind: 'prospector', name: 'Prospector' },
   { x: 24, y: 14, kind: 'bounty', name: 'Bounty Board' },
   { x: 4, y: 16, kind: 'transmuter', name: 'Transmuter' },
@@ -125,6 +128,14 @@ export const TOWN_SERVICE_ARRIVALS = {
 // They keep their AUTHORED sanctum tiles and never wander — the regular keepers out
 // in the open clearing are the ones who get randomized spots and stroll about.
 export const TOWN_ENDGAME_KINDS = ['covenants', 'weave', 'pantheon', 'mirrorforge', 'deeds', 'cycles'];
+
+// Regular (non-sanctum) keepers PINNED to their authored tile — they take the exact
+// spot above every visit and never wander, so the hero always finds them in the same
+// place. The Craftsman is pinned north of the Town Portal: it's the keeper you return
+// to constantly (forging gear, crafting the HUD Field Kit), so it must never wander
+// off where a hero could lose it. buildTown places these at n.x/n.y with wander=false
+// and reserves their tile from the wander free-set.
+export const TOWN_FIXED_KINDS = ['forge'];
 
 // Bounding box (inclusive tile coords) of the hedged endgame sanctum — the grove the
 // six endgame keepers occupy, walled by the hedge with a single south doorway. This

@@ -6,7 +6,7 @@ import {
 import {
   TOWN_W, TOWN_H, TOWN_SPAWN, TOWN_GATE, TOWN_PORTAL,
   TOWN_PATHS, TOWN_NPCS, TOWN_DECOR, TOWN_DECOR_FAMILIES,
-  TOWN_SANCTUM, TOWN_ENDGAME_KINDS,
+  TOWN_SANCTUM, TOWN_ENDGAME_KINDS, TOWN_FIXED_KINDS,
 } from '../../src/data/townLayout.js';
 import { DECOR_INDEX } from '../../src/assets/decorAtlas.js';
 
@@ -217,6 +217,32 @@ describe('authored town data', () => {
     for (const d of TOWN_DECOR.filter((dd) => dd.c === 'h')) expect(inBox(d.x, d.y)).toBe(true);
     const endgame = new Set(TOWN_ENDGAME_KINDS);
     for (const n of TOWN_NPCS) expect(inBox(n.x, n.y)).toBe(endgame.has(n.kind));
+  });
+
+  it('pins the Craftsman on the avenue just north of the Town Portal (never wanders)', () => {
+    // The Craftsman is the keeper the hero returns to constantly, so it must be
+    // easy to find: pinned (TOWN_FIXED_KINDS) directly north of the Town Portal on
+    // the same avenue column, close enough to greet the moment you portal in.
+    const forge = TOWN_NPCS.find((n) => n.kind === 'forge');
+    expect(forge).toBeTruthy();
+    expect(TOWN_FIXED_KINDS).toContain('forge');
+    expect(forge.x).toBe(TOWN_PORTAL.x);         // same avenue column
+    expect(forge.y).toBeLessThan(TOWN_PORTAL.y); // north of (above) the portal
+    expect(TOWN_PORTAL.y - forge.y).toBeLessThanOrEqual(3);
+    // Its tile is a walkable interior avenue tile (buildTown stamps the keeper solid).
+    expect(TOWN_PATHS.some((p) => p.x === forge.x && p.y === forge.y)).toBe(true);
+  });
+
+  it('keeps every fixed keeper a regular open-clearing keeper (not a sanctum one)', () => {
+    // Fixed keepers pin an OPEN-clearing keeper in place; they are never the hedged
+    // endgame keepers (those already own their sanctum tiles), so none sits inside
+    // the sanctum box and none doubles as an endgame kind.
+    for (const kind of TOWN_FIXED_KINDS) {
+      expect(TOWN_ENDGAME_KINDS).not.toContain(kind);
+      const n = TOWN_NPCS.find((k) => k.kind === kind);
+      expect(n).toBeTruthy();
+      expect(inSanctum(n.x, n.y, TOWN_SANCTUM)).toBe(false);
+    }
   });
 
   it('every decor entry resolves to a real atlas piece and is in bounds', () => {
