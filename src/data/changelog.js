@@ -10,6 +10,7 @@ export const CHANGELOG = [
   { date: "2026-07-19", size: "small", v: "Learn the Dungeon Gate at graduation", by: "Jeff Louie", notes: [
     "First town visit (floor-5 boss) no longer holds a return portal — press on through the Dungeon Gate.",
     "Gate gains a Continue to Floor N button: one tap to your deepest checkpoint on the tier you're pushing.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Kills drop 30% less gear", by: "Jeff Louie", notes: [
     "Per-kill gear drop chance −30%: boss pick 56%→39%, elite 36%→25%, normal 8%→5.6%.",
   ] },
