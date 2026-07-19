@@ -13,6 +13,16 @@ export const CHANGELOG = [
     "Craftsman pinned north of the Town Portal — no longer wanders off.",
     "LOOT/GEAR/HERO/SKILLS tabs 33% taller, labels centered.",
   ] },
+  { date: "2026-07-18", size: "small", v: "New-loot badge on the LOOT tab", by: "Jeff Louie", notes: [
+    "Red count badge on the LOOT tab flags loot picked up while you were on another tab; clears when you open it.",
+    "Touch: red pip on the Bag button mirrors it while the tab's tucked away.",
+  ] },
+  { date: "2026-07-18", size: "small", v: "Early-game rebalance — real stats, not a hit cap", by: "Jeff Louie", notes: [
+    "Floors 1–5 trash carries more HP and the hero hits softer while weak; both ease to full by floor 6.",
+    "Kills now take a few blows organically — dropped the old \"min 3 hits\" per-hit cap.",
+    "Longer fights let foes land more of their (full-strength) hits, so the opening actually threatens.",
+    "Beach pack/elite HP raised to match; Rat King quake slam 1.5× dmg (was 1.7×).",
+  ] },
   { date: "2026-07-18", size: "small", v: "Patch Notes credit the right author", by: "Jeff Louie", notes: [
     "Version History badge reads each entry's real author; JL work no longer shows AS.",
   ] },

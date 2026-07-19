@@ -75,12 +75,30 @@ export const HAZARD_INTRO_FLOOR = {
   puddle: 13,
 };
 
-// ── GENTLER OPENING DIFFICULTY ────────────────────────────────────────────────
-// A soft relief multiplier applied to foe HP/damage on the very first floors, on
-// top of the normal depth curve, so floors 1–5 breathe before the game ramps. `1`
-// (or absent) = no relief. Legacy multiplies enemy HP/damage by this.
-export const EARLY_RELIEF = {
-  1: 0.6, 2: 0.68, 3: 0.78, 4: 0.88, 5: 0.95,
+// ── EARLY-GAME DIFFICULTY ARC ─────────────────────────────────────────────────
+// A new hero's real stats are lopsided: attribute base alone (10 × 2.6 ≈ 26 flat)
+// makes even a bare-fisted first hit dwarf a floor-1 foe's ~15-25 HP, so the opening
+// used to be pure one-shotting. Rather than clamp per-hit damage to force a hit
+// count (the old MIN_EARLY_HITS cap — an artificial rule), we bend the actual
+// numbers over the opening floors so kills take a few blows ORGANICALLY: foes carry
+// MORE HP and the hero deals LESS, both easing back to full strength by floor 6 as
+// levels + gear naturally take over. That is the "weak at the start → earn your
+// strength" arc. Guided heroes only (a Veteran opts out of the whole ramp); a
+// returning deep hero (high maxFloor) is past it and unaffected.
+
+// Foe max-HP MULTIPLIER over the opening floors (≥1 = tougher). Keyed on deepest
+// floor reached, so it only bites a hero genuinely early in its run. Replaces the
+// old relief (which REDUCED early HP and, with the damage cap, made trash a
+// faceroll). `1` (or absent, floor 6+) = the plain depth-curve HP.
+export const EARLY_ENEMY_HP = {
+  1: 2.8, 2: 2.4, 3: 2.0, 4: 1.5, 5: 1.18,
+};
+// Hero-DAMAGE ramp over the opening floors (≤1 = the hero hits softer while weak).
+// Keyed on the CURRENT floor. Applied to the hero's rolled hit only — NOT to the
+// gear-Power / rating model or the DPS tooltip, which stay depth-independent — so a
+// fresh hero organically needs a few swings, then ramps to full by floor 6.
+export const PLAYER_EARLY_DMG = {
+  1: 0.57, 2: 0.65, 3: 0.76, 4: 0.87, 5: 0.95,
 };
 // Smaller packs early: a cap on how many foes a normal floor spawns, by floor.
 export const EARLY_PACK_CAP = { 1: 3, 2: 4, 3: 5, 4: 6, 5: 7 };

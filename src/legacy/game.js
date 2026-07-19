@@ -31,6 +31,7 @@ import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { creditInitials } from '../systems/credit.js';
 import { restockCost } from '../systems/restockCost.js';
+import { unseenLootCount } from '../systems/lootSeen.js';
 import { hasVaultKey, addVaultKey, spendVaultKey } from '../systems/vaultKeys.js';
 import { isCritical } from '../systems/crit.js';
 import { favouredBases, armorWeight, rollFavouredBase, rollForcedFavouredBase } from '../systems/classLoot.js';
@@ -50,7 +51,6 @@ import { channelCoef, classDamageAttr, attrDamageFor, shieldMax, spiritVeilMult,
 import { LUCK_FX } from '../data/attributeScaling.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { KILL_LOOT, killLootParams } from '../systems/bossLoot.js';
-import { capEarlyHit } from '../systems/earlyGame.js';
 import { pointsEarned } from '../systems/bossPoints.js';
 import { resistFraction, penFraction, mitigate, physicalShare } from '../systems/defense.js';
 import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js';
@@ -64,7 +64,7 @@ import { lockedTiers } from '../systems/rarityGate.js';
 import {
   rampDepth, featureUnlocked, unlockedSkillSlots, elitesAllowed, gearRequirementsActive,
   setItemsAllowed, cursedItemsAllowed, uniqueItemsAllowed, loadoutSwapUnlocked,
-  detailedTooltips, hazardAllowed, earlyRelief, earlyPackCap,
+  detailedTooltips, hazardAllowed, earlyEnemyHp, playerEarlyDamage, earlyPackCap,
   firstHint, keeperIntro, starterChain, deathTip as rampDeathTip,
   rampStatus,
 } from '../systems/onboarding.js';
@@ -7356,6 +7356,9 @@ window.gameState = function gameState(radius) {
     menu: {
       bagOpen: !!panelOpen,
       tab: currentTab,
+      // Count behind the LOOT tab's red "new loot" badge: bag items picked up while
+      // the player was looking elsewhere and hasn't opened the LOOT list since.
+      newLoot: newLootCount(),
       townView: inTown ? townView : null,
       // Walkable-town live state (null outside town). The hero roams a fixed map
       // (position in player.x/player.y) and walks up to a keeper to use it. `objects`
@@ -7631,6 +7634,7 @@ window.gameGuide = function gameGuide(topic) {
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
       `The LOOT bag holds items in PICKUP order (the order you found them) by default. Crafting the Quartermaster's Ledger HUD upgrade at the Craftsman adds the LOOT tab's Sort button (pickup / rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
+      `A red badge on the LOOT tab (a red pip on the touch Bag button) counts loot that landed in the bag while you were on another tab; it clears the instant you open the LOOT list. gameState().menu.newLoot mirrors the count.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. SAFEGUARD: while enemies are near you can't swap onto an EMPTY or much-weaker set (it would strip your armor mid-fight) — break away first, or swap where it's safe; gearing UP to a stronger set is always allowed. Off-class weapons can be carried and sold but not equipped.`,
       `Bosses spill the MOST loot of any foe, and the FIRST time you clear a given boss FLOOR its guardian pays a jackpot — ~3x the drops at noticeably better quality (a one-time windfall per boss floor). In Endless, where boss species recur, this tracks by floor, so every new or deeper boss floor keeps paying; farming a floor you've already cleared drops at the normal boss rate. gameState().enemies[i].firstKill flags a boss whose floor windfall is still unclaimed. See gameGuide("enemies") for the boss rules.`,
       `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them; each snack instantly restores a little HP, MP AND Stamina (the same amount to all three).`,
@@ -7756,7 +7760,7 @@ window.gameGuide = function gameGuide(topic) {
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
       `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view.`,
-      `Opening-floor content pacing (Normal, floors 1–25): foes are fewer and softer on floors 1–5 and climb to full strength by floor 6; the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. TRAINING WHEELS: on the beach and floors 1–3, no single blow can fell a foe in fewer than 3 hits (per-hit damage is capped to leave it alive through its first two), so a new player always trades a few real blows rather than one-shotting trash. No glowing ELITES or elite affixes until floor 4 (the one scripted beach elite aside). Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
+      `Opening-floor content pacing (Normal, floors 1–25): the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. DIFFICULTY ARC — a fresh hero's flat attribute damage would otherwise one-shot floor-1 trash, so over floors 1–5 the real numbers bend to make kills take a few blows ORGANICALLY (no per-hit cap): foes carry extra HP and the hero deals less, both easing to full strength by floor 6 as your levels and gear take over — "weak at the start, then earn your strength". Because those fights last longer, foes land more of their (full-strength) hits, so the opening actually threatens. No glowing ELITES or elite affixes until floor 4 (the one scripted beach elite aside). Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
   };
@@ -11893,7 +11897,10 @@ function buildTutorialMap() {
   // `type` (sprite) and name come from the rolled species.
   const mkFoe = (type, x, y, extra) => Object.assign({
     x, y, type, name: (MONSTERS[type] && MONSTERS[type].name) || 'Creature',
-    hp: 20, maxHp: 20, level: 1, dmg: 3,
+    // HP sized so the ramped opening hit (attribute damage eased by the guided
+    // player-damage ramp) fells a pack foe in a few blows, not one — the beach's
+    // "trade real blows" lesson now comes from HP, not a per-hit cap.
+    hp: 45, maxHp: 45, level: 1, dmg: 3,
     dead: false, behavior: 'chaser', passive: true, provoked: false, slow: true,
     wakeRange: 4, tutorial: true,
     mColor: (MONSTERS[type] && MONSTERS[type].color) || null,
@@ -11907,7 +11914,7 @@ function buildTutorialMap() {
   // than the pack, and NOT slow — a real step up that guards the cave. Still
   // tutorial-flagged, so it pays out through the beach handler like the rest.
   enemies.push(mkFoe(eliteType, caveX, 6, {
-    name: pick(ELITE_NAMES), hp: 60, maxHp: 60, dmg: 6, level: 2,
+    name: pick(ELITE_NAMES), hp: 85, maxHp: 85, dmg: 6, level: 2,
     isElite: true, slow: false, wakeRange: 5,
   }));
 
@@ -16831,12 +16838,6 @@ function spawnEnemies() {
   const lvlGap = Math.max(0, player.level - dungeonLevel);
   const threatScale = Math.min(2, 1 + lvlGap * BALANCE.antiGrindPerGap);
 
-  // Early-game bite: a gentle nudge so the first floors aren't a total faceroll,
-  // but small enough that a fresh, gearless hero won't get bursted down. Strongest
-  // on floor 1 (+20%) and fading to nothing by floor 5 (deeper floors already bite
-  // hard via depthThreat, so this only lifts the soft opening).
-  const earlyBite = dungeonLevel <= 4 ? 1 + (5 - dungeonLevel) * 0.05 : 1;
-
   // Comeback relief: for a few floors after a death, foes pull their punches so a
   // stumble doesn't spiral into an unbreakable death loop. It's anchored to the
   // floor you revive toward and fades as you climb back to where you fell, so it's
@@ -16859,12 +16860,15 @@ function spawnEnemies() {
   // sworn, so an un-covenanted descent is byte-identical). Malaise is applied to
   // damage over time in takePlayerDamage(); here elapsed≈0 at build, so it's neutral.
   const _fe = (Date.now() - (_egFloorEnterMs || Date.now())) / 1000;
-  // Ramp: a gentler opening curve for a brand-new hero — foe HP and damage are
-  // eased on the first floors and climb back to full strength by floor 6. Keyed on
-  // deepest-reached, so a returning deep hero (and every existing save) sees ×1.
-  const _rampEase = player.guided ? earlyRelief(player.maxFloor) : 1;
-  const baseHp = Math.max(1, Math.round(egCovSpawnHp((14 + mobLevel * BALANCE.enemyHpPerFloor) * threat * (floorMod.hpMult || 1) * pfx('hp', 1) * threatScale * reliefEase * _rampEase * BALANCE.enemyHpMult, _fe)));
-  const baseDmg = Math.max(1, Math.round(egCovSpawnDmg((3.5 + mobLevel * BALANCE.enemyDmgPerFloor + bandIdx) * threat * (floorMod.dmgMult || 1) * pfx('dmg', 1) * threatScale * earlyBite * reliefEase * _rampEase * BALANCE.enemyDmgMult, _fe)));
+  // Early-game arc: a brand-new hero's foes carry MORE HP over the opening floors
+  // (data/onboarding EARLY_ENEMY_HP), easing to the plain depth curve by floor 6 —
+  // the enemy half of "weak at the start". Keyed on deepest-reached, so a returning
+  // deep hero (and every existing save) sees ×1. Foe DAMAGE takes no early modifier
+  // now: the longer fights this HP boost creates already make the opening threaten,
+  // and the hero half of the arc is the playerEarlyDamage() ramp on the hero's hit.
+  const _hpRamp = player.guided ? earlyEnemyHp(player.maxFloor) : 1;
+  const baseHp = Math.max(1, Math.round(egCovSpawnHp((14 + mobLevel * BALANCE.enemyHpPerFloor) * threat * (floorMod.hpMult || 1) * pfx('hp', 1) * threatScale * reliefEase * _hpRamp * BALANCE.enemyHpMult, _fe)));
+  const baseDmg = Math.max(1, Math.round(egCovSpawnDmg((3.5 + mobLevel * BALANCE.enemyDmgPerFloor + bandIdx) * threat * (floorMod.dmgMult || 1) * pfx('dmg', 1) * threatScale * reliefEase * BALANCE.enemyDmgMult, _fe)));
   floorMobSpec = { types: floorTypes, hp: baseHp, dmg: baseDmg, level: mobLevel };
 
   for (let i = 0; i < count; i++) {
@@ -23125,6 +23129,12 @@ function rollPlayerHit(e) {
   const dmgPct = foodFx('dmgPct') + healerFx('dmgPct'); // ramen + healer Blessing (Might)
   if (dmgPct) dmg *= 1 + dmgPct;
   dmg *= classDmgDealtMult(); // Warrior + damage passives
+  // Early-game arc (guided heroes): the hero hits softer over the opening floors and
+  // ramps to full by floor 6 (data/onboarding PLAYER_EARLY_DMG), so a fresh hero's
+  // huge flat attribute damage doesn't one-shot floor-1 trash — the hero half of
+  // "weak at the start". Applied to the live hit ONLY, never the Power/rating model
+  // or the DPS tooltip (which stay depth-independent).
+  if (player.guided) dmg *= playerEarlyDamage(dungeonLevel);
   if (diffClearedCount()) dmg *= diffDebuffMult(); // permanent per-tier scar
   const dmgUp = buffMag('dmgUp'); // War Cry / Frenzy / Avatar self-buffs
   if (dmgUp > 0) dmg *= 1 + dmgUp;
@@ -23201,10 +23211,6 @@ function dealDamage(e, dmg, isCrit) {
   if (e.shieldT > 0) dmg = Math.max(1, Math.round(dmg * 0.5)); // boss ward halves the blow
   // Vulnerable (cursed/marked) foes take amplified damage from every source.
   if (statusEffects.some(s => s.target === e && s.effect === 'vuln')) dmg = Math.round(dmg * 1.35);
-  // Early-game training wheels: on the beach and floors 1–3, no single blow may
-  // fell a foe in fewer than MIN_EARLY_HITS hits — cap the bite so a new player
-  // trades a few blows rather than one-shotting trash (see systems/earlyGame.js).
-  dmg = capEarlyHit(dmg, e.maxHp, dungeonLevel, tutorialActive);
   e.hp -= dmg;
   // Vampiric (item power): siphon a slice of the damage dealt back as health.
   const vamp = itemPowerCount('vampiric');
@@ -23565,9 +23571,7 @@ function attackEnemy(e, opts = {}) {
       return;
     }
     const h = rollPlayerHit(target);
-    // Cap the swing on the early floors (matching dealDamage) so the combat-log
-    // total and the floating hit number agree when the bite is clamped.
-    const d = capEarlyHit(Math.max(1, Math.round(h.dmg * mult)), target.maxHp, dungeonLevel, tutorialActive);
+    const d = Math.max(1, Math.round(h.dmg * mult));
     if (h.isCrit) anyCrit = true;
     dealtTotal += d;
     dealDamage(target, d, h.isCrit);
@@ -25427,8 +25431,10 @@ function ratKingTurn(e, dist) {
   _fxPush('aura', cx, cy, paletteFor('summon'), { variant: 'flare', dur: Math.round(tell * 620), moteN: 10 });
   triggerAttackAnim(e, player.x, player.y);   // a quick lunge/rear as it commits
   if (roll < 0.32) {
-    // Quake Slam — a big disc around the boss. Dodge: sprint to the rim.
-    pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 4.6, tell, active: 0.14, dmg: Math.round(raw * 1.7), el: 'earth', src: e, label: `${e.name}'s quake`, flash: true, shakeAmt: 7, sfx: 'boss' });
+    // Quake Slam — a big disc around the boss. Dodge: sprint to the rim. Eased to
+    // 1.5× (was 1.7×) so a missed dodge on the FIRST boss a new hero ever meets isn't
+    // a near-one-shot — still the Rat King's heaviest blow, just survivable.
+    pushTelegraph({ shape: 'disc', x: cx, y: cy, r: 4.6, tell, active: 0.14, dmg: Math.round(raw * 1.5), el: 'earth', src: e, label: `${e.name}'s quake`, flash: true, shakeAmt: 7, sfx: 'boss' });
     log(`<span data-spr=b_ratking></span> ${e.name} rears back for a slam!`);
   } else if (roll < 0.62) {
     // Pounce — a disc that tracks you, then locks. Dodge: keep moving.
@@ -27095,6 +27101,12 @@ function flushHudDirty() { if (_hudDirty) { _hudDirty = false; updateBars(); } }
 let _statusStripHtml = null;
 let _clearStatusHtml = null, _pactHudKey = null, _foodHudKey = null;
 let _invTabHtml = null, _heroTabHtml = null, _skillsTabHtml = null;
+// "New loot" badge state: item object refs the player has already laid eyes on in
+// the LOOT list. A WeakSet, so it never touches the save shape and drops removed
+// items on its own — resets to empty on reload (nothing badges just after loading;
+// the loaded bag is seeded as seen). See newLootCount() / markLootSeen().
+const _seenLoot = new WeakSet();
+let _seenLootInit = false;
 let _skillBtnIconHtml = null;
 function updateBars() {
   renderStaminaBar();
@@ -27262,11 +27274,17 @@ function updateBars() {
   _hudWispTown = inTown;
   applyHudWisps();
 
-  // Show how many items are in the bag right in the LOOT tab label, in the same
-  // tab font (a dim bracket, not a badge).
+  // The LOOT tab label carries two readouts: a dim bracketed bag tally in the tab
+  // font, and — when loot has piled up unseen — a red count badge.
+  // Unseen-loot count drives both that badge and the touch Bag pip. Computed once
+  // here (it also snapshots the bag as "seen" while the list is open).
+  const newLoot = newLootCount();
   const invTab = document.getElementById('tab-inv');
   if (invTab) {
-    const html = `LOOT<span class="tab-num ${inventory.length>=BAG_MAX?'full':''}">(${inventory.length}/${BAG_MAX})</span>`;
+    // A red count badge — same component as the HERO / SKILLS point badges — flags
+    // loot that landed in the bag while the player was looking elsewhere.
+    const newBadge = newLoot > 0 ? `<span class="tab-count">${newLoot}</span>` : '';
+    const html = `LOOT<span class="tab-num ${inventory.length>=BAG_MAX?'full':''}">(${inventory.length}/${BAG_MAX})</span>${newBadge}`;
     if (html !== _invTabHtml) { _invTabHtml = html; invTab.innerHTML = html; }
   }
 
@@ -27303,6 +27321,11 @@ function updateBars() {
   // Mirror the unspent-points count onto the touch BAG button's badge.
   const tbBagBadge = document.getElementById('tb-bag-badge');
   if (tbBagBadge) tbBagBadge.textContent = totalPts > 0 ? String(totalPts) : '';
+  // On touch the LOOT tab hides inside the closed Bag sheet, so surface unseen loot
+  // as a small red pip on the always-visible Bag button (clear of the gold points
+  // badge). A dot, not a number — the exact count shows once the bag is open.
+  const tbBagNew = document.getElementById('tb-bag-newloot');
+  if (tbBagNew) tbBagNew.classList.toggle('show', newLoot > 0);
   // Plain item count in brackets next to the BAG label — same font, no glow.
   const bagCount = document.getElementById('bag-count');
   if (bagCount) {
@@ -27621,6 +27644,26 @@ let _panelDirty = false;
 function panelVisible() { return panelOpen && !document.body.classList.contains('panel-collapsed'); }
 function renderPanelSoon() { _panelDirty = true; }
 function flushPanel() { if (_panelDirty && panelVisible()) renderPanel(); }
+
+// ── "New loot" badge plumbing ───────────────────────────────────────────────
+// Is the LOOT list actually on-screen right now? On desktop that's the open,
+// un-collapsed drawer; on touch it's the open Bag sheet. Either way the tab must
+// be the active one — a GEAR/HERO/SKILLS view doesn't count as seeing the loot.
+function lootListVisible() {
+  if (currentTab !== 'inv') return false;
+  return isTouchMode() ? document.body.classList.contains('bag-open') : panelVisible();
+}
+// Mark everything currently in the bag as seen (bounded ≤ BAG_MAX, O(1) adds, no
+// allocation — safe to call every frame while the list is visible).
+function markLootSeen() { for (const item of inventory) if (item) _seenLoot.add(item); }
+// How many bag items has the player not yet seen in the LOOT list? Seeds the
+// loaded bag as seen on first call (so a reload never badges old loot), and keeps
+// the snapshot current whenever the list is visible (nothing is hidden then).
+function newLootCount() {
+  if (!_seenLootInit) { markLootSeen(); _seenLootInit = true; }
+  if (lootListVisible()) { markLootSeen(); return 0; }
+  return unseenLootCount(inventory, _seenLoot);
+}
 
 function renderPanel() {
   _panelDirty = false;   // any render (direct or flushed) satisfies a pending request
@@ -31375,6 +31418,9 @@ function loadGame() {
       : null;
     graveMarker = null;
     inventory = (data.inventory || []).filter(it => it && it.slot); // drop legacy typeKey-only items
+    // A loaded bag starts fully "seen" — the new-loot badge only flags items that
+    // arrive during THIS session, never the gear you already owned before reloading.
+    markLootSeen(); _seenLootInit = true;
     // The town stash is shared across every save slot, so it is NOT restored from
     // this character's save. loadStash() (called once at boot) loads it from its
     // own key and folds any per-character stashes from older saves into the pool.
