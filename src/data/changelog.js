@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "small", v: "HUD Upgrades: renamed, own landing tab, steeper prices", by: "Jeff Louie", notes: [
+    "Craftsman's \"HUD Kit\" tab renamed HUD Upgrades — now the landing tab, ahead of GEAR.",
+    "Prices ~2–3× steeper and mixed: Scrap on all, Glimmer from mid tier, a Core on minimap & auto-loot.",
+    "Core gates the two premium tools behind reaching Hardened, so the kit is no longer a one-visit sweep.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Esc closes title popups; reset local achievements & bestiary", by: "Jeff Louie", notes: [
     "Esc now closes Cloud Save, Save Slots, Achievements, Bestiary & History popups (matches the rest).",
     "New Settings ▸ Progress ▸ Reset wipes this device's achievement & bestiary progress to zero.",

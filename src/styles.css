@@ -3159,7 +3159,7 @@
   .gold-vault-note { font-size: 1.2rem; opacity: 0.72; }
   #shop-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px; }
   #shop-tabs { display: flex; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--border); }
-  /* Craftsman bench switch (GEAR · HUD KIT) — reuses the .shop-tab pill inside the town panel. */
+  /* Craftsman bench switch (HUD UPGRADES · GEAR) — reuses the .shop-tab pill inside the town panel. */
   #forge-tabs { display: flex; gap: 6px; margin-bottom: var(--space-5); }
   .shop-tab { flex: 1; padding: 7px 0; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--orange-400); font-family: var(--font-ui); font-weight: bold; font-size: 1.4rem; letter-spacing: 1px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .shop-tab.active { border-color: var(--gold); background: var(--orange-850); color: var(--gold); }

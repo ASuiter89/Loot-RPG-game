@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   HUD_UPGRADE_KEYS,
+  HUD_COST_KEYS,
   hudUpgradeById,
   hudUpgradeCost,
+  hudUpgradeCostOf,
   hudOwns,
   allHudUpgradesOwned,
   hudUpgradesOwnedCount,
@@ -32,15 +34,42 @@ describe('hudUpgradeById', () => {
   });
 });
 
+describe('HUD_COST_KEYS', () => {
+  it('lists gold plus the crafting materials in wallet order', () => {
+    expect(HUD_COST_KEYS).toEqual(['gold', 'scrap', 'glimmer', 'core', 'chaos']);
+  });
+});
+
+describe('hudUpgradeCostOf', () => {
+  it('returns the catalog cost object for a known key', () => {
+    for (const u of HUD_UPGRADES) expect(hudUpgradeCostOf(u.key)).toEqual(u.cost);
+  });
+  it('is an empty object for an unknown key', () => {
+    expect(hudUpgradeCostOf('nope')).toEqual({});
+  });
+  it('keeps only positive integer components, flooring fractions', () => {
+    const catalog = [
+      { key: 'a', cost: { gold: 120.9, scrap: 10, glimmer: 0, core: -2, chaos: 'x' } },
+      { key: 'b', cost: {} },
+      { key: 'c' },
+      { key: 'd', cost: { gold: 0 } },
+    ];
+    expect(hudUpgradeCostOf('a', catalog)).toEqual({ gold: 120, scrap: 10 });
+    expect(hudUpgradeCostOf('b', catalog)).toEqual({});
+    expect(hudUpgradeCostOf('c', catalog)).toEqual({});
+    expect(hudUpgradeCostOf('d', catalog)).toEqual({});
+  });
+});
+
 describe('hudUpgradeCost', () => {
-  it('returns the catalog price for a known key', () => {
-    for (const u of HUD_UPGRADES) expect(hudUpgradeCost(u.key)).toBe(u.price);
+  it('returns the gold component of a known key', () => {
+    for (const u of HUD_UPGRADES) expect(hudUpgradeCost(u.key)).toBe(u.cost.gold);
   });
   it('is 0 for an unknown key', () => {
     expect(hudUpgradeCost('nope')).toBe(0);
   });
-  it('floors and rejects a non-positive / malformed price', () => {
-    const catalog = [{ key: 'a', price: 12.9 }, { key: 'b', price: -5 }, { key: 'c', price: 'x' }, { key: 'd' }];
+  it('floors and rejects a non-positive / malformed gold', () => {
+    const catalog = [{ key: 'a', cost: { gold: 12.9 } }, { key: 'b', cost: { gold: -5 } }, { key: 'c', cost: { gold: 'x' } }, { key: 'd' }];
     expect(hudUpgradeCost('a', catalog)).toBe(12);
     expect(hudUpgradeCost('b', catalog)).toBe(0);
     expect(hudUpgradeCost('c', catalog)).toBe(0);
