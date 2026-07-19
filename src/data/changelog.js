@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "Merchant ware rarity scales with depth", by: "Jeff Louie", notes: [
+    "Roaming & town merchant stock leans by progress: shallow stalls white→green, deep ones blue→purple→orange→red.",
+    "Wares obey the drop rarity gate — greens wait for the floor-5 boss, blue+ for floor-10; a fresh hero sees only white.",
+    "No more set/orange/blue on a level-3 stall.",
+  ] },
   { date: "2026-07-18", size: "medium", v: "15 new Shrine boons", by: "Jeff Louie", notes: [
     "Beyond power/guard/fortune: greed (+60% gold), insight (+50% xp), discovery (+50 Magic Find), harvest (+60% materials), precision (+18% crit), phantom (+15% dodge).",
     "sorcery (+30% skill/spell power), leech (+15% lifesteal), brambles (reflect), bulwark (+Defense), swift (+18% move), haste (+25% attack speed).",
