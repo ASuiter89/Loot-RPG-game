@@ -15,6 +15,10 @@ export const CHANGELOG = [
     "New Settings ▸ Progress ▸ Reset wipes this device's achievement & bestiary progress to zero.",
     "Death ledger untouched; signed in, cloud re-syncs it — sign out first to keep it cleared.",
   ] },
+  { date: "2026-07-18", size: "small", v: "Early bag groups by category, rarest first", by: "Jeff Louie", notes: [
+    "Bag now groups gear by category (weapon, chest, legs…), rarest on top within each (was pickup order).",
+    "Quartermaster's Ledger still unlocks manual re-sort (pickup/rarity/power/value) & stat filter.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Craftsman arrives with the Healer", by: "Jeff Louie", notes: [
     "Joins on first boss (floor 5), was 2nd (floor 10); HUD Field Kit ready from first town visit.",
   ] },
