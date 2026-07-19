@@ -11,6 +11,11 @@ export const CHANGELOG = [
     "Craftsman pinned beside the Town Portal, off the avenue — no longer blocks the path.",
     "Campfire log seating pulled off the trails; endgame grove moved up 1 so keepers can't strand above it.",
   ] },
+  { date: "2026-07-19", size: "small", v: "HUD Upgrades: renamed, own landing tab, steeper prices", by: "Jeff Louie", notes: [
+    "Craftsman's \"HUD Kit\" tab renamed HUD Upgrades — now the landing tab, ahead of GEAR.",
+    "Prices ~2–3× steeper and mixed: Scrap on all, Glimmer from mid tier, a Core on minimap & auto-loot.",
+    "Core gates the two premium tools behind reaching Hardened, so the kit is no longer a one-visit sweep.",
+  ] },
   { date: "2026-07-19", size: "small", v: "Learn the Dungeon Gate at graduation", by: "Jeff Louie", notes: [
     "First town visit (floor-5 boss) no longer holds a return portal — press on through the Dungeon Gate.",
     "Gate gains a Continue to Floor N button: one tap to your deepest checkpoint on the tier you're pushing.",

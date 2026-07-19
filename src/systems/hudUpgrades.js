@@ -9,18 +9,37 @@ import { HUD_UPGRADES } from '../data/hudUpgrades.js';
 // enumerate without re-listing the seven strings.
 export const HUD_UPGRADE_KEYS = HUD_UPGRADES.map((u) => u.key);
 
+// The mixed-cost components an upgrade may charge, in wallet order (commonest first).
+// Mirrors the shell's CRAFT_MAT_KEYS plus gold — canAfford / spendCost understand any
+// subset of these.
+export const HUD_COST_KEYS = ['gold', 'scrap', 'glimmer', 'core', 'chaos'];
+
 // The catalog entry for a key (from the given catalog, defaulting to the shipped
 // one), or null when unknown.
 export function hudUpgradeById(key, catalog = HUD_UPGRADES) {
   return (Array.isArray(catalog) ? catalog : []).find((u) => u && u.key === key) || null;
 }
 
-// Gold price of an upgrade. Unknown keys — and any malformed/negative price — cost 0
-// (the shell still guards the purchase, so a bad key can never be "bought" anyway).
-export function hudUpgradeCost(key, catalog = HUD_UPGRADES) {
+// The full mixed cost { gold, scrap, glimmer, core, chaos } to build an upgrade — a
+// wallet-ready object the shell hands to canAfford / spendCost / costLabelHi. Only
+// positive integer components are kept (fractions are floored, zero/negative/malformed
+// dropped); an unknown key — or an entry with no cost — is free ({}). The shell still
+// guards the purchase, so a bad key can never be "bought" anyway.
+export function hudUpgradeCostOf(key, catalog = HUD_UPGRADES) {
   const u = hudUpgradeById(key, catalog);
-  const p = u && u.price;
-  return typeof p === 'number' && p > 0 ? Math.floor(p) : 0;
+  const raw = (u && u.cost) || {};
+  const out = {};
+  for (const k of HUD_COST_KEYS) {
+    const v = raw[k];
+    if (typeof v === 'number' && v > 0) out[k] = Math.floor(v);
+  }
+  return out;
+}
+
+// Gold component of an upgrade's cost (a convenience over hudUpgradeCostOf). Unknown
+// keys — and any malformed/negative gold — cost 0.
+export function hudUpgradeCost(key, catalog = HUD_UPGRADES) {
+  return hudUpgradeCostOf(key, catalog).gold || 0;
 }
 
 // Does the given owned-map grant `key`? Tolerates a missing/!object map (a brand-new
