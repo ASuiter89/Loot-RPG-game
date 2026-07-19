@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "Rogue, Mage, Templar lore trimmed", by: "Claude", notes: [
+    "Rogue, Mage and Templar lore cut to a single line each, matching the Warrior's.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Cleaner beach level-up nudge", by: "Claude", notes: [
     "Level-up popup reads \"You gained a level!\" (was \"Level 2!\").",
     "Drops its left star badge; tutorial nudge text now centered.",
