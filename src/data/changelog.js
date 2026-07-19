@@ -7,6 +7,12 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "medium", v: "Tutorial pauses to teach one control at a time", by: "Jeff Louie", notes: [
+    "Opening \"head north\" hint clears after ~2s of walking (was: stayed the whole shore).",
+    "First hit, first weapon and first spell each PAUSE and spotlight one glowing control — Health Potion, your new gear, Mana Potion — greying the rest until you use it.",
+    "Equip beat opens the bag to the Loot tab only; other tabs lock until the weapon's on.",
+    "Level-up nudge reworded: \"Level up! Open your bag and spend your Hero and Skill points.\"",
+  ] },
   { date: "2026-07-19", size: "small", v: "HUD Upgrade gold costs ×3", by: "Jeff Louie", notes: [
     "Craftsman HUD Upgrade gold prices tripled; materials unchanged. Minimap 480→1440g, vitals 120→360g.",
   ] },

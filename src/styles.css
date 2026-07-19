@@ -634,15 +634,15 @@
   @keyframes objDonePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
   #objective-chip .obj-streak { color: var(--orange-800); font-weight: bold; }
 
-  /* Greed gate — the risk/reward "cursed floor" choice modal. The beach-tutorial
-     prompts (weapon drop, first level-up) share this world-pausing overlay shell. */
-  #greed-overlay, #boss-gate-overlay, #equip-tut-overlay, #beach-levelup-overlay {
+  /* Greed gate — the risk/reward "cursed floor" choice modal, shared with the
+     boss-floor threshold prompt. (The beach-tutorial beats teach through the
+     world-pausing spotlight GATE below, not a full-screen card.) */
+  #greed-overlay, #boss-gate-overlay {
     position: fixed; inset: 0; z-index: 470; display: none;
     align-items: center; justify-content: center; padding: 20px;
     background: color-mix(in srgb, var(--ink) 72%, transparent);
   }
-  #greed-overlay.open, #boss-gate-overlay.open,
-  #equip-tut-overlay.open, #beach-levelup-overlay.open { display: flex; }
+  #greed-overlay.open, #boss-gate-overlay.open { display: flex; }
   #greed-card, #boss-gate-card {
     max-width: 340px; width: 100%; padding: 20px 18px;
     /* Cap to the visible viewport (overlay pads 20px top+bottom) and scroll a tall
@@ -808,6 +808,86 @@
     font-family: var(--font-ui); -webkit-tap-highlight-color: transparent;
   }
   #tut-popup .tp-x:hover, #tut-popup .tp-x:active { color: var(--text); background: color-mix(in srgb, var(--panel) 90%, transparent); }
+
+  /* ── TUTORIAL SPOTLIGHT GATE ── a world-pausing teaching moment that greys the
+     whole screen except ONE live control (the glowing Health/Mana flask, the Bag,
+     the loot list) and swallows every touch outside it, so the only thing a new hero
+     can do is the action being taught. Four blocker panels tile the viewport around
+     a lit hole (both placed in viewport px by positionTutGate); the world stays
+     paused (rtPaused) until the taught action fires (syncTutGate). The container is
+     click-through — only the blockers catch pointers. */
+  #tut-gate { position: fixed; inset: 0; z-index: 560; display: none; pointer-events: none; }
+  body.tut-gated #tut-gate { display: block; }
+  #tut-gate .tg-block {
+    position: fixed; pointer-events: auto;
+    background: color-mix(in srgb, var(--ink) 66%, transparent);
+    animation: tgFade 0.28s ease-out;
+  }
+  @keyframes tgFade { from { opacity: 0; } to { opacity: 1; } }
+  /* The lit hole is purely a glowing ring around the spared rectangle (its middle is
+     transparent, so the control beneath shows through undimmed). Gold by default; the
+     Health-Potion beat glows red and the Mana-Potion beat blue, to match the flask. */
+  #tg-hole {
+    position: fixed; z-index: 1; pointer-events: none; border-radius: var(--radius-md);
+    box-shadow: 0 0 0 2px var(--gold),
+                0 0 0 5px color-mix(in srgb, var(--gold) 42%, transparent),
+                0 0 22px 8px color-mix(in srgb, var(--gold-350) 52%, transparent);
+    animation: tgHole 1.3s ease-in-out infinite;
+  }
+  @keyframes tgHole {
+    0%, 100% { box-shadow: 0 0 0 2px var(--gold), 0 0 0 5px color-mix(in srgb, var(--gold) 38%, transparent), 0 0 16px 6px color-mix(in srgb, var(--gold-350) 42%, transparent); }
+    50%      { box-shadow: 0 0 0 2px var(--gold), 0 0 0 7px color-mix(in srgb, var(--gold) 54%, transparent), 0 0 30px 12px color-mix(in srgb, var(--gold-350) 66%, transparent); }
+  }
+  body.tut-gate-potion #tg-hole {
+    box-shadow: 0 0 0 2px var(--hp), 0 0 0 5px color-mix(in srgb, var(--hp) 42%, transparent), 0 0 24px 9px color-mix(in srgb, var(--hp) 55%, transparent);
+    animation-name: tgHolePotion;
+  }
+  @keyframes tgHolePotion {
+    0%, 100% { box-shadow: 0 0 0 2px var(--hp), 0 0 0 5px color-mix(in srgb, var(--hp) 38%, transparent), 0 0 18px 7px color-mix(in srgb, var(--hp) 45%, transparent); }
+    50%      { box-shadow: 0 0 0 2px var(--hp), 0 0 0 8px color-mix(in srgb, var(--hp) 55%, transparent), 0 0 34px 14px color-mix(in srgb, var(--hp) 72%, transparent); }
+  }
+  body.tut-gate-mana #tg-hole {
+    box-shadow: 0 0 0 2px var(--mp), 0 0 0 5px color-mix(in srgb, var(--mp) 42%, transparent), 0 0 24px 9px color-mix(in srgb, var(--mp) 55%, transparent);
+    animation-name: tgHoleMana;
+  }
+  @keyframes tgHoleMana {
+    0%, 100% { box-shadow: 0 0 0 2px var(--mp), 0 0 0 5px color-mix(in srgb, var(--mp) 38%, transparent), 0 0 18px 7px color-mix(in srgb, var(--mp) 45%, transparent); }
+    50%      { box-shadow: 0 0 0 2px var(--mp), 0 0 0 8px color-mix(in srgb, var(--mp) 55%, transparent), 0 0 34px 14px color-mix(in srgb, var(--mp) 72%, transparent); }
+  }
+  /* The gate's own instruction pill — pinned top-centre, safe-area aware, fluid. It
+     rides above the blockers and carries the message itself (the floating #tut-popup
+     is masked while a gate is up, and the touch Bag sheet hides it anyway). */
+  #tg-msg {
+    position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + var(--space-5));
+    transform: translateX(-50%); z-index: 2; pointer-events: none;
+    display: none; align-items: center; gap: var(--space-3);
+    width: max-content; max-width: min(92vw, 440px);
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--bg) 96%, transparent);
+    border: 1px solid var(--gold);
+    color: var(--text); font-size: var(--fs-body); line-height: 1.4; text-align: center;
+    box-shadow: 0 6px 22px color-mix(in srgb, var(--ink) 66%, transparent),
+                0 0 16px color-mix(in srgb, var(--gold) 32%, transparent);
+  }
+  body.tut-gated #tg-msg { display: inline-flex; animation: tgFade 0.4s ease-out; }
+  #tg-msg .tg-msg-ic {
+    flex: 0 0 auto; width: calc(28px * var(--ui-scale, 1)); height: calc(28px * var(--ui-scale, 1));
+    display: flex; align-items: center; justify-content: center;
+  }
+  #tg-msg .tg-msg-ic:empty { display: none; }
+  #tg-msg .tg-msg-ic .dl-ic, #tg-msg .tg-msg-ic svg { width: 100%; height: 100%; }
+  #tg-msg .tg-msg-text b { color: var(--gold); font-weight: bold; }
+  /* The floating pill is redundant while a spotlight gate is up — the gate carries
+     its own message. */
+  body.tut-gated #tut-popup { display: none !important; }
+  /* Equip beat: only the LOOT tab works — the other bag tabs go inert + dim. */
+  body.tut-loot-lock #tab-equip, body.tut-loot-lock #tab-hero, body.tut-loot-lock #tab-skills {
+    pointer-events: none; opacity: 0.4;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #tut-gate .tg-block, #tg-hole, #tg-msg { animation: none; }
+  }
 
   /* LOOT tab wisps + a gold text glow until the starter weapon is worn. */
   #tab-inv.tut-tab-glow {
@@ -5655,6 +5735,13 @@
     max-width: min(92vw, 460px);
   }
   body.touch.bag-open #tut-popup { display: none; }
+  /* The spotlight-gate message docks in that same on-map slot (below the header
+     band), so it never overlaps the vitals strip — and, unlike the pill, it STAYS
+     visible with the Bag open (the equip beat spotlights the loot list beneath it). */
+  body.touch #tg-msg {
+    top: calc(env(safe-area-inset-top, 0px) + var(--hdr-h) + 18px);
+    max-width: min(92vw, 460px);
+  }
 
   /* Objective/bounty chip: a quiet cue that sits fully CLEAR of the footer action
      bar (not over its tiles), compact so it never dominates the bottom of the map.
