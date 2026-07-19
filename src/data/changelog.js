@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "Esc closes title popups; reset local achievements & bestiary", by: "Jeff Louie", notes: [
+    "Esc now closes Cloud Save, Save Slots, Achievements, Bestiary & History popups (matches the rest).",
+    "New Settings ▸ Progress ▸ Reset wipes this device's achievement & bestiary progress to zero.",
+    "Death ledger untouched; signed in, cloud re-syncs it — sign out first to keep it cleared.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Craftsman arrives with the Healer", by: "Jeff Louie", notes: [
     "Joins on first boss (floor 5), was 2nd (floor 10); HUD Field Kit ready from first town visit.",
   ] },
