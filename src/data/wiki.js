@@ -697,7 +697,7 @@ export const WIKI = [
         keywords: ['town', 'camp', 'keeper', 'gate', 'portal', 'checkpoint', 'rest', 'walkable'],
         body: [
           { p: 'Town is a walkable base <b>camp</b>, not a menu. You arrive in a forest clearing; walk up to a keeper and interact to use their service. Time keeps flowing here — HP, MP and Stamina regen while you roam — so resting a moment restores you for free.' },
-          { p: 'Two objects are your exits: the <b>Dungeon Gate</b> opens a tier + floor picker (you can warp in on any five-floor checkpoint up to your deepest floor), and the <b>Town Portal</b> — present only when you left a floor by portal — drops you right back where you left.' },
+          { p: 'Two objects are your exits: the <b>Dungeon Gate</b> opens a tier + floor picker — press <b>Continue to Floor N</b> to drop straight onto your deepest unlocked checkpoint, or tap any five-floor checkpoint up to your deepest floor. The <b>Town Portal</b> — present only when you left a floor by portal — drops you right back where you left.' },
           { note: 'A keeper stays greyed with a padlock until you meet its unlock requirement, and tells you the requirement when you interact.' },
         ],
       },
