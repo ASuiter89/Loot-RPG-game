@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  RAMP_FLOOR, SKILL_SLOT_RAMP, HAZARD_INTRO_FLOOR, EARLY_RELIEF, EARLY_PACK_CAP,
+  RAMP_FLOOR, SKILL_SLOT_RAMP, HAZARD_INTRO_FLOOR, EARLY_ENEMY_HP, PLAYER_EARLY_DMG, EARLY_PACK_CAP,
   HINTS, KEEPER_INTRO, KEEPER_INTRO_FLOOR, STARTER_STEPS, TIPS, DEATH_TIPS,
 } from '../../src/data/onboarding.js';
 import { WIKI, wikiArticles } from '../../src/data/wiki.js';
@@ -32,14 +32,26 @@ describe('onboarding schedule validity', () => {
     }
   });
 
-  it('early relief multipliers are ≤ 1 and rise toward full strength', () => {
-    const floors = Object.keys(EARLY_RELIEF).map(Number).sort((a, b) => a - b);
+  it('early enemy-HP multipliers are ≥ 1 and ease down toward full strength', () => {
+    const floors = Object.keys(EARLY_ENEMY_HP).map(Number).sort((a, b) => a - b);
+    expect(floors.length).toBeGreaterThan(0);
+    let prev = Infinity;
+    for (const f of floors) {
+      expect(EARLY_ENEMY_HP[f], `floor ${f} is a boost (≥1)`).toBeGreaterThanOrEqual(1);
+      expect(EARLY_ENEMY_HP[f], `floor ${f} eases downward`).toBeLessThanOrEqual(prev);
+      prev = EARLY_ENEMY_HP[f];
+    }
+  });
+
+  it('player early-damage ramp multipliers are in (0,1] and rise toward full strength', () => {
+    const floors = Object.keys(PLAYER_EARLY_DMG).map(Number).sort((a, b) => a - b);
+    expect(floors.length).toBeGreaterThan(0);
     let prev = 0;
     for (const f of floors) {
-      expect(EARLY_RELIEF[f], `floor ${f}`).toBeLessThanOrEqual(1);
-      expect(EARLY_RELIEF[f], `floor ${f}`).toBeGreaterThan(0);
-      expect(EARLY_RELIEF[f], `floor ${f} rises`).toBeGreaterThan(prev);
-      prev = EARLY_RELIEF[f];
+      expect(PLAYER_EARLY_DMG[f], `floor ${f} ≤ 1`).toBeLessThanOrEqual(1);
+      expect(PLAYER_EARLY_DMG[f], `floor ${f} > 0`).toBeGreaterThan(0);
+      expect(PLAYER_EARLY_DMG[f], `floor ${f} rises`).toBeGreaterThan(prev);
+      prev = PLAYER_EARLY_DMG[f];
     }
   });
 

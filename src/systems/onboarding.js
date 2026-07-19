@@ -6,7 +6,7 @@
 // embedding any of the numbers. Mirrors the shape of systems/rarityGate.js.
 
 import {
-  RAMP_FLOOR, SKILL_SLOT_RAMP, HAZARD_INTRO_FLOOR, EARLY_RELIEF, EARLY_PACK_CAP,
+  RAMP_FLOOR, SKILL_SLOT_RAMP, HAZARD_INTRO_FLOOR, EARLY_ENEMY_HP, PLAYER_EARLY_DMG, EARLY_PACK_CAP,
   HINTS, KEEPER_INTRO, STARTER_STEPS, TIPS, DEATH_TIPS,
 } from '../data/onboarding.js';
 
@@ -51,10 +51,18 @@ export function hazardAllowed(kind, floor) {
   return rampDepth(floor) >= intro;
 }
 
-// Soft relief multiplier for foe HP/damage on the opening floors (1 = none). Only
-// the first few floors carry an entry; everything deeper is full strength.
-export function earlyRelief(floor) {
-  return EARLY_RELIEF[rampDepth(floor)] || 1;
+// Foe max-HP multiplier over the opening floors (≥1 = tougher; 1 = plain depth
+// curve). Keyed on deepest floor reached, so only a genuinely-early hero sees it.
+// Absent past the ramp ⇒ 1.
+export function earlyEnemyHp(floor) {
+  return EARLY_ENEMY_HP[rampDepth(floor)] || 1;
+}
+
+// Hero-damage ramp over the opening floors (≤1 = softer while weak; 1 = full). The
+// counterpart to earlyEnemyHp on the hero side — keyed on the CURRENT floor, so it
+// shapes each fight as it happens and lifts as the hero descends. Absent ⇒ 1.
+export function playerEarlyDamage(floor) {
+  return PLAYER_EARLY_DMG[rampDepth(floor)] || 1;
 }
 
 // Cap on how many foes an early floor spawns, or null (uncapped) past the ramp.
