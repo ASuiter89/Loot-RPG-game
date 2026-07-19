@@ -33,12 +33,14 @@ export const TOWN_PORTAL = { x: 15, y: 15, name: 'Town Portal' };
 // spread loosely across the open clearing.
 export const TOWN_NPCS = [
   // Endgame sanctum — the hedged grove (top-left), reached through its south gap.
-  { x: 5, y: 4, kind: 'covenants', name: 'Covenant Altar' },
-  { x: 8, y: 5, kind: 'weave', name: 'Ascendant Weave' },
-  { x: 10, y: 7, kind: 'pantheon', name: 'Pantheon' },
-  { x: 4, y: 6, kind: 'mirrorforge', name: 'Mirrorforge' },
-  { x: 6, y: 8, kind: 'deeds', name: 'Hall of Deeds' },
-  { x: 9, y: 9, kind: 'cycles', name: 'Cycles' },
+  // The grove sits one tile up so its top wall butts against the treeline (no walkable
+  // gap above it for a keeper to get stranded in); keep these in sync with the hedges.
+  { x: 5, y: 3, kind: 'covenants', name: 'Covenant Altar' },
+  { x: 8, y: 4, kind: 'weave', name: 'Ascendant Weave' },
+  { x: 10, y: 6, kind: 'pantheon', name: 'Pantheon' },
+  { x: 4, y: 5, kind: 'mirrorforge', name: 'Mirrorforge' },
+  { x: 6, y: 7, kind: 'deeds', name: 'Hall of Deeds' },
+  { x: 9, y: 8, kind: 'cycles', name: 'Cycles' },
   // Regular services, scattered organically across the clearing.
   { x: 16, y: 5, kind: 'trainer', name: 'Trainer' },
   { x: 22, y: 4, kind: 'merchant', name: 'Merchant' },
@@ -46,10 +48,11 @@ export const TOWN_NPCS = [
   { x: 19, y: 7, kind: 'ramen', name: 'Ramen House' },
   { x: 25, y: 7, kind: 'healer', name: 'Healer' },
   { x: 21, y: 11, kind: 'gambler', name: 'Gambler' },
-  // The Craftsman stands on the central avenue two tiles NORTH of the Town Portal
-  // (15,15) — pinned and never wandering (see TOWN_FIXED_KINDS) so a returning hero
-  // steps out of the portal right in front of the forge and can never miss it.
-  { x: 15, y: 13, kind: 'forge', name: 'Craftsman' },
+  // The Craftsman stands just OFF the central avenue, up-left of the Town Portal
+  // (15,15) — pinned and never wandering (see TOWN_FIXED_KINDS) so it's right by where
+  // a returning hero lands, but sits beside the path (not on it) so it never blocks the
+  // walkway. A path tile is orthogonally adjacent, so it's still greeted in one step.
+  { x: 12, y: 12, kind: 'forge', name: 'Craftsman' },
   { x: 9, y: 12, kind: 'prospector', name: 'Prospector' },
   { x: 24, y: 14, kind: 'bounty', name: 'Bounty Board' },
   { x: 4, y: 16, kind: 'transmuter', name: 'Transmuter' },
@@ -76,12 +79,16 @@ export const TOWN_PATHS = [
 // endgame-sanctum hedge walls (with a south doorway gap), then scattered camp props,
 // then the treeline (border trees + non-occluding bushes).
 export const TOWN_DECOR = [
-  // Landmarks: central campfire + fire-ring seating, well, signpost.
-  { x: 15, y: 10, id: 180 }, { x: 13, y: 9, c: 'L' }, { x: 17, y: 9, c: 'L' }, { x: 13, y: 11, c: 'L' }, { x: 17, y: 11, c: 'L' }, { x: 15, y: 12, c: 'L' }, { x: 23, y: 12, id: 190 }, { x: 13, y: 18, id: 63 },
-  // Endgame sanctum hedge walls ('h'), doorway gap on the south side (at x:7,y:10).
-  { x: 3, y: 3, c: 'h' }, { x: 3, y: 10, c: 'h' }, { x: 4, y: 3, c: 'h' }, { x: 4, y: 10, c: 'h' }, { x: 5, y: 3, c: 'h' }, { x: 5, y: 10, c: 'h' }, { x: 6, y: 3, c: 'h' }, { x: 6, y: 10, c: 'h' }, { x: 7, y: 3, c: 'h' }, { x: 8, y: 3, c: 'h' }, { x: 8, y: 10, c: 'h' }, { x: 9, y: 3, c: 'h' }, { x: 9, y: 10, c: 'h' }, { x: 10, y: 3, c: 'h' }, { x: 10, y: 10, c: 'h' }, { x: 11, y: 3, c: 'h' }, { x: 11, y: 10, c: 'h' }, { x: 3, y: 4, c: 'h' }, { x: 11, y: 4, c: 'h' }, { x: 3, y: 5, c: 'h' }, { x: 11, y: 5, c: 'h' }, { x: 3, y: 6, c: 'h' }, { x: 11, y: 6, c: 'h' }, { x: 3, y: 7, c: 'h' }, { x: 11, y: 7, c: 'h' }, { x: 3, y: 8, c: 'h' }, { x: 11, y: 8, c: 'h' }, { x: 3, y: 9, c: 'h' }, { x: 11, y: 9, c: 'h' },
+  // Landmarks: central campfire + fire-ring seating, well, signpost. The four seat
+  // logs ring the fire at its corners, kept OFF the walkable trails (the y:11 path and
+  // the avenue run between them) so no stump ever sits on a path.
+  { x: 15, y: 10, id: 180 }, { x: 13, y: 9, c: 'L' }, { x: 17, y: 9, c: 'L' }, { x: 13, y: 12, c: 'L' }, { x: 17, y: 12, c: 'L' }, { x: 23, y: 12, id: 190 }, { x: 13, y: 18, id: 63 },
+  // Endgame sanctum hedge walls ('h'), shifted up one tile so the top wall (y:2) butts
+  // against the treeline — no walkable row above the grove. Doorway gap on the south
+  // side (at x:7,y:9).
+  { x: 3, y: 2, c: 'h' }, { x: 3, y: 9, c: 'h' }, { x: 4, y: 2, c: 'h' }, { x: 4, y: 9, c: 'h' }, { x: 5, y: 2, c: 'h' }, { x: 5, y: 9, c: 'h' }, { x: 6, y: 2, c: 'h' }, { x: 6, y: 9, c: 'h' }, { x: 7, y: 2, c: 'h' }, { x: 8, y: 2, c: 'h' }, { x: 8, y: 9, c: 'h' }, { x: 9, y: 2, c: 'h' }, { x: 9, y: 9, c: 'h' }, { x: 10, y: 2, c: 'h' }, { x: 10, y: 9, c: 'h' }, { x: 11, y: 2, c: 'h' }, { x: 11, y: 9, c: 'h' }, { x: 3, y: 3, c: 'h' }, { x: 11, y: 3, c: 'h' }, { x: 3, y: 4, c: 'h' }, { x: 11, y: 4, c: 'h' }, { x: 3, y: 5, c: 'h' }, { x: 11, y: 5, c: 'h' }, { x: 3, y: 6, c: 'h' }, { x: 11, y: 6, c: 'h' }, { x: 3, y: 7, c: 'h' }, { x: 11, y: 7, c: 'h' }, { x: 3, y: 8, c: 'h' }, { x: 11, y: 8, c: 'h' },
   // Camp props (flowers/grass/potted/rugs walkable; barrels/crates solid).
-  { x: 6, y: 5, c: 'r' }, { x: 8, y: 8, c: 'p' }, { x: 4, y: 9, c: 'f' }, { x: 10, y: 4, c: 'p' }, { x: 7, y: 6, c: 'r' }, { x: 21, y: 5, c: 'o' }, { x: 23, y: 6, c: 'c' }, { x: 20, y: 4, c: 'f' },
+  { x: 6, y: 4, c: 'r' }, { x: 8, y: 7, c: 'p' }, { x: 4, y: 8, c: 'f' }, { x: 10, y: 3, c: 'p' }, { x: 7, y: 5, c: 'r' }, { x: 21, y: 5, c: 'o' }, { x: 23, y: 6, c: 'c' }, { x: 20, y: 4, c: 'f' },
   { x: 27, y: 6, c: 'g' }, { x: 18, y: 7, c: 'p' }, { x: 24, y: 9, c: 'o' }, { x: 26, y: 5, c: 'f' }, { x: 12, y: 5, c: 'f' }, { x: 14, y: 5, c: 'g' }, { x: 16, y: 6, c: 'f' }, { x: 18, y: 4, c: 'g' },
   { x: 6, y: 12, c: 'c' }, { x: 8, y: 14, c: 'p' }, { x: 5, y: 15, c: 'f' }, { x: 9, y: 16, c: 'g' }, { x: 22, y: 14, c: 'o' }, { x: 25, y: 15, c: 'c' }, { x: 19, y: 15, c: 'p' }, { x: 21, y: 17, c: 'f' },
   { x: 11, y: 16, c: 'g' }, { x: 13, y: 16, c: 'f' }, { x: 3, y: 17, c: 'g' }, { x: 5, y: 17, c: 'f' }, { x: 16, y: 15, c: 'f' }, { x: 15, y: 14, c: 'g' }, { x: 17, y: 13, c: 'f' },
@@ -134,10 +141,11 @@ export const TOWN_ENDGAME_KINDS = ['covenants', 'weave', 'pantheon', 'mirrorforg
 
 // Regular (non-sanctum) keepers PINNED to their authored tile — they take the exact
 // spot above every visit and never wander, so the hero always finds them in the same
-// place. The Craftsman is pinned north of the Town Portal: it's the keeper you return
-// to constantly (forging gear, crafting the HUD Field Kit), so it must never wander
-// off where a hero could lose it. buildTown places these at n.x/n.y with wander=false
-// and reserves their tile from the wander free-set.
+// place. The Craftsman is pinned just off the avenue beside the Town Portal: it's the
+// keeper you return to constantly (forging gear, crafting the HUD Field Kit), so it
+// must never wander off where a hero could lose it — but it sits BESIDE the path, not
+// on it, so it never blocks the walkway. buildTown places these at n.x/n.y with
+// wander=false and reserves their tile from the wander free-set.
 export const TOWN_FIXED_KINDS = ['forge'];
 
 // Bounding box (inclusive tile coords) of the hedged endgame sanctum — the grove the
@@ -146,7 +154,7 @@ export const TOWN_FIXED_KINDS = ['forge'];
 // blocks it from the wander free-set, and updateTownNpcs double-guards on it, so the
 // open-clearing folk keep out of the endgame grove. Keep it covering every hedge tile
 // and every endgame-keeper tile (a data test enforces both).
-export const TOWN_SANCTUM = { x0: 3, y0: 3, x1: 11, y1: 10 };
+export const TOWN_SANCTUM = { x0: 3, y0: 2, x1: 11, y1: 9 };
 
 // Slow-stroll tuning for the wandering regular keepers (buildTown + updateTownNpcs).
 // speed in tiles/sec (unhurried amble); radius is how far (Chebyshev) a keeper drifts
