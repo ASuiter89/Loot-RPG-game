@@ -24104,7 +24104,7 @@ function castSkillById(id, opts) {
   if (!fired) return false;
 
   if (bloodPact) { player.hp = Math.max(1, player.hp - cost); spawnFloatingText(player.x, player.y, `-${cost}`, '#ff5a6a'); }
-  else { player.mp -= cost; showRampHint('spellMana'); }   // ramp: first mana-spending cast teaches the mana resource (self-latches)
+  else player.mp -= cost;   // the first-cast mana lesson is taught by the spotlight gate (maybeTeachFirstSpell, below), not a ramp chip
   fireSkillTrigger('cast', {}); // on-cast procs
   updateBars();
   // Real-time: the cast just starts the recharge, which then burns down in real

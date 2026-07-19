@@ -12,6 +12,7 @@ export const CHANGELOG = [
     "First hit, first weapon and first spell each PAUSE and spotlight one glowing control — Health Potion, your new gear, Mana Potion — greying the rest until you use it.",
     "Equip beat opens the bag to the Loot tab only; other tabs lock until the weapon's on.",
     "Level-up nudge reworded: \"Level up! Open your bag and spend your Hero and Skill points.\"",
+  ] },
   { date: "2026-07-19", size: "small", v: "Escape portal out of the first boss lair", by: "Jeff Louie", notes: [
     "First floor-5 lair has no stairs onward; felling the guardian tears open a portal — \"Quick! Step into the portal!\"",
     "Step into it to graduate up into town (was walking unsealed stairs there).",
