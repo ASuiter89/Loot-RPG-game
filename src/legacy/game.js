@@ -23922,7 +23922,7 @@ function castSkillById(id, opts) {
   if (!fired) return false;
 
   if (bloodPact) { player.hp = Math.max(1, player.hp - cost); spawnFloatingText(player.x, player.y, `-${cost}`, '#ff5a6a'); }
-  else player.mp -= cost;
+  else { player.mp -= cost; showRampHint('spellMana'); }   // ramp: first mana-spending cast teaches the mana resource (self-latches)
   fireSkillTrigger('cast', {}); // on-cast procs
   updateBars();
   // Real-time: the cast just starts the recharge, which then burns down in real
@@ -29798,12 +29798,14 @@ function itemCardHTML(item, opts = {}) {
     const negative = (typeof v === 'number') && v < 0;
     const val = (typeof v === 'string') ? abbreviateNumbersIn(v) : (v < 0 ? '' : '+') + abbreviateNumber(v);
     // Base (headline/innate) stats come from the item's base and can't be
-    // rerolled, so tag them apart from rollable affixes — but keep every stat the
-    // same colour so the list reads cleanly. A curse penalty (negative) is tagged.
+    // rerolled, so mark them apart from rollable affixes — but keep every stat the
+    // same colour so the list reads cleanly. A base stat gets a dim asterisk whose
+    // hover title explains it (keeps the row short so name + stats stay the focus);
+    // a curse penalty (negative) keeps its worded tag.
     const isNative = head.includes(k);
     const style = negative ? ' style="color:var(--red-350)"' : '';
     const tag = negative ? ' <span class="tt-tag">cursed</span>'
-              : isNative ? ' <span class="tt-tag">base</span>' : '';
+              : isNative ? ' <span class="tt-base-mark" title="Base stat: innate to this item and can’t be rerolled">*</span>' : '';
     return `<div class="tt-stat"${style}>${val} ${STAT_LABELS[k] || k}${tag}</div>`;
   });
   // Attribute affixes (+Might, +Luck, …) get their own coloured rows.
@@ -29847,7 +29849,7 @@ function itemCardHTML(item, opts = {}) {
     : '';
   // Item level: drives raw stat size, so it's worth surfacing alongside power.
   const ilvlLine = (item.slot && item.ilvl)
-    ? `<span style="color:var(--blue-250);font-weight:bold">ilvl ${item.ilvl}</span>` : '';
+    ? `<span style="color:var(--blue-250)">ilvl ${item.ilvl}</span>` : '';
   // The "Equipped" label reads in gold so a glance tells which card is the piece
   // already worn, vs the dim "Hovered" candidate beside it.
   const label = opts.label
@@ -29859,8 +29861,10 @@ function itemCardHTML(item, opts = {}) {
   let reqLine = '';
   const rq = opts.hideReq ? null : attrReqStatus(item);
   if (rq) {
-    const col = rq.ok ? '#7ad08a' : '#e0556b';
-    reqLine = `<div style="color:${col};font-size:1.2rem;font-weight:bold;margin:2px 0">${rq.ok ? '✓' : '⚠'} Requires ${rq.need} ${ATTRIBUTES[rq.attr].short} <span style="opacity:.75">(you have ${rq.have})</span></div>`;
+    // Only the player's CURRENT stat number carries the green (sufficient) / red
+    // (short) colour; the rest of the line reads as plain metadata.
+    const haveCol = rq.ok ? 'var(--green-450)' : 'var(--red-350)';
+    reqLine = `<div class="tt-req">Requires ${rq.need} ${ATTRIBUTES[rq.attr].short} (you have <span style="color:${haveCol};font-weight:bold">${rq.have}</span>)</div>`;
   }
   // Ramp: a Guided hero's early tooltips run trimmed — the abstract build-aware
   // Power line is held back until the detailed-tooltips floor, so a new player just
@@ -29868,8 +29872,10 @@ function itemCardHTML(item, opts = {}) {
   const begin = player.guided && !detailedTooltips(player.maxFloor);
   return `
     ${label}
-    <div class="tt-name" style="color:${tierColor(item)}">${curseMark(item)}${item.name}</div>
-    <div class="tt-tier" style="color:${tierColor(item)}">${item.slot ? `<span data-spr=${SLOTS[item.slot].sprite}></span> ${SLOTS[item.slot].label}` : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</div>
+    <div class="tt-nameline">
+      <span class="tt-name" style="color:${tierColor(item)}">${curseMark(item)}${item.name}</span>
+      <span class="tt-tier" style="color:${tierColor(item)}">${item.slot ? `<span data-spr=${SLOTS[item.slot].sprite}></span> ${SLOTS[item.slot].label}` : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</span>
+    </div>
     ${weaponTypeLine}
     ${item.slot && !begin && hudOwned('rankings') ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${abbreviateNumber(power)}</div>` : ''}
     ${powerLine}
@@ -29877,7 +29883,7 @@ function itemCardHTML(item, opts = {}) {
     ${reqLine}
     ${stats}
     ${weaponLine}
-    <div style="color:var(--warn);font-size:1.2rem;margin-top:3px">Value: <span data-spr=ic_money></span>${fmtGold(item.value)}</div>
+    <div class="tt-value">Value: <span data-spr=ic_money></span>${fmtGold(item.value)}</div>
     <div class="tt-flavor">${item.flavor}</div>`;
 }
 
