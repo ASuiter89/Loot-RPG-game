@@ -74,14 +74,16 @@ lives in `src/legacy/game.js` and shrinks as code is extracted.)
     **Never end a turn by asking the human to open, approve, or merge the PR** —
     that's the exact stall this pipeline exists to remove. (Opening one by hand is
     harmless if you ever want to; it flows into the same auto-merge.)
-  - **A stalled PR is yours to finish — don't leave it dirty.** Changelog entries all
-    prepend to the top of one array, but `.gitattributes` marks
-    `src/data/changelog.js` `merge=union`, so git keeps BOTH sides' new entries on a
-    merge/rebase instead of conflicting — concurrent PRs no longer collide there
-    (same-day order may shuffle; that's cosmetic, and the data test pins only date
-    order). If a PR still goes "dirty" for some other reason, the auto-merge sweep
-    deliberately SKIPS it rather than force-merge, so rebase onto latest `main`,
-    keeping both sides' intent, and push so it can merge.
+  - **A stalled PR is yours to finish — don't leave it dirty.** Every PR prepends a
+    changelog entry to the top of one array, so the second PR to land always collides
+    there. `.gitattributes` marks `src/data/changelog.js` `merge=union` (git keeps
+    BOTH sides' entries when it actually merges), but GitHub's mergeability precheck
+    ignores merge drivers and still flags the PR DIRTY — so `auto-merge.yml`
+    AUTO-HEALS a changelog-only DIRTY: it merges `main` in (union resolves the
+    changelog as whole blocks), pushes, then gates + merges. Same-day order may
+    shuffle; that's cosmetic, and the data test pins only date order. A DIRTY PR that
+    conflicts on anything ELSE is left for you: rebase onto latest `main`, keep both
+    sides' intent, and push so it can merge.
   - **When your change has merged and nothing's left to do, tell the user they can
     archive this session** — Claude Code has no tool to archive a session itself, so
     this can't be automatic. The PR subscription delivers a merged event
