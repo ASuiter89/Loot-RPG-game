@@ -15,6 +15,9 @@ const GATED_KEYS = new Set([
 ]);
 // The bench sections each upgrade may list under.
 const GROUP_IDS = new Set(HUD_UPGRADE_GROUPS.map((g) => g.id));
+// The mixed-cost components an upgrade may charge — gold plus the crafting materials,
+// mirrored from the shell's wallet (CRAFT_MAT_KEYS + gold).
+const COST_KEYS = new Set(['gold', 'scrap', 'glimmer', 'core', 'chaos']);
 
 describe('HUD_UPGRADES catalog', () => {
   it('is a non-empty array', () => {
@@ -32,7 +35,7 @@ describe('HUD_UPGRADES catalog', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it('gives every entry a well-formed shape (name, icon, desc, group, positive integer price)', () => {
+  it('gives every entry a well-formed shape (name, icon, desc, group, mixed cost)', () => {
     for (const u of HUD_UPGRADES) {
       expect(typeof u.key).toBe('string');
       expect(u.key.length).toBeGreaterThan(0);
@@ -45,19 +48,39 @@ describe('HUD_UPGRADES catalog', () => {
       expect(typeof u.desc).toBe('string');
       expect(u.desc.length).toBeGreaterThan(0);
       expect(GROUP_IDS.has(u.group)).toBe(true);
-      expect(Number.isInteger(u.price)).toBe(true);
-      expect(u.price).toBeGreaterThan(0);
+      // cost is a mixed { gold, scrap, glimmer, core, chaos } object — every component
+      // is a known key and a positive integer, and a real gold price is always charged.
+      expect(u.cost && typeof u.cost).toBe('object');
+      expect(Number.isInteger(u.cost.gold)).toBe(true);
+      expect(u.cost.gold).toBeGreaterThan(0);
+      for (const [k, v] of Object.entries(u.cost)) {
+        expect(COST_KEYS.has(k)).toBe(true);
+        expect(Number.isInteger(v)).toBe(true);
+        expect(v).toBeGreaterThan(0);
+      }
     }
   });
 
-  it('lists the instruments cheapest-first within each bench group', () => {
+  it('lists the instruments cheapest-first (by gold) within each bench group', () => {
     // The bench renders one section per group (readouts, then bag tools); each
-    // section reads cheapest → priciest, so ordering is checked per group, not
-    // across the whole array.
+    // section reads cheapest → priciest by gold, so ordering is checked per group,
+    // not across the whole array.
     for (const g of HUD_UPGRADE_GROUPS) {
-      const prices = HUD_UPGRADES.filter((u) => u.group === g.id).map((u) => u.price);
-      const sorted = prices.slice().sort((a, b) => a - b);
-      expect(prices).toEqual(sorted);
+      const golds = HUD_UPGRADES.filter((u) => u.group === g.id).map((u) => u.cost.gold);
+      const sorted = golds.slice().sort((a, b) => a - b);
+      expect(golds).toEqual(sorted);
+    }
+  });
+
+  it('draws finer materials for the pricier tools (Core only on the priciest of a group)', () => {
+    // The Craftsman's build costs escalate: a Core (a Hardened-difficulty drop) only
+    // ever gates the single priciest tool in a group, so no early readout is stranded
+    // behind a material the player cannot yet farm.
+    for (const g of HUD_UPGRADE_GROUPS) {
+      const group = HUD_UPGRADES.filter((u) => u.group === g.id);
+      group.forEach((u, i) => {
+        if (u.cost.core) expect(i).toBe(group.length - 1);
+      });
     }
   });
 
