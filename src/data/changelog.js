@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "Beach foes randomized each new game", by: "Claude", notes: [
+    "Opening pack is now four of one random low-level species (rats, slimes, etc.) — not always skeletons.",
+    "Cave elite rolls its own random type too; no two new games open the same fight.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Rogue, Mage, Templar lore trimmed", by: "Claude", notes: [
     "Rogue, Mage and Templar lore cut to a single line each, matching the Warrior's.",
   ] },
