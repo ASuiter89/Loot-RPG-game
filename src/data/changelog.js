@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "small", v: "Learn the Dungeon Gate at graduation", by: "Jeff Louie", notes: [
+    "First town visit (floor-5 boss) no longer holds a return portal — press on through the Dungeon Gate.",
+    "Gate gains a Continue to Floor N button: one tap to your deepest checkpoint on the tier you're pushing.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Craftsman arrives with the Healer", by: "Jeff Louie", notes: [
     "Joins on first boss (floor 5), was 2nd (floor 10); HUD Field Kit ready from first town visit.",
   ] },
