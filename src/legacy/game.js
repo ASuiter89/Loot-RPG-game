@@ -6800,11 +6800,12 @@ let currentTab = 'inv';
 // Which gear slot the LOOT tab is filtered to ('all', a SLOT_KEYS value, or
 // 'other' for non-equipable items like potions).
 let lootFilter = 'all';
-// How the LOOT list is ordered: 'pickup' (default — the order you found them in) |
-// 'rarity' | 'power' | 'slot' | 'value'. Sorting other than pickup order needs the
-// Quartermaster's Ledger HUD upgrade (hudOwned('sortfilter')); until then the bag
-// stays in pickup order and the Sort/Filter controls are hidden.
-let lootSort = 'pickup';
+// How the LOOT list is ordered: 'slot' (default — grouped by gear category, rarest
+// first within each) | 'pickup' (the order you found them in) | 'rarity' | 'power' |
+// 'value'. CHOOSING the sort needs the Quartermaster's Ledger HUD upgrade
+// (hudOwned('sortfilter')); until then the Sort/Filter controls are hidden and the
+// bag holds this default category sort.
+let lootSort = 'slot';
 // Stat/attribute keys the LOOT list is narrowed to (empty = no stat filter). An
 // item shows if it carries ANY selected stat, so builds can surface relevant gear.
 let lootStatFilter = [];
@@ -7646,7 +7647,7 @@ window.gameGuide = function gameGuide(topic) {
       `Loot LEANS to your class: drops, the merchant and the gambler favour build-relevant bases (~60%, the rest random) — a Mage sees more staves/wands, robes and tomes; a Warrior/Templar more of their melee weapons, plate and shields; a Rogue more daggers/bows, light armour and quivers. Off-favoured bases still turn up, and picking a slot at the gambler still leans the base within it.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
       `From the LOOT tab, click an item to Equip, Sell (50% of its value, as gold), Scrap (into crafting materials), or Lock. Locked items are protected from sell, scrap and auto-loot.`,
-      `The LOOT bag holds items in PICKUP order (the order you found them) by default. Crafting the Quartermaster's Ledger HUD upgrade at the Craftsman adds the LOOT tab's Sort button (pickup / rarity / power / slot / value) and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
+      `The LOOT bag GROUPS items by gear category (weapon, off-hand, head, chest, hands, legs, ring, amulet) with the rarest piece first within each category, by default — so even a fresh hero finds gear by type with its best pieces on top. Crafting the Quartermaster's Ledger HUD upgrade at the Craftsman adds the LOOT tab's Sort button (pickup / rarity / power / slot / value) to re-order it however you like and a Filter button that narrows the list to gear carrying stats you pick; these only reorder/hide the on-screen rows — gameState().menu.inventory always returns the full unsorted bag with stable i indices.`,
       `A red badge on the LOOT tab (a red pip on the touch Bag button) counts loot that landed in the bag while you were on another tab; it clears the instant you open the LOOT list. gameState().menu.newLoot mirrors the count.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. SAFEGUARD: while enemies are near you can't swap onto an EMPTY or much-weaker set (it would strip your armor mid-fight) — break away first, or swap where it's safe; gearing UP to a stronger set is always allowed. Off-class weapons can be carried and sold but not equipped.`,
       `Bosses spill the MOST loot of any foe, and the FIRST time you clear a given boss FLOOR its guardian pays a jackpot — ~3x the drops at noticeably better quality (a one-time windfall per boss floor). In Endless, where boss species recur, this tracks by floor, so every new or deeper boss floor keeps paying; farming a floor you've already cleared drops at the normal boss rate. gameState().enemies[i].firstKill flags a boss whose floor windfall is still unclaimed. See gameGuide("enemies") for the boss rules.`,
@@ -7716,7 +7717,7 @@ window.gameGuide = function gameGuide(topic) {
       + `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the regular service keepers milling about the green at FRESH random spots every visit (most of them slowly strolling around — except the Craftsman, pinned just north of the Town Portal so you always find it) and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all. A keeper only appears once it has ARRIVED (one joins per boss kill) — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
       `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff, healerBuffs and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
-      `Merchant (buy gear / pay to restock — ware rarity SCALES with how deep you've pushed and never grey junk: shallow stalls stock white→green, deeper ones lean blue→purple→orange→red. The same early-game gate as dungeon drops applies, so no colour you haven't earned yet — greens wait for the floor-5 boss, blues+ for floor-10. Each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is a FOUNDING keeper — it arrives with the Healer the moment the town opens (boss floor 5), so its HUD Field Kit is on hand from your first visit — and stands PINNED just north of the Town Portal on the central avenue — it never wanders, so a hero returning by portal steps out right in front of it and can never lose it. Its HUD-KIT bench crafts the "Field Kit" in two groups: HUD READOUTS that each switch on a heads-up-display piece (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana numbers, status-effect icons), and BAG & LOOT TOOLS (Appraiser's Loupe = item Power ratings, Gauging Calipers = +/- stat compare vs equipped, Quartermaster's Ledger = bag sort & filter, Sorting Sieve = auto-loot rules). A fresh hero starts BARE — no HUD numbers/minimap/counters/labels/status icons, and a plain pickup-order bag with no Power ratings, stat compare, sort/filter or auto-loot — and fits these as gold allows; each is kept for that hero, and a freshly-fitted HUD piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + the KIT prices; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
+      `Merchant (buy gear / pay to restock — ware rarity SCALES with how deep you've pushed and never grey junk: shallow stalls stock white→green, deeper ones lean blue→purple→orange→red. The same early-game gate as dungeon drops applies, so no colour you haven't earned yet — greens wait for the floor-5 boss, blues+ for floor-10. Each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is a FOUNDING keeper — it arrives with the Healer the moment the town opens (boss floor 5), so its HUD Field Kit is on hand from your first visit — and stands PINNED just north of the Town Portal on the central avenue — it never wanders, so a hero returning by portal steps out right in front of it and can never lose it. Its HUD-KIT bench crafts the "Field Kit" in two groups: HUD READOUTS that each switch on a heads-up-display piece (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana numbers, status-effect icons), and BAG & LOOT TOOLS (Appraiser's Loupe = item Power ratings, Gauging Calipers = +/- stat compare vs equipped, Quartermaster's Ledger = bag sort & filter, Sorting Sieve = auto-loot rules). A fresh hero starts BARE — no HUD numbers/minimap/counters/labels/status icons, and a bag auto-grouped by gear category (rarest first) but with no Power ratings, stat compare, re-sort/filter or auto-loot — and fits these as gold allows; each is kept for that hero, and a freshly-fitted HUD piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + the KIT prices; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1, 5 or 10 floors (more damage/loot/gold, or an easier stretch). Each mystic offers just TWO pacts, rolled at random from twelve, so the choice changes every time you find one; a longer pact costs MORE per floor (the price climbs exponentially with floors sealed). gameState().npcs lists the two pacts a nearby mystic offers. Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Sellsword (arrives with your 12th boss kill): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
@@ -7773,7 +7774,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the FIRST hit you take pops a one-time nudge naming the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view.`,
       `Opening-floor content pacing (Normal, floors 1–25): the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. DIFFICULTY ARC — a fresh hero's flat attribute damage would otherwise one-shot floor-1 trash, so over floors 1–5 the real numbers bend to make kills take a few blows ORGANICALLY (no per-hit cap): foes carry extra HP and the hero deals less, both easing to full strength by floor 6 as your levels and gear take over — "weak at the start, then earn your strength". Because those fights last longer, foes land more of their (full-strength) hits, so the opening actually threatens. No glowing ELITES or elite affixes until floor 4 (the one scripted beach elite aside). Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -11911,6 +11912,10 @@ function buildTutorialMap() {
   // Whichever foe falls FIRST hands over the starter weapon (see onEnemyDefeated /
   // _beachGearDropped), so the gift never hinges on kill order.
   _beachGearDropped = false;
+  // Re-arm the first-hit Health-Potion teach for this fresh shore (it fires once,
+  // the moment a foe first bites — see beachPotionHint / enemyAttackPlayer).
+  _beachPotionTaught = false; _beachPotionCueOn = false;
+  if (_beachPotionTimer) { clearTimeout(_beachPotionTimer); _beachPotionTimer = null; }
   const packType = pick(BEACH_FOE_TYPES);
   const eliteType = pick(BEACH_FOE_TYPES);
   // A gentle beach foe: the tutorial fixes its stats and slow melee gait; only the
@@ -11919,8 +11924,11 @@ function buildTutorialMap() {
     x, y, type, name: (MONSTERS[type] && MONSTERS[type].name) || 'Creature',
     // HP sized so the ramped opening hit (attribute damage eased by the guided
     // player-damage ramp) fells a pack foe in a few blows, not one — the beach's
-    // "trade real blows" lesson now comes from HP, not a per-hit cap.
-    hp: 45, maxHp: 45, level: 1, dmg: 3,
+    // "trade real blows" lesson now comes from HP, not a per-hit cap. Their bite is
+    // deliberately REAL (dmg 8, well above a floor-1 mob's ~5): a fresh hero's Health
+    // visibly drops as the pack closes, so the first blow's Health-Potion teach
+    // (beachPotionHint) lands on a hero who actually needs to heal — not a faceroll.
+    hp: 45, maxHp: 45, level: 1, dmg: 8,
     dead: false, behavior: 'chaser', passive: true, provoked: false, slow: true,
     wakeRange: 4, tutorial: true,
     mColor: (MONSTERS[type] && MONSTERS[type].color) || null,
@@ -11931,10 +11939,12 @@ function buildTutorialMap() {
   enemies.push(mkFoe(packType, caveX - 1, 19));
   enemies.push(mkFoe(packType, caveX + 1, 19));
   // The elite: a named, glowing foe of its own random type — tougher and hits harder
-  // than the pack, and NOT slow — a real step up that guards the cave. Still
-  // tutorial-flagged, so it pays out through the beach handler like the rest.
+  // than the pack, and NOT slow — a real step up that guards the cave. Its blow
+  // (dmg 16, double a pack foe) is the beach's climax: a threat a level-1 hero must
+  // heal through, driving home the potion lesson. Still tutorial-flagged, so it pays
+  // out through the beach handler like the rest.
   enemies.push(mkFoe(eliteType, caveX, 6, {
-    name: pick(ELITE_NAMES), hp: 85, maxHp: 85, dmg: 6, level: 2,
+    name: pick(ELITE_NAMES), hp: 85, maxHp: 85, dmg: 16, level: 2,
     isElite: true, slow: false, wakeRange: 5,
   }));
 
@@ -11948,6 +11958,8 @@ function finishTutorial() {
   tutorialActive = false;
   player.tutorialDone = true;
   _beachHintStage = null;
+  _beachPotionCueOn = false;
+  if (_beachPotionTimer) { clearTimeout(_beachPotionTimer); _beachPotionTimer = null; }
   hideTutorialHint();
   refreshTutorialCues();   // tutorial over — drop the loot-tab / bag wisps + hide any nudge
   dungeonLevel = 1;
@@ -11974,10 +11986,18 @@ function finishTutorial() {
 // desync and survive a reload; a player can dismiss a popup and the tab wisps
 // carry the reminder. See buildTutorialMap / onEnemyDefeated / updateFloorClear.
 
-// Which popup variant is on screen ('equip' | 'levelup' | null), and which
+// Which popup variant is on screen ('equip' | 'levelup' | 'potion' | null), and which
 // variants the player has already dismissed (the tab wisps still carry the cue).
 let _tutPopupVariant = null;
 const _tutDismissed = { equip: false, levelup: false };
+// First-hit Health-Potion teach: the moment a beach foe first bites, a one-time popup
+// names the Health-Potion hotkey so a new hero learns to heal under fire. `_taught`
+// latches it to once per shore; `_cueOn` drives the popup (highest priority so it
+// always surfaces on that first blow); the timer auto-retires it after a few seconds
+// so it never buries the equip beat that follows. Reset in buildTutorialMap.
+let _beachPotionTaught = false;
+let _beachPotionCueOn = false;
+let _beachPotionTimer = null;
 // The ambient "?" hint stage the shore wants to show ('move' at spawn, 'cave' once
 // cleared, or null between beats — the equip popup carries guidance there). It
 // SHARES the lower banner slot with the actionable popup, so syncBeachHint() reveals
@@ -12046,6 +12066,29 @@ function grantBeachLevelUp() {
   refreshTutorialCues();
 }
 
+// First beach blow: raise the one-time "here's how to heal" popup. Fired from
+// enemyAttackPlayer the moment a foe's hit actually lands on the shore. Latched so it
+// shows once per shore, and self-retires after a few seconds so it hands the banner
+// back to the equip beat that follows the first kill.
+function beachPotionHint() {
+  if (!tutorialActive || _beachPotionTaught) return;
+  _beachPotionTaught = true;
+  _beachPotionCueOn = true;
+  refreshTutorialCues();                 // reconcile → surfaces the 'potion' popup
+  if (_beachPotionTimer) clearTimeout(_beachPotionTimer);
+  _beachPotionTimer = setTimeout(() => {
+    _beachPotionCueOn = false; _beachPotionTimer = null; refreshTutorialCues();
+  }, 7000);
+}
+// Retire the potion popup early — the hero has learned the lesson (quaffed a Health
+// Potion) or the shore is being torn down. No-op when the cue isn't up.
+function clearBeachPotionCue() {
+  if (_beachPotionTimer) { clearTimeout(_beachPotionTimer); _beachPotionTimer = null; }
+  if (!_beachPotionCueOn) return;
+  _beachPotionCueOn = false;
+  refreshTutorialCues();
+}
+
 // Reconcile every beach cue against live state: the LOOT-tab / bag-icon wisps, and
 // which (if any) popup is showing. Cheap and idempotent — safe to call from
 // renderPanel and after any equip / point spend. Off the beach it just tears the
@@ -12060,11 +12103,14 @@ function refreshTutorialCues() {
   // pulses the unspent-points badge on that same button.)
   const tbBag = document.getElementById('tb-bag');
   if (tbBag) tbBag.classList.toggle('tut-bag-wisp', equipCue);
-  // Equip first, then the level-up nudge; a dismissed variant stays hidden while
-  // its tab / bag wisp carries the reminder.
-  const want = (equipCue && !_tutDismissed.equip) ? 'equip'
-    : (spendCue && !_tutDismissed.levelup) ? 'levelup'
-      : null;
+  // The first-hit potion teach wins the banner (it fires before the first kill and
+  // self-retires); then equip, then the level-up nudge. A dismissed variant stays
+  // hidden while its tab / bag wisp carries the reminder.
+  const potionCue = tutorialActive && _beachPotionCueOn;
+  const want = potionCue ? 'potion'
+    : (equipCue && !_tutDismissed.equip) ? 'equip'
+      : (spendCue && !_tutDismissed.levelup) ? 'levelup'
+        : null;
   if (want !== _tutPopupVariant) {
     if (want) showTutPopup(want); else hideTutPopup();
   }
@@ -12092,7 +12138,13 @@ function showTutPopup(variant) {
   _tutPopupVariant = variant;
   const cfg = variant === 'equip'
     ? { spr: 'chest', html: 'You found a weapon! Open <b>Loot</b> to equip&nbsp;it.' }
-    : { spr: null, html: '<b>You gained a level!</b> Spend your points in the <b>Hero</b> &amp; <b>Skills</b>&nbsp;tabs.' };
+    : variant === 'potion'
+      // First blow taken — name the Health-Potion control. Touch has no hotkey, so
+      // point at the footer potion button instead of a key.
+      ? { spr: 'ic_heart', html: isTouchMode()
+          ? 'Taking hits? Tap the <b>Health Potion</b> to heal.'
+          : `Taking hits? Press <b>${kbLabel('healthPotion')}</b> to quaff a Health&nbsp;Potion.` }
+      : { spr: null, html: '<b>You gained a level!</b> Spend your points in the <b>Hero</b> &amp; <b>Skills</b>&nbsp;tabs.' };
   const icon = el.querySelector('.tp-ic');
   const txt = el.querySelector('.tp-text');
   // A null sprite means no left badge (the level-up nudge is text-only); toggle the
@@ -12102,7 +12154,7 @@ function showTutPopup(variant) {
   if (txt) txt.innerHTML = cfg.html;
   el.classList.add('show');
   paintDataSpr(el);
-  if (variant !== prev) sfx(variant === 'equip' ? 'loot' : 'levelup');
+  if (variant !== prev) sfx(variant === 'equip' ? 'loot' : variant === 'potion' ? 'blip' : 'levelup');
 }
 function hideTutPopup() {
   _tutPopupVariant = null;
@@ -25066,6 +25118,7 @@ function enemyAttackPlayer(e) {
   sfx('hurt');
   if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
   if (dmg > 0) { if (hpLost > 0) spawnParticles(player.x, player.y, '#d22a3a', 6, 0.07); addShake(4); playEnemyMeleeVfx(e, beh); }
+  if (tutorialActive && dmg > 0) beachPotionHint();   // first beach blow → teach the Health-Potion hotkey
   log(`💢 ${enemyLabel(e)} -${dmg}`);
   if (player.hp > 0 && player.hp <= player.maxHp * 0.25) fireSkillTrigger('lowhp', { enemy: e });
   if (player.hp <= player.maxHp * 0.25) screenFlash('#cc0000');
@@ -27462,6 +27515,7 @@ function useHealthPotion() {
   sfx('potion');
   log(`<span data-spr=ic_heart></span> Quaffed a ${logPotion('Health Potion')} — +${amt} HP over a few seconds.`, 'loot');
   spendPotionTurn();
+  if (tutorialActive) clearBeachPotionCue();   // lesson learned — retire the first-hit teach
 }
 
 // Mana potions restore a fraction of max MP (so they scale with you) rather than
@@ -27522,8 +27576,9 @@ const LOOT_SORTS = [
   { key: 'slot',   label: 'Slot'   },
   { key: 'value',  label: 'Value'  },
 ];
-// The LOOT bag's own sort menu leads with 'Pickup' (the order items were found in —
-// the default, and where the list sits before the Quartermaster's Ledger is crafted).
+// The LOOT bag's own sort menu adds 'Pickup' (the order items were found in) to the
+// shared sorts. The bag DEFAULTS to 'Slot' (category, rarest first) — where the list
+// sits before the Quartermaster's Ledger is crafted, and what the menu returns to.
 // The merchant keeps the base LOOT_SORTS (its stock has no pickup order).
 const BAG_SORTS = [{ key: 'pickup', label: 'Pickup' }, ...LOOT_SORTS];
 function setLootSort(k) { lootSort = k; renderPanel(); }
@@ -27776,8 +27831,8 @@ function renderPanel() {
     // Sort + stat-filter controls: two dropdown buttons, each opening an inline
     // options panel below the row (so nothing floats over the list on mobile). Gated
     // on the Quartermaster's Ledger crafted at the Craftsman (hudOwned('sortfilter'));
-    // until then the controls are hidden, the bag holds pickup order, and no stat
-    // filter narrows the list.
+    // until then the controls are hidden, the bag holds the default category sort, and
+    // no stat filter narrows the list.
     const sfOwned = hudOwned('sortfilter');
     const lootCtrls = sfOwned ? sortFilterCtrlsHTML({
       sorts: BAG_SORTS,
@@ -27789,7 +27844,8 @@ function renderPanel() {
       emptyHint: 'No stats to filter yet — pick up some gear first.',
     }) : '';
     // With the Ledger unowned, only the slot subtab narrows the list — the stat
-    // filter is inert (its controls are hidden), so items show in pickup order.
+    // filter is inert (its controls are hidden), so items show in the default
+    // category sort.
     const bagRowVisible = sfOwned ? lootRowVisible : (it) => itemRowVisible(it, lootFilter, []);
     // Rarity rank for sorting: junk 0 → unique 6 (higher = rarer).
     const TIER_KEYS = Object.keys(TIERS);
@@ -27814,8 +27870,10 @@ function renderPanel() {
       }
     });
     // Order the decorated rows by the chosen sort key — but only if the Ledger is
-    // owned; otherwise the bag holds pickup order (the order items were found in).
-    rows.sort(makeRowCompare(sfOwned ? lootSort : 'pickup'));
+    // owned; otherwise the bag holds the default category sort ('slot' — grouped by
+    // gear category, rarest first within each, so the newest hero still finds gear
+    // by type with its best pieces on top).
+    rows.sort(makeRowCompare(sfOwned ? lootSort : 'slot'));
     const mMoney = '<span data-spr=ic_money></span>', mScrap = '<span data-spr=mat_scrap></span>';
     const bulkBar = bulkN ? `<div class="loot-bulk-bar">
       <button class="loot-bulk-btn" onclick="bagBulk('sell')">${mMoney} Sell all · <span data-spr=ic_money></span>${fmtGold(bulkGold)}</button>

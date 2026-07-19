@@ -11,6 +11,10 @@ export const CHANGELOG = [
     "First town visit (floor-5 boss) no longer holds a return portal — press on through the Dungeon Gate.",
     "Gate gains a Continue to Floor N button: one tap to your deepest checkpoint on the tier you're pushing.",
   ] },
+  { date: "2026-07-18", size: "small", v: "Beach foes bite; first hit teaches the potion", by: "Jeff Louie", notes: [
+    "Tutorial pack hits for 8 (was 3), cave elite 16 (was 6) — the opening actually threatens.",
+    "First blow you take pops a one-time nudge naming the Health-Potion hotkey.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Kills drop 30% less gear", by: "Jeff Louie", notes: [
     "Per-kill gear drop chance −30%: boss pick 56%→39%, elite 36%→25%, normal 8%→5.6%.",
   ] },
@@ -18,6 +22,10 @@ export const CHANGELOG = [
     "Esc now closes Cloud Save, Save Slots, Achievements, Bestiary & History popups (matches the rest).",
     "New Settings ▸ Progress ▸ Reset wipes this device's achievement & bestiary progress to zero.",
     "Death ledger untouched; signed in, cloud re-syncs it — sign out first to keep it cleared.",
+  ] },
+  { date: "2026-07-18", size: "small", v: "Early bag groups by category, rarest first", by: "Jeff Louie", notes: [
+    "Bag now groups gear by category (weapon, chest, legs…), rarest on top within each (was pickup order).",
+    "Quartermaster's Ledger still unlocks manual re-sort (pickup/rarity/power/value) & stat filter.",
   ] },
   { date: "2026-07-18", size: "small", v: "Craftsman arrives with the Healer", by: "Jeff Louie", notes: [
     "Joins on first boss (floor 5), was 2nd (floor 10); HUD Field Kit ready from first town visit.",
