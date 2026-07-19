@@ -29,6 +29,8 @@ import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach
 import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
+import { SHRINE_DEFS } from '../data/shrines.js';
+import { defaultShrineBuffs, shrineFxFrom, activeShrineBuffs, pickShrineKind } from '../systems/shrineEffects.js';
 import { creditInitials } from '../systems/credit.js';
 import { restockCost } from '../systems/restockCost.js';
 import { unseenLootCount } from '../systems/lootSeen.js';
@@ -37,6 +39,7 @@ import { isCritical } from '../systems/crit.js';
 import { favouredBases, armorWeight, rollFavouredBase, rollForcedFavouredBase } from '../systems/classLoot.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
+import { stripDamageClause } from '../systems/skillText.js';
 import { rollDamage, spreadRange } from '../systems/damageRoll.js';
 import { castTargetsInSight, splashTargetsFrom, nextChainLink } from '../systems/aoeTargeting.js';
 import { spellSpreadFor } from '../data/spellSpread.js';
@@ -61,6 +64,7 @@ import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMa
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
 import { lockedTiers } from '../systems/rarityGate.js';
+import { shopTierWeights } from '../systems/shopStock.js';
 import {
   rampDepth, featureUnlocked, unlockedSkillSlots, elitesAllowed, gearRequirementsActive,
   setItemsAllowed, cursedItemsAllowed, uniqueItemsAllowed, loadoutSwapUnlocked,
@@ -3788,7 +3792,7 @@ function staminaRegenPerSec() {
 // Total Defense: gear DEF plus a contribution from Might (class-scaled — Warriors
 // armour up hardest). Might moved here from Vitality in the attribute overhaul.
 function playerDefense() {
-  return totalStat('DEF') + totalAttr('might') * attrCoef('def') + foodFx('defFlat');
+  return totalStat('DEF') + totalAttr('might') * attrCoef('def') + foodFx('defFlat') + shrineFx('defLvl') * dungeonLevel; // + Bulwark shrine (flat DEF per floor depth)
 }
 
 // ── RATING-VS-LEVEL CHANCE SYSTEM ──
@@ -3841,7 +3845,7 @@ const ACC_BASE = 80, ACC_PER_LEVEL = 12;
 function playerEvasionRating() {
   let r = totalAttr('agility') * attrCoef('evasion')
     + totalStat('SPD') + totalStat('DODGE')
-    + ratePct(skillBonus('dodge')) + ratePct(buffMag('dodgeUp')) + ratePct(foodFx('dodgePct'));
+    + ratePct(skillBonus('dodge')) + ratePct(buffMag('dodgeUp')) + ratePct(foodFx('dodgePct')) + ratePct(shrineFx('dodgePct')); // + Phantom shrine
   // Rogue's innate evasion scales with level so "harder to pin down" stays true
   // at depth (a flat bonus would wash out as opposition climbs each floor).
   r += classInnateEvasionRating();
@@ -3872,7 +3876,7 @@ function agiAtkSpeedPct() {
 }
 function playerCritRating() {
   let r = totalAttr('luck') * LUCK_FX.critPerLuck + totalStat('CRIT') + totalStat('LCK')
-    + ratePct(skillBonus('crit')) + ratePct(buffMag('critUp')) + ratePct(foodFx('critPct')) + ratePct(healerFx('critPct'));
+    + ratePct(skillBonus('crit')) + ratePct(buffMag('critUp')) + ratePct(foodFx('critPct')) + ratePct(healerFx('critPct')) + ratePct(shrineFx('critPct')); // + Precision shrine
   // Rogue's innate crit scales with level so "keener crits" keeps pace with the
   // rising crit opposition of deeper floors instead of fading to nothing.
   r += classInnateCritRating();
@@ -3945,13 +3949,15 @@ function hpRegenPerSec() {
   r += buffMag('regen'); // Redeemer / Bastion regen buffs
   r += foodFx('regen'); // a warm bowl of ramen mends you between fights
   r += healerFx('regen'); // a healer Blessing (Vigor) keeps you mending
+  r += shrineFx('regenPctHp') * (player.maxHp || 0); // Renewal shrine: % of max HP per beat
   return r * TICKS_PER_SEC;
 }
 function mpRegenPerSec() {
   // A slow trickle on purpose: mana should run dry in sustained fights so mana
   // pots stay worth quaffing. Scaled to a real per-second rate; applyRegen banks
   // the fractional per-beat share so sub-1 regen works while MP stays an integer.
-  return (0.15 + totalAttr('spirit') * attrCoef('mpRegen') + skillBonus('mpRegen')) * TICKS_PER_SEC;
+  return (0.15 + totalAttr('spirit') * attrCoef('mpRegen') + skillBonus('mpRegen')
+    + shrineFx('mpRegenPctMp') * (player.maxMp || 0)) * TICKS_PER_SEC; // + Clarity shrine (% of max MP per beat)
 }
 
 // Every food drop shows the shared `food` pixel tile (referenced directly).
@@ -5610,7 +5616,7 @@ function applyCastMods(node, cast) {
 // multiplier (classDmgDealtMult) only touches physical hits, so without this a
 // caster Mage would have no class damage bonus at all.
 function spellPowerMult() {
-  return 1 + classSpellBonusFrac() + skillBonus('spell') + buffMag('spellUp') + totalStat('SPELLPWR') / 100;
+  return 1 + classSpellBonusFrac() + skillBonus('spell') + buffMag('spellUp') + totalStat('SPELLPWR') / 100 + shrineFx('spellUp'); // + Sorcery shrine
 }
 // Skill-damage multiplier — the MARTIAL twin of spellPowerMult(), applied only to
 // weapon-based active skills (see skillPhysDamage). Gear Skill Power lets you build
@@ -5618,7 +5624,7 @@ function spellPowerMult() {
 // attacks (those keep ATK + Increased Damage) and never touches spells. skillBonus
 // is future-proofing for any 'skillpwr' passive (returns 0 today).
 function skillPowerMult() {
-  return 1 + skillBonus('skillpwr') + buffMag('skillUp') + totalStat('SKILLPWR') / 100;
+  return 1 + skillBonus('skillpwr') + buffMag('skillUp') + totalStat('SKILLPWR') / 100 + shrineFx('skillUp'); // + Sorcery shrine
 }
 // The SCHOOL of an active node — 'skill' (martial, weapon-based), 'spell' (magic), or
 // 'hybrid' (a weapon strike that also channels magic, dealing BOTH). Explicit via
@@ -6721,9 +6727,10 @@ let mystic = null;    // { x, y } — the Wandering Mystic, when present this fl
 let pact = null;      // active pact: { id, icon, name, desc, floors, fx } or null
 let hasFountain = false;
 let shrineData = {};  // "y,x" -> { kind } for shrine tiles on this floor
-const SHRINE_KINDS = ['power','guard','fortune','blood','wisdom'];
-// Temporary shrine buffs, each counts down a number of floors.
-let buffs = { power: 0, guard: 0, fortune: 0 };
+// Temporary shrine buffs, each counts down a number of floors. One 0-floor slot
+// per non-instant kind in the catalog (src/data/shrines.js); new-style boons fold
+// into combat live via shrineFx().
+let buffs = defaultShrineBuffs();
 // Transient combat buffs from active skills (War Cry, Sanctuary, shields, …),
 // keyed by id to { secs: real seconds left, mag: magnitude }, aged on the world
 // clock (see worldTick). Purely in-combat and short-lived, so intentionally NOT
@@ -6734,6 +6741,12 @@ let buffs = { power: 0, guard: 0, fortune: 0 };
 let combatBuffs = {};
 function hasBuff(id) { const b = combatBuffs[id]; return !!b && b.secs > 0; }
 function buffMag(id) { const b = combatBuffs[id]; return (b && b.secs > 0) ? b.mag : 0; }
+// Summed magnitude of a shrine-boon effect key across all ACTIVE floor-boons — the
+// shrine twin of foodFx/healerFx, read live (boons lapse per floor). See the fx-key
+// table in src/data/shrines.js for what each key means and its hook site.
+function shrineFx(key) { return shrineFxFrom(buffs, key); }
+// Vigor boon active → sprint and dash spend no Stamina.
+function vigorFree() { return (buffs.vigor || 0) > 0; }
 // Buffs linger slightly longer than their base duration — a small global bump so
 // self-buffs, shields, regen etc. all last a touch more.
 const BUFF_DUR_MULT = 1.2;
@@ -7050,9 +7063,9 @@ window.gameState = function gameState(radius) {
     } }
   }
   if (typeof buffs !== 'undefined' && buffs) {
-    for (const k of ['power', 'guard', 'fortune']) if (buffs[k] > 0) {
-      const m = (typeof STATUS_META !== 'undefined' && STATUS_META['s_' + k]) || null;
-      effects.push({ id: 's_' + k, name: m ? m.name : k, kind: 'buff', floors: buffs[k] });
+    for (const b of activeShrineBuffs(buffs)) {
+      const m = (typeof STATUS_META !== 'undefined' && STATUS_META[b.id]) || null;
+      effects.push({ id: b.id, name: m ? m.name : b.name, kind: 'buff', floors: b.floors });
     }
   }
   if (typeof player !== 'undefined' && Array.isArray(player.healerBuffs)) {
@@ -7589,12 +7602,12 @@ window.gameGuide = function gameGuide(topic) {
       `The bar has ${SKILL_SLOTS} MANUAL slots (cast by hand with ${key('skill1')}-${key('skill' + SKILL_SLOTS)}) plus ONE dedicated auto-cast slot. You choose what goes where — drag a learned active onto a slot, or use the SKILLS-tab slot buttons; a freshly-learned active auto-fills the first open manual slot.`,
       `gameState().skills lists each filled manual slot's number key, MP cost (already reduced by your Mana Cost Reduction), cooldown remaining, ready flag, and what the skill DOES — its shape, range/radius and the damages/heals/buffs/summons flags — so you can pick one without inspecting it. The auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
       `Every active has a SCHOOL — SKILL, SPELL, or HYBRID — shown as a badge on its tree node and in gameState().skills[i].school. A SKILL is martial: weapon-based, scales with weapon damage + Skill Power, leeches life, meets a foe's physical ARMOR (pierced by Armor Pen), recharged by CDR only. A SPELL is magic: scales with Spirit + Spell Power, never leeches, meets a foe's MAGIC RESIST (pierced by Magic Pen), recharged by CDR + Cast Speed. A HYBRID lands BOTH — a physical part (leeches, meets armor, Skill Power) AND a magic part (meets magic resist, Spell Power); its tooltip spells out the split, and it recharges with CDR + Cast Speed. Classes lean differently: Warrior is all SKILL, Mage all SPELL, Rogue mostly skill with shadow/toxic hybrids, Templar mostly holy spells with holy-strike hybrids. Gear the stats that match the actives you lean on.`,
-      `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and many skills gain extra recharge from their rank milestones (how much varies by skill — its "Rank bonuses" ladder spells it out). The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
+      `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and many skills gain extra recharge from their rank milestones (how much varies by skill — its "Surge bonuses" ladder spells it out). The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a self-buff's rank milestones, which lengthen its buff at ranks 7 & 10 and add a 20%-faster recharge at rank 10) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) plus a maxed skill's longer, faster buff lifts a 40%-baseline buff well past ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
-      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% (Empowered), +20% (Honed), +30% (Mastered) — so deepening a key skill outpaces its rising mana cost. On TOP of that flat power, each milestone grants a SIGNATURE perk unique to the skill's archetype — no two kinds of spell read alike: a chain arcs to more foes, a summon lingers longer then raises an extra minion, an ailment nova inflicts more reliably then longer and wider, a self-buff hits harder then lasts longer, a bolt gains range then a double-strike, a piercing beam reaches further then strikes twice, a cleave leeches, a floor-wide storm hits more foes, an assassin's strike gains an execute. Every skill's detail card shows a "Rank bonuses" ladder listing all three (its power spike + that rank's signature), each lit pink with a ✓ once your rank has earned it.`,
-      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10) — the ladder names the passive's OWN bonus so each reads uniquely — so maxing one passive beats spreading points thin. AND at rank 10 a passive unlocks one BRAND-NEW stat it never gave before — thematic to the node (a crit passive gains crit damage, an HP passive gains regen, a spell passive gains crit, and so on) — folded straight into the same combat formulas. Its detail card lists all three spikes plus the rank-10 stat in the pink-when-earned "Rank bonuses" ladder, shows milestone pips by the rank, and folds the surge into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
+      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% (Empowered), +20% (Honed), +30% (Mastered) — so deepening a key skill outpaces its rising mana cost. On TOP of that flat power, each milestone grants a SIGNATURE perk unique to the skill's archetype — no two kinds of spell read alike: a chain arcs to more foes, a summon lingers longer then raises an extra minion, an ailment nova inflicts more reliably then longer and wider, a self-buff hits harder then lasts longer, a bolt gains range then a double-strike, a piercing beam reaches further then strikes twice, a cleave leeches, a floor-wide storm hits more foes, an assassin's strike gains an execute. Every skill's detail card shows a "Surge bonuses" ladder listing all three (its power spike + that rank's signature), each marked with a ✓ once your rank has earned it.`,
+      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10) — the ladder names the passive's OWN bonus so each reads uniquely — so maxing one passive beats spreading points thin. AND at rank 10 a passive unlocks one BRAND-NEW stat it never gave before — thematic to the node (a crit passive gains crit damage, an HP passive gains regen, a spell passive gains crit, and so on) — folded straight into the same combat formulas. Its detail card lists all three spikes plus the rank-10 stat in the ✓-when-earned "Surge bonuses" ladder, shows milestone pips by the rank, and folds the surge into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
-      `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
+      `Refund a rank from a skill's SKILLS-tab popover: the ↩︎ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
       `RANGED casts need LINE OF SIGHT: a bolt, beam (line), nova or chain only strikes foes YOU can see — a SOLID obstruction (wall, door, boss barrier, furniture) between you and a foe blocks it, but open ground and water don't; the cast fails with "No foe in sight" if nothing visible is in range. Melee/cleave (adjacent-only) and the rare floor-wide "strike random foes" ultimate ignore walls.`,
       `A BLAST (Meteor, Fireball, Blizzard, Firestorm, Condemn, Plague Bomb, Death Rain, …) is judged from its POINT OF IMPACT, not from you: the projectile lands on the nearest foe you can see, then its radius damage spreads to every foe THE IMPACT can see — so a meteor dropped onto a pack tucked behind a wall still burns the whole pack, even foes you couldn't hit directly. A mark DETONATION (Immolation, Death Blossom, Final Judgment popping a vuln/Condemned foe) bursts the same way — from the marked foe outward. Novas still radiate from YOU.`,
@@ -7659,9 +7672,9 @@ window.gameGuide = function gameGuide(topic) {
       `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, the exit is north, and four pillars give cover. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
       `ISLAND FLOORS (gameState().island true) come up now and then on outdoor floors: the landmass is ringed by open SEA, so the whole map edge is deep water (~) instead of a rock wall. You can see and shoot across it but never walk off — the shore IS the boundary. Nothing reachable is lost; the sea only replaces the impassable frame, so play it like any other floor.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
-      `SHRINES (*): gameState().shrines gives each one's kind. power/guard/fortune are good multi-floor boons and wisdom restores 50% of max HP and refills MP to full, but BLOOD costs 30% of your current HP — check the kind before stepping on one.`,
+      `SHRINES (*): gameState().shrines gives each one's kind. Most are multi-floor boons that fold into your stats while active (see gameState().effects): power (+50% dmg), guard (−40% dmg taken), fortune (loot), greed (+60% gold), insight (+50% xp), discovery (+50 Magic Find), harvest (+60% materials), precision (+18% crit), phantom (+15% dodge), sorcery (+30% skill/spell power), leech (+15% lifesteal), thorns (reflect), renewal (HP regen), clarity (MP regen), bulwark (+Defense), swift (+18% move), haste (+25% attack speed), vigor (tireless sprint/dash + full Stamina). wisdom instantly restores 50% max HP and refills MP; but BLOOD costs 30% of current HP for XP — check the kind before stepping on one.`,
       `TELEPORTERS (o): gameState().teleporters gives each pad's destination (toX,toY). Stepping on one plays a short walk-through-portal animation — the portal swallows you, the camera pans across to the partner pad, and you step out there (~0.9s, world frozen, unhittable; gameState().transit reads 'warp'). It also clears any click-to-move route, so you won't auto-walk back toward the pad you clicked. Use it deliberately, not while fleeing.`,
-      `FOUNTAINS (f) full-heal once. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground — it glows and bobs; carryingKey true once held). Shove into the door while carrying the key to unlock it. What's behind varies wildly: a rich chest or hoard, an armory of gear, coins, food, a healing fountain, a blessing shrine, a room of elite guards or a swarm of weak foes, a champion, a spike- or lava-ringed prize — or an express staircase (») that plunges you two floors deeper. Vault foes are optional: they NEVER seal the stairs, so opening a combat vault is always your choice.`,
+      `FOUNTAINS (f) full-restore once — HP, MP, and Stamina to max, plus a potion-cooldown reset. CRACKED WALLS (%) are shortcuts you smash open: shove into one from ANY direction (walk or dash) and it chips away, taking ${MAX_CRACK_HITS} hits to collapse — it keeps blocking until then, growing visibly more cracked each hit, so just keep pressing. LOCKED DOORS (+) need the vault key (gameState().vaultKey on the ground — it glows and bobs; carryingKey true once held). Shove into the door while carrying the key to unlock it. What's behind varies wildly: a rich chest or hoard, an armory of gear, coins, food, a healing fountain, a blessing shrine, a room of elite guards or a swarm of weak foes, a champion, a spike- or lava-ringed prize — or an express staircase (») that plunges you two floors deeper. Vault foes are optional: they NEVER seal the stairs, so opening a combat vault is always your choice.`,
       `CURSED FLOOR (the "greed" gate): rarely, on descending to a non-boss floor from depth 3+, a WORLD-PAUSING prompt offers to brave the floor for DOUBLED loot & gold at the cost of tougher non-boss foes (more HP and damage). Movement freezes until you choose — gameState().greed.pending is true, mode is 'greed' and blockingOverlay is 'greed-overlay'; call acceptGreed() to take it (gameState().greed.active then reads true, mult 2) or declineGreed() to skip.`,
     ],
     enemies: [
@@ -7687,7 +7700,7 @@ window.gameGuide = function gameGuide(topic) {
     progression: [
       `Four classes, each with ONE damage attribute: Warrior (Might, tanky melee), Rogue (Agility, crit & dodge), Mage (Spirit, spells & big MP), Templar (Vitality, durable hybrid). Class gates which weapons you can equip.`,
       `Five attributes (gameState().player.attributes), with re-homed roles: Might (+Defense; the Warrior's damage), Vitality (+max HP, +HP regen, +Stamina; the Templar's damage), Agility (+evasion, +accuracy, +move/attack speed; the Rogue's damage), Spirit (+max MP, +MP regen, +spell power, +healing, +Spirit Veil shield; the Mage's damage), Luck (+crit, +loot quality). How much each point gives is CLASS-SCALED — e.g. Vitality gives the Templar the most HP, Spirit gives the Mage the most spell power. Pump your class's single damage attribute for damage; every attribute also pays a defensive/utility role.`,
-      `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend). Spend attributes on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
+      `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend), and FULLY restores the hero — HP, MP and Stamina all top off to max — a clean second wind. Spend attributes on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
       `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives. From level 20 you also earn a SEPARATE ascendancy point every 5 levels (20, 25, 30…; gameState().menu.pointsToSpend.ascendancy), spent only on the ascendancy path tree. Normal skill points can't buy path skills and ascendancy points can't buy passive/active skills. Path skills carry NO level requirement — they're gated only by the earlier skills in the path tree.`,
       `Respec attributes/skills or change class at the Trainer for gold that scales with your level (points refund). Switching to your class's other ascension afterwards costs a lot of gold (also scales with level and depth; path points refund) — the first ascension stays free, but re-ascending is a deliberate, costly choice, as is retraining class. After a respec, check that worn gear still meets its attribute requirement (under-req pieces turn red and are ignored).`,
       `BOSS POINTS are a separate progression track that rewards new depth: every boss floor you clear for the FIRST time grants ONE point (farming a floor you've already cleared grants none — it's the same first-clear ledger as the boss loot jackpot). Spend them at the ASCENDANT WEAVE, a town service that opens once you've cleared your first boss floor: a constellation board of stat nodes, attribute-threshold keystones and socketed Glyphs where every point is a real, opportunity-cost choice — see gameGuide('weave'). gameState().menu.bossPointsEarned reports the total earned all-time; gameState().endgame.weave reports points available, lit nodes and active keystones.`,
@@ -7699,17 +7712,17 @@ window.gameGuide = function gameGuide(topic) {
       `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
     ],
     town: [
-`The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived — and the HUD's Town button stays HIDDEN until you first set foot in the camp (player.townVisited flips true on that first arrival, revealing the button). That first kill opens the camp — and when you then leave Floor 5 you climb up into town for a one-time celebration (the townsfolk cheer and thank you, a one-time WELCOME hint chip greets you — town is your safe haven and the Town button teleports you home — the first keeper — the Healer — arrives, and the newly-revealed Town button glows for that visit) before a Town Portal there carries you on to Floor 6. `
+`The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived — and the HUD's Town button stays HIDDEN until you first set foot in the camp (player.townVisited flips true on that first arrival, revealing the button). That first kill opens the camp — and when you then leave Floor 5 you climb up into town for a one-time celebration (the townsfolk cheer and thank you, a one-time WELCOME hint chip greets you — town is your safe haven and the Town button teleports you home — the two founding keepers — the Healer and the Craftsman — arrive, and the newly-revealed Town button glows for that visit) before a Town Portal there carries you on to Floor 6. `
       + `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the regular service keepers milling about the green at FRESH random spots every visit (most of them slowly strolling around — except the Craftsman, pinned just north of the Town Portal so you always find it) and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all. A keeper only appears once it has ARRIVED (one joins per boss kill) — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
       `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff, healerBuffs and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
-      `Merchant (buy gear / pay to restock — deals only in uncommon+ gear, never grey/white, weighted toward the rarer tiers; each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is the SECOND keeper to arrive (right after the Healer), and stands PINNED just north of the Town Portal on the central avenue — it never wanders, so a hero returning by portal steps out right in front of it and can never lose it. Its HUD-KIT bench crafts the "Field Kit" in two groups: HUD READOUTS that each switch on a heads-up-display piece (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana numbers, status-effect icons), and BAG & LOOT TOOLS (Appraiser's Loupe = item Power ratings, Gauging Calipers = +/- stat compare vs equipped, Quartermaster's Ledger = bag sort & filter, Sorting Sieve = auto-loot rules). A fresh hero starts BARE — no HUD numbers/minimap/counters/labels/status icons, and a plain pickup-order bag with no Power ratings, stat compare, sort/filter or auto-loot — and fits these as gold allows; each is kept for that hero, and a freshly-fitted HUD piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + the KIT prices; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
+      `Merchant (buy gear / pay to restock — ware rarity SCALES with how deep you've pushed and never grey junk: shallow stalls stock white→green, deeper ones lean blue→purple→orange→red. The same early-game gate as dungeon drops applies, so no colour you haven't earned yet — greens wait for the floor-5 boss, blues+ for floor-10. Each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is a FOUNDING keeper — it arrives with the Healer the moment the town opens (boss floor 5), so its HUD Field Kit is on hand from your first visit — and stands PINNED just north of the Town Portal on the central avenue — it never wanders, so a hero returning by portal steps out right in front of it and can never lose it. Its HUD-KIT bench crafts the "Field Kit" in two groups: HUD READOUTS that each switch on a heads-up-display piece (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana numbers, status-effect icons), and BAG & LOOT TOOLS (Appraiser's Loupe = item Power ratings, Gauging Calipers = +/- stat compare vs equipped, Quartermaster's Ledger = bag sort & filter, Sorting Sieve = auto-loot rules). A fresh hero starts BARE — no HUD numbers/minimap/counters/labels/status icons, and a plain pickup-order bag with no Power ratings, stat compare, sort/filter or auto-loot — and fits these as gold allows; each is kept for that hero, and a freshly-fitted HUD piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + the KIT prices; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1, 5 or 10 floors (more damage/loot/gold, or an easier stretch). Each mystic offers just TWO pacts, rolled at random from twelve, so the choice changes every time you find one; a longer pact costs MORE per floor (the price climbs exponentially with floors sealed). gameState().npcs lists the two pacts a nearby mystic offers. Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Sellsword (arrives with your 12th boss kill): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (arrives with your 11th boss kill): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Prospector (level 5+): trades GOLD for raw crafting materials, and refines commons up a tier. BUY Scrap, Glimmer, Core or Chaos Orbs outright — the price climbs steeply with the material's rarity, grows with the deepest floor you've reached, and rises a little with every purchase you make this visit (resetting when you next enter town) — a bulk lot is priced flat, so it's always the cheapest way to buy a quantity. You can only buy a material your progression could already DROP — the same difficulty gate as kills (Scrap/Glimmer from Normal, Core from Hardened, Chaos from Brutal) — so it tops up what you farm, never a tier you couldn't yet earn. REFINE fuses a stack of a common material into ONE of the next tier up (Scrap→Glimmer→Core→Chaos); it's deliberately lossy, so it never beats simply buying the rarer material — it's a way to spend an overflow of commons. Bought/refined materials land in your shared stash pool (or an SSF hero's private wallet), same as drops.`,
-      `Keepers arrive ONE PER BOSS KILL as you fell boss floors — each guardian you beat (Floor 5 is the first, Floor 10 the second, and so on) brings exactly ONE new keeper, announced by a pop-up banner the instant the boss dies (even mid-fight down in the dungeon). The arrival order is: 1 Healer, 2 Craftsman, 3 Merchant, 4 Vault, 5 Ramen House, 6 Prospector, 7 Trainer, 8 Gambler, 9 Enchanter, 10 Bounty Board, 11 Transmuter, 12 Sellsword, then the endgame keepers 13 Ascendant Weave, 14 Cycles, 15 Hall of Deeds, 16 Covenant Altar, 17 Mirrorforge, 18 Pantheon. (The Craftsman arrives second, so its HUD Field Kit opens up with your second keeper.) So the keeper waiting after your Nth boss kill is arrival #N. (A Solo Self-Found hero's Vault stays sealed for life.) A still-locked keeper is ABSENT from the walkable camp; in the Town directory it shows GREYED with a padlock and its unlock hint. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
+      `Keepers arrive as you fell boss floors — each guardian you beat (Floor 5 is the first, Floor 10 the second, and so on) brings a keeper, announced by a pop-up banner the instant the boss dies (even mid-fight down in the dungeon). The FLOOR-5 unlock brings TWO founding keepers together — the Healer and the Craftsman — so your first town visit already has both (the Craftsman's HUD Field Kit is on hand from the start); every boss after that brings ONE more. The arrival order is: Healer + Craftsman (both on boss #1, the town-unlock), then 3 Merchant, 4 Vault, 5 Ramen House, 6 Prospector, 7 Trainer, 8 Gambler, 9 Enchanter, 10 Bounty Board, 11 Transmuter, 12 Sellsword, then the endgame keepers 13 Ascendant Weave, 14 Cycles, 15 Hall of Deeds, 16 Covenant Altar, 17 Mirrorforge, 18 Pantheon. Each number is the boss-kill count that keeper joins on, so the keeper waiting after your Nth boss kill is arrival #N — except boss #2 lands no one new, since the two founders already arrived together on boss #1. (A Solo Self-Found hero's Vault stays sealed for life.) A still-locked keeper is ABSENT from the walkable camp; in the Town directory it shows GREYED with a padlock and its unlock hint. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim its reward. Each contract pays a DIFFERENT MIX of 1–3 rewards — gold, a crafting material (any of scrap/glimmer/core/chaos, scaled by depth), a lump of XP, or a gear piece scaled to your depth (the toughest boss contracts guarantee a rarer piece) — and a contract paying fewer things pays more of each. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract, its live progress (including menu.bounty.done once it's ready to claim), and menu.bounty.rewards listing exactly what it pays. In town, clicking the belt's BOUNTY module opens the board (even with no active contract).`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
@@ -11142,7 +11155,7 @@ function populateVault(variant, place) {
       mapData[back.y][back.x] = 3; hasFountain = true; chest(interior[1], 5);
       break;
     case 'shrine':
-      mapData[back.y][back.x] = 5; shrineData[back.y + ',' + back.x] = { kind: pick(SHRINE_KINDS) };
+      mapData[back.y][back.x] = 5; shrineData[back.y + ',' + back.x] = { kind: pickShrineKind(Math.random()) };
       break;
     case 'armory': {
       let n = 0;
@@ -11550,7 +11563,7 @@ function generateMap() {
   if (Math.random() < 0.25) {
     const c = randomFloorTile(reach);
     if (c && (Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) >= 3) {
-      mapData[c.y][c.x] = 5; shrineData[c.y+','+c.x] = { kind: pick(SHRINE_KINDS) };
+      mapData[c.y][c.x] = 5; shrineData[c.y+','+c.x] = { kind: pickShrineKind(Math.random()) };
     }
   }
 
@@ -11637,7 +11650,7 @@ function generateMap() {
         if ((Math.abs(c.x - player.x) + Math.abs(c.y - player.y)) >= 3) { spot = c; break; }
       }
       const c = spot || fallback;
-      if (c) { mapData[c.y][c.x] = 5; shrineData[c.y + ',' + c.x] = { kind: pick(SHRINE_KINDS) }; }
+      if (c) { mapData[c.y][c.x] = 5; shrineData[c.y + ',' + c.x] = { kind: pickShrineKind(Math.random()) }; }
     }
   }
 
@@ -12487,21 +12500,19 @@ function handleQuestStep(nx, ny) {
   }
 }
 
-// Rarity distribution for merchant wares: the merchant deals only in uncommon+
-// gear — never junk (grey) or normal (white) — weighted toward the rarer tiers so
-// his table always beats a raw floor drop. Every tier from uncommon up is
-// reachable, with a slim shot at legendary / unique.
-const SHOP_TIER_WEIGHTS = {
-  uncommon: 40, rare: 34, epic: 16, legendary: 6, unique: 2,
-};
-
 // Roll a fresh merchant stock: `lo`..`hi` gear pieces geared to `ilvl`, each
 // gamble-priced. Shared by the dungeon wanderer, the town shop, and paid restocks.
+// Rarity SCALES WITH PROGRESS and honours the early-game gate: shopTierWeights
+// peaks each colour around the item level it belongs to (shallow stalls stock
+// white→green, deep ones lean blue→orange→red) and drops any tier the hero hasn't
+// earned yet — greens until the floor-5 boss, blues+ until floor-10 — so a fresh
+// hero is never sold colours the dungeon itself won't drop (see systems/shopStock.js).
 function rollShopStock(ilvl, lo, hi) {
   const stock = [];
   const n = rnd(lo, hi);
+  const tierWeights = shopTierWeights(ilvl, player.bossFirstKills, player.maxFloor);
   for (let i = 0; i < n; i++) {
-    const tier = weighted(SHOP_TIER_WEIGHTS);
+    const tier = weighted(tierWeights);
     const item = generateItem(1, ilvl, tier);
     stock.push({ kind: 'gear', item, price: Math.max(10, Math.round(item.value * 1.4)) });
   }
@@ -12863,7 +12874,7 @@ function buyItem(i) {
 }
 
 // ── CRAFTSMAN HUD FIELD KIT ── the Craftsman's HUD-KIT bench (see renderForge tabs).
-// The Craftsman (second keeper to arrive, after the Healer) CRAFTS the HUD readout instruments — one-time
+// The Craftsman (a founding keeper, arriving with the Healer when the town opens) CRAFTS the HUD readout instruments — one-time
 // gold buys that switch a piece of the heads-up display on for good (persisted per
 // hero on player.hudUpgrades). The element gating lives in updateBars / drawMinimap /
 // renderStatusStrip; here we just render the rows and take the payment. A freshly-
@@ -13295,9 +13306,9 @@ function warpToTown() {
 
 // GRADUATE TO TOWN — the one-time victory lap the very first time the Floor 5 guardian
 // is felled and the hero leaves the floor. Instead of stepping straight onto Floor 6,
-// they climb out into the newly-opened camp: the townsfolk celebrate, the first keeper
-// (the Healer) is milling about — the rest arrive one per boss kill as the hero
-// descends (the Craftsman's HUD Field Kit comes with the second) — and the Town Portal
+// they climb out into the newly-opened camp: the townsfolk celebrate, the two founding
+// keepers (the Healer and the Craftsman, its HUD Field Kit in hand) are milling about —
+// the rest arrive one per boss kill as the hero descends — and the Town Portal
 // is primed to press on. We quietly build Floor 6 first
 // and FREEZE it as the held floor, so the Town Portal drops the hero onto Floor 6.
 function graduateToTown() {
@@ -13324,7 +13335,7 @@ function graduateToTown() {
   screenFlash('#ffd24b');
   sfx('levelup');
   log('<span data-spr=feat_gate_red></span> You climb from the guardian\'s lair — and step into <b>town</b> for the very first time.', 'important');
-  log('<span data-spr=q_relic></span> Word of the fallen guardian races ahead of you. The townsfolk pour out cheering — grateful, the <b>Healer</b> opens their door first; more keepers arrive with each guardian you fell — the <b>Craftsman</b> and their HUD <b>Field Kit</b> next.', 'important');
+  log('<span data-spr=q_relic></span> Word of the fallen guardian races ahead of you. The townsfolk pour out cheering — grateful, the <b>Healer</b> and the <b>Craftsman</b> (with their HUD <b>Field Kit</b>) throw open their doors; more keepers arrive with each further guardian you fell.', 'important');
   log(`<span data-spr=feat_gate_red></span> Town is your haven now — from any floor, tap the glowing <b>Town</b> button (${kbLabel('portal')}) to teleport back here any time to rest, shop and resupply.`, 'important');
   log('Rest and resupply, then step into the <span data-spr=feat_portal></span> Town Portal when you\'re ready to press on to <b>Floor 6</b>.');
   showTownWelcome();   // one-time "welcome to your safe haven" hint chip on the first arrival
@@ -17164,8 +17175,9 @@ function rollsQualityBonus(rolls) {
 function qualityMagicFind() {
   const gear = totalStat('MAGICFIND') + skillBonus('magicFind');
   const food = foodFx('magicPct') * 100;
+  const shrine = shrineFx('magicPct') * 100; // Discovery shrine
   const luck = Math.max(0, totalAttr('luck') - ATTR_BASE) * 1.5;
-  return Math.max(0, gear + food + luck);
+  return Math.max(0, gear + food + shrine + luck);
 }
 
 function rollTier(rolls = 1, ilvl = null) {
@@ -21657,10 +21669,27 @@ function activateShrine(nx, ny) {
       log(`<span data-spr=scroll></span> Shrine of Wisdom! Restored ${heal} HP and full MP.`, 'important');
       screenFlash('#aa66ff'); break;
     }
+    // Every other kind is a catalog-driven floor boon (greed, insight, precision,
+    // vigor, …): magnitudes live in src/data/shrines.js and fold into combat via
+    // shrineFx(). No bespoke case needed — one generic grant.
+    default: applyShrineBoon(kind);
   }
   updateBars();
   // Real-time: the world clock owns enemy/quest cadence — just persist the boon.
   saveGame();
+}
+
+// New-style shrine boon: latch the floor counter, run any one-shot on-grant effect
+// (Vigor tops Stamina to full), then log + flash from the catalog. The lasting
+// effect folds into the live combat formulas through shrineFx(); it counts down in
+// tickBuffs() and shows on the status strip like power/guard/fortune.
+function applyShrineBoon(kind) {
+  const def = SHRINE_DEFS[kind];
+  if (!def) return;
+  if (def.floors) buffs[kind] = Math.max(buffs[kind] || 0, def.floors);
+  if (def.stamina) { player.stamina = player.maxStamina; player._stamDelay = 0; }
+  log(`<span data-spr=${def.icon}></span> ${def.log}`, 'important');
+  if (def.flash) screenFlash(def.flash);
 }
 
 // Tiny on-descent vignettes — mostly atmosphere, some with a small mechanical
@@ -22418,7 +22447,7 @@ function regenStamina(dt) {
 // A burst of speed in the current input/facing direction, fuelled by stamina.
 function doDash() {
   if (inTown || portalChanneling() || portalTransiting() || mapWarping() || isPlayerStunned()) return;
-  if ((player.dashCd || 0) > 0 || player.stamina < DASH_COST) return;
+  if ((player.dashCd || 0) > 0 || (!vigorFree() && player.stamina < DASH_COST)) return; // Vigor shrine: dash for free
   let dx = (heldDir('right') ? 1 : 0) - (heldDir('left') ? 1 : 0);
   let dy = (heldDir('down') ? 1 : 0) - (heldDir('up') ? 1 : 0);
   // Touch: dash in the joystick's current push direction (a double-tap-drag on the
@@ -22440,7 +22469,7 @@ function doDash() {
   player.vx = dx * DASH_SPEED; player.vy = dy * DASH_SPEED;
   player.dashT = 0.16; player.dashCd = DASH_CD;
   entryGuard = false;   // dashing ends arrival grace
-  player.stamina = Math.max(0, player.stamina - DASH_COST); player._stamDelay = STAM_DELAY;
+  if (!vigorFree()) { player.stamina = Math.max(0, player.stamina - DASH_COST); player._stamDelay = STAM_DELAY; } // Vigor shrine spends no Stamina
   sfx('teleport'); spawnParticles(player.x, player.y, '#bfe3ff', 9, 0.13);
 }
 
@@ -22554,12 +22583,12 @@ function updatePlayer(dt) {
   // Sprint: wanting it + moving + stamina. Held Shift or a latched auto-sprint
   // toggle counts. Drains stamina; otherwise it refills. Town is a safe hub —
   // sprint there is free (no drain) and stamina keeps refilling as if at rest.
-  const wantSprint = moving && (inTown || player.stamina > 0) && (sprintHeld || sprintLatched);
-  if (wantSprint && !inTown) { player.stamina = Math.max(0, player.stamina - SPRINT_DRAIN * dt); player._stamDelay = STAM_DELAY; }
+  const wantSprint = moving && (inTown || vigorFree() || player.stamina > 0) && (sprintHeld || sprintLatched);
+  if (wantSprint && !inTown && !vigorFree()) { player.stamina = Math.max(0, player.stamina - SPRINT_DRAIN * dt); player._stamDelay = STAM_DELAY; } // Vigor shrine: sprint drains no Stamina
   else regenStamina(dt);
 
   // Agility quickens your stride on top of any MOVESPD gear.
-  let maxSpd = PLAYER_SPEED * (1 + totalStat('MOVESPD') / 100) * agiMoveMult();
+  let maxSpd = PLAYER_SPEED * (1 + totalStat('MOVESPD') / 100) * agiMoveMult() * (1 + shrineFx('movePct')); // × Swiftness shrine
   if (wantSprint) maxSpd *= SPRINT_MULT;
   if (isPlayerSlowed()) maxSpd *= 0.5;
 
@@ -22852,6 +22881,7 @@ function useFountain(nx, ny) {
   showRampHint('fountain');   // ramp: first fountain taught (self-latches)
   player.hp = player.maxHp;
   player.mp = player.maxMp;
+  player.stamina = player.maxStamina; player._stamDelay = 0; // …and a full, ready Stamina bar (no lingering exertion delay)
   player.potionCd = 0; // a sip also resets your potion cooldown
   const wasT = mapData[ny][nx];
   mapData[ny][nx] = 0; // fountain is spent
@@ -22859,7 +22889,7 @@ function useFountain(nx, ny) {
   pathGridDirty();     // …but the opened tile joins the pathfinding grid
   hasFountain = false;
   sfx('potion');
-  log(`<span data-spr=feat_shrine></span> Fountain of Healing — full HP and MP!`, 'important');
+  log(`<span data-spr=feat_shrine></span> Fountain of Healing — full HP, MP, and Stamina!`, 'important');
   updateBars();
   saveGame();
 }
@@ -23048,7 +23078,7 @@ function takePlayerDamage(dmg, label, { lethal = true, isDoT = false } = {}) {
 
 // Thorns (gear): reflect a flat amount back at a melee attacker after it hits you.
 function thornsReflect(e) {
-  const thorns = totalStat('THORNS') + Math.round(buffMag('thorns')) + Math.round(foodFx('thorns')); // gear + Iron Wall buff + ramen
+  const thorns = totalStat('THORNS') + Math.round(buffMag('thorns')) + Math.round(foodFx('thorns')) + Math.round(shrineFx('thornsLvl') * dungeonLevel); // gear + Iron Wall buff + ramen + Brambles shrine
   if (thorns > 0 && e && !e.dead) {
     spawnFloatingText(e.x, e.y, `${thorns}`, '#ffcc66');
     dealDamage(e, thorns, false);
@@ -23068,7 +23098,7 @@ function lifestealHeal(amount) {
   const lsMult = (floorMod && floorMod.lifestealMult) || 1;
   const lsCap = Math.max(1, Math.round(player.maxHp * 0.12));
   // Life leech: lifesteal passives + gear Life Leech % (+ any lifesteal buff).
-  const ls = (skillBonus('lifesteal') + buffMag('lifestealUp') + totalStat('LEECH') / 100 + foodFx('lifesteal')) * lsMult; // + Vampire/Tonkotsu ramen
+  const ls = (skillBonus('lifesteal') + buffMag('lifestealUp') + totalStat('LEECH') / 100 + foodFx('lifesteal') + shrineFx('lifesteal')) * lsMult; // + Vampire/Tonkotsu ramen + Leech shrine
   if (ls > 0 && player.hp < player.maxHp) {
     // Leech is a RATE, not a burst: bank the per-swing amount and let it pay out
     // over time (queueHeal), so a big AoE hit no longer snaps the bar up in one frame.
@@ -23368,10 +23398,10 @@ function onEnemyDefeated(e) {
   if (e.isBoss && farm < 1 && !firstBossKill) log(`⚠️ ${label} slain here recently — spoils thinner (${Math.round(farm * 100)}%). Rest or move on to reset.`, 'important');
   const xpMult = e.isBoss ? 5 : (e.isElite ? 2 : 1);
   const goldMult = e.isBoss ? 3 : (e.isElite ? 2 : 1);
-  const xp = Math.round(12 * dungeonLevel * xpMult * farm * pfx('xp', 1) * (1 + (totalStat('XPGAIN') + skillBonus('xpGain')) / 100 + foodFx('xpPct') + healerFx('xpPct')));
+  const xp = Math.round(12 * dungeonLevel * xpMult * farm * pfx('xp', 1) * (1 + (totalStat('XPGAIN') + skillBonus('xpGain')) / 100 + foodFx('xpPct') + healerFx('xpPct') + shrineFx('xpPct'))); // + Insight shrine
   player.xp += xp;
   // Greed gate (cursed floor) and the Greedy item power both fatten the purse.
-  const gold = Math.round((rnd(2, 8) + dungeonLevel * 3) * goldMult * farm * (floorMod.goldMult || 1) * greedGoldMult() * (1 + 0.4 * itemPowerCount('greedy')) * pfx('gold', 1) * (1 + (totalStat('GOLDFIND') + skillBonus('goldFind')) / 100 + foodFx('goldPct') + healerFx('goldPct')));
+  const gold = Math.round((rnd(2, 8) + dungeonLevel * 3) * goldMult * farm * (floorMod.goldMult || 1) * greedGoldMult() * (1 + 0.4 * itemPowerCount('greedy')) * pfx('gold', 1) * (1 + (totalStat('GOLDFIND') + skillBonus('goldFind')) / 100 + foodFx('goldPct') + healerFx('goldPct') + shrineFx('goldPct'))); // + Greed shrine
   player.gold += gold;
   // Lifetime counters that bounty contracts snapshot & track against.
   if (e.isBoss) player.bossKills = (player.bossKills || 0) + 1;
@@ -23465,7 +23495,7 @@ function onEnemyDefeated(e) {
     const add = (k, n) => { if (n > 0 && materialUnlocked(k)) gained[k] = (gained[k] || 0) + n; };
     const big = e.isBoss ? 3 : (e.isElite ? 2 : 1);
     // Material Find % (gear) boosts the odds of every crafting-material drop.
-    const matMult = lootMult * (1 + totalStat('MATFIND') / 100) * egCovMaterialMult();   // × Dread Covenant material find
+    const matMult = lootMult * (1 + totalStat('MATFIND') / 100 + shrineFx('matPct')) * egCovMaterialMult();   // × Dread Covenant material find + Harvest shrine
     if (Math.random() < 0.34 * matMult || e.isElite || e.isBoss)  add('scrap', rnd(1, 2) * big + Math.min(4, Math.floor(dungeonLevel / 12)));
     if (Math.random() < 0.09 * matMult || e.isBoss)               add('glimmer', e.isBoss ? rnd(1, 2) : 1);
     if (Math.random() < (0.018 + dungeonLevel * 0.0012) * matMult || (e.isBoss && Math.random() < 0.5)) add('core', e.isBoss ? rnd(1, 2) : 1);
@@ -24132,9 +24162,13 @@ function skillDmgTipLine(node, rank) {
 //     `{dmg}` expands to the whole phrase ("16k–22k damage", plus a "(×N)" badge for a
 //     multi-strike cast) — a desc writes "deals {dmg} and …", not "{dmg} damage". A desc
 //     with no token falls back to the phrase appended as its own sentence.
-function skillDescHtml(node, rank) {
+function skillDescHtml(node, rank, opts) {
   let d = (node && node.desc) || '';
   d = d.replace(/\s*\+\d+%\s+damage per point in [^.]+\.?/gi, '').trim();
+  // The detail card lists a live Damage / DPS readout already, so drop the
+  // redundant range from the flavour line there (opts.hideDmg) and skip the
+  // appended "Deals X." sentence — the number lives in the stat rows instead.
+  if (opts && opts.hideDmg) return stripDamageClause(d);
   const dp = (node && node.cast) ? skillDamagePreview(node, rank) : null;
   if (dp) {
     const hits = dp.strikes > 1 ? ` <span style='opacity:0.75'>(×${dp.strikes})</span>` : '';
@@ -26609,8 +26643,9 @@ function availableServiceKinds() {
   return (typeof TOWN_MENU !== 'undefined') ? TOWN_MENU.filter((s) => townServiceAvailable(s.kind)).map((s) => s.kind) : [];
 }
 // Announce a freshly-arrived keeper with a small pop-up banner (fires even down in the
-// dungeon, the instant a boss kill lands one). Since each boss brings exactly one new
-// keeper, `fresh` is normally a single keeper. `knownServices` latches which have been
+// dungeon, the instant a boss kill lands one). Since each boss after the first brings
+// exactly one new keeper (the town-unlock brings two — the Healer and the Craftsman),
+// `fresh` is usually a single keeper. `knownServices` latches which have been
 // announced so an arrival is heralded exactly once. Silent baseline sync when
 // `knownServices` is missing (an older save / mid-run load) so nothing spams on boot.
 function checkTownArrivals(silent) {
@@ -26708,10 +26743,12 @@ function checkLevelUp() {
     const ascGained = (player.level >= ASCEND_LEVEL && (player.level - ASCEND_LEVEL) % ASC_POINT_EVERY === 0) ? 1 : 0;
     if (ascGained) player.ascPoints = (player.ascPoints || 0) + ascGained;
     recomputeMaxStats();        // level grants more base HP/MP
-    // A level-up mends a chunk of HP/MP — a real relief mid-fight, but no longer
-    // a free full reset, so health and mana stay finite resources you manage.
-    player.hp = Math.min(player.maxHp, player.hp + Math.round(player.maxHp * 0.4));
-    player.mp = Math.min(player.maxMp, player.mp + Math.round(player.maxMp * 0.4));
+    // A level-up fully restores the hero — HP, MP, and Stamina all top off to their
+    // (freshly recomputed) maxima, a clean second wind that rewards the milestone.
+    player.hp = player.maxHp;
+    player.mp = player.maxMp;
+    player.stamina = player.maxStamina || MAX_STAMINA;
+    player._stamDelay = 0;      // and a ready Stamina bar — no lingering exertion delay
     // A level that also banks an ascendancy point gets its own ethereal sting so the
     // milestone stands out from an ordinary level-up fanfare.
     if (ascGained) sfx('ascpoint'); else sfx('levelup');
@@ -26975,11 +27012,15 @@ const STATUS_META = {
   thorns:      { icon: 'ic_mallet',  kind: 'buff', name: 'Thorns',       desc: 'Reflect damage back at attackers.' },
   regen:       { icon: 'ic_heart',   kind: 'buff', name: 'Regeneration', desc: 'Recover HP each second.' },
   shield:      { icon: 'ic_orb',     kind: 'buff', name: 'Shield',       desc: 'Absorbs incoming damage.' },
-  // Shrine boons (the buffs{} object) — counted in floors, not seconds.
-  s_power:   { icon: 'ui_power', kind: 'buff', name: 'Power Shrine', desc: '+50% damage.' },
-  s_guard:   { icon: 'a_shield', kind: 'buff', name: 'Guarded',      desc: 'Take 40% less damage.' },
-  s_fortune: { icon: 'ic_money', kind: 'buff', name: 'Fortune',      desc: '+50% loot and an extra drop.' },
+  // Shrine boons (the buffs{} object, counted in floors not seconds) are folded in
+  // below from the shrine catalog so there's a single source of truth.
 };
+// Shrine boons — one s_<kind> chip per non-instant kind, straight from the catalog
+// (src/data/shrines.js), so a new shrine renders its strip chip with no edit here.
+for (const _kind in SHRINE_DEFS) {
+  const _d = SHRINE_DEFS[_kind];
+  if (!_d.instant) STATUS_META['s_' + _kind] = { icon: _d.icon, kind: 'buff', name: _d.name, desc: _d.desc };
+}
 // Healer buffs (Rested + Blessings) — counted in floors. Fold their metadata in from
 // the data catalog so their strip chips render name/icon/tooltip like any other buff,
 // with a single source of truth (src/data/healerBuffs.js).
@@ -27009,8 +27050,8 @@ function activeStatusList() {
     const b = combatBuffs[id];
     if (b && b.secs > 0) out.push({ id, remaining: Math.ceil(b.secs), unit: 'second', mag: b.mag });
   }
-  for (const k of ['power', 'guard', 'fortune']) {
-    if (buffs[k] > 0) out.push({ id: 's_' + k, remaining: buffs[k], unit: 'floor', mag: null });
+  for (const b of activeShrineBuffs(buffs)) {
+    out.push({ id: b.id, remaining: b.floors, unit: 'floor', mag: null });
   }
   for (const b of (player.healerBuffs || [])) {
     if (b && b.floors > 0 && STATUS_META[b.id]) out.push({ id: b.id, remaining: b.floors, unit: 'floor', mag: null });
@@ -28284,14 +28325,14 @@ function renderSkills(el) {
     if (rank > 0) {
       const rBlock = refundBlockedBy(sn);
       const rCost = skillRefundCost();
-      if (rBlock) refundBtn = `<button class="pop-refund" disabled>↩️ Refund locked — ${rBlock} needs it</button>`;
-      else { const aff = canAfford(rCost); refundBtn = `<button class="pop-refund${aff ? '' : ' short'}" ${aff ? '' : 'disabled'} onclick="refundSkill('${sn.id}')">↩️ Refund 1 pt — <span data-spr=ic_money></span>${fmtGold(rCost.gold)}</button>`; }
+      if (rBlock) refundBtn = `<button class="pop-refund" disabled>↩︎ Refund locked — ${rBlock} needs it</button>`;
+      else { const aff = canAfford(rCost); refundBtn = `<button class="pop-refund${aff ? '' : ' short'}" ${aff ? '' : 'disabled'} onclick="refundSkill('${sn.id}')">↩︎ Refund 1 pt — <span data-spr=ic_money></span>${fmtGold(rCost.gold)}</button>`; }
     }
     // Owned actives can be slotted onto / pulled off the hotkey bar straight from
     // the popover (the quick path alongside dragging the node onto a tray slot).
     const slotAt = (sn.type === 'active' && rank > 0) ? skillSlotIndexOf(sn.id) : -1;
     const hideBtn = (sn.type === 'active' && rank > 0)
-      ? `<button class="pop-hide${slotAt < 0 ? ' hidden' : ''}" onclick="toggleSkillSlot('${sn.id}')">${slotAt >= 0 ? `<span data-spr=ic_stun></span> On bar (slot ${slotAt + 1}) — tap to remove` : '🚫 Off the bar — tap to add'}</button>`
+      ? `<button class="pop-hide${slotAt < 0 ? ' hidden' : ''}" onclick="toggleSkillSlot('${sn.id}')">${slotAt >= 0 ? `<span data-spr=ic_stun></span> On bar (slot ${slotAt + 1}) — tap to remove` : '⊘ Off the bar — tap to add'}</button>`
       : '';
     // Drop this active into the single auto-cast slot (or clear it) straight from the
     // popover — the touch-friendly path that mirrors dragging it onto the bar's middle
@@ -28304,7 +28345,7 @@ function renderSkills(el) {
       <b>${dlIcon(sn.icon,18)||''} ${sn.name}</b>${rankTxt}
       <div class="ty">${typeTxt}</div>
       ${skillRecoveryTag(sn)}
-      <div class="ds">${skillDescHtml(sn, rank)}</div>
+      <div class="ds">${skillDescHtml(sn, rank, { hideDmg: true })}</div>
       ${skillMechHtml(sn, rank)}
       ${ruHtml}
       ${msHtml}
@@ -28545,7 +28586,7 @@ function skillMechList(n, rank) {
     if (dp) {
       const hits = dp.strikes > 1 ? ` <span style="opacity:0.75">(×${dp.strikes})</span>` : '';
       add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b> <span style="opacity:0.6">per hit</span>${hits}`);
-      if (dp.hybrid && dp.phys && dp.magic) add('Split', '#c99cd6', `<span style="color:#e0a24b">${formatDamageRange(dp.phys.min, dp.phys.max)} physical</span> + <span style="color:#b08ad8">${formatDamageRange(dp.magic.min, dp.magic.max)} magic</span>`);
+      if (dp.hybrid && dp.phys && dp.magic) add('Split', '#c99cd6', `${formatDamageRange(dp.phys.min, dp.phys.max)} physical + ${formatDamageRange(dp.magic.min, dp.magic.max)} magic`);
       add('DPS', '#e0a24b', `<b>${abbreviateNumber(dp.dps)}</b>`);
     }
     // Movement first — gap-closers/pulls/escapes are the headline of a mobility skill.
@@ -28569,18 +28610,19 @@ function skillMechList(n, rank) {
     }
   }
   // Passive milestone surges (the +8/+10/+12% spikes at ranks 3/7/10) now get their
-  // own specific "Rank bonuses" ladder in the card, so no vague Surge chip here. The
+  // own specific "Surge bonuses" ladder in the card, so no vague Surge chip here. The
   // rank-10 SURGE stat is surfaced in that same ladder (see skillMilestonesHtml).
   // Cross-cutting keystone rule that a stat line can't show.
   if (n.kflag === 'bloodpact') add('Keystone', '#e8c267', 'Active skills cost life instead of mana.');
   return rows;
 }
-// Styled-chip version for the click popover.
+// Styled-chip version for the click popover. Chips share one neutral treatment
+// (the per-mech accent colours were dropped to keep the card calm — see styles.css).
 function skillMechHtml(n, rank) {
   const rows = skillMechList(n, rank);
   if (!rows.length) return '';
   return `<div class="mech">` + rows.map(r =>
-    `<div class="mech-row"><span class="mech-t" style="background:${r.color}22;color:${r.color}">${r.tag}</span><span class="mech-d">${r.desc}</span></div>`
+    `<div class="mech-row"><span class="mech-t">${r.tag}</span><span class="mech-d">${r.desc}</span></div>`
   ).join('') + `</div>`;
 }
 // Build the "On rank up" preview rows: the concrete buff each point buys, shown
@@ -28692,7 +28734,7 @@ function passiveMilestoneDesc(node, rank) {
   return `+${pct}% ${passiveBonusName(node)}`;
 }
 // The rank 3 / 7 / 10 spikes as a standalone checklist for the detail card: all
-// three are ALWAYS shown (what each grants), and each lights green once this skill's
+// three are ALWAYS shown (what each grants), and each gets a ✓ once this skill's
 // rank is high enough to have earned it — so you can see the whole ladder at any
 // rank, not just the next rung. Empty for skills that never milestone.
 function skillMilestonesHtml(node, rank) {
@@ -28710,7 +28752,7 @@ function skillMilestonesHtml(node, rank) {
       + `<span class="ms-k">${met ? '✓ ' : ''}${m.pips} Rank ${m.rank}</span>`
       + `<span class="ms-v"><b>${m.name}</b> — ${desc}</span></div>`;
   }).join('');
-  return `<div class="ms"><div class="ms-h">Rank bonuses</div>${rows}</div>`;
+  return `<div class="ms"><div class="ms-h">Surge bonuses</div>${rows}</div>`;
 }
 // Plain-text "new total" summary at a given rank, for the level-up log line.
 function skillTotalSummary(node, rank) {
@@ -31496,8 +31538,8 @@ function loadGame() {
     inventory.forEach(recordWardrobe);
     wornItems.forEach(recordWardrobe);
     dungeonLevel = data.dungeonLevel || 1;
-    // Restore shrine buffs, tolerating older saves that predate them.
-    buffs = Object.assign({ power: 0, guard: 0, fortune: 0 }, data.buffs || {});
+    // Restore shrine buffs, tolerating older saves that predate any kind.
+    buffs = Object.assign(defaultShrineBuffs(), data.buffs || {});
     // Restore an active mystic pact, tolerating older saves (and dropping a
     // malformed one rather than letting it break floor generation).
     pact = (data.pact && data.pact.fx && data.pact.floors > 0) ? data.pact : null;
@@ -34999,7 +35041,7 @@ function updateActorRender(dt) {
 // hero swings noticeably faster than a sluggish one.
 const PLAYER_ATK_BASE = 1.5;
 const STYLE_ATK_MULT = { flurry: 0.7, slash: 1, cleave: 1.25, crush: 1.4, reap: 1.2, thrust: 1.05, shot: 1.05, bolt: 1.15, fist: 0.85 };
-function playerAttackSpeedPct() { return Math.max(0, totalStat('ATKSPD')) + agiAtkSpeedPct(); }
+function playerAttackSpeedPct() { return Math.max(0, totalStat('ATKSPD')) + agiAtkSpeedPct() + shrineFx('atkSpdPct') * 100; } // + Haste shrine
 function playerAttackInterval() {
   const m = STYLE_ATK_MULT[weaponStyle()] || 1;
   return PLAYER_ATK_BASE * m / (1 + playerAttackSpeedPct() / 100);
@@ -38579,6 +38621,7 @@ __dlLive("stashHc", () => stashHc, (v) => { stashHc = v; });   // Hardcore ladde
 __dlLive("merchant", () => merchant, (v) => { merchant = v; });
 __dlLive("moveTarget", () => moveTarget, undefined);   // read-only handle (a const object) — lets tests inspect the click-to-move route
 __dlLive("pact", () => pact, (v) => { pact = v; });
+__dlLive("buffs", () => buffs, (v) => { buffs = v; });   // live shrine-boon counters (floors left per kind) — inspectable/drivable like pact
 __dlLive("player", () => player, (v) => { player = v; });
 __dlLive("selectedItem", () => selectedItem, (v) => { selectedItem = v; });
 __dlLive("selectedSkillId", () => selectedSkillId, (v) => { selectedSkillId = v; });

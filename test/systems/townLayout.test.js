@@ -6,7 +6,7 @@ import {
 import {
   TOWN_W, TOWN_H, TOWN_SPAWN, TOWN_GATE, TOWN_PORTAL,
   TOWN_PATHS, TOWN_NPCS, TOWN_DECOR, TOWN_DECOR_FAMILIES,
-  TOWN_SANCTUM, TOWN_ENDGAME_KINDS, TOWN_FIXED_KINDS,
+  TOWN_SANCTUM, TOWN_ENDGAME_KINDS, TOWN_FIXED_KINDS, TOWN_SERVICE_ARRIVALS,
 } from '../../src/data/townLayout.js';
 import { DECOR_INDEX } from '../../src/assets/decorAtlas.js';
 
@@ -231,6 +231,22 @@ describe('authored town data', () => {
     expect(TOWN_PORTAL.y - forge.y).toBeLessThanOrEqual(3);
     // Its tile is a walkable interior avenue tile (buildTown stamps the keeper solid).
     expect(TOWN_PATHS.some((p) => p.x === forge.x && p.y === forge.y)).toBe(true);
+  });
+
+  it('makes the Healer and Craftsman the two founding keepers (both share arrival 1)', () => {
+    // The town-unlock (felling the Floor 5 guardian) brings BOTH founders at once, so a
+    // hero's very first town visit has the Healer AND the Craftsman — the Craftsman's HUD
+    // Field Kit is on hand from the start, and it's the keeper waiting right by the portal.
+    expect(TOWN_SERVICE_ARRIVALS.healer).toBe(1);
+    expect(TOWN_SERVICE_ARRIVALS.forge).toBe(1);
+    // Exactly those two share arrival 1; every other keeper joins on a later boss (>1),
+    // so no keeper is left un-numbered or ahead of the founders.
+    for (const n of TOWN_NPCS) {
+      const arrival = TOWN_SERVICE_ARRIVALS[n.kind];
+      expect(typeof arrival).toBe('number');
+      if (n.kind === 'healer' || n.kind === 'forge') expect(arrival).toBe(1);
+      else expect(arrival).toBeGreaterThan(1);
+    }
   });
 
   it('keeps every fixed keeper a regular open-clearing keeper (not a sanctum one)', () => {

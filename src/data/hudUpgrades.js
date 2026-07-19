@@ -3,7 +3,8 @@
 // raw pixels — health/mana show as bars with no numbers, no minimap, no counters, no
 // depth or difficulty label, no status-effect icons — and the loot bag shows items in
 // plain pickup order with no Power ratings, stat compare, sort/filter or auto-loot.
-// The town Craftsman (the SECOND keeper to arrive) crafts these one at a time; each
+// The town Craftsman (a founding keeper, on hand from your first town visit) crafts
+// these one at a time; each
 // purchase switches a piece on for good (persisted per hero on player.hudUpgrades).
 //
 // Each entry is { key, name, icon, price, group, hud, desc }:
