@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "Chest rooms rarer; some floors hold two", by: "Claude", notes: [
+    "Treasure-hoard room appears less often; a lucky floor can now hold two.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Beach foes randomized each new game", by: "Claude", notes: [
     "Opening pack is now four of one random low-level species (rats, slimes, etc.) — not always skeletons.",
     "Cave elite rolls its own random type too; no two new games open the same fight.",

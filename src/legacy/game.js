@@ -55,6 +55,7 @@ import { resistFraction, penFraction, mitigate, physicalShare } from '../systems
 import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js';
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { pickVaultRoom, findSealedRoom } from '../systems/vaultRooms.js';
+import { rollHoardRoomCount } from '../systems/hoardRooms.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
@@ -11550,11 +11551,18 @@ function generateMap() {
   spawnGroundLoot();
   // ── TREASURE HOARD ROOM (rare) ── a whole room packed with chests. A jackpot
   // find — but cracking that many is a gamble (mimics and chest-ambushes lurk).
-  // Chests are laid in a checkerboard so you can still weave between them.
-  if (rooms.length && Math.random() < 0.001) {
-    const far = rooms.filter(r => Math.abs(r.cx - player.x) + Math.abs(r.cy - player.y) >= 6);
-    const room = pick(far.length ? far : rooms);
-    if (room) {
+  // Chests are laid in a checkerboard so you can still weave between them. Most
+  // floors get none; a lucky few get one, and rarer still a floor gets two distinct
+  // hoards (rollHoardRoomCount, tuned in src/data/hoardRooms.js).
+  const hoardRoomCount = rooms.length ? rollHoardRoomCount(Math.random) : 0;
+  if (hoardRoomCount) {
+    // Prefer rooms a few tiles from the entrance; each hoard claims a DIFFERENT room
+    // so a two-hoard floor spreads them out rather than stacking on one spot.
+    let candidates = rooms.filter(r => Math.abs(r.cx - player.x) + Math.abs(r.cy - player.y) >= 6);
+    if (!candidates.length) candidates = rooms.slice();
+    for (let n = 0; n < hoardRoomCount && candidates.length; n++) {
+      const room = pick(candidates);
+      candidates = candidates.filter(r => r !== room);
       const luck = 2 + Math.floor(dungeonLevel / 3);
       let placed = 0;
       for (let y = room.y; y < room.y + room.h && placed < 16; y++) {
