@@ -8,6 +8,22 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — Shrine boons are data-driven (15 new kinds)
+
+- 📦 New leaf `src/data/shrines.js`: the whole Shrine catalog (classic +
+  15 new kinds) as pure data — name/icon/flash/floors/`fx` magnitudes/log per kind.
+- 📦 New `src/systems/shrineEffects.js`: pure `defaultShrineBuffs`, `shrineFxFrom`
+  (summed boon magnitude for an effect key — the shrine twin of foodFx/healerFx),
+  `activeShrineBuffs`, and the weighted `pickShrineKind`. Unit-tested
+  (`test/systems/shrineEffects.test.js`).
+- 🧪 `activateShrine()` keeps the five classic cases and routes every other kind
+  through one generic `applyShrineBoon()`; new boons fold into combat live via
+  `shrineFx(key)` terms added beside the existing foodFx/healerFx terms (gold, xp,
+  crit, dodge, magic/material find, spell/skill power, lifesteal, thorns, HP/MP
+  regen, defense, move & attack speed, plus a free-Stamina Vigor gate). The status
+  strip / gameState effects / STATUS_META now iterate the catalog, and `window.buffs`
+  is exposed through the `__dlLive` test seam. Healing Fountain also tops Stamina.
+
 ## Tooling — changelog merge conflicts auto-resolve (`merge=union`)
 
 - 🏗️ New `.gitattributes` marks `src/data/changelog.js` `merge=union`: git keeps
