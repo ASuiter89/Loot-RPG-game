@@ -142,6 +142,13 @@ export const HINTS = {
     text: `Out of Mana — it regenerates over time.`,
     wiki: 'mana',
   },
+  // First successful cast — the proactive counterpart to `mana` above: fired the
+  // first time a cast actually SPENDS mana, so a new hero learns the resource on
+  // the way up rather than only when they run dry.
+  spellMana: {
+    text: `That cast spent <b>Mana</b> — every skill draws on it; it refills over time.`,
+    wiki: 'mana',
+  },
   // First shrine stepped on (shrines activate on contact; a blood shrine costs Health).
   shrine: {
     text: `A <b>shrine</b>'s boon is yours — see it under Status on the HERO tab.`,
