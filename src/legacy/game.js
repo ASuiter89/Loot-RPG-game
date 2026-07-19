@@ -6030,6 +6030,14 @@ function refundSkill(id) {
 // like a personality rather than just a tougher sprite.
 const ELITE_NAMES = ['Grok the Render','Vossk Bonechewer','Mauler','The Gloomfang','Ssarith','Korrath','Bilewretch','Ironjaw','Nightcrawler','The Hollow King'];
 
+// Low-level "critter" types the one-time beach tutorial can throw at a fresh hero —
+// each is a gentle melee foe with real pixel art (a MONSTER_SPRITE_IDX tile).
+// buildTutorialMap picks ONE at random for the whole opening pack (all four the
+// same) and one for the guarding elite, so the shore isn't the identical fight every
+// new game. The tutorial forces behaviour/stats (slow, low HP) regardless of type —
+// only the look and name change.
+const BEACH_FOE_TYPES = ['rat', 'slime', 'bat', 'cavesnake', 'bogfrog', 'rotgrub', 'scorpion', 'kobold', 'centipede', 'cavespider'];
+
 // Floor modifiers — each new floor rolls a random theme that tweaks danger and
 // rewards. This is a gameplay layer on top of the purely-visual THEMES below.
 const FLOOR_MODS = [
@@ -6070,9 +6078,9 @@ let floorCleared = false;
 // generateMap()/buildTutorialMap(); cleared at the end of the first runEnemyTurn.
 let entryGuard = false;
 // True while the player is on the one-time beach tutorial map (a fresh hero's
-// very first "floor"): a tall, narrow sandy cove with three skeletons and an elite
-// to fight and a cave to the north that drops them into the real dungeon. See
-// buildTutorialMap().
+// very first "floor"): a tall, narrow sandy cove with a pack of four random-type
+// low-level foes and a random-type elite to fight, and a cave to the north that
+// drops them into the real dungeon. See buildTutorialMap().
 let tutorialActive = false;
 // ── TOWN GATE ACCESS ──
 // The town gate is no longer locked behind a combat / cooldown check — it's always
@@ -6106,7 +6114,7 @@ function updateFloorClear() {
       sfx('bosskill');
       conquerDifficulty();
     } else if (tutorialActive) {
-      // Beach tutorial: the last foe (the three skeletons and the elite) just fell.
+      // Beach tutorial: the last foe (the pack of four and the elite) just fell.
       // Grant the hero's first LEVEL-UP (their first skill + stat points, earned here
       // — see grantBeachLevelUp), unseal the cave, and point them north to it.
       log('<span data-spr=feat_door></span> The last foe falls — the cave to the north opens!', 'important');
@@ -7742,7 +7750,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals THREE skeletons up the shore — they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. A lone ELITE guards the cave further north, and the cave down to floor 1 stays SEALED until it and the three skeletons fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view.`,
       `Opening-floor content pacing (Normal, floors 1–25): foes are fewer and softer on floors 1–5 and climb to full strength by floor 6; the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. TRAINING WHEELS: on the beach and floors 1–3, no single blow can fell a foe in fewer than 3 hits (per-hit damage is capped to leave it alive through its first two), so a new player always trades a few real blows rather than one-shotting trash. No glowing ELITES or elite affixes until floor 4 (the one scripted beach elite aside). Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -11785,10 +11793,11 @@ function buildBossArena() {
 // A fresh hero's very first map: a TALL, NARROW sandy cove ringed by sea (a wider
 // bay to the south, a long beach reaching north). They wake at the water's edge
 // and learn to MOVE across an empty beach before the follow-camera scrolls the
-// first skeletons into view — three that turn hostile as the hero approaches;
-// felling one drops a grey weapon to equip. An ELITE guards the cave further north,
-// and only once it and the three fall does the northern cave unseal — and the hero
-// take their first level-up. Built once per new hero; `player.tutorialDone` retires it.
+// first foes into view — a PACK of four (one random low-level species, so no two new
+// games open the same) that turn hostile as the hero approaches; felling one drops a
+// grey weapon to equip. A random-type ELITE guards the cave further north, and only
+// once it and the pack fall does the northern cave unseal — and the hero take their
+// first level-up. Built once per new hero; `player.tutorialDone` retires it.
 function buildTutorialMap() {
   tutorialActive = true;
   inTown = false;
@@ -11809,7 +11818,7 @@ function buildTutorialMap() {
   // A TALL, NARROW sandy cove ringed by SEA. The hero wakes at the water's edge in
   // the SOUTH with an empty beach stretching far to the north, so the very first
   // thing they do is learn to WALK — no foe in sight — before the follow-camera
-  // scrolls the first skeletons into view. The border is WATER, not stone: a thin
+  // scrolls the first foes into view. The border is WATER, not stone: a thin
   // sea laps every edge and bites a few ragged tiles into the sand so the shore
   // isn't a perfect rectangle. Kept skinny (a slim strip of beach) and deliberately
   // taller than a normal floor for that opening stroll.
@@ -11851,37 +11860,47 @@ function buildTutorialMap() {
   setPlayerCell(caveX, spawnY);                  // sand, with water directly below (syncs fx/fy)
   startPos = { x: caveX, y: spawnY };            // a beach death returns you to the shore
 
-  // The way north is barred by THREE skeletons up the beach and, guarding the cave,
-  // a lone ELITE. They start NEUTRAL and off-screen, but unlike a struck-only foe
-  // they turn HOSTILE the moment the hero strays within `wakeRange` — so a new
-  // player is drawn into their first real fight by simply approaching, then learns
-  // combat as the slow shamblers close in. The `tutorial` flag routes each death
-  // through the beach handler (no XP/loot spam; the clear grants the level-up).
-  //   • The THREE sit well up the empty beach, OFF-SCREEN at spawn, so the hero has
-  //     to walk to meet them — the opening skirmish.
+  // The way north is barred by a PACK of four up the beach and, guarding the cave,
+  // a lone ELITE. To keep a new game from being the same fight twice, the pack is
+  // four identical foes of ONE randomly-chosen low-level type (all rats, or all
+  // slimes, …) and the elite rolls its OWN random type (see BEACH_FOE_TYPES). They
+  // start NEUTRAL and off-screen, but unlike a struck-only foe they turn HOSTILE the
+  // moment the hero strays within `wakeRange` — so a new player is drawn into their
+  // first real fight by simply approaching, then learns combat as the slow foes close
+  // in. The `tutorial` flag routes each death through the beach handler (no XP/loot
+  // spam; the clear grants the level-up).
+  //   • The PACK sits well up the empty beach, OFF-SCREEN at spawn, so the hero has
+  //     to walk to meet it — the opening skirmish.
   //   • The ELITE waits further north again, up by the cave; the cave stays sealed
-  //     until it and the three fall.
+  //     until it and the pack fall.
   // Whichever foe falls FIRST hands over the starter weapon (see onEnemyDefeated /
   // _beachGearDropped), so the gift never hinges on kill order.
   _beachGearDropped = false;
-  const mkSkeleton = (x, y, extra) => Object.assign({
-    x, y, type: 'skeleton', name: 'Skeleton', hp: 20, maxHp: 20, level: 1, dmg: 3,
+  const packType = pick(BEACH_FOE_TYPES);
+  const eliteType = pick(BEACH_FOE_TYPES);
+  // A gentle beach foe: the tutorial fixes its stats and slow melee gait; only the
+  // `type` (sprite) and name come from the rolled species.
+  const mkFoe = (type, x, y, extra) => Object.assign({
+    x, y, type, name: (MONSTERS[type] && MONSTERS[type].name) || 'Creature',
+    hp: 20, maxHp: 20, level: 1, dmg: 3,
     dead: false, behavior: 'chaser', passive: true, provoked: false, slow: true,
     wakeRange: 4, tutorial: true,
+    mColor: (MONSTERS[type] && MONSTERS[type].color) || null,
   }, extra || {});
-  enemies.push(mkSkeleton(caveX,     21, { hp: 24, maxHp: 24, dmg: 4 }));
-  enemies.push(mkSkeleton(caveX - 2, 19));
-  enemies.push(mkSkeleton(caveX + 2, 19));
-  // The elite: a named, glowing skeleton — tougher and hits harder than the trash,
-  // and NOT slow — a real step up that guards the cave. Still tutorial-flagged, so
-  // it pays out through the beach handler like the rest.
-  enemies.push(mkSkeleton(caveX, 6, {
-    name: 'Bonelord', hp: 60, maxHp: 60, dmg: 6, level: 2,
+  // The pack: four identical low-level foes up the beach, hostile on approach.
+  enemies.push(mkFoe(packType, caveX - 2, 21));
+  enemies.push(mkFoe(packType, caveX + 2, 21));
+  enemies.push(mkFoe(packType, caveX - 1, 19));
+  enemies.push(mkFoe(packType, caveX + 1, 19));
+  // The elite: a named, glowing foe of its own random type — tougher and hits harder
+  // than the pack, and NOT slow — a real step up that guards the cave. Still
+  // tutorial-flagged, so it pays out through the beach handler like the rest.
+  enemies.push(mkFoe(eliteType, caveX, 6, {
+    name: pick(ELITE_NAMES), hp: 60, maxHp: 60, dmg: 6, level: 2,
     isElite: true, slow: false, wakeRange: 5,
-    mColor: (MONSTERS.skeleton && MONSTERS.skeleton.color) || null,
   }));
 
-  // Seal the cave until every skeleton falls, so the fight can't be skipped.
+  // Seal the cave until every foe falls, so the fight can't be skipped.
   floorCleared = false;
   tutorialStage('move');
 }
@@ -11927,7 +11946,7 @@ const _tutDismissed = { equip: false, levelup: false };
 // it only when no popup is up.
 let _beachHintStage = null;
 // Whether the beach's one starter weapon has already dropped this tutorial. The
-// FIRST foe felled — whichever of the three skeletons or the elite it is — hands it
+// FIRST foe felled — whichever of the pack or the elite it is — hands it
 // over, so the gift never depends on kill order. Reset per tutorial in
 // buildTutorialMap; the save doesn't persist enemies, so a mid-beach reload rebuilds
 // the shore and re-arms it.
@@ -11972,11 +11991,11 @@ function dropTutorialGear(e) {
   inventory.push(item);
   _tutDismissed.equip = false;   // a fresh drop re-surfaces the nudge
   renderPanelSoon();
-  log(`<span data-spr=chest></span> The skeleton drops ${logItem(item)}!`, 'loot');
+  log(`<span data-spr=chest></span> The ${(e && e.name) || 'foe'} drops ${logItem(item)}!`, 'loot');
   refreshTutorialCues();
 }
 
-// Beach graduation: felling the three skeletons and the elite is the hero's FIRST
+// Beach graduation: felling the pack and the elite is the hero's FIRST
 // level-up — the first skill point and stat points, EARNED here rather than at spawn.
 // Grant a real 1→2 level (the beach banks no kill XP, so this is exactly one
 // level), suppressing the fly-in banner in favour of the tutorial popup.
@@ -12081,8 +12100,11 @@ function tutorialStage(stage) {
   const moveHow = isTouchMode() ? 'the joystick (drag the map)' : 'WASD / arrows';
   _beachHintStage = (stage === 'move' || stage === 'cave') ? stage : null;
   if (stage === 'move') {
-    // The beach opens empty — teach walking first; the skeletons are a stroll north.
-    setTutorialHint(`Use <b>${moveHow}</b> to head <b>north</b> toward the <b>skeletons</b>.`);
+    // The beach opens empty — teach walking first; the pack is a stroll north. Name
+    // the foe from the live pack so the hint matches whichever species rolled.
+    const packFoe = (enemies || []).find(e => e && e.tutorial && !e.isElite && !e.dead);
+    const foeName = (packFoe && packFoe.name) || 'creature';
+    setTutorialHint(`Use <b>${moveHow}</b> to head <b>north</b> toward the <b>${foeName}</b> pack.`);
   } else if (stage === 'cave') {
     setTutorialHint(`Step into the <b>cave</b> (<span data-spr=ic_down></span>) up north to descend.`);
   }
@@ -22679,7 +22701,7 @@ function performAscend(nx, ny) {
 // last-finite-floor guards.
 function goDownStairs(nx, ny) {
   if (tutorialActive) {
-    if (!floorCleared) { const left = hostilesRemaining(); log(`<span data-spr=b_deathknight></span> The cave is sealed — defeat ${left === 1 ? 'the last skeleton' : `all ${left} skeletons`} first.`, 'important'); sfx('click'); return; }
+    if (!floorCleared) { const left = hostilesRemaining(); log(`<span data-spr=b_deathknight></span> The cave is sealed — defeat ${left === 1 ? 'the last foe' : `all ${left} foes`} first.`, 'important'); sfx('click'); return; }
     // The cave won't take you until your Level-2 points are spent — a new hero
     // learns to build BEFORE descending. Warn, and re-surface the nudge.
     const unspentA = player.attrPoints || 0, unspentS = player.skillPoints || 0;
@@ -23219,16 +23241,16 @@ function onEnemyDefeated(e) {
   // Summoned minions are pure threat — they drop NO XP, gold or loot, so a
   // summoner boss can't be farmed by killing the fodder it spawns endlessly.
   if (e.minion) { sfx('kill'); updateFloorClear(); return; }
-  // ── Beach tutorial ── the shore foes (three skeletons + an elite) pay out a
-  // scripted, gentle reward, NOT the full loot routine: no XP or drop spam (so the
-  // first level-up fires exactly on the last kill — see updateFloorClear — rather
-  // than trickling in from kill XP), just a puff of bone dust. The FIRST one felled
+  // ── Beach tutorial ── the shore foes (a pack of four + an elite, random types)
+  // pay out a scripted, gentle reward, NOT the full loot routine: no XP or drop spam
+  // (so the first level-up fires exactly on the last kill — see updateFloorClear —
+  // rather than trickling in from kill XP), just a puff of dust. The FIRST one felled
   // — whichever it is — hands over a grey weapon to equip (tracked by
   // _beachGearDropped, so kill order can't strand the gift). Clears the tile and
   // re-checks the floor.
   if (tutorialActive && e.tutorial) {
     sfx('kill');
-    spawnParticles(e.x, e.y, '#e6ebf2', 12, 0.13);   // bone-dust burst
+    spawnParticles(e.x, e.y, e.mColor || '#e6ebf2', 12, 0.13);   // death puff in the foe's own hue
     // The weapon drop's own popup (+ bag/LOOT/EQUIP wisps) carries the guidance now,
     // so park the ambient "?" hint rather than stacking a second banner on it.
     if (!_beachGearDropped) { _beachGearDropped = true; dropTutorialGear(e); if (!floorCleared) tutorialStage('quiet'); }
@@ -24683,7 +24705,7 @@ function enemyMove(e) {
 
   // Neutral foes never initiate — they hold their ground (with the rare idle
   // shuffle) until the player provokes them by attacking. Once provoked they
-  // fight normally. A foe with a `wakeRange` (the beach skeletons/elite) is the
+  // fight normally. A foe with a `wakeRange` (the beach pack/elite) is the
   // exception: it turns hostile the moment the hero strays within that many tiles,
   // so approaching alone starts the fight.
   if (e.passive && !e.provoked) {
@@ -24717,7 +24739,7 @@ function enemyMove(e) {
   // Bosses weigh their signature ability first; some abilities end the turn.
   if (e.isBoss && bossSpecial(e, dist, beh)) return;
 
-  // Heavy brutes (and flagged-slow foes like the tutorial skeleton) act only
+  // Heavy brutes (and flagged-slow foes like the tutorial pack) act only
   // every other world beat — slow, but they still close in. A chilled foe (ice) is
   // dragged to that same half-speed until the frost wears off.
   if (beh.slow || e.slow || isChilled(e)) { e.tick = (e.tick || 0) + 1; if (e.tick % 2 === 1) return; }
