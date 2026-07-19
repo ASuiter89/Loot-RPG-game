@@ -13,11 +13,11 @@
 // `noDrop` is the chance a single pick finds nothing; `quality` is the per-item
 // quality nudge (each step ≈ +15 effective Magic Find inside rollTier).
 export const KILL_LOOT = {
-  // noDrop values are tuned so the per-pick DROP chance (1 − noDrop) is 20% lower
-  // than the old baseline: boss 0.70→0.56, elite 0.45→0.36, normal 0.10→0.08.
-  boss:   { picks: 5, noDrop: 0.44, quality: 3 },
-  elite:  { picks: 3, noDrop: 0.64, quality: 2 },
-  normal: { picks: 1, noDrop: 0.92, quality: 1 },
+  // noDrop values are tuned so the per-pick DROP chance (1 − noDrop) is 30% lower
+  // than the previous baseline: boss 0.56→0.392, elite 0.36→0.252, normal 0.08→0.056.
+  boss:   { picks: 5, noDrop: 0.608, quality: 3 },
+  elite:  { picks: 3, noDrop: 0.748, quality: 2 },
+  normal: { picks: 1, noDrop: 0.944, quality: 1 },
   // First-kill jackpot (bosses only): ~2× the picks (boss 5→10), a quality bump on
   // every item, and a slashed empty-pick chance so nearly every extra pick lands.
   firstKill: { lootMult: 2, qualityBonus: 3, noDropMult: 0.35 },
