@@ -1536,7 +1536,13 @@
   }
   .tab-btn {
     flex: 1;
-    padding: 9px 0;
+    /* LOOT/GEAR/HERO/SKILLS are the most-clicked buttons in the game, so the row is
+       kept tall (~33% over the old 9px) and the label is flex-centred both ways for a
+       comfortable target. The desktop-media rule bumps its own padding to match. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 15px 0;
     background: none;
     border: none;
     color: var(--junk);
@@ -4748,7 +4754,7 @@
        Hold them at a compact-but-readable size, drop the wide letter-spacing, and
        let the filter chips wrap rather than clip. Content (item names, stat lines,
        descriptions) keeps the large fluid size. */
-    .panel-tab .tab-btn { font-size: 1.25rem; letter-spacing: 0; padding: 10px 2px; }
+    .panel-tab .tab-btn { font-size: 1.25rem; letter-spacing: 0; padding: 17px 2px; }
     .tab-num { margin-left: 4px; font-size: 0.82em; }
     .tab-count { margin-left: 5px; }
     .loot-subtabs { flex-wrap: wrap; gap: 4px; }
