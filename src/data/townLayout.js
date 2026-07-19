@@ -99,24 +99,27 @@ export const TOWN_DECOR = [
 ];
 
 // ── SERVICE UNLOCK ORDER ──────────────────────────────────────────────────────
-// The town is a CAMP that fills in ONE keeper at a time as the hero proves
-// themselves against the dungeon's guardians. Every keeper has an ARRIVAL number:
-// keeper N arrives once N distinct boss floors have been first-cleared (the floor-5
-// guardian is boss #1, floor 10 is #2, …), so exactly ONE new keeper joins after
-// each boss kill — never a batch. Arrival 1 IS the town-unlock: before the floor-5
-// guardian falls, the camp offers no services and the Town Portal is sealed.
-//   The HEALER arrives FIRST; the CRAFTSMAN arrives SECOND — besides forging blank
-//   gear, they CRAFT the HUD "Field Kit" (the minimap, counters, depth/difficulty
-//   labels and vital numbers you build out a bare heads-up display with; see
-//   src/data/hudUpgrades.js), so the readout tools open up with the second keeper.
-//   1 Healer · 2 Craftsman · 3 Merchant · 4 Vault   — the essentials (boss floors 5–20)
+// The town is a CAMP that fills in its keepers as the hero proves themselves against
+// the dungeon's guardians. Each keeper has an ARRIVAL number: it joins once that many
+// distinct boss floors have been first-cleared (the floor-5 guardian is boss #1, floor
+// 10 is #2, …). Arrival 1 IS the town-unlock: before the floor-5 guardian falls the
+// camp offers no services and the Town Portal is sealed.
+//   The two FOUNDING keepers — the HEALER and the CRAFTSMAN — SHARE arrival 1, so the
+//   very first town visit already has both. Besides forging blank gear, the Craftsman
+//   CRAFTS the HUD "Field Kit" (the minimap, counters, depth/difficulty labels and
+//   vital numbers you build a bare heads-up display out of; see src/data/hudUpgrades.js),
+//   so those readout tools are on hand from the first visit. Every OTHER keeper keeps
+//   its own arrival number below and joins one-per-boss (the two founders share #1, so
+//   boss #2 lands no one new — the next keeper, the Merchant, joins on boss #3):
+//   1 Healer + Craftsman   — the two founders, from the town-unlock (boss floor 5)
+//   3 Merchant · 4 Vault   — the other essentials (boss floors 15–20)
 //   5 Ramen House · 6 Prospector · 7 Trainer
 //   8 Gambler · 9 Enchanter · 10 Bounty Board
 //   11 Transmuter · 12 Sellsword
 //   13 Ascendant Weave · 14 Cycles · 15 Hall of Deeds   — endgame sanctum
 //   16 Covenant Altar · 17 Mirrorforge · 18 Pantheon    — the deepest keepers
 export const TOWN_SERVICE_ARRIVALS = {
-  healer: 1, forge: 2, merchant: 3, stash: 4,
+  healer: 1, forge: 1, merchant: 3, stash: 4,
   ramen: 5, prospector: 6, trainer: 7,
   gambler: 8, enchanter: 9, bounty: 10,
   transmuter: 11, sellsword: 12,

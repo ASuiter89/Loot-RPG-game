@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "Craftsman arrives with the Healer", by: "Jeff Louie", notes: [
+    "Joins on first boss (floor 5), was 2nd (floor 10); HUD Field Kit ready from first town visit.",
+  ] },
   { date: "2026-07-18", size: "medium", v: "15 new Shrine boons", by: "Jeff Louie", notes: [
     "Beyond power/guard/fortune: greed (+60% gold), insight (+50% xp), discovery (+50 Magic Find), harvest (+60% materials), precision (+18% crit), phantom (+15% dodge).",
     "sorcery (+30% skill/spell power), leech (+15% lifesteal), brambles (reflect), bulwark (+Defense), swift (+18% move), haste (+25% attack speed).",
