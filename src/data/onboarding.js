@@ -96,7 +96,7 @@ export const HINTS = {
   // Floors 1–2: after clearing every foe, point at the way down. (The beach
   // tutorial already teaches move+attack; this carries the lesson into floor 1–2.)
   descend: {
-    text: `Floor clear — step onto the <span data-spr=ic_down></span> down-stairs to descend.`,
+    text: `Floor clear — descend deeper down the dungeon.`,
     wiki: 'core-loop',
   },
   // Floor 6–7: nudge toward auto-loot if it is still fully manual.
