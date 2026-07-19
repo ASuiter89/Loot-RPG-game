@@ -7769,6 +7769,7 @@ window.gameGuide = function gameGuide(topic) {
       `Cross-device saves are conflict-safe: whichever copy of a hero has been PLAYED longer wins a merge (measured by real active play-time, not the wall clock, so a device with a fast/slow clock can't cheat the merge), and a copy is never overwritten by an older one. Deleting or losing a hero (Hardcore permadeath) is recorded account-wide and can't be undone by an old copy on another device.`,
       `A window you leave OPEN but stop playing goes idle after a minute (or the moment its tab is hidden): while idle it stops writing and stops mirroring saves, so it can't overwrite newer progress. The instant you return and play again — or switch back to its tab — it re-checks the account first and pulls down anything a second device advanced, reloading into that newer copy if needed. So it's safe to leave the game open on one machine and keep playing on another; come back and it catches up instead of clobbering.`,
       `Use Settings ▸ Account ▸ Sync Now to force an immediate reconcile. Because a stale tab defers to the account, the safe habit across devices is simply: play, then let the other device catch up on its own when you return to it.`,
+      `Signing out keeps every local save PLUS your account-wide achievement feats and bestiary codex on this device — they just stop mirroring, so the title tiles still show them. To wipe THIS device's achievement + bestiary progress back to zero, use Settings ▸ Progress ▸ Reset (two taps to confirm); it leaves the hardcore death ledger intact. While signed in the cloud re-syncs the wipe away (the ledgers only ever grow), so sign out first if you want it cleared for good.`,
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
@@ -9610,6 +9611,8 @@ function showGraveyard() {
       + (list.length ? graveHtml : `<div class="pt-empty">No fallen heroes yet — past runs rest here once you reset a run.</div>`);
   }
   document.getElementById('graveyard-overlay').classList.add('open');
+  // Opened from the settings popup (Progress tab) or the title — tuck the menu
+  // away so this sits standalone and one Esc closes it (see handleEscape).
   const menu = document.getElementById('settings-menu');
   if (menu) menu.classList.remove('open');
 }
@@ -10295,6 +10298,10 @@ function renderBestiary() {
 function setBestiaryFilter(id) { _bestiaryFilter = id; renderBestiary(); }
 function showBestiary() {
   renderBestiary();
+  // Opened from the settings popup (Progress tab) or the title — tuck the menu
+  // away so this sits standalone and one Esc closes it (see handleEscape).
+  const menu = document.getElementById('settings-menu');
+  if (menu) menu.classList.remove('open');
   const ov = document.getElementById('bestiary-overlay');
   if (ov) ov.classList.add('open');
 }
@@ -30157,6 +30164,15 @@ function handleEscape() {
   if (close('death-log-overlay', closeDeathLog)) return true;
   if (close('death-overlay', closeDeath)) return true;
   if (close('keybind-overlay', keybindsBack)) return true;
+  // Title-screen / Progress-tab popups (Cloud Save, Save Slots, Achievements,
+  // Bestiary, History). Each can sit over the title OR over the settings menu, so
+  // close them BEFORE the settings-menu fallback below — and before the preGame
+  // guard — so Esc dismisses them on the title screen too.
+  if (close('account-overlay', closeAccount)) return true;
+  if (close('slots-overlay', closeSlots)) return true;
+  if (close('achievements-overlay', closeAchievements)) return true;
+  if (close('bestiary-overlay', closeBestiary)) return true;
+  if (close('graveyard-overlay', closeGraveyard)) return true;
   if (close('settings-menu', () => document.getElementById('settings-menu').classList.remove('open'))) return true;
   if (close('shop-overlay', shopClose)) return true;
   if (close('mystic-overlay', mysticClose)) return true;
@@ -34122,8 +34138,60 @@ function renderTitleBestiary() {
   const discovered = roster.filter(s => speciesDiscovered(bestiaryKills(s))).length;
   cnt.textContent = roster.length ? `${discovered} / ${roster.length}` : '';
 }
+// Two-tap wipe of THIS device's title-screen progress stats — the achievement
+// feats (Kitten hcMeta.nach + Hardcore hcMeta.ach) and the bestiary codex
+// (bestiaryDex) — back to zero. First tap arms the button (auto-disarms after 3s);
+// the second tap clears. The hardcore DEATH ledger (hcMeta.cids) is deliberately
+// left intact, so this can never revive a permadead hero. Local only: while signed
+// in the cloud still holds the master copy and re-syncs it (the ledgers only ever
+// grow), so a player who wants it gone for good signs out first — the tooltip says
+// as much. Wired to the Settings ▸ Progress ▸ Reset button.
+let _statsWipeArmed = false;
+let _statsWipeTimer = null;
+function _setStatsWipeUi(state) {   // 'idle' | 'armed' | 'done'
+  const btn = document.getElementById('reset-stats-action');
+  const lbl = document.getElementById('reset-stats-label');
+  if (btn) btn.classList.toggle('armed', state === 'armed');
+  if (lbl) lbl.textContent = state === 'armed' ? 'TAP AGAIN TO WIPE'
+    : state === 'done' ? 'CLEARED ✓'
+    : 'CLEAR ACHIEVEMENTS & BESTIARY';
+}
+function resetTitleStats() {
+  if (!_statsWipeArmed) {                 // first tap: arm, then auto-disarm
+    _statsWipeArmed = true;
+    _setStatsWipeUi('armed');
+    if (_statsWipeTimer) clearTimeout(_statsWipeTimer);
+    _statsWipeTimer = setTimeout(() => { _statsWipeArmed = false; _statsWipeTimer = null; _setStatsWipeUi('idle'); }, 3000);
+    return;
+  }
+  if (_statsWipeTimer) { clearTimeout(_statsWipeTimer); _statsWipeTimer = null; }
+  _statsWipeArmed = false;
+  // Clear the achievement feat sets — keep the death ledger cids untouched so a
+  // fallen hardcore hero stays fallen.
+  hcMeta.ach = [];
+  hcMeta.nach = [];
+  hcMeta.ts = Date.now();
+  _hcAchSet = new Set();
+  _nAchSet = new Set();
+  writeHcMeta();
+  // Clear the bestiary codex back to empty.
+  bestiaryDex = emptyDex();
+  writeBestiaryDex();
+  // Repaint the title tiles and any open Achievements/Bestiary popup so the wipe
+  // shows instantly (renderTitleAchievements also rebuilds the achievements popup).
+  try { renderTitleAchievements(); } catch (e) {}
+  try { renderTitleBestiary(); } catch (e) {}
+  try { const bo = document.getElementById('bestiary-overlay'); if (bo && bo.classList.contains('open')) renderBestiary(); } catch (e) {}
+  // Confirm on the button, then settle back to the resting label.
+  _setStatsWipeUi('done');
+  _statsWipeTimer = setTimeout(() => { _statsWipeTimer = null; _setStatsWipeUi('idle'); }, 1600);
+}
 function showAchievements() {
   renderTitleAchievements();  // refresh in case progress changed
+  // Opened from the settings popup (Progress tab) or the title — tuck the menu
+  // away so this sits standalone and one Esc closes it (see handleEscape).
+  const menu = document.getElementById('settings-menu');
+  if (menu) menu.classList.remove('open');
   const ov = document.getElementById('achievements-overlay');
   if (ov) ov.classList.add('open');
 }
@@ -38537,6 +38605,7 @@ const __DL_FN_BRIDGE = {
   selectAchTab,
   renderTitleAchievements,
   renderTitleBestiary,
+  resetTitleStats,
   showAchievements,
   closeAchievements,
   showBestiary,
