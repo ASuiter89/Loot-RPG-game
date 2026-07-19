@@ -1946,6 +1946,10 @@
      available skill clearly stands apart from greyed/cooling-down ones. */
   .skillbar-btn.ready { background: var(--border); border-color: var(--gold); color: var(--text); animation: skillReadyGold 1.4s ease-in-out infinite; }
   .skillbar-btn.ready:active { background: var(--border); }
+  /* The auto-cast slot fires itself, so its ready state doesn't need to nag for a
+     press — keep the brighter fill + gold outline but drop the pulse. Pulsing is
+     reserved for new-player education HUD cues. */
+  .skillbar-btn.autoslot.ready { animation: none; }
   @keyframes skillReadyGold {
     0%,100% { box-shadow: 0 0 6px color-mix(in srgb, var(--gold-350) 50%, transparent); border-color: var(--gold); }
     50%     { box-shadow: 0 0 14px color-mix(in srgb, var(--gold) 90%, transparent); border-color: var(--xp); }
@@ -1974,15 +1978,15 @@
   .skillbar-btn.potion { border-color: var(--red-550); background: var(--red-700); color: var(--red-150); }
   .skillbar-btn.potion:active { background: var(--red-800); }
   .skillbar-btn.potion.empty { background: var(--bg); border-color: var(--magenta-750); color: var(--red-600); }
-  /* Ready to drink → a soft pulsing glow so it's obvious it can be used. */
-  .skillbar-btn.potion.ready { border-color: var(--red-200); animation: potReadyRed 1.5s ease-in-out infinite; }
-  @keyframes potReadyRed { 0%,100% { box-shadow: 0 0 4px 1px color-mix(in srgb, var(--danger) 45%, transparent); } 50% { box-shadow: 0 0 12px 3px color-mix(in srgb, var(--danger) 90%, transparent); } }
+  /* Ready to drink → a brighter border so it's obvious it can be used. No pulse:
+     pulsing is reserved for new-player education HUD cues. */
+  .skillbar-btn.potion.ready { border-color: var(--red-200); }
   .skillbar-btn.potion.mana { border-color: var(--blue-550); background: var(--blue-700); color: var(--purple-50); }
   .skillbar-btn.potion.mana:active { background: var(--blue-600); }
   .skillbar-btn.potion.mana.empty { background: var(--blue-800); border-color: var(--blue-800); color: var(--btn-off); }
-  .skillbar-btn.potion.mana.ready { border-color: var(--blue-250); animation: potReadyBlue 1.5s ease-in-out infinite; }
-  @keyframes potReadyBlue { 0%,100% { box-shadow: 0 0 4px 1px color-mix(in srgb, var(--mp) 45%, transparent); } 50% { box-shadow: 0 0 12px 3px color-mix(in srgb, var(--blue-250) 90%, transparent); } }
-  /* Critically low HP overrides the gentle glow with a faster alarm pulse. */
+  .skillbar-btn.potion.mana.ready { border-color: var(--blue-250); }
+  /* Critically low HP still pulses a faster alarm — a rare emergency cue, kept
+     distinct from the (now removed) ambient "ready to drink" glow. */
   .skillbar-btn.potion.urgent { animation: healPulse 0.85s ease-in-out infinite; }
   /* TOWN button (desktop): a green/parchment tone so it reads as "leave to the
      safe hub", distinct from the purple skills and the red/blue potions. */

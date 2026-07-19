@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "Auto slot & potions stop pulsing", by: "Jeff Louie", notes: [
+    "Auto-cast slot and health/mana potions keep bright ready outline; pulse removed.",
+    "Critical-HP potion alarm still pulses.",
+  ] },
   { date: "2026-07-18", size: "small", v: "New-loot badge on the LOOT tab", by: "Jeff Louie", notes: [
     "Red count badge on the LOOT tab flags loot picked up while you were on another tab; clears when you open it.",
     "Touch: red pip on the Bag button mirrors it while the tab's tucked away.",
