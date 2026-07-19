@@ -249,6 +249,12 @@
        covers any glyph the chosen face lacks (em dash, arrows, symbols). */
     --font-ui: 'Cinzel', Georgia, 'Times New Roman', serif;
 
+    /* ── PLAIN FONT ── the quiet counterpart to --font-ui. Secondary tooltip
+       metadata (slot·ilvl, equip requirement, value) reads in this neutral system
+       face so the decorative --font-ui is reserved for what should pop — the item
+       name and its stat rows. System fonts only (no download / runtime dep). */
+    --font-plain: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
     /* Height of the bottom control bar, used to sit the tutorial hint chip just
        above it. */
     --bar-h: 60px;
@@ -2753,18 +2759,29 @@
     cursor: pointer;
     line-height: 1.6;
   }
-  #tooltip .tt-name { font-weight: bold; font-size: 1.4rem; margin-bottom: 4px; }
+  /* Name + slot·ilvl share one row: the name pops in the decorative --font-ui, the
+     slot·ilvl trail sits beside it in the plain face (.tt-tier). flex-wrap keeps the
+     trail dropping below on a narrow card rather than overflowing. */
+  #tooltip .tt-nameline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; margin-bottom: 4px; }
+  #tooltip .tt-name { font-weight: bold; font-size: 1.4rem; }
   /* Every stat row reads in the same bright body colour for clean scanning; a small
-     dim "base" tag (not colour) marks the innate stats that can't be rerolled. */
+     dim asterisk (not colour) marks the innate "base" stats that can't be rerolled. */
   #tooltip .tt-stat { color: var(--text); }
   #tooltip .tt-tag { font-size: 1.2rem; font-style: italic; color: var(--btn-off); margin-left: 2px; }
+  /* Base-stat marker: a dim asterisk carrying a native hover title, in place of a
+     "base" word — keeps the stat line short while name + stats stay the focus. */
+  #tooltip .tt-base-mark { color: var(--btn-off); cursor: help; margin-left: 1px; }
   #tooltip .tt-flavor { color: var(--junk); font-style: italic; margin-top: 4px; font-size: 1.2rem; }
   /* Weapon reach grid: a row of small tiles — gold = you, red = squares you can
      strike. Used in the weapon tooltip and the Forge so reach reads at a glance. */
   .range-grid { display: inline-flex; gap: 2px; vertical-align: middle; }
   .range-grid .rg-cell { width: 11px; height: 11px; border-radius: 2px; border: 1px solid transparent; box-sizing: border-box; }
   .range-cap { font-size: 1.2rem; color: var(--orange-400); margin-left: 6px; vertical-align: middle; letter-spacing: .5px; }
-  #tooltip .tt-tier { font-size: 1.2rem; opacity: 0.7; }
+  /* Secondary metadata (slot·ilvl, equip requirement, value) drops the decorative
+     face for the plain one so the name and stat rows are what pop. */
+  #tooltip .tt-tier { font-family: var(--font-plain); font-size: 1.2rem; opacity: 0.7; }
+  #tooltip .tt-req { font-family: var(--font-plain); font-size: 1.2rem; margin: 2px 0; }
+  #tooltip .tt-value { font-family: var(--font-plain); color: var(--warn); font-size: 1.2rem; margin-top: 3px; }
   /* Side-by-side compare: hovered item next to the currently-equipped piece.
      Roomy cards keep item names and requirement lines on one row. */
   #tooltip.comparing { max-width: 940px; }

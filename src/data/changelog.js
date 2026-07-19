@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "small", v: "Cleaner item tooltip", by: "Jeff Louie", notes: [
+    "Slot & ilvl move up beside the item name; name + stats keep the display font, slot·ilvl & value go plain.",
+    "Equip requirement: only your current stat number is green (met) or red (short).",
+    "Base stats mark with a hover-labelled * (was a \"base\" word).",
+  ] },
   { date: "2026-07-19", size: "small", v: "HUD Upgrade gold costs ×3", by: "Jeff Louie", notes: [
     "Craftsman HUD Upgrade gold prices tripled; materials unchanged. Minimap 480→1440g, vitals 120→360g.",
   ] },
