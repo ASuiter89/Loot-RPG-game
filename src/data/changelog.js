@@ -10,6 +10,7 @@ export const CHANGELOG = [
   { date: "2026-07-19", size: "small", v: "Escape portal out of the first boss lair", by: "Jeff Louie", notes: [
     "First floor-5 lair has no stairs onward; felling the guardian tears open a portal — \"Quick! Step into the portal!\"",
     "Step into it to graduate up into town (was walking unsealed stairs there).",
+  ] },
   { date: "2026-07-19", size: "small", v: "Cleaner item tooltip", by: "Jeff Louie", notes: [
     "Slot & ilvl move up beside the item name; name + stats keep the display font, slot·ilvl & value go plain.",
     "Equip requirement: only your current stat number is green (met) or red (short).",
