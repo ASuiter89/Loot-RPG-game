@@ -10,14 +10,20 @@
 #
 # The hourly `schedule` is a backstop for a transient gate flake (re-evaluates every
 # open, eligible PR); `workflow_dispatch` re-evaluates on demand (pass a PR number,
-# or leave blank to sweep all). A PR that went behind `main` and conflicts (DIRTY)
-# is skipped until a rebase-push re-triggers this — the rebase-push IS the retrigger,
-# so nothing sits stranded.
+# or leave blank to sweep all). A PR that went behind `main` and conflicts (DIRTY) is
+# AUTO-HEALED when the only conflict is the append-only changelog: the gate job merges
+# `main` in (the `merge=union` driver keeps both sides' entries as whole blocks) and
+# pushes the result, then gates + merges as usual. This is the common collision —
+# every PR prepends a changelog entry, so the second to land always conflicts there,
+# and GitHub reports DIRTY because its mergeability precheck ignores `.gitattributes`
+# merge drivers. A DIRTY PR whose conflict touches anything ELSE is left for a human.
+# The full gate suite (incl. the changelog data test) runs on the healed tree, so a
+# bad heal can never land.
 #
 # Safety: only same-repo, non-draft `claude/*` branches merge; human and fork PRs
-# are untouched. Gates run against the PR head, so a red change never lands. Uses
-# GITHUB_TOKEN; kicks deploy.yml after a merge (a GITHUB_TOKEN merge doesn't
-# re-trigger push-based workflows).
+# are untouched. Gates run against the PR head (with `main` merged in when a PR was
+# auto-healed), so a red change never lands. Uses GITHUB_TOKEN; kicks deploy.yml
+# after a merge (a GITHUB_TOKEN merge doesn't re-trigger push-based workflows).
 
 name: Auto-merge Claude PRs
 
@@ -120,7 +126,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPO: ${{ github.repository }}
     steps:
-      - name: Re-resolve PR and skip if ineligible or conflicting
+      - name: Re-resolve PR; classify eligibility and conflict state
         id: pr
         run: |
           set -euo pipefail
@@ -136,22 +142,62 @@ jobs:
              || [ "${HEAD_REF#claude/}" = "$HEAD_REF" ]; then
             echo "PR #$NUM is not an open, non-draft, same-repo claude/* branch — skipping."
             echo "skip=true" >> "$GITHUB_OUTPUT"
-          elif [ "$MERGE" = "DIRTY" ]; then
-            echo "PR #$NUM conflicts with the base branch (mergeStateStatus=DIRTY) — skipping until resolved."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Evaluating PR #$NUM ($HEAD_REF, mergeStateStatus=$MERGE)."
             echo "number=$NUM" >> "$GITHUB_OUTPUT"
+            echo "headRef=$HEAD_REF" >> "$GITHUB_OUTPUT"
+            if [ "$MERGE" = "DIRTY" ]; then
+              echo "PR #$NUM is DIRTY — will attempt a changelog-only auto-heal before gating."
+              echo "dirty=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Evaluating PR #$NUM ($HEAD_REF, mergeStateStatus=$MERGE)."
+            fi
           fi
 
-      - name: Check out PR head
+      - name: Check out PR branch
         if: steps.pr.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
-          ref: refs/pull/${{ steps.pr.outputs.number }}/head
+          # The branch BY NAME (not refs/pull/N/head) so the auto-heal step can push
+          # the merged result back. Fork PRs are filtered out above, so the branch tip
+          # is the PR head. Full history is needed to merge `main` in.
+          ref: ${{ steps.pr.outputs.headRef }}
+          fetch-depth: 0
+
+      - name: Auto-heal a changelog-only conflict
+        id: heal
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          DIRTY: ${{ steps.pr.outputs.dirty }}
+          HEAD_REF: ${{ steps.pr.outputs.headRef }}
+          NUM: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          if [ "${DIRTY:-}" != "true" ]; then
+            echo "PR #$NUM is not DIRTY — no heal needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags origin main
+          # Force the union driver for the changelog even on branches cut before it was
+          # added to the tracked .gitattributes — .git/info/attributes applies locally,
+          # regardless of what the branch has committed.
+          echo 'src/data/changelog.js merge=union' >> "$(git rev-parse --git-dir)/info/attributes"
+          # A single 3-way merge of `main`: union keeps BOTH sides' changelog entries as
+          # whole blocks (valid), unlike a per-commit rebase whose stale context can
+          # interleave them. If anything OUTSIDE the changelog conflicts, the merge
+          # fails — that is a real conflict, so leave the PR for a human.
+          if git merge --no-edit FETCH_HEAD; then
+            echo "Merged main cleanly; any changelog collision was resolved by the union driver."
+            git push origin "HEAD:refs/heads/$HEAD_REF"
+          else
+            echo "A conflict remains outside the changelog — leaving PR #$NUM for a human."
+            git merge --abort
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Node
-        if: steps.pr.outputs.skip != 'true'
+        if: steps.pr.outputs.skip != 'true' && steps.heal.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           # Match deploy.yml / netlify.toml (Node 20) so gates run as they ship.
@@ -159,36 +205,49 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        if: steps.pr.outputs.skip != 'true'
+        if: steps.pr.outputs.skip != 'true' && steps.heal.outputs.skip != 'true'
         run: npm ci
 
       - name: Install Chromium for smoke tests
-        if: steps.pr.outputs.skip != 'true'
+        if: steps.pr.outputs.skip != 'true' && steps.heal.outputs.skip != 'true'
         # The smoke suite boots the game in real Chromium via Playwright.
         run: npx playwright install --with-deps chromium
 
       - name: Unit + characterization tests
-        if: steps.pr.outputs.skip != 'true'
+        if: steps.pr.outputs.skip != 'true' && steps.heal.outputs.skip != 'true'
         run: npm test
 
       - name: Build static bundle
-        if: steps.pr.outputs.skip != 'true'
+        if: steps.pr.outputs.skip != 'true' && steps.heal.outputs.skip != 'true'
         run: npm run build
 
       - name: Smoke test (boots the game end-to-end)
-        if: steps.pr.outputs.skip != 'true'
+        if: steps.pr.outputs.skip != 'true' && steps.heal.outputs.skip != 'true'
         run: npm run smoke
 
       - name: Styles lint
-        if: steps.pr.outputs.skip != 'true'
+        if: steps.pr.outputs.skip != 'true' && steps.heal.outputs.skip != 'true'
         run: node tools/styles-lint.js
 
       - name: Squash-merge and delete branch
-        if: steps.pr.outputs.skip != 'true'
-        run: gh pr merge "${{ steps.pr.outputs.number }}" --repo "$REPO" --squash --delete-branch
+        if: steps.pr.outputs.skip != 'true' && steps.heal.outputs.skip != 'true'
+        run: |
+          set -uo pipefail
+          NUM='${{ steps.pr.outputs.number }}'
+          # After an auto-heal push, GitHub's mergeability can take a moment to
+          # recompute — retry a few times before giving up.
+          for i in 1 2 3 4 5; do
+            if gh pr merge "$NUM" --repo "$REPO" --squash --delete-branch; then
+              exit 0
+            fi
+            echo "Merge attempt $i for PR #$NUM failed (mergeability may still be propagating); retrying…"
+            sleep $((i * 6))
+          done
+          echo "::error::Could not squash-merge PR #$NUM after retries."
+          exit 1
 
       - name: Trigger Pages deploy
-        if: steps.pr.outputs.skip != 'true'
+        if: steps.pr.outputs.skip != 'true' && steps.heal.outputs.skip != 'true'
         # A GITHUB_TOKEN merge does not re-trigger deploy.yml's push event, so kick
         # it explicitly. Non-fatal: the merge already succeeded by here.
         run: |
