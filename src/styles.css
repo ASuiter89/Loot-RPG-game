@@ -5065,7 +5065,7 @@
     border: 1px solid var(--gold);
     color: var(--text);
     font-size: 1.3rem;
-    text-align: left;
+    text-align: center;
     line-height: 1.4;
     cursor: pointer;
     pointer-events: auto;
