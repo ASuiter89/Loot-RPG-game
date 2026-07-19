@@ -7775,7 +7775,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the FIRST hit you take pops a one-time nudge naming the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view.`,
       `Opening-floor content pacing (Normal, floors 1–25): the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. DIFFICULTY ARC — a fresh hero's flat attribute damage would otherwise one-shot floor-1 trash, so over floors 1–5 the real numbers bend to make kills take a few blows ORGANICALLY (no per-hit cap): foes carry extra HP and the hero deals less, both easing to full strength by floor 6 as your levels and gear take over — "weak at the start, then earn your strength". Because those fights last longer, foes land more of their (full-strength) hits, so the opening actually threatens. No glowing ELITES or elite affixes until floor 4 (the one scripted beach elite aside). Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -11913,6 +11913,10 @@ function buildTutorialMap() {
   // Whichever foe falls FIRST hands over the starter weapon (see onEnemyDefeated /
   // _beachGearDropped), so the gift never hinges on kill order.
   _beachGearDropped = false;
+  // Re-arm the first-hit Health-Potion teach for this fresh shore (it fires once,
+  // the moment a foe first bites — see beachPotionHint / enemyAttackPlayer).
+  _beachPotionTaught = false; _beachPotionCueOn = false;
+  if (_beachPotionTimer) { clearTimeout(_beachPotionTimer); _beachPotionTimer = null; }
   const packType = pick(BEACH_FOE_TYPES);
   const eliteType = pick(BEACH_FOE_TYPES);
   // A gentle beach foe: the tutorial fixes its stats and slow melee gait; only the
@@ -11921,8 +11925,11 @@ function buildTutorialMap() {
     x, y, type, name: (MONSTERS[type] && MONSTERS[type].name) || 'Creature',
     // HP sized so the ramped opening hit (attribute damage eased by the guided
     // player-damage ramp) fells a pack foe in a few blows, not one — the beach's
-    // "trade real blows" lesson now comes from HP, not a per-hit cap.
-    hp: 45, maxHp: 45, level: 1, dmg: 3,
+    // "trade real blows" lesson now comes from HP, not a per-hit cap. Their bite is
+    // deliberately REAL (dmg 8, well above a floor-1 mob's ~5): a fresh hero's Health
+    // visibly drops as the pack closes, so the first blow's Health-Potion teach
+    // (beachPotionHint) lands on a hero who actually needs to heal — not a faceroll.
+    hp: 45, maxHp: 45, level: 1, dmg: 8,
     dead: false, behavior: 'chaser', passive: true, provoked: false, slow: true,
     wakeRange: 4, tutorial: true,
     mColor: (MONSTERS[type] && MONSTERS[type].color) || null,
@@ -11933,10 +11940,12 @@ function buildTutorialMap() {
   enemies.push(mkFoe(packType, caveX - 1, 19));
   enemies.push(mkFoe(packType, caveX + 1, 19));
   // The elite: a named, glowing foe of its own random type — tougher and hits harder
-  // than the pack, and NOT slow — a real step up that guards the cave. Still
-  // tutorial-flagged, so it pays out through the beach handler like the rest.
+  // than the pack, and NOT slow — a real step up that guards the cave. Its blow
+  // (dmg 16, double a pack foe) is the beach's climax: a threat a level-1 hero must
+  // heal through, driving home the potion lesson. Still tutorial-flagged, so it pays
+  // out through the beach handler like the rest.
   enemies.push(mkFoe(eliteType, caveX, 6, {
-    name: pick(ELITE_NAMES), hp: 85, maxHp: 85, dmg: 6, level: 2,
+    name: pick(ELITE_NAMES), hp: 85, maxHp: 85, dmg: 16, level: 2,
     isElite: true, slow: false, wakeRange: 5,
   }));
 
@@ -11950,6 +11959,8 @@ function finishTutorial() {
   tutorialActive = false;
   player.tutorialDone = true;
   _beachHintStage = null;
+  _beachPotionCueOn = false;
+  if (_beachPotionTimer) { clearTimeout(_beachPotionTimer); _beachPotionTimer = null; }
   hideTutorialHint();
   refreshTutorialCues();   // tutorial over — drop the loot-tab / bag wisps + hide any nudge
   dungeonLevel = 1;
@@ -11976,10 +11987,18 @@ function finishTutorial() {
 // desync and survive a reload; a player can dismiss a popup and the tab wisps
 // carry the reminder. See buildTutorialMap / onEnemyDefeated / updateFloorClear.
 
-// Which popup variant is on screen ('equip' | 'levelup' | null), and which
+// Which popup variant is on screen ('equip' | 'levelup' | 'potion' | null), and which
 // variants the player has already dismissed (the tab wisps still carry the cue).
 let _tutPopupVariant = null;
 const _tutDismissed = { equip: false, levelup: false };
+// First-hit Health-Potion teach: the moment a beach foe first bites, a one-time popup
+// names the Health-Potion hotkey so a new hero learns to heal under fire. `_taught`
+// latches it to once per shore; `_cueOn` drives the popup (highest priority so it
+// always surfaces on that first blow); the timer auto-retires it after a few seconds
+// so it never buries the equip beat that follows. Reset in buildTutorialMap.
+let _beachPotionTaught = false;
+let _beachPotionCueOn = false;
+let _beachPotionTimer = null;
 // The ambient "?" hint stage the shore wants to show ('move' at spawn, 'cave' once
 // cleared, or null between beats — the equip popup carries guidance there). It
 // SHARES the lower banner slot with the actionable popup, so syncBeachHint() reveals
@@ -12048,6 +12067,29 @@ function grantBeachLevelUp() {
   refreshTutorialCues();
 }
 
+// First beach blow: raise the one-time "here's how to heal" popup. Fired from
+// enemyAttackPlayer the moment a foe's hit actually lands on the shore. Latched so it
+// shows once per shore, and self-retires after a few seconds so it hands the banner
+// back to the equip beat that follows the first kill.
+function beachPotionHint() {
+  if (!tutorialActive || _beachPotionTaught) return;
+  _beachPotionTaught = true;
+  _beachPotionCueOn = true;
+  refreshTutorialCues();                 // reconcile → surfaces the 'potion' popup
+  if (_beachPotionTimer) clearTimeout(_beachPotionTimer);
+  _beachPotionTimer = setTimeout(() => {
+    _beachPotionCueOn = false; _beachPotionTimer = null; refreshTutorialCues();
+  }, 7000);
+}
+// Retire the potion popup early — the hero has learned the lesson (quaffed a Health
+// Potion) or the shore is being torn down. No-op when the cue isn't up.
+function clearBeachPotionCue() {
+  if (_beachPotionTimer) { clearTimeout(_beachPotionTimer); _beachPotionTimer = null; }
+  if (!_beachPotionCueOn) return;
+  _beachPotionCueOn = false;
+  refreshTutorialCues();
+}
+
 // Reconcile every beach cue against live state: the LOOT-tab / bag-icon wisps, and
 // which (if any) popup is showing. Cheap and idempotent — safe to call from
 // renderPanel and after any equip / point spend. Off the beach it just tears the
@@ -12062,11 +12104,14 @@ function refreshTutorialCues() {
   // pulses the unspent-points badge on that same button.)
   const tbBag = document.getElementById('tb-bag');
   if (tbBag) tbBag.classList.toggle('tut-bag-wisp', equipCue);
-  // Equip first, then the level-up nudge; a dismissed variant stays hidden while
-  // its tab / bag wisp carries the reminder.
-  const want = (equipCue && !_tutDismissed.equip) ? 'equip'
-    : (spendCue && !_tutDismissed.levelup) ? 'levelup'
-      : null;
+  // The first-hit potion teach wins the banner (it fires before the first kill and
+  // self-retires); then equip, then the level-up nudge. A dismissed variant stays
+  // hidden while its tab / bag wisp carries the reminder.
+  const potionCue = tutorialActive && _beachPotionCueOn;
+  const want = potionCue ? 'potion'
+    : (equipCue && !_tutDismissed.equip) ? 'equip'
+      : (spendCue && !_tutDismissed.levelup) ? 'levelup'
+        : null;
   if (want !== _tutPopupVariant) {
     if (want) showTutPopup(want); else hideTutPopup();
   }
@@ -12094,7 +12139,13 @@ function showTutPopup(variant) {
   _tutPopupVariant = variant;
   const cfg = variant === 'equip'
     ? { spr: 'chest', html: 'You found a weapon! Open <b>Loot</b> to equip&nbsp;it.' }
-    : { spr: null, html: '<b>You gained a level!</b> Spend your points in the <b>Hero</b> &amp; <b>Skills</b>&nbsp;tabs.' };
+    : variant === 'potion'
+      // First blow taken — name the Health-Potion control. Touch has no hotkey, so
+      // point at the footer potion button instead of a key.
+      ? { spr: 'ic_heart', html: isTouchMode()
+          ? 'Taking hits? Tap the <b>Health Potion</b> to heal.'
+          : `Taking hits? Press <b>${kbLabel('healthPotion')}</b> to quaff a Health&nbsp;Potion.` }
+      : { spr: null, html: '<b>You gained a level!</b> Spend your points in the <b>Hero</b> &amp; <b>Skills</b>&nbsp;tabs.' };
   const icon = el.querySelector('.tp-ic');
   const txt = el.querySelector('.tp-text');
   // A null sprite means no left badge (the level-up nudge is text-only); toggle the
@@ -12104,7 +12155,7 @@ function showTutPopup(variant) {
   if (txt) txt.innerHTML = cfg.html;
   el.classList.add('show');
   paintDataSpr(el);
-  if (variant !== prev) sfx(variant === 'equip' ? 'loot' : 'levelup');
+  if (variant !== prev) sfx(variant === 'equip' ? 'loot' : variant === 'potion' ? 'blip' : 'levelup');
 }
 function hideTutPopup() {
   _tutPopupVariant = null;
@@ -25060,6 +25111,7 @@ function enemyAttackPlayer(e) {
   sfx('hurt');
   if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
   if (dmg > 0) { if (hpLost > 0) spawnParticles(player.x, player.y, '#d22a3a', 6, 0.07); addShake(4); playEnemyMeleeVfx(e, beh); }
+  if (tutorialActive && dmg > 0) beachPotionHint();   // first beach blow → teach the Health-Potion hotkey
   log(`💢 ${enemyLabel(e)} -${dmg}`);
   if (player.hp > 0 && player.hp <= player.maxHp * 0.25) fireSkillTrigger('lowhp', { enemy: e });
   if (player.hp <= player.maxHp * 0.25) screenFlash('#cc0000');
@@ -27456,6 +27508,7 @@ function useHealthPotion() {
   sfx('potion');
   log(`<span data-spr=ic_heart></span> Quaffed a ${logPotion('Health Potion')} — +${amt} HP over a few seconds.`, 'loot');
   spendPotionTurn();
+  if (tutorialActive) clearBeachPotionCue();   // lesson learned — retire the first-hit teach
 }
 
 // Mana potions restore a fraction of max MP (so they scale with you) rather than

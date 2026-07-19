@@ -12,6 +12,10 @@ export const CHANGELOG = [
     "Prices ~2–3× steeper and mixed: Scrap on all, Glimmer from mid tier, a Core on minimap & auto-loot.",
     "Core gates the two premium tools behind reaching Hardened, so the kit is no longer a one-visit sweep.",
   ] },
+  { date: "2026-07-18", size: "small", v: "Beach foes bite; first hit teaches the potion", by: "Jeff Louie", notes: [
+    "Tutorial pack hits for 8 (was 3), cave elite 16 (was 6) — the opening actually threatens.",
+    "First blow you take pops a one-time nudge naming the Health-Potion hotkey.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Kills drop 30% less gear", by: "Jeff Louie", notes: [
     "Per-kill gear drop chance −30%: boss pick 56%→39%, elite 36%→25%, normal 8%→5.6%.",
   ] },
