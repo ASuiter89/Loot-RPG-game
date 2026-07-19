@@ -12,9 +12,21 @@ export const CHANGELOG = [
     "First hit, first weapon and first spell each PAUSE and spotlight one glowing control — Health Potion, your new gear, Mana Potion — greying the rest until you use it.",
     "Equip beat opens the bag to the Loot tab only; other tabs lock until the weapon's on.",
     "Level-up nudge reworded: \"Level up! Open your bag and spend your Hero and Skill points.\"",
+  { date: "2026-07-19", size: "small", v: "Escape portal out of the first boss lair", by: "Jeff Louie", notes: [
+    "First floor-5 lair has no stairs onward; felling the guardian tears open a portal — \"Quick! Step into the portal!\"",
+    "Step into it to graduate up into town (was walking unsealed stairs there).",
+  ] },
+  { date: "2026-07-19", size: "small", v: "Cleaner item tooltip", by: "Jeff Louie", notes: [
+    "Slot & ilvl move up beside the item name; name + stats keep the display font, slot·ilvl & value go plain.",
+    "Equip requirement: only your current stat number is green (met) or red (short).",
+    "Base stats mark with a hover-labelled * (was a \"base\" word).",
   ] },
   { date: "2026-07-19", size: "small", v: "HUD Upgrade gold costs ×3", by: "Jeff Louie", notes: [
     "Craftsman HUD Upgrade gold prices tripled; materials unchanged. Minimap 480→1440g, vitals 120→360g.",
+  ] },
+  { date: "2026-07-19", size: "small", v: "First-cast mana tip; potions stop pulsing", by: "Jeff Louie", notes: [
+    "First skill you cast pops a one-time nudge: casting spends Mana, which refills over time.",
+    "Ready Health/Mana potions no longer pulse gold — a static bright border marks them usable.",
   ] },
   { date: "2026-07-19", size: "small", v: "Tidier town camp", by: "Jeff Louie", notes: [
     "Craftsman pinned beside the Town Portal, off the avenue — no longer blocks the path.",

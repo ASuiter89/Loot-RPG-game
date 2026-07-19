@@ -1,6 +1,7 @@
 // End-to-end smoke test for the one-time TOWN WELCOME hint.
 //
-// The first time the hero climbs into town (after the Floor 5 guardian falls) a
+// The first time the hero steps into town (through the escape portal that opens when
+// the Floor 5 guardian falls) a
 // small, non-blocking greeting appears in the tutorial-hint chip — telling the
 // player town is a safe haven they can teleport back to via the Town button. It's
 // a glanceable banner, NOT a world-pausing modal. This drives the REAL built game

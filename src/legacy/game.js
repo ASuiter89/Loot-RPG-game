@@ -6129,6 +6129,15 @@ function updateFloorClear() {
       sfx('floorclear');
       grantBeachLevelUp();
       tutorialStage('cave');
+    } else if (graduationFloor()) {
+      // FIRST Floor-5 clear — the town-unlock. This floor has no stairs onward: felling
+      // the guardian tears open an escape portal beside the hero (pendingTownGraduation
+      // was just set in onEnemyDefeated). Stepping into it whisks them up to the newly-
+      // opened camp for their one-time welcome (see graduateToTown).
+      markDepthReached(floorUnlockedByClear(dungeonLevel, false));
+      placeGraduationPortal();
+      sfx('floorclear'); sfx('teleport');
+      log('<span data-spr=feat_gate_red></span> The guardian falls and the lair convulses — a portal tears open! <b>Quick! Step into the portal!</b>', 'important');
     } else {
       // Clearing this floor unsealed its down-stairs, which opens the NEXT floor at
       // the town Gate — so that floor now counts as your deepest and is re-enterable
@@ -6170,10 +6179,9 @@ function conquerDifficulty() {
   saveGame();
   showConquest(tier, firstTime);
 }
-// Place the next-difficulty rainbow portal on an open, reachable tile near the
-// hero (so it's right there when the conquest banner closes).
-function placeNextDiffPortal(diff) {
-  nextDiffPortal = null;
+// The closest open, walkable, unoccupied floor tile to the hero (ring search out to
+// r=4), for materialising a portal right beside them. Falls back to just above.
+function nearestOpenTileToHero() {
   let best = null, bestD = Infinity;
   for (let r = 1; r <= 4; r++) {
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
@@ -6187,9 +6195,21 @@ function placeNextDiffPortal(diff) {
     }
     if (best) break;
   }
-  if (!best) best = { x: player.x, y: Math.max(1, player.y - 1) }; // fallback: just above
-  nextDiffPortal = { x: best.x, y: best.y, diff };
+  return best || { x: player.x, y: Math.max(1, player.y - 1) };
+}
+// Place the next-difficulty rainbow portal on an open, reachable tile near the
+// hero (so it's right there when the conquest banner closes).
+function placeNextDiffPortal(diff) {
+  const t = nearestOpenTileToHero();
+  nextDiffPortal = { x: t.x, y: t.y, diff };
   log('🌈 Rainbow portal tears open — step in for the next difficulty.', 'important');
+}
+// Tear open the one-time graduation portal beside the hero, the moment the first
+// Floor-5 guardian falls — this boss floor has no stairs, so the portal IS the exit
+// to town (stepping on it runs graduateToTown; see the movement handler).
+function placeGraduationPortal() {
+  const t = nearestOpenTileToHero();
+  gradPortal = { x: t.x, y: t.y };
 }
 function showConquest(tier, firstTime) {
   const thisName = DIFFS[tier - 1].name;
@@ -6701,6 +6721,12 @@ let graveMarker = null;
 // boss if you choose to stay on the floor: { x, y, diff } — step on it to drop
 // into the next difficulty at floor 1. Cleared each new floor / town visit.
 let nextDiffPortal = null;
+// The one-time "escape to town" portal that tears open when the very first Floor-5
+// guardian falls: { x, y } — step on it to graduate into the newly-opened camp (this
+// floor has no stairs; the portal is the only way out — see buildBossArena /
+// updateFloorClear / graduationFloor). Re-derived from the graduation state on reload,
+// cleared on every new floor / town visit.
+let gradPortal = null;
 let merchant = null;  // { x, y, stock: [...] } when present
 let shopMode = 'buy';  // merchant tab: 'buy' | 'sell'
 // Merchant Sort / Filter — mirrors the LOOT drawer's controls but keeps its own
@@ -6973,6 +6999,8 @@ window.gameState = function gameState(radius) {
   }
   // Rainbow conquest gate: step on it to dive into the next difficulty (floor 1).
   if (typeof nextDiffPortal !== 'undefined' && nextDiffPortal) put(nextDiffPortal.x, nextDiffPortal.y, 'R');
+  // Graduation escape portal: step on it to graduate up into the newly-opened town.
+  if (typeof gradPortal !== 'undefined' && gradPortal) put(gradPortal.x, gradPortal.y, 'O');
   // Walkable-town objects (gated on inTown so they never collide with dungeon
   // glyphs): each service keeper 'n' (solid — you interact from beside it), the
   // Dungeon Gate 'G', the Town Portal 'P' (only when a floor is held). Kinds/
@@ -7360,6 +7388,10 @@ window.gameState = function gameState(radius) {
       x: nextDiffPortal.x, y: nextDiffPortal.y,
       toTier: (typeof DIFFS !== 'undefined') ? ((DIFFS[nextDiffPortal.diff - 1] || {}).name || null) : null,
     } : null,
+    // Walk-on escape portal that tears open when the FIRST Floor-5 guardian falls
+    // (glyph 'O'): step onto it to graduate up into the newly-opened town. This floor
+    // has no stairs onward — the portal is the only way out.
+    escapePortal: (typeof gradPortal !== 'undefined' && gradPortal) ? { x: gradPortal.x, y: gradPortal.y, to: 'town' } : null,
     // Cursed-floor "greed" gate. pending → an accept/decline prompt is up (blockingOverlay
     // 'greed-overlay'; mode 'greed'): call acceptGreed() for DOUBLED loot & gold + tougher
     // foes, or declineGreed() to skip. active → this floor's greed bonus is already on.
@@ -7518,7 +7550,7 @@ window.gameState = function gameState(radius) {
       cycle: egSafe(egCycleGameStateBlock),     // seasonal phase, enrollment, journey checklist, countdown
       deeds: egSafe(egDeedsGameStateBlock),     // Renown rank + total, deeds completed/total, equipped title
     },
-    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant (passable) · ? mystic (passable) · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · » vault express stair (drops 2 floors) · < stairs up · R rainbow conquest gate · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain · (town) n service keeper (walk up + interact) · G Dungeon Gate (step in to descend) · P Town Portal (return to held floor)',
+    legend: '@ you · E enemy · a ally · $ chest · c coins · k vault key · & food · g grave · M merchant (passable) · ? mystic (passable) · N quest npc · Q quest objective · A arrow trap · v/V fire vent (V=flaring) · F boss flame · B boss barrier · X solid furniture · ! bolt in flight · > stairs down · » vault express stair (drops 2 floors) · < stairs up · R rainbow conquest gate · O escape portal to town (step in) · # wall · . floor · ~ deep water (impassable; see/shoot over) · ^ lava (burns) · " spikes (stab) · + locked door · * shrine · o teleporter · % cracked wall · f fountain · (town) n service keeper (walk up + interact) · G Dungeon Gate (step in to descend) · P Town Portal (return to held floor)',
     // Call window.gameGuide() for the full rules; window.gameGuide("combat") for one topic.
     guide: 'window.gameGuide() returns a full how-to-play reference (controls, combat, skills, auto-cast, loot, auto-loot, hazards, town, progression, AI-driving tips). Pass a topic string for one section.',
     map: rows.join('\n'),
@@ -7725,7 +7757,7 @@ window.gameGuide = function gameGuide(topic) {
       `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
     ],
     town: [
-`The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived — and the HUD's Town button stays HIDDEN until you first set foot in the camp (player.townVisited flips true on that first arrival, revealing the button). That first kill opens the camp — and when you then leave Floor 5 you climb up into town for a one-time celebration (the townsfolk cheer and thank you, a one-time WELCOME hint chip greets you — town is your safe haven and the Town button teleports you home — the two founding keepers — the Healer and the Craftsman — arrive, and the newly-revealed Town button glows for that visit) before a Town Portal there carries you on to Floor 6. `
+`The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived — and the HUD's Town button stays HIDDEN until you first set foot in the camp (player.townVisited flips true on that first arrival, revealing the button). That first Floor-5 lair has NO stairs onward: felling its guardian tears open an escape portal (glyph 'O', gameState().escapePortal) right beside you with a "Quick! Step into the portal!" cue — step onto it to graduate up into town for a one-time celebration (the townsfolk cheer and thank you, a one-time WELCOME hint chip greets you — town is your safe haven and the Town button teleports you home — the two founding keepers — the Healer and the Craftsman — arrive, and the newly-revealed Town button glows for that visit). This first visit holds NO return portal, so a Town Portal there carries you on to Floor 6. `
       + `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the regular service keepers milling about the green at FRESH random spots every visit (most of them slowly strolling around — except the Craftsman, pinned just off the avenue beside the Town Portal so you always find it) and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all. A keeper only appears once it has ARRIVED (one joins per boss kill) — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
       `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff, healerBuffs and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
@@ -11338,6 +11370,7 @@ function generateMap() {
   teleporters = {};
   groundKey = null;   // where THIS floor's key sits; carried keys ride on player.keys
   deepStair = null; vaultInfo = null;
+  gradPortal = null;  // stale graduation portal never carries across a fresh floor build
   quest = null;
   bossHazards = []; bossTelegraphs = [];
 
@@ -11799,9 +11832,11 @@ function buildBossArena() {
     if (yy > 0 && xx > 0 && yy < MAP_H - 1 && xx < MAP_W - 1) mapData[yy][xx] = 0;
   }
   mapData[syTile][cx] = entryStair;
-  // ── EXIT (north) ── omitted on the last finite boss floor (conquer it, then
-  // take the next difficulty from town). Otherwise sealed until the boss dies.
-  const noOnward = isLastFiniteFloor() && farStair === 2;
+  // ── EXIT (north) ── omitted on the last finite boss floor (conquer it, then take
+  // the next difficulty from town) AND on the one-time graduation floor (the first
+  // Floor 5), where felling the guardian tears open an escape portal to town instead
+  // of unsealing stairs. Otherwise sealed until the boss dies.
+  const noOnward = farStair === 2 && (isLastFiniteFloor() || graduationFloor());
   if (!noOnward) mapData[cy - BOSS_ARENA_R + 2][cx] = farStair;
   // The guardian holds the centre; spawnEnemies pins the boss to this cell.
   bossArenaCell = { x: cx - 1, y: cy - 1 };
@@ -11840,6 +11875,10 @@ function buildBossArena() {
   if (!floorCleared) {
     const b = enemies.find(e => e.isBoss);
     log(`⚠️ ${b ? b.name : 'A guardian'} seals every exit until it falls.`, 'important');
+  } else if (graduationFloor()) {
+    // Backtracking onto / reloading the already-felled graduation floor: the escape
+    // portal to town still waits beside the entrance (see placeGraduationPortal).
+    placeGraduationPortal();
   }
   arrivalDir = 'down';
 }
@@ -13533,12 +13572,13 @@ function warpToTown() {
 }
 
 // GRADUATE TO TOWN — the one-time victory lap the very first time the Floor 5 guardian
-// is felled and the hero leaves the floor. Instead of stepping straight onto Floor 6,
-// they climb out into the newly-opened camp: the townsfolk celebrate, the two founding
-// keepers (the Healer and the Craftsman, its HUD upgrades in hand) are milling about —
-// the rest arrive one per boss kill as the hero descends. No return portal is held on
-// this first visit: the hero presses on through the Dungeon Gate (its "Continue to
-// Floor 6" button), learning the exit they'll use for the rest of the run.
+// is felled. The lair has no stairs onward; the kill tears open an escape portal (see
+// placeGraduationPortal) and stepping into it lands the hero here, in the newly-opened
+// camp: the townsfolk celebrate, the two founding keepers (the Healer and the Craftsman,
+// its HUD upgrades in hand) are milling about — the rest arrive one per boss kill as the
+// hero descends. No return portal is held on this first visit: the hero presses on
+// through the Dungeon Gate (its "Continue to Floor 6" button), learning the exit they'll
+// use for the rest of the run.
 function graduateToTown() {
   player.pendingTownGraduation = false;
   // Advance PROGRESS to Floor 6 so the Dungeon Gate offers it as the next descent —
@@ -13559,7 +13599,7 @@ function graduateToTown() {
   beginPortalArrival();
   screenFlash('#ffd24b');
   sfx('levelup');
-  log('<span data-spr=feat_gate_red></span> You climb from the guardian\'s lair — and step into <b>town</b> for the very first time.', 'important');
+  log('<span data-spr=feat_gate_red></span> You step through the portal from the guardian\'s lair — and into <b>town</b> for the very first time.', 'important');
   log('<span data-spr=q_relic></span> Word of the fallen guardian races ahead of you. The townsfolk pour out cheering — grateful, the <b>Healer</b> and the <b>Craftsman</b> (with their <b>HUD upgrades</b>) throw open their doors; more keepers arrive with each further guardian you fell.', 'important');
   log(`<span data-spr=feat_gate_red></span> Town is your haven now — from any floor, tap the glowing <b>Town</b> button (${kbLabel('portal')}) to teleport back here any time to rest, shop and resupply.`, 'important');
   log('Rest and resupply, then take the <span data-spr=feat_gate_red></span> <b>Dungeon Gate</b> up the avenue and press <b>Continue to Floor 6</b> when you\'re ready to press on.');
@@ -13589,7 +13629,7 @@ function buildTown(atPortal = false) {
   floorSerial++;
   // Clear every dungeon-only entity so nothing lingers into the safe hub.
   enemies = []; merchant = null; mystic = null; minions = []; combatBuffs = {};
-  groundItems = []; groundFood = []; groundGold = []; graveMarker = null; nextDiffPortal = null;
+  groundItems = []; groundFood = []; groundGold = []; graveMarker = null; nextDiffPortal = null; gradPortal = null;
   quest = null; teleporters = {}; shrineData = {};
   floorThemeOverride = null; floorIslandTheme = null; furnitureMap = {}; decorMap = {}; // town is never an indoor/island floor
   townShopStock = null; townRestocks = 0; // fresh merchant wares + reset restock surcharge each town visit
@@ -19331,6 +19371,11 @@ function draw() {
     const ppx = offX + nextDiffPortal.x * tw + tw / 2, ppy = offY + nextDiffPortal.y * th + th / 2;
     drawPortal(ppx, ppy, tw, 'rainbow');
   }
+  // Graduation escape portal — the blue town portal that opens on the first Floor-5 kill.
+  if (gradPortal) {
+    const gpx = offX + gradPortal.x * tw + tw / 2, gpy = offY + gradPortal.y * th + th / 2;
+    drawPortal(gpx, gpy, tw, 'town');
+  }
 
   // Quest markers — NPCs, objectives, and pickups, each ringed to stand out.
   if (quest) {
@@ -22895,6 +22940,13 @@ function onEnterCell(nx, ny) {
     enterDungeonAt(d, 1, { noPortalFx: true });   // keeps its own purple flash, not the blue pillar
     return;
   }
+  // Graduation escape portal — the first Floor-5 lair's only way out. Step in to be
+  // whisked up into the newly-opened town for the one-time welcome (graduateToTown).
+  if (gradPortal && gradPortal.x === nx && gradPortal.y === ny) {
+    gradPortal = null;
+    graduateToTown();
+    return;
+  }
   if (deepStair && deepStair.x === nx && deepStair.y === ny) { useDeepStair(); return; } // vault express stair
   const tile = mapData[ny][nx];
   if (tile === 12) { goUpStairs(nx, ny); return; }     // stairs up (or floor-1 town portal)
@@ -23051,10 +23103,10 @@ function goDownStairs(nx, ny) {
     return;
   }
   if (!floorCleared) { log(`<span data-spr=feat_lock></span> Stairs sealed. ${clearConditionLabel()}`, 'important'); sfx('click'); return; }
-  // Just felled the Floor 5 guardian for the first time? Leaving the floor doesn't
-  // drop you onto Floor 6 — it carries you up into the newly-opened town to celebrate,
-  // and the hero presses on through the Dungeon Gate's "Continue to Floor 6" (no held
-  // return portal on this first visit; see graduateToTown).
+  // Defensive fallback: the first Floor-5 lair has no down-stair — felling its guardian
+  // opens an escape portal instead (see graduationFloor / placeGraduationPortal), and
+  // stepping into that portal graduates to town. This guards the rare case a stray
+  // down-stair is ever underfoot with the graduation still pending.
   if (player.pendingTownGraduation && dungeonLevel === 5) { graduateToTown(); return; }
   if (isLastFiniteFloor()) {
     log(`<span data-spr=b_ratking></span> Deepest floor of the ${diffMeta().name} dungeon — beat its guardian, then take the next difficulty from town.`, 'important');
@@ -24052,7 +24104,7 @@ function castSkillById(id, opts) {
   if (!fired) return false;
 
   if (bloodPact) { player.hp = Math.max(1, player.hp - cost); spawnFloatingText(player.x, player.y, `-${cost}`, '#ff5a6a'); }
-  else player.mp -= cost;
+  else { player.mp -= cost; showRampHint('spellMana'); }   // ramp: first mana-spending cast teaches the mana resource (self-latches)
   fireSkillTrigger('cast', {}); // on-cast procs
   updateBars();
   // Real-time: the cast just starts the recharge, which then burns down in real
@@ -26871,6 +26923,16 @@ function bossesBeaten() { return pointsEarned(player.bossFirstKills); }
 // The town CAMP throws open its doors once the Floor 5 guardian falls — before that
 // there is no Town Portal and no service keeper has arrived. (This IS arrival #1.)
 function townUnlocked() { return !!(player.bossFirstKills && player.bossFirstKills['5']); }
+// The one-time "graduate to town" boss floor: the very first Floor 5, from arrival
+// through the boss kill until the hero steps into the escape portal to the camp. On
+// THIS floor there are no stairs onward — felling the guardian tears open a portal
+// instead (see buildBossArena / updateFloorClear). `!townUnlocked()` covers the fight
+// (kill not yet banked); `pendingTownGraduation` covers the window after the kill
+// (and across a reload, when the kill is already banked). Never fires on a later
+// difficulty's floor 5 (dungeonLevel there is 30+, and the town is long since open).
+function graduationFloor() {
+  return dungeonLevel === 5 && (!townUnlocked() || !!player.pendingTownGraduation);
+}
 // The unlock gate for a keeper kind: its ARRIVAL number (the boss-kill count it joins
 // on — one keeper per kill), plus the short player-facing hint shown on a still-locked
 // tile. The Vault stays sealed for life to a Solo Self-Found hero (no shared pools).
@@ -29926,12 +29988,14 @@ function itemCardHTML(item, opts = {}) {
     const negative = (typeof v === 'number') && v < 0;
     const val = (typeof v === 'string') ? abbreviateNumbersIn(v) : (v < 0 ? '' : '+') + abbreviateNumber(v);
     // Base (headline/innate) stats come from the item's base and can't be
-    // rerolled, so tag them apart from rollable affixes — but keep every stat the
-    // same colour so the list reads cleanly. A curse penalty (negative) is tagged.
+    // rerolled, so mark them apart from rollable affixes — but keep every stat the
+    // same colour so the list reads cleanly. A base stat gets a dim asterisk whose
+    // hover title explains it (keeps the row short so name + stats stay the focus);
+    // a curse penalty (negative) keeps its worded tag.
     const isNative = head.includes(k);
     const style = negative ? ' style="color:var(--red-350)"' : '';
     const tag = negative ? ' <span class="tt-tag">cursed</span>'
-              : isNative ? ' <span class="tt-tag">base</span>' : '';
+              : isNative ? ' <span class="tt-base-mark" title="Base stat: innate to this item and can’t be rerolled">*</span>' : '';
     return `<div class="tt-stat"${style}>${val} ${STAT_LABELS[k] || k}${tag}</div>`;
   });
   // Attribute affixes (+Might, +Luck, …) get their own coloured rows.
@@ -29975,7 +30039,7 @@ function itemCardHTML(item, opts = {}) {
     : '';
   // Item level: drives raw stat size, so it's worth surfacing alongside power.
   const ilvlLine = (item.slot && item.ilvl)
-    ? `<span style="color:var(--blue-250);font-weight:bold">ilvl ${item.ilvl}</span>` : '';
+    ? `<span style="color:var(--blue-250)">ilvl ${item.ilvl}</span>` : '';
   // The "Equipped" label reads in gold so a glance tells which card is the piece
   // already worn, vs the dim "Hovered" candidate beside it.
   const label = opts.label
@@ -29987,8 +30051,10 @@ function itemCardHTML(item, opts = {}) {
   let reqLine = '';
   const rq = opts.hideReq ? null : attrReqStatus(item);
   if (rq) {
-    const col = rq.ok ? '#7ad08a' : '#e0556b';
-    reqLine = `<div style="color:${col};font-size:1.2rem;font-weight:bold;margin:2px 0">${rq.ok ? '✓' : '⚠'} Requires ${rq.need} ${ATTRIBUTES[rq.attr].short} <span style="opacity:.75">(you have ${rq.have})</span></div>`;
+    // Only the player's CURRENT stat number carries the green (sufficient) / red
+    // (short) colour; the rest of the line reads as plain metadata.
+    const haveCol = rq.ok ? 'var(--green-450)' : 'var(--red-350)';
+    reqLine = `<div class="tt-req">Requires ${rq.need} ${ATTRIBUTES[rq.attr].short} (you have <span style="color:${haveCol};font-weight:bold">${rq.have}</span>)</div>`;
   }
   // Ramp: a Guided hero's early tooltips run trimmed — the abstract build-aware
   // Power line is held back until the detailed-tooltips floor, so a new player just
@@ -29996,8 +30062,10 @@ function itemCardHTML(item, opts = {}) {
   const begin = player.guided && !detailedTooltips(player.maxFloor);
   return `
     ${label}
-    <div class="tt-name" style="color:${tierColor(item)}">${curseMark(item)}${item.name}</div>
-    <div class="tt-tier" style="color:${tierColor(item)}">${item.slot ? `<span data-spr=${SLOTS[item.slot].sprite}></span> ${SLOTS[item.slot].label}` : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</div>
+    <div class="tt-nameline">
+      <span class="tt-name" style="color:${tierColor(item)}">${curseMark(item)}${item.name}</span>
+      <span class="tt-tier" style="color:${tierColor(item)}">${item.slot ? `<span data-spr=${SLOTS[item.slot].sprite}></span> ${SLOTS[item.slot].label}` : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</span>
+    </div>
     ${weaponTypeLine}
     ${item.slot && !begin && hudOwned('rankings') ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${abbreviateNumber(power)}</div>` : ''}
     ${powerLine}
@@ -30005,7 +30073,7 @@ function itemCardHTML(item, opts = {}) {
     ${reqLine}
     ${stats}
     ${weaponLine}
-    <div style="color:var(--warn);font-size:1.2rem;margin-top:3px">Value: <span data-spr=ic_money></span>${fmtGold(item.value)}</div>
+    <div class="tt-value">Value: <span data-spr=ic_money></span>${fmtGold(item.value)}</div>
     <div class="tt-flavor">${item.flavor}</div>`;
 }
 
