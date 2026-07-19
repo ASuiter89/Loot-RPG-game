@@ -15,6 +15,13 @@ export const CHANGELOG = [
   ] },
   { date: "2026-07-18", size: "small", v: "Fountain restores Stamina", by: "Jeff Louie", notes: [
     "Fountain of Healing tops Stamina to full alongside HP and MP.",
+  { date: "2026-07-18", size: "small", v: "Auto slot & potions stop pulsing", by: "Jeff Louie", notes: [
+    "Auto-cast slot and health/mana potions keep bright ready outline; pulse removed.",
+    "Critical-HP potion alarm still pulses.",
+  ] },
+  { date: "2026-07-18", size: "small", v: "New-loot badge on the LOOT tab", by: "Jeff Louie", notes: [
+    "Red count badge on the LOOT tab flags loot picked up while you were on another tab; clears when you open it.",
+    "Touch: red pip on the Bag button mirrors it while the tab's tucked away.",
   ] },
   { date: "2026-07-18", size: "small", v: "Early-game rebalance — real stats, not a hit cap", by: "Jeff Louie", notes: [
     "Floors 1–5 trash carries more HP and the hero hits softer while weak; both ease to full by floor 6.",
