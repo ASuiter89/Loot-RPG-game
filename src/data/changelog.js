@@ -10,6 +10,11 @@ export const CHANGELOG = [
   { date: "2026-07-18", size: "small", v: "Craftsman arrives with the Healer", by: "Jeff Louie", notes: [
     "Joins on first boss (floor 5), was 2nd (floor 10); HUD Field Kit ready from first town visit.",
   ] },
+  { date: "2026-07-18", size: "small", v: "Merchant ware rarity scales with depth", by: "Jeff Louie", notes: [
+    "Roaming & town merchant stock leans by progress: shallow stalls white→green, deep ones blue→purple→orange→red.",
+    "Wares obey the drop rarity gate — greens wait for the floor-5 boss, blue+ for floor-10; a fresh hero sees only white.",
+    "No more set/orange/blue on a level-3 stall.",
+  ] },
   { date: "2026-07-18", size: "medium", v: "15 new Shrine boons", by: "Jeff Louie", notes: [
     "Beyond power/guard/fortune: greed (+60% gold), insight (+50% xp), discovery (+50 Magic Find), harvest (+60% materials), precision (+18% crit), phantom (+15% dodge).",
     "sorcery (+30% skill/spell power), leech (+15% lifesteal), brambles (reflect), bulwark (+Defense), swift (+18% move), haste (+25% attack speed).",
@@ -18,6 +23,9 @@ export const CHANGELOG = [
   ] },
   { date: "2026-07-18", size: "small", v: "Fountain restores Stamina", by: "Jeff Louie", notes: [
     "Fountain of Healing tops Stamina to full alongside HP and MP.",
+  ] },
+  { date: "2026-07-18", size: "small", v: "Level-up fully restores you", by: "Jeff Louie", notes: [
+    "Level up refills HP, MP & Stamina to full (was +40% HP/MP, no Stamina); Stamina bar rearms instantly.",
   ] },
   { date: "2026-07-18", size: "medium", v: "Craftsman crafts new HUD upgrades; pinned by the portal", by: "Jeff Louie", notes: [
     "Item Power, +/- stat compare, bag sort/filter & auto-loot are new one-time Craftsman HUD buys.",
@@ -32,6 +40,12 @@ export const CHANGELOG = [
   { date: "2026-07-18", size: "small", v: "New-loot badge on the LOOT tab", by: "Jeff Louie", notes: [
     "Red count badge on the LOOT tab flags loot picked up while you were on another tab; clears when you open it.",
     "Touch: red pip on the Bag button mirrors it while the tab's tucked away.",
+  ] },
+  { date: "2026-07-18", size: "small", v: "Calmer skill card; Surge bonuses", by: "Jeff Louie", notes: [
+    "Skill card decluttered — neutral buttons, chips and rows; only a pending level-up surge stays pink.",
+    "\"Rank bonuses\" → \"Surge bonuses\"; earned rungs marked with a ✓, not a colour.",
+    "Refund and off-bar buttons use plain monochrome glyphs.",
+    "Skill description drops its damage range — shown in the card's Damage / DPS rows.",
   ] },
   { date: "2026-07-18", size: "small", v: "Early-game rebalance — real stats, not a hit cap", by: "Jeff Louie", notes: [
     "Floors 1–5 trash carries more HP and the hero hits softer while weak; both ease to full by floor 6.",

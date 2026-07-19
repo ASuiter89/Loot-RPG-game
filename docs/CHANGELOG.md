@@ -8,6 +8,20 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## UI — skill detail card decluttered; damage clause extracted
+
+- 📦 New leaf module `src/systems/skillText.js`: pure `stripDamageClause` that strips
+  a description's `{dmg}` clause (in a handful of grammatical frames, with a
+  bare-"damage" fallback for novel ones). The detail card uses it so its flavour line
+  no longer repeats the range shown in its own Damage / DPS rows.
+- 🧪 `test/systems/skillText.test.js` covers each frame + the fallback / idempotence /
+  empty-input guards.
+- 📄 `.sk-pop` styling neutralized in `src/styles.css`: the type line, mech chips,
+  on-rank-up values, the renamed "Surge bonuses" ladder (was "Rank bonuses"),
+  requirement rows and the secondary buttons drop their accent colours; the sole
+  remaining pop is the pink surge glow on the Learn button when a level-up crosses a
+  rank-3/7/10 milestone. Refund / off-bar buttons use monochrome outline glyphs.
+
 ## Feature — Shrine boons are data-driven (15 new kinds)
 
 - 📦 New leaf `src/data/shrines.js`: the whole Shrine catalog (classic +
