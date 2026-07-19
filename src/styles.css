@@ -1693,8 +1693,8 @@
   .sk-pop b { color: var(--gold); }
   /* Name line keeps a step of hierarchy over the denser 1.1rem body. */
   .sk-pop > b { font-size: 1.2rem; }
-  .sk-pop .ty { color: var(--blue-350); font-size: 1.1rem; margin-top: 1px; }
-  .sk-pop .sk-recov { margin-top: 2px; font-size: 1.1rem; color: var(--hp); opacity: 0.85; }
+  .sk-pop .ty { color: var(--purple-150); font-size: 1.1rem; margin-top: 1px; }
+  .sk-pop .sk-recov { margin-top: 2px; font-size: 1.1rem; color: var(--purple-150); opacity: 0.85; }
   .sk-pop .ds { margin-top: 3px; color: var(--purple-50); }
   /* Mechanics readout: one tagged chip per engine piece (charge, trigger,
      synergy, transform, detonate…) so a node reads how it actually plays. */
@@ -1702,45 +1702,48 @@
   .sk-pop .mech-row { display: flex; gap: 5px; align-items: baseline; font-size: 1.1rem; line-height: 1.4;
     justify-content: space-between; }
   .sk-pop .mech-t { flex: 0 0 auto; font-size: 1.1rem; font-weight: 700; letter-spacing: 0.4px;
-    text-transform: uppercase; padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
+    text-transform: uppercase; padding: 1px 5px; border-radius: 4px; white-space: nowrap;
+    background: var(--panel-raised); color: var(--purple-150); }
   .sk-pop .mech-d { color: var(--purple-50); margin-left: auto; text-align: right; }
   .sk-pop .mech-d b { color: var(--purple-50); font-weight: 700; }
   /* "On rank up" preview: shows the concrete buff each point buys (now → next). */
   .sk-pop .ru { margin-top: 5px; padding: 4px 6px; background: var(--panel); border: 1px solid var(--panel-raised); border-radius: 6px; }
-  .sk-pop .ru-h { font-size: 1.1rem; letter-spacing: 0.5px; color: var(--blue-350); text-transform: uppercase; margin-bottom: 2px; }
+  .sk-pop .ru-h { font-size: 1.1rem; letter-spacing: 0.5px; color: var(--purple-150); text-transform: uppercase; margin-bottom: 2px; }
   .sk-pop .ru-row { display: flex; justify-content: space-between; gap: 6px; font-size: 1.1rem; line-height: 1.4; }
   .sk-pop .ru-row .ru-k { color: var(--purple-150); min-width: 0; }
   /* Let long values (e.g. a milestone note) wrap instead of spilling past the
      popover's border; short number ranges still fit on one line. */
   .sk-pop .ru-row .ru-v { color: var(--purple-50); text-align: right; min-width: 0; overflow-wrap: anywhere; }
-  .sk-pop .ru-row .ru-v b { color: var(--green-450); font-weight: bold; }
-  /* Rank-bonus ladder: the fixed rank 3 / 7 / 10 milestone surges, all always shown and
-     lit PINK (with a ✓) once this skill's rank has earned them — pink because green is
-     already carrying synergy/leech/rank-up duty in this same card. */
+  .sk-pop .ru-row .ru-v b { color: inherit; font-weight: normal; }
+  /* Surge-bonus ladder: the fixed rank 3 / 7 / 10 milestone surges, all always shown, each
+     earning a leading ✓ once this skill's rank has reached it. Kept neutral like the rest of
+     the card — the only surge accent that pops is the Learn button when a level-up is about
+     to cross one of these (see .pop-buy.surge). */
   .sk-pop .ms { margin-top: 5px; padding: 4px 6px; background: var(--panel); border: 1px solid var(--panel-raised); border-radius: 6px; }
-  .sk-pop .ms-h { font-size: 1.1rem; letter-spacing: 0.5px; color: var(--surge); text-transform: uppercase; margin-bottom: 2px; }
+  .sk-pop .ms-h { font-size: 1.1rem; letter-spacing: 0.5px; color: var(--purple-150); text-transform: uppercase; margin-bottom: 2px; }
   .sk-pop .ms-row { display: flex; justify-content: space-between; gap: 6px; font-size: 1.1rem; line-height: 1.4; }
   .sk-pop .ms-row .ms-k { flex: 0 0 auto; white-space: nowrap; font-weight: 700; letter-spacing: 0.3px; color: var(--purple-150); }
   .sk-pop .ms-row .ms-v { text-align: right; min-width: 0; overflow-wrap: anywhere; color: var(--purple-50); }
   .sk-pop .ms-row .ms-v b { color: inherit; font-weight: 700; }
-  .sk-pop .ms-row.met .ms-k, .sk-pop .ms-row.met .ms-v { color: var(--surge); }
-  .sk-pop .rq { font-size: 1.1rem; margin-top: 3px; line-height: 1.4; }
-  .sk-pop .rq.no { color: var(--red-300); }
-  .sk-pop .rq.ok { color: var(--green-450); }
-  /* Per-requirement rows: green when that prereq is satisfied, red when still short. */
-  .sk-pop .rqok { color: var(--green-450); }
-  .sk-pop .rqno { color: var(--red-300); }
-  .sk-pop .rq-hint { font-size: 1.1rem; margin-top: 3px; color: var(--gold); }
+  /* Earned rungs read the same as the rest — the leading ✓ marks them, no colour highlight. */
+  .sk-pop .ms-row.met .ms-k { color: var(--purple-50); }
+  .sk-pop .rq { font-size: 1.1rem; margin-top: 3px; line-height: 1.4; color: var(--purple-150); }
+  /* Per-requirement rows read neutral; the leading ✓ / door glyph marks met vs unmet
+     (a lone accent, the ★ Build-defining badge, keeps its inline gold). */
+  .sk-pop .rqok { color: var(--purple-150); }
+  .sk-pop .rqno { color: var(--purple-150); }
+  .sk-pop .rq-hint { font-size: 1.1rem; margin-top: 3px; color: var(--purple-150); }
   .sk-pop .pop-buy { width: 100%; margin-top: 6px; padding: 5px; border: none; border-radius: 5px;
     background: var(--border); color: var(--paper); font-family: inherit; font-size: 1.2rem; font-weight: bold;
     cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .sk-pop .pop-buy:active { background: var(--purple-500); }
   .sk-pop .pop-buy:disabled { background: var(--panel); color: var(--junk); cursor: not-allowed; }
-  .sk-pop .pop-buy.maxed { background: var(--success); color: var(--green-50); }
+  .sk-pop .pop-buy.maxed { background: var(--panel-raised); color: var(--purple-150); }
   /* "Surge incoming": the next rank up crosses a rank-3/7/10 milestone, so the Learn
      button pulses with a pink glow and a wisp of pink light circling its rim — the same
-     --surge pink as the rank-bonus ladder it is about to light. Purely decorative, so a
-     disabled ("Ready — level up") button still advertises the coming spike. */
+     --surge pink as the Surge-bonus ladder it is about to light. This is the ONE accent
+     the otherwise-neutral card keeps. Purely decorative, so a disabled ("Ready — level
+     up") button still advertises the coming spike. */
   .sk-pop .pop-buy.surge { position: relative; z-index: 0; overflow: visible;
     animation: surge-pulse 1.7s ease-in-out infinite; }
   .sk-pop .pop-buy.surge::before { content: ''; position: absolute; inset: -2px; z-index: -1;
@@ -1754,27 +1757,28 @@
   @media (prefers-reduced-motion: reduce) {
     .sk-pop .pop-buy.surge, .sk-pop .pop-buy.surge::before { animation: none; }
     .sk-pop .pop-buy.surge { box-shadow: 0 0 8px color-mix(in srgb, var(--surge) 60%, transparent); } }
-  /* Show/hide-on-bar toggle for owned actives. */
+  /* Secondary toggles (hide-on-bar, auto-cast, refund) all share one neutral treatment —
+     the card's only colour accent is the surge Learn button above. State is carried by the
+     button's glyph + label, not a hue. */
   .sk-pop .pop-hide { width: 100%; margin-top: 5px; padding: 5px; border: 1px solid var(--border); border-radius: 5px;
-    background: var(--panel); color: var(--purple-200); font-family: inherit; font-size: 1.2rem; font-weight: bold;
+    background: var(--panel); color: var(--text); font-family: inherit; font-size: 1.2rem; font-weight: bold;
     cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .sk-pop .pop-hide:active { background: var(--border); }
-  .sk-pop .pop-hide.hidden { background: var(--magenta-750); border-color: var(--red-600); color: var(--red-450); }
+  .sk-pop .pop-hide.hidden { background: var(--panel-raised); border-color: var(--border); color: var(--text); }
   /* Auto-cast toggle for a slotted active (touch-friendly; desktop also has
-     right-click / hold-the-hotkey on the bar). Cyan when armed, matching the bar badge. */
-  .sk-pop .pop-auto { width: 100%; margin-top: 5px; padding: 5px; border: 1px solid var(--btn-off); border-radius: 5px;
-    background: var(--blue-800); color: var(--info); font-family: inherit; font-size: 1.2rem; font-weight: bold;
+     right-click / hold-the-hotkey on the bar). Slightly raised when armed. */
+  .sk-pop .pop-auto { width: 100%; margin-top: 5px; padding: 5px; border: 1px solid var(--border); border-radius: 5px;
+    background: var(--panel); color: var(--text); font-family: inherit; font-size: 1.2rem; font-weight: bold;
     cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-  .sk-pop .pop-auto:active { background: var(--blue-800); }
-  .sk-pop .pop-auto.on { background: var(--blue-800); border-color: var(--blue-300); color: var(--blue-100); box-shadow: 0 0 6px color-mix(in srgb, var(--blue-300) 50%, transparent); }
+  .sk-pop .pop-auto:active { background: var(--border); }
+  .sk-pop .pop-auto.on { background: var(--panel-raised); border-color: var(--border); color: var(--paper); }
   /* Refund a rank of an owned skill for gold (returns 1 skill point). The Trainer's
      full respec wipes everything at once; this is the surgical, per-skill version. */
-  .sk-pop .pop-refund { width: 100%; margin-top: 5px; padding: 5px; border: 1px solid var(--frame); border-radius: 5px;
-    background: var(--tint-black); color: var(--gold); font-family: inherit; font-size: 1.2rem; font-weight: bold;
+  .sk-pop .pop-refund { width: 100%; margin-top: 5px; padding: 5px; border: 1px solid var(--border); border-radius: 5px;
+    background: var(--panel); color: var(--text); font-family: inherit; font-size: 1.2rem; font-weight: bold;
     cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-  .sk-pop .pop-refund:active { background: var(--orange-850); }
+  .sk-pop .pop-refund:active { background: var(--border); }
   .sk-pop .pop-refund:disabled { background: var(--panel); color: var(--junk); border-color: var(--border); cursor: not-allowed; }
-  .sk-pop .pop-refund.short { color: var(--danger); border-color: var(--danger); }
 
   /* SKILLS-tab header: the point pool and the class / subclass identity share one
      compact two-column strip (was three stacked full-width rows). The point box sizes

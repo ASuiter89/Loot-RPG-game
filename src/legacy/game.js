@@ -39,6 +39,7 @@ import { isCritical } from '../systems/crit.js';
 import { favouredBases, armorWeight, rollFavouredBase, rollForcedFavouredBase } from '../systems/classLoot.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
+import { stripDamageClause } from '../systems/skillText.js';
 import { rollDamage, spreadRange } from '../systems/damageRoll.js';
 import { castTargetsInSight, splashTargetsFrom, nextChainLink } from '../systems/aoeTargeting.js';
 import { spellSpreadFor } from '../data/spellSpread.js';
@@ -7600,12 +7601,12 @@ window.gameGuide = function gameGuide(topic) {
       `The bar has ${SKILL_SLOTS} MANUAL slots (cast by hand with ${key('skill1')}-${key('skill' + SKILL_SLOTS)}) plus ONE dedicated auto-cast slot. You choose what goes where — drag a learned active onto a slot, or use the SKILLS-tab slot buttons; a freshly-learned active auto-fills the first open manual slot.`,
       `gameState().skills lists each filled manual slot's number key, MP cost (already reduced by your Mana Cost Reduction), cooldown remaining, ready flag, and what the skill DOES — its shape, range/radius and the damages/heals/buffs/summons flags — so you can pick one without inspecting it. The auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
       `Every active has a SCHOOL — SKILL, SPELL, or HYBRID — shown as a badge on its tree node and in gameState().skills[i].school. A SKILL is martial: weapon-based, scales with weapon damage + Skill Power, leeches life, meets a foe's physical ARMOR (pierced by Armor Pen), recharged by CDR only. A SPELL is magic: scales with Spirit + Spell Power, never leeches, meets a foe's MAGIC RESIST (pierced by Magic Pen), recharged by CDR + Cast Speed. A HYBRID lands BOTH — a physical part (leeches, meets armor, Skill Power) AND a magic part (meets magic resist, Spell Power); its tooltip spells out the split, and it recharges with CDR + Cast Speed. Classes lean differently: Warrior is all SKILL, Mage all SPELL, Rogue mostly skill with shadow/toxic hybrids, Templar mostly holy spells with holy-strike hybrids. Gear the stats that match the actives you lean on.`,
-      `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and many skills gain extra recharge from their rank milestones (how much varies by skill — its "Rank bonuses" ladder spells it out). The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
+      `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and many skills gain extra recharge from their rank milestones (how much varies by skill — its "Surge bonuses" ladder spells it out). The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a self-buff's rank milestones, which lengthen its buff at ranks 7 & 10 and add a 20%-faster recharge at rank 10) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) plus a maxed skill's longer, faster buff lifts a 40%-baseline buff well past ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
-      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% (Empowered), +20% (Honed), +30% (Mastered) — so deepening a key skill outpaces its rising mana cost. On TOP of that flat power, each milestone grants a SIGNATURE perk unique to the skill's archetype — no two kinds of spell read alike: a chain arcs to more foes, a summon lingers longer then raises an extra minion, an ailment nova inflicts more reliably then longer and wider, a self-buff hits harder then lasts longer, a bolt gains range then a double-strike, a piercing beam reaches further then strikes twice, a cleave leeches, a floor-wide storm hits more foes, an assassin's strike gains an execute. Every skill's detail card shows a "Rank bonuses" ladder listing all three (its power spike + that rank's signature), each lit pink with a ✓ once your rank has earned it.`,
-      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10) — the ladder names the passive's OWN bonus so each reads uniquely — so maxing one passive beats spreading points thin. AND at rank 10 a passive unlocks one BRAND-NEW stat it never gave before — thematic to the node (a crit passive gains crit damage, an HP passive gains regen, a spell passive gains crit, and so on) — folded straight into the same combat formulas. Its detail card lists all three spikes plus the rank-10 stat in the pink-when-earned "Rank bonuses" ladder, shows milestone pips by the rank, and folds the surge into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
+      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% (Empowered), +20% (Honed), +30% (Mastered) — so deepening a key skill outpaces its rising mana cost. On TOP of that flat power, each milestone grants a SIGNATURE perk unique to the skill's archetype — no two kinds of spell read alike: a chain arcs to more foes, a summon lingers longer then raises an extra minion, an ailment nova inflicts more reliably then longer and wider, a self-buff hits harder then lasts longer, a bolt gains range then a double-strike, a piercing beam reaches further then strikes twice, a cleave leeches, a floor-wide storm hits more foes, an assassin's strike gains an execute. Every skill's detail card shows a "Surge bonuses" ladder listing all three (its power spike + that rank's signature), each marked with a ✓ once your rank has earned it.`,
+      `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10) — the ladder names the passive's OWN bonus so each reads uniquely — so maxing one passive beats spreading points thin. AND at rank 10 a passive unlocks one BRAND-NEW stat it never gave before — thematic to the node (a crit passive gains crit damage, an HP passive gains regen, a spell passive gains crit, and so on) — folded straight into the same combat formulas. Its detail card lists all three spikes plus the rank-10 stat in the ✓-when-earned "Surge bonuses" ladder, shows milestone pips by the rank, and folds the surge into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
-      `Refund a rank from a skill's SKILLS-tab popover: the ↩️ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
+      `Refund a rank from a skill's SKILLS-tab popover: the ↩︎ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
       `RANGED casts need LINE OF SIGHT: a bolt, beam (line), nova or chain only strikes foes YOU can see — a SOLID obstruction (wall, door, boss barrier, furniture) between you and a foe blocks it, but open ground and water don't; the cast fails with "No foe in sight" if nothing visible is in range. Melee/cleave (adjacent-only) and the rare floor-wide "strike random foes" ultimate ignore walls.`,
       `A BLAST (Meteor, Fireball, Blizzard, Firestorm, Condemn, Plague Bomb, Death Rain, …) is judged from its POINT OF IMPACT, not from you: the projectile lands on the nearest foe you can see, then its radius damage spreads to every foe THE IMPACT can see — so a meteor dropped onto a pack tucked behind a wall still burns the whole pack, even foes you couldn't hit directly. A mark DETONATION (Immolation, Death Blossom, Final Judgment popping a vuln/Condemned foe) bursts the same way — from the marked foe outward. Novas still radiate from YOU.`,
@@ -24155,9 +24156,13 @@ function skillDmgTipLine(node, rank) {
 //     `{dmg}` expands to the whole phrase ("16k–22k damage", plus a "(×N)" badge for a
 //     multi-strike cast) — a desc writes "deals {dmg} and …", not "{dmg} damage". A desc
 //     with no token falls back to the phrase appended as its own sentence.
-function skillDescHtml(node, rank) {
+function skillDescHtml(node, rank, opts) {
   let d = (node && node.desc) || '';
   d = d.replace(/\s*\+\d+%\s+damage per point in [^.]+\.?/gi, '').trim();
+  // The detail card lists a live Damage / DPS readout already, so drop the
+  // redundant range from the flavour line there (opts.hideDmg) and skip the
+  // appended "Deals X." sentence — the number lives in the stat rows instead.
+  if (opts && opts.hideDmg) return stripDamageClause(d);
   const dp = (node && node.cast) ? skillDamagePreview(node, rank) : null;
   if (dp) {
     const hits = dp.strikes > 1 ? ` <span style='opacity:0.75'>(×${dp.strikes})</span>` : '';
@@ -28313,14 +28318,14 @@ function renderSkills(el) {
     if (rank > 0) {
       const rBlock = refundBlockedBy(sn);
       const rCost = skillRefundCost();
-      if (rBlock) refundBtn = `<button class="pop-refund" disabled>↩️ Refund locked — ${rBlock} needs it</button>`;
-      else { const aff = canAfford(rCost); refundBtn = `<button class="pop-refund${aff ? '' : ' short'}" ${aff ? '' : 'disabled'} onclick="refundSkill('${sn.id}')">↩️ Refund 1 pt — <span data-spr=ic_money></span>${fmtGold(rCost.gold)}</button>`; }
+      if (rBlock) refundBtn = `<button class="pop-refund" disabled>↩︎ Refund locked — ${rBlock} needs it</button>`;
+      else { const aff = canAfford(rCost); refundBtn = `<button class="pop-refund${aff ? '' : ' short'}" ${aff ? '' : 'disabled'} onclick="refundSkill('${sn.id}')">↩︎ Refund 1 pt — <span data-spr=ic_money></span>${fmtGold(rCost.gold)}</button>`; }
     }
     // Owned actives can be slotted onto / pulled off the hotkey bar straight from
     // the popover (the quick path alongside dragging the node onto a tray slot).
     const slotAt = (sn.type === 'active' && rank > 0) ? skillSlotIndexOf(sn.id) : -1;
     const hideBtn = (sn.type === 'active' && rank > 0)
-      ? `<button class="pop-hide${slotAt < 0 ? ' hidden' : ''}" onclick="toggleSkillSlot('${sn.id}')">${slotAt >= 0 ? `<span data-spr=ic_stun></span> On bar (slot ${slotAt + 1}) — tap to remove` : '🚫 Off the bar — tap to add'}</button>`
+      ? `<button class="pop-hide${slotAt < 0 ? ' hidden' : ''}" onclick="toggleSkillSlot('${sn.id}')">${slotAt >= 0 ? `<span data-spr=ic_stun></span> On bar (slot ${slotAt + 1}) — tap to remove` : '⊘ Off the bar — tap to add'}</button>`
       : '';
     // Drop this active into the single auto-cast slot (or clear it) straight from the
     // popover — the touch-friendly path that mirrors dragging it onto the bar's middle
@@ -28333,7 +28338,7 @@ function renderSkills(el) {
       <b>${dlIcon(sn.icon,18)||''} ${sn.name}</b>${rankTxt}
       <div class="ty">${typeTxt}</div>
       ${skillRecoveryTag(sn)}
-      <div class="ds">${skillDescHtml(sn, rank)}</div>
+      <div class="ds">${skillDescHtml(sn, rank, { hideDmg: true })}</div>
       ${skillMechHtml(sn, rank)}
       ${ruHtml}
       ${msHtml}
@@ -28574,7 +28579,7 @@ function skillMechList(n, rank) {
     if (dp) {
       const hits = dp.strikes > 1 ? ` <span style="opacity:0.75">(×${dp.strikes})</span>` : '';
       add('Damage', '#e05a4b', `<b>${formatDamageRange(dp.min, dp.max)}</b> <span style="opacity:0.6">per hit</span>${hits}`);
-      if (dp.hybrid && dp.phys && dp.magic) add('Split', '#c99cd6', `<span style="color:#e0a24b">${formatDamageRange(dp.phys.min, dp.phys.max)} physical</span> + <span style="color:#b08ad8">${formatDamageRange(dp.magic.min, dp.magic.max)} magic</span>`);
+      if (dp.hybrid && dp.phys && dp.magic) add('Split', '#c99cd6', `${formatDamageRange(dp.phys.min, dp.phys.max)} physical + ${formatDamageRange(dp.magic.min, dp.magic.max)} magic`);
       add('DPS', '#e0a24b', `<b>${abbreviateNumber(dp.dps)}</b>`);
     }
     // Movement first — gap-closers/pulls/escapes are the headline of a mobility skill.
@@ -28598,18 +28603,19 @@ function skillMechList(n, rank) {
     }
   }
   // Passive milestone surges (the +8/+10/+12% spikes at ranks 3/7/10) now get their
-  // own specific "Rank bonuses" ladder in the card, so no vague Surge chip here. The
+  // own specific "Surge bonuses" ladder in the card, so no vague Surge chip here. The
   // rank-10 SURGE stat is surfaced in that same ladder (see skillMilestonesHtml).
   // Cross-cutting keystone rule that a stat line can't show.
   if (n.kflag === 'bloodpact') add('Keystone', '#e8c267', 'Active skills cost life instead of mana.');
   return rows;
 }
-// Styled-chip version for the click popover.
+// Styled-chip version for the click popover. Chips share one neutral treatment
+// (the per-mech accent colours were dropped to keep the card calm — see styles.css).
 function skillMechHtml(n, rank) {
   const rows = skillMechList(n, rank);
   if (!rows.length) return '';
   return `<div class="mech">` + rows.map(r =>
-    `<div class="mech-row"><span class="mech-t" style="background:${r.color}22;color:${r.color}">${r.tag}</span><span class="mech-d">${r.desc}</span></div>`
+    `<div class="mech-row"><span class="mech-t">${r.tag}</span><span class="mech-d">${r.desc}</span></div>`
   ).join('') + `</div>`;
 }
 // Build the "On rank up" preview rows: the concrete buff each point buys, shown
@@ -28721,7 +28727,7 @@ function passiveMilestoneDesc(node, rank) {
   return `+${pct}% ${passiveBonusName(node)}`;
 }
 // The rank 3 / 7 / 10 spikes as a standalone checklist for the detail card: all
-// three are ALWAYS shown (what each grants), and each lights green once this skill's
+// three are ALWAYS shown (what each grants), and each gets a ✓ once this skill's
 // rank is high enough to have earned it — so you can see the whole ladder at any
 // rank, not just the next rung. Empty for skills that never milestone.
 function skillMilestonesHtml(node, rank) {
@@ -28739,7 +28745,7 @@ function skillMilestonesHtml(node, rank) {
       + `<span class="ms-k">${met ? '✓ ' : ''}${m.pips} Rank ${m.rank}</span>`
       + `<span class="ms-v"><b>${m.name}</b> — ${desc}</span></div>`;
   }).join('');
-  return `<div class="ms"><div class="ms-h">Rank bonuses</div>${rows}</div>`;
+  return `<div class="ms"><div class="ms-h">Surge bonuses</div>${rows}</div>`;
 }
 // Plain-text "new total" summary at a given rank, for the level-up log line.
 function skillTotalSummary(node, rank) {

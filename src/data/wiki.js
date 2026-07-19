@@ -343,7 +343,7 @@ export const WIKI = [
         body: [
           { p: 'Higher skill ranks cost more Mana but spike in power at ranks <b>3, 7 and 10</b> — so deepening one key skill outpaces its rising cost. On top of the flat power boost, each milestone grants a <b>signature perk</b> unique to that skill\'s archetype: a chain arcs to more foes, a summon raises an extra minion, a bolt gains a double-strike, and so on.' },
           { p: '<b>Passives</b> surge at those same ranks, and at rank 10 a passive unlocks one brand-new stat it never gave before. So maxing one passive beats spreading points thin.' },
-          { note: 'Every skill\'s detail card shows a "Rank bonuses" ladder — each rung lights up once your rank has earned it.' },
+          { note: 'Every skill\'s detail card shows a "Surge bonuses" ladder — each rung gets a ✓ once your rank has earned it.' },
         ],
       },
       {
