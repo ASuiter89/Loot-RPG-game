@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-18", size: "small", v: "Esc closes title popups; reset local achievements & bestiary", by: "Jeff Louie", notes: [
+    "Esc now closes Cloud Save, Save Slots, Achievements, Bestiary & History popups (matches the rest).",
+    "New Settings ▸ Progress ▸ Reset wipes this device's achievement & bestiary progress to zero.",
+    "Death ledger untouched; signed in, cloud re-syncs it — sign out first to keep it cleared.",
+  ] },
   { date: "2026-07-18", size: "medium", v: "Craftsman crafts new HUD upgrades; pinned by the portal", by: "Jeff Louie", notes: [
     "Item Power, +/- stat compare, bag sort/filter & auto-loot are new one-time Craftsman HUD buys.",
     "Fresh hero starts without them; bag shows pickup order till you buy sort/filter.",
