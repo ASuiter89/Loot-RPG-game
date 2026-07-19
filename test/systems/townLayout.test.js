@@ -188,11 +188,12 @@ describe('authored town data', () => {
   });
 
   it('gathers every endgame keeper INSIDE the hedged sanctum, and no regular one', () => {
-    // The endgame keepers cluster in the walled grove (interior x:4..10, y:4..9);
+    // The endgame keepers cluster in the walled grove (interior x:4..10, y:3..8);
     // every regular keeper sits out in the open clearing. This is the "group all
-    // end-game NPCs together in a separate room" invariant.
+    // end-game NPCs together in a separate room" invariant. The grove sits one tile up
+    // (top wall y:2) so its top butts the treeline with no strandable row above it.
     const ENDGAME = new Set(['covenants', 'weave', 'pantheon', 'mirrorforge', 'deeds', 'cycles']);
-    const inSanctum = (n) => n.x >= 4 && n.x <= 10 && n.y >= 4 && n.y <= 9;
+    const inSanctum = (n) => n.x >= 4 && n.x <= 10 && n.y >= 3 && n.y <= 8;
     for (const n of TOWN_NPCS) {
       if (ENDGAME.has(n.kind)) expect(inSanctum(n)).toBe(true);
       else expect(inSanctum(n)).toBe(false);
@@ -201,11 +202,27 @@ describe('authored town data', () => {
     // interior, with exactly ONE walkable gap (its doorway) on the border.
     const hedges = new Set(TOWN_DECOR.filter((d) => d.c === 'h').map((d) => key(d.x, d.y)));
     let gaps = 0;
-    for (let x = 3; x <= 11; x++) for (let y = 3; y <= 10; y++) {
-      const border = x === 3 || x === 11 || y === 3 || y === 10;
+    for (let x = 3; x <= 11; x++) for (let y = 2; y <= 9; y++) {
+      const border = x === 3 || x === 11 || y === 2 || y === 9;
       if (border && !hedges.has(key(x, y))) gaps++;
     }
     expect(gaps).toBe(1);
+  });
+
+  it('leaves no walkable row directly above the grove (nothing for a keeper to get stranded in)', () => {
+    // The grove's top wall must butt straight against the solid treeline — if an open
+    // row sat between them, a wandering keeper could slip in and pace a dead single-tile
+    // strip. Build the solid-blocked set (borders + solid decor footprints) and assert
+    // every tile directly above the top hedge wall, across the grove's width, is blocked.
+    const hedges = TOWN_DECOR.filter((d) => d.c === 'h');
+    const topWallY = Math.min(...hedges.map((d) => d.y));
+    const xs = hedges.map((d) => d.x);
+    const blocked = new Set();
+    for (let x = 0; x < TOWN_W; x++) for (let y = 0; y < TOWN_H; y++) if (isBorder(x, y)) blocked.add(key(x, y));
+    for (const d of TOWN_DECOR) { const r = resolve(d); if (r.solid) for (const [fx, fy] of r.foot) blocked.add(key(fx, fy)); }
+    for (let x = Math.min(...xs); x <= Math.max(...xs); x++) {
+      expect(blocked.has(key(x, topWallY - 1))).toBe(true);
+    }
   });
 
   it('TOWN_SANCTUM bounds enclose the whole grove — every hedge tile and endgame keeper, no regular one', () => {
@@ -219,18 +236,21 @@ describe('authored town data', () => {
     for (const n of TOWN_NPCS) expect(inBox(n.x, n.y)).toBe(endgame.has(n.kind));
   });
 
-  it('pins the Craftsman on the avenue just north of the Town Portal (never wanders)', () => {
-    // The Craftsman is the keeper the hero returns to constantly, so it must be
-    // easy to find: pinned (TOWN_FIXED_KINDS) directly north of the Town Portal on
-    // the same avenue column, close enough to greet the moment you portal in.
+  it('pins the Craftsman just off the avenue beside the Town Portal (never wanders, never blocks the path)', () => {
+    // The Craftsman is the keeper the hero returns to constantly, so it must be easy to
+    // find: pinned (TOWN_FIXED_KINDS) close to the Town Portal and above it. But it sits
+    // BESIDE the avenue, not on it — its own tile is off every path so it never blocks
+    // the walkway, yet a path tile is orthogonally adjacent so it's greeted in one step.
     const forge = TOWN_NPCS.find((n) => n.kind === 'forge');
     expect(forge).toBeTruthy();
     expect(TOWN_FIXED_KINDS).toContain('forge');
-    expect(forge.x).toBe(TOWN_PORTAL.x);         // same avenue column
     expect(forge.y).toBeLessThan(TOWN_PORTAL.y); // north of (above) the portal
-    expect(TOWN_PORTAL.y - forge.y).toBeLessThanOrEqual(3);
-    // Its tile is a walkable interior avenue tile (buildTown stamps the keeper solid).
-    expect(TOWN_PATHS.some((p) => p.x === forge.x && p.y === forge.y)).toBe(true);
+    const cheb = Math.max(Math.abs(forge.x - TOWN_PORTAL.x), Math.abs(forge.y - TOWN_PORTAL.y));
+    expect(cheb).toBeLessThanOrEqual(3);         // close enough to greet the moment you portal in
+    const onPath = TOWN_PATHS.some((p) => p.x === forge.x && p.y === forge.y);
+    expect(onPath).toBe(false);                  // sits beside the path, not on it
+    const pathAdjacent = TOWN_PATHS.some((p) => Math.abs(p.x - forge.x) + Math.abs(p.y - forge.y) === 1);
+    expect(pathAdjacent).toBe(true);             // but a path tile is one step away
   });
 
   it('makes the Healer and Craftsman the two founding keepers (both share arrival 1)', () => {
