@@ -30,6 +30,12 @@ export const CHANGELOG = [
     "Red count badge on the LOOT tab flags loot picked up while you were on another tab; clears when you open it.",
     "Touch: red pip on the Bag button mirrors it while the tab's tucked away.",
   ] },
+  { date: "2026-07-18", size: "small", v: "Calmer skill card; Surge bonuses", by: "Jeff Louie", notes: [
+    "Skill card decluttered — neutral buttons, chips and rows; only a pending level-up surge stays pink.",
+    "\"Rank bonuses\" → \"Surge bonuses\"; earned rungs marked with a ✓, not a colour.",
+    "Refund and off-bar buttons use plain monochrome glyphs.",
+    "Skill description drops its damage range — shown in the card's Damage / DPS rows.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Early-game rebalance — real stats, not a hit cap", by: "Jeff Louie", notes: [
     "Floors 1–5 trash carries more HP and the hero hits softer while weak; both ease to full by floor 6.",
     "Kills now take a few blows organically — dropped the old \"min 3 hits\" per-hit cap.",
