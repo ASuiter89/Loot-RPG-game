@@ -10,6 +10,12 @@ export const CHANGELOG = [
   { date: "2026-07-18", size: "small", v: "Rogue, Mage, Templar lore trimmed", by: "Claude", notes: [
     "Rogue, Mage and Templar lore cut to a single line each, matching the Warrior's.",
   ] },
+  { date: "2026-07-18", size: "small", v: "Beach reworked — 3 skeletons, an elite, water shore", by: "Claude", notes: [
+    "Three skeletons open the beach, turning hostile as you approach (was one, struck-only).",
+    "A lone elite now guards the cave (was a pack of four).",
+    "First weapon drop is grey, not green — greens stay locked until the first boss falls.",
+    "Beach is narrower; sea rings the shore with a ragged, non-rectangular coastline.",
+  ] },
   { date: "2026-07-18", size: "small", v: "Cleaner beach level-up nudge", by: "Claude", notes: [
     "Level-up popup reads \"You gained a level!\" (was \"Level 2!\").",
     "Drops its left star badge; tutorial nudge text now centered.",
