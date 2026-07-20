@@ -7,6 +7,14 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "medium", v: "Five new Craftsman HUD upgrades", by: "Jeff Louie", notes: [
+    "Item level, gold value & salvage yield hidden until you build their bag readouts.",
+    "Derived-stats panel (Adept's Slate) & skill surge bonuses (Sage's Codex) now purchasable too.",
+    "Merchant still shows sell prices & salvage yield; Sell-all / Scrap-all totals always show.",
+  ] },
+  { date: "2026-07-19", size: "small", v: "Vital Readout covers stamina too", by: "Jeff Louie", notes: [
+    "Stamina number hidden on a bare HUD; Craftsman's Vital Readout now prints HP, MP & stamina (was HP/MP).",
+  ] },
   { date: "2026-07-19", size: "small", v: "Dungeon Gate: cleaner colors, terser copy", by: "Jeff Louie", notes: [
     "Frontier checkpoint tile stays neutral while pushing a tier — gold reserved for the Continue button.",
     "Trimmed gate copy: dropped tier-name prefix, repeated warp line, and filler words.",

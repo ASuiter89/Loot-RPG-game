@@ -1,9 +1,10 @@
 // ── HUD UPGRADES — the Craftsman's readout instruments & bag tools ──
 // The heads-up display and loot bag start bare: a fresh hero reads the world off the
-// raw pixels — health/mana show as bars with no numbers, no minimap, no counters, no
-// depth or difficulty label, no status-effect icons — and the loot bag auto-groups
-// items by gear category (rarest first) but has no Power ratings, stat compare,
-// re-sort/filter or auto-loot.
+// raw pixels — health/mana/stamina show as bars with no numbers, no minimap, no counters, no
+// depth or difficulty label, no status-effect icons — the loot bag auto-groups
+// items by gear category (rarest first) but shows no item level, gold value, salvage
+// yield, Power ratings, stat compare, re-sort/filter or auto-loot, and the hero's own
+// derived-stats panel and skill surge bonuses stay hidden too.
 // The town Craftsman (a founding keeper, on hand from your first town visit) builds
 // these one at a time; each purchase switches a piece on for good (persisted per hero
 // on player.hudUpgrades).
@@ -17,8 +18,9 @@
 //           pricier pieces draw finer materials — Scrap on the cheap readouts, Glimmer
 //           from the mid tier up, and a Core on the two premium tools (the minimap and
 //           auto-loot), gating those behind reaching a difficulty that drops Core.
-//   group — which bench section it lists under: 'readout' (HUD overlay pieces) or
-//           'bag' (loot-bag conveniences). See renderHudKitHTML in the shell.
+//   group — which bench section it lists under: 'readout' (HUD overlay pieces),
+//           'bag' (loot-bag conveniences), or 'sheet' (the hero's own character &
+//           skill readouts). See renderHudKitHTML in the shell.
 //   hud   — the plain-language name of the piece it reveals (used in tooltips/logs).
 //   desc  — the shop-row blurb.
 // Ordered cheapest → priciest (by gold) WITHIN each group so the essentials read first.
@@ -26,8 +28,8 @@
 export const HUD_UPGRADES = [
   // ── HUD READOUTS — the heads-up-display overlay pieces. ──
   { key: 'vitals', name: 'Vital Readout', icon: 'ic_heart', cost: { gold: 360, scrap: 10 }, group: 'readout',
-    hud: 'health & mana numbers',
-    desc: 'Print the exact numbers on your health and mana bars.' },
+    hud: 'health, mana & stamina numbers',
+    desc: 'Print the exact numbers on your health, mana and stamina bars.' },
   { key: 'floor', name: 'Depth Gauge', icon: 'feat_gate_red', cost: { gold: 360, scrap: 10 }, group: 'readout',
     hud: 'dungeon floor counter',
     desc: 'Show which floor you are on.' },
@@ -47,6 +49,15 @@ export const HUD_UPGRADES = [
     hud: 'minimap',
     desc: 'Sketch the whole floor as a corner minimap.' },
   // ── BAG & LOOT TOOLS — conveniences for reading and handling loot. ──
+  { key: 'ilvl', name: "Assayer's Glass", icon: 'ui_level', cost: { gold: 300, scrap: 8 }, group: 'bag',
+    hud: 'item level',
+    desc: 'Print each gear piece item level in your bag and tooltips.' },
+  { key: 'value', name: 'Coin Scale', icon: 'ic_money', cost: { gold: 330, scrap: 10 }, group: 'bag',
+    hud: 'item gold value',
+    desc: 'Print each item gold value in your bag; Merchant sell prices always show.' },
+  { key: 'scrapval', name: 'Salvage Gauge', icon: 'mat_scrap', cost: { gold: 360, scrap: 12 }, group: 'bag',
+    hud: 'item salvage yield',
+    desc: 'Preview the materials each item sheds when scrapped.' },
   { key: 'rankings', name: "Appraiser's Loupe", icon: 'ui_power', cost: { gold: 450, scrap: 15 }, group: 'bag',
     hud: 'item Power ratings',
     desc: 'Print each gear piece Power rating in your bag and worn slots.' },
@@ -59,6 +70,13 @@ export const HUD_UPGRADES = [
   { key: 'autoloot', name: 'Sorting Sieve', icon: 'mat_scrap', cost: { gold: 1200, scrap: 55, glimmer: 6, core: 1 }, group: 'bag',
     hud: 'auto-loot rules',
     desc: 'Auto-scrap or auto-sell loot of chosen rarities the moment it drops.' },
+  // ── CHARACTER & SKILL SHEET — readouts for your own hero, not loot. ──
+  { key: 'statsheet', name: "Adept's Slate", icon: 'ic_target', cost: { gold: 600, scrap: 20 }, group: 'sheet',
+    hud: 'derived-stats panel',
+    desc: 'Show the full derived-stats breakdown under your gear.' },
+  { key: 'surges', name: "Sage's Codex", icon: 'ic_wand', cost: { gold: 660, scrap: 22, glimmer: 2 }, group: 'sheet',
+    hud: 'skill surge bonuses',
+    desc: 'Reveal each skill surge bonus and its rank milestone.' },
 ];
 
 // The two bench sections, in display order, with the section blurb the HUD-upgrades
@@ -67,5 +85,7 @@ export const HUD_UPGRADE_GROUPS = [
   { id: 'readout', label: 'HUD Readouts',
     blurb: 'Instruments that build out your heads-up display — vital numbers, floor & foe counters, status icons, the minimap.' },
   { id: 'bag', label: 'Bag & Loot Tools',
-    blurb: 'Tools for reading and handling loot — item Power, stat compare, bag sort/filter, and auto-loot rules.' },
+    blurb: 'Tools for reading and handling loot — item level, gold value, salvage yield, Power, stat compare, bag sort/filter, and auto-loot rules.' },
+  { id: 'sheet', label: 'Character & Skill Sheet',
+    blurb: 'Readouts for your own hero — the derived-stats breakdown and each skill surge bonus.' },
 ];
