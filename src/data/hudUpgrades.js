@@ -1,6 +1,6 @@
 // ── HUD UPGRADES — the Craftsman's readout instruments & bag tools ──
 // The heads-up display and loot bag start bare: a fresh hero reads the world off the
-// raw pixels — health/mana/stamina show as bars with no numbers, no minimap, no counters, no
+// raw pixels — health/mana/stamina/XP show as bars with no numbers, no minimap, no counters, no
 // depth or difficulty label, no status-effect icons — the loot bag auto-groups
 // items by gear category (rarest first) but shows no item level, gold value, salvage
 // yield, Power ratings, stat compare, re-sort/filter or auto-loot, and the hero's own
@@ -27,21 +27,29 @@
 
 export const HUD_UPGRADES = [
   // ── HUD READOUTS — the heads-up-display overlay pieces. ──
+  // Cheapest → priciest by gold, which doubles as the recommended reading order:
+  // the essential Vital Readout first, the premium tools (status strip, minimap)
+  // last. The lightweight trinkets (XP numbers, difficulty label, chest tally) sit
+  // cheap in the middle — nice-to-haves, not full instruments, so they're priced
+  // to match rather than like the counters and readouts around them.
   { key: 'vitals', name: 'Vital Readout', icon: 'ic_heart', cost: { gold: 360, scrap: 10 }, group: 'readout',
     hud: 'health, mana & stamina numbers',
     desc: 'Print the exact numbers on your health, mana and stamina bars.' },
   { key: 'floor', name: 'Depth Gauge', icon: 'feat_gate_red', cost: { gold: 360, scrap: 10 }, group: 'readout',
     hud: 'dungeon floor counter',
     desc: 'Show which floor you are on.' },
+  { key: 'xpnums', name: 'Ascension Gauge', icon: 'ui_level', cost: { gold: 390, scrap: 10 }, group: 'readout',
+    hud: 'experience-to-level numbers',
+    desc: 'Print your experience-to-next-level numbers on the XP bar.' },
+  { key: 'difficulty', name: 'Omen Dial', icon: 'ic_up', cost: { gold: 420, scrap: 8 }, group: 'readout',
+    hud: 'difficulty tier label',
+    desc: 'Name the difficulty tier beside the floor.' },
+  { key: 'chests', name: 'Treasure Tally', icon: 'chest', cost: { gold: 480, scrap: 14 }, group: 'readout',
+    hud: 'chests-remaining counter',
+    desc: 'Count the unopened chests left on the floor.' },
   { key: 'foes', name: 'Spyglass', icon: 'ui_foes', cost: { gold: 540, scrap: 20 }, group: 'readout',
     hud: 'foes-remaining counter',
     desc: 'Tally the foes still standing between you and the stairs.' },
-  { key: 'difficulty', name: 'Omen Dial', icon: 'ic_up', cost: { gold: 600, scrap: 20 }, group: 'readout',
-    hud: 'difficulty tier label',
-    desc: 'Name the difficulty tier beside the floor.' },
-  { key: 'chests', name: 'Treasure Tally', icon: 'chest', cost: { gold: 840, scrap: 35, glimmer: 3 }, group: 'readout',
-    hud: 'chests-remaining counter',
-    desc: 'Count the unopened chests left on the floor.' },
   { key: 'status', name: 'Warding Charm', icon: 'ic_orb', cost: { gold: 1020, scrap: 45, glimmer: 5 }, group: 'readout',
     hud: 'status-effect icons',
     desc: 'Reveal your buff & debuff icons in the top corner.' },
@@ -83,7 +91,7 @@ export const HUD_UPGRADES = [
 // bench prints above each group. The shell renders one .shop-grid per group.
 export const HUD_UPGRADE_GROUPS = [
   { id: 'readout', label: 'HUD Readouts',
-    blurb: 'Instruments that build out your heads-up display — vital numbers, floor & foe counters, status icons, the minimap.' },
+    blurb: 'Instruments that build out your heads-up display — start with the Vital Readout, then add floor, XP & foe counters, status icons and the minimap.' },
   { id: 'bag', label: 'Bag & Loot Tools',
     blurb: 'Tools for reading and handling loot — item level, gold value, salvage yield, Power, stat compare, bag sort/filter, and auto-loot rules.' },
   { id: 'sheet', label: 'Character & Skill Sheet',

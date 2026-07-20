@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "small", v: "New XP-numbers readout; two HUD readouts cheaper", by: "Jeff Louie", notes: [
+    "New Ascension Gauge readout prints experience-to-next-level numbers on the XP bar.",
+    "Omen Dial 420g (was 600); Treasure Tally 480g (was 840, no Glimmer).",
+    "HUD Readouts bench points to the Vital Readout as the first buy.",
+  ] },
   { date: "2026-07-19", size: "medium", v: "Five new Craftsman HUD upgrades", by: "Jeff Louie", notes: [
     "Item level, gold value & salvage yield hidden until you build their bag readouts.",
     "Derived-stats panel (Adept's Slate) & skill surge bonuses (Sage's Codex) now purchasable too.",

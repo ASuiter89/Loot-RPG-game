@@ -73,6 +73,7 @@
   <div class="hud-item" id="floor-hud" data-tip="<div class='ht-name'><span data-spr=feat_gate_red></span> Dungeon Depth</div><div class='ht-line'>The floor you're on, and the difficulty tier. Each floor down is tougher — but the loot gets richer too. Conquer floor 25 to unlock the next, deadlier difficulty.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr=feat_gate_red></span> <span class="hud-val" id="floor-num">1</span><span class="floor-diff" id="floor-diff"></span></div>
   <div class="hud-item" id="level-hud" data-tip="<div class='ht-name'><span data-spr=ui_level></span> Hero Level</div><div class='ht-line'>Fill the XP bar by slaying foes to level up. Each level boosts your stats and grants an attribute point.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">Lv <span class="hud-val" id="level-num">1</span>
     <div class="xp-track"><div class="xp-fill" id="xp-bar" style="width:0%"></div></div>
+    <span class="hud-val" id="xp-text"></span>
   </div>
   <div class="hud-item" id="enemies-hud" data-tip="<div class='ht-name'><span data-spr='ui_foes'></span> Foes Remaining</div><div class='ht-line'>How many enemies are still alive on this floor. The stairs down stay sealed (<span data-spr=feat_door></span>) until every foe is cleared (<span data-spr=feat_door></span>).</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr="ui_foes"></span> <span class="hud-val" id="enemies-num">0</span> <span id="clear-status"><span data-spr=feat_door></span></span></div>
   <div class="hud-item" id="chests-hud" style="display:none" data-tip="<div class='ht-name'><span data-spr=chest></span> Chests Remaining</div><div class='ht-line'>How many unopened chests are still waiting on this floor — walk over one to grab its loot.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()"><span data-spr=chest></span> <span class="hud-val" id="chests-num">0</span></div>
@@ -151,6 +152,7 @@
         <div id="dh-xp-fill"></div>
         <div class="dh-xp-notches"></div>
         <span class="dh-xp-lvl" id="dh-xp-lvl">Lv 1</span>
+        <span class="dh-xp-val" id="dh-xp-val"></span>
       </div>
     </div>
     <div id="bottom-row">
