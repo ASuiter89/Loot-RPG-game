@@ -24138,9 +24138,13 @@ function castSkillById(id, opts) {
   updateBars();
   renderSkillBar();
   saveGame();
-  // A deliberate cast (not the silent auto-cast probe) is the moment to teach a new
-  // hero that spells burn Mana — pause and spotlight the Mana Potion the first time.
-  if (!(opts && opts.silent)) maybeTeachFirstSpell();
+  // The first cast that actually burns Mana is the moment to teach a new hero that
+  // spells cost Mana — pause and spotlight the Mana Potion. This fires whether the
+  // player pressed the key OR it fired from the auto-cast slot: a rogue whose
+  // auto-spell is throwing knives spends MP exactly like a manual cast, so the lesson
+  // must land on that spend, not wait for a later deliberate cast. (A Blood Pact cast
+  // pays in life, not mana, so it never arms the mana lesson.)
+  if (!bloodPact) maybeTeachFirstSpell();
   return true;
 }
 
