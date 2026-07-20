@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "small", v: "Auto-cast spells trigger the mana tutorial", by: "Jeff Louie", notes: [
+    "First mana-spending cast teaches the Mana Potion even when it fires from the auto-cast slot (was: manual casts only).",
+  ] },
   { date: "2026-07-19", size: "small", v: "Ready-spell glow: thin dark-blue pulse", by: "Jeff Louie", notes: [
     "Ready skill slots pulse a thin dark-blue border (was thick gold glow).",
   ] },
