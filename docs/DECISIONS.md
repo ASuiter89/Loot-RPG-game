@@ -21,7 +21,7 @@ instruction, and **replace the single-file rule** in `CLAUDE.md` with the modula
 rules — while preserving the property the old rule actually protected:
 **the deployed artifact stays static files** with **no runtime dependencies**.
 Vite's production build outputs exactly that (`dist/` = static HTML/CSS/JS/assets),
-so Netlify / GitHub Pages hosting is unaffected.
+so GitHub Pages hosting is unaffected.
 
 **Rationale.** The two constraints that matter to the user — *ship static files*
 and *stay trivially hostable* — are honored by a static bundler. What changes is
@@ -42,9 +42,9 @@ replaced by a "single static bundle" guarantee enforced by `npm run build`.
 
 **Rationale.** Vite gives real ES-module dev ergonomics (`npm run dev` with HMR),
 a static production build, and first-class Vitest integration (shared config).
-`base: './'` emits **relative** asset URLs, so the same bundle works served from a
-domain root (Netlify) **or** a project subpath (GitHub Pages) with no per-host
-base surgery — the one GitHub-Pages footgun, sidestepped.
+`base: './'` emits **relative** asset URLs, so the bundle works served from a
+project subpath (GitHub Pages, e.g. `/Loot-RPG-game/`) with no base surgery —
+the one GitHub-Pages footgun, sidestepped.
 
 **Verified.** `vite build` on the untouched baseline emits a byte-identical
 `dist/index.html`; the Playwright smoke passes against both source and `dist`.

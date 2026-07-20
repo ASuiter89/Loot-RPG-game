@@ -8,7 +8,7 @@ generative WebAudio soundtrack, with **zero third-party runtime dependencies**.
 The game was originally a single ~30k-line `index.html`. It is being refactored,
 incrementally and behavior-preserving, into a modular ES-module codebase built to
 a **static bundle** with [Vite](https://vitejs.dev/) — still deployable as plain
-static files on Netlify / GitHub Pages.
+static files on GitHub Pages.
 
 ---
 
@@ -31,25 +31,22 @@ hosted Supabase project for cloud saves / leaderboards, and falls back to
 
 ## Deploying
 
-The app is designed to work on **both** hosts, which serve it two different ways.
-The key is that `index.html` and the Vite build both use **relative** asset paths
-(`./src/...` / `./assets/...`, via `base: './'`), so nothing is hardcoded to a
-domain root — it works at a root domain *and* at a project subpath.
+The app deploys to **GitHub Pages**, which serves it at a project subpath
+(`https://user.github.io/Loot-RPG-game/`). The key is that `index.html` and the
+Vite build both use **relative** asset paths (`./src/...` / `./assets/...`, via
+`base: './'`), so nothing is hardcoded to a domain root — it resolves correctly
+under the subpath.
 
-- **Netlify (runs the build).** `netlify.toml` sets `command = "npm run build"`
-  and `publish = "dist"`, so Netlify ships the optimized, hashed `dist/` bundle.
-- **GitHub Pages (serves the repo, no build).** Pages serves the committed source
-  directly at the project subpath (`https://user.github.io/Loot-RPG-game/`). Because
-  `index.html` references `./src/main.js` and `./src/styles.css` **relatively**,
-  they resolve under the subpath and the ES-module graph (all relative imports)
-  loads as-is. A root `.nojekyll` file makes Pages serve `src/` verbatim.
-  - This serves unminified source; for the optimized bundle on Pages too, add a
-    GitHub Actions workflow that runs `npm run build` and deploys `dist/` (and set
-    Pages' source to "GitHub Actions").
+- **GitHub Actions build (`.github/workflows/deploy.yml`).** Every push to `main`
+  runs `npm run build` and publishes the optimized, hashed `dist/` bundle to
+  Pages. A `concurrency` guard serializes overlapping deploys. For this to be the
+  live source, set **Settings → Pages → Source** to "GitHub Actions".
+- The workflow drops a `.nojekyll` into the artifact so Pages serves the build
+  verbatim (no Jekyll processing).
 
-Verify both before deploying: `npm run smoke` (built `dist/`) and
-`npm run smoke:pages` (raw source over HTTP, the Pages path). `dist/` and
-`coverage/` are git-ignored; Netlify builds them on deploy.
+Verify before deploying: `npm run smoke` (built `dist/`) and `npm run smoke:pages`
+(raw source over HTTP, the unbuilt Pages path). `dist/` and `coverage/` are
+git-ignored; the Actions workflow builds them on deploy.
 
 ---
 

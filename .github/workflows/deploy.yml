@@ -3,7 +3,7 @@
 # Why this file exists: Pages was previously set to "Deploy from a branch", which
 # uses GitHub's auto-generated `pages-build-deployment` workflow. That workflow
 # (1) serves the raw repo root — the unbuilt, unminified ES-module source, not the
-# optimized `dist/` bundle that netlify.toml / vite.config.js treat as the real
+# optimized `dist/` bundle that vite.config.js treats as the real
 # artifact — and (2) has no concurrency guard, so rapid pushes to `main` create
 # overlapping Pages deployments that collide and fail with
 # "Deployment failed, try again later." on the very first status poll.
@@ -50,7 +50,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          # Match netlify.toml (NODE_VERSION: 20) so both hosts build identically.
+          # Node 20 — matches the version the gates run under (see auto-merge.yml).
           node-version: 20
           cache: npm
 

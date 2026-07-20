@@ -17,8 +17,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
 
 // Recursively collect .js/.mjs files under a directory. Plain readdirSync so the
-// gate runs identically on every Node version we build with (Node 20 on
-// Netlify/CI has no fs.globSync — that's a Node 22+ API), with no new dependency.
+// gate runs identically on every Node version we build with (Node 20 in CI has
+// no fs.globSync — that's a Node 22+ API), with no new dependency.
 // Dotfiles/dot-dirs are skipped to match shell-glob semantics.
 function collectModules(dir) {
   const out = [];
@@ -44,8 +44,8 @@ describe('index.html script wiring', () => {
   const html = readFileSync(resolve(ROOT, 'index.html'), 'utf8');
 
   it('references the ES-module entry via a relative path', () => {
-    // Relative so it works at a domain root (Netlify) and a project subpath
-    // (GitHub Pages) alike; absolute "/src/…" 404s on a subpath.
+    // Relative so it works at a GitHub Pages project subpath;
+    // absolute "/src/…" 404s on a subpath.
     expect(html).toMatch(/<script\s+type="module"\s+src="\.\/src\/main\.js"><\/script>/);
   });
 

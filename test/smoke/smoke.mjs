@@ -19,7 +19,7 @@ import http from 'node:http';
 // A modular Vite build loads its entry as an ES module (`<script type=module
 // src=...>`), which a browser refuses to fetch over file:// (CORS). So serve the
 // target's directory over HTTP for the smoke run. This also matches how the game
-// is actually hosted (static files over HTTP on Netlify / GitHub Pages).
+// is actually hosted (static files over HTTP on GitHub Pages).
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.woff2': 'font/woff2',
