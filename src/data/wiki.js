@@ -172,6 +172,27 @@ export const WIKI = [
           { p: 'The D-pad or left stick move the selection, the bottom face button selects, and the right face button backs out. Bumpers switch tabs. Clicking the right stick toggles a virtual cursor that works over anything as a universal fallback.' },
         ],
       },
+      {
+        id: 'accessibility',
+        title: 'Accessibility & Comfort',
+        keywords: ['accessibility', 'colorblind', 'colourblind', 'color vision', 'colour vision', 'deuteranopia', 'protanopia', 'tritanopia', 'pip', 'shape', 'motion', 'screen shake', 'flash', 'ui size', 'font', 'comfort', 'settings'],
+        body: [
+          { p: 'Settings ▸ Visuals collects the comfort options. All are per-device and off nothing you rely on — pick what suits you.' },
+          { h: 'Colour vision' },
+          { p: 'Loot rarity normally reads by colour alone. <b>COLOR VISION</b> picks a colourblind-friendly mode — <b>Deuteranopia</b>, <b>Protanopia</b> (both red-green) or <b>Tritanopia</b> (blue-yellow) — that does two things at once:' },
+          { ul: [
+            'Re-tints the rarity tiers to hues that stay apart under that deficiency.',
+            'Adds a small <b>shape pip</b> beside every item name — a circle, triangle, diamond, star and so on, one per tier — so rarity also reads by silhouette, not just hue.',
+          ] },
+          { note: 'Off by default; the standard palette is unchanged until you pick a mode.' },
+          { h: 'Motion & size' },
+          { ul: [
+            '<b>Screen Shake</b> and <b>Screen Flash</b> each toggle off for a steady, wash-free view.',
+            '<b>UI Size</b> scales the whole interface 1×–2×; <b>UI Font</b> refaces it.',
+            '<b>Minimap</b> sets the floor-sketch box size.',
+          ] },
+        ],
+      },
     ],
   },
 

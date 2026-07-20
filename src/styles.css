@@ -1523,7 +1523,10 @@
     letter-spacing: 1px;
     color: var(--meta);
   }
-  .settings-dpad-row { display: flex; gap: 4px; }
+  .settings-dpad-row { display: flex; gap: 4px; flex-wrap: wrap; }
+  /* COLOR VISION offers four longer labels; give them a wider basis so they wrap
+     2-up on a narrow sheet (never clipping) instead of squishing 4-across. */
+  #colorblind-row .dpad-cfg-btn { flex: 1 1 40%; }
   .dpad-cfg-btn {
     flex: 1;
     padding: 6px 4px;
@@ -2778,6 +2781,28 @@
   .item-legendary { color: var(--legendary); }
   .item-unique    { color: var(--unique); }
   .item-set       { color: var(--set); }
+
+  /* ---- Colour-vision rarity pip ---- a per-tier SHAPE marker prepended to an
+     item name, a second (non-colour) channel so rarity reads by silhouette as
+     well as hue. Emitted only in a colour-vision mode (rarityPip() returns ''
+     otherwise), so default play shows none. Each tier gets a distinct clip-path
+     silhouette, filled from the same --<tier> token the mode re-tints so pip and
+     name always share a colour. Sized in em so it tracks the name's font. */
+  .cb-pip {
+    display: inline-block;
+    width: 0.72em; height: 0.72em;
+    margin-right: 0.34em;
+    vertical-align: -0.05em;
+    background: var(--junk);
+  }
+  .cb-pip--junk      { clip-path: circle(50% at 50% 50%); }
+  .cb-pip--normal    { clip-path: inset(0); }
+  .cb-pip--uncommon  { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+  .cb-pip--rare      { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+  .cb-pip--epic      { clip-path: polygon(50% 0, 100% 38%, 82% 100%, 18% 100%, 0 38%); }
+  .cb-pip--legendary { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+  .cb-pip--unique    { clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+  .cb-pip--set       { clip-path: polygon(38% 0, 62% 0, 62% 38%, 100% 38%, 100% 62%, 62% 62%, 62% 100%, 38% 100%, 38% 62%, 0 62%, 0 38%, 38% 38%); }
 
   .item-name { font-weight: bold; }
   .item-type { font-size: 1.2rem; opacity: 0.7; }

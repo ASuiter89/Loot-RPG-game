@@ -346,6 +346,16 @@
           <div class="settings-dpad-row" id="uiscale-row"></div>
         </div>
 
+        <!-- COLOR VISION — colourblind-friendly loot: a mode re-tints the rarity
+             tiers to hues that stay separable under a colour-vision deficiency and
+             adds a per-tier shape pip beside item names (a second, non-colour
+             channel). Off by default (view unchanged). Populated by
+             renderColorblindControls(); setColorblindMode() persists the choice. -->
+        <div id="colorblind-settings">
+          <div class="settings-dpad-label">COLOR VISION</div>
+          <div class="settings-dpad-row" id="colorblind-row"></div>
+        </div>
+
         <!-- MINIMAP — the top-left floor sketch's box size (Small / Medium /
              Large). Populated by renderMinimapSizeControls(). -->
         <div id="minimap-size-settings">
