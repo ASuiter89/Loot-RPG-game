@@ -7640,6 +7640,7 @@ window.gameGuide = function gameGuide(topic) {
       `THREE damage sources, each with its own scaling — see the "damage" topic. In short: auto-attacks & martial skills run on your weapon + Attack (ATK), spells run on Spirit; ATK does NOT boost spells. Each source has a dedicated gear amp: Increased Dmg for autos, Skill Power for martial skills, Spell Power for spells.`,
       `Defense / block / damage-reduction come from gear, the Might attribute, and your class passive. On TOP of HP sits the Spirit Veil — a Spirit-fuelled blue shield that soaks damage before your health and recharges after a few unhit seconds (see the "veil" topic). Healing is OVER TIME (a pending pool that fills the bar on a slope, shown as a translucent zone) — sip ${key('healthPotion')} EARLY rather than at zero; see the "healing" topic.`,
       `Swap loadouts with ${key('swapWeapon')} to switch between, say, a ranged kite set and a melee finisher. A safety net blocks swapping onto an empty/much-weaker set while foes are near, so a stray keypress can't strip you naked mid-fight.`,
+      `COMBAT-LOG COLOURS: the log tints the NUMBER by outcome so a fight reads at a glance — GOLD = damage YOU deal, RED = damage you TAKE, GREEN = HP you heal (the line text stays neutral otherwise). Loot-drop lines are green too, but only the +N on a heal line is; gold/XP keep the coin colour, mana its blue.`,
     ],
     healing: [
       `RECOVERY IS OVER TIME, not instant. Most healing no longer snaps HP up — it fills a PENDING pool that pays into HP at a capped rate (~12%/s of max HP per source), so the bar climbs on a visible slope. gameState().player.pendingHeal is the HP still owed; the HP/MP bars show it as a translucent zone ahead of the solid fill.`,
@@ -21293,13 +21294,13 @@ function tickStatusEffects() {
         const dmg = 2 + dungeonLevel;
         const hpLost = takePlayerDamage(dmg, 'poison', { lethal: false, isDoT: true });
         if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#44dd44');
-        log(`<span data-spr=potion_g></span> Poison -${dmg} HP`);
+        log(`<span data-spr=potion_g></span> Poison ${clHurt(dmg)} HP`);
       }
       if (pulse && s.effect === 'burn') {
         const dmg = 4 + Math.round(dungeonLevel * 1.5);
         const hpLost = takePlayerDamage(dmg, 'burning', { lethal: false, isDoT: true });
         if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff8a3a');
-        log(`<span data-spr=ic_fire></span> Burning -${dmg} HP`);
+        log(`<span data-spr=ic_fire></span> Burning ${clHurt(dmg)} HP`);
       }
       if (pulse && s.effect === 'stun') {
         log('<span data-spr=ic_stun></span> Stunned — locked in place!');
@@ -21311,7 +21312,7 @@ function tickStatusEffects() {
         const dmg = s.spread ? burnSpreadDmg() : burnDmg();
         e.hp -= dmg;
         spawnFloatingText(e.x, e.y, `${dmg}`, '#ff8a3a');
-        log(`<span data-spr=ic_fire></span> Burn -${dmg} ${e.isBoss ? e.name : e.type}`);
+        log(`<span data-spr=ic_fire></span> Burn ${clDealt(dmg)} ${e.isBoss ? e.name : e.type}`);
         if (e.hp <= 0) { log(`<span data-spr=ic_fire></span> ${e.isBoss ? e.name : e.type} burned`, 'important'); onEnemyDefeated(e); }
         // A directly-cast fire-mage burn ignites adjacent foes (weak, non-chaining).
         else if (!s.spread && s.source === 'player' && player.class === 'mage') burnSpreaders.push(e);
@@ -21320,7 +21321,7 @@ function tickStatusEffects() {
         const dmg = 2 + dungeonLevel;
         e.hp -= dmg;
         spawnFloatingText(e.x, e.y, `${dmg}`, '#44dd44');
-        log(`<span data-spr=potion_g></span> Poison -${dmg} ${e.isBoss ? e.name : e.type}`);
+        log(`<span data-spr=potion_g></span> Poison ${clDealt(dmg)} ${e.isBoss ? e.name : e.type}`);
         if (e.hp <= 0) {
           // Route poison kills through the normal death handler so the foe still
           // grants XP/gold/loot AND the floor-clear check runs — otherwise a
@@ -22005,7 +22006,7 @@ function activateShrine(nx, ny) {
       const heal = Math.floor(player.maxHp * 0.5);
       player.hp = Math.min(player.maxHp, player.hp + heal);
       player.mp = player.maxMp;
-      log(`<span data-spr=scroll></span> Shrine of Wisdom! Restored ${heal} HP and full MP.`, 'important');
+      log(`<span data-spr=scroll></span> Shrine of Wisdom! Restored <span class="dl-heal">${heal}</span> HP and full MP.`, 'important');
       screenFlash('#aa66ff'); break;
     }
     // Every other kind is a catalog-driven floor boon (greed, insight, precision,
@@ -22039,19 +22040,19 @@ const FLOOR_EVENTS = [
   () => { const g = rnd(5,12) + dungeonLevel*2; player.gold += g; log(`<span data-spr=e_rat></span> A rat drops a stolen coin. +<span data-spr=ic_money></span>${g}.`, 'loot'); },
   () => { const g = rnd(8,18) + dungeonLevel*2; player.gold += g; log(`<span data-spr=mat_glimmer></span> A crystal vein glitters — you pry some loose. +<span data-spr=ic_money></span>${g}.`, 'loot'); },
   () => { const g = rnd(12,28) + dungeonLevel*3; player.gold += g; log(`<span data-spr=ic_money></span> A dropped coin pouch — +<span data-spr=ic_money></span>${g}!`, 'loot'); },
-  () => { const heal = Math.floor(player.maxHp*0.2); player.hp = Math.min(player.maxHp, player.hp+heal); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=ramen_scallion></span> An eerie calm settles — +${heal} HP.`, 'important'); },
-  () => { const heal = Math.floor(player.maxHp*0.1); player.hp = Math.min(player.maxHp, player.hp+heal); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=food></span> A forgotten ration — you eat it. +${heal} HP.`, 'loot'); },
-  () => { const heal = Math.floor(player.maxHp*0.08); player.hp = Math.min(player.maxHp, player.hp+heal); log(`<span data-spr=town_healer></span> You catch your breath. +${heal} HP.`, ''); },
+  () => { const heal = Math.floor(player.maxHp*0.2); player.hp = Math.min(player.maxHp, player.hp+heal); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=ramen_scallion></span> An eerie calm settles — ${clHeal(heal)} HP.`); },
+  () => { const heal = Math.floor(player.maxHp*0.1); player.hp = Math.min(player.maxHp, player.hp+heal); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=food></span> A forgotten ration — you eat it. ${clHeal(heal)} HP.`); },
+  () => { const heal = Math.floor(player.maxHp*0.08); player.hp = Math.min(player.maxHp, player.hp+heal); log(`<span data-spr=town_healer></span> You catch your breath. ${clHeal(heal)} HP.`, ''); },
   () => { const xp = 15*dungeonLevel; player.xp += xp; log(`💡 A flash of insight — +${xp} XP!`, 'important'); checkLevelUp(); },
   () => { const xp = 10*dungeonLevel; player.xp += xp; log(`<span data-spr=scroll></span> A torn spellbook page — +${xp} XP.`, 'loot'); checkLevelUp(); },
   () => { buffs.fortune = Math.max(buffs.fortune, 2); log('<span data-spr=chest></span> A lucky coin — better loot for 2 floors!', 'important'); screenFlash('#22cc66'); },
   () => { buffs.power = Math.max(buffs.power, 2); log('<span data-spr=ic_fire></span> Battle fury surges — +50% damage for 2 floors!', 'important'); screenFlash('#ff6600'); },
   () => { buffs.power = Math.max(buffs.power, 1); log('<span data-spr=w_dagger></span> You hone your blade on a whetstone — +50% damage next floor.', 'loot'); },
-  () => { const heal = Math.floor(player.maxHp*0.15); const mana = Math.floor(player.maxMp*0.15); player.hp = Math.min(player.maxHp, player.hp+heal); player.mp = Math.min(player.maxMp, player.mp+mana); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=potion_g></span> A half-full flask — +${heal} HP, +${mana} MP.`, 'loot'); },
+  () => { const heal = Math.floor(player.maxHp*0.15); const mana = Math.floor(player.maxMp*0.15); player.hp = Math.min(player.maxHp, player.hp+heal); player.mp = Math.min(player.maxMp, player.mp+mana); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=potion_g></span> A half-full flask — ${clHeal(heal)} HP, +${mana} MP.`); },
   // ── Small hazards ──
-  () => { const dmg = Math.round((rnd(5,12) + dungeonLevel) * BALANCE.hazardDmgMult); const hpLost = takePlayerDamage(dmg, 'hidden trap', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344'); log(`🪤 A hidden trap snaps shut — -${dmg} HP!`, 'important'); screenFlash('#cc0000'); },
-  () => { if (Math.random()<0.5){ const h=Math.floor(player.maxHp*0.12); player.hp=Math.min(player.maxHp,player.hp+h); spawnFloatingText(player.x,player.y,`+${h}`,'#44dd44'); log(`<span data-spr=potion_g></span> A strange puddle — refreshing. +${h} HP.`,'loot'); } else { const d=Math.round(rnd(3,8) * BALANCE.hazardDmgMult); const hpLost=takePlayerDamage(d, 'strange puddle', { lethal: false }); if(hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`<span data-spr=potion_g></span> A strange puddle — bad idea. -${d} HP.`); } },
-  () => { const d = Math.round(rnd(2,6) * BALANCE.hazardDmgMult); const hpLost = takePlayerDamage(d, 'web', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`🕸️ You scratch free of a thick web. -${d} HP.`); },
+  () => { const dmg = Math.round((rnd(5,12) + dungeonLevel) * BALANCE.hazardDmgMult); const hpLost = takePlayerDamage(dmg, 'hidden trap', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344'); log(`🪤 A hidden trap snaps shut — ${clHurt(dmg)} HP!`, 'important'); screenFlash('#cc0000'); },
+  () => { if (Math.random()<0.5){ const h=Math.floor(player.maxHp*0.12); player.hp=Math.min(player.maxHp,player.hp+h); spawnFloatingText(player.x,player.y,`+${h}`,'#44dd44'); log(`<span data-spr=potion_g></span> A strange puddle — refreshing. ${clHeal(h)} HP.`); } else { const d=Math.round(rnd(3,8) * BALANCE.hazardDmgMult); const hpLost=takePlayerDamage(d, 'strange puddle', { lethal: false }); if(hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`<span data-spr=potion_g></span> A strange puddle — bad idea. ${clHurt(d)} HP.`); } },
+  () => { const d = Math.round(rnd(2,6) * BALANCE.hazardDmgMult); const hpLost = takePlayerDamage(d, 'web', { lethal: false }); if (hpLost>0) spawnFloatingText(player.x,player.y,`${hpLost}`,'#ff3344'); log(`🕸️ You scratch free of a thick web. ${clHurt(d)} HP.`); },
   // ── Pure flavour, no effect ──
   () => log('<span data-spr=b_deathknight></span> A long-dead adventurer slumps against the wall. You leave them be.'),
   () => log('<span data-spr=scroll></span> Scrawled on the stone: "TURN BACK." You press on anyway.'),
@@ -23066,14 +23067,14 @@ function onEnterCell(nx, ny) {
     const burn = Math.round((BALANCE.lavaBase + dungeonLevel * BALANCE.lavaPerFloor + player.maxHp * BALANCE.lavaMaxHpFrac) * BALANCE.hazardDmgMult);
     const hpLost = takePlayerDamage(burn, 'lava', { lethal: false, isDoT: true });
     if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff7733');
-    log(`<span data-spr=ic_fire></span> Lava scorches you -${burn}!`, 'important');
+    log(`<span data-spr=ic_fire></span> Lava scorches you ${clHurt(burn)}!`, 'important');
     updateBars();
   }
   if (tile === 8) {
     const stab = Math.round((BALANCE.spikeBase + dungeonLevel * BALANCE.spikePerFloor + player.maxHp * BALANCE.spikeMaxHpFrac) * BALANCE.hazardDmgMult);
     const hpLost = takePlayerDamage(stab, 'spikes', { lethal: false });
     if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
-    log(`🩸 Spikes stab you -${stab}!`);
+    log(`🩸 Spikes stab you ${clHurt(stab)}!`);
     updateBars();
   }
 }
@@ -23829,7 +23830,7 @@ function onEnemyDefeated(e) {
     if (orb > 0) {
       player.hp += orb;
       spawnFloatingText(e.x, e.y, `+${orb}`, '#44dd44');
-      log(`<span data-spr=ic_heart></span> +${orb} HP`, 'loot');
+      log(`<span data-spr=ic_heart></span> ${clHeal(orb)} HP`);
       updateBars();
     }
   }
@@ -23975,7 +23976,7 @@ function attackEnemy(e, opts = {}) {
   if (style === 'flurry') {
     // Dagger: two quick lighter strikes, extra crit rolled per hit.
     swing(e, 0.62); swing(e, 0.62);
-    if (dealtTotal > 0) log(`${anyCrit ? '💥 ' : ''}<span data-spr=w_dagger></span> ${label} -${dealtTotal}`, anyCrit ? 'important' : '');
+    if (dealtTotal > 0) log(`${anyCrit ? '💥 ' : ''}<span data-spr=w_dagger></span> ${label} ${clDealt(dealtTotal)}`, anyCrit ? 'important' : '');
     else log(`🌬️ ${label} dodged`);
   } else {
     swing(e);
@@ -23984,7 +23985,7 @@ function attackEnemy(e, opts = {}) {
       : style === 'reap' ? '<span data-spr=w_sword></span>' : style === 'crush' ? '<span data-spr=ic_mallet></span>' : '<span data-spr=w_sword></span>';
     if (dealtTotal > 0) {
       if (anyCrit) sfx('crit');
-      log(`${anyCrit ? '💥 ' : ''}${vi} ${label} -${dealtTotal}`, anyCrit ? 'important' : '');
+      log(`${anyCrit ? '💥 ' : ''}${vi} ${label} ${clDealt(dealtTotal)}`, anyCrit ? 'important' : '');
     } else {
       log(`🌬️ ${label} dodged`);
     }
@@ -24010,7 +24011,7 @@ function attackEnemy(e, opts = {}) {
     swing(e);
     if (dealtTotal > before) {
       spawnFloatingText(e.x, e.y - 0.3, `2×${dealtTotal - before}`, '#ffd24b');
-      log(`<span data-spr=ic_stun></span> again +${dealtTotal - before}`, 'important');
+      log(`<span data-spr=ic_stun></span> again <span class="dl-dmg">+${dealtTotal - before}</span>`, 'important');
     }
   }
 
@@ -24859,7 +24860,7 @@ function resolveCast(node, rank) {
     if (best) { setPlayerCell(best.x, best.y); spawnFloatingText(player.x, player.y, '', '#cfe0ff'); }
   }
 
-  log(`✦ ${node.name}${total > 0 ? ` -${total}` : ''}${targets.length > 1 ? ` ×${targets.length}` : ''}`, 'important');
+  log(`✦ ${node.name}${total > 0 ? ` ${clDealt(total)}` : ''}${targets.length > 1 ? ` ×${targets.length}` : ''}`, 'important');
   };
 
   // Lay down the animation, then resolve the hit NOW — unless a flying bolt takes
@@ -25418,7 +25419,7 @@ function enemyAttackPlayer(e) {
   if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
   if (dmg > 0) { if (hpLost > 0) spawnParticles(player.x, player.y, '#d22a3a', 6, 0.07); addShake(4); playEnemyMeleeVfx(e, beh); }
   if (tutorialActive && dmg > 0) beachPotionHint();   // first beach blow → teach the Health-Potion hotkey
-  log(`💢 ${enemyLabel(e)} -${dmg}`);
+  log(`💢 ${enemyLabel(e)} ${clHurt(dmg)}`);
   if (player.hp > 0 && player.hp <= player.maxHp * 0.25) fireSkillTrigger('lowhp', { enemy: e });
   if (player.hp <= player.maxHp * 0.25) screenFlash('#cc0000');
   if (e.bossAbility === 'lifesteal') bossLifesteal(e, dmg);
@@ -25480,7 +25481,7 @@ function landEnemyRangedHit(e, raw, color) {
   if (hpLost > 0) { spawnFloatingText(player.x, player.y, `${hpLost}`, color || '#c77dff');
     spawnParticles(player.x, player.y, color || '#c77dff', 6, 0.08); }
   addShake(3);
-  log(`<span data-spr=w_bow></span> ${enemyLabel(e)} -${dmg}`);
+  log(`<span data-spr=w_bow></span> ${enemyLabel(e)} ${clHurt(dmg)}`);
   // Even a non-critical hit from off-screen gets a soft flash so a ranged
   // attacker chipping you from across the room never goes unsignalled.
   if (player.hp > 0 && player.hp <= player.maxHp * 0.25) fireSkillTrigger('lowhp', { enemy: e });
@@ -25558,7 +25559,7 @@ function tickBossHazards() {
     const hpLost = takePlayerDamage(burn, 'wall of flame', { lethal: false, isDoT: true });
     if (hpLost > 0) { spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff7733');
       spawnParticles(player.x, player.y, '#ff7733', 5, 0.08); }
-    log(`<span data-spr=ic_fire></span> Standing in flames -${burn}!`);
+    log(`<span data-spr=ic_fire></span> Standing in flames ${clHurt(burn)}!`);
   }
   bossHazards = bossHazards.filter(h => { h.secs -= WORLD_TICK_SECONDS; return h.secs > 0; });
 }
@@ -26126,7 +26127,7 @@ function bossChainPull(e, dist) {
   spawnParticles(player.x, player.y, '#cc8844', 8, 0.1);
   const dmg = bossHitPlayer(Math.max(2, Math.round(e.dmg * 0.5)), e, '#ffaa33');
   e.cd = 5;
-  log(`<span data-spr=mat_scrap></span> ${e.name} hooks you in -${dmg}!`, 'important');
+  log(`<span data-spr=mat_scrap></span> ${e.name} hooks you in ${clHurt(dmg)}!`, 'important');
   sfx('boss'); addShake(6); screenFlash('#aa5522');
   return true;
 }
@@ -26166,7 +26167,7 @@ function bossShockwave(e, dist) {
   spawnParticles(player.x, player.y, '#aaddff', 10, 0.12);
   const dmg = bossHitPlayer(Math.max(2, Math.round(e.dmg * 0.6)), e, '#88ddff');
   e.cd = 5;
-  log(`💥 ${e.name} shockwave — hurled back -${dmg}!`, 'important');
+  log(`💥 ${e.name} shockwave — hurled back ${clHurt(dmg)}!`, 'important');
   sfx('boss'); addShake(7); screenFlash('#6699cc');
   if (Math.random() < 0.4 && player.hp > 0) { applyStatusEffect('player', 'stun', 1, e); log('<span data-spr=ic_stun></span> The blast leaves you reeling!'); }
   return true;
@@ -26203,7 +26204,7 @@ function bossFrostNova(e, dist) {
   if (player.hp > 0) applyStatusEffect('player', 'stun', rnd(1, 2), e);
   e.cd = 6;
   spawnFloatingText(player.x, player.y - 0.3, 'FROZEN', '#aee7ff');
-  log(`<span data-spr=ic_ice></span> ${e.name} freezes you -${dmg}!`, 'important');
+  log(`<span data-spr=ic_ice></span> ${e.name} freezes you ${clHurt(dmg)}!`, 'important');
   sfx('boss'); screenFlash('#88ccff');
   return true;
 }
@@ -26241,7 +26242,7 @@ function bossCurseBlast(e, dist) {
   const eff = Math.random() < 0.5 ? 'poison' : 'stun';
   if (player.hp > 0) applyStatusEffect('player', eff, eff === 'poison' ? 3 : 1, e);
   e.cd = 4;
-  log(`<span data-spr=b_allseer></span> ${e.name} hexes you -${dmg} (${eff})!`, 'important');
+  log(`<span data-spr=b_allseer></span> ${e.name} hexes you ${clHurt(dmg)} (${eff})!`, 'important');
   sfx('boss'); screenFlash('#9933cc');
   return true;
 }
@@ -26280,7 +26281,7 @@ function bossCharge(e, dist) {
     const kx = Math.sign(player.x - b.x) || dx, ky = Math.sign(player.y - b.y) || dy;
     for (let i = 0; i < 2; i++) { const px = player.x + kx, py = player.y + ky; if (!playerCanStand(px, py)) break; setPlayerCell(px, py); }
     if (player.hp > 0 && Math.random() < 0.4) applyStatusEffect('player', 'stun', 1, e);
-    log(`<span data-spr=e_boar></span> ${e.name} tramples you -${dmg}!`, 'important');
+    log(`<span data-spr=e_boar></span> ${e.name} tramples you ${clHurt(dmg)}!`, 'important');
   } else {
     log(`<span data-spr=e_boar></span> ${e.name} thunders across the room!`, 'important');
   }
@@ -26316,7 +26317,7 @@ function bossQuake(e, dist) {
   for (let i = 0; i < 2; i++) { const px = player.x + kx, py = player.y + ky; if (!playerCanStand(px, py)) break; setPlayerCell(px, py); }
   if (player.hp > 0 && Math.random() < 0.6) applyStatusEffect('player', 'stun', rnd(1, 2), e);
   e.cd = 6;
-  log(`🌋 ${e.name} slams the ground — quake -${dmg}!`, 'important');
+  log(`🌋 ${e.name} slams the ground — quake ${clHurt(dmg)}!`, 'important');
   sfx('boss'); addShake(9); screenFlash('#b08040');
   return true;
 }
@@ -26331,7 +26332,7 @@ function bossDrain(e, dist) {
   spawnFloatingText(e.x, e.y, `+${heal}`, '#66ff99');
   spawnParticles(e.x, e.y, '#66ff99', 8, 0.09);
   e.cd = 5;
-  log(`🩸 ${e.name} siphons ${dmg} life, heals ${heal}!`, 'important');
+  log(`🩸 ${e.name} siphons <span class="dl-hurt">${dmg}</span> life, heals ${heal}!`, 'important');
   sfx('boss'); screenFlash('#992255');
   return true;
 }
@@ -26352,7 +26353,7 @@ function bossVortex(e, dist) {
   spawnParticles(player.x, player.y, '#7a6bff', 10, 0.12);
   const dmg = bossHitPlayer(Math.max(1, Math.round(e.dmg * 0.3)), e, '#9a8bff');
   e.cd = 5;
-  log(`<span data-spr=feat_portal></span> ${e.name} drags you in -${dmg}!`, 'important');
+  log(`<span data-spr=feat_portal></span> ${e.name} drags you in ${clHurt(dmg)}!`, 'important');
   sfx('boss'); screenFlash('#5a4bbb');
   return true;
 }
@@ -26364,7 +26365,7 @@ function bossVenom(e, dist) {
   const dmg = bossHitPlayer(Math.max(2, Math.round(e.dmg * 0.5)), e, '#88dd55');
   if (player.hp > 0) { applyStatusEffect('player', 'poison', 3, e); applyStatusEffect('player', 'slow', 3, e); }
   e.cd = 5;
-  log(`<span data-spr=e_snake></span> ${e.name} spits venom -${dmg} — poisoned & slowed!`, 'important');
+  log(`<span data-spr=e_snake></span> ${e.name} spits venom ${clHurt(dmg)} — poisoned & slowed!`, 'important');
   sfx('boss'); screenFlash('#448833');
   return true;
 }
@@ -26379,7 +26380,7 @@ function bossWhirlwind(e, dist) {
   const kx = Math.sign(player.x - a.x) || 1, ky = Math.sign(player.y - a.y);
   for (let i = 0; i < 2; i++) { const px = player.x + kx, py = player.y + ky; if (!playerCanStand(px, py)) break; setPlayerCell(px, py); }
   e.cd = 5;
-  log(`🌪️ ${e.name} storm of blows -${dmg}!`, 'important');
+  log(`🌪️ ${e.name} storm of blows ${clHurt(dmg)}!`, 'important');
   sfx('boss'); addShake(6); screenFlash('#ccaa66');
   return true;
 }
@@ -26941,7 +26942,7 @@ function openChest(chest) {
       const dmg = Math.round((4 + dungeonLevel * 2) * BALANCE.hazardDmgMult);
       const hpLost = takePlayerDamage(dmg, 'trapped chest', { lethal: false });
       if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
-      log(`💥 Trapped chest! Explodes -${dmg}!`, 'important');
+      log(`💥 Trapped chest! Explodes ${clHurt(dmg)}!`, 'important');
     } else {
       applyStatusEffect('player', 'poison', 3, null);
       log('<span data-spr=b_deathknight></span> A trapped chest bursts with poison gas!', 'important');
@@ -27838,7 +27839,7 @@ function useHealthPotion() {
   if (player.hp >= player.maxHp) { log('Already at full health.'); return; }
   const amt = queueHeal(healPotionAmount(), true); // over-time, interruptible sip (a heavy direct hit spills it)
   sfx('potion');
-  log(`<span data-spr=ic_heart></span> Quaffed a ${logPotion('Health Potion')} — +${amt} HP over a few seconds.`, 'loot');
+  log(`<span data-spr=ic_heart></span> Quaffed a ${logPotion('Health Potion')} — ${clHeal(amt)} HP over a few seconds.`);
   spendPotionTurn();
   if (tutorialActive) clearBeachPotionCue();   // lesson learned — retire the first-hit teach
 }
@@ -30375,6 +30376,20 @@ let _logScrollPending = false;   // coalesce the auto-scroll-to-newest into one 
 // synchronous appends and that frame, so the rested position (bottom) is identical —
 // at zero forced reflows on the action's own frame.
 function _scrollLogToNewest() { _logScrollPending = false; if (_logEl) _logEl.scrollTop = _logEl.scrollHeight; }
+
+// ── COMBAT-LOG DAMAGE COLOURS ──
+// One hue per outcome so a fast-scrolling log reads at a glance instead of drowning
+// in colour: damage YOU deal is gold, damage you TAKE is red, healing is green. Only
+// the NUMBER is tinted (the .dl-* classes in styles.css) — the rest of the line stays
+// the line's own colour — so the colour carries meaning rather than noise. clDealt/
+// clHurt take a positive amount and prepend the "-"; clHeal prepends the "+". Callers
+// that phrase the number without a sign ("siphons 40 life", "Restored 40 HP") pass the
+// raw span so the wording stays natural. abbreviateNumbersIn() still compacts the digits
+// inside because it rewrites text between tags, not the tags themselves.
+function clDealt(n) { return `<span class="dl-dmg">-${n}</span>`; }
+function clHurt(n) { return `<span class="dl-hurt">-${n}</span>`; }
+function clHeal(n) { return `<span class="dl-heal">+${n}</span>`; }
+
 function log(msg, cls='') {
   const el = _logEl || (_logEl = document.getElementById('log'));
   // Every combat-log line goes through one abbreviator so damage, gold, heals and

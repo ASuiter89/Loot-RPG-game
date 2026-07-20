@@ -178,6 +178,12 @@
     /* Semantic status */
     --danger: #ff5252;           /* can't-afford / error / cost short */
     --success: #2e7d32;         /* upgrade / positive */
+    /* Combat-log damage legend — one hue per outcome so the log scans at a glance
+       (see .log-line .dl-* and the log() helpers): gold = damage YOU deal, red =
+       damage you take, green = healing you gain. */
+    --dmg-dealt: var(--gold);
+    --dmg-taken: var(--danger);
+    --dmg-heal:  var(--green-500);
     --surge: #ff6fc4;           /* skill milestone / rank-bonus surge accent (pink) */
     --ascendancy: #5ec8ff;      /* ascendancy-point accent — light blue, kept distinct from the red skill-point badge */
     --warn: #c9a84a;               /* locked / caution */
@@ -3206,6 +3212,13 @@
   #log.log-pinning .log-line { content-visibility: visible; }
   .log-line.important { color: var(--paper); }
   .log-line.loot { color: var(--green-500); }
+  /* Damage numbers carry the outcome so the line text can stay calm: gold = damage
+     you deal, red = damage you take, green = healing. Bold so the number is what the
+     eye lands on. Only the number is tinted — one steady legend instead of a wall of
+     colour. Applies in the live log AND the death-recap Combat Log popup. */
+  .log-line .dl-dmg  { color: var(--dmg-dealt); font-weight: 700; }
+  .log-line .dl-hurt { color: var(--dmg-taken); font-weight: 700; }
+  .log-line .dl-heal { color: var(--dmg-heal);  font-weight: 700; }
 
   /* ── PERF HUD (dev tool) ── toggled from the console via perfHud(); a
      click-through readout pinned top-right above everything else. */
