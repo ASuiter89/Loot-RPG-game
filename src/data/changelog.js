@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "small", v: "Dungeon Gate: cleaner colors, terser copy", by: "Jeff Louie", notes: [
+    "Frontier checkpoint tile stays neutral while pushing a tier — gold reserved for the Continue button.",
+    "Trimmed gate copy: dropped tier-name prefix, repeated warp line, and filler words.",
+  ] },
   { date: "2026-07-19", size: "small", v: "New-loot badge clears on opening the bag", by: "Jeff Louie", notes: [
     "Red new-loot badge (and touch Bag pip) clear when you open the LOOT list, not on the next combat event.",
   ] },
