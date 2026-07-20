@@ -16685,18 +16685,21 @@ function renderGate() {
   const startF = (gateDiff === 4 && cap > 40) ? cap - 39 : 1;
   const stops = warpCheckpoints(cap, startF);      // 1, 6, 11 … warp-in floors in view
   const topStop = stops.length ? stops[stops.length - 1] : 1;
-  // Highlight the checkpoint you'd resume from — the one at or below where you last
-  // were in THIS tier — as a light "you are here" marker.
+  const meta = DIFFS[gateDiff - 1];
+  const conquered = diffClearedCount() >= gateDiff;
+  // The checkpoint you'd resume from — the one at or below where you last were in
+  // THIS tier. Marked gold ("you are here") ONLY on a conquered tier, where the
+  // grid is the sole navigation. While you're still pushing a tier, the gold
+  // Continue CTA below IS that resume highlight, so the grid tiles stay neutral —
+  // a second gold border on the frontier tile just competes with the CTA.
   const returnDl = Math.max(1, dungeonReturn || 1);
   const returnStop = diffOf(returnDl) === gateDiff ? warpFloorFor(displayFloor(returnDl)) : 0;
   let buttons = '';
   for (const f of stops) {
-    const current = f === returnStop ? ' current' : '';
+    const current = (conquered && f === returnStop) ? ' current' : '';
     const frontier = f === topStop ? ' ▾' : '';
     buttons += `<button class="gate-floor${current}" onclick="enterDungeonAt(${gateDiff},${f})">${f}${frontier}</button>`;
   }
-  const meta = DIFFS[gateDiff - 1];
-  const conquered = diffClearedCount() >= gateDiff;
   // Primary CTA — one prominent button that drops you straight onto your deepest
   // unlocked checkpoint (the frontier, `topStop`) so pressing on is one obvious click.
   // Shown only on the tier you're still PUSHING (not yet conquered): a conquered tier
@@ -16710,24 +16713,24 @@ function renderGate() {
     : '';
   let blurb;
   if (gateDiff === 4) {
-    blurb = `Endless: the dungeon never ends. Floors climb from 1 forever, bosses are random, and the threat keeps ramping. Death here bites hardest. Warp in every fifth floor and walk the rest.`;
+    blurb = `Never ends — floors climb from 1 forever, bosses random, threat always ramping. Death bites hardest here.`;
   } else {
-    const flavour = gateDiff === 1 ? 'as it was meant to be played' : 'the same 25 floors, far tougher and bloodier';
-    const tail = conquered ? 'Conquered — warp to any checkpoint to grind.' : `Deepest reached: floor ${cap} of 25.`;
-    blurb = `${meta.name}: ${flavour}. ${tail} Warp in every fifth floor and walk the rest.`;
+    const flavour = gateDiff === 1 ? 'As it was meant to be played.' : 'The same 25 floors, far tougher.';
+    const tail = conquered ? 'Conquered — warp anywhere to grind.' : `Deepest: floor ${cap} of 25.`;
+    blurb = `${flavour} ${tail}`;
   }
   // Persistent grave note — visible whatever tier is picked, so you always know
   // where your lost bag is waiting.
   const graveNote = graveDl
-    ? `<div class="town-blurb gate-grave-note"><span data-spr=feat_grave></span> Your lost bag lies on <b>${floorLabel(graveDl)}</b> — dive in and walk onto the grave to reclaim it.</div>`
+    ? `<div class="town-blurb gate-grave-note"><span data-spr=feat_grave></span> Your lost bag lies on <b>${floorLabel(graveDl)}</b> — walk onto the grave to reclaim it.</div>`
     : '';
   setTownContent(`
-    <div class="town-blurb">Choose a difficulty, then a floor. Conquer each one's floor-25 guardian to unlock the next.</div>
+    <div class="town-blurb">Conquer a tier's floor-25 guardian to unlock the next.</div>
     <div class="gate-diffs">${tabs}</div>
     ${graveNote}
     <div class="town-blurb gate-tier-blurb" style="color:${meta.color}">${blurb}</div>
     ${continueCta}
-    ${continueCta ? '<div class="town-blurb gate-grid-note">Or warp to a checkpoint:</div>' : ''}
+    ${continueCta ? '<div class="town-blurb gate-grid-note">Or warp to a checkpoint, then walk down:</div>' : ''}
     <div class="gate-grid">${buttons}</div>`);
 }
 function enterDungeonAt(diff, floor, opts) {
