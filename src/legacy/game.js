@@ -12918,8 +12918,15 @@ function statDiffLine(item) {
     // requirement isn't met — you can't wield it, so it isn't a "first equip".
     if (item.slot === 'offhand' && isTwoHander(equipped.weapon) && !skillFlag('titangrip')) return '';
     if (!canEquipItem(item)) return '';
+    // The empty-slot cue is basic orientation ("you've never worn an amulet — this
+    // fills that slot"), NOT a stat readout, so it shows for ANY hero. Unlike the
+    // +/- compare below, it is deliberately NOT gated on the Gauging Calipers HUD
+    // upgrade — a fresh hero must still learn an open slot exists.
     return '<span class="first-equip">★ EMPTY SLOT</span>';
   }
+  // The +/- stat compare against the equipped piece IS the Gauging Calipers readout,
+  // so it stays blank until that HUD upgrade is crafted (hudOwned('compare')).
+  if (!hudOwned('compare')) return '';
   const num = (it, k) => {
     let v = it.stats ? it.stats[k] : undefined;
     if (v === undefined) v = it.attrs ? it.attrs[k] : undefined;
@@ -28174,7 +28181,11 @@ function renderPanel() {
       // Power badge (Appraiser's Loupe) and stat compare (Gauging Calipers) are each
       // gated on their own crafted HUD upgrade; both stay blank until bought.
       const pwr = itemPowerBadge(item);
-      const diff = (equipable && hudOwned('compare')) ? `<div class="item-diff">${statDiffLine(item)}</div>` : '';
+      // statDiffLine self-gates the +/- compare on the Gauging Calipers upgrade but
+      // ALWAYS returns the "empty slot" cue for an unfilled slot, so a fresh hero
+      // still sees an open gear slot before crafting any loot HUD readout.
+      const diffLine = equipable ? statDiffLine(item) : '';
+      const diff = diffLine ? `<div class="item-diff">${diffLine}</div>` : '';
       const lockBtn = `<button class="row-btn lock-toggle-btn ${item.locked?'on':''}" onclick="toggleLock(${i})" ${hoverTip(item.locked
         ? `<div class='ht-name'><span data-spr=feat_door></span> Locked</div><div class='ht-line'>Safe from selling, scrapping &amp; auto-loot. Tap to unlock.</div>`
         : `<div class='ht-name'><span data-spr=feat_door></span> Unlocked</div><div class='ht-line'>Tap to lock — keeps it from being sold or scrapped.</div>`)}>${dlIcon('key', 20) || (item.locked ? '<span data-spr=feat_door></span>' : '<span data-spr=feat_door></span>')}</button>`;

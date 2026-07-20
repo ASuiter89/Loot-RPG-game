@@ -2778,9 +2778,12 @@
   .ipow { font-weight: bold; text-shadow: 0 0 5px var(--pc); animation: ipowGlow 1.7s ease-in-out infinite; }
   @keyframes ipowGlow { 0%, 100% { text-shadow: 0 0 4px var(--pc); } 50% { text-shadow: 0 0 11px var(--pc), 0 0 18px var(--pc); } }
 
-  /* "EMPTY SLOT" badge — a gear slot you've never filled. Made loud (gold
-     pill, glow, gentle pulse) so a brand-new gear slot grabs the eye. */
+  /* "EMPTY SLOT" badge — a gear slot you've never filled. A steady gold pill with
+     two wisps of light circling its rim (the shared --tut-wisp ring) draws the eye
+     to a newly-fillable slot WITHOUT a pulse — the scale/glow throb read as too
+     distracting, so it's dropped in favour of the calmer orbiting wisps. */
   .first-equip {
+    position: relative;              /* anchors the circling wisp ring */
     display: inline-block;
     padding: 1px 6px;
     border-radius: 8px;
@@ -2790,11 +2793,26 @@
     color: var(--orange-850);
     background: linear-gradient(180deg, var(--xp), var(--gold));
     box-shadow: 0 0 6px color-mix(in srgb, var(--gold) 85%, transparent);
-    animation: firstEquipPulse 1.15s ease-in-out infinite;
   }
-  @keyframes firstEquipPulse {
-    0%, 100% { box-shadow: 0 0 5px color-mix(in srgb, var(--gold) 60%, transparent); transform: scale(1); }
-    50%      { box-shadow: 0 0 11px color-mix(in srgb, var(--xp) 100%, transparent); transform: scale(1.06); }
+  .first-equip::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    padding: 1.5px; pointer-events: none; z-index: 1;
+    background: conic-gradient(from var(--tut-wisp),
+      transparent 0deg,
+      color-mix(in srgb, var(--gold-350) 92%, transparent) 26deg,
+      transparent 62deg,
+      transparent 180deg,
+      color-mix(in srgb, var(--gold-200) 82%, transparent) 206deg,
+      transparent 242deg,
+      transparent 360deg);
+    -webkit-mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    mask-composite: exclude;
+    animation: tut-wisp-spin 3.2s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .first-equip::before { animation: none; }
   }
   /* Item power badge — a single gold number shown alongside an item's stats. */
   .item-power { color: var(--gold-350); font-weight: bold; opacity: 0.95; margin-left: 5px; white-space: nowrap; }
