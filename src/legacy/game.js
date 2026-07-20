@@ -64,6 +64,7 @@ import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMa
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
 import { lockedTiers } from '../systems/rarityGate.js';
+import { firstRarityMilestone, MILESTONE_KICKER, seedMilestones } from '../systems/rarityMilestone.js';
 import { shopTierWeights } from '../systems/shopStock.js';
 import {
   rampDepth, featureUnlocked, unlockedSkillSlots, elitesAllowed, gearRequirementsActive,
@@ -6499,6 +6500,11 @@ let player = { x: 5, y: 5,
   // wardrobe of every look the player has ever found.
   cosmetics: { head: null, chest: null, weapon: null },
   wardrobe: { head: [], chest: [], weapon: [] },
+  // First-of-rarity milestone ledger: which coloured mid-tiers (green/blue/purple)
+  // this hero has already celebrated with a first-pickup banner. Empty on a fresh
+  // hero — each colour stops the world the first time it enters the bag (see
+  // lootReveal + systems/rarityMilestone.js), then never again. Saved per character.
+  rarityFirsts: {},
   // Crafting materials are NOT stored on the hero — they're an account-wide shared
   // wallet in the stash (Standard and Hardcore keep separate wallets), so every
   // hero draws on the same pool. See heroMaterials() / gainMaterial() / spendCost().
@@ -7694,6 +7700,7 @@ window.gameGuide = function gameGuide(topic) {
       `COLOUR UNLOCKS IN WAVES over the early floors, so the opening dungeon is a real ramp: below the first boss, drops are only grey & white. Defeating the first guardian (floor 5) unlocks GREENS; the second guardian (floor 10) unlocks BLUES and every rarer tier. A boss's own first-kill windfall already pays in the colour it just unlocked. So a green is an early milestone, not a floor-1 giveaway.`,
       `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike the random rarities it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and a fixed SET of 2–3 signature powers (each a "legendary modifier" like Vampiric) — where an ordinary legendary rolls just one, a unique stacks several, and they compound. Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. (Set pieces — see below — are the OTHER fixed, named red artifacts.) gameState() marks worn/held uniques with a "unique" id and "fixed":true, and lists a piece's powers in item "powers".`,
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
+      `Your very FIRST green, blue and purple each pop that SAME banner the moment you pick one up — a one-time milestone as each new colour first enters your bag (latched on player.rarityFirsts); after that, that colour reverts to its quiet drop chime. Legendary and red keep bannering every time.`,
       `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
       `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. The drawback always lands on a property you'll actually FEEL — a core stat (Attack, Defense, Max HP/MP, Speed) or a damage amp (Increased/Boss Damage, Spell/Skill Power) — never on a benefit-only rating whose negative would just floor to zero, so a curse's price is always paid. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — a curse hits ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
       `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). The on-screen Power number, item level, gold value, +/- stat-compare line, and bag Sort/Filter controls are all one-time Craftsman HUD upgrades (Appraiser's Loupe, Assayer's Glass, Coin Scale, Gauging Calipers, Quartermaster's Ledger — see gameGuide("town")); a fresh hero reads gear by its raw stats until they're crafted, but gameState always reports pow, ilvl, value + full stats regardless of what's fitted. gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
@@ -21677,6 +21684,19 @@ function isTopTierItem(item) { return !!item && (item.tier === 'legendary' || it
 function lootReveal(item) {
   if (!item || !item.tier) return;
   const col = tierColor(item);   // set pieces flash their own colour, not unique red
+  // The FIRST green/blue/purple this hero ever picks up stops the world exactly like
+  // a legendary — a one-time milestone the moment a new colour enters the bag. Once
+  // celebrated (latched on player.rarityFirsts), that tier reverts to its usual quiet
+  // chime below; legendary/unique aren't milestone tiers, so they fall straight through
+  // to the isTopTierItem branch and keep bannering every time.
+  const milestone = firstRarityMilestone(item, player.rarityFirsts);
+  if (milestone) {
+    (player.rarityFirsts || (player.rarityFirsts = {}))[milestone] = 1;
+    showLootBanner(item.name, MILESTONE_KICKER[milestone] || 'NEW RARITY', col,
+      () => { sfx('legendary'); screenFlash(col); addShake(9); });
+    saveGameSoon();   // latch the milestone so it never re-fires, even if you quit now
+    return;
+  }
   if (isTopTierItem(item)) {
     // Sting, flash and shake ride along with the banner so they land when it shows
     // (it may be queued behind a depth banner), not the instant it's enqueued.
@@ -31813,6 +31833,16 @@ function loadGame() {
       player.bossFirstKills = {};
       const cf = player.clearedFloors || {};
       for (const k in cf) { if (cf[k] && Number(k) % 5 === 0) player.bossFirstKills[k] = 1; }
+    }
+    // First-of-rarity milestone banners (new): the first pickup of each coloured mid-
+    // tier (green/blue/purple) stops the world like a legendary. Seed the ledger for
+    // OLD saves from the colours this hero has ALREADY unlocked — greens at the floor-5
+    // guardian, blues/purples at floor-10 (see rarityGate.lockedTiers) — so a returning
+    // hero only ever celebrates a colour they genuinely haven't found yet. Fresh heroes
+    // keep the empty ledger from the template. (Runs after bossFirstKills is seeded so
+    // lockedTiers reads a valid progression.)
+    if (!player.rarityFirsts || typeof player.rarityFirsts !== 'object') {
+      player.rarityFirsts = seedMilestones(lockedTiers(player.bossFirstKills, player.maxFloor));
     }
     // Town progression: keeper/camp unlocks now key off boss-floor clears (see
     // TOWN_SERVICE_ARRIVALS). Coerce the one-time graduation flag, then SILENTLY baseline
