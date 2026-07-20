@@ -10,6 +10,10 @@ export const CHANGELOG = [
   { date: "2026-07-19", size: "small", v: "Auto-cast spells trigger the mana tutorial", by: "Jeff Louie", notes: [
     "First mana-spending cast teaches the Mana Potion even when it fires from the auto-cast slot (was: manual casts only).",
   ] },
+  { date: "2026-07-19", size: "small", v: "Boss floors race the track, not swap it", by: "Jeff Louie", notes: [
+    "New run opens on an upbeat electronic track (Bloom, Neon, Summit…).",
+    "Boss floors drop the separate boss song — current track races ~25% faster, instantly on entry.",
+  ] },
   { date: "2026-07-19", size: "small", v: "Ready-spell glow: thin dark-blue pulse", by: "Jeff Louie", notes: [
     "Ready skill slots pulse a thin dark-blue border (was thick gold glow).",
   ] },
