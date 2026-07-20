@@ -184,6 +184,8 @@ import { isBestiaryFieldKnown, speciesDiscovered, bestiaryRevealRatio, emptyDex,
 import { buildCollectionCatalog, collectionFacets, groupStoredArtifacts, acquiredKeySet,
   filterCatalog, collectionProgress, itemCatalogKey } from '../systems/uniqueCollection.js';
 import { blockGearSwap, GEARSET_DANGER_RADIUS } from '../systems/gearSetSwap.js';
+import { CB_MODES, TIER_KEYS as CB_TIER_KEYS } from '../data/colorblindPalettes.js';
+import { normalizeCbMode, paletteFor as cbPaletteFor } from '../systems/colorblind.js';
 
 // ══════════════════════════════════════════
 // CONSTANTS & DATA
@@ -611,15 +613,44 @@ const ICON_EMPTY_COLOR = '#5a5a68';
 // a distinct colour (mirrors the --set token) instead of the unique red, so a set
 // drop reads as its own class at a glance. Keep in sync with --set in :root.
 const SET_RARITY_COLOR = '#1fd4c4';
+// ── COLOUR VISION (colourblind) ── an accessibility mode that swaps the tier
+// palette for one still separable under a colour-vision deficiency and turns on a
+// per-tier SHAPE pip beside item names (a second, non-text channel). Off by
+// default, so the stock view is unchanged. Persisted per device (like the other
+// Visuals toggles); applied to the CSS tier tokens + canvas tier colours by
+// applyColorblindMode(). Palette + resolution logic live in the extracted modules.
+const COLORBLIND_KEY = 'dungeonLoot_colorblind';
+let colorblindMode = '';
+try { colorblindMode = normalizeCbMode(localStorage.getItem(COLORBLIND_KEY)); } catch (e) {}
+let _cbPalette = cbPaletteFor(colorblindMode);
+// Rarity → display hex, colour-vision aware. When a mode is active the tier's
+// stock colour is swapped for the palette's more-separable hue; otherwise `base`
+// (the stock colour) passes straight through. `key` is a TIERS key or 'set'.
+function rarityHex(key, base) {
+  if (_cbPalette && key && _cbPalette[key]) return _cbPalette[key];
+  return base;
+}
 // Rarity tint for an item's icon (muted grey when there's nothing to colour). A
 // set piece overrides its (always-unique) tier colour with the shared set colour.
 function tierColor(item) {
-  if (item && item.set) return SET_RARITY_COLOR;
-  return (item && TIERS[item.tier] && TIERS[item.tier].color) || ICON_EMPTY_COLOR;
+  const isSet = !!(item && item.set);
+  const key = isSet ? 'set' : (item && item.tier);
+  const base = isSet ? SET_RARITY_COLOR : ((item && TIERS[item.tier] && TIERS[item.tier].color) || ICON_EMPTY_COLOR);
+  return rarityHex(key, base);
 }
 // The CSS rarity class for an item's name/row — set pieces get their own colour
 // class instead of their tier's.
 function rarityClass(item) { return (item && item.set) ? 'item-set' : 'item-' + (item ? item.tier : 'normal'); }
+// A per-tier SHAPE marker prepended to an item name — the second, non-text channel
+// that carries rarity in a colour-vision mode (see .cb-pip in styles.css). Returns
+// '' in default play (zero DOM added), so the standard view stays byte-identical;
+// in a mode it emits a small tier-shaped, tier-coloured pip. The colour reads the
+// same `--<tier>` token the mode re-tints, so pip and name always match.
+function rarityPip(item) {
+  if (!colorblindMode || !item) return '';
+  const key = item.set ? 'set' : (item.tier || 'normal');
+  return `<span class="cb-pip cb-pip--${key}" style="background:var(--${key})" aria-hidden="true"></span>`;
+}
 // Resolve a layer's material to a colour (a MATERIALS key, or a literal colour).
 function matColor(m) { return MATERIALS[m] || m; }
 // Inline-SVG markup for a vector icon key: each layer drawn in its own material
@@ -2921,7 +2952,7 @@ const AUTO_LOOT_CATS = (() => {
 // rule, everything else its rarity tier.
 function autoLootKey(item) { return (item && item.set) ? 'set' : (item && item.tier); }
 // Display colour for a picker row (the 'set' pseudo-rarity has no TIERS entry).
-function autoLootColor(cat) { return cat === 'set' ? SET_RARITY_COLOR : ((TIERS[cat] || {}).color || ICON_EMPTY_COLOR); }
+function autoLootColor(cat) { return rarityHex(cat, cat === 'set' ? SET_RARITY_COLOR : ((TIERS[cat] || {}).color || ICON_EMPTY_COLOR)); }
 function defaultAutoLoot() {
   const o = {};
   for (const t of AUTO_LOOT_CATS) o[t] = 'keep';
@@ -9208,6 +9239,44 @@ function updateScreenFlashButton() {
   if (btn) btn.classList.toggle('on', showScreenFlash);
 }
 
+// ── COLOUR VISION ── apply a colourblind mode: re-tint the `--<tier>` tokens
+// (which every DOM rarity colour + the canvas tierColor() read) from the mode's
+// palette, and flag the body so the per-tier shape pips show. Off clears both back
+// to the stock palette. Safe to call at module load (guards a missing body).
+function applyColorblindMode(mode) {
+  colorblindMode = normalizeCbMode(mode);
+  _cbPalette = cbPaletteFor(colorblindMode);
+  const rootStyle = document.documentElement.style;
+  for (const key of CB_TIER_KEYS) {
+    if (_cbPalette && _cbPalette[key]) rootStyle.setProperty('--' + key, _cbPalette[key]);
+    else rootStyle.removeProperty('--' + key);
+  }
+  const body = document.body;
+  if (body) {
+    if (colorblindMode) body.dataset.cb = colorblindMode;
+    else delete body.dataset.cb;
+  }
+}
+// Settings action: pick a colour-vision mode. Persists, re-tints live, and
+// refreshes the picker. Tier COLOURS update everywhere at once (CSS custom
+// props); the shape pips appear on panels the next time they render.
+function setColorblindMode(mode) {
+  applyColorblindMode(mode);
+  try { localStorage.setItem(COLORBLIND_KEY, colorblindMode); } catch (e) {}
+  settingsChanged();
+  sfx('click');
+  renderColorblindControls();
+  markHudDirty();
+}
+function renderColorblindControls() {
+  const row = document.getElementById('colorblind-row');
+  if (!row) return;
+  row.innerHTML = CB_MODES.map(m =>
+    `<button class="dpad-cfg-btn ${colorblindMode === m.id ? 'sel' : ''}" onclick="setColorblindMode('${m.id}')">${m.label}</button>`
+  ).join('');
+}
+applyColorblindMode(colorblindMode);
+
 // Settings modal: a centred overlay holding sound, saves and options.
 // There's no on-screen button — it opens only with Esc (see handleEscape) and,
 // being an RT-blocking overlay, pausing the game while it's up. The scrim
@@ -9216,7 +9285,7 @@ function toggleSettingsMenu(e) {
   if (e) e.stopPropagation();
   const menu = document.getElementById('settings-menu');
   if (!menu) return;
-  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderCursorControls(); renderCursorSizeControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); updateMixButtons(); centerSettingsCard(); }
+  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderCursorControls(); renderCursorSizeControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderColorblindControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); updateMixButtons(); centerSettingsCard(); }
 }
 function closeSettingsMenu() {
   const menu = document.getElementById('settings-menu');
@@ -13154,7 +13223,7 @@ function renderShopSellHTML() {
     const lock = locked ? `<span class="shop-price short"><span data-spr=ic_key></span></span>` : '';
     return `<div class="shop-row ${rarityClass(it)} ${locked ? 'locked' : ''}">`
       + `<span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>`
-      + `<div class="shop-row-info ${rarityClass(it)}"><div class="shop-row-name">${curseMark(it)}${it.name}</div><div class="shop-row-sub">${sub}</div></div>`
+      + `<div class="shop-row-info ${rarityClass(it)}"><div class="shop-row-name">${rarityPip(it)}${curseMark(it)}${it.name}</div><div class="shop-row-sub">${sub}</div></div>`
       + `${lock}${scrapBtn}${sellBtn}</div>`;
   }).join('');
   return ctrls + bulk + rows;
@@ -15318,8 +15387,8 @@ function renderForge() {
   if (show.rarity) {
     const tierBtns = CRAFT_TIERS.map(t => {
       const caps = TIER_AFFIX_CAPS[t] || { stat: 0, attr: 0 };
-      return `<button class="forge-opt ${t === forgeTier ? 'on' : ''}" style="${t === forgeTier ? '' : `color:${TIERS[t].color}`}" onclick="forgeSelectTier('${t}')">
-         <span style="color:${TIERS[t].color};font-size:1.8rem">●</span>
+      return `<button class="forge-opt ${t === forgeTier ? 'on' : ''}" style="${t === forgeTier ? '' : `color:${rarityHex(t, TIERS[t].color)}`}" onclick="forgeSelectTier('${t}')">
+         <span style="color:${rarityHex(t, TIERS[t].color)};font-size:1.8rem">●</span>
          <span style="font-size:1.2rem;color:var(--orange-400)">${caps.stat}+${caps.attr}</span></button>`;
     }).join('');
 
@@ -16630,7 +16699,7 @@ function renderFixedEnchantItem(item) {
     : `This artifact's modifiers are set for good. Its values were rolled once, scaled to the depth it dropped on, and locked.`;
   setTownContent(`
     <div class="shop-row has-actions"><button class="modal-nav-btn" onclick="enchantBack()">‹ Back</button>
-      <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${curseMark(item)}${item.name}</div>
+      <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${rarityPip(item)}${curseMark(item)}${item.name}</div>
       <div class="shop-row-sub">${SLOTS[item.slot].label} · ilvl ${item.ilvl} · ${kindWord}${setTag}</div></div></div>
     <div class="ench-legend">${legend}</div>
     ${powLine}
@@ -28259,7 +28328,7 @@ function renderPanel() {
       <div class="loot-item ${rarityClass(item)} ${selectedItem===i?'selected':''} ${isUpgrade?'upgrade':''} ${item.locked?'locked':''} ${cantEquip?'cant-equip':''}">
         <div class="loot-info" onclick="selectItem(${i}, this)"
              onmouseenter="showTooltip(event,${i})" onmouseleave="hideTooltip()">
-          <div class="item-name">${curseMark(item)}${item.name}${craftedMark(item)}</div>
+          <div class="item-name">${rarityPip(item)}${curseMark(item)}${item.name}${craftedMark(item)}</div>
           <div class="item-type">${slotName}${pwr}</div>
           ${diff}
         </div>
@@ -30157,7 +30226,7 @@ function itemCardHTML(item, opts = {}) {
   return `
     ${label}
     <div class="tt-nameline">
-      <span class="tt-name" style="color:${tierColor(item)}">${curseMark(item)}${item.name}</span>
+      <span class="tt-name" style="color:${tierColor(item)}">${rarityPip(item)}${curseMark(item)}${item.name}</span>
       <span class="tt-tier" style="color:${tierColor(item)}">${item.slot ? `<span data-spr=${SLOTS[item.slot].sprite}></span> ${SLOTS[item.slot].label}` : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</span>
     </div>
     ${weaponTypeLine}
@@ -30519,7 +30588,7 @@ function curseMark(item, px) { return item && item.cursed ? dlIcon('ic_cursed', 
 function stripLegacyCurseMark(name) { return typeof name === 'string' ? name.replace(/^\u2620\uFE0F?\s*/u, '') : name; }
 function logItem(item) {
   const c = tierColor(item);   // set pieces log in the set colour, not their tier's
-  return `<span style="color:${c}">${curseMark(item)}${item.name}</span>`;
+  return `<span style="color:${c}">${rarityPip(item)}${curseMark(item)}${item.name}</span>`;
 }
 // Wrap a potion label in the shared potion colour for chat-log mentions.
 function logPotion(label) {
@@ -33049,7 +33118,7 @@ function lbHeroBuildHTML(r, lo) {
       <span class="lb-gear-ic">${iconMarkup(itemIcon(it), col)}</span>
       <div class="lb-gear-info">
         <div class="lb-gear-slot">${label}</div>
-        <div class="lb-gear-name" style="color:${col}">${curseMark(it)}${escapeHtml(it.name || '')}${it.crafted ? ' ' + (dlIcon('ic_mallet', 12) || '') : ''}</div>
+        <div class="lb-gear-name" style="color:${col}">${rarityPip(it)}${curseMark(it)}${escapeHtml(it.name || '')}${it.crafted ? ' ' + (dlIcon('ic_mallet', 12) || '') : ''}</div>
         <div class="lb-gear-power">${PWR_GLYPH} ${abbreviateNumber(itemPower(it))}${it.ilvl ? ` · <span style="color:var(--blue-250)">ilvl ${abbreviateNumber(it.ilvl)}</span>` : ''}</div>
       </div>
     </div>`;
@@ -36389,7 +36458,7 @@ function renderMirrorforge() {
     } else {
       for (const p of picks) {
         const it = p.it, sel = (p.i === _egMfSel);
-        const col = (TIERS[it.tier] && TIERS[it.tier].color) || 'var(--text)';
+        const col = rarityHex(it.tier, (TIERS[it.tier] && TIERS[it.tier].color) || 'var(--text)');
         const slotLabel = (typeof SLOTS === 'object' && SLOTS && it.slot && SLOTS[it.slot]) ? SLOTS[it.slot].label : (it.slot || '');
         const tags = [];
         if (it.mirrored) tags.push('Perfected');
@@ -36439,7 +36508,7 @@ function renderMirrorforge() {
       const wallet = egMfWallet();
       const budget = fpBudget(c), rem = fpRemaining(c), spent = mfSpent(c);
       const pct = budget > 0 ? Math.max(0, Math.min(100, Math.round(rem / budget * 100))) : 0;
-      const col = (TIERS[item.tier] && TIERS[item.tier].color) || 'var(--text)';
+      const col = rarityHex(item.tier, (TIERS[item.tier] && TIERS[item.tier].color) || 'var(--text)');
       const fixed = !!item.fixed;
       const aetherOK = (player.aether > 0) && aetherUnlocked(endlessDepth);
 
@@ -37803,6 +37872,8 @@ const __DL_FN_BRIDGE = {
   applyMinimapSize,
   setMinimapSize,
   renderMinimapSizeControls,
+  setColorblindMode,
+  renderColorblindControls,
   currentUiFont,
   applyUiFont,
   setUiFont,
