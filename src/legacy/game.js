@@ -103,7 +103,7 @@ import { upgradeOptions as ilvlUpgradeOptions, upgradeCost as calcIlvlUpgradeCos
 import { CHANGELOG } from '../data/changelog.js';
 import { WIKI } from '../data/wiki.js';
 import { buildWikiIndex, searchWiki } from '../systems/wikiSearch.js';
-import { MUSIC_SECTIONS } from '../data/musicSections.js';
+import { MUSIC_SECTIONS, HAPPY_START_SECTIONS } from '../data/musicSections.js';
 import { bassSemi, voiceChord, voiceSpread } from '../systems/musicGroove.js';
 import { terrainPacksInUse } from '../data/terrainPacks.js';
 import { TRAP_THEME } from '../data/trapThemes.js';
@@ -8428,15 +8428,27 @@ function rollMusicVariation() {
   musicRegister = mpick([0, 0, 0, 12, -12]);          // occasional octave lift/drop
 }
 // ── Music vibe ── the player can lock the generative soundtrack to one style
-// ("vibe") from Settings, or leave it on Shuffle to drift through them all. The
-// intense Boss track still takes over on boss floors regardless. Saved globally.
+// ("vibe") from Settings, or leave it on Shuffle to drift through them all. Boss
+// floors don't swap the style — they just race the current track. Saved globally.
 const MUSIC_VIBE_KEY = 'musicVibe';
 let musicVibe = 'auto';
 try { const _mv = localStorage.getItem(MUSIC_VIBE_KEY); if (_mv) musicVibe = _mv; } catch (e) {}
-// The next normal (non-boss) style to drift to: the chosen vibe if locked, else random.
+// The next style to drift to: the chosen vibe if locked, else random.
 function pickNextNormalSection() {
   if (musicVibe !== 'auto') { const i = parseInt(musicVibe, 10); if (i >= 0 && i < NORMAL_SECTIONS) return i; }
   return Math.floor(Math.random() * NORMAL_SECTIONS);
+}
+// Bright, upbeat styles a fresh run opens on (HAPPY_START_SECTIONS resolved to live
+// indices, so a reorder of MUSIC_SECTIONS can't desync them).
+const HAPPY_SECTIONS = HAPPY_START_SECTIONS
+  .map(n => MUSIC_SECTIONS.findIndex(s => s.name === n))
+  .filter(i => i >= 0);
+// The style a NEW game starts on: a random happy track on Shuffle, or the player's
+// locked vibe if they've chosen one. Falls back to the normal pick if the happy
+// list somehow resolves empty.
+function pickHappyStartSection() {
+  if (musicVibe !== 'auto' || !HAPPY_SECTIONS.length) return pickNextNormalSection();
+  return HAPPY_SECTIONS[Math.floor(Math.random() * HAPPY_SECTIONS.length)];
 }
 function syncMusicVibeUi() { const sel = document.getElementById('music-vibe-select'); if (sel) sel.value = musicVibe; }
 // Choose a music vibe from Settings. Applies right away (unless a boss owns the
@@ -8473,9 +8485,13 @@ const mpick = (a) => a[Math.floor(Math.random() * a.length)];
 // The generative engine below reads MUSIC_SECTIONS; the harmony/groove math lives in
 // src/systems/musicGroove.js (bassSemi / voiceChord). See that data file for the
 // per-style scale/progs/timbre kit and the bassPat/chordPat groove-lane format.
-// The Boss track is the last entry; the normal drift excludes it.
-const BOSS_IDX = MUSIC_SECTIONS.length - 1;
-const NORMAL_SECTIONS = BOSS_IDX; // count of drift-eligible styles
+// There is no separate boss track: every style is drift-eligible, and boss floors
+// just speed the CURRENT track up (BOSS_TEMPO_MUL) for intensity — see scheduleMusic.
+const NORMAL_SECTIONS = MUSIC_SECTIONS.length; // count of drift-eligible styles
+// Boss floors race the current track for intensity instead of swapping songs: the
+// per-step duration is scaled by this while a boss lives (smaller = faster; 0.8 ≈
+// +25% tempo). Applied straight to the tempo, so the speed-up lands near-instantly.
+const BOSS_TEMPO_MUL = 0.8;
 
 // The crossfade state at a given playhead time: which two palettes are in play
 // and how far blended (t: 0 = all `from`, 1 = all `to`). Outside a transition
@@ -8760,28 +8776,16 @@ function scheduleMusic() {
     if (musicTrans && when >= musicTrans.end) {
       musicSectionIdx = musicTrans.toIdx;
       musicTrans = null;
-      // The Boss track holds until the boss dies; normal styles drift on a timer.
-      musicSectionEndTime = (musicSectionIdx === BOSS_IDX)
-        ? Infinity
-        : when + SECTION_MIN + Math.random() * (SECTION_MAX - SECTION_MIN);
+      musicSectionEndTime = when + SECTION_MIN + Math.random() * (SECTION_MAX - SECTION_MIN);
     }
-    // Boss fights hijack the music: swap to the intense Boss track while a boss
-    // lives (bossNow, checked once above), then drift back once the floor clears.
-    // Entering a boss fight hijacks the music RIGHT AWAY: kick off the swap to the
-    // intense Boss track the instant a boss is alive — no waiting for the next bar
-    // line — and ramp it in fast so the intensity lands as you step onto the floor.
-    if (!musicTrans && musicStep > 0 && bossNow && musicSectionIdx !== BOSS_IDX) {
-      musicTrans = { fromIdx: musicSectionIdx, toIdx: BOSS_IDX, start: when, end: when + 1.2 };
-    }
-    // Leaving a boss fight drifts back to a normal style, eased in on the next bar.
-    else if (!musicTrans && beat === 0 && musicStep > 0 && !bossNow && musicSectionIdx === BOSS_IDX) {
-      const next = pickNextNormalSection();
-      musicTrans = { fromIdx: BOSS_IDX, toIdx: next, start: when, end: when + SECTION_FADE };
-    }
+    // Boss floors don't swap the song — they just race the current track for
+    // intensity (BOSS_TEMPO_MUL, applied to the tempo below). While a boss lives the
+    // style is held put (the drift/skip guards below stay off), so the SAME track
+    // simply plays faster; it eases back to normal speed the instant the boss dies.
     // Manual SKIP: the player asked for a new song NOW. Crossfade to a different
-    // style right away (a quick 4s blend, not the lazy drift fade), never waiting
-    // on the drift timer — unless a boss owns the music. Always lands on a style
-    // different from the current one, even when a vibe is locked.
+    // style right away (a quick 4s blend, not the lazy drift fade), never waiting on
+    // the drift timer — held while a boss lives so the current track keeps racing.
+    // Always lands on a style different from the current one, even when a vibe is locked.
     if (musicSkip && !musicTrans && musicStep > 0 && !bossNow) {
       let next = pickNextNormalSection();
       if (next === musicSectionIdx) next = (next + 1) % NORMAL_SECTIONS;
@@ -8807,8 +8811,7 @@ function scheduleMusic() {
       const mid = (musicTrans.start + musicTrans.end) / 2;
       structIdx = when >= mid ? musicTrans.toIdx : musicTrans.fromIdx;
     }
-    const toBoss = musicTrans && musicTrans.toIdx === BOSS_IDX;
-    if ((beat === 0 || toBoss) && structIdx !== musicStructIdx) {
+    if (beat === 0 && structIdx !== musicStructIdx) {
       musicStructIdx = structIdx;
       musicProg = mpick(MUSIC_SECTIONS[structIdx].progs);
       musicBarCount = 0;
@@ -8825,7 +8828,10 @@ function scheduleMusic() {
 
     // Resolve the timbre/feel for this step (crossfaded mid-transition).
     const blend = musicBlend(when);
-    const tempo = musicLerp('tempo', blend) * musicTempoMul;
+    // A live boss races the current track (smaller step = faster) for intensity, in
+    // place of the old separate boss song. bossNow is checked once per scheduler tick
+    // (~60ms) and applied straight here, so the speed-up lands the moment you enter.
+    const tempo = musicLerp('tempo', blend) * musicTempoMul * (bossNow ? BOSS_TEMPO_MUL : 1);
     const leadDensity = musicLerp('leadDensity', blend);
     const arpDensity = musicLerp('arpDensity', blend);
     const kickVol = musicLerp('kickVol', blend);
@@ -8895,8 +8901,8 @@ function startMusic() {
   if (!ctx) return;
   musicNext = ctx.currentTime + 0.1;
   musicStep = 0; musicBarCount = 0; musicArpIdx = 0; musicLeadIdx = 4;
-  // Start on the chosen vibe (or a random *normal* style on Shuffle; never Boss).
-  musicSectionIdx = pickNextNormalSection();
+  // Open a fresh run on a happy, upbeat track (or the chosen vibe if one is locked).
+  musicSectionIdx = pickHappyStartSection();
   musicStructIdx = musicSectionIdx;
   musicProg = null;
   musicTrans = null;
@@ -8956,8 +8962,9 @@ function resetMusicBus() {
 }
 // SKIP TRACK: cut the current song off RIGHT AWAY and jump the generative
 // soundtrack to a fresh style. If the music is off we just nudge the player to
-// turn it up; if it hasn't started yet, starting it already gives a new track. A
-// boss owns the music, so during a boss the skip is honoured once the fight ends.
+// turn it up; if it hasn't started yet, starting it already gives a new track.
+// During a boss the current (sped-up) track is held, so the skip lands once the
+// fight ends rather than swapping songs mid-battle.
 function skipMusicTrack() {
   if (audio.musicLevel <= 0) { sfx('denied'); log('🎵 Music off — raise music volume to hear tracks.'); return; }
   audioUnlock();

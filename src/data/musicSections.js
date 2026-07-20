@@ -578,28 +578,9 @@ export const MUSIC_SECTIONS = [
       chordPat: [{l:0.7,v:0.82,voi:'open'}, null, {l:0.5,v:0.72,voi:'inv1',p:0.75}, {l:0.5,v:0.75,voi:'root',p:0.7}, {l:0.7,v:0.8,voi:'open'}, null, {l:0.5,v:0.72,voi:'inv2',p:0.75}, {l:0.5,v:0.7,voi:'inv1',p:0.65,next:true}],
       kickPat: ['main', null, 'main', null, 'main', null, 'main', null],
       hatPat:  [0,0,1,0,0,0,1,0] } },
-
-  // BOSS — only plays during boss fights. Fast, menacing A Phrygian-dominant with a
-  // pounding kick. Bass: a relentless pounding pedal with half-step chromatic pushes
-  // (the b2 is the menace). Comp: dense, driving, aggressive stabs. Kept LAST so the
-  // normal drift never randomly selects it (see scheduleMusic / startMusic).
-  { name: 'Boss',    tempo: 0.16,
-    scale: [0, 1, 4, 5, 7, 8, 10, 12, 13, 16, 17, 19, 20],
-    progs: [
-      [[0,4,7],[1,5,8],[0,4,7],[7,10,13]],          // A  Bb  A  E(ish) — menacing
-      [[0,4,7],[8,12,15],[1,5,8],[0,4,7]],
-    ],
-    bass: { type: 'square',   voice: 'saw',    cutoff: 560,  q: 5, detune: 7, vol: 0.30 },
-    pad:  { type: 'sawtooth', voice: 'warm',   cutoff: 1400, q: 2, detune: 5, vol: 0.12 },
-    lead: { type: 'square',   voice: 'square', cutoff: 2800, q: 1, detune: 6, vol: 0.18 },
-    leadDensity: 0.9, arpDensity: 0.35,
-    kickVol: 1.25, kickMidVol: 1.0, hatVol: 0.09,
-    groove: { swing: 0.0, leadOct: 0, arpOct: 12, arpEvery: 4, arpVel: 0.55, chordOct: 0,
-      leadLong: 0.15, leadRest: 0.06,
-      bassPat: [{d:'r',l:0.8,v:1.0}, {d:'r',l:0.8,v:0.88,p:0.9}, {d:'r',l:0.8,v:1.0}, {d:'n2',l:0.7,v:0.9},
-                {d:'r',l:0.8,v:1.0}, {d:'r',l:0.8,v:0.88,p:0.9}, {d:'5',l:0.7,v:0.85,p:0.85}, {d:'n2',l:0.7,v:0.95}],
-      chordPat: [{l:0.6,v:1.0,voi:'root'}, null, {l:0.5,v:0.9,voi:'inv1',p:0.9}, {l:0.5,v:0.85,voi:'root',p:0.8},
-                 null, {l:0.5,v:0.9,voi:'inv1',p:0.85}, {l:0.5,v:0.8,voi:'open',p:0.7}, {l:0.5,v:0.85,voi:'root',p:0.8,next:true}],
-      kickPat: ['main', 'mid', 'main', 'mid', 'main', 'mid', 'main', 'mid'],
-      hatPat:  [1,1,1,1,1,1,1,1] } },
 ];
+
+// The bright, upbeat electronic styles a fresh run opens on (by name → resolved to
+// indices in startMusic). Keeps game-start music happy instead of a random draw that
+// might land on a brooding or eerie style. Every name must exist in MUSIC_SECTIONS.
+export const HAPPY_START_SECTIONS = ['Bloom', 'Neon', 'Lagoon', 'Summit', 'Levels', 'Boogie', 'Roam', 'Palm'];

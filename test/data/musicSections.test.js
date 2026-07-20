@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MUSIC_SECTIONS } from '../../src/data/musicSections.js';
+import { MUSIC_SECTIONS, HAPPY_START_SECTIONS } from '../../src/data/musicSections.js';
 import { bassSemi, voiceChord } from '../../src/systems/musicGroove.js';
 
 const STEPS_PER_BAR = 8;
@@ -10,10 +10,21 @@ const VOICINGS = new Set(['root', 'inv1', 'inv2', 'open', 'wide']);
 const VOICES = new Set(['saw', 'sub', 'reese', 'acid', 'sing', 'pluck', 'fm', 'square', 'supersaw', 'warm']);
 
 describe('MUSIC_SECTIONS data validity', () => {
-  it('is a non-empty array with Boss kept last', () => {
+  it('is a non-empty array of drift-eligible styles (no dedicated Boss track)', () => {
     expect(Array.isArray(MUSIC_SECTIONS)).toBe(true);
     expect(MUSIC_SECTIONS.length).toBeGreaterThanOrEqual(10);
-    expect(MUSIC_SECTIONS[MUSIC_SECTIONS.length - 1].name).toBe('Boss');
+    // Boss floors now just speed the current track up — there is no separate Boss
+    // song for the drift to accidentally select, so none should exist.
+    expect(MUSIC_SECTIONS.some(s => s.name === 'Boss')).toBe(false);
+  });
+
+  it('every happy-start style names a real section', () => {
+    expect(Array.isArray(HAPPY_START_SECTIONS)).toBe(true);
+    expect(HAPPY_START_SECTIONS.length).toBeGreaterThan(0);
+    const names = new Set(MUSIC_SECTIONS.map(s => s.name));
+    for (const n of HAPPY_START_SECTIONS) {
+      expect(names.has(n), `happy-start style ${n} missing from MUSIC_SECTIONS`).toBe(true);
+    }
   });
 
   it('every style has a complete, well-typed kit', () => {
