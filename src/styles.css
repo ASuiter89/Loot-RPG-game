@@ -2335,6 +2335,9 @@
     background: repeating-linear-gradient(90deg, transparent 0, transparent calc(5% - 2px), color-mix(in srgb, var(--ink) 60%, transparent) calc(5% - 2px), color-mix(in srgb, var(--ink) 60%, transparent) 5%);
   }
   #dh-xp .dh-xp-lvl { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--font-ui); font-size: 1.2rem; font-weight: bold; color: var(--text); text-shadow: 0 1px 2px var(--ink), 0 0 4px color-mix(in srgb, var(--ink) 80%, transparent); }
+  /* XP-to-next numbers (the Ascension Gauge HUD upgrade) — mirrors the level label
+     on the right edge; empty until the upgrade is fitted, so a bare bar shows nothing. */
+  #dh-xp .dh-xp-val { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-family: var(--font-ui); font-size: 1.2rem; font-weight: bold; color: var(--gold); text-shadow: 0 1px 2px var(--ink), 0 0 4px color-mix(in srgb, var(--ink) 80%, transparent); }
 
   /* Every hotkey slot is rendered, even unassigned ones, as a dashed drop target
      you can drag a learned skill onto (or tap to assign). Kept compact and dim so

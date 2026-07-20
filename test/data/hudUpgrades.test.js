@@ -6,13 +6,13 @@ import { HUD_UPGRADES, HUD_UPGRADE_GROUPS } from '../../src/data/hudUpgrades.js'
 // so a typo'd or duplicated key would silently strand a piece with no way to switch
 // it on.
 
-// The piece each key gates, mirrored from the game shell: the seven HUD-overlay
+// The piece each key gates, mirrored from the game shell: the eight HUD-overlay
 // readouts (updateBars / drawMinimap / renderStatusStrip), the seven loot-bag tools
 // (item level/value/salvage yield + itemPowerBadge / statDiffLine / sort-filter
 // controls / acquireLoot), and the two character-&-skill sheet readouts
 // (heroStatsPanelHTML / skillMilestonesHtml).
 const GATED_KEYS = new Set([
-  'vitals', 'floor', 'foes', 'difficulty', 'chests', 'status', 'minimap',
+  'vitals', 'floor', 'xpnums', 'foes', 'difficulty', 'chests', 'status', 'minimap',
   'ilvl', 'value', 'scrapval', 'rankings', 'compare', 'sortfilter', 'autoloot',
   'statsheet', 'surges',
 ]);

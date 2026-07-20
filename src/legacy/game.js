@@ -27526,6 +27526,7 @@ function flushHudDirty() { if (_hudDirty) { _hudDirty = false; updateBars(); } }
 // re-assigning identical innerHTML still tears down and re-parses the subtree,
 // so each write is guarded by comparing the freshly built string first.
 let _statusStripHtml = null;
+let _xpTextShown = null;   // last XP-to-next string written (Ascension Gauge); skips identical DOM writes
 let _clearStatusHtml = null, _pactHudKey = null, _foodHudKey = null;
 let _invTabHtml = null, _heroTabHtml = null, _skillsTabHtml = null;
 // "New loot" badge state: item object refs the player has already laid eyes on in
@@ -27564,6 +27565,16 @@ function updateBars() {
   hpBar.classList.toggle('hp-low', hpLow);
   if (hpBar.parentElement) hpBar.parentElement.classList.toggle('hp-low-track', hpLow);
   document.getElementById('mp-text').textContent = ownVitals ? `${abbreviateNumber(player.mp)}/${abbreviateNumber(player.maxMp)}` : '';
+  // Experience-to-next numbers — the XP bar's own readout (the Ascension Gauge HUD
+  // upgrade). Shown on both the header chip (#xp-text) and the desktop bottom XP bar
+  // (#dh-xp-val); blank on a bare HUD. XP moves rarely, so a cached last-string guard
+  // skips the DOM write when unchanged (per the HUD "written only on change" rule).
+  const xpValStr = hudOwned('xpnums') ? `${abbreviateNumber(player.xp)}/${abbreviateNumber(xpForLevel(player.level))}` : '';
+  if (xpValStr !== _xpTextShown) {
+    _xpTextShown = xpValStr;
+    const xt = document.getElementById('xp-text'); if (xt) xt.textContent = xpValStr;
+    const dxv = document.getElementById('dh-xp-val'); if (dxv) dxv.textContent = xpValStr;
+  }
   // Computed once, then reused by both the mobile header and the desktop
   // bottom-HUD mirror below (each used to be computed twice per call, and
   // playerPower() walks all gear + skills every time).
