@@ -10,6 +10,7 @@ export const CHANGELOG = [
   { date: "2026-07-19", size: "small", v: "Empty-slot gear badge returns", by: "Jeff Louie", notes: [
     "\"Empty slot\" badge shows on gear you've never worn again — no Gauging Calipers needed.",
     "Badge circles wisps of light instead of pulsing.",
+  ] },
   { date: "2026-07-19", size: "small", v: "Auto-cast spells trigger the mana tutorial", by: "Jeff Louie", notes: [
     "First mana-spending cast teaches the Mana Potion even when it fires from the auto-cast slot (was: manual casts only).",
   ] },
