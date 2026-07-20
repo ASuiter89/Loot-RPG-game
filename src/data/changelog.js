@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "small", v: "Combat log colours damage by outcome", by: "Jeff Louie", notes: [
+    "Log tints the number: gold = damage you deal, red = damage you take, green = HP healed.",
+    "Heal lines (potion, orb, shrine) read neutral with a green number — no longer mistaken for green loot rows.",
+  ] },
   { date: "2026-07-19", size: "medium", v: "Five new Craftsman HUD upgrades", by: "Jeff Louie", notes: [
     "Item level, gold value & salvage yield hidden until you build their bag readouts.",
     "Derived-stats panel (Adept's Slate) & skill surge bonuses (Sage's Codex) now purchasable too.",
