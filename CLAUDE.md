@@ -13,7 +13,7 @@ persistence layer.
 
 The game is a **modular ES-module codebase** built to a **static bundle** with
 **Vite**. Source lives in `src/`; `index.html` is just the app shell. `npm run
-build` emits `dist/`, which Netlify / GitHub Pages serve as plain static files.
+build` emits `dist/`, which GitHub Pages serves as plain static files.
 (The project used to be one 30k-line `index.html`; see `docs/DECISIONS.md` for the
 pivot and `docs/CHANGELOG.md` for what has moved. A transitional monolith still
 lives in `src/legacy/game.js` and shrinks as code is extracted.)
@@ -21,7 +21,7 @@ lives in `src/legacy/game.js` and shrinks as code is extracted.)
 ## Hard rules
 
 - **Ship a static bundle — no runtime dependencies.** The build must stay a set of
-  static files deployable to Netlify / GitHub Pages with no server. Do not add a
+  static files deployable to GitHub Pages with no server. Do not add a
   runtime dependency, framework, or CDN `<script>`. Dev tooling (Vite, Vitest,
   Playwright) is fine — it never ships. Vite `base` is `'./'`; keep asset URLs
   relative so the bundle works at a domain root or a Pages subpath.
@@ -353,4 +353,4 @@ Apply this proactively on every UI change.
 
 Run `npm test` + `npm run build` + `npm run smoke`. The game silently fails to load
 on a syntax/boot error, so these three gates — not a manual eyeball — are the safety
-net. Never leave `main` in a non-bootable or red state (Netlify auto-deploys it).
+net. Never leave `main` in a non-bootable or red state (GitHub Pages auto-deploys it).

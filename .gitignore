@@ -8,8 +8,8 @@ cand/
 # Node deps installed only for local headless verification (not part of the game).
 node_modules/
 
-# Vite build output (static bundle) — generated, not committed. Netlify/Pages
-# build this from source on deploy.
+# Vite build output (static bundle) — generated, not committed. GitHub Pages
+# builds this from source on deploy.
 dist/
 
 # Vitest coverage reports.

@@ -264,13 +264,13 @@ test suite + smoke green.
 - 🧪 `test/systems/skillMath.test.js` gains coverage for `earnedSkillPoints` and
   the `earnedAscPoints` cadence.
 
-## Fix — dual-host deploy (Netlify + GitHub Pages)
+## Fix — GitHub Pages subpath deploy
 
 - 🏗️ `index.html` now references `./src/main.js` and `./src/styles.css`
   **relatively** (were absolute `/src/…`). Absolute paths resolve to the domain
   root and 404 on a GitHub Pages **project subpath** (`/Loot-RPG-game/`), which
-  served the raw source unstyled. Relative paths work at a root domain (Netlify's
-  built `dist/`) **and** the subpath (Pages' raw source).
+  served the raw source unstyled. Relative paths resolve under the subpath so the
+  module graph loads as-is.
 - 🏗️ Added a root `.nojekyll` so GitHub Pages serves `src/` verbatim.
 - 🧪 Baseline gates now **require** relative asset paths (reject `/src/…`); added
   `npm run smoke:pages` (raw source over HTTP, the Pages path) alongside
