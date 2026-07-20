@@ -200,7 +200,7 @@ jobs:
         if: steps.pr.outputs.skip != 'true' && steps.heal.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
-          # Match deploy.yml / netlify.toml (Node 20) so gates run as they ship.
+          # Match deploy.yml (Node 20) so gates run as the bundle ships.
           node-version: 20
           cache: npm
 

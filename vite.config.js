@@ -2,10 +2,9 @@ import { defineConfig } from 'vitest/config';
 
 // Dungeon Loot build + test config.
 //
-// The game ships as static files (Netlify / GitHub Pages). `base: './'` emits
-// relative asset URLs so the built bundle works whether it is served from a
-// domain root (Netlify) or a project subpath (GitHub Pages) — no base-path
-// surgery needed per host.
+// The game ships as static files on GitHub Pages. `base: './'` emits relative
+// asset URLs so the built bundle works when served from a project subpath
+// (e.g. /Loot-RPG-game/) — no base-path surgery needed.
 export default defineConfig({
   base: './',
   root: '.',

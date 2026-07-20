@@ -149,8 +149,8 @@ describe('History records every ended run (graveyard headstones)', () => {
 
 describe('index.html module wiring', () => {
   it('loads the game as an ES module entry via a RELATIVE path', () => {
-    // Relative paths keep the app working at any mount point — the domain root
-    // (Netlify) AND a project subpath (GitHub Pages, e.g. /Loot-RPG-game/).
+    // Relative paths keep the app working at any mount point — including a
+    // GitHub Pages project subpath (e.g. /Loot-RPG-game/).
     // An absolute "/src/..." resolves to the domain root and 404s on a subpath.
     expect(html).toMatch(/<script\s+type="module"\s+src="\.\/src\/main\.js"><\/script>/);
     expect(html, 'asset paths must be relative (not /src/…) for GitHub Pages subpaths').not.toMatch(/(?:src|href)="\/src\//);
