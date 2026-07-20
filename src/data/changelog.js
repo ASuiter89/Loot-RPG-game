@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-19", size: "small", v: "New-loot badge clears on opening the bag", by: "Jeff Louie", notes: [
+    "Red new-loot badge (and touch Bag pip) clear when you open the LOOT list, not on the next combat event.",
+  ] },
   { date: "2026-07-19", size: "small", v: "Ready-spell glow: thin dark-blue pulse", by: "Jeff Louie", notes: [
     "Ready skill slots pulse a thin dark-blue border (was thick gold glow).",
   ] },

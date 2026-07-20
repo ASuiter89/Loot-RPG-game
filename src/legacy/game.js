@@ -9771,6 +9771,7 @@ let panelOpen = false;
 function togglePanel() {
   // The loot drawer is a permanent column — just (re)render it.
   panelOpen = true; renderPanel();
+  markHudDirty();   // revealing the loot list clears its new-loot badge this frame
 }
 // Touch: the bag/loot drawer is a full-screen sheet toggled by the BAG button
 // (body.bag-open drives the CSS; renderPanel fills it). On desktop the drawer is a
@@ -9779,6 +9780,7 @@ function toggleBag() {
   const open = !document.body.classList.contains('bag-open');
   document.body.classList.toggle('bag-open', open);
   if (open) { document.body.classList.remove('panel-collapsed'); panelOpen = true; renderPanel(); }
+  markHudDirty();   // opening the Bag sheet clears the touch new-loot pip this frame
 }
 
 // ── MAP CLICK-TO-MOVE ──
@@ -27816,6 +27818,10 @@ function switchTab(tab) {
   const st = document.getElementById('tab-skills');
   if (st) st.classList.toggle('active', tab==='skills');
   renderPanel();
+  // The LOOT tab's red new-loot badge (and its touch Bag pip) only recompute on a
+  // HUD-dirty flush — mark dirty so opening the LOOT list clears the badge this
+  // frame instead of lingering until the next combat event. See newLootCount().
+  markHudDirty();
   // Always land at the top when switching tabs — never mid-scroll from the last one.
   const pc = document.getElementById('panel-content');
   if (pc) pc.scrollTop = 0;
@@ -30383,6 +30389,7 @@ function toggleLog() {
 const PANEL_COLLAPSE_KEY = 'panelCollapsed';
 function setPanelCollapsed(collapsed, persist = true) {
   document.body.classList.toggle('panel-collapsed', collapsed);
+  markHudDirty();   // un-collapsing reveals the loot list — recompute its new-loot badge this frame
   if (persist) { try { localStorage.setItem(PANEL_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) {} settingsChanged(); }
   // Folding the loot drawer slides its column width to/from the map on desktop —
   // re-fit the canvas backing buffer to the animating cell width each frame so the
