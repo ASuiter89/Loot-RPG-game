@@ -11,6 +11,7 @@ export const CHANGELOG = [
     "New Ascension Gauge readout prints experience-to-next-level numbers on the XP bar.",
     "Omen Dial 420g (was 600); Treasure Tally 480g (was 840, no Glimmer).",
     "HUD Readouts bench points to the Vital Readout as the first buy.",
+  ] },
   { date: "2026-07-19", size: "small", v: "Combat log colours damage by outcome", by: "Jeff Louie", notes: [
     "Log tints the number: gold = damage you deal, red = damage you take, green = HP healed.",
     "Heal lines (potion, orb, shrine) read neutral with a green number — no longer mistaken for green loot rows.",
