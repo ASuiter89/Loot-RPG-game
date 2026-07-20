@@ -1,5 +1,7 @@
 // Behavioural test — the legendary/unique loot BANNER must fire for every gear
 // type AND from every source that grants a top-tier piece, not just kills/chests.
+// It ALSO guards the first-of-rarity MILESTONE: the first green/blue/purple a hero
+// picks up earns that same banner once, then reverts to a quiet chime.
 //
 // This guards the fix for "toasts only show for daggers": the banner (#loot-banner)
 // keys purely on rarity, and the surprise-reward sources (gambler jackpot, bounty
@@ -92,11 +94,25 @@ async function main() {
         }
       }
 
-      // 2) Lesser tiers must NOT banner (the gate is legendary/unique only).
-      for (const tier of ['epic','rare','normal']) {
+      // 2) First-of-rarity MILESTONE gating. The FIRST green/blue/purple pickup pops
+      // the same banner as a legendary (a one-time celebration as a new colour enters
+      // the bag); a SECOND of that colour does NOT; normal/junk are the baseline and
+      // never milestone. Reset the ledger so this section starts fresh regardless of
+      // what the slot-reveals above left behind.
+      window.player.rarityFirsts = {};
+      for (const tier of ['uncommon','rare','epic']) {
+        const item1 = window.generateItem(1, 12, tier, 'chest');
+        const first = drive(() => window.lootReveal(item1));
+        const item2 = window.generateItem(1, 12, tier, 'chest');
+        const second = drive(() => window.lootReveal(item2));
+        res.gating.push({ tier, firstBannered: first.show, firstTitle: first.title, name: item1.name, secondBannered: second.show });
+      }
+      // The baseline tiers every hero starts swimming in never earn a milestone.
+      for (const tier of ['normal','junk']) {
+        window.player.rarityFirsts = {};
         const item = window.generateItem(1, 12, tier, 'chest');
         const r = drive(() => window.lootReveal(item));
-        res.gating.push({ tier, banneredWrongly: r.show, title: r.title });
+        res.gating.push({ tier, baseline: true, firstBannered: r.show });
       }
 
       // 3) isTopTierItem predicate truth table.
@@ -146,7 +162,12 @@ async function main() {
       if (!s.ok) failures.push(`banner did NOT fire for ${s.tier} ${s.slot} (show=${s.show}, title="${s.title}", expected "${s.name}"${s.threw ? ', threw: ' + s.threw : ''})`);
     }
     for (const g of out.gating) {
-      if (g.banneredWrongly) failures.push(`banner fired for a ${g.tier} item — the gate should be legendary/unique only (title="${g.title}")`);
+      if (g.baseline) {
+        if (g.firstBannered) failures.push(`banner fired for a ${g.tier} item — baseline tiers must never milestone`);
+        continue;
+      }
+      if (!g.firstBannered || g.firstTitle !== g.name) failures.push(`first ${g.tier} did NOT pop the milestone banner (show=${g.firstBannered}, title="${g.firstTitle}", expected "${g.name}")`);
+      if (g.secondBannered) failures.push(`second ${g.tier} popped a banner — the milestone must fire only once per colour`);
     }
     const p = out.predicate;
     if (!(p.legendary && p.unique && !p.epic && !p.rareItem && !p.nullItem)) {

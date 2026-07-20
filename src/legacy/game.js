@@ -64,6 +64,7 @@ import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMa
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
 import { lockedTiers } from '../systems/rarityGate.js';
+import { firstRarityMilestone, MILESTONE_KICKER, seedMilestones } from '../systems/rarityMilestone.js';
 import { shopTierWeights } from '../systems/shopStock.js';
 import {
   rampDepth, featureUnlocked, unlockedSkillSlots, elitesAllowed, gearRequirementsActive,
@@ -6467,10 +6468,13 @@ let player = { x: 5, y: 5,
   guided: true, taught: {}, levelUpsSeen: 0, starterDone: false,
   // HUD "Field Kit": which readout instruments this hero has crafted at the Craftsman
   // (minimap, foes/chest counters, depth & difficulty labels, vital numbers, status
-  // icons — see src/data/hudUpgrades.js). A fresh hero starts with a BARE HUD (owns
-  // none); each key flips on for good on purchase. loadGame() grants the whole set to
-  // saves that predate the Field Kit, so no existing hero loses a readout they had.
-  hudUpgrades: {},
+  // icons, item level/value/salvage-yield, derived-stats panel, skill surge bonuses —
+  // see src/data/hudUpgrades.js). A fresh hero starts with a BARE HUD (owns none); each
+  // key flips on for good on purchase. loadGame() grants the whole set to saves that
+  // predate the Field Kit, so no existing hero loses a readout they had. `hudKitV` is
+  // the kit's schema version — bumped when a batch of previously-free readouts becomes
+  // purchasable, so loadGame() can grant those to a pre-batch save exactly once.
+  hudUpgrades: {}, hudKitV: 2,
   // ── ENDGAME state (a fresh hero starts empty; loadGame() migrates old saves) ──
   covenantsActive: [],        // Dread Covenants sworn for the next descent
   dreadGrid: {},              // per-class "highest Dread cleared" checklist
@@ -6496,6 +6500,11 @@ let player = { x: 5, y: 5,
   // wardrobe of every look the player has ever found.
   cosmetics: { head: null, chest: null, weapon: null },
   wardrobe: { head: [], chest: [], weapon: [] },
+  // First-of-rarity milestone ledger: which coloured mid-tiers (green/blue/purple)
+  // this hero has already celebrated with a first-pickup banner. Empty on a fresh
+  // hero — each colour stops the world the first time it enters the bag (see
+  // lootReveal + systems/rarityMilestone.js), then never again. Saved per character.
+  rarityFirsts: {},
   // Crafting materials are NOT stored on the hero — they're an account-wide shared
   // wallet in the stash (Standard and Hardcore keep separate wallets), so every
   // hero draws on the same pool. See heroMaterials() / gainMaterial() / spendCost().
@@ -7657,7 +7666,7 @@ window.gameGuide = function gameGuide(topic) {
       `Every active has a SCHOOL — SKILL, SPELL, or HYBRID — shown as a badge on its tree node and in gameState().skills[i].school. A SKILL is martial: weapon-based, scales with weapon damage + Skill Power, leeches life, meets a foe's physical ARMOR (pierced by Armor Pen), recharged by CDR only. A SPELL is magic: scales with Spirit + Spell Power, never leeches, meets a foe's MAGIC RESIST (pierced by Magic Pen), recharged by CDR + Cast Speed. A HYBRID lands BOTH — a physical part (leeches, meets armor, Skill Power) AND a magic part (meets magic resist, Spell Power); its tooltip spells out the split, and it recharges with CDR + Cast Speed. Classes lean differently: Warrior is all SKILL, Mage all SPELL, Rogue mostly skill with shadow/toxic hybrids, Templar mostly holy spells with holy-strike hybrids. Gear the stats that match the actives you lean on.`,
       `Cooldowns are real seconds (spam-floored at 0.5s). CDR, Cast Speed and MCR are RATINGS: each cuts its target by rating/(rating+100) — an asymptotic fraction that nears but never reaches 100% (no cap, the math just can't get there). So a cooldown is cd = base × (1 − CDR/(CDR+100)) = base / (1 + CDR/100); a SPELL's recharge takes a second such cut from Cast Speed, and MP cost the same from MCR. Example: 100 CDR rating = a 50% cut (cd halves); stack it to 300 for a 75% cut. +Attack Speed quickens auto-attacks the same way. CDR speeds every active, Cast Speed spells only, and many skills gain extra recharge from their rank milestones (how much varies by skill — its "Surge bonuses" ladder spells it out). The hero sheet shows the real % each rating yields, and a skill's tooltip shows its actual post-CDR cooldown — a cooldown drops by exactly the amount shown.`,
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a self-buff's rank milestones, which lengthen its buff at ranks 7 & 10 and add a 20%-faster recharge at rank 10) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) plus a maxed skill's longer, faster buff lifts a 40%-baseline buff well past ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
-      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% (Empowered), +20% (Honed), +30% (Mastered) — so deepening a key skill outpaces its rising mana cost. On TOP of that flat power, each milestone grants a SIGNATURE perk unique to the skill's archetype — no two kinds of spell read alike: a chain arcs to more foes, a summon lingers longer then raises an extra minion, an ailment nova inflicts more reliably then longer and wider, a self-buff hits harder then lasts longer, a bolt gains range then a double-strike, a piercing beam reaches further then strikes twice, a cleave leeches, a floor-wide storm hits more foes, an assassin's strike gains an execute. Every skill's detail card shows a "Surge bonuses" ladder listing all three (its power spike + that rank's signature), each marked with a ✓ once your rank has earned it.`,
+      `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% (Empowered), +20% (Honed), +30% (Mastered) — so deepening a key skill outpaces its rising mana cost. On TOP of that flat power, each milestone grants a SIGNATURE perk unique to the skill's archetype — no two kinds of spell read alike: a chain arcs to more foes, a summon lingers longer then raises an extra minion, an ailment nova inflicts more reliably then longer and wider, a self-buff hits harder then lasts longer, a bolt gains range then a double-strike, a piercing beam reaches further then strikes twice, a cleave leeches, a floor-wide storm hits more foes, an assassin's strike gains an execute. Every skill's detail card shows a "Surge bonuses" ladder listing all three (its power spike + that rank's signature), each marked with a ✓ once your rank has earned it — the ladder itself is a one-time Craftsman HUD upgrade (the Sage's Codex; a bare hero learns skills without it, see gameGuide("town")).`,
       `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10) — the ladder names the passive's OWN bonus so each reads uniquely — so maxing one passive beats spreading points thin. AND at rank 10 a passive unlocks one BRAND-NEW stat it never gave before — thematic to the node (a crit passive gains crit damage, an HP passive gains regen, a spell passive gains crit, and so on) — folded straight into the same combat formulas. Its detail card lists all three spikes plus the rank-10 stat in the ✓-when-earned "Surge bonuses" ladder, shows milestone pips by the rank, and folds the surge into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
       `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩︎ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
@@ -7692,9 +7701,10 @@ window.gameGuide = function gameGuide(topic) {
       `COLOUR UNLOCKS IN WAVES over the early floors, so the opening dungeon is a real ramp: below the first boss, drops are only grey & white. Defeating the first guardian (floor 5) unlocks GREENS; the second guardian (floor 10) unlocks BLUES and every rarer tier. A boss's own first-kill windfall already pays in the colour it just unlocked. So a green is an early milestone, not a floor-1 giveaway.`,
       `RED (unique) is special: a unique is a hand-crafted, NAMED artifact — the one-of-a-kind version of a specific gear type (a named Greatsword, a named Robe, …), one for every gear type in the game. Unlike the random rarities it is NOT randomly affixed: each unique always carries the SAME native signature stat, the SAME six modifiers, and a fixed SET of 2–3 signature powers (each a "legendary modifier" like Vampiric) — where an ordinary legendary rolls just one, a unique stacks several, and they compound. Only the VALUES vary — they roll scaled to the depth it drops on, exactly once, then LOCK. A unique is fixed on drop: it can't be augmented, rerolled or transmuted at the Enchanter. (Set pieces — see below — are the OTHER fixed, named red artifacts.) gameState() marks worn/held uniques with a "unique" id and "fixed":true, and lists a piece's powers in item "powers".`,
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
+      `Your very FIRST green, blue and purple each pop that SAME banner the moment you pick one up — a one-time milestone as each new colour first enters your bag (latched on player.rarityFirsts); after that, that colour reverts to its quiet drop chime. Legendary and red keep bannering every time.`,
       `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
       `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. The drawback always lands on a property you'll actually FEEL — a core stat (Attack, Defense, Max HP/MP, Speed) or a damage amp (Increased/Boss Damage, Spell/Skill Power) — never on a benefit-only rating whose negative would just floor to zero, so a curse's price is always paid. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — a curse hits ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
-      `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). The on-screen Power number, the +/- stat-compare line, and the bag Sort/Filter controls are all one-time Craftsman HUD upgrades (Appraiser's Loupe, Gauging Calipers, Quartermaster's Ledger — see gameGuide("town")); a fresh hero reads gear by its raw stats until they're crafted, but gameState always reports pow + full stats regardless of what's fitted. gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
+      `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). The on-screen Power number, item level, gold value, +/- stat-compare line, and bag Sort/Filter controls are all one-time Craftsman HUD upgrades (Appraiser's Loupe, Assayer's Glass, Coin Scale, Gauging Calipers, Quartermaster's Ledger — see gameGuide("town")); a fresh hero reads gear by its raw stats until they're crafted, but gameState always reports pow, ilvl, value + full stats regardless of what's fitted. gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Loot LEANS to your class: drops, the merchant and the gambler favour build-relevant bases (~60%, the rest random) — a Mage sees more staves/wands, robes and tomes; a Warrior/Templar more of their melee weapons, plate and shields; a Rogue more daggers/bows, light armour and quivers. Off-favoured bases still turn up, and picking a slot at the gambler still leans the base within it.`,
       `Each armour base also gates on the attribute that fits its identity (Helm→Vitality, Cap→Luck, Circlet/Crown→Spirit, Hood→Agility, …); the requirement is the price of that base's raw armour, so pick the base your build's attribute unlocks. Weapons/off-hands still gate on their own attribute; jewelry carries a fixed signature stat per base too. The gate climbs with item level on a STEEPENING curve (and ~8% per rarity step), so deep gear demands a real, class-defining stake in its attribute — off-class pieces lock out ever harder the further you descend, rewarding a committed build over a spread-thin one.`,
@@ -7769,7 +7779,7 @@ window.gameGuide = function gameGuide(topic) {
       + `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the regular service keepers milling about the green at FRESH random spots every visit (most of them slowly strolling around — except the Craftsman, pinned just off the avenue beside the Town Portal so you always find it) and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all. A keeper only appears once it has ARRIVED (one joins per boss kill) — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
       `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff, healerBuffs and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
-      `Merchant (buy gear / pay to restock — ware rarity SCALES with how deep you've pushed and never grey junk: shallow stalls stock white→green, deeper ones lean blue→purple→orange→red. The same early-game gate as dungeon drops applies, so no colour you haven't earned yet — greens wait for the floor-5 boss, blues+ for floor-10. Each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is a FOUNDING keeper — it arrives with the Healer the moment the town opens (boss floor 5), so its HUD upgrades are on hand from your first visit — and stands PINNED just off the avenue beside the Town Portal (a step up-left of it) — it never wanders and sits BESIDE the path, not on it, so a hero returning by portal finds it right where they land without it ever blocking the walkway. Its HUD UPGRADES bench (the Craftsman's landing tab, ahead of the GEAR forge) builds them in two groups: HUD READOUTS that each switch on a heads-up-display piece (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana numbers, status-effect icons), and BAG & LOOT TOOLS (Appraiser's Loupe = item Power ratings, Gauging Calipers = +/- stat compare vs equipped, Quartermaster's Ledger = bag sort & filter, Sorting Sieve = auto-loot rules). A fresh hero starts BARE — no HUD numbers/minimap/counters/labels/status icons, and a bag auto-grouped by gear category (rarest first) but with no Power ratings, stat compare, re-sort/filter or auto-loot — and buys these as gold + materials allow. Each is a one-time build with a mixed price: Scrap on the cheap readouts, Glimmer from the mid tier up, and a Core on the two premium tools (the minimap and auto-loot), so the priciest pieces wait until you've dived deep enough to drop those materials. Each is kept for that hero, and a freshly-fitted HUD piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + each upgrade's mixed {gold,scrap,glimmer,core} cost; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
+      `Merchant (buy gear / pay to restock — ware rarity SCALES with how deep you've pushed and never grey junk: shallow stalls stock white→green, deeper ones lean blue→purple→orange→red. The same early-game gate as dungeon drops applies, so no colour you haven't earned yet — greens wait for the floor-5 boss, blues+ for floor-10. Each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is a FOUNDING keeper — it arrives with the Healer the moment the town opens (boss floor 5), so its HUD upgrades are on hand from your first visit — and stands PINNED just off the avenue beside the Town Portal (a step up-left of it) — it never wanders and sits BESIDE the path, not on it, so a hero returning by portal finds it right where they land without it ever blocking the walkway. Its HUD UPGRADES bench (the Craftsman's landing tab, ahead of the GEAR forge) builds them in three groups: HUD READOUTS that each switch on a heads-up-display piece (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana/stamina numbers, status-effect icons), BAG & LOOT TOOLS (Assayer's Glass = item level, Coin Scale = item gold value, Salvage Gauge = salvage-material preview, Appraiser's Loupe = item Power ratings, Gauging Calipers = +/- stat compare vs equipped, Quartermaster's Ledger = bag sort & filter, Sorting Sieve = auto-loot rules), and CHARACTER & SKILL SHEET readouts (Adept's Slate = the derived-stats breakdown under your gear, Sage's Codex = each skill's milestone surge bonuses). A fresh hero starts BARE — no HUD numbers/minimap/counters/labels/status icons; a bag auto-grouped by gear category (rarest first) but showing no item level, gold value, salvage yield, Power ratings, stat compare, re-sort/filter or auto-loot; and no derived-stats panel or skill surge bonuses — and buys these as gold + materials allow. Even bare, the Merchant's sell tab still shows each item's sell price and salvage yield, and Sell-all / Scrap-all totals always show, so a hero can always transact. Each is a one-time build with a mixed price: Scrap on the cheap readouts, Glimmer from the mid tier up, and a Core on the two premium tools (the minimap and auto-loot), so the priciest pieces wait until you've dived deep enough to drop those materials. Each is kept for that hero, and a freshly-fitted HUD piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + each upgrade's mixed {gold,scrap,glimmer,core} cost; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1, 5 or 10 floors (more damage/loot/gold, or an easier stretch). Each mystic offers just TWO pacts, rolled at random from twelve, so the choice changes every time you find one; a longer pact costs MORE per floor (the price climbs exponentially with floors sealed). gameState().npcs lists the two pacts a nearby mystic offers. Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Sellsword (arrives with your 12th boss kill): hire a combat companion for 1/10/30 floors, like a Mystic pact. It spawns beside you each floor of the contract, reviving between floors, and fights like a strong summon. The hire is a premium, depth-scaled cost — it climbs steeply with the deepest floor you have reached — and a longer contract shaves a little off each floor (a gentler bulk discount than the Mystic's). Hiring again replaces the current contract. gameState().menu.merc reports the active hire and floors left; once in the dungeon the companion also appears in gameState().allies.`,
@@ -13134,8 +13144,13 @@ function renderShopSellHTML() {
     const sub = it.slot ? SLOTS[it.slot].label : 'item';
     const locked = it.locked;
     const sellBtn = locked ? '' : `<button class="shop-sell-btn" onclick="shopSell(${i})"><span data-spr=ic_money></span>${fmtGold(price)}</button>`;
+    // The Merchant's scrap button previews its salvage yield here regardless of the
+    // Salvage Gauge readout — the sell tab is the scrap context, the counterpart to
+    // sell prices always showing here even for a bare hero.
+    const scrapExtra = (!locked && it.slot && TIERS[it.tier])
+      ? salvageRanges(it).filter(r => r.key !== 'scrap').map(({ key }) => `<span data-spr=mat_${key}></span>`).join('') : '';
     const scrapBtn = (!locked && it.slot && TIERS[it.tier])
-      ? `<button class="shop-scrap-btn" title="Scrap" onclick="shopScrap(${i})"><span data-spr=mat_scrap></span></button>` : '';
+      ? `<button class="shop-scrap-btn" title="Scrap" onclick="shopScrap(${i})"><span data-spr=mat_scrap></span>${scrapExtra ? ' +' + scrapExtra : ''}</button>` : '';
     const lock = locked ? `<span class="shop-price short"><span data-spr=ic_key></span></span>` : '';
     return `<div class="shop-row ${rarityClass(it)} ${locked ? 'locked' : ''}">`
       + `<span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>`
@@ -21670,6 +21685,19 @@ function isTopTierItem(item) { return !!item && (item.tier === 'legendary' || it
 function lootReveal(item) {
   if (!item || !item.tier) return;
   const col = tierColor(item);   // set pieces flash their own colour, not unique red
+  // The FIRST green/blue/purple this hero ever picks up stops the world exactly like
+  // a legendary — a one-time milestone the moment a new colour enters the bag. Once
+  // celebrated (latched on player.rarityFirsts), that tier reverts to its usual quiet
+  // chime below; legendary/unique aren't milestone tiers, so they fall straight through
+  // to the isTopTierItem branch and keep bannering every time.
+  const milestone = firstRarityMilestone(item, player.rarityFirsts);
+  if (milestone) {
+    (player.rarityFirsts || (player.rarityFirsts = {}))[milestone] = 1;
+    showLootBanner(item.name, MILESTONE_KICKER[milestone] || 'NEW RARITY', col,
+      () => { sfx('legendary'); screenFlash(col); addShake(9); });
+    saveGameSoon();   // latch the milestone so it never re-fires, even if you quit now
+    return;
+  }
   if (isTopTierItem(item)) {
     // Sting, flash and shake ride along with the banner so they land when it shows
     // (it may be queued behind a depth banner), not the instant it's enqueued.
@@ -27159,9 +27187,14 @@ function renderStaminaBar() {
   const st = Math.max(0, Math.min(mx, player.stamina || 0));
   const w = (st / mx * 100) + '%';
   if (w !== _stamW) { _stamW = w; bar.style.width = w; }
+  // The stamina NUMBER is the Vital Readout HUD piece — the same Craftsman gate as the
+  // HP/MP digits (see updateBars / hudOwned). A bare hero reads stamina off the bar's
+  // fill only; the digits appear once the Vital Readout is built. The fill stays live
+  // regardless — only the label is gated.
+  const ownVitals = hudOwned('vitals');
   const txt = hudEl('stam-text');
   if (txt) {
-    const label = `${abbreviateNumber(st)}/${abbreviateNumber(mx)}`;
+    const label = ownVitals ? `${abbreviateNumber(st)}/${abbreviateNumber(mx)}` : '';
     if (label !== _stamTxt) { _stamTxt = label; txt.textContent = label; }
   }
   // Mirror onto the desktop bottom-HUD endurance bar — a centred fill that shrinks
@@ -27171,7 +27204,7 @@ function renderStaminaBar() {
     if (dhEnd && w !== _dhEndW) { _dhEndW = w; dhEnd.style.width = w; }
     const dhEndVal = hudEl('dh-end-val');
     if (dhEndVal) {
-      const label = `${Math.round(st)}/${mx}`;
+      const label = ownVitals ? `${Math.round(st)}/${mx}` : '';
       if (label !== _dhEndTxt) { _dhEndTxt = label; dhEndVal.textContent = label; }
     }
   }
@@ -28022,12 +28055,17 @@ function bagActionsHTML(item, i) {
   if (item.locked) {
     return `<div class="loot-actions"><span class="la-note"><span data-spr=ic_key></span> Locked</span>${lockBtn}</div>`;
   }
+  // The per-item sell price is the Coin Scale readout (hudOwned('value')): a bare hero
+  // sells blind from the bag and only reads worth at the Merchant's sell tab (which is
+  // never gated). The button still sells — only its price tag is withheld.
   const sellPrice = Math.max(1, Math.round(item.value * 0.5));
-  const sellBtn = `<button class="row-btn la-btn" onclick="sellFromBag(${i})"><span data-spr=ic_money></span> Sell · <span data-spr=ic_money></span>${fmtGold(sellPrice)}</button>`;
+  const sellBtn = `<button class="row-btn la-btn" onclick="sellFromBag(${i})"><span data-spr=ic_money></span> Sell${hudOwned('value') ? ` · <span data-spr=ic_money></span>${fmtGold(sellPrice)}` : ''}</button>`;
   // Compact yield hint: lead with the Scrap icon, then just the icons of any
-  // rarer mats this piece adds — no number ranges, so it never wraps.
-  const extraMats = salvageRanges(item).filter(r => r.key !== 'scrap')
-    .map(({ key }) => `<span data-spr=mat_${key}></span>`).join('');
+  // rarer mats this piece adds — no number ranges, so it never wraps. The rarer-mats
+  // preview is the Salvage Gauge readout (hudOwned('scrapval')); until it's crafted the
+  // bag button shows just "Scrap" (the Merchant's scrap button still previews the yield).
+  const extraMats = hudOwned('scrapval') ? salvageRanges(item).filter(r => r.key !== 'scrap')
+    .map(({ key }) => `<span data-spr=mat_${key}></span>`).join('') : '';
   const scrapBtn = (item.slot && TIERS[item.tier])
     ? `<button class="row-btn la-btn" onclick="scrapFromBag(${i})"><span data-spr=mat_scrap></span> Scrap${extraMats ? ' +' + extraMats : ''}</button>`
     : '';
@@ -29098,7 +29136,9 @@ function passiveMilestoneDesc(node, rank) {
 // rank is high enough to have earned it — so you can see the whole ladder at any
 // rank, not just the next rung. Empty for skills that never milestone.
 function skillMilestonesHtml(node, rank) {
-  if (!skillHasMilestones(node)) return '';
+  // The whole "Surge bonuses" ladder is the Sage's Codex readout (hudOwned('surges'))
+  // — a bare hero learns skills without seeing their milestone surge bonuses spelled out.
+  if (!hudOwned('surges') || !skillHasMilestones(node)) return '';
   const passive = node.type === 'passive';
   const r = rank || 0;
   // A maxed passive ALSO unlocks one brand-new stat at its rank-10 milestone (see
@@ -29716,7 +29756,9 @@ function renderPaperdoll() {
     `<div class="pda-stage"><div class="paperdoll-anat">${bodyHTML}${slots}</div></div>` +
     `<div class="pd-hint">Tap a slot for details · ✕ to unequip · EQUIP loot from the LOOT tab</div>` +
     (twoSets ? `<div class="pd-hint">Two loadouts — switch sets above or press ${kbLabel('swapWeapon')}</div>` : '') +
-    heroStatsPanelHTML() +
+    // The derived-stats "Stats" card is the Adept's Slate readout (hudOwned('statsheet'))
+    // — a bare hero equips by feel until it's crafted at the Craftsman.
+    (hudOwned('statsheet') ? heroStatsPanelHTML() : '') +
     `</div>`;
 }
 // The Enchanter's Equipped section reuses the same paper-doll body, but each worn
@@ -30077,7 +30119,9 @@ function itemCardHTML(item, opts = {}) {
         : `<div style="color:${(TIERS.unique || {}).color || '#ff2222'};font-size:1.2rem;font-weight:bold;margin:2px 0">✦ Unique — properties fixed on drop</div>`)
     : '';
   // Item level: drives raw stat size, so it's worth surfacing alongside power.
-  const ilvlLine = (item.slot && item.ilvl)
+  // Gated on the Assayer's Glass HUD upgrade (hudOwned('ilvl')) — a bare hero reads
+  // gear by its raw stats until the readout is crafted at the Craftsman.
+  const ilvlLine = (item.slot && item.ilvl && hudOwned('ilvl'))
     ? `<span style="color:var(--blue-250)">ilvl ${item.ilvl}</span>` : '';
   // The "Equipped" label reads in gold so a glance tells which card is the piece
   // already worn, vs the dim "Hovered" candidate beside it.
@@ -30112,7 +30156,7 @@ function itemCardHTML(item, opts = {}) {
     ${reqLine}
     ${stats}
     ${weaponLine}
-    <div class="tt-value">Value: <span data-spr=ic_money></span>${fmtGold(item.value)}</div>
+    ${hudOwned('value') ? `<div class="tt-value">Value: <span data-spr=ic_money></span>${fmtGold(item.value)}</div>` : ''}
     <div class="tt-flavor">${item.flavor}</div>`;
 }
 
@@ -31644,7 +31688,16 @@ function loadGame() {
     // full HUD they always had (minimap, counters, depth/difficulty, vital numbers,
     // status icons). Brand-new heroes get an empty map from the player template and
     // must buy each piece, so this migration must fire ONLY when the field is absent.
-    if (!player.hudUpgrades || typeof player.hudUpgrades !== 'object') player.hudUpgrades = allHudUpgradesOwned();
+    if (!player.hudUpgrades || typeof player.hudUpgrades !== 'object') { player.hudUpgrades = allHudUpgradesOwned(); player.hudKitV = 2; }
+    // Schema v2 turned five previously-UNCONDITIONAL readouts into purchasable pieces
+    // (item level, gold value, salvage yield, the derived-stats panel, skill surge
+    // bonuses). A pre-v2 save (hudKitV absent/<2) always showed them, so GRANT those
+    // five so no returning hero loses them — then stamp the version so it fires once.
+    // A fresh post-v2 hero carries hudKitV:2 from the template and stays bare.
+    else if (!(player.hudKitV >= 2)) {
+      for (const k of ['ilvl', 'value', 'scrapval', 'statsheet', 'surges']) player.hudUpgrades[k] = true;
+      player.hudKitV = 2;
+    }
     // Crafting materials moved OFF the hero into the account-wide shared wallet
     // (see loadStash → migrateHeroMaterials). Any legacy `player.materials` on an
     // older save is left untouched here and folded into the shared pool once, on
@@ -31795,6 +31848,16 @@ function loadGame() {
       player.bossFirstKills = {};
       const cf = player.clearedFloors || {};
       for (const k in cf) { if (cf[k] && Number(k) % 5 === 0) player.bossFirstKills[k] = 1; }
+    }
+    // First-of-rarity milestone banners (new): the first pickup of each coloured mid-
+    // tier (green/blue/purple) stops the world like a legendary. Seed the ledger for
+    // OLD saves from the colours this hero has ALREADY unlocked — greens at the floor-5
+    // guardian, blues/purples at floor-10 (see rarityGate.lockedTiers) — so a returning
+    // hero only ever celebrates a colour they genuinely haven't found yet. Fresh heroes
+    // keep the empty ledger from the template. (Runs after bossFirstKills is seeded so
+    // lockedTiers reads a valid progression.)
+    if (!player.rarityFirsts || typeof player.rarityFirsts !== 'object') {
+      player.rarityFirsts = seedMilestones(lockedTiers(player.bossFirstKills, player.maxFloor));
     }
     // Town progression: keeper/camp unlocks now key off boss-floor clears (see
     // TOWN_SERVICE_ARRIVALS). Coerce the one-time graduation flag, then SILENTLY baseline

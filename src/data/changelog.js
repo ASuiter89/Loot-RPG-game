@@ -11,9 +11,20 @@ export const CHANGELOG = [
     "Log tints the number: gold = damage you deal, red = damage you take, green = HP healed.",
     "Heal lines (potion, orb, shrine) read neutral with a green number — no longer mistaken for green loot rows.",
   ] },
+  { date: "2026-07-19", size: "medium", v: "Five new Craftsman HUD upgrades", by: "Jeff Louie", notes: [
+    "Item level, gold value & salvage yield hidden until you build their bag readouts.",
+    "Derived-stats panel (Adept's Slate) & skill surge bonuses (Sage's Codex) now purchasable too.",
+    "Merchant still shows sell prices & salvage yield; Sell-all / Scrap-all totals always show.",
+  ] },
+  { date: "2026-07-19", size: "small", v: "Vital Readout covers stamina too", by: "Jeff Louie", notes: [
+    "Stamina number hidden on a bare HUD; Craftsman's Vital Readout now prints HP, MP & stamina (was HP/MP).",
+  ] },
   { date: "2026-07-19", size: "small", v: "Dungeon Gate: cleaner colors, terser copy", by: "Jeff Louie", notes: [
     "Frontier checkpoint tile stays neutral while pushing a tier — gold reserved for the Continue button.",
     "Trimmed gate copy: dropped tier-name prefix, repeated warp line, and filler words.",
+  ] },
+  { date: "2026-07-19", size: "small", v: "First green/blue/purple pops a loot banner", by: "Jeff Louie", notes: [
+    "First green/blue/purple pickup each pops a legendary-style banner, sting & shake; then quiet.",
   ] },
   { date: "2026-07-19", size: "small", v: "New-loot badge clears on opening the bag", by: "Jeff Louie", notes: [
     "Red new-loot badge (and touch Bag pip) clear when you open the LOOT list, not on the next combat event.",
