@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   GREEN_BOSS_FLOOR, BLUE_BOSS_FLOOR,
   bossDefeated, greensUnlocked, bluesUnlocked, lockedTiers,
+  RARITY_LADDER, tiersAboveFound,
 } from '../../src/systems/rarityGate.js';
 
 describe('rarity gate — boss floors', () => {
@@ -77,5 +78,41 @@ describe('lockedTiers', () => {
 
   it('a deep save (high maxFloor) has nothing locked even with an empty ledger', () => {
     expect(lockedTiers({}, 40).size).toBe(0);
+  });
+});
+
+describe('tiersAboveFound — cap the merchant at what the hero has FOUND', () => {
+  it('ranks the ladder junk 0 · white 1 · green 2 · blue 3 · purple 4 · orange 5 · red 6', () => {
+    expect(RARITY_LADDER).toEqual(
+      ['junk', 'normal', 'uncommon', 'rare', 'epic', 'legendary', 'unique']);
+  });
+
+  it('never found a blue → blue and every rarer tier are withheld', () => {
+    // Highest found is green (rank 2): blue (3) and up must be locked.
+    const locked = tiersAboveFound(2);
+    for (const t of ['rare', 'epic', 'legendary', 'unique']) expect(locked.has(t)).toBe(true);
+    // What you HAVE found (and below) is still sellable.
+    for (const t of ['junk', 'normal', 'uncommon']) expect(locked.has(t)).toBe(false);
+  });
+
+  it('found a purple → purple and below open, orange/red still capped', () => {
+    const locked = tiersAboveFound(4); // epic (purple) is the highest found
+    for (const t of ['junk', 'normal', 'uncommon', 'rare', 'epic']) expect(locked.has(t)).toBe(false);
+    for (const t of ['legendary', 'unique']) expect(locked.has(t)).toBe(true);
+  });
+
+  it('a fresh hero (only white found) is capped to white — no colour at all', () => {
+    const locked = tiersAboveFound(1); // normal (white)
+    for (const t of ['uncommon', 'rare', 'epic', 'legendary', 'unique']) expect(locked.has(t)).toBe(true);
+    expect(locked.has('junk')).toBe(false);
+    expect(locked.has('normal')).toBe(false);
+  });
+
+  it('a red found (top rank) caps nothing', () => {
+    expect(tiersAboveFound(6).size).toBe(0);
+  });
+
+  it('a non-finite rank means NO cap (backward-compatible default)', () => {
+    for (const bad of [undefined, null, NaN, 'x']) expect(tiersAboveFound(bad).size).toBe(0);
   });
 });
