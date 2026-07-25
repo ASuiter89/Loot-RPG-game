@@ -1052,11 +1052,29 @@
   /* Same hero/journey card as the title screen, sized to the settings card and
      with the title's bottom margin dropped (the stack's gap spaces it instead). */
   #settings-hero { width: 100%; margin: 0; box-sizing: border-box; }
-  .settings-vibe { cursor: default; }
-  /* Shared native-select look — the Audio tab's music-vibe picker and the Visuals
-     tab's UI FONT picker use the same dropdown chrome. */
-  #music-vibe-select, #ui-font-select { flex: 1; min-width: 0; width: 100%; background: var(--panel); color: var(--purple-50); border: 1px solid var(--border); border-radius: 6px; padding: 5px 6px; font-family: inherit; font-size: 1.3rem; letter-spacing: 0.3px; cursor: pointer; }
-  #music-vibe-select option, #ui-font-select option { background: var(--panel); color: var(--purple-50); }
+  .settings-vibe { cursor: default; display: flex; flex-direction: column; gap: 4px; }
+  /* Native-select look for the Visuals tab's UI FONT picker (the Audio tab's music
+     picker is now a multi-select chip grid, styled below). */
+  #ui-font-select { flex: 1; min-width: 0; width: 100%; background: var(--panel); color: var(--purple-50); border: 1px solid var(--border); border-radius: 6px; padding: 5px 6px; font-family: inherit; font-size: 1.3rem; letter-spacing: 0.3px; cursor: pointer; }
+  #ui-font-select option { background: var(--panel); color: var(--purple-50); }
+  /* MUSIC STYLES multi-select — a fluid grid of toggle chips (base look reused from
+     .dpad-cfg-btn). auto-fill + minmax(min(100%, …)) so a lone column can never
+     exceed the sheet on a ~280px screen and extra columns appear only when they fit;
+     the grid scrolls inside its own cap so the rest of Audio stays reachable. */
+  #music-vibe-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5rem), 1fr));
+    gap: 4px;
+    max-height: 38dvh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    padding-right: 2px;
+  }
+  .vibe-chip { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; line-height: 1.2; text-align: center; }
+  /* The Shuffle (all) chip spans the full width above the per-style grid. */
+  .vibe-chip.vibe-all { grid-column: 1 / -1; }
+  .vibe-chip .vibe-tag { font-size: 1.1rem; color: var(--meta); }
+  .vibe-chip.sel .vibe-tag { color: var(--paper); opacity: 0.85; }
   #settings-card {
     display: flex;
     flex-direction: column;
@@ -1542,9 +1560,8 @@
   }
   .dpad-cfg-btn.sel { background: var(--border); color: var(--paper); border-color: var(--frame); }
 
-  /* The UI FONT picker is a native <select> styled by the shared
-     #music-vibe-select, #ui-font-select rule above (same chrome as the Audio
-     tab's music dropdown). */
+  /* The UI FONT picker is a native <select> styled by the #ui-font-select rule
+     above. */
 
   .heal-btn {
     background: var(--red-700);
