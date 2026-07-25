@@ -11,6 +11,7 @@ export const CHANGELOG = [
     "Worn piece dropped below its attribute req now gets a pulsing red border on the paper doll, not just greyed.",
     "GEAR tab wears a pulsing red dot while any worn piece is ignored.",
     "Paper-doll corner unequip icons gone — tap a slot for its card, then Unequip.",
+  ] },
   { date: "2026-07-25", size: "medium", v: "Boss rooms are one-of-a-kind", by: "Jeff Louie", notes: [
     "Each of the 15 guardians fights in its own arena — no two boss rooms alike.",
     "Caster lairs bristle with columns to duck behind, breaking line-of-sight on volleys & beams.",
