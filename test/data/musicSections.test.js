@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MUSIC_SECTIONS, HAPPY_START_SECTIONS } from '../../src/data/musicSections.js';
+import { MUSIC_SECTIONS, HAPPY_START_SECTIONS, MUSIC_VIBE_TAGS } from '../../src/data/musicSections.js';
 import { bassSemi, voiceChord } from '../../src/systems/musicGroove.js';
 
 const STEPS_PER_BAR = 8;
@@ -24,6 +24,18 @@ describe('MUSIC_SECTIONS data validity', () => {
     const names = new Set(MUSIC_SECTIONS.map(s => s.name));
     for (const n of HAPPY_START_SECTIONS) {
       expect(names.has(n), `happy-start style ${n} missing from MUSIC_SECTIONS`).toBe(true);
+    }
+  });
+
+  it('every style has a genre tag for the music-style picker, and no orphan tags', () => {
+    const names = new Set(MUSIC_SECTIONS.map(s => s.name));
+    for (const s of MUSIC_SECTIONS) {
+      const tag = MUSIC_VIBE_TAGS[s.name];
+      expect(typeof tag, `style ${s.name} missing a MUSIC_VIBE_TAGS entry`).toBe('string');
+      expect(tag.length, `style ${s.name} has an empty tag`).toBeGreaterThan(0);
+    }
+    for (const name of Object.keys(MUSIC_VIBE_TAGS)) {
+      expect(names.has(name), `MUSIC_VIBE_TAGS names unknown style ${name}`).toBe(true);
     }
   });
 

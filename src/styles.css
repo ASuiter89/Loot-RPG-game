@@ -1052,11 +1052,29 @@
   /* Same hero/journey card as the title screen, sized to the settings card and
      with the title's bottom margin dropped (the stack's gap spaces it instead). */
   #settings-hero { width: 100%; margin: 0; box-sizing: border-box; }
-  .settings-vibe { cursor: default; }
-  /* Shared native-select look — the Audio tab's music-vibe picker and the Visuals
-     tab's UI FONT picker use the same dropdown chrome. */
-  #music-vibe-select, #ui-font-select { flex: 1; min-width: 0; width: 100%; background: var(--panel); color: var(--purple-50); border: 1px solid var(--border); border-radius: 6px; padding: 5px 6px; font-family: inherit; font-size: 1.3rem; letter-spacing: 0.3px; cursor: pointer; }
-  #music-vibe-select option, #ui-font-select option { background: var(--panel); color: var(--purple-50); }
+  .settings-vibe { cursor: default; display: flex; flex-direction: column; gap: 4px; }
+  /* Native-select look for the Visuals tab's UI FONT picker (the Audio tab's music
+     picker is now a multi-select chip grid, styled below). */
+  #ui-font-select { flex: 1; min-width: 0; width: 100%; background: var(--panel); color: var(--purple-50); border: 1px solid var(--border); border-radius: 6px; padding: 5px 6px; font-family: inherit; font-size: 1.3rem; letter-spacing: 0.3px; cursor: pointer; }
+  #ui-font-select option { background: var(--panel); color: var(--purple-50); }
+  /* MUSIC STYLES multi-select — a fluid grid of toggle chips (base look reused from
+     .dpad-cfg-btn). auto-fill + minmax(min(100%, …)) so a lone column can never
+     exceed the sheet on a ~280px screen and extra columns appear only when they fit;
+     the grid scrolls inside its own cap so the rest of Audio stays reachable. */
+  #music-vibe-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5rem), 1fr));
+    gap: 4px;
+    max-height: 38dvh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    padding-right: 2px;
+  }
+  .vibe-chip { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; line-height: 1.2; text-align: center; }
+  /* The Shuffle (all) chip spans the full width above the per-style grid. */
+  .vibe-chip.vibe-all { grid-column: 1 / -1; }
+  .vibe-chip .vibe-tag { font-size: 1.1rem; color: var(--meta); }
+  .vibe-chip.sel .vibe-tag { color: var(--paper); opacity: 0.85; }
   #settings-card {
     display: flex;
     flex-direction: column;
@@ -1542,9 +1560,8 @@
   }
   .dpad-cfg-btn.sel { background: var(--border); color: var(--paper); border-color: var(--frame); }
 
-  /* The UI FONT picker is a native <select> styled by the shared
-     #music-vibe-select, #ui-font-select rule above (same chrome as the Audio
-     tab's music dropdown). */
+  /* The UI FONT picker is a native <select> styled by the #ui-font-select rule
+     above. */
 
   .heal-btn {
     background: var(--red-700);
@@ -1673,6 +1690,20 @@
      it reads as a subtitle, not a badge. */
   .tab-num { margin-left: 5px; opacity: 0.65; font-weight: normal; }
   .tab-num.full { color: var(--red-350); }
+  /* GEAR tab flags a gear conflict — a worn piece knocked below its attribute
+     requirement (a stat-dropping swap pulled the +attr that qualified it) is now red
+     and ignored on the paper doll — with a pulsing red dot beside the label, so the
+     conflict reads without opening the tab. A dot, not a count: the GEAR panel names
+     the exact slot(s). */
+  .tab-btn.gear-conflict::after {
+    content: ''; display: inline-block; width: 8px; height: 8px; margin-left: 8px;
+    border-radius: 50%; background: var(--danger);
+    animation: tabDotPulse 1.3s ease-in-out infinite;
+  }
+  @keyframes tabDotPulse {
+    0%,100% { transform: scale(1);    opacity: 0.72; box-shadow: 0 0 4px  color-mix(in srgb, var(--danger) 55%, transparent); }
+    50%     { transform: scale(1.35); opacity: 1;    box-shadow: 0 0 11px color-mix(in srgb, var(--danger) 100%, transparent); }
+  }
 
   /* ── HERO / ATTRIBUTES PANEL ── */
   /* Hero name shown at the top of the HERO tab. */
@@ -2526,18 +2557,11 @@
   .loot-item:hover { background: var(--panel); border-color: var(--border); }
   .loot-item.selected { background: var(--panel); border-color: var(--magenta-750); }
   /* First row sits directly beneath the frozen, higher-z-index .loot-head, which
-     paints over anything that reaches up into it. An upgrade row's top border and
-     its 6px glow (below) extend above the row box, so without a gap the header
-     clips them. This margin lives OUTSIDE the header (header padding can't help —
-     the header's opaque fill still covers it), giving the highlight clear air. */
+     paints over anything that reaches up into it. A small top margin lives OUTSIDE
+     the header (header padding can't help — the header's opaque fill still covers
+     it) so the first row's border and hover state clear the header edge. */
   .loot-head + .loot-item { margin-top: var(--space-4); }
-  /* Upgrade highlight: this item has more power than what's in its slot. */
-  .loot-item.upgrade { border-color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); box-shadow: 0 0 6px color-mix(in srgb, var(--uncommon) 25%, transparent); }
-  .loot-item.upgrade:hover { background: color-mix(in srgb, var(--success) 20%, transparent); }
   .up-arrow { color: var(--green-400); font-weight: bold; }
-  .equip-row-btn.upgrade-btn { background: var(--success); box-shadow: 0 0 8px color-mix(in srgb, var(--uncommon) 60%, transparent); animation: upgPulse 1.3s ease-in-out infinite; }
-  .equip-row-btn.upgrade-btn:active { background: var(--uncommon); }
-  @keyframes upgPulse { 0%,100% { box-shadow: 0 0 4px color-mix(in srgb, var(--uncommon) 40%, transparent); } 50% { box-shadow: 0 0 11px color-mix(in srgb, var(--uncommon) 85%, transparent); } }
   .loot-info { flex: 1; cursor: pointer; min-width: 0; }
   .loot-info .item-name { overflow: hidden; text-overflow: ellipsis; }
   /* Little item picture shown at the start of each loot / gear / shop row. */
@@ -2923,6 +2947,10 @@
   #tooltip .tt-cardlabel { font-size: 1.2rem; letter-spacing: 1px; text-transform: uppercase; color: var(--junk); margin-bottom: 3px; }
   /* The worn piece's label pops in gold so the equipped side is obvious at a glance. */
   #tooltip .tt-cardlabel.tt-cardlabel-worn { color: var(--gold); font-weight: bold; }
+  /* GEAR paper-doll slot card: its Unequip button (the paper doll has no inline
+     action tray like the bag list). Full-width primary action above the close hint. */
+  #tooltip .tt-actions { display: flex; margin-top: 8px; }
+  #tooltip .tt-actions .act-btn { flex: 1; }
 
   /* Styled hover popup for enchanter buttons — mirrors the gear tooltip look so
      hovering a reroll button reads like hovering a piece of gear (no native
@@ -3078,14 +3106,14 @@
   .pd-slot.empty .dl-ic, .pd-slot.empty .pd-emoji { opacity: 0.28; }
   .pd-slot.filled { background: color-mix(in srgb, var(--ink) 75%, transparent); }
   /* A worn piece whose attribute requirement is no longer met: greyed & desaturated
-     so the gear panel shows at a glance it's being ignored until you re-qualify. */
-  .pd-slot.pd-inactive { background: color-mix(in srgb, var(--magenta-800) 60%, transparent); animation: pd-req-pulse 1.3s ease-in-out infinite; }
+     AND wrapped in a thick red border that pulses (colour + glow), so the gear panel
+     shows at a glance which slot is being ignored until you re-qualify. The border is
+     solid red at rest (reduced-motion / animation off); the keyframes throb it. */
+  .pd-slot.pd-inactive { border: 2px solid var(--red-350); background: color-mix(in srgb, var(--magenta-800) 60%, transparent); animation: pd-req-pulse 1.3s ease-in-out infinite; }
   .pd-slot.pd-inactive .dl-ic, .pd-slot.pd-inactive .pd-emoji { opacity: 0.45; filter: grayscale(0.7); }
-  /* A no-longer-usable worn piece throbs a red glow so the eye lands on the exact
-     slot to re-qualify (overrides the inline red box-shadow while it animates). */
   @keyframes pd-req-pulse {
-    0%, 100% { box-shadow: 0 0 5px color-mix(in srgb, var(--red-350) 45%, transparent); }
-    50%      { box-shadow: 0 0 16px 2px color-mix(in srgb, var(--red-350) 95%, transparent); }
+    0%, 100% { border-color: var(--red-550); box-shadow: 0 0 5px color-mix(in srgb, var(--red-350) 45%, transparent); }
+    50%      { border-color: var(--red-200); box-shadow: 0 0 16px 2px color-mix(in srgb, var(--red-350) 95%, transparent); }
   }
   .pd-emoji { font-size: 3rem; line-height: 1; filter: grayscale(0.1); }
   .pd-pwr { position: absolute; bottom: 1px; right: 3px; font-size: 1.2rem; }
@@ -3136,13 +3164,6 @@
      and collide with the tiles below/beside it. The piece's name (and full stats)
      live in its tap/hover tooltip instead; the rarity-framed icon carries the rest. */
   .paperdoll-anat .pd-cap { display: none; }
-  .pd-unequip {
-    position: absolute; top: -7px; right: -7px;
-    width: 19px; height: 19px; padding: 0;
-    border-radius: 50%; border: 1px solid var(--border);
-    background: var(--magenta-800); color: var(--red-300); font-size: 1.3rem; line-height: 1;
-    cursor: pointer; z-index: 2;
-  }
   /* Slot names wrap to a second line rather than truncating ('Off-Hand' → 'Off-…')
      now that the fluid type is larger; the cell is centred so two-line labels
      stay tidy. */

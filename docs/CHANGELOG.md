@@ -8,6 +8,20 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — music-style picker is multi-select
+
+- 📦 New leaf `src/systems/musicVibe.js`: pure selection math over an injected rng —
+  `parseVibe`/`serializeVibe` (stored as `'auto'` or a sorted index list; an old
+  single-index save still parses), `toggleVibe`, `pickVibeSection` (next style from
+  the allowed pool, avoiding the current one when the pool leaves a choice), and
+  `pickStartSection`. Unit-tested (`test/systems/musicVibe.test.js`).
+- 📦 `src/data/musicSections.js` gains `MUSIC_VIBE_TAGS` (a genre tag per style),
+  driving the picker labels from data; the data test enforces one tag per style.
+- 🧪 `src/legacy/game.js` swaps the single-lock vibe logic for the new module: the
+  soundtrack drifts only among the selected styles (`applyMusicVibe`), and the native
+  `<select>` becomes a fluid chip grid (`renderMusicVibeControls` → `toggleMusicVibe`
+  / `setMusicVibeAll`, both window-bridged + in the smoke handler allowlist).
+
 ## UI — skill detail card decluttered; damage clause extracted
 
 - 📦 New leaf module `src/systems/skillText.js`: pure `stripDamageClause` that strips
