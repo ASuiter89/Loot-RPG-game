@@ -2526,18 +2526,11 @@
   .loot-item:hover { background: var(--panel); border-color: var(--border); }
   .loot-item.selected { background: var(--panel); border-color: var(--magenta-750); }
   /* First row sits directly beneath the frozen, higher-z-index .loot-head, which
-     paints over anything that reaches up into it. An upgrade row's top border and
-     its 6px glow (below) extend above the row box, so without a gap the header
-     clips them. This margin lives OUTSIDE the header (header padding can't help —
-     the header's opaque fill still covers it), giving the highlight clear air. */
+     paints over anything that reaches up into it. A small top margin lives OUTSIDE
+     the header (header padding can't help — the header's opaque fill still covers
+     it) so the first row's border and hover state clear the header edge. */
   .loot-head + .loot-item { margin-top: var(--space-4); }
-  /* Upgrade highlight: this item has more power than what's in its slot. */
-  .loot-item.upgrade { border-color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); box-shadow: 0 0 6px color-mix(in srgb, var(--uncommon) 25%, transparent); }
-  .loot-item.upgrade:hover { background: color-mix(in srgb, var(--success) 20%, transparent); }
   .up-arrow { color: var(--green-400); font-weight: bold; }
-  .equip-row-btn.upgrade-btn { background: var(--success); box-shadow: 0 0 8px color-mix(in srgb, var(--uncommon) 60%, transparent); animation: upgPulse 1.3s ease-in-out infinite; }
-  .equip-row-btn.upgrade-btn:active { background: var(--uncommon); }
-  @keyframes upgPulse { 0%,100% { box-shadow: 0 0 4px color-mix(in srgb, var(--uncommon) 40%, transparent); } 50% { box-shadow: 0 0 11px color-mix(in srgb, var(--uncommon) 85%, transparent); } }
   .loot-info { flex: 1; cursor: pointer; min-width: 0; }
   .loot-info .item-name { overflow: hidden; text-overflow: ellipsis; }
   /* Little item picture shown at the start of each loot / gear / shop row. */

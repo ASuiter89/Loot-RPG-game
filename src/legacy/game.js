@@ -28309,11 +28309,9 @@ function renderPanel() {
       // yellow lock button and a faint red wash on the whole row.
       const cantEquip = equipable && !canEquipItem(item);
       const slotName = item.slot ? SLOTS[item.slot].label : 'potion';
-      // Compare this item's power to whatever currently fills its slot, so we can
-      // flag upgrades and show the power swing (▲+5 / ▼-2).
-      const equippedHere = equipable ? equipped[item.slot] : null;
-      const delta = equipable ? equipUpgradeDelta(item) : 0;
-      const isUpgrade = equipable && delta > 0;
+      // We deliberately DON'T stamp a "this is an upgrade" verdict on the row — the
+      // player weighs the trade themselves. The raw stat swing (▲+5 / ▼-2) is still
+      // shown below via statDiffLine so they have the numbers to judge by.
       // Power badge (Appraiser's Loupe) and stat compare (Gauging Calipers) are each
       // gated on their own crafted HUD upgrade; both stay blank until bought.
       const pwr = itemPowerBadge(item);
@@ -28326,7 +28324,7 @@ function renderPanel() {
         ? `<div class='ht-name'><span data-spr=feat_door></span> Locked</div><div class='ht-line'>Safe from selling, scrapping &amp; auto-loot. Tap to unlock.</div>`
         : `<div class='ht-name'><span data-spr=feat_door></span> Unlocked</div><div class='ht-line'>Tap to lock — keeps it from being sold or scrapped.</div>`)}>${dlIcon('key', 20) || (item.locked ? '<span data-spr=feat_door></span>' : '<span data-spr=feat_door></span>')}</button>`;
       return `
-      <div class="loot-item ${rarityClass(item)} ${selectedItem===i?'selected':''} ${isUpgrade?'upgrade':''} ${item.locked?'locked':''} ${cantEquip?'cant-equip':''}">
+      <div class="loot-item ${rarityClass(item)} ${selectedItem===i?'selected':''} ${item.locked?'locked':''} ${cantEquip?'cant-equip':''}">
         <div class="loot-info" onclick="selectItem(${i}, this)"
              onmouseenter="showTooltip(event,${i})" onmouseleave="hideTooltip()">
           <div class="item-name">${rarityPip(item)}${curseMark(item)}${item.name}${craftedMark(item)}</div>
@@ -28336,7 +28334,7 @@ function renderPanel() {
         ${lockBtn}
         ${equipable
           ? (!cantEquip
-              ? `<button class="row-btn equip-row-btn ${isUpgrade?'upgrade-btn':''} ${(equipCueOn && item.tutorialGift)?'tut-equip-wisp':''}" onclick="quickEquip(${i})">${equippedHere && isUpgrade?'SWAP':'EQUIP'}</button>`
+              ? `<button class="row-btn equip-row-btn ${(equipCueOn && item.tutorialGift)?'tut-equip-wisp':''}" onclick="quickEquip(${i})">EQUIP</button>`
               : `<button class="row-btn locked-row-btn" ${hoverTip(`<div class='ht-name'><span data-spr=feat_door></span> Can't Equip</div><div class='ht-line'>${equipLockReason(item)}</div>`)} onclick="quickEquip(${i})"><span data-spr=feat_door></span></button>`)
           : ''}
       </div>

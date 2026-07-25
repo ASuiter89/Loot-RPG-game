@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-25", size: "small", v: "Bag drops the upgrade highlight", by: "Jeff Louie", notes: [
+    "Green upgrade border/glow & SWAP label gone; every gear row reads EQUIP.",
+    "Stat swing (▲/▼) still shown — judge the trade yourself.",
+  ] },
   { date: "2026-07-25", size: "small", v: "History syncs across devices", by: "Jeff Louie", notes: [
     "Signed in, your fallen-hero History mirrors to the cloud — past runs follow you across devices (was device-only).",
     "Merge is conflict-safe: runs union across devices, the more-played snapshot of a hero wins, newest-first.",
