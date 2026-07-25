@@ -104,7 +104,8 @@ import { upgradeOptions as ilvlUpgradeOptions, upgradeCost as calcIlvlUpgradeCos
 import { CHANGELOG } from '../data/changelog.js';
 import { WIKI } from '../data/wiki.js';
 import { buildWikiIndex, searchWiki } from '../systems/wikiSearch.js';
-import { MUSIC_SECTIONS, HAPPY_START_SECTIONS } from '../data/musicSections.js';
+import { MUSIC_SECTIONS, HAPPY_START_SECTIONS, MUSIC_VIBE_TAGS } from '../data/musicSections.js';
+import { parseVibe, serializeVibe, toggleVibe, pickVibeSection, pickStartSection } from '../systems/musicVibe.js';
 import { bassSemi, voiceChord, voiceSpread } from '../systems/musicGroove.js';
 import { terrainPacksInUse } from '../data/terrainPacks.js';
 import { TRAP_THEME } from '../data/trapThemes.js';
@@ -1061,7 +1062,7 @@ function setUiFont(id) {
 function renderFontControls() {
   const sel = document.getElementById('ui-font-select');
   if (!sel) return;
-  // Native <select>, styled like the Audio tab's music picker. Each option carries
+  // Native <select> (styled by #ui-font-select). Each option carries
   // its face as an inline font-family so browsers that render option fonts preview
   // it (a graceful extra — the label reads fine in the UI font otherwise).
   sel.innerHTML = UI_FONTS.map(f =>
@@ -8470,51 +8471,98 @@ function rollMusicVariation() {
   musicTempoMul = 0.86 + Math.random() * 0.28;        // ±~14% tempo swing
   musicRegister = mpick([0, 0, 0, 12, -12]);          // occasional octave lift/drop
 }
-// ── Music vibe ── the player can lock the generative soundtrack to one style
-// ("vibe") from Settings, or leave it on Shuffle to drift through them all. Boss
-// floors don't swap the style — they just race the current track. Saved globally.
+// ── Music vibe ── the player picks any MIX of styles ("vibes") in Settings ▸ Audio
+// (multi-select), or leaves every style enabled to shuffle through them all. The
+// soundtrack drifts only among the selected styles; a single selection locks to it.
+// Boss floors don't swap the style — they just race the current track. Saved
+// globally as 'auto' (all) or a sorted comma list of style indices ('3' | '3,5,9');
+// an older single-index save still parses correctly. Selection math is the pure,
+// unit-tested src/systems/musicVibe.js; here we just wire it to audio + the UI.
 const MUSIC_VIBE_KEY = 'musicVibe';
 let musicVibe = 'auto';
 try { const _mv = localStorage.getItem(MUSIC_VIBE_KEY); if (_mv) musicVibe = _mv; } catch (e) {}
-// The next style to drift to: the chosen vibe if locked, else random.
-function pickNextNormalSection() {
-  if (musicVibe !== 'auto') { const i = parseInt(musicVibe, 10); if (i >= 0 && i < NORMAL_SECTIONS) return i; }
-  return Math.floor(Math.random() * NORMAL_SECTIONS);
+// Normalise any legacy/stored value against the live style count (drops stale
+// indices, collapses a full selection to 'auto'). MUSIC_SECTIONS.length is live at
+// eval time; NORMAL_SECTIONS (same value) isn't defined until below.
+musicVibe = serializeVibe(musicVibe, MUSIC_SECTIONS.length);
+// The next style to drift/skip to, drawn from the selected pool (or every style on
+// Shuffle). `avoid` is skipped when the pool leaves another choice, so a shuffle
+// never repeats back-to-back; a single locked style returns itself (caller decides).
+function pickNextNormalSection(avoid) {
+  return pickVibeSection(musicVibe, NORMAL_SECTIONS, Math.random, avoid);
 }
 // Bright, upbeat styles a fresh run opens on (HAPPY_START_SECTIONS resolved to live
 // indices, so a reorder of MUSIC_SECTIONS can't desync them).
 const HAPPY_SECTIONS = HAPPY_START_SECTIONS
   .map(n => MUSIC_SECTIONS.findIndex(s => s.name === n))
   .filter(i => i >= 0);
-// The style a NEW game starts on: a random happy track on Shuffle, or the player's
-// locked vibe if they've chosen one. Falls back to the normal pick if the happy
-// list somehow resolves empty.
+// The style a NEW game starts on: a random happy track on Shuffle, else a happy one
+// among the selection (falling back to any selected style).
 function pickHappyStartSection() {
-  if (musicVibe !== 'auto' || !HAPPY_SECTIONS.length) return pickNextNormalSection();
-  return HAPPY_SECTIONS[Math.floor(Math.random() * HAPPY_SECTIONS.length)];
+  return pickStartSection(musicVibe, NORMAL_SECTIONS, HAPPY_SECTIONS, Math.random);
 }
-function syncMusicVibeUi() { const sel = document.getElementById('music-vibe-select'); if (sel) sel.value = musicVibe; }
-// Choose a music vibe from Settings. Applies right away (unless a boss owns the
-// music this moment): crossfades to the chosen style, or resumes drifting on Shuffle.
-function setMusicVibe(v) {
-  musicVibe = v;
-  try { localStorage.setItem(MUSIC_VIBE_KEY, v); } catch (e) {}
-  settingsChanged();
-  syncMusicVibeUi();
-  if (typeof sfx === 'function') sfx('click');
-  const ctx = audio && audio.ctx;
-  const bossNow = typeof enemies !== 'undefined' && enemies.some(e => !e.dead && e.isBoss);
-  if (v !== 'auto') {
-    const idx = parseInt(v, 10);
-    if (ctx && !bossNow && !musicTrans && musicSectionIdx !== idx) {
-      const when = ctx.currentTime + 0.05;
-      musicTrans = { fromIdx: musicSectionIdx, toIdx: idx, start: when, end: when + SECTION_FADE };
-    }
-    musicSectionEndTime = Infinity;                          // hold on the chosen vibe
-  } else if (ctx) {
-    musicSectionEndTime = ctx.currentTime + SECTION_MIN;     // resume drifting before long
+// Repaint the multi-select picker chips to match the current selection.
+function renderMusicVibeControls() {
+  const row = document.getElementById('music-vibe-row');
+  if (!row) return;
+  const set = new Set(parseVibe(musicVibe, NORMAL_SECTIONS));
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  // Shuffle-all when nothing is picked; otherwise each selected style lights up.
+  let html = `<button class="dpad-cfg-btn vibe-chip vibe-all ${set.size ? '' : 'sel'}" `
+    + `onclick="setMusicVibeAll()" title="Shuffle through every style">`
+    + `<span class="vibe-name">Shuffle (all)</span></button>`;
+  for (let i = 0; i < NORMAL_SECTIONS; i++) {
+    const name = MUSIC_SECTIONS[i] ? MUSIC_SECTIONS[i].name : ('Style ' + i);
+    const tag = MUSIC_VIBE_TAGS[name] || '';
+    html += `<button class="dpad-cfg-btn vibe-chip ${set.has(i) ? 'sel' : ''}" `
+      + `onclick="toggleMusicVibe(${i})" title="${esc(name)}${tag ? ' — ' + esc(tag) : ''}">`
+      + `<span class="vibe-name">${esc(name)}</span>`
+      + (tag ? `<span class="vibe-tag">${esc(tag)}</span>` : '')
+      + `</button>`;
   }
+  row.innerHTML = html;
 }
+// Persist the current selection and repaint the picker. Kept separate so both
+// setters (toggle / shuffle-all) share it.
+function saveMusicVibe() {
+  try { localStorage.setItem(MUSIC_VIBE_KEY, musicVibe); } catch (e) {}
+  settingsChanged();
+  renderMusicVibeControls();
+  if (typeof sfx === 'function') sfx('click');
+}
+// Apply the current selection to the LIVE soundtrack (unless a boss owns the music
+// this moment): if the style now playing isn't in the allowed set, crossfade to one
+// that is; a single locked style then holds, a 2+ subset keeps drifting among them,
+// and Shuffle-all resumes drifting through everything.
+function applyMusicVibe() {
+  const ctx = audio && audio.ctx;
+  const set = parseVibe(musicVibe, NORMAL_SECTIONS);
+  const bossNow = typeof enemies !== 'undefined' && enemies.some(e => !e.dead && e.isBoss);
+  if (!set.length) { if (ctx) musicSectionEndTime = ctx.currentTime + SECTION_MIN; return; }
+  if (ctx && !bossNow && !musicTrans && !set.includes(musicSectionIdx)) {
+    const idx = pickNextNormalSection(musicSectionIdx);
+    const when = ctx.currentTime + 0.05;
+    musicTrans = { fromIdx: musicSectionIdx, toIdx: idx, start: when, end: when + SECTION_FADE };
+  }
+  // One style → hold on it; a wider selection → drift among the picked styles.
+  if (set.length === 1) musicSectionEndTime = Infinity;
+  else if (ctx) musicSectionEndTime = ctx.currentTime + SECTION_MIN;
+}
+// Set the whole selection at once (a stored string / index array). Kept for the
+// window bridge and external callers; the UI drives toggleMusicVibe / setMusicVibeAll.
+function setMusicVibe(v) {
+  musicVibe = serializeVibe(v, NORMAL_SECTIONS);
+  saveMusicVibe();
+  applyMusicVibe();
+}
+// Toggle one style in/out of the selection (a picker chip).
+function toggleMusicVibe(idx) {
+  musicVibe = serializeVibe(toggleVibe(musicVibe, idx, NORMAL_SECTIONS), NORMAL_SECTIONS);
+  saveMusicVibe();
+  applyMusicVibe();
+}
+// Clear the selection back to Shuffle-all (the "Shuffle (all)" chip).
+function setMusicVibeAll() { setMusicVibe('auto'); }
 const SECTION_MIN = 80;       // shortest a style holds before drifting (sec)
 const SECTION_MAX = 100;      // longest a style holds before drifting (sec) — ~1.5 min
 const SECTION_FADE = 12;      // how long the crossfade between styles lasts (sec)
@@ -8828,21 +8876,20 @@ function scheduleMusic() {
     // Manual SKIP: the player asked for a new song NOW. Crossfade to a different
     // style right away (a quick 4s blend, not the lazy drift fade), never waiting on
     // the drift timer — held while a boss lives so the current track keeps racing.
-    // Always lands on a style different from the current one, even when a vibe is locked.
+    // Always lands on a style different from the current one, even when locked to one.
     if (musicSkip && !musicTrans && musicStep > 0 && !bossNow) {
-      let next = pickNextNormalSection();
-      if (next === musicSectionIdx) next = (next + 1) % NORMAL_SECTIONS;
+      let next = pickNextNormalSection(musicSectionIdx);
+      if (next === musicSectionIdx) next = (next + 1) % NORMAL_SECTIONS;  // single lock: detour off it
       musicTrans = { fromIdx: musicSectionIdx, toIdx: next, start: when, end: when + 4 };
       musicSkip = false;
     }
     if (!musicTrans && beat === 0 && musicStep > 0 && when >= musicSectionEndTime && !bossNow) {
-      let next = pickNextNormalSection();
-      if (next === musicSectionIdx) {
-        // Shuffle never repeats a style back-to-back; a locked vibe just holds on.
-        if (musicVibe === 'auto') next = (next + 1) % NORMAL_SECTIONS;
-        else musicSectionEndTime = when + SECTION_MIN;
-      }
-      if (next !== musicSectionIdx) musicTrans = { fromIdx: musicSectionIdx, toIdx: next, start: when, end: when + SECTION_FADE };
+      // Drift to another allowed style. pickNextNormalSection avoids repeating the
+      // current one whenever the pool leaves a choice; a single locked style returns
+      // itself, so we just hold on it.
+      const next = pickNextNormalSection(musicSectionIdx);
+      if (next === musicSectionIdx) musicSectionEndTime = when + SECTION_MIN;
+      else musicTrans = { fromIdx: musicSectionIdx, toIdx: next, start: when, end: when + SECTION_FADE };
     }
 
     // Which style's *musical structure* (scale/chords/groove) drives this step.
@@ -9019,8 +9066,8 @@ function skipMusicTrack() {
   // Silence the old track instantly, then restart the scheduler on a different
   // style from a clean bar so the new song begins right now.
   resetMusicBus();
-  let next = pickNextNormalSection();
-  if (next === musicSectionIdx) next = (next + 1) % NORMAL_SECTIONS;
+  let next = pickNextNormalSection(musicSectionIdx);
+  if (next === musicSectionIdx) next = (next + 1) % NORMAL_SECTIONS;  // single lock: detour off it
   musicSectionIdx = next;
   musicStructIdx = next;
   musicTrans = null;
@@ -9286,7 +9333,7 @@ function toggleSettingsMenu(e) {
   if (e) e.stopPropagation();
   const menu = document.getElementById('settings-menu');
   if (!menu) return;
-  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderCursorControls(); renderCursorSizeControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderColorblindControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); updateMixButtons(); centerSettingsCard(); }
+  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderCursorControls(); renderCursorSizeControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderColorblindControls(); renderFontControls(); updateTargetModeUi(); renderMusicVibeControls(); updateMixButtons(); centerSettingsCard(); }
 }
 function closeSettingsMenu() {
   const menu = document.getElementById('settings-menu');
@@ -31256,7 +31303,7 @@ function padDriveMenu(down, axes, pressed, dt, ts) {
   if (!raw) raw = stickToDir(axes[0] || 0, axes[1] || 0);
   const navDir = padNavPulse(raw, dt);
   // Left/right on a focused <select> cycles its option instead of moving focus, so a
-  // long native dropdown (e.g. the music-vibe picker) is fully drivable.
+  // long native dropdown (e.g. the UI FONT picker) is fully drivable.
   if (navDir && (navDir === 'left' || navDir === 'right') && padFocusEl && padFocusEl.tagName === 'SELECT') {
     padCycleSelect(padFocusEl, navDir === 'right' ? 1 : -1);
   } else if (navDir) padMoveFocus(navDir, els);
@@ -33812,7 +33859,7 @@ const SETTINGS_SYNC_KEYS = [
   'dungeonLootMusic',         // music volume level (0–5)
   'dungeonLootSfx',           // sfx volume level (0–5)
   'dungeonLootTownAmb',       // town ambience on/off
-  'musicVibe',                // locked music style / shuffle
+  'musicVibe',                // selected music styles ('auto' = shuffle all, else index list)
   'dungeonLoot_keybinds',     // custom key bindings (JSON)
   'dungeonLootMiniCollapsed', // minimap collapsed
   'logCollapsed',             // combat-log drawer collapsed
@@ -38238,8 +38285,10 @@ const __DL_FN_BRIDGE = {
   sfx,
   rollMusicVariation,
   pickNextNormalSection,
-  syncMusicVibeUi,
+  renderMusicVibeControls,
   setMusicVibe,
+  toggleMusicVibe,
+  setMusicVibeAll,
   musicBlend,
   musicLerp,
   mVoice,
