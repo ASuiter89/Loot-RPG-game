@@ -42,6 +42,22 @@ export function activeShrineBuffs(buffs, defs = SHRINE_DEFS) {
   return out;
 }
 
+// Terse label for the floating text that pops over the hero on contact — the bare
+// distinguishing word, dropping the "Shrine of (the)" / "… Shrine" scaffolding:
+//   'Shrine of Fortune' → 'Fortune', 'Shrine of the Leech' → 'Leech',
+//   'Blood Shrine' → 'Blood'. Pure string transform, so it's unit-tested; the shell
+// pops it in the kind's `tint` colour. Falls back to the trimmed name if it doesn't
+// match the pattern (never returns empty).
+export function shrineShortName(name) {
+  if (!name) return '';
+  const short = String(name)
+    .replace(/^Shrine of the\s+/i, '')
+    .replace(/^Shrine of\s+/i, '')
+    .replace(/\s+Shrine$/i, '')
+    .trim();
+  return short || String(name).trim();
+}
+
 // Weighted spawn pick from a [0,1) roll — classic boons stay common, the new ones
 // rarer (per-kind `weight`, default 1). Deterministic in the roll so the shell
 // passes Math.random() while tests pass fixed values.

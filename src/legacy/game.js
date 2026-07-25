@@ -30,7 +30,7 @@ import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { SHRINE_DEFS } from '../data/shrines.js';
-import { defaultShrineBuffs, shrineFxFrom, activeShrineBuffs, pickShrineKind } from '../systems/shrineEffects.js';
+import { defaultShrineBuffs, shrineFxFrom, activeShrineBuffs, pickShrineKind, shrineShortName } from '../systems/shrineEffects.js';
 import { creditInitials } from '../systems/credit.js';
 import { restockCost } from '../systems/restockCost.js';
 import { unseenLootCount } from '../systems/lootSeen.js';
@@ -22143,6 +22143,11 @@ function activateShrine(nx, ny) {
     // shrineFx(). No bespoke case needed — one generic grant.
     default: applyShrineBoon(kind);
   }
+  // Terse floating label over the hero naming the boon just received ("Fortune",
+  // "Leech", …), in the kind's distinct rarity-spectrum tint — quick visual
+  // confirmation of WHICH shrine fired without reading the combat log.
+  const sd = SHRINE_DEFS[kind];
+  if (sd) spawnFloatingText(player.x, player.y, shrineShortName(sd.name), sd.tint || PALETTE.text, 1.15);
   updateBars();
   // Real-time: the world clock owns enemy/quest cadence — just persist the boon.
   saveGame();
