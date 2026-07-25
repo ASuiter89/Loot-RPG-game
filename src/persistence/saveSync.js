@@ -139,6 +139,112 @@ export function hcMetaCloudHasAll(local, cloud) {
   return base.cids.every(x => cc.has(x)) && base.ach.every(x => ca.has(x)) && base.nach.every(x => cn.has(x));
 }
 
+// ── Graveyard (fallen-hero History) — a union-merged set of headstones ────────
+// The graveyard mirrors to its own account row exactly like the ledgers above, but
+// its members are RECORDS (a hero's death snapshot: class, level, deepest floor,
+// gold, play-time…), not bare ids. Without this sync a signed-in player's History
+// is only ever the device they happen to be on — a run ended on the phone never
+// shows on the laptop. The merge makes it ACCOUNT-WIDE and loses nothing:
+//   • Every headstone is keyed by the hero's stable `cid` (a legacy id-less record
+//     falls back to a content signature), unioned across devices so no past run is
+//     dropped.
+//   • When two devices hold a record for the SAME hero the MORE-PLAYED snapshot wins
+//     (play-time is monotonic — the fuller, later record survives — so it's
+//     clock-skew-proof, matching saveOrder).
+//   • Newest-first by `ts` and capped, so the list converges deterministically on
+//     every device and can't grow without bound.
+
+/**
+ * Normalize one headstone for merging: a shallow copy with a string|null `cid` and
+ * clean numeric `ts`/`playMs`. Every other field passes through untouched, so the
+ * shell can enrich a headstone (new stat, new tag) without this stripping it. A
+ * non-object becomes null (callers drop it).
+ */
+export function sanitizeGrave(g) {
+  if (!g || typeof g !== 'object') return null;
+  const cid = (typeof g.cid === 'string' && g.cid) ? g.cid : null;
+  const ts = Math.max(0, Math.floor(g.ts) || 0);
+  const playMs = Number.isFinite(g.playMs) ? g.playMs : 0;
+  return { ...g, cid, ts, playMs };
+}
+
+/**
+ * Merge identity for a headstone: its stable cid, or — for a legacy id-less record —
+ * a content signature, so two devices that each recorded the same pre-cid hero still
+ * dedupe to one entry instead of doubling it.
+ */
+export function graveKey(g) {
+  if (g && g.cid) return 'cid:' + g.cid;
+  return 'sig:' + [g && g.name, g && g.cls, g && g.level, g && g.floor, g && g.gold, g && g.ts].join('|');
+}
+
+/**
+ * Order two records of the SAME hero, fresher last (>0 → a fresher, <0 → b fresher,
+ * 0 → same). Play-time is monotonic, so it's the clock-skew-proof primary signal (a
+ * fuller death snapshot beats an earlier partial one); `ts` only breaks ties.
+ */
+export function graveOrder(a, b) {
+  const pa = (a && a.playMs) || 0, pb = (b && b.playMs) || 0;
+  if (pa !== pb) return pa - pb;
+  return ((a && a.ts) || 0) - ((b && b.ts) || 0);
+}
+
+// Fold a list of raw headstones into a Map keyed by merge identity, keeping the
+// freshest record per key. Internal to the merge helpers below.
+function graveMap(list) {
+  const m = new Map();
+  (Array.isArray(list) ? list : []).forEach(raw => {
+    const g = sanitizeGrave(raw);
+    if (!g) return;
+    const k = graveKey(g);
+    const cur = m.get(k);
+    if (!cur || graveOrder(g, cur) > 0) m.set(k, g);
+  });
+  return m;
+}
+// Newest-first by ts, then capped — the single canonical ordering both devices apply
+// so a merged graveyard converges to the same list everywhere.
+function sortCapGraves(graves, cap) {
+  const out = graves.slice().sort((a, b) => ((b && b.ts) || 0) - ((a && a.ts) || 0));
+  return (cap && cap > 0 && out.length > cap) ? out.slice(0, cap) : out;
+}
+// Canonical signature of a graveyard (key + chosen version per entry, in order), so a
+// merge can tell a real change from a no-op reorder.
+function graveSig(graves) {
+  return graves.map(g => graveKey(g) + '@' + ((g && g.playMs) || 0) + '@' + ((g && g.ts) || 0)).join(';');
+}
+
+/**
+ * Union a cloud graveyard into the local one — deduped by hero, freshest snapshot per
+ * hero, newest-first, capped. Returns { graves, grew }: the merged list and whether it
+ * differs from what local already held (a new run arrived, or a fuller snapshot
+ * replaced one we had), so the caller persists/uploads only on a real change. Inputs
+ * are never mutated.
+ */
+export function mergeGraveyard(local, cloud, cap) {
+  const merged = graveMap(local);
+  graveMap(cloud).forEach((g, k) => {
+    const cur = merged.get(k);
+    if (!cur || graveOrder(g, cur) > 0) merged.set(k, g);
+  });
+  const graves = sortCapGraves(Array.from(merged.values()), cap);
+  const localOnly = sortCapGraves(Array.from(graveMap(local).values()), cap);
+  return { graves, grew: graveSig(graves) !== graveSig(localOnly) };
+}
+
+/**
+ * True when the cloud graveyard already holds every one of our headstones at a
+ * version no older than ours — so a push would add nothing and can be skipped.
+ */
+export function graveyardCloudHasAll(local, cloud) {
+  const cloudMap = graveMap(cloud);
+  for (const [k, g] of graveMap(local)) {
+    const c = cloudMap.get(k);
+    if (!c || graveOrder(c, g) < 0) return false; // cloud is missing this hero, or holds an older snapshot
+  }
+  return true;
+}
+
 // ── The reconcile planner ────────────────────────────────────────────────────
 
 /**
