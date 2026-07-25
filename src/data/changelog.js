@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-25", size: "small", v: "Bag drops the upgrade highlight", by: "Jeff Louie", notes: [
+    "Green upgrade border/glow & SWAP label gone; every gear row reads EQUIP.",
+    "Stat swing (▲/▼) still shown — judge the trade yourself.",
+  ] },
   { date: "2026-07-19", size: "small", v: "New XP-numbers readout; two HUD readouts cheaper", by: "Jeff Louie", notes: [
     "New Ascension Gauge readout prints experience-to-next-level numbers on the XP bar.",
     "Omen Dial 420g (was 600); Treasure Tally 480g (was 840, no Glimmer).",
