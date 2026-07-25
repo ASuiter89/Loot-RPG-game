@@ -11,6 +11,7 @@ export const CHANGELOG = [
     "Each of the 15 guardians fights in its own arena — no two boss rooms alike.",
     "Caster lairs bristle with columns to duck behind, breaking line-of-sight on volleys & beams.",
     "Hazards vary by boss — lava, breakable walls, spike beds; open plaza + lanes stay navigable.",
+  ] },
   { date: "2026-07-25", size: "small", v: "Pick a mix of music styles", by: "Jeff Louie", notes: [
     "Settings ▸ Audio music picker is multi-select: check any mix and the soundtrack shuffles only among them.",
     "One style checked locks to it; none (or all) is Shuffle (all). Old single-style pick still loads.",
