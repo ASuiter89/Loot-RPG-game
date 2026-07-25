@@ -321,6 +321,7 @@ export const WIKI = [
         body: [
           { p: '<b>Mana</b> pays for your active skills. It\'s a rationed resource: a modest pool, real skill costs, and regen that is <b>halved while you\'re in combat</b> (for a few seconds after dealing or taking damage). Sustained casting genuinely drains you.' },
           { p: 'The <b>Spirit</b> attribute grows your mana pool and regen. If you lean on spells, carry Mana Potions and consider Mana Cost Reduction gear.' },
+          { p: 'Gear also rolls <b>Mana Regen</b> directly — a flat mana-per-second trickle, on the sustain slots from the first floors, that stacks on Spirit\'s and is halved in combat just the same.' },
         ],
       },
     ],
