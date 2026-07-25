@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-25", size: "small", v: "Shrines pop their name over the hero", by: "Jeff Louie", notes: [
+    "Stepping on a shrine floats a terse label over you — \"Fortune\", \"Leech\", etc.",
+    "Each shrine's label has its own rarity-spectrum tint, so you clock which boon at a glance.",
+  ] },
   { date: "2026-07-25", size: "small", v: "History syncs across devices", by: "Jeff Louie", notes: [
     "Signed in, your fallen-hero History mirrors to the cloud — past runs follow you across devices (was device-only).",
     "Merge is conflict-safe: runs union across devices, the more-played snapshot of a hero wins, newest-first.",
