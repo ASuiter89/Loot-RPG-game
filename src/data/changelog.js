@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-25", size: "small", v: "Gear-conflict cues on the GEAR panel", by: "Jeff Louie", notes: [
+    "Worn piece dropped below its attribute req now gets a pulsing red border on the paper doll, not just greyed.",
+    "GEAR tab wears a pulsing red dot while any worn piece is ignored.",
+    "Paper-doll corner unequip icons gone — tap a slot for its card, then Unequip.",
+  ] },
   { date: "2026-07-25", size: "small", v: "Bag drops the upgrade highlight", by: "Jeff Louie", notes: [
     "Green upgrade border/glow & SWAP label gone; every gear row reads EQUIP.",
     "Stat swing (▲/▼) still shown — judge the trade yourself.",

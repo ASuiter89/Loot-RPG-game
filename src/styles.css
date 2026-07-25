@@ -1673,6 +1673,20 @@
      it reads as a subtitle, not a badge. */
   .tab-num { margin-left: 5px; opacity: 0.65; font-weight: normal; }
   .tab-num.full { color: var(--red-350); }
+  /* GEAR tab flags a gear conflict — a worn piece knocked below its attribute
+     requirement (a stat-dropping swap pulled the +attr that qualified it) is now red
+     and ignored on the paper doll — with a pulsing red dot beside the label, so the
+     conflict reads without opening the tab. A dot, not a count: the GEAR panel names
+     the exact slot(s). */
+  .tab-btn.gear-conflict::after {
+    content: ''; display: inline-block; width: 8px; height: 8px; margin-left: 8px;
+    border-radius: 50%; background: var(--danger);
+    animation: tabDotPulse 1.3s ease-in-out infinite;
+  }
+  @keyframes tabDotPulse {
+    0%,100% { transform: scale(1);    opacity: 0.72; box-shadow: 0 0 4px  color-mix(in srgb, var(--danger) 55%, transparent); }
+    50%     { transform: scale(1.35); opacity: 1;    box-shadow: 0 0 11px color-mix(in srgb, var(--danger) 100%, transparent); }
+  }
 
   /* ── HERO / ATTRIBUTES PANEL ── */
   /* Hero name shown at the top of the HERO tab. */
@@ -2916,6 +2930,10 @@
   #tooltip .tt-cardlabel { font-size: 1.2rem; letter-spacing: 1px; text-transform: uppercase; color: var(--junk); margin-bottom: 3px; }
   /* The worn piece's label pops in gold so the equipped side is obvious at a glance. */
   #tooltip .tt-cardlabel.tt-cardlabel-worn { color: var(--gold); font-weight: bold; }
+  /* GEAR paper-doll slot card: its Unequip button (the paper doll has no inline
+     action tray like the bag list). Full-width primary action above the close hint. */
+  #tooltip .tt-actions { display: flex; margin-top: 8px; }
+  #tooltip .tt-actions .act-btn { flex: 1; }
 
   /* Styled hover popup for enchanter buttons — mirrors the gear tooltip look so
      hovering a reroll button reads like hovering a piece of gear (no native
@@ -3071,14 +3089,14 @@
   .pd-slot.empty .dl-ic, .pd-slot.empty .pd-emoji { opacity: 0.28; }
   .pd-slot.filled { background: color-mix(in srgb, var(--ink) 75%, transparent); }
   /* A worn piece whose attribute requirement is no longer met: greyed & desaturated
-     so the gear panel shows at a glance it's being ignored until you re-qualify. */
-  .pd-slot.pd-inactive { background: color-mix(in srgb, var(--magenta-800) 60%, transparent); animation: pd-req-pulse 1.3s ease-in-out infinite; }
+     AND wrapped in a thick red border that pulses (colour + glow), so the gear panel
+     shows at a glance which slot is being ignored until you re-qualify. The border is
+     solid red at rest (reduced-motion / animation off); the keyframes throb it. */
+  .pd-slot.pd-inactive { border: 2px solid var(--red-350); background: color-mix(in srgb, var(--magenta-800) 60%, transparent); animation: pd-req-pulse 1.3s ease-in-out infinite; }
   .pd-slot.pd-inactive .dl-ic, .pd-slot.pd-inactive .pd-emoji { opacity: 0.45; filter: grayscale(0.7); }
-  /* A no-longer-usable worn piece throbs a red glow so the eye lands on the exact
-     slot to re-qualify (overrides the inline red box-shadow while it animates). */
   @keyframes pd-req-pulse {
-    0%, 100% { box-shadow: 0 0 5px color-mix(in srgb, var(--red-350) 45%, transparent); }
-    50%      { box-shadow: 0 0 16px 2px color-mix(in srgb, var(--red-350) 95%, transparent); }
+    0%, 100% { border-color: var(--red-550); box-shadow: 0 0 5px color-mix(in srgb, var(--red-350) 45%, transparent); }
+    50%      { border-color: var(--red-200); box-shadow: 0 0 16px 2px color-mix(in srgb, var(--red-350) 95%, transparent); }
   }
   .pd-emoji { font-size: 3rem; line-height: 1; filter: grayscale(0.1); }
   .pd-pwr { position: absolute; bottom: 1px; right: 3px; font-size: 1.2rem; }
@@ -3129,13 +3147,6 @@
      and collide with the tiles below/beside it. The piece's name (and full stats)
      live in its tap/hover tooltip instead; the rarity-framed icon carries the rest. */
   .paperdoll-anat .pd-cap { display: none; }
-  .pd-unequip {
-    position: absolute; top: -7px; right: -7px;
-    width: 19px; height: 19px; padding: 0;
-    border-radius: 50%; border: 1px solid var(--border);
-    background: var(--magenta-800); color: var(--red-300); font-size: 1.3rem; line-height: 1;
-    cursor: pointer; z-index: 2;
-  }
   /* Slot names wrap to a second line rather than truncating ('Off-Hand' → 'Off-…')
      now that the fluid type is larger; the cell is centred so two-line labels
      stay tidy. */
