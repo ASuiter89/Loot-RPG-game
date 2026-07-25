@@ -584,3 +584,18 @@ export const MUSIC_SECTIONS = [
 // indices in startMusic). Keeps game-start music happy instead of a random draw that
 // might land on a brooding or eerie style. Every name must exist in MUSIC_SECTIONS.
 export const HAPPY_START_SECTIONS = ['Bloom', 'Neon', 'Lagoon', 'Summit', 'Levels', 'Boogie', 'Roam', 'Palm'];
+
+// A one-word genre tag per style, shown under the name in the Settings ▸ Audio
+// music-style picker (the multi-select). Keyed by MUSIC_SECTIONS name; every style
+// must have a tag (a data test enforces this).
+export const MUSIC_VIBE_TAGS = {
+  Cavern: 'brooding',   Crystal: 'shimmering', Forge:  'industrial',
+  Mist:   'ambient',    Hollow:  'bluesy',     March:  'heroic',
+  Bloom:  'bright',     Veil:    'eerie',      Tide:   'lo-fi',
+  Pulse:  'house',      Neon:    'EDM',        Lagoon: 'tropical',
+  Rush:   'drum & bass', Strobe: 'prog house', Prism:  'future bass',
+  Summit: 'chillwave',  Levels:  'melodic house', Riddim: 'moombahton',
+  Rift:   'melodic dubstep', Snarl: 'brostep', Blaze:  'big room',
+  Boogie: 'future funk', Velvet: 'electro-funk', Vogue: 'French house',
+  Roam:   'organic bass', Palm:   'piano house',
+};

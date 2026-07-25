@@ -10,6 +10,18 @@ export const CHANGELOG = [
   { date: "2026-07-25", size: "small", v: "Merchant capped at rarity you've found", by: "Jeff Louie", notes: [
     "Merchant never stocks a colour above your highest found rarity — no blue before your first blue, no purple before your first purple.",
     "Layers atop the boss gate; gear you currently hold counts as found.",
+  { date: "2026-07-25", size: "medium", v: "Boss rooms are one-of-a-kind", by: "Jeff Louie", notes: [
+    "Each of the 15 guardians fights in its own arena — no two boss rooms alike.",
+    "Caster lairs bristle with columns to duck behind, breaking line-of-sight on volleys & beams.",
+    "Hazards vary by boss — lava, breakable walls, spike beds; open plaza + lanes stay navigable.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Pick a mix of music styles", by: "Jeff Louie", notes: [
+    "Settings ▸ Audio music picker is multi-select: check any mix and the soundtrack shuffles only among them.",
+    "One style checked locks to it; none (or all) is Shuffle (all). Old single-style pick still loads.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Bag drops the upgrade highlight", by: "Jeff Louie", notes: [
+    "Green upgrade border/glow & SWAP label gone; every gear row reads EQUIP.",
+    "Stat swing (▲/▼) still shown — judge the trade yourself.",
   ] },
   { date: "2026-07-25", size: "small", v: "History syncs across devices", by: "Jeff Louie", notes: [
     "Signed in, your fallen-hero History mirrors to the cloud — past runs follow you across devices (was device-only).",

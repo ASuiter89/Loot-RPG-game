@@ -60,6 +60,7 @@ import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { pickVaultRoom, findSealedRoom } from '../systems/vaultRooms.js';
 import { rollHoardRoomCount } from '../systems/hoardRooms.js';
+import { carveArenaGrid } from '../systems/bossArena.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
@@ -104,7 +105,8 @@ import { upgradeOptions as ilvlUpgradeOptions, upgradeCost as calcIlvlUpgradeCos
 import { CHANGELOG } from '../data/changelog.js';
 import { WIKI } from '../data/wiki.js';
 import { buildWikiIndex, searchWiki } from '../systems/wikiSearch.js';
-import { MUSIC_SECTIONS, HAPPY_START_SECTIONS } from '../data/musicSections.js';
+import { MUSIC_SECTIONS, HAPPY_START_SECTIONS, MUSIC_VIBE_TAGS } from '../data/musicSections.js';
+import { parseVibe, serializeVibe, toggleVibe, pickVibeSection, pickStartSection } from '../systems/musicVibe.js';
 import { bassSemi, voiceChord, voiceSpread } from '../systems/musicGroove.js';
 import { terrainPacksInUse } from '../data/terrainPacks.js';
 import { TRAP_THEME } from '../data/trapThemes.js';
@@ -1061,7 +1063,7 @@ function setUiFont(id) {
 function renderFontControls() {
   const sel = document.getElementById('ui-font-select');
   if (!sel) return;
-  // Native <select>, styled like the Audio tab's music picker. Each option carries
+  // Native <select> (styled by #ui-font-select). Each option carries
   // its face as an inline font-family so browsers that render option fonts preview
   // it (a graceful extra — the label reads fine in the UI font otherwise).
   sel.innerHTML = UI_FONTS.map(f =>
@@ -4423,6 +4425,17 @@ const BOSSES_PER_TIER = 5;
 const BOSS_HP_MULT_BY_TIER = { 1: 1.6, 2: 3.0, 3: 5.0, 4: 5.0 };
 function bossHpMult() { return BOSS_HP_MULT_BY_TIER[currentDifficulty()] || 5.0; }
 
+// Which of the fifteen guardians holds the current boss floor. Finite tiers map
+// (difficulty, local floor) → a fixed guardian (Normal 0-4, Hardened 5-9, Brutal
+// 10-14); Endless rolls one at random. Called once per boss floor in buildBossArena
+// (which carves that guardian's bespoke arena) and reused by spawnEnemies, so the
+// room and the boss it holds always match.
+function selectFloorBoss() {
+  const localBossIdx = Math.max(0, Math.min(Math.floor(displayFloor() / 5) - 1, BOSSES_PER_TIER - 1));
+  const bossIdx = (currentDifficulty() - 1) * BOSSES_PER_TIER + localBossIdx;
+  return isEndless() ? pick(BOSSES) : BOSSES[Math.max(0, Math.min(bossIdx, BOSSES.length - 1))];
+}
+
 // ── ENEMY AI BEHAVIOURS ──
 // Each archetype defines HOW a monster moves and fights, so foes feel distinct
 // instead of all shuffling toward you in a line. The actual pathing toward the
@@ -6899,7 +6912,10 @@ let mapData = [];
 let mapEpoch = 0;   // bumped whenever the map layout changes, to invalidate the wall-shadow cache
 // Boss-arena state: the centre of the current boss room, and (only during a boss
 // floor's build) the tile the guardian is pinned to. Both null off a boss floor.
-let bossArenaCenter = null, bossArenaCell = null;
+// `arenaBoss` is the guardian chosen for the arena currently being built — set in
+// buildBossArena so spawnEnemies pins the SAME boss the room was carved for, then
+// cleared once consumed (null outside the build window).
+let bossArenaCenter = null, bossArenaCell = null, arenaBoss = null;
 // Per-tile shove tally for cracked walls (tile 10): "y,x" -> hits taken so far.
 // A wall absent from the map is untouched (stage 0); it's deleted when it breaks.
 // Rebuilt empty with every floor (see each `mapData = []`), never saved — the map
@@ -7770,7 +7786,7 @@ window.gameGuide = function gameGuide(topic) {
       `TRAP-THEMED FLOORS: some floors (gameState().modifier "Spike Gauntlet" / "Arrow Gallery" / "The Vent Works") dedicate the whole floor to ONE trap kind, packed in far denser than usual — expect a field of spikes, a hall lined with arrow emitters, or clusters of fire vents. Loot runs a little richer to reward threading them; a walkable route through the spikes is always guaranteed.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `BOSS TELEGRAPHS (gameState().hazards.telegraphs) are a guardian's wind-up attacks — a floor indicator that fills, flashes, then detonates. Each carries its shape (disc = filled circle; ring = donut, lethal in the band between innerR and r but SAFE in the centre hole and beyond r; lane = beam between (x1,y1)-(x2,y2); cone = wedge of radius r opening ±halfAngle around facing), its centre (x,y)/geometry, seconds until it lands (secsToHit), and danger:true when it hurts. They are ALWAYS dodgeable by MOVING out of the zone before secsToHit hits 0 (for a ring, step past r or into the hole) — never an RNG dodge. Red = damage; cyan = a benign spawn marker. A tracking disc follows you early in its wind-up, then locks — keep moving and it lands where you were.`,
-      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, the exit is north, and four pillars give cover. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
+      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, and the exit is north. EACH guardian has its OWN arena — the cover and hazards vary by boss (columns to break line-of-sight on volleys and beams, lava pools, breakable cracked walls, spike beds), so read the ASCII map (# wall, ^ lava, " spikes, % cracked wall) and use the cover: duck behind a pillar to break a telegraphed shot, smash through a cracked wall for a new lane. A big open centre plaza, a clear north-south lane and an open perimeter ring are always kept, so there's room to kite. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
       `ISLAND FLOORS (gameState().island true) come up now and then on outdoor floors: the landmass is ringed by open SEA, so the whole map edge is deep water (~) instead of a rock wall. You can see and shoot across it but never walk off — the shore IS the boundary. Nothing reachable is lost; the sea only replaces the impassable frame, so play it like any other floor.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. Most are multi-floor boons that fold into your stats while active (see gameState().effects): power (+50% dmg), guard (−40% dmg taken), fortune (loot), greed (+60% gold), insight (+50% xp), discovery (+50 Magic Find), harvest (+60% materials), precision (+18% crit), phantom (+15% dodge), sorcery (+30% skill/spell power), leech (+15% lifesteal), thorns (reflect), renewal (HP regen), clarity (MP regen), bulwark (+Defense), swift (+18% move), haste (+25% attack speed), vigor (tireless sprint/dash + full Stamina). wisdom instantly restores 50% max HP and refills MP; but BLOOD costs 30% of current HP for XP — check the kind before stepping on one.`,
@@ -8476,51 +8492,98 @@ function rollMusicVariation() {
   musicTempoMul = 0.86 + Math.random() * 0.28;        // ±~14% tempo swing
   musicRegister = mpick([0, 0, 0, 12, -12]);          // occasional octave lift/drop
 }
-// ── Music vibe ── the player can lock the generative soundtrack to one style
-// ("vibe") from Settings, or leave it on Shuffle to drift through them all. Boss
-// floors don't swap the style — they just race the current track. Saved globally.
+// ── Music vibe ── the player picks any MIX of styles ("vibes") in Settings ▸ Audio
+// (multi-select), or leaves every style enabled to shuffle through them all. The
+// soundtrack drifts only among the selected styles; a single selection locks to it.
+// Boss floors don't swap the style — they just race the current track. Saved
+// globally as 'auto' (all) or a sorted comma list of style indices ('3' | '3,5,9');
+// an older single-index save still parses correctly. Selection math is the pure,
+// unit-tested src/systems/musicVibe.js; here we just wire it to audio + the UI.
 const MUSIC_VIBE_KEY = 'musicVibe';
 let musicVibe = 'auto';
 try { const _mv = localStorage.getItem(MUSIC_VIBE_KEY); if (_mv) musicVibe = _mv; } catch (e) {}
-// The next style to drift to: the chosen vibe if locked, else random.
-function pickNextNormalSection() {
-  if (musicVibe !== 'auto') { const i = parseInt(musicVibe, 10); if (i >= 0 && i < NORMAL_SECTIONS) return i; }
-  return Math.floor(Math.random() * NORMAL_SECTIONS);
+// Normalise any legacy/stored value against the live style count (drops stale
+// indices, collapses a full selection to 'auto'). MUSIC_SECTIONS.length is live at
+// eval time; NORMAL_SECTIONS (same value) isn't defined until below.
+musicVibe = serializeVibe(musicVibe, MUSIC_SECTIONS.length);
+// The next style to drift/skip to, drawn from the selected pool (or every style on
+// Shuffle). `avoid` is skipped when the pool leaves another choice, so a shuffle
+// never repeats back-to-back; a single locked style returns itself (caller decides).
+function pickNextNormalSection(avoid) {
+  return pickVibeSection(musicVibe, NORMAL_SECTIONS, Math.random, avoid);
 }
 // Bright, upbeat styles a fresh run opens on (HAPPY_START_SECTIONS resolved to live
 // indices, so a reorder of MUSIC_SECTIONS can't desync them).
 const HAPPY_SECTIONS = HAPPY_START_SECTIONS
   .map(n => MUSIC_SECTIONS.findIndex(s => s.name === n))
   .filter(i => i >= 0);
-// The style a NEW game starts on: a random happy track on Shuffle, or the player's
-// locked vibe if they've chosen one. Falls back to the normal pick if the happy
-// list somehow resolves empty.
+// The style a NEW game starts on: a random happy track on Shuffle, else a happy one
+// among the selection (falling back to any selected style).
 function pickHappyStartSection() {
-  if (musicVibe !== 'auto' || !HAPPY_SECTIONS.length) return pickNextNormalSection();
-  return HAPPY_SECTIONS[Math.floor(Math.random() * HAPPY_SECTIONS.length)];
+  return pickStartSection(musicVibe, NORMAL_SECTIONS, HAPPY_SECTIONS, Math.random);
 }
-function syncMusicVibeUi() { const sel = document.getElementById('music-vibe-select'); if (sel) sel.value = musicVibe; }
-// Choose a music vibe from Settings. Applies right away (unless a boss owns the
-// music this moment): crossfades to the chosen style, or resumes drifting on Shuffle.
-function setMusicVibe(v) {
-  musicVibe = v;
-  try { localStorage.setItem(MUSIC_VIBE_KEY, v); } catch (e) {}
-  settingsChanged();
-  syncMusicVibeUi();
-  if (typeof sfx === 'function') sfx('click');
-  const ctx = audio && audio.ctx;
-  const bossNow = typeof enemies !== 'undefined' && enemies.some(e => !e.dead && e.isBoss);
-  if (v !== 'auto') {
-    const idx = parseInt(v, 10);
-    if (ctx && !bossNow && !musicTrans && musicSectionIdx !== idx) {
-      const when = ctx.currentTime + 0.05;
-      musicTrans = { fromIdx: musicSectionIdx, toIdx: idx, start: when, end: when + SECTION_FADE };
-    }
-    musicSectionEndTime = Infinity;                          // hold on the chosen vibe
-  } else if (ctx) {
-    musicSectionEndTime = ctx.currentTime + SECTION_MIN;     // resume drifting before long
+// Repaint the multi-select picker chips to match the current selection.
+function renderMusicVibeControls() {
+  const row = document.getElementById('music-vibe-row');
+  if (!row) return;
+  const set = new Set(parseVibe(musicVibe, NORMAL_SECTIONS));
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  // Shuffle-all when nothing is picked; otherwise each selected style lights up.
+  let html = `<button class="dpad-cfg-btn vibe-chip vibe-all ${set.size ? '' : 'sel'}" `
+    + `onclick="setMusicVibeAll()" title="Shuffle through every style">`
+    + `<span class="vibe-name">Shuffle (all)</span></button>`;
+  for (let i = 0; i < NORMAL_SECTIONS; i++) {
+    const name = MUSIC_SECTIONS[i] ? MUSIC_SECTIONS[i].name : ('Style ' + i);
+    const tag = MUSIC_VIBE_TAGS[name] || '';
+    html += `<button class="dpad-cfg-btn vibe-chip ${set.has(i) ? 'sel' : ''}" `
+      + `onclick="toggleMusicVibe(${i})" title="${esc(name)}${tag ? ' — ' + esc(tag) : ''}">`
+      + `<span class="vibe-name">${esc(name)}</span>`
+      + (tag ? `<span class="vibe-tag">${esc(tag)}</span>` : '')
+      + `</button>`;
   }
+  row.innerHTML = html;
 }
+// Persist the current selection and repaint the picker. Kept separate so both
+// setters (toggle / shuffle-all) share it.
+function saveMusicVibe() {
+  try { localStorage.setItem(MUSIC_VIBE_KEY, musicVibe); } catch (e) {}
+  settingsChanged();
+  renderMusicVibeControls();
+  if (typeof sfx === 'function') sfx('click');
+}
+// Apply the current selection to the LIVE soundtrack (unless a boss owns the music
+// this moment): if the style now playing isn't in the allowed set, crossfade to one
+// that is; a single locked style then holds, a 2+ subset keeps drifting among them,
+// and Shuffle-all resumes drifting through everything.
+function applyMusicVibe() {
+  const ctx = audio && audio.ctx;
+  const set = parseVibe(musicVibe, NORMAL_SECTIONS);
+  const bossNow = typeof enemies !== 'undefined' && enemies.some(e => !e.dead && e.isBoss);
+  if (!set.length) { if (ctx) musicSectionEndTime = ctx.currentTime + SECTION_MIN; return; }
+  if (ctx && !bossNow && !musicTrans && !set.includes(musicSectionIdx)) {
+    const idx = pickNextNormalSection(musicSectionIdx);
+    const when = ctx.currentTime + 0.05;
+    musicTrans = { fromIdx: musicSectionIdx, toIdx: idx, start: when, end: when + SECTION_FADE };
+  }
+  // One style → hold on it; a wider selection → drift among the picked styles.
+  if (set.length === 1) musicSectionEndTime = Infinity;
+  else if (ctx) musicSectionEndTime = ctx.currentTime + SECTION_MIN;
+}
+// Set the whole selection at once (a stored string / index array). Kept for the
+// window bridge and external callers; the UI drives toggleMusicVibe / setMusicVibeAll.
+function setMusicVibe(v) {
+  musicVibe = serializeVibe(v, NORMAL_SECTIONS);
+  saveMusicVibe();
+  applyMusicVibe();
+}
+// Toggle one style in/out of the selection (a picker chip).
+function toggleMusicVibe(idx) {
+  musicVibe = serializeVibe(toggleVibe(musicVibe, idx, NORMAL_SECTIONS), NORMAL_SECTIONS);
+  saveMusicVibe();
+  applyMusicVibe();
+}
+// Clear the selection back to Shuffle-all (the "Shuffle (all)" chip).
+function setMusicVibeAll() { setMusicVibe('auto'); }
 const SECTION_MIN = 80;       // shortest a style holds before drifting (sec)
 const SECTION_MAX = 100;      // longest a style holds before drifting (sec) — ~1.5 min
 const SECTION_FADE = 12;      // how long the crossfade between styles lasts (sec)
@@ -8834,21 +8897,20 @@ function scheduleMusic() {
     // Manual SKIP: the player asked for a new song NOW. Crossfade to a different
     // style right away (a quick 4s blend, not the lazy drift fade), never waiting on
     // the drift timer — held while a boss lives so the current track keeps racing.
-    // Always lands on a style different from the current one, even when a vibe is locked.
+    // Always lands on a style different from the current one, even when locked to one.
     if (musicSkip && !musicTrans && musicStep > 0 && !bossNow) {
-      let next = pickNextNormalSection();
-      if (next === musicSectionIdx) next = (next + 1) % NORMAL_SECTIONS;
+      let next = pickNextNormalSection(musicSectionIdx);
+      if (next === musicSectionIdx) next = (next + 1) % NORMAL_SECTIONS;  // single lock: detour off it
       musicTrans = { fromIdx: musicSectionIdx, toIdx: next, start: when, end: when + 4 };
       musicSkip = false;
     }
     if (!musicTrans && beat === 0 && musicStep > 0 && when >= musicSectionEndTime && !bossNow) {
-      let next = pickNextNormalSection();
-      if (next === musicSectionIdx) {
-        // Shuffle never repeats a style back-to-back; a locked vibe just holds on.
-        if (musicVibe === 'auto') next = (next + 1) % NORMAL_SECTIONS;
-        else musicSectionEndTime = when + SECTION_MIN;
-      }
-      if (next !== musicSectionIdx) musicTrans = { fromIdx: musicSectionIdx, toIdx: next, start: when, end: when + SECTION_FADE };
+      // Drift to another allowed style. pickNextNormalSection avoids repeating the
+      // current one whenever the pool leaves a choice; a single locked style returns
+      // itself, so we just hold on it.
+      const next = pickNextNormalSection(musicSectionIdx);
+      if (next === musicSectionIdx) musicSectionEndTime = when + SECTION_MIN;
+      else musicTrans = { fromIdx: musicSectionIdx, toIdx: next, start: when, end: when + SECTION_FADE };
     }
 
     // Which style's *musical structure* (scale/chords/groove) drives this step.
@@ -9025,8 +9087,8 @@ function skipMusicTrack() {
   // Silence the old track instantly, then restart the scheduler on a different
   // style from a clean bar so the new song begins right now.
   resetMusicBus();
-  let next = pickNextNormalSection();
-  if (next === musicSectionIdx) next = (next + 1) % NORMAL_SECTIONS;
+  let next = pickNextNormalSection(musicSectionIdx);
+  if (next === musicSectionIdx) next = (next + 1) % NORMAL_SECTIONS;  // single lock: detour off it
   musicSectionIdx = next;
   musicStructIdx = next;
   musicTrans = null;
@@ -9292,7 +9354,7 @@ function toggleSettingsMenu(e) {
   if (e) e.stopPropagation();
   const menu = document.getElementById('settings-menu');
   if (!menu) return;
-  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderCursorControls(); renderCursorSizeControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderColorblindControls(); renderFontControls(); updateTargetModeUi(); syncMusicVibeUi(); updateMixButtons(); centerSettingsCard(); }
+  if (menu.classList.toggle('open')) { sfx('click'); renderSettingsHero(); showSettingsTab(settingsTab); renderCursorControls(); renderCursorSizeControls(); renderUiScaleControls(); renderMinimapSizeControls(); renderColorblindControls(); renderFontControls(); updateTargetModeUi(); renderMusicVibeControls(); updateMixButtons(); centerSettingsCard(); }
 }
 function closeSettingsMenu() {
   const menu = document.getElementById('settings-menu');
@@ -11890,13 +11952,17 @@ function generateMap() {
 }
 
 // ── FIXED BOSS ARENA ─────────────────────────────────────────────────────────
-// Every boss floor is the same hand-authored circular room, identical each time:
-// the hero enters from the stairs at the SOUTH, the guardian holds the CENTRE, and
-// the way onward sits at the NORTH — sealed (like any uncleared floor) until the
-// boss falls. Four pillars give cover to duck telegraphed shots behind. No trash,
-// no loot clutter, no side rooms — just the hero and the boss. The confirmation
-// gate and the exit locks that trap you here until you win or die are layered on
-// in the stairs and town-portal handlers.
+// Every boss floor is a fixed circular room, one bespoke layout PER GUARDIAN so no
+// two boss rooms look alike: the hero enters from the stairs at the SOUTH, the
+// guardian holds the CENTRE, and the way onward sits at the NORTH — sealed (like any
+// uncleared floor) until the boss falls. Each guardian's own cover and hazards
+// (pillars to duck telegraphed shots, lava, breakable walls, spike beds) are stamped
+// into the annulus around the plaza (see src/data/bossArenas.js); a big open central
+// plaza, a clear N-S lane and an open perimeter ring are always preserved so even a
+// 3×3 guardian can lumber freely (systems/bossArena.js). No trash, no loot clutter,
+// no side rooms — just the hero and the boss. The confirmation gate and the exit
+// locks that trap you here until you win or die are layered on in the stairs and
+// town-portal handlers.
 const BOSS_ARENA_R = 10;                        // circle radius, centre-to-wall (tiles)
 const BOSS_ARENA_SIZE = BOSS_ARENA_R * 2 + 5;   // map dimension, with a wall margin
 function buildBossArena() {
@@ -11904,22 +11970,12 @@ function buildBossArena() {
   MAP_W = BOSS_ARENA_SIZE; MAP_H = BOSS_ARENA_SIZE;
   const cx = MAP_W >> 1, cy = MAP_H >> 1;
   bossArenaCenter = { x: cx, y: cy };
-  // Solid rock, then carve the circular floor out of it.
-  mapData = []; wallCracks = {};
-  const R2 = BOSS_ARENA_R * BOSS_ARENA_R;
-  for (let y = 0; y < MAP_H; y++) {
-    mapData[y] = [];
-    for (let x = 0; x < MAP_W; x++) {
-      const dx = x - cx, dy = y - cy;
-      mapData[y][x] = (dx * dx + dy * dy <= R2) ? 0 : 1;
-    }
-  }
-  // Four cover pillars on an inner ring — something to break line of sight on.
-  const pr = Math.round(BOSS_ARENA_R * 0.55);
-  for (const [ox, oy] of [[-pr, -pr], [pr, -pr], [-pr, pr], [pr, pr]]) {
-    const x = cx + ox, y = cy + oy;
-    if (mapData[y] && mapData[y][x] === 0) mapData[y][x] = 1;
-  }
+  wallCracks = {};
+  // Choose the guardian NOW so spawnEnemies below pins the SAME one this room is
+  // carved for, then carve its bespoke arena — a stone circle with that boss's cover
+  // and hazards stamped in (the pure builder guarantees the room stays navigable).
+  arenaBoss = selectFloorBoss();
+  mapData = carveArenaGrid(arenaBoss.type, BOSS_ARENA_R).grid;
   // ── ENTRANCE (south) ── the hero spawns here, on the stair back the way they
   // came. Which stair type it is depends on arrival direction, mirroring the
   // normal floor logic; either way the entrance is south and the exit is north.
@@ -11968,7 +12024,7 @@ function buildBossArena() {
   bumpMapEpoch(); pathGridDirty();
   // Spawn the guardian (boss only — spawnEnemies gives boss floors a count of 1).
   spawnEnemies();
-  bossArenaCell = null;           // consumed
+  bossArenaCell = null; arenaBoss = null;   // consumed by spawnEnemies
   // ── CLEAR CONDITION ── the exit stays sealed until the boss falls. A boss floor
   // is never "pre-cleared" unless you've already beaten it (backtracking here).
   floorCleared = false;
@@ -17331,15 +17387,12 @@ function spawnEnemies() {
               (Math.abs(ex - player.x) + Math.abs(ey - player.y)) <= ENEMY_AGGRO + 1) && tries < 100);
     if (tries < 100) {
       if (isBossFloor && i === 0) {
-        // Each finite tier has its OWN five guardians (Normal 0-4, Hardened 5-9,
-        // Brutal 10-14), so the boss ladder differs every difficulty rather than
-        // replaying. Endless has no preset bosses — it rolls one of all fifteen at
-        // random on every boss floor.
-        const localBossIdx = Math.max(0, Math.min(Math.floor(displayFloor() / 5) - 1, BOSSES_PER_TIER - 1));
-        const bossIdx = (currentDifficulty() - 1) * BOSSES_PER_TIER + localBossIdx;
-        const boss = isEndless()
-          ? pick(BOSSES)
-          : BOSSES[Math.max(0, Math.min(bossIdx, BOSSES.length - 1))];
+        // buildBossArena already chose this floor's guardian (Normal 0-4, Hardened
+        // 5-9, Brutal 10-14 per tier; Endless rolls one of the fifteen at random)
+        // and carved the arena around it — reuse that pick so the room and the boss
+        // it holds always match. Fall back to a fresh selection on the rare spawn
+        // path with no fixed arena in flight.
+        const boss = arenaBoss || selectFloorBoss();
         let bsize = boss.size || 1;
         if (bossArenaCell) {
           // Fixed boss arena: the guardian is pinned dead-centre (its open block is
@@ -28348,11 +28401,9 @@ function renderPanel() {
       // yellow lock button and a faint red wash on the whole row.
       const cantEquip = equipable && !canEquipItem(item);
       const slotName = item.slot ? SLOTS[item.slot].label : 'potion';
-      // Compare this item's power to whatever currently fills its slot, so we can
-      // flag upgrades and show the power swing (▲+5 / ▼-2).
-      const equippedHere = equipable ? equipped[item.slot] : null;
-      const delta = equipable ? equipUpgradeDelta(item) : 0;
-      const isUpgrade = equipable && delta > 0;
+      // We deliberately DON'T stamp a "this is an upgrade" verdict on the row — the
+      // player weighs the trade themselves. The raw stat swing (▲+5 / ▼-2) is still
+      // shown below via statDiffLine so they have the numbers to judge by.
       // Power badge (Appraiser's Loupe) and stat compare (Gauging Calipers) are each
       // gated on their own crafted HUD upgrade; both stay blank until bought.
       const pwr = itemPowerBadge(item);
@@ -28365,7 +28416,7 @@ function renderPanel() {
         ? `<div class='ht-name'><span data-spr=feat_door></span> Locked</div><div class='ht-line'>Safe from selling, scrapping &amp; auto-loot. Tap to unlock.</div>`
         : `<div class='ht-name'><span data-spr=feat_door></span> Unlocked</div><div class='ht-line'>Tap to lock — keeps it from being sold or scrapped.</div>`)}>${dlIcon('key', 20) || (item.locked ? '<span data-spr=feat_door></span>' : '<span data-spr=feat_door></span>')}</button>`;
       return `
-      <div class="loot-item ${rarityClass(item)} ${selectedItem===i?'selected':''} ${isUpgrade?'upgrade':''} ${item.locked?'locked':''} ${cantEquip?'cant-equip':''}">
+      <div class="loot-item ${rarityClass(item)} ${selectedItem===i?'selected':''} ${item.locked?'locked':''} ${cantEquip?'cant-equip':''}">
         <div class="loot-info" onclick="selectItem(${i}, this)"
              onmouseenter="showTooltip(event,${i})" onmouseleave="hideTooltip()">
           <div class="item-name">${rarityPip(item)}${curseMark(item)}${item.name}${craftedMark(item)}</div>
@@ -28375,7 +28426,7 @@ function renderPanel() {
         ${lockBtn}
         ${equipable
           ? (!cantEquip
-              ? `<button class="row-btn equip-row-btn ${isUpgrade?'upgrade-btn':''} ${(equipCueOn && item.tutorialGift)?'tut-equip-wisp':''}" onclick="quickEquip(${i})">${equippedHere && isUpgrade?'SWAP':'EQUIP'}</button>`
+              ? `<button class="row-btn equip-row-btn ${(equipCueOn && item.tutorialGift)?'tut-equip-wisp':''}" onclick="quickEquip(${i})">EQUIP</button>`
               : `<button class="row-btn locked-row-btn" ${hoverTip(`<div class='ht-name'><span data-spr=feat_door></span> Can't Equip</div><div class='ht-line'>${equipLockReason(item)}</div>`)} onclick="quickEquip(${i})"><span data-spr=feat_door></span></button>`)
           : ''}
       </div>
@@ -31295,7 +31346,7 @@ function padDriveMenu(down, axes, pressed, dt, ts) {
   if (!raw) raw = stickToDir(axes[0] || 0, axes[1] || 0);
   const navDir = padNavPulse(raw, dt);
   // Left/right on a focused <select> cycles its option instead of moving focus, so a
-  // long native dropdown (e.g. the music-vibe picker) is fully drivable.
+  // long native dropdown (e.g. the UI FONT picker) is fully drivable.
   if (navDir && (navDir === 'left' || navDir === 'right') && padFocusEl && padFocusEl.tagName === 'SELECT') {
     padCycleSelect(padFocusEl, navDir === 'right' ? 1 : -1);
   } else if (navDir) padMoveFocus(navDir, els);
@@ -33864,7 +33915,7 @@ const SETTINGS_SYNC_KEYS = [
   'dungeonLootMusic',         // music volume level (0–5)
   'dungeonLootSfx',           // sfx volume level (0–5)
   'dungeonLootTownAmb',       // town ambience on/off
-  'musicVibe',                // locked music style / shuffle
+  'musicVibe',                // selected music styles ('auto' = shuffle all, else index list)
   'dungeonLoot_keybinds',     // custom key bindings (JSON)
   'dungeonLootMiniCollapsed', // minimap collapsed
   'logCollapsed',             // combat-log drawer collapsed
@@ -38290,8 +38341,10 @@ const __DL_FN_BRIDGE = {
   sfx,
   rollMusicVariation,
   pickNextNormalSection,
-  syncMusicVibeUi,
+  renderMusicVibeControls,
   setMusicVibe,
+  toggleMusicVibe,
+  setMusicVibeAll,
   musicBlend,
   musicLerp,
   mVoice,
