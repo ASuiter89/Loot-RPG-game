@@ -572,6 +572,7 @@ export const WIKI = [
         keywords: ['shrine', 'shrines', 'fountain', 'power', 'guard', 'fortune', 'wisdom', 'blood', 'boon'],
         body: [
           { p: '<b>Shrines</b> grant boons, but check the kind before you step on: <b>power</b>, <b>guard</b> and <b>fortune</b> are good multi-floor buffs, <b>wisdom</b> restores health and mana — but <b>blood</b> costs a chunk of your current HP.' },
+          { note: 'Stepping on a shrine pops its name over you ("Fortune", "Leech") in its own colour.' },
           { note: 'Active boons show under <b>Status</b> on the HERO tab (and as icons in the top-right).' },
           { p: '<b>Fountains</b> full-heal you once. Take these deliberately, not while fleeing.' },
         ],

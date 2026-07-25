@@ -11,6 +11,15 @@ export const CHANGELOG = [
     "Merchant never stocks a colour above your highest found rarity — no blue before your first blue, no purple before your first purple.",
     "Layers atop the boss gate; gear you currently hold counts as found.",
   ] },
+  { date: "2026-07-25", size: "small", v: "Shrines pop their name over the hero", by: "Jeff Louie", notes: [
+    "Stepping on a shrine floats a terse label over you — \"Fortune\", \"Leech\", etc.",
+    "Each shrine's label has its own rarity-spectrum tint, so you clock which boon at a glance.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Gear-conflict cues on the GEAR panel", by: "Jeff Louie", notes: [
+    "Worn piece dropped below its attribute req now gets a pulsing red border on the paper doll, not just greyed.",
+    "GEAR tab wears a pulsing red dot while any worn piece is ignored.",
+    "Paper-doll corner unequip icons gone — tap a slot for its card, then Unequip.",
+  ] },
   { date: "2026-07-25", size: "medium", v: "Boss rooms are one-of-a-kind", by: "Jeff Louie", notes: [
     "Each of the 15 guardians fights in its own arena — no two boss rooms alike.",
     "Caster lairs bristle with columns to duck behind, breaking line-of-sight on volleys & beams.",

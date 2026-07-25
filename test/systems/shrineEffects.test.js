@@ -4,6 +4,7 @@ import {
   shrineFxFrom,
   activeShrineBuffs,
   pickShrineKind,
+  shrineShortName,
 } from '../../src/systems/shrineEffects.js';
 import { SHRINE_DEFS } from '../../src/data/shrines.js';
 
@@ -98,6 +99,31 @@ describe('pickShrineKind', () => {
   });
 });
 
+describe('shrineShortName', () => {
+  it('strips the "Shrine of (the)" / "… Shrine" scaffolding to the bare word', () => {
+    expect(shrineShortName('Shrine of Fortune')).toBe('Fortune');
+    expect(shrineShortName('Shrine of the Leech')).toBe('Leech');
+    expect(shrineShortName('Shrine of the Bulwark')).toBe('Bulwark');
+    expect(shrineShortName('Blood Shrine')).toBe('Blood');
+    expect(shrineShortName('Shrine of Swiftness')).toBe('Swiftness');
+  });
+
+  it('falls back to the trimmed name and never returns empty', () => {
+    expect(shrineShortName('Mystery')).toBe('Mystery');
+    expect(shrineShortName('  Padded  ')).toBe('Padded');
+    expect(shrineShortName('')).toBe('');
+    expect(shrineShortName(null)).toBe('');
+  });
+
+  it('yields a non-empty terse label for every shipped shrine', () => {
+    for (const kind in SHRINE_DEFS) {
+      const short = shrineShortName(SHRINE_DEFS[kind].name);
+      expect(short.length).toBeGreaterThan(0);
+      expect(/shrine/i.test(short)).toBe(false);
+    }
+  });
+});
+
 describe('SHRINE_DEFS catalog', () => {
   it('every boon has a name, an icon and either floors or instant', () => {
     for (const kind in SHRINE_DEFS) {
@@ -106,6 +132,16 @@ describe('SHRINE_DEFS catalog', () => {
       expect(typeof d.icon).toBe('string');
       expect(d.instant === true || typeof d.floors === 'number').toBe(true);
     }
+  });
+
+  it('gives every shrine a DISTINCT hex tint for its floating label', () => {
+    const tints = [];
+    for (const kind in SHRINE_DEFS) {
+      const tint = SHRINE_DEFS[kind].tint;
+      expect(tint, `${kind} tint`).toMatch(/^#[0-9a-fA-F]{6}$/);
+      tints.push(tint.toLowerCase());
+    }
+    expect(new Set(tints).size).toBe(tints.length);
   });
 
   it('ships at least 15 non-classic boons beyond the classics', () => {
