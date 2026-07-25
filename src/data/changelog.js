@@ -10,6 +10,13 @@ export const CHANGELOG = [
   { date: "2026-07-25", size: "small", v: "Mana Regen is now a gear stat; regen shows up early", by: "Jeff Louie", notes: [
     "New Mana Regen (MRG) affix — flat +MP/sec on helm/chest/legs/amulet/off-hand, stacks on Spirit's, halved in combat.",
     "Low-level drops float HP/MP regen toward their scarce affix slots, so sustain lands early (was mostly late-game).",
+  { date: "2026-07-25", size: "small", v: "Merchant capped at rarity you've found", by: "Jeff Louie", notes: [
+    "Merchant never stocks a colour above your highest found rarity — no blue before your first blue, no purple before your first purple.",
+    "Layers atop the boss gate; gear you currently hold counts as found.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Shrines pop their name over the hero", by: "Jeff Louie", notes: [
+    "Stepping on a shrine floats a terse label over you — \"Fortune\", \"Leech\", etc.",
+    "Each shrine's label has its own rarity-spectrum tint, so you clock which boon at a glance.",
   ] },
   { date: "2026-07-25", size: "small", v: "Gear-conflict cues on the GEAR panel", by: "Jeff Louie", notes: [
     "Worn piece dropped below its attribute req now gets a pulsing red border on the paper doll, not just greyed.",

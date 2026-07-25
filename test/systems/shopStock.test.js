@@ -102,3 +102,47 @@ describe('shopTierWeights — honours the early-game rarity gate', () => {
     expect(w.unique).toBeGreaterThan(0);
   });
 });
+
+describe('shopTierWeights — caps at the highest rarity the hero has FOUND', () => {
+  // Deep, everything boss-unlocked, so ONLY the found cap can shape the ladder.
+  const DEEP = [{ '5': 1, '10': 1 }, 999];
+
+  it('a fourth arg omitted keeps the old (uncapped) behaviour', () => {
+    const w = shopTierWeights(60, ...DEEP);
+    expect(w.legendary).toBeGreaterThan(0);
+    expect(w.unique).toBeGreaterThan(0);
+  });
+
+  it('never found a blue → the merchant never stocks blue+ even when boss-unlocked', () => {
+    // Highest found is green (rank 2): blue/purple/orange/red are withheld.
+    const w = shopTierWeights(60, ...DEEP, 2);
+    for (const t of ['rare', 'epic', 'legendary', 'unique']) expect(w[t]).toBeUndefined();
+  });
+
+  it('found a purple → purple sells, orange/red still withheld', () => {
+    const w = shopTierWeights(60, ...DEEP, 4); // epic (purple) is the highest found
+    expect(w.epic).toBeGreaterThan(0);
+    for (const t of ['legendary', 'unique']) expect(w[t]).toBeUndefined();
+  });
+
+  it('found a red → the full ladder is available again', () => {
+    const w = shopTierWeights(60, ...DEEP, 6);
+    expect(w.legendary).toBeGreaterThan(0);
+    expect(w.unique).toBeGreaterThan(0);
+  });
+
+  it('a white-only hero still gets a sellable stall (falls back to normal)', () => {
+    const w = shopTierWeights(60, ...DEEP, 1); // only white found
+    expect(Object.keys(w).length).toBeGreaterThan(0);
+    expect(w[SHOP_FALLBACK_TIER]).toBeGreaterThan(0);
+    for (const t of ['uncommon', 'rare', 'epic', 'legendary', 'unique']) expect(w[t]).toBeUndefined();
+  });
+
+  it('the found cap and the boss gate compose — the stricter of the two wins', () => {
+    // Found a purple (rank 4) but only the floor-5 boss is down (blue+ still boss-gated):
+    // the boss gate is stricter here, so blue+ stay withheld despite the higher find.
+    const w = shopTierWeights(16, { '5': 1 }, 9, 4);
+    expect(w.uncommon).toBeGreaterThan(0);
+    for (const t of ['rare', 'epic', 'legendary', 'unique']) expect(w[t]).toBeUndefined();
+  });
+});
