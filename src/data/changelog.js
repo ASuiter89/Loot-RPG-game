@@ -10,6 +10,7 @@ export const CHANGELOG = [
   { date: "2026-07-25", size: "small", v: "Merchant capped at rarity you've found", by: "Jeff Louie", notes: [
     "Merchant never stocks a colour above your highest found rarity — no blue before your first blue, no purple before your first purple.",
     "Layers atop the boss gate; gear you currently hold counts as found.",
+  ] },
   { date: "2026-07-25", size: "medium", v: "Boss rooms are one-of-a-kind", by: "Jeff Louie", notes: [
     "Each of the 15 guardians fights in its own arena — no two boss rooms alike.",
     "Caster lairs bristle with columns to duck behind, breaking line-of-sight on volleys & beams.",
