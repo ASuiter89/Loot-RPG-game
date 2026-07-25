@@ -165,7 +165,8 @@ import { nextPity, targetBias, shouldRedirect, pickMissingTarget,
   isPityGuaranteed, pityRemaining, targetStillValid } from '../systems/collectionTargeting.js';
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 import { planReconcile, planSlotPush, freshDelMeta, sanitizeDelMeta, isTombstoned, addTombstone,
-  mergeDelMeta, delCloudHasAll, sanitizeHcMeta, mergeHcMeta, hcMetaCloudHasAll } from '../persistence/saveSync.js';
+  mergeDelMeta, delCloudHasAll, sanitizeHcMeta, mergeHcMeta, hcMetaCloudHasAll,
+  mergeGraveyard, graveyardCloudHasAll } from '../persistence/saveSync.js';
 import { freshStash, sanitizeStash, mergeStash, depositGold, withdrawGold, depositMaterial, withdrawMaterial, materialsValue, foldHeroMaterials } from '../persistence/stashSync.js';
 import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
 import { mercCost } from '../systems/mercPricing.js';
@@ -7859,7 +7860,7 @@ window.gameGuide = function gameGuide(topic) {
       `Anywhere: Options/Menu pauses to Settings. R3 (right-stick click) toggles a VIRTUAL CURSOR — a mouse driven by the right stick, ✕/A = click — that works over the map and any menu, the universal fallback for anything else. View/Share opens an on-screen controller cheat-sheet. Text entry (hero name, cloud-save login) uses an on-screen keyboard with a Random-name key. See docs/CONTROLLER.md for the full map.`,
     ],
     cloud: [
-      `Saves live in your browser's local storage by default. Sign in (Settings ▸ Account) with an email + password to also mirror every save slot, your shared Stash, and your settings to the cloud, so the same heroes follow you across devices — it's optional and free, and signed out the game behaves exactly as before.`,
+      `Saves live in your browser's local storage by default. Sign in (Settings ▸ Account) with an email + password to also mirror every save slot, your shared Stash, your fallen-hero History, and your settings to the cloud, so the same heroes follow you across devices — it's optional and free, and signed out the game behaves exactly as before.`,
       `Cross-device saves are conflict-safe: whichever copy of a hero has been PLAYED longer wins a merge (measured by real active play-time, not the wall clock, so a device with a fast/slow clock can't cheat the merge), and a copy is never overwritten by an older one. Deleting or losing a hero (Hardcore permadeath) is recorded account-wide and can't be undone by an old copy on another device.`,
       `A window you leave OPEN but stop playing goes idle after a minute (or the moment its tab is hidden): while idle it stops writing and stops mirroring saves, so it can't overwrite newer progress. The instant you return and play again — or switch back to its tab — it re-checks the account first and pulls down anything a second device advanced, reloading into that newer copy if needed. So it's safe to leave the game open on one machine and keep playing on another; come back and it catches up instead of clobbering.`,
       `Use Settings ▸ Account ▸ Sync Now to force an immediate reconcile. Because a stale tab defers to the account, the safe habit across devices is simply: play, then let the other device catch up on its own when you return to it.`,
@@ -32104,6 +32105,9 @@ function loadGraveyard() {
 }
 function saveGraveyard(list) {
   try { localStorage.setItem(GRAVEYARD_KEY, JSON.stringify(list.slice(0, GRAVEYARD_MAX))); } catch (e) {}
+  // For a signed-in player, mirror the newly-filed headstone up so History is
+  // account-wide, not stuck to whichever device ended the run (see graveyardReconcile).
+  cloudScheduleGraveyard();
 }
 // Record a hero as a fallen run, if they actually got going. Defaults to the
 // live `player`, but any parsed save's `.player` can be passed (with that save's
@@ -33635,6 +33639,79 @@ async function delReconcile() {
   if (haveLocal && !delCloudHasAll(delMeta, cloud)) await cloudWriteDelMeta();
 }
 
+// ── Graveyard (fallen-hero History) cloud sync ───────────────────────────────
+// The graveyard mirrors to its own dedicated row (GRAVEYARD_CLOUD_SLOT), exactly
+// like the ledgers above and for the same reason: History should be ACCOUNT-WIDE,
+// not stuck to the one device a run happened to end on. It is UNION-FIRST, never
+// last-writer-wins — read the cloud copy, merge it with ours (a blind overwrite from
+// a device with a shorter local history would erase runs recorded elsewhere), then
+// write the union back. Records are deduped by hero (cid), the more-played snapshot
+// of a shared hero wins, and the list is newest-first + capped so every device
+// converges on the same History. cloudReconcile() ignores this row (no .player → not
+// a started save), so it has its own reconcile below. The merge set-algebra is pure
+// and unit-tested in persistence/saveSync.js; this is just the storage + cloud plumbing.
+const GRAVEYARD_CLOUD_SLOT = -5; // sentinel cloud "slot" for the fallen-hero History — never a real character
+let cloudGraveTimer = null;
+function cloudScheduleGraveyard() {
+  if (!cloudEnabled() || !authState.user) return;
+  if (cloudGraveTimer) return;
+  cloudGraveTimer = setTimeout(() => { cloudGraveTimer = null; graveyardReconcile(); }, 3500);
+}
+// Read the account's graveyard row. Returns the data object ({ graves, ts }), null
+// (no row), or undefined (couldn't read — caller MUST NOT then blind-write, or it
+// could shrink the cloud History).
+async function cloudFetchGraveyard() {
+  const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?select=data&user_id=eq.' + authState.user.id + '&slot=eq.' + GRAVEYARD_CLOUD_SLOT, { headers: cloudRestHeaders() });
+  if (!res.ok) return undefined;
+  const rows = await res.json();
+  return (rows && rows[0] && rows[0].data && typeof rows[0].data === 'object') ? rows[0].data : null;
+}
+// Union a cloud graveyard blob into the local one. Persists locally if it changed and
+// — when History is on screen — re-renders it so freshly-synced runs appear at once.
+// Returns the merged list (what a subsequent write should push).
+function graveyardMergeIn(cloud) {
+  const cloudGraves = (cloud && Array.isArray(cloud.graves)) ? cloud.graves : [];
+  const r = mergeGraveyard(loadGraveyard(), cloudGraves, GRAVEYARD_MAX);
+  if (r.grew) {
+    saveGraveyard(r.graves);
+    try {
+      const ov = document.getElementById('graveyard-overlay');
+      if (ov && ov.classList.contains('open')) showGraveyard();
+    } catch (e) {}
+  }
+  return r.graves;
+}
+// Blind upsert of the CURRENT merged graveyard. Internal — only called right after a
+// successful read+merge, so it writes the union (never a shrunk list).
+async function cloudWriteGraveyard(graves) {
+  try {
+    const ts = Date.now();
+    const res = await fetch(LB_SUPABASE_URL + '/rest/v1/saves?on_conflict=user_id,slot', {
+      method: 'POST',
+      headers: cloudRestHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify({
+        user_id: authState.user.id, slot: GRAVEYARD_CLOUD_SLOT, data: { graves: graves, ts: ts },
+        updated_at: new Date(ts).toISOString(),
+      }),
+    });
+    return res.ok;
+  } catch (e) { return false; }
+}
+// Union-FIRST push / boot reconcile: read the cloud row, merge it into ours, then
+// write the union back if we hold anything the cloud is missing. Shared by the
+// debounced push (a new headstone) and the boot/sync reconcile sequences. If the
+// cloud can't be read we DON'T write, rather than risk a shrinking blind overwrite.
+async function graveyardReconcile() {
+  if (!cloudEnabled() || !authState.user) return;
+  if (!await ensureToken()) return;
+  let cloud;
+  try { cloud = await cloudFetchGraveyard(); } catch (e) { return; }
+  if (cloud === undefined) return;
+  const graves = graveyardMergeIn(cloud);
+  const cloudGraves = (cloud && Array.isArray(cloud.graves)) ? cloud.graves : [];
+  if (graves.length && !graveyardCloudHasAll(graves, cloudGraves)) await cloudWriteGraveyard(graves);
+}
+
 // ── Shared-stash cloud sync ─────────────────────────────────────────────────
 // Each ladder's stash mirrors to its own dedicated row per account (Standard →
 // STASH_CLOUD_SLOT, Hardcore → STASH_HC_CLOUD_SLOT), separate from the per-character
@@ -33941,6 +34018,7 @@ async function cloudBootSync() {
   await delReconcile();
   const r = await cloudReconcile(); // freezes saves itself the moment it changes the active slot
   await stashReconcile(); // sync the shared stash too (writes STASH_KEY before any reload)
+  await graveyardReconcile(); // merge the fallen-hero History so it's account-wide, not device-local
   // Pull the account's preferences (writes the settings localStorage keys before
   // any reload, so the load-time reads pick them up). Reports whether adopting the
   // cloud copy changed a local value, so a settings-only change still reloads.
@@ -33985,6 +34063,7 @@ async function syncAll() {
   await delReconcile();
   const r = await cloudReconcile(); // freezes saves itself the moment it changes the active slot
   await stashReconcile();
+  await graveyardReconcile();
   out.settingsPulled = await settingsReconcile();
   out.activeChanged = r.activeChanged;
   _slotSyncStale = false; // verified against the account — the flush/push guards can trust us again
@@ -34131,6 +34210,7 @@ async function doLogin() {
     await delReconcile();              // pull tombstones next so a deleted hero isn't resurrected on link
     await cloudReconcile();
     await stashReconcile();            // merge the shared stash with the account's
+    await graveyardReconcile();        // merge the fallen-hero History with the account's
     await settingsReconcile();         // merge preferences with the account's
     _switchingSlot = true;             // don't let the teardown save overwrite a pulled-newer slot
     location.reload();
@@ -34157,6 +34237,7 @@ async function doSignup() {
       await delReconcile();            // pull tombstones next so a deleted hero isn't resurrected on link
       await cloudReconcile();
       await stashReconcile();          // merge the shared stash with the account's
+      await graveyardReconcile();      // merge the fallen-hero History with the account's
       await settingsReconcile();       // merge preferences with the account's
       _switchingSlot = true;           // don't let the teardown save overwrite a pulled-newer slot
       location.reload();

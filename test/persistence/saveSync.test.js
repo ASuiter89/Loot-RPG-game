@@ -10,6 +10,11 @@ import {
   sanitizeHcMeta,
   mergeHcMeta,
   hcMetaCloudHasAll,
+  sanitizeGrave,
+  graveKey,
+  graveOrder,
+  mergeGraveyard,
+  graveyardCloudHasAll,
   planReconcile,
   planSlotPush,
 } from '../../src/persistence/saveSync.js';
@@ -222,6 +227,113 @@ describe('hcMetaCloudHasAll', () => {
     expect(hcMetaCloudHasAll(
       { cids: [], ach: [], nach: ['n1', 'n2'] },
       { cids: [], ach: [], nach: ['n1'] },
+    )).toBe(false);
+  });
+});
+
+// ═══════════════════════════ graveyard (History) ═════════════════════════════
+
+// One headstone. cid=null makes a legacy (pre-cid) record.
+function grave(cid, ts, extra = {}) {
+  return { cid: cid || null, name: 'Hero', cls: 'warrior', level: 5, floor: 3, gold: 10, playMs: 1000, ts, ...extra };
+}
+
+describe('sanitizeGrave', () => {
+  it('normalizes cid, ts and playMs while preserving other fields', () => {
+    const g = sanitizeGrave({ cid: 'c1', name: 'Bob', level: 7, ts: 12.9, playMs: 500, hardcore: true });
+    expect(g.cid).toBe('c1');
+    expect(g.ts).toBe(12);       // floored
+    expect(g.playMs).toBe(500);
+    expect(g.name).toBe('Bob');  // untouched pass-through
+    expect(g.hardcore).toBe(true);
+  });
+  it('coerces a missing/blank cid to null and bad numbers to 0', () => {
+    const g = sanitizeGrave({ cid: '', ts: NaN, playMs: undefined });
+    expect(g.cid).toBe(null);
+    expect(g.ts).toBe(0);
+    expect(g.playMs).toBe(0);
+  });
+  it('returns null for a non-object', () => {
+    expect(sanitizeGrave(null)).toBe(null);
+    expect(sanitizeGrave(42)).toBe(null);
+  });
+});
+
+describe('graveKey', () => {
+  it('keys a cid-bearing record by its cid', () => {
+    expect(graveKey({ cid: 'c1', name: 'A' })).toBe('cid:c1');
+  });
+  it('keys a legacy id-less record by a content signature', () => {
+    const a = graveKey({ cid: null, name: 'A', cls: 'mage', level: 3, floor: 2, gold: 4, ts: 9 });
+    const b = graveKey({ cid: null, name: 'A', cls: 'mage', level: 3, floor: 2, gold: 4, ts: 9 });
+    expect(a).toBe(b);           // identical legacy records collide (dedupe)
+    expect(a).not.toBe(graveKey({ cid: null, name: 'B', cls: 'mage', level: 3, floor: 2, gold: 4, ts: 9 }));
+  });
+});
+
+describe('graveOrder', () => {
+  it('ranks the more-played snapshot fresher, ts only as a tiebreak', () => {
+    expect(graveOrder({ playMs: 200, ts: 1 }, { playMs: 100, ts: 9 })).toBeGreaterThan(0);
+    expect(graveOrder({ playMs: 100, ts: 9 }, { playMs: 100, ts: 5 })).toBeGreaterThan(0);
+    expect(graveOrder({ playMs: 100, ts: 5 }, { playMs: 100, ts: 5 })).toBe(0);
+  });
+});
+
+describe('mergeGraveyard', () => {
+  it('unions runs from both devices, newest-first', () => {
+    const local = [grave('c1', 30), grave('c2', 10)];
+    const cloud = [grave('c3', 20)];
+    const { graves, grew } = mergeGraveyard(local, cloud, 200);
+    expect(grew).toBe(true);
+    expect(graves.map(g => g.cid)).toEqual(['c1', 'c3', 'c2']); // sorted by ts desc
+  });
+  it('dedupes a shared hero, keeping the MORE-PLAYED snapshot', () => {
+    const local = [grave('c1', 50, { playMs: 1000, level: 8 })];
+    const cloud = [grave('c1', 20, { playMs: 4000, level: 14 })]; // earlier ts but far more play-time
+    const { graves } = mergeGraveyard(local, cloud, 200);
+    expect(graves).toHaveLength(1);
+    expect(graves[0].playMs).toBe(4000);
+    expect(graves[0].level).toBe(14);
+  });
+  it('reports grew=false when the cloud adds nothing new', () => {
+    const local = [grave('c1', 30), grave('c2', 10)];
+    const cloud = [grave('c1', 30)];
+    const { grew } = mergeGraveyard(local, cloud, 200);
+    expect(grew).toBe(false);
+  });
+  it('caps the merged list to the newest N and reports growth on a dropped tail', () => {
+    const local = [grave('c1', 100), grave('c2', 90)];
+    const cloud = [grave('c3', 80)];
+    const { graves } = mergeGraveyard(local, cloud, 2);
+    expect(graves.map(g => g.cid)).toEqual(['c1', 'c2']); // oldest (c3) capped off
+  });
+  it('does not mutate its inputs', () => {
+    const local = [grave('c1', 30)];
+    mergeGraveyard(local, [grave('c2', 40)], 200);
+    expect(local).toHaveLength(1);
+  });
+  it('converges: re-merging the result with the cloud is a no-op', () => {
+    const local = [grave('c1', 30)];
+    const cloud = [grave('c2', 40)];
+    const first = mergeGraveyard(local, cloud, 200);
+    const second = mergeGraveyard(first.graves, cloud, 200);
+    expect(second.grew).toBe(false);
+    expect(second.graves.map(g => g.cid)).toEqual(first.graves.map(g => g.cid));
+  });
+});
+
+describe('graveyardCloudHasAll', () => {
+  it('is true when the cloud holds every local run at a version no older', () => {
+    expect(graveyardCloudHasAll([grave('c1', 10)], [grave('c1', 10), grave('c2', 20)])).toBe(true);
+    expect(graveyardCloudHasAll([], null)).toBe(true); // nothing to push
+  });
+  it('is false when the cloud is missing a run we hold (forces a push)', () => {
+    expect(graveyardCloudHasAll([grave('c1', 10), grave('c2', 20)], [grave('c1', 10)])).toBe(false);
+  });
+  it('is false when the cloud holds an OLDER snapshot of a shared run', () => {
+    expect(graveyardCloudHasAll(
+      [grave('c1', 50, { playMs: 4000 })],
+      [grave('c1', 20, { playMs: 1000 })],
     )).toBe(false);
   });
 });
