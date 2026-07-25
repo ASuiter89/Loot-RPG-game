@@ -60,6 +60,7 @@ import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { pickVaultRoom, findSealedRoom } from '../systems/vaultRooms.js';
 import { rollHoardRoomCount } from '../systems/hoardRooms.js';
+import { carveArenaGrid } from '../systems/bossArena.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
@@ -4423,6 +4424,17 @@ const BOSSES_PER_TIER = 5;
 const BOSS_HP_MULT_BY_TIER = { 1: 1.6, 2: 3.0, 3: 5.0, 4: 5.0 };
 function bossHpMult() { return BOSS_HP_MULT_BY_TIER[currentDifficulty()] || 5.0; }
 
+// Which of the fifteen guardians holds the current boss floor. Finite tiers map
+// (difficulty, local floor) → a fixed guardian (Normal 0-4, Hardened 5-9, Brutal
+// 10-14); Endless rolls one at random. Called once per boss floor in buildBossArena
+// (which carves that guardian's bespoke arena) and reused by spawnEnemies, so the
+// room and the boss it holds always match.
+function selectFloorBoss() {
+  const localBossIdx = Math.max(0, Math.min(Math.floor(displayFloor() / 5) - 1, BOSSES_PER_TIER - 1));
+  const bossIdx = (currentDifficulty() - 1) * BOSSES_PER_TIER + localBossIdx;
+  return isEndless() ? pick(BOSSES) : BOSSES[Math.max(0, Math.min(bossIdx, BOSSES.length - 1))];
+}
+
 // ── ENEMY AI BEHAVIOURS ──
 // Each archetype defines HOW a monster moves and fights, so foes feel distinct
 // instead of all shuffling toward you in a line. The actual pathing toward the
@@ -6893,7 +6905,10 @@ let mapData = [];
 let mapEpoch = 0;   // bumped whenever the map layout changes, to invalidate the wall-shadow cache
 // Boss-arena state: the centre of the current boss room, and (only during a boss
 // floor's build) the tile the guardian is pinned to. Both null off a boss floor.
-let bossArenaCenter = null, bossArenaCell = null;
+// `arenaBoss` is the guardian chosen for the arena currently being built — set in
+// buildBossArena so spawnEnemies pins the SAME boss the room was carved for, then
+// cleared once consumed (null outside the build window).
+let bossArenaCenter = null, bossArenaCell = null, arenaBoss = null;
 // Per-tile shove tally for cracked walls (tile 10): "y,x" -> hits taken so far.
 // A wall absent from the map is untouched (stage 0); it's deleted when it breaks.
 // Rebuilt empty with every floor (see each `mapData = []`), never saved — the map
@@ -7764,7 +7779,7 @@ window.gameGuide = function gameGuide(topic) {
       `TRAP-THEMED FLOORS: some floors (gameState().modifier "Spike Gauntlet" / "Arrow Gallery" / "The Vent Works") dedicate the whole floor to ONE trap kind, packed in far denser than usual — expect a field of spikes, a hall lined with arrow emitters, or clusters of fire vents. Loot runs a little richer to reward threading them; a walkable route through the spikes is always guaranteed.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `BOSS TELEGRAPHS (gameState().hazards.telegraphs) are a guardian's wind-up attacks — a floor indicator that fills, flashes, then detonates. Each carries its shape (disc = filled circle; ring = donut, lethal in the band between innerR and r but SAFE in the centre hole and beyond r; lane = beam between (x1,y1)-(x2,y2); cone = wedge of radius r opening ±halfAngle around facing), its centre (x,y)/geometry, seconds until it lands (secsToHit), and danger:true when it hurts. They are ALWAYS dodgeable by MOVING out of the zone before secsToHit hits 0 (for a ring, step past r or into the hole) — never an RNG dodge. Red = damage; cyan = a benign spawn marker. A tracking disc follows you early in its wind-up, then locks — keep moving and it lands where you were.`,
-      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, the exit is north, and four pillars give cover. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
+      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, and the exit is north. EACH guardian has its OWN arena — the cover and hazards vary by boss (columns to break line-of-sight on volleys and beams, lava pools, breakable cracked walls, spike beds), so read the ASCII map (# wall, ^ lava, " spikes, % cracked wall) and use the cover: duck behind a pillar to break a telegraphed shot, smash through a cracked wall for a new lane. A big open centre plaza, a clear north-south lane and an open perimeter ring are always kept, so there's room to kite. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
       `ISLAND FLOORS (gameState().island true) come up now and then on outdoor floors: the landmass is ringed by open SEA, so the whole map edge is deep water (~) instead of a rock wall. You can see and shoot across it but never walk off — the shore IS the boundary. Nothing reachable is lost; the sea only replaces the impassable frame, so play it like any other floor.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. Most are multi-floor boons that fold into your stats while active (see gameState().effects): power (+50% dmg), guard (−40% dmg taken), fortune (loot), greed (+60% gold), insight (+50% xp), discovery (+50 Magic Find), harvest (+60% materials), precision (+18% crit), phantom (+15% dodge), sorcery (+30% skill/spell power), leech (+15% lifesteal), thorns (reflect), renewal (HP regen), clarity (MP regen), bulwark (+Defense), swift (+18% move), haste (+25% attack speed), vigor (tireless sprint/dash + full Stamina). wisdom instantly restores 50% max HP and refills MP; but BLOOD costs 30% of current HP for XP — check the kind before stepping on one.`,
@@ -11884,13 +11899,17 @@ function generateMap() {
 }
 
 // ── FIXED BOSS ARENA ─────────────────────────────────────────────────────────
-// Every boss floor is the same hand-authored circular room, identical each time:
-// the hero enters from the stairs at the SOUTH, the guardian holds the CENTRE, and
-// the way onward sits at the NORTH — sealed (like any uncleared floor) until the
-// boss falls. Four pillars give cover to duck telegraphed shots behind. No trash,
-// no loot clutter, no side rooms — just the hero and the boss. The confirmation
-// gate and the exit locks that trap you here until you win or die are layered on
-// in the stairs and town-portal handlers.
+// Every boss floor is a fixed circular room, one bespoke layout PER GUARDIAN so no
+// two boss rooms look alike: the hero enters from the stairs at the SOUTH, the
+// guardian holds the CENTRE, and the way onward sits at the NORTH — sealed (like any
+// uncleared floor) until the boss falls. Each guardian's own cover and hazards
+// (pillars to duck telegraphed shots, lava, breakable walls, spike beds) are stamped
+// into the annulus around the plaza (see src/data/bossArenas.js); a big open central
+// plaza, a clear N-S lane and an open perimeter ring are always preserved so even a
+// 3×3 guardian can lumber freely (systems/bossArena.js). No trash, no loot clutter,
+// no side rooms — just the hero and the boss. The confirmation gate and the exit
+// locks that trap you here until you win or die are layered on in the stairs and
+// town-portal handlers.
 const BOSS_ARENA_R = 10;                        // circle radius, centre-to-wall (tiles)
 const BOSS_ARENA_SIZE = BOSS_ARENA_R * 2 + 5;   // map dimension, with a wall margin
 function buildBossArena() {
@@ -11898,22 +11917,12 @@ function buildBossArena() {
   MAP_W = BOSS_ARENA_SIZE; MAP_H = BOSS_ARENA_SIZE;
   const cx = MAP_W >> 1, cy = MAP_H >> 1;
   bossArenaCenter = { x: cx, y: cy };
-  // Solid rock, then carve the circular floor out of it.
-  mapData = []; wallCracks = {};
-  const R2 = BOSS_ARENA_R * BOSS_ARENA_R;
-  for (let y = 0; y < MAP_H; y++) {
-    mapData[y] = [];
-    for (let x = 0; x < MAP_W; x++) {
-      const dx = x - cx, dy = y - cy;
-      mapData[y][x] = (dx * dx + dy * dy <= R2) ? 0 : 1;
-    }
-  }
-  // Four cover pillars on an inner ring — something to break line of sight on.
-  const pr = Math.round(BOSS_ARENA_R * 0.55);
-  for (const [ox, oy] of [[-pr, -pr], [pr, -pr], [-pr, pr], [pr, pr]]) {
-    const x = cx + ox, y = cy + oy;
-    if (mapData[y] && mapData[y][x] === 0) mapData[y][x] = 1;
-  }
+  wallCracks = {};
+  // Choose the guardian NOW so spawnEnemies below pins the SAME one this room is
+  // carved for, then carve its bespoke arena — a stone circle with that boss's cover
+  // and hazards stamped in (the pure builder guarantees the room stays navigable).
+  arenaBoss = selectFloorBoss();
+  mapData = carveArenaGrid(arenaBoss.type, BOSS_ARENA_R).grid;
   // ── ENTRANCE (south) ── the hero spawns here, on the stair back the way they
   // came. Which stair type it is depends on arrival direction, mirroring the
   // normal floor logic; either way the entrance is south and the exit is north.
@@ -11962,7 +11971,7 @@ function buildBossArena() {
   bumpMapEpoch(); pathGridDirty();
   // Spawn the guardian (boss only — spawnEnemies gives boss floors a count of 1).
   spawnEnemies();
-  bossArenaCell = null;           // consumed
+  bossArenaCell = null; arenaBoss = null;   // consumed by spawnEnemies
   // ── CLEAR CONDITION ── the exit stays sealed until the boss falls. A boss floor
   // is never "pre-cleared" unless you've already beaten it (backtracking here).
   floorCleared = false;
@@ -17292,15 +17301,12 @@ function spawnEnemies() {
               (Math.abs(ex - player.x) + Math.abs(ey - player.y)) <= ENEMY_AGGRO + 1) && tries < 100);
     if (tries < 100) {
       if (isBossFloor && i === 0) {
-        // Each finite tier has its OWN five guardians (Normal 0-4, Hardened 5-9,
-        // Brutal 10-14), so the boss ladder differs every difficulty rather than
-        // replaying. Endless has no preset bosses — it rolls one of all fifteen at
-        // random on every boss floor.
-        const localBossIdx = Math.max(0, Math.min(Math.floor(displayFloor() / 5) - 1, BOSSES_PER_TIER - 1));
-        const bossIdx = (currentDifficulty() - 1) * BOSSES_PER_TIER + localBossIdx;
-        const boss = isEndless()
-          ? pick(BOSSES)
-          : BOSSES[Math.max(0, Math.min(bossIdx, BOSSES.length - 1))];
+        // buildBossArena already chose this floor's guardian (Normal 0-4, Hardened
+        // 5-9, Brutal 10-14 per tier; Endless rolls one of the fifteen at random)
+        // and carved the arena around it — reuse that pick so the room and the boss
+        // it holds always match. Fall back to a fresh selection on the rare spawn
+        // path with no fixed arena in flight.
+        const boss = arenaBoss || selectFloorBoss();
         let bsize = boss.size || 1;
         if (bossArenaCell) {
           // Fixed boss arena: the guardian is pinned dead-centre (its open block is
