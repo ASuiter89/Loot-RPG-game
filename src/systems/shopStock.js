@@ -15,7 +15,7 @@
 // to its own weighted picker.
 
 import { SHOP_TIER_BANDS, SHOP_TIER_FLOOR, SHOP_FALLBACK_TIER } from '../data/shopStock.js';
-import { lockedTiers } from './rarityGate.js';
+import { lockedTiers, tiersAboveFound } from './rarityGate.js';
 
 // How prominent one tier is at item level `ilvl`: a Gaussian bump centred on the
 // tier's `center`, so weight tails off smoothly as the shop's depth moves away
@@ -27,17 +27,21 @@ function bandWeight(band, ilvl) {
 
 // The rarity weights for a merchant whose wares are geared to `ilvl`, for a hero
 // with the given boss ledger + deepest floor. Tiers the gate still locks are
-// dropped; a tier whose share is below SHOP_TIER_FLOOR is dropped too (no
-// out-of-band tail piece). Always returns at least one tier.
-export function shopTierWeights(ilvl, bossFirstKills, maxFloor) {
+// dropped; the FOUND cap (`foundRank`, the rank of the highest rarity the hero has
+// ever picked up) drops any colour above what they've actually found, so the merchant
+// never sells a rarity ahead of the hero's own finds; a tier whose share is below
+// SHOP_TIER_FLOOR is dropped too (no out-of-band tail piece). `foundRank` is optional —
+// omit it (or pass a non-finite value) for no found cap. Always returns at least one tier.
+export function shopTierWeights(ilvl, bossFirstKills, maxFloor, foundRank) {
   const lvl = Math.max(1, Number(ilvl) || 1);
   const locked = lockedTiers(bossFirstKills, maxFloor);
+  const aboveFound = tiersAboveFound(foundRank);
 
   // Raw bell weights over the tiers this hero may actually be sold.
   const raw = {};
   let total = 0;
   for (const band of SHOP_TIER_BANDS) {
-    if (locked.has(band.tier)) continue;
+    if (locked.has(band.tier) || aboveFound.has(band.tier)) continue;
     const w = bandWeight(band, lvl);
     if (w > 0) { raw[band.tier] = w; total += w; }
   }

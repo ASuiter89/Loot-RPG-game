@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-25", size: "small", v: "Merchant capped at rarity you've found", by: "Jeff Louie", notes: [
+    "Merchant never stocks a colour above your highest found rarity — no blue before your first blue, no purple before your first purple.",
+    "Layers atop the boss gate; gear you currently hold counts as found.",
+  ] },
   { date: "2026-07-25", size: "small", v: "Shrines pop their name over the hero", by: "Jeff Louie", notes: [
     "Stepping on a shrine floats a terse label over you — \"Fortune\", \"Leech\", etc.",
     "Each shrine's label has its own rarity-spectrum tint, so you clock which boon at a glance.",

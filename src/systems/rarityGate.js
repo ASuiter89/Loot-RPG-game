@@ -49,3 +49,25 @@ export function lockedTiers(bossFirstKills, maxFloor) {
   }
   return locked;
 }
+
+// The full rarity ladder, common → rare, mirroring the shell's TIERS order. A tier's
+// RANK is its index here: junk 0 · white 1 · green 2 · blue 3 · purple 4 · orange 5 ·
+// red 6. Used to cap MERCHANT wares at the highest colour the hero has actually found.
+export const RARITY_LADDER = ['junk', 'normal', 'uncommon', 'rare', 'epic', 'legendary', 'unique'];
+
+// Tiers a MERCHANT must not stock because the hero hasn't FOUND that colour yet — a
+// "found-rarity" cap layered on top of the boss gate. `foundRank` is the rank (index
+// in RARITY_LADDER) of the highest rarity the hero has ever picked up; any tier ranked
+// strictly above it is withheld, so a hero who has never found a blue is never sold a
+// blue, one who has never found a purple never sold a purple, and so on. A non-finite
+// rank means "no cap" (returns an empty Set), so a caller that doesn't track finds keeps
+// its old behaviour. Junk/white (ranks 0–1) sit at or below any real cap, so they're
+// never withheld here — the merchant always has a baseline to sell.
+export function tiersAboveFound(foundRank) {
+  const locked = new Set();
+  if (!Number.isFinite(foundRank)) return locked;
+  for (let i = 0; i < RARITY_LADDER.length; i++) {
+    if (i > foundRank) locked.add(RARITY_LADDER[i]);
+  }
+  return locked;
+}
