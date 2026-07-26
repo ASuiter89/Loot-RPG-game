@@ -10,6 +10,9 @@ import {
   sanitizeHcMeta,
   mergeHcMeta,
   hcMetaCloudHasAll,
+  hcPlaytimeValue,
+  bumpHcPlaytime,
+  seedHcPlaytime,
   sanitizeGrave,
   graveKey,
   graveOrder,
@@ -147,21 +150,71 @@ describe('delCloudHasAll', () => {
 // ══════════════════════ account-wide meta ledger (feats) ═════════════════════
 
 describe('freshHcMeta', () => {
-  it('is a blank ledger with all three sets present', () => {
-    expect(freshHcMeta()).toEqual({ cids: [], ach: [], nach: [], ts: 0 });
+  it('is a blank ledger with all sets and the play-time counter present', () => {
+    expect(freshHcMeta()).toEqual({ cids: [], ach: [], nach: [], pt: {}, ts: 0 });
   });
 });
 
 describe('sanitizeHcMeta', () => {
   it('coerces junk into a clean ledger and keeps only string ids', () => {
-    expect(sanitizeHcMeta(null)).toEqual({ cids: [], ach: [], nach: [], ts: 0 });
+    expect(sanitizeHcMeta(null)).toEqual({ cids: [], ach: [], nach: [], pt: {}, ts: 0 });
     expect(sanitizeHcMeta({ cids: ['a', 5, null], ach: ['x'], nach: ['n', {}], ts: 9.7 }))
-      .toEqual({ cids: ['a'], ach: ['x'], nach: ['n'], ts: 9 });
+      .toEqual({ cids: ['a'], ach: ['x'], nach: ['n'], pt: {}, ts: 9 });
   });
-  it('defaults nach to [] for a legacy blob that predates normal-mode feats', () => {
-    // A row written before account-wide Kitten feats existed carries only cids/ach.
+  it('defaults nach/pt to empty for a legacy blob that predates them', () => {
+    // A row written before account-wide Kitten feats / lifetime play-time existed
+    // carries only cids/ach.
     expect(sanitizeHcMeta({ cids: ['a'], ach: ['x'], ts: 3 }))
-      .toEqual({ cids: ['a'], ach: ['x'], nach: [], ts: 3 });
+      .toEqual({ cids: ['a'], ach: ['x'], nach: [], pt: {}, ts: 3 });
+  });
+  it('keeps only positive-integer play-time entries', () => {
+    expect(sanitizeHcMeta({ pt: { d1: 1500, d2: 0, d3: -4, d4: 'x', d5: 2.9 }, ts: 1 }).pt)
+      .toEqual({ d1: 1500, d5: 2 });
+  });
+});
+
+describe('play-time counter (hcMeta.pt)', () => {
+  it('totals play-time as the sum across every device', () => {
+    expect(hcPlaytimeValue({ pt: { d1: 1000, d2: 2000, _seed: 500 } })).toBe(3500);
+    expect(hcPlaytimeValue(null)).toBe(0);
+  });
+  it('bumps a device counter (grow-only) and ignores no-op deltas', () => {
+    const m = freshHcMeta();
+    bumpHcPlaytime(m, 'd1', 1000);
+    bumpHcPlaytime(m, 'd1', 500);
+    bumpHcPlaytime(m, 'd1', 0);
+    bumpHcPlaytime(m, '', 999);
+    expect(m.pt).toEqual({ d1: 1500 });
+  });
+  it('seeds a shared baseline bucket with MAX so re-seeding never double-counts', () => {
+    const m = freshHcMeta();
+    seedHcPlaytime(m, '_seed', 4680000); // 1h18m reconstructed baseline
+    seedHcPlaytime(m, '_seed', 4680000); // idempotent — same device or another reseeds
+    seedHcPlaytime(m, '_seed', 3000000); // a smaller reconstruction can't lower it
+    expect(m.pt._seed).toBe(4680000);
+    expect(hcPlaytimeValue(m)).toBe(4680000);
+  });
+  it('merges the counter by per-device MAX and sums across devices', () => {
+    const { meta, grew } = mergeHcMeta(
+      { cids: [], ach: [], nach: [], pt: { d1: 3000, _seed: 1000 }, ts: 1 },
+      { cids: [], ach: [], nach: [], pt: { d1: 2000, d2: 5000, _seed: 1000 }, ts: 2 },
+      100,
+    );
+    expect(grew).toBe(true); // d2 arrived
+    expect(meta.pt).toEqual({ d1: 3000, d2: 5000, _seed: 1000 });
+    expect(hcPlaytimeValue(meta)).toBe(9000);
+    expect(meta.ts).toBe(100);
+  });
+  it('never lowers a device tally from a stale cloud copy', () => {
+    const { meta, grew } = mergeHcMeta(
+      { pt: { d1: 8000 } }, { pt: { d1: 3000 } }, 100,
+    );
+    expect(grew).toBe(false);
+    expect(meta.pt).toEqual({ d1: 8000 });
+  });
+  it('forces a push (hcMetaCloudHasAll false) when we hold unsynced play-time', () => {
+    expect(hcMetaCloudHasAll({ pt: { d1: 5000 } }, { pt: { d1: 2000 } })).toBe(false);
+    expect(hcMetaCloudHasAll({ pt: { d1: 2000 } }, { pt: { d1: 2000, d2: 9 } })).toBe(true);
   });
 });
 
@@ -206,7 +259,7 @@ describe('mergeHcMeta', () => {
     const { meta, grew, learnedDeath } = mergeHcMeta(local, null, 100);
     expect(grew).toBe(false);
     expect(learnedDeath).toBe(false);
-    expect(meta).toEqual({ cids: ['d1'], ach: ['a1'], nach: ['n1'], ts: 3 });
+    expect(meta).toEqual({ cids: ['d1'], ach: ['a1'], nach: ['n1'], pt: {}, ts: 3 });
   });
   it('does not mutate its inputs', () => {
     const local = { cids: [], ach: [], nach: ['n1'], ts: 1 };

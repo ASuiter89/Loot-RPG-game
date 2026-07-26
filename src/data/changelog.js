@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-25", size: "small", v: "Total time played survives deleted heroes", by: "Jeff Louie", notes: [
+    "History total reads a durable, account-wide lifetime counter — not a sum of surviving heroes; won't drop when a hero's deleted, a slot's reused, or a device's data clears.",
+    "Tallies every device and syncs; seeds once from your current total.",
+  ] },
   { date: "2026-07-25", size: "small", v: "Merchant capped at rarity you've found", by: "Jeff Louie", notes: [
     "Merchant never stocks a colour above your highest found rarity — no blue before your first blue, no purple before your first purple.",
     "Layers atop the boss gate; gear you currently hold counts as found.",
