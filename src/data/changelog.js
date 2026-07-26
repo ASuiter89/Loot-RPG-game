@@ -9,6 +9,9 @@
 export const CHANGELOG = [
   { date: "2026-07-25", size: "small", v: "Town keepers drop the floating role icon", by: "Jeff Louie", notes: [
     "Role glyph no longer floats above each keeper's head; \"!\" new-arrival marker stays.",
+  { date: "2026-07-25", size: "small", v: "Total time played survives deleted heroes", by: "Jeff Louie", notes: [
+    "History total reads a durable, account-wide lifetime counter — not a sum of surviving heroes; won't drop when a hero's deleted, a slot's reused, or a device's data clears.",
+    "Tallies every device and syncs; seeds once from your current total.",
   ] },
   { date: "2026-07-25", size: "small", v: "Mana Regen is now a gear stat; regen shows up early", by: "Jeff Louie", notes: [
     "New Mana Regen (MRG) affix — flat +MP/sec on helm/chest/legs/amulet/off-hand, stacks on Spirit's, halved in combat.",

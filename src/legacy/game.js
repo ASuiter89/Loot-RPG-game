@@ -168,6 +168,7 @@ import { nextPity, targetBias, shouldRedirect, pickMissingTarget,
 import { createLeaderboardRepo } from '../persistence/leaderboardRepo.js';
 import { planReconcile, planSlotPush, freshDelMeta, sanitizeDelMeta, isTombstoned, addTombstone,
   mergeDelMeta, delCloudHasAll, sanitizeHcMeta, mergeHcMeta, hcMetaCloudHasAll,
+  hcPlaytimeValue, bumpHcPlaytime, seedHcPlaytime,
   mergeGraveyard, graveyardCloudHasAll } from '../persistence/saveSync.js';
 import { freshStash, sanitizeStash, mergeStash, depositGold, withdrawGold, depositMaterial, withdrawMaterial, materialsValue, foldHeroMaterials } from '../persistence/stashSync.js';
 import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
@@ -7918,7 +7919,7 @@ window.gameGuide = function gameGuide(topic) {
       `Anywhere: Options/Menu pauses to Settings. R3 (right-stick click) toggles a VIRTUAL CURSOR — a mouse driven by the right stick, ✕/A = click — that works over the map and any menu, the universal fallback for anything else. View/Share opens an on-screen controller cheat-sheet. Text entry (hero name, cloud-save login) uses an on-screen keyboard with a Random-name key. See docs/CONTROLLER.md for the full map.`,
     ],
     cloud: [
-      `Saves live in your browser's local storage by default. Sign in (Settings ▸ Account) with an email + password to also mirror every save slot, your shared Stash, your fallen-hero History, and your settings to the cloud, so the same heroes follow you across devices — it's optional and free, and signed out the game behaves exactly as before.`,
+      `Saves live in your browser's local storage by default. Sign in (Settings ▸ Account) with an email + password to also mirror every save slot, your shared Stash, your fallen-hero History, your lifetime Total-time-played, and your settings to the cloud, so the same heroes follow you across devices — it's optional and free, and signed out the game behaves exactly as before.`,
       `Cross-device saves are conflict-safe: whichever copy of a hero has been PLAYED longer wins a merge (measured by real active play-time, not the wall clock, so a device with a fast/slow clock can't cheat the merge), and a copy is never overwritten by an older one. Deleting or losing a hero (Hardcore permadeath) is recorded account-wide and can't be undone by an old copy on another device.`,
       `A window you leave OPEN but stop playing goes idle after a minute (or the moment its tab is hidden): while idle it stops writing and stops mirroring saves, so it can't overwrite newer progress. The instant you return and play again — or switch back to its tab — it re-checks the account first and pulls down anything a second device advanced, reloading into that newer copy if needed. So it's safe to leave the game open on one machine and keep playing on another; come back and it catches up instead of clobbering.`,
       `Use Settings ▸ Account ▸ Sync Now to force an immediate reconcile. Because a stale tab defers to the account, the safe habit across devices is simply: play, then let the other device catch up on its own when you return to it.`,
@@ -9790,22 +9791,57 @@ function fmtGraveDate(ts) {
   try { return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
   catch (e) { return ''; }
 }
-// Graveyard of Fallen Heroes — every past run and all its metrics: class, level,
-// deepest floor, gold, time played and date. The header shows total play time
-// across every character (living + fallen) plus the fallen count.
-function showGraveyard() {
-  const totalEl = document.getElementById('graveyard-total');
-  const bodyEl = document.getElementById('graveyard-body');
-  const list = loadGraveyard();
-  // Total play time across every character — living save slots and fallen graves
-  // (deduped by character id so a hero is never counted twice).
+// Legacy "total time played" — reconstructed by summing the play-time of every
+// character that STILL EXISTS (living save slots + fallen graves, deduped by cid so a
+// hero is never double-counted). This is fragile: it silently forgets any hero that's
+// been deleted, had its slot reused, or been evicted from localStorage — which is why
+// a player with 20+ real hours can see barely one. The durable hcMeta.pt counter is
+// authoritative now; this survives only as a FLOOR under it (see showGraveyard).
+function reconstructTotalPlayMs() {
   let totalMs = 0; const seen = new Set();
   for (const i of allLocalSlotIndices()) {
     const su = slotSummary(i); if (!su) continue;
     const ms = (i === activeSlot && typeof player === 'object' && player) ? (player.playMs || 0) : su.playMs;
     totalMs += ms; if (su.cid) seen.add(su.cid);
   }
-  for (const g of list) { if (g.cid && seen.has(g.cid)) continue; if (g.cid) seen.add(g.cid); totalMs += (g.playMs || 0); }
+  for (const g of loadGraveyard()) { if (g.cid && seen.has(g.cid)) continue; if (g.cid) seen.add(g.cid); totalMs += (g.playMs || 0); }
+  return totalMs;
+}
+
+// One-time fold of the pre-existing reconstructed total into the durable lifetime
+// counter, so a player who already has hours logged doesn't reset to zero the moment
+// the counter ships. Folds into a SHARED bucket (MAX), and only while the account
+// counter is still empty — once ANY real play has accrued (here or on another device)
+// the value is non-zero and we never re-seed, so the baseline can't double-count the
+// time the per-device counters already hold. For a signed-in player we wait until the
+// account row has merged in this boot (see hcReconcile), so "empty" means empty
+// account-wide, not just on this freshly-booted device.
+function ensurePlaytimeSeeded() {
+  if (_ptSeedChecked) return;
+  try { if (cloudEnabled() && authState.user && !_hcReconciledThisBoot) return; } catch (e) { return; }
+  _ptSeedChecked = true;
+  if (hcPlaytimeValue(hcMeta) > 0) return;
+  const base = reconstructTotalPlayMs();
+  if (base <= 0) return;
+  seedHcPlaytime(hcMeta, PT_SEED_KEY, base);
+  hcMeta.ts = Date.now();
+  writeHcMeta();
+  cloudScheduleHcMeta();
+}
+
+// Graveyard of Fallen Heroes — every past run and all its metrics: class, level,
+// deepest floor, gold, time played and date. The header shows the durable, account-
+// wide lifetime play-time total (see ensurePlaytimeSeeded) plus the fallen count.
+function showGraveyard() {
+  const totalEl = document.getElementById('graveyard-total');
+  const bodyEl = document.getElementById('graveyard-body');
+  const list = loadGraveyard();
+  ensurePlaytimeSeeded();
+  // Total time played reads from the durable account-wide lifetime counter (hcMeta.pt),
+  // floored by the live reconstruction so it can never show LESS than the heroes that
+  // still exist (e.g. right after adding a hero the counter hasn't billed yet, or mid-
+  // seed). The counter is what keeps this from dropping when a hero is deleted/evicted.
+  const totalMs = Math.max(reconstructTotalPlayMs(), hcPlaytimeValue(hcMeta));
   if (totalEl) {
     totalEl.className = 'pt-total';
     totalEl.innerHTML = `<div class="pt-total-val">${formatPlayTime(totalMs)}</div>`
@@ -32361,7 +32397,15 @@ function recordFallenSlot(i) {
 // each slot derived its own count live and they diverged). See sanitizeHcMeta/
 // mergeHcMeta in persistence/saveSync.js for the pure, tested set algebra.
 const HC_DEAD_KEY = 'dungeonLoot_hcMeta_v1';
-let hcMeta = { cids: [], ach: [], nach: [], ts: 0 };
+let hcMeta = { cids: [], ach: [], nach: [], pt: {}, ts: 0 };
+// Shared bucket key the one-time play-time baseline seeds into (see
+// ensurePlaytimeSeeded). Held under a SHARED key — not a per-device one — so seeding
+// the same reconstructed total on two devices MAX-merges instead of summing.
+const PT_SEED_KEY = '_seed';
+let _ptSeedChecked = false;
+// True once this boot's hcMeta cloud reconcile has run, so play-time seeding for a
+// signed-in player waits for the account counter before deciding it's "empty".
+let _hcReconciledThisBoot = false;
 // Set mirrors of hcMeta.ach / hcMeta.nach for O(1) membership tests — the achievement
 // checks probe every id on each save, so the array indexOf scans add up. Kept in
 // sync at every point the feat sets change (load, grant, cloud merge).
@@ -32623,8 +32667,14 @@ if (typeof document !== 'undefined') {
 // conflict signal (an idle tab can't inflate its play-time and out-rank the device
 // you actually played on). The total rides along in the normal save; we also nudge a
 // save every ~20s so genuine play still persists even when nothing else saved.
+//
+// The SAME billed `dt` also feeds the durable account-wide lifetime counter
+// (hcMeta.pt[thisDevice]) — the History "Total time played" reads from that, not from
+// summing whatever heroes still exist, so it no longer collapses when a hero is
+// deleted or a device is wiped. hcMeta persists on the same ~20s cadence (and on hide).
 let _ptLastBeat = Date.now();
 let _ptSinceSave = 0;
+let _ptHcDirty = false; // lifetime counter has unpersisted play-time
 function playTimeBeat() {
   const now = Date.now();
   let dt = now - _ptLastBeat;
@@ -32633,14 +32683,31 @@ function playTimeBeat() {
   if (dt < 0) dt = 0;
   if (dt > 5000) dt = 1000; // background throttle / sleep — count a nominal tick
   if (typeof player === 'object' && player) player.playMs = (player.playMs || 0) + dt;
+  // Seed the lifetime baseline once (deferred for a signed-in player until the account
+  // counter has merged), THEN start accruing — so the seed can't double-count billed dt.
+  ensurePlaytimeSeeded();
+  if (_ptSeedChecked && dt > 0 && typeof player === 'object' && player) {
+    bumpHcPlaytime(hcMeta, stashDeviceId(), dt);
+    _ptHcDirty = true;
+  }
   _ptSinceSave += dt;
   if (_ptSinceSave >= 20000) {
     _ptSinceSave = 0;
+    flushPlaytimeCounter();
     // The world tick already autosaves every few seconds during play, so only
     // fire the heartbeat save when nothing else persisted recently (e.g. idling
     // on a menu). playMs still accumulates either way and rides the next save.
     if (Date.now() - _lastSaveAt >= 15000) { try { saveGame(); } catch (e) {} }
   }
+}
+// Persist the durable lifetime counter (local write + debounced cloud push) when it
+// holds unsaved play-time. Cheap and idempotent; a no-op when nothing changed.
+function flushPlaytimeCounter() {
+  if (!_ptHcDirty) return;
+  _ptHcDirty = false;
+  hcMeta.ts = Date.now();
+  writeHcMeta();
+  cloudScheduleHcMeta();
 }
 setInterval(playTimeBeat, 1000);
 // Leaving the foreground: persist locally and try one GUARDED cloud push while the
@@ -32652,6 +32719,7 @@ if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       try { saveGame(); } catch (e) {}
+      try { flushPlaytimeCounter(); } catch (e) {}
       try { cloudFlush(); } catch (e) {}
       _slotSyncStale = true;
     } else {
@@ -32664,7 +32732,7 @@ if (typeof window !== 'undefined') {
   // The page is being torn down — persist LOCALLY only. A blind keepalive cloud write
   // could clobber a newer copy from another device, and a guarded (read-first) write
   // can't complete during unload; the tail reaches the cloud on the next boot reconcile.
-  window.addEventListener('pagehide', () => { try { saveGame(); } catch (e) {} });
+  window.addEventListener('pagehide', () => { try { saveGame(); } catch (e) {} try { flushPlaytimeCounter(); } catch (e) {} });
 }
 
 // Format a millisecond span as a compact human play-time string: "3h 12m",
@@ -33689,10 +33757,16 @@ function cloudScheduleHcMeta() {
 function hcMergeIn(cloud) {
   const r = mergeHcMeta(hcMeta, cloud, Date.now());
   if (r.grew) {
-    hcMeta.cids = r.meta.cids; hcMeta.ach = r.meta.ach; hcMeta.nach = r.meta.nach; hcMeta.ts = r.meta.ts;
+    hcMeta.cids = r.meta.cids; hcMeta.ach = r.meta.ach; hcMeta.nach = r.meta.nach;
+    hcMeta.pt = r.meta.pt; hcMeta.ts = r.meta.ts;
     _hcAchSet = new Set(hcMeta.ach);
     _nAchSet = new Set(hcMeta.nach);
     writeHcMeta();
+    // A fuller play-time tally may have arrived — refresh the History total if it's open.
+    try {
+      const ov = document.getElementById('graveyard-overlay');
+      if (ov && ov.classList.contains('open')) showGraveyard();
+    } catch (e) {}
   }
   return r.learnedDeath;
 }
@@ -33739,7 +33813,7 @@ async function cloudPushHcMeta() {
   try { cloud = await cloudFetchHcMeta(); } catch (e) { return false; }
   if (cloud === undefined) return false;
   hcMergeIn(cloud);
-  const haveLocal = hcMeta.cids.length || hcMeta.ach.length || hcMeta.nach.length;
+  const haveLocal = hcMeta.cids.length || hcMeta.ach.length || hcMeta.nach.length || hcPlaytimeValue(hcMeta);
   if (haveLocal && !hcCloudHasAll(cloud)) return await cloudWriteHcMeta();
   return true;
 }
@@ -33751,10 +33825,11 @@ async function hcReconcile() {
   let cloud;
   try { cloud = await cloudFetchHcMeta(); } catch (e) { return false; }
   if (cloud === undefined) return false;
+  _hcReconciledThisBoot = true; // read succeeded (row or none) — play-time seeding may proceed
   const learnedDeath = hcMergeIn(cloud);
   // Push our union up if we hold anything the cloud is missing. Nothing local and
   // no cloud row → leave it be (don't litter empty rows for players with no feats).
-  const haveLocal = hcMeta.cids.length || hcMeta.ach.length || hcMeta.nach.length;
+  const haveLocal = hcMeta.cids.length || hcMeta.ach.length || hcMeta.nach.length || hcPlaytimeValue(hcMeta);
   if (haveLocal && !hcCloudHasAll(cloud)) await cloudWriteHcMeta();
   return learnedDeath;
 }
