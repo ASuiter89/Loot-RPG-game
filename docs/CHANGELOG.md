@@ -8,6 +8,22 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Fix — a death on the beach tutorial stays on the beach
+
+- 📦 New `src/systems/shoreDeath.js` (`deathRoute`) — the priority order a killing
+  blow resolves through (Last Stand → revive bowl → Hardcore permadeath → the shore
+  retry → town), lifted out of `handleDeath`'s inline `if` chain and unit-tested.
+- 🧪 `src/legacy/game.js`: new `shoreDeath()` beside `handleDeath()`. Falling on the
+  opening beach used to revive the hero in TOWN — and a save taken in town never
+  resumes the shore (`savedOnShore`), so one lost first fight skipped the tutorial,
+  its starter weapon and its level-up for good. The shore is now rebuilt around the
+  hero at no cost (bag kept, no gold/XP taken, no grave); `showDeathScreen` gained an
+  `onShore` variant and `gameState()` a `shore` flag (the beach and real floor 1 both
+  run at depth 1). Hardcore is untouched: one life, beach included.
+- 🧪 `test/smoke/tutorial-resume.mjs` grows a step 4 — kill the hero on the resumed
+  shore and assert the beach rebuilds, the bag survives and the save still reads the
+  shore.
+
 ## Fix — the run modifiers a hero opts into now actually apply
 
 - 📦 New `src/data/skillCosts.js` (`MIN_CAST_COST`, `LIFE_COST_PER_MP`,

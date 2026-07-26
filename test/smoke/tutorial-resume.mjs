@@ -12,8 +12,10 @@
 //   2. reloading that save comes back to the SHORE — its pack of four identical foes
 //      plus one elite — not a generated dungeon floor;
 //   3. the slot list labels that hero "The Shore", not "Floor 1";
-//   4. a hero who has left for the dungeon stops recording the shore; and
-//   5. a save predating the flag is stamped graduated, never dragged back to it.
+//   4. DYING on the shore respawns there, cost-free — a town revive would stamp the
+//      hero graduated and skip the tutorial just as surely as the reload bug did;
+//   5. a hero who has left for the dungeon stops recording the shore; and
+//   6. a save predating the flag is stamped graduated, never dragged back to it.
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -67,7 +69,7 @@ async function main() {
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 
   const failures = [];
-  let fresh = null, resumed = null, slotRow = null, descended = null, legacyBoot = null;
+  let fresh = null, resumed = null, slotRow = null, shoreDeath = null, descended = null, legacyBoot = null;
   try {
     // ── 1. A brand-new hero begins on the shore, and the save records it ──
     await page.goto(url, { waitUntil: 'load', timeout: 30000 });
@@ -129,7 +131,46 @@ async function main() {
     });
     if (!/The Shore/.test(slotRow)) failures.push(`slot list does not label the mid-tutorial hero "The Shore" (got: ${slotRow.slice(0, 160)})`);
 
-    // ── 4. Off the shore and into the dungeon — the save must stop claiming it ──
+    // ── 4. A death on the shore is a RETRY, not a run cut short ──
+    //       A town revive ends the tutorial as surely as the reload bug did: a save
+    //       taken in town never comes back to the beach, so the cave, the starter
+    //       weapon and the shore level-up would all be skipped. Fell one foe first so
+    //       the hero is actually carrying the gift a town death would bury in a grave.
+    shoreDeath = await page.evaluate(() => {
+      const first = window.gameState().enemies[0];
+      window.onEnemyDefeated(window.getEnemyAt(first.x, first.y));   // → hands over the starter weapon
+      const bagBefore = (window.gameState().menu.inventory || []).length;
+      window.player.gold = 250;               // a purse an ordinary death would halve
+      window.player.lastStandReady = false;   // spend the free save, so the blow is lethal
+      window.player.hp = 0;
+      window.handleDeath();
+      const gs = window.gameState();
+      const d = JSON.parse(localStorage.getItem('dungeonLoot_save_v1'));
+      return {
+        bagBefore,
+        inTown: gs.inTown, shore: gs.shore, floor: gs.floor,
+        gold: gs.player.gold, hp: gs.player.hp, maxHp: gs.player.maxHp,
+        level: gs.player.level, tutorialDone: !!window.player.tutorialDone,
+        bag: (d.inventory || []).length, grave: !!d.graveSite,
+        savedTutorial: d.tutorial, savedInTown: d.inTown,
+        foes: gs.enemies.map((e) => ({ name: e.name, isElite: e.isElite })),
+        sub: ((document.getElementById('death-sub') || {}).textContent || '').trim(),
+        button: ((document.getElementById('death-continue') || {}).textContent || '').trim(),
+      };
+    });
+    if (shoreDeath.inTown) failures.push('a death on the shore revived the hero in TOWN — the tutorial is skipped from there');
+    if (!shoreDeath.shore) failures.push('gameState().shore is false after a shore death — the hero left the beach');
+    if (shoreDeath.savedTutorial !== true || shoreDeath.savedInTown) failures.push(`the post-death save does not record the shore (tutorial=${JSON.stringify(shoreDeath.savedTutorial)}, inTown=${JSON.stringify(shoreDeath.savedInTown)})`);
+    if (shoreDeath.tutorialDone) failures.push('a shore death stamped the hero as having graduated the tutorial');
+    if (!isShore(shoreDeath.foes)) failures.push(`the shore was not rebuilt after a death — ${JSON.stringify(shapeOf(shoreDeath.foes))}`);
+    if (shoreDeath.bagBefore < 1) failures.push('felling the first shore foe did not hand over the starter weapon');
+    if (shoreDeath.bag !== shoreDeath.bagBefore) failures.push(`the bag was not kept through a shore death (${shoreDeath.bagBefore} → ${shoreDeath.bag})`);
+    if (shoreDeath.grave) failures.push('a shore death dropped the bag as a grave — the starter weapon would be stranded on a floor the hero has never seen');
+    if (shoreDeath.gold !== 250) failures.push(`a shore death took gold (250 → ${shoreDeath.gold})`);
+    if (shoreDeath.hp !== shoreDeath.maxHp) failures.push(`the hero did not wake at full Health (${shoreDeath.hp}/${shoreDeath.maxHp})`);
+    if (/Town/.test(shoreDeath.sub) || /Town/.test(shoreDeath.button)) failures.push(`the death screen still says Town on the shore: "${shoreDeath.sub}" / "${shoreDeath.button}"`);
+
+    // ── 5. Off the shore and into the dungeon — the save must stop claiming it ──
     descended = await page.evaluate(() => {
       window.enterDungeonAt(1, 1);
       window.saveGame();
@@ -138,7 +179,7 @@ async function main() {
     });
     if (descended.savedTutorial !== false) failures.push(`a hero in the dungeon still records tutorial=${JSON.stringify(descended.savedTutorial)}`);
 
-    // ── 5. A save that predates the flag carries no `tutorial` field and no
+    // ── 6. A save that predates the flag carries no `tutorial` field and no
     //       tutorialDone — a hero from before the shore shipped, or one the bug
     //       already carried into the dungeon. Boot must leave them there AND stamp
     //       them graduated, so the post-shore lessons (maybeTeachFirstSpell) stop
@@ -172,6 +213,11 @@ async function main() {
     console.log('tutorial-resume: fresh     ', JSON.stringify(fresh && { ...shapeOf(fresh.foes), savedTutorial: fresh.savedTutorial, savedFloor: fresh.savedFloor }));
     console.log('tutorial-resume: resumed   ', JSON.stringify(resumed && { ...shapeOf(resumed.foes), floor: resumed.floor, level: resumed.level, tutorialDone: resumed.tutorialDone }));
     console.log('tutorial-resume: slotRow   ', JSON.stringify((slotRow || '').slice(0, 120)));
+    console.log('tutorial-resume: shoreDeath', JSON.stringify(shoreDeath && {
+      ...shapeOf(shoreDeath.foes), inTown: shoreDeath.inTown, shore: shoreDeath.shore,
+      gold: shoreDeath.gold, bag: `${shoreDeath.bagBefore}→${shoreDeath.bag}`, grave: shoreDeath.grave,
+      hp: `${shoreDeath.hp}/${shoreDeath.maxHp}`, button: shoreDeath.button,
+    }));
     console.log('tutorial-resume: descended ', JSON.stringify(descended));
     console.log('tutorial-resume: legacyBoot', JSON.stringify(legacyBoot && { ...shapeOf(legacyBoot.foes), floor: legacyBoot.floor, tutorialDone: legacyBoot.tutorialDone }));
     await browser.close();

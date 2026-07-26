@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-26", size: "small", v: "Dying on the beach keeps you on the beach", by: "Jeff Louie", notes: [
+    "Fall on the opening shore and it rebuilds around you at the water's edge (was: revived in town, tutorial skipped).",
+    "Costs nothing — no gold, no XP, bag kept, so the first weapon and first level-up survive a stumble.",
+    "Hardcore unchanged: one life, beach included.",
+  ] },
   { date: "2026-07-25", size: "small", v: "Loading a hero mid-tutorial returns to the beach", by: "Jeff Louie", notes: [
     "Quitting the opening shore and loading that slot resumes there (was: dungeon floor 1).",
     "First weapon and first level-up can't be skipped by a mid-tutorial reload.",
