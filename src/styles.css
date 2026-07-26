@@ -1982,6 +1982,30 @@
     mask-composite: exclude;
     animation: sk-wisps 3.4s linear infinite; }
   @media (prefers-reduced-motion: reduce) { .sk-vtab-glow, .sk-vtab-glow::before { animation: none; } }
+  /* Unspent ascendancy point: the PATH tab wears a LIGHT-BLUE wisp ring (the
+     --ascendancy accent) so the eye lands on it, distinct from the gold skill-point
+     ramp above. Reuses the shared --sk-wisp spin; only the hue and pulse differ. */
+  .sk-vtab-ascglow { position: relative; border-color: color-mix(in srgb, var(--ascendancy) 55%, var(--panel));
+    animation: sk-vtab-ascglow-pulse 1.9s ease-in-out infinite; }
+  .sk-vtab-ascglow::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none;
+    background: conic-gradient(from var(--sk-wisp),
+      transparent 0deg,
+      color-mix(in srgb, var(--ascendancy) 90%, transparent) 28deg,
+      transparent 66deg,
+      transparent 180deg,
+      color-mix(in srgb, var(--blue-100) 80%, transparent) 208deg,
+      transparent 246deg,
+      transparent 360deg);
+    -webkit-mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    mask-composite: exclude;
+    animation: sk-wisps 3.4s linear infinite; }
+  @keyframes sk-vtab-ascglow-pulse {
+    0%, 100% { box-shadow: 0 0 4px color-mix(in srgb, var(--ascendancy) 28%, transparent); }
+    50%      { box-shadow: 0 0 13px 1px color-mix(in srgb, var(--ascendancy) 60%, transparent); } }
+  @media (prefers-reduced-motion: reduce) { .sk-vtab-ascglow, .sk-vtab-ascglow::before { animation: none; } }
   /* Branch (specialization) sub-tabs under PASSIVE/ACTIVE — one per build path. */
   /* Auto-fitting grid: tiles size to hold the full branch name and wrap onto a
      second row when they won't all fit across, so names are never cut off. */
@@ -3555,24 +3579,6 @@
   .pact-buy-btn .pact-floors { display: block; font-size: 1.5rem; }
   .pact-buy-btn .pact-cost { display: block; opacity: 0.85; font-size: 1.3rem; margin-top: 2px; }
   .pact-buy-btn .pact-cost.cost-short { color: var(--red-200); opacity: 1; }
-  /* ── SELLSWORD CAMP — .merc-card, a deliberate one-off over .pact-card ──
-     A hire card carries an actual mercenary CHARACTER sprite (not the Mystic's
-     ability icons), so it mirrors the hero card (.hero-card): name + description
-     left-aligned in a column, the walking sprite right-aligned and standing about
-     as tall as those two lines. Scoped to .merc-card so the Mystic pact cards keep
-     their inline icon-beside-name head. */
-  .merc-card .merc-top {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 12px; margin-bottom: 11px;
-  }
-  .merc-card .merc-info { flex: 1 1 auto; min-width: 0; }
-  .merc-card .merc-info .pact-name { margin-bottom: 4px; }
-  .merc-card .merc-info .pact-desc { margin: 0; }
-  .merc-card .merc-portrait {
-    flex: 0 0 auto; line-height: 0;
-    filter: drop-shadow(0 0 6px var(--accent, var(--accent-teal)));
-  }
-
   /* ── TOWN MODAL ── (craftsman / healer / trainer / enchanter / dungeon gate) */
   #town-overlay {
     position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 70%, transparent);
@@ -4024,29 +4030,56 @@
   .ov-btn.danger { background: var(--orange-850); border-color: var(--red-650); color: var(--red-250); }
   .ov-btn.danger:active { background: var(--orange-850); }
 
-  /* Save-slot rows: each holds a character summary (or "empty") plus actions. */
+  /* Save-slot rows: a hero walking in place on the left, that character's summary
+     (or "empty") plus actions stacked beside it. There is deliberately NO slot
+     number — the list order already says which slot is which. */
   .slot-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
   .slot-row {
+    display: flex; align-items: center; gap: var(--space-5);
     border: 1px solid var(--border); border-radius: 7px; background: var(--orange-850);
     padding: 9px 10px;
   }
   .slot-row.active { border-color: var(--gold); background: var(--orange-850); }
   .slot-row.empty { opacity: 0.92; }
+  /* Portrait column — a square sized to the stacked name/stats/buttons beside it, so
+     the hero reads at full row height. One knob (--slot-portrait) drives the box, the
+     sheet framing and the walk-cycle offset together. Sized in REM (not px×--ui-scale
+     like most boxes) because it has to TRACK the text block next to it: that block is
+     all rem, so keying off the same root keeps the square row-height at both layout
+     bases and at every UI SIZE. The vw cap stops the sprite eating the row on a narrow
+     phone or foldable cover screen. */
+  .slot-portrait {
+    --slot-portrait: min(9.6rem, 26vw);
+    flex: 0 0 auto; width: var(--slot-portrait); height: var(--slot-portrait);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .slot-portrait > * { max-width: 100%; max-height: 100%; }
+  /* Reuses the shared .town-walk step animation; the source is a full 4-row walk
+     sheet (down/left/right/up), so background-size covers all four rows and the
+     square box crops to the top (down-facing) one. */
+  .slot-walk {
+    width: 100%; height: 100%;
+    background-size: calc(var(--slot-portrait) * 4) calc(var(--slot-portrait) * 4);
+    --twx: calc(var(--slot-portrait) * -4);
+  }
+  .slot-body { flex: 1 1 auto; min-width: 0; }
   .slot-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .slot-num { font-size: 1.3rem; font-weight: bold; color: var(--orange-500); letter-spacing: 1px; flex: 0 0 auto; }
   .slot-badge {
     font-size: 1.2rem; font-weight: bold; color: var(--ink); background: var(--gold);
     border-radius: 4px; padding: 1px 5px; letter-spacing: 1px; flex: 0 0 auto;
   }
-  .slot-class { font-size: 1.8rem; flex: 0 0 auto; }
   .slot-name {
     flex: 1 1 auto; color: var(--xp); font-weight: bold; font-size: 1.5rem;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .slot-name.muted { color: var(--orange-500); font-weight: normal; font-style: italic; }
   .slot-name .slot-cls { color: var(--orange-400); font-weight: normal; font-size: 1.3rem; }
+  /* Two deliberate lines — progress on top, timings below — rather than one long
+     sentence the portrait squeezes into an arbitrary wrap. */
   .slot-stats { font-size: 1.3rem; color: var(--orange-400); margin-bottom: 8px; line-height: 1.4; }
-  .slot-stats .slot-time { color: var(--orange-500); }
+  /* Each time chunk wraps as a WHOLE, so a narrow row can never strand "ago"/"now"
+     alone on a last line. */
+  .slot-stats .slot-time { color: var(--orange-500); white-space: nowrap; }
   .slot-actions { display: flex; gap: 6px; }
   .slot-btn {
     flex: 1 1 0; box-sizing: border-box; padding: 8px 6px; border: 1px solid var(--gold);

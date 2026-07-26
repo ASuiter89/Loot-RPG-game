@@ -9,6 +9,60 @@
 export const CHANGELOG = [
   { date: "2026-07-25", size: "small", v: "Town keepers drop the floating role icon", by: "Jeff Louie", notes: [
     "Role glyph no longer floats above each keeper's head; \"!\" new-arrival marker stays.",
+  { date: "2026-07-25", size: "small", v: "Loading a hero mid-tutorial returns to the beach", by: "Jeff Louie", notes: [
+    "Quitting the opening shore and loading that slot resumes there (was: dungeon floor 1).",
+    "First weapon and first level-up can't be skipped by a mid-tutorial reload.",
+    "Save slot reads \"The Shore\" for a hero still on the beach (was \"Floor 1\").",
+  ] },
+  { date: "2026-07-25", size: "large", v: "Season & Covenant rules now actually apply", by: "Jeff Louie", notes: [
+    "Season headline rule was advertised and never applied. XP, bounty payout, drop rarity tier and the season enemy affix all bite now.",
+    "Live season (Stormcrown, Volatile): +25% XP, drops roll one tier richer, foes burst on death.",
+    "Season affixes: Frenzied +25% foe attack speed; Armored +8% foe armor; Volatile corpses blast ~1.6 tiles (capped 12% max HP, never lethal).",
+    "Covenant healing debuff now scales every heal; rarity sweetener now scales every drop roll and its cap.",
+    "Covenant boss-point sweetener banks its fraction, paying a whole extra point each time it crosses 1.",
+    "A tier shift never grants a colour you haven't unlocked; un-enrolled and un-sworn heroes are untouched.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Skill costs read true", by: "Jeff Louie", notes: [
+    "Bar, tooltips and tree quote the cost AFTER Mana Cost Reduction — a castable skill no longer greys out as unaffordable.",
+    "Blood-casters (Bloodletter, Blood Pact) see their price in HP, not a mana number they have no pool for.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Auto-cast stops bleeding blood-casters dry", by: "Jeff Louie", notes: [
+    "Auto-cast keeps 50% max HP in reserve on a life-paid skill; it used to pin a Bloodletter at a sliver all floor.",
+    "Manual casts unchanged — spend to your last point if you want.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Death Knight resist profile", by: "Jeff Louie", notes: [
+    "Deep-roster Death Knight listed two resist profiles; the dead one is gone. Live values unchanged (phys 1.4, magic 1.2).",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Save Slots rows rebuilt around the hero", by: "Jeff Louie", notes: [
+    "Each row leads with that hero walking in place at full row height.",
+    "Dropped slot numbers and gold; row now reads Lv · deepest floor, then playtime · last save.",
+    "Heroes resting in town show their deepest floor (\"Endless 3\") instead of \"In Town\".",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Bosses shrug off stun-chains", by: "Jeff Louie", notes: ["Guardians (elites too, lighter) halve each stun/freeze; repeats diminish — 2nd lasts half, 3rd a sliver, rest shrugged off.", "Can lock a boss for a beat but never stunlock it; DR resets after a few CC-free seconds."] },
+  { date: "2026-07-25", size: "small", v: "Any hit shatters a channeling town portal", by: "Jeff Louie", notes: ["Town portal breaks on any landed blow mid-channel — even one a shield (Spirit Veil, barrier, mana shield) fully soaks; was: only HP loss."] },
+  { date: "2026-07-25", size: "small", v: "Shrine name label lingers long enough to read", by: "Jeff Louie", notes: ["Shrine boon label (\"Fortune\", \"Blood\", …) holds ~2.4s (was 0.8s) — long enough to read."] },
+  { date: "2026-07-25", size: "small", v: "Fainter target crosshair", by: "Jeff Louie", notes: [
+    "Auto-attack crosshair drops to 35% opacity — marks the locked foe without hiding it.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "PATH tab rings blue on an unspent ascendancy point", by: "Jeff Louie", notes: [
+    "PATH sub-tab wears a light-blue wisp while you hold an unspent ascendancy point.",
+  ] },
+  { date: "2026-07-25", size: "large", v: "Three new classes: Fortune-Seeker, Windblade, Bloodletter", by: "Jeff Louie", notes: [
+    "Fortune-Seeker — ranged; first class whose skills scale off LUCK. Crits build STREAK; keystones turn gold & magic find into damage.",
+    "Windblade — Agility + Spirit hybrid blade-caster. Dodges build GALE; steel and spell land as one hit.",
+    "Bloodletter — Might + Vitality hybrid with NO mana: every skill costs ~0.45% max HP per point of its cost. MP bar and flask hidden.",
+    "A hybrid sums both attributes at a lower rate per point, so either one is worth the same.",
+    "Each ships 30 passives, 30 actives and 2 ascendancies; none summon minions.",
+    "Existing four classes are untouched — the scaling ladder grew to 7 ranks with their coefficients unchanged.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Sellsword leaves town", by: "Jeff Louie", notes: [
+    "Sellsword keeper and companion hiring are gone; their art now walks as the three new heroes.",
+    "Later keepers arrive one boss sooner — Weave 12th, Cycles 13th, Deeds 14th, Covenants 15th, Mirrorforge 16th, Pantheon 17th.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Total time played counts open time", by: "Jeff Louie", notes: [
+    "History total bills every foreground second — menus, planning, combat — not just active input; pauses when tab hidden.",
+    "Per-hero row time stays active-play only (the cross-device merge measure), so the header can read above the rows' sum.",
+  ] },
   { date: "2026-07-25", size: "small", v: "Total time played survives deleted heroes", by: "Jeff Louie", notes: [
     "History total reads a durable, account-wide lifetime counter — not a sum of surviving heroes; won't drop when a hero's deleted, a slot's reused, or a device's data clears.",
     "Tallies every device and syncs; seeds once from your current total.",

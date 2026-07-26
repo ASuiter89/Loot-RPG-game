@@ -23,18 +23,38 @@
 // ── Identity attribute per class — what SKILLS/spells scale off ──────────────
 // (Basic auto-attacks scale off Might for everyone; see the `basicDmg` channel.)
 export const CLASS_DMG_ATTR = {
-  warrior: 'might',
-  rogue:   'agility',
-  mage:    'spirit',
-  templar: 'vitality',
+  warrior:     'might',
+  rogue:       'agility',
+  mage:        'spirit',
+  templar:     'vitality',
+  fortune:     'luck',      // the only class that turns Luck into raw skill power
+  windblade:   'agility',   // hybrid — see CLASS_DMG_ATTR2
+  bloodletter: 'might',     // hybrid — see CLASS_DMG_ATTR2
 };
 // Classless legacy saves (mid-migration) fall back to this.
 export const CLASS_DMG_ATTR_FALLBACK = 'might';
+
+// ── HYBRID classes — skills scale off the SUM of TWO attributes ──────────────
+// A pure class converts ONE identity attribute at ATTR_DMG_PER_POINT. A hybrid
+// converts BOTH of its attributes at the lower ATTR_DMG_PER_POINT_HYBRID, applied
+// to their SUM — so splitting points costs raw skill power versus a pure class,
+// but buys the full derived-stat payout of two attributes (a Bloodletter's Vitality
+// is HP *and* damage; a Windblade's Spirit is MP/Veil *and* damage). Summing rather
+// than ranking the two also means there is no "dump the off-attribute" skew: a point
+// in either one is worth exactly the same to the skill lane.
+export const CLASS_DMG_ATTR2 = {
+  windblade:   'spirit',
+  bloodletter: 'vitality',
+};
 
 // Attack power added per point of the class's IDENTITY attribute to its SKILLS. Was a
 // 2.4 primary + 0.8 secondary split; folded into one channel with a small bump so a
 // hero who mains their identity attribute lands close to the old primary+secondary total.
 export const ATTR_DMG_PER_POINT = 2.6;
+// Per-point rate for a HYBRID class, charged against BOTH attributes. Lower than the
+// pure rate so a hybrid trades peak skill damage for breadth; the class-level damage
+// multiplier (CLASS_DMG_DEALT in the shell) pays part of that gap back.
+export const ATTR_DMG_PER_POINT_HYBRID = 2.0;
 
 // ── The shared per-class scaling ladder ──────────────────────────────────────
 // Multiplier applied to a channel's base coefficient, indexed by the class's
@@ -42,8 +62,16 @@ export const ATTR_DMG_PER_POINT = 2.6;
 // attributes still pay out. Rank #2 == 1.0 (== the old global value) so the class
 // that mains a stat keeps ~today's numbers (curve-preserving). Tune the whole
 // game's class-identity strength from this one array.
-//            #1     #2     #3     #4
-export const CLASS_SCALE_LADDER = [1.20, 1.00, 0.78, 0.55];
+//
+// SEVEN ranks since the three new classes landed. The four original classes were
+// NOT re-tuned: every `order` array below keeps them at ranks #1/#2/#4/#6, whose
+// ladder values are exactly the old four (1.20 / 1.00 / 0.78 / 0.55). The three new
+// classes INTERLEAVE at #3/#5/#7, so adding them shifted no existing coefficient by
+// a single point. The trade is that a new class tops out at rank #3 (0.88) in any one
+// channel — its identity comes from its damage attribute, tree and class multipliers
+// rather than from out-scaling an original class on a derived stat.
+//            #1     #2     #3     #4     #5     #6     #7
+export const CLASS_SCALE_LADDER = [1.20, 1.00, 0.88, 0.78, 0.66, 0.55, 0.46];
 
 // ── Attribute → stat channels ────────────────────────────────────────────────
 // For each derived-stat channel: which attribute feeds it, the base (rank-#2)
@@ -58,39 +86,41 @@ export const ATTR_STAT_CHANNELS = {
   // `base` is set so the top class (rank #1) lands at exactly ATTR_DMG_PER_POINT
   // (2.6), keeping the Warrior — who already mained Might for damage — behaviour-
   // identical. (Skills still scale off the class's identity attr at ATTR_DMG_PER_POINT.)
-  basicDmg:     { attr: 'might',    base: ATTR_DMG_PER_POINT / CLASS_SCALE_LADDER[0], order: ['warrior', 'rogue', 'templar', 'mage'] },
+  basicDmg:     { attr: 'might',    base: ATTR_DMG_PER_POINT / CLASS_SCALE_LADDER[0], order: ['warrior', 'rogue', 'bloodletter', 'templar', 'windblade', 'mage', 'fortune'] },
 
   // Might → Defense (moved off Vitality). Warriors armour up hardest.
-  def:          { attr: 'might',    base: 0.5,   order: ['warrior', 'templar', 'rogue', 'mage'] },
+  def:          { attr: 'might',    base: 0.5,   order: ['warrior', 'templar', 'bloodletter', 'rogue', 'windblade', 'mage', 'fortune'] },
 
   // Might → Accuracy (moved off Agility — Might is now the whole "land your weapon
   // swing" stat: how hard AND how true). Rogues convert it most efficiently.
-  accuracy:     { attr: 'might',    base: 2.0,   order: ['rogue', 'warrior', 'templar', 'mage'] },
+  accuracy:     { attr: 'might',    base: 2.0,   order: ['rogue', 'warrior', 'fortune', 'templar', 'windblade', 'mage', 'bloodletter'] },
 
   // Vitality → HP & HP regen. Templars are the hardiest.
-  hp:           { attr: 'vitality', base: 11,    order: ['templar', 'warrior', 'rogue', 'mage'] },
-  hpRegen:      { attr: 'vitality', base: 0.06,  order: ['templar', 'warrior', 'rogue', 'mage'] },
+  hp:           { attr: 'vitality', base: 11,    order: ['templar', 'warrior', 'bloodletter', 'rogue', 'windblade', 'mage', 'fortune'] },
+  hpRegen:      { attr: 'vitality', base: 0.06,  order: ['templar', 'warrior', 'bloodletter', 'rogue', 'windblade', 'mage', 'fortune'] },
 
   // Vitality → Stamina pool & recharge (moved off Might). Warriors sprint longest.
-  staminaMax:   { attr: 'vitality', base: 1.6,   order: ['warrior', 'rogue', 'templar', 'mage'] },
-  staminaRegen: { attr: 'vitality', base: 0.22,  order: ['warrior', 'rogue', 'templar', 'mage'] },
+  staminaMax:   { attr: 'vitality', base: 1.6,   order: ['warrior', 'rogue', 'windblade', 'templar', 'bloodletter', 'mage', 'fortune'] },
+  staminaRegen: { attr: 'vitality', base: 0.22,  order: ['warrior', 'rogue', 'windblade', 'templar', 'bloodletter', 'mage', 'fortune'] },
 
   // Agility → Evasion (rogues dodge best; mages surprisingly nimble).
-  evasion:      { attr: 'agility',  base: 1.15,  order: ['rogue', 'mage', 'warrior', 'templar'] },
+  evasion:      { attr: 'agility',  base: 1.15,  order: ['rogue', 'mage', 'windblade', 'warrior', 'fortune', 'templar', 'bloodletter'] },
   // Agility → Move speed / Attack speed (rogues quickest overall). Accuracy moved to
   // Might, so Agility is now pure nimbleness — evasion + how fast you move & swing.
   // Move/attack speed are soft-capped curves; `base` is the CAP, class-scaled.
-  moveCap:      { attr: 'agility',  base: 0.35,  order: ['rogue', 'warrior', 'templar', 'mage'] },
-  atkSpdCap:    { attr: 'agility',  base: 60,    order: ['rogue', 'warrior', 'templar', 'mage'] },
+  moveCap:      { attr: 'agility',  base: 0.35,  order: ['rogue', 'warrior', 'windblade', 'templar', 'fortune', 'mage', 'bloodletter'] },
+  atkSpdCap:    { attr: 'agility',  base: 60,    order: ['rogue', 'warrior', 'windblade', 'templar', 'fortune', 'mage', 'bloodletter'] },
 
   // Spirit → MP / MP regen / Spell power / Heals (mages hardest, warriors least).
-  mp:           { attr: 'spirit',   base: 4,     order: ['mage', 'templar', 'rogue', 'warrior'] },
-  mpRegen:      { attr: 'spirit',   base: 0.025, order: ['mage', 'templar', 'rogue', 'warrior'] },
-  spellPower:   { attr: 'spirit',   base: 3,     order: ['mage', 'templar', 'rogue', 'warrior'] },
+  // The Bloodletter sits last in every Spirit channel by design — it has NO mana pool
+  // at all (see CLASS_NO_MANA in the shell), so these coefficients never pay it out.
+  mp:           { attr: 'spirit',   base: 4,     order: ['mage', 'templar', 'windblade', 'rogue', 'fortune', 'warrior', 'bloodletter'] },
+  mpRegen:      { attr: 'spirit',   base: 0.025, order: ['mage', 'templar', 'windblade', 'rogue', 'fortune', 'warrior', 'bloodletter'] },
+  spellPower:   { attr: 'spirit',   base: 3,     order: ['mage', 'templar', 'windblade', 'rogue', 'fortune', 'warrior', 'bloodletter'] },
   // Heals: new Spirit channel. Base per-point is modest so high Spirit + cooldown
   // reduction ramps sustain without instantly trivialising it (heals are still
   // gated by their cooldown and clamped to missing HP).
-  heal:         { attr: 'spirit',   base: 0.9,   order: ['mage', 'templar', 'rogue', 'warrior'] },
+  heal:         { attr: 'spirit',   base: 0.9,   order: ['mage', 'templar', 'windblade', 'rogue', 'fortune', 'warrior', 'bloodletter'] },
 };
 
 // Luck is deliberately class-flat (crit rating, loot quality). Kept here so the
@@ -116,7 +146,9 @@ export const SHIELD = {
   // the top class (Mage); other classes take a share via classMult below. e.g. a Mage
   // 50 Spirit over baseline → +100% max Veil (doubled); a Warrior → +37.5%.
   spiritBoostPerPoint: 0.02,
-  classMult:   { mage: 1.0, templar: 0.75, rogue: 0.55, warrior: 0.375 }, // → 2 / 1.5 / 1.1 / 0.75 %/pt
+  // → 2 / 1.5 / 1.3 / 1.1 / 0.9 / 0.75 / 0.6 %/pt. The Bloodletter amplifies Veil least:
+  // it pays for skills in HP, so a big Spirit buffer would undercut its whole risk loop.
+  classMult:   { mage: 1.0, templar: 0.75, windblade: 0.65, rogue: 0.55, fortune: 0.45, warrior: 0.375, bloodletter: 0.3 },
   classMultDefault: 0.55, // classless fallback (mid of the range)
   rechargeDelay: 3.5,  // seconds without taking ANY damage before recharge starts
   baseRechargePct: 0.125, // fraction of max Spirit Veil restored per second (~8s to full)

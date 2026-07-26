@@ -42,7 +42,7 @@ const POWER_KEYS = new Set(['vampiric', 'arcing', 'greedy', 'stalwart', 'attuned
   'warded', 'thornmail', 'evasive', 'bulwark', 'aegis', 'mending', 'spellbound', 'warmage',
   'spellblade', 'quickened', 'hasty', 'focused', 'tenacious', 'hemorrhage', 'concussive',
   'fleet', 'deadeye', 'fortunate', 'prospector', 'scholar', 'salvager']);
-const CLASSES = new Set(['warrior', 'rogue', 'mage', 'templar', 'any']);
+const CLASSES = new Set(['warrior', 'rogue', 'mage', 'templar', 'fortune', 'windblade', 'bloodletter', 'any']);
 
 // Stats a slot's headline OWNS automatically — a native/mod must never claim one
 // (it's baked in and would collide). Mirrors uniqueMandatoryHeadline + the off-hand
