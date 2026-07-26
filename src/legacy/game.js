@@ -20442,6 +20442,7 @@ function drawTargetCrosshair(cx, cy, size) {
   const r = size * 0.5;
   const red = 'rgba(255,48,58,';                       // bright targeting red
   ctx.save();
+  ctx.globalAlpha = 0.35;                              // faint overlay — mark the foe without hiding it
   ctx.lineCap = 'round';
   ctx.lineWidth = Math.max(1.5, size * 0.05);
   ctx.strokeStyle = red + (0.7 + 0.25 * t) + ')';

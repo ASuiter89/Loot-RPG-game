@@ -8,6 +8,9 @@
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
   { date: "2026-07-25", size: "small", v: "Shrine name label lingers long enough to read", by: "Jeff Louie", notes: ["Shrine boon label (\"Fortune\", \"Blood\", …) holds ~2.4s (was 0.8s) — long enough to read."] },
+  { date: "2026-07-25", size: "small", v: "Fainter target crosshair", by: "Jeff Louie", notes: [
+    "Auto-attack crosshair drops to 35% opacity — marks the locked foe without hiding it.",
+  ] },
   { date: "2026-07-25", size: "small", v: "PATH tab rings blue on an unspent ascendancy point", by: "Jeff Louie", notes: [
     "PATH sub-tab wears a light-blue wisp while you hold an unspent ascendancy point.",
   ] },
