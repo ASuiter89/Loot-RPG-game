@@ -48,7 +48,7 @@ import { activeSurgePerks, applySurgeCastMods, surgeHasteFrac } from '../systems
 import { combatScore, powerScalar, applyDelta, marginalPower } from '../systems/gearPower.js';
 import { equipSwapDelta } from '../systems/gearCompare.js';
 import { GEAR_POWER } from '../data/gearPower.js';
-import { channelCoef, classDamageAttr, attrDamageFor, shieldMax, spiritVeilMult, shieldRechargePerSec,
+import { channelCoef, classDamageAttr, attrDamageFor, basicAttrDamage, shieldMax, spiritVeilMult, shieldRechargePerSec,
   shieldRechargeDelay, shieldPerSpiritPoint, healAmount as calcHealAmount,
   ATTR_DMG_PER_POINT } from '../systems/attributeScaling.js';
 import { LUCK_FX } from '../data/attributeScaling.js';
@@ -3222,16 +3222,17 @@ const HERO = 'The hero';
 // with the SAME spread (ATTR_BASE in each) and differs only in how its points
 // convert into power: each attribute feeds a family of derived stats via the
 // CLASS-SCALED coefficients in src/data/attributeScaling.js (read through attrCoef
-// below), and weapon/skill damage scales off each class's SINGLE damage attribute
-// (classDamageAttr × ATTR_DMG_PER_POINT). You earn a generous handful of points per
-// level, and each point is correspondingly small, so the per-level power gain — and
-// thus the difficulty curve — stays close to the old design.
+// below). BASIC (auto) attacks scale off MIGHT for every class; SKILLS scale off the
+// class's identity attribute (classDamageAttr × ATTR_DMG_PER_POINT); spells off Spirit.
+// You earn a generous handful of points per level, and each point is correspondingly
+// small, so the per-level power gain — and thus the difficulty curve — stays close to
+// the old design.
 // `label` is the plain attribute name; `sprite` is its pixel tile (referenced
 // directly). Use attrLabelIcon(key) to prefix the icon where the label needs art.
 const ATTRIBUTES = {
-  might:    { label: 'Might',    sprite: 'ui_power',    short: 'MIG', desc: 'raises Defense' },
+  might:    { label: 'Might',    sprite: 'ui_power',    short: 'MIG', desc: 'raises basic attack damage, Accuracy & Defense' },
   vitality: { label: 'Vitality', sprite: 'ic_heart',    short: 'VIT', desc: 'raises max HP, HP regen & Stamina' },
-  agility:  { label: 'Agility',  sprite: 'ui_agility',  short: 'AGI', desc: 'raises Evasion, Accuracy, move & attack speed' },
+  agility:  { label: 'Agility',  sprite: 'ui_agility',  short: 'AGI', desc: 'raises Evasion, move & attack speed' },
   spirit:   { label: 'Spirit',   sprite: 'ui_spirit',   short: 'SPR', desc: 'raises max MP, MP regen, spell power, healing & Spirit Veil' },
   luck:     { label: 'Luck',     sprite: 'mat_glimmer', short: 'LUK', desc: 'raises Crit chance & loot quality' },
 };
@@ -3248,8 +3249,9 @@ const ATTR_POINTS_PER_LEVEL = 5;   // attribute points granted per hero level
 
 // Per-point attribute→stat conversion is now CLASS-SCALED and data-driven — see
 // src/data/attributeScaling.js (the tunable tables) and the pure channelCoef() /
-// attrCoef() adapter above. Damage scales off each class's single damage attribute
-// (classDamageAttr × ATTR_DMG_PER_POINT). What remains here as bare constants: the
+// attrCoef() adapter above. Basic attacks scale off Might (the class-scaled `basicDmg`
+// channel); skills scale off each class's identity attribute (classDamageAttr ×
+// ATTR_DMG_PER_POINT). What remains here as bare constants: the
 // Agility soft-cap KNEES (the caps themselves are class-scaled via attrCoef), and
 // the class-flat Luck→crit coefficient lives in LUCK_FX in the data module.
 //
@@ -3558,7 +3560,7 @@ function buildPowerContext() {
     hpScale: hpMult,
     // Offense aggregates.
     weaponAvg: (wLo + wHi) / 2,
-    atkFlat: L * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat'),
+    atkFlat: L * 2 + totalStat('ATK') + physModelAttrDamage() + skillBonus('atkFlat'),
     idmgPct: totalStat('IDMG'),
     critRating: totalAttr('luck') * LUCK_FX.critPerLuck + totalStat('CRIT') + totalStat('LCK')
       + ratePct(skillBonus('crit')) + classInnateCritRating(),
@@ -3597,22 +3599,27 @@ function buildPowerContext() {
   return ctx;
 }
 
-// Combat-axis delta an attribute affix (+v of `key`) adds, folding the class's
-// single damage attribute and each attribute's (class-scaled) derived-stat package
-// — so +Luck is worth Power only to a build that crits, +Spirit only where it feeds
-// spells (and boosts a Spirit Veil the hero already has), +Might only where it hardens defence (and damage, for the class
-// that scales off it). Mirrors the live derived-stat functions exactly.
+// Combat-axis delta an attribute affix (+v of `key`) adds, folding each attribute's
+// damage lane (Might → basic attacks for all; the class identity attr → its skills)
+// and its (class-scaled) derived-stat package — so +Luck is worth Power only to a
+// build that crits, +Spirit only where it feeds spells (and boosts a Spirit Veil the
+// hero already has), +Might for basic-attack damage, accuracy AND defence. Mirrors the
+// live derived-stat functions exactly.
 function attrPowerAxes(key, v, ctx, add) {
-  // Damage: ONLY the class's single damage attribute adds attack power.
-  if (key === classDamageAttr(player.class)) add('atkFlat', v * ATTR_DMG_PER_POINT);
+  // Damage rides two lanes: Might feeds every class's BASIC (auto) attack, and the
+  // class's IDENTITY attribute feeds its SKILLS (physical classes only — a Mage's
+  // Spirit is valued on the spell lane below, and Warrior's identity IS Might).
+  if (key === 'might') add('atkFlat', v * attrCoef('basicDmg'));   // Might → basic attack damage (all)
+  const idA = classDamageAttr(player.class);
+  if (key === idA && idA !== 'might' && idA !== 'spirit') add('atkFlat', v * ATTR_DMG_PER_POINT); // identity → skills
   if (key === 'might') {
     add('def', v * attrCoef('def'));                              // Might → Defense (all classes)
+    add('accRating', v * attrCoef('accuracy'));                   // Might → Accuracy (moved off Agility)
   } else if (key === 'vitality') {
     add('maxHp', v * attrCoef('hp') * ctx.hpScale);              // Vitality → HP (+ regen, Stamina n/a to combat)
     add('regen', v * attrCoef('hpRegen') * TICKS_PER_SEC);
   } else if (key === 'agility') {
-    add('dodgeRating', v * attrCoef('evasion'));
-    add('accRating', v * attrCoef('accuracy'));
+    add('dodgeRating', v * attrCoef('evasion'));                  // Agility → Evasion (Accuracy now on Might)
   } else if (key === 'spirit') {
     add('spellCore', v * attrCoef('spellPower'));               // Spirit → spell power…
     add('maxShield', v * shieldPerSpiritPoint(totalStat('VEIL'), player.class)); // …and boosts the gear/spell Spirit Veil
@@ -3712,11 +3719,26 @@ function classDmgAttrs() {
   const cls = playerClass();
   return (cls && cls.dmgAttrs) || { primary: 'might', secondary: null };
 }
-// Bonus attack damage from the class's single damage attribute (Warrior=Might,
-// Rogue=Agility, Mage=Spirit, Templar=Vitality). The old primary+secondary split
-// and the universal off-class Might dab are gone — one attribute, one coefficient.
-function attrDamage() {
+// Attribute-side damage now rides TWO lanes:
+//   • autoAttrDamage()  — BASIC (auto) attacks scale off MIGHT for every class
+//     (class-scaled via the `basicDmg` channel; Warrior best, Mage least).
+//   • skillAttrDamage() — the class's IDENTITY attribute (Warrior=Might, Rogue=Agility,
+//     Templar=Vitality, Mage=Spirit) powers its SKILLS. (Spells add Spirit separately.)
+function autoAttrDamage() {
+  return basicAttrDamage(totalAttr('might'), player.class);
+}
+function skillAttrDamage() {
   return attrDamageFor(totalAttr(classDamageAttr(player.class)), player.class);
+}
+// Physical attribute damage the Power/rating model folds into its weapon base: the
+// Might auto lane PLUS the identity SKILL lane when that identity is a physical attr
+// (Rogue/Templar). Warrior's identity IS Might (counted once via the auto lane) and a
+// Mage's identity is Spirit (valued on the spell lane), so neither double-counts here.
+function physModelAttrDamage() {
+  let d = autoAttrDamage();
+  const idA = classDamageAttr(player.class);
+  if (idA !== 'might' && idA !== 'spirit') d += skillAttrDamage();
+  return d;
 }
 // Crit damage multiplier — equipment-only beyond the base, so gear (CRITDMG)
 // drives how hard your crits land. Crit damage can swing freely up or down, but
@@ -3882,8 +3904,9 @@ function drOpposition(lvl)    { return 46 + (lvl || curDepth()) * 12; }
 // Accuracy keeps a level-scaled floor so ordinary attacks keep landing.
 const ACC_BASE = 80, ACC_PER_LEVEL = 12;
 // SKILL_RATING + ratePct() extracted to src/systems/ratings.js (imported at top).
-// Agility drives BOTH Evasion and Accuracy; gear SPD/DODGE (legacy) read as flat
-// evasion rating, the new ACC stat as accuracy. Rogues get an evasion/crit edge.
+// Agility drives Evasion; MIGHT drives Accuracy (moved off Agility); gear SPD/DODGE
+// (legacy) read as flat evasion rating, the ACC stat as accuracy. Rogues get an
+// evasion/crit edge.
 function playerEvasionRating() {
   let r = totalAttr('agility') * attrCoef('evasion')
     + totalStat('SPD') + totalStat('DODGE')
@@ -3895,7 +3918,7 @@ function playerEvasionRating() {
 }
 function playerAccuracyRating() {
   return Math.max(0, ACC_BASE + player.level * ACC_PER_LEVEL
-    + totalAttr('agility') * attrCoef('accuracy') + totalStat('ACC') + ratePct(skillBonus('acc')));
+    + totalAttr('might') * attrCoef('accuracy') + totalStat('ACC') + ratePct(skillBonus('acc')));
 }
 // Agility you've built beyond the starting base — the input to the speed curves
 // so a fresh hero (base Agility) sits at the tuned baseline and only investment
@@ -7737,8 +7760,8 @@ window.gameGuide = function gameGuide(topic) {
     ],
     damage: [
       `Damage comes from THREE distinct sources, each with its own scaling lane — build into one and you don't accidentally buff the others:`,
-      `AUTO-ATTACK: your automatic weapon swing. Scales with weapon Damage + Attack (ATK) + your class's SINGLE damage attribute (Warrior→Might, Rogue→Agility, Mage→Spirit, Templar→Vitality) — pumping that one attribute is your attribute-side damage. Dedicated amp: Increased Dmg % (IDMG). Speed lever: Attack Speed % (ATKSPD) — faster swings. Can MISS (accuracy vs the foe's evasion).`,
-      `SKILL (the martial actives): weapon-based active abilities. Scale off the SAME weapon + ATK base as auto-attacks, times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
+      `AUTO-ATTACK: your automatic weapon swing. Scales with weapon Damage + Attack (ATK) + MIGHT (all classes — Might is the universal basic-attack attribute; Warriors get the most per point, Mages the least). Dedicated amp: Increased Dmg % (IDMG). Speed lever: Attack Speed % (ATKSPD, from Agility + gear) — faster swings. Can MISS (your Accuracy, from Might, vs the foe's evasion).`,
+      `SKILL (the martial actives): weapon-based active abilities. Scale off weapon + ATK + your class's IDENTITY attribute (Warrior→Might, Rogue→Agility, Templar→Vitality; a Mage's actives are SPELLS), times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
       `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
       `HYBRID (a weapon strike that also channels magic — the Templar's holy strikes, the Rogue's shadow/toxic strikes): lands a physical part AND a magic part in one cast. The physical part scales like a SKILL (weapon + Skill Power, leeches, meets armor); the magic part scales like a SPELL (Spirit + Spell Power, no leech, meets magic resist). Only the physical half leeches. Recharged by CDR + Cast Speed. Its tooltip shows the exact split ("40 physical + 30 magic"), so build BOTH power stats to max it — or lean one and accept the other half stays modest.`,
       `AREA OF EFFECT: any active with a RADIUS — a nova bursting around you, a lobbed blast — strikes every foe inside that radius. Gear Area of Effect % (AREA) widens that radius (rounded to whole tiles, so it steps up a tile once you've stacked enough), catching more of a pack per cast. It helps EVERY class's radius skills but does nothing for single-target casts (bolts, melee, a bolt that hits one foe). Read your total in gameState().player.offense.area.`,
@@ -7821,8 +7844,8 @@ window.gameGuide = function gameGuide(topic) {
       `Quests never seal the stairs and are safe to skip, but the reward scales with depth — grab the cheap ones on your way to the exit.`,
     ],
     progression: [
-      `Four classes, each with ONE damage attribute: Warrior (Might, tanky melee), Rogue (Agility, crit & dodge), Mage (Spirit, spells & big MP), Templar (Vitality, durable hybrid). Class gates which weapons you can equip.`,
-      `Five attributes (gameState().player.attributes), with re-homed roles: Might (+Defense; the Warrior's damage), Vitality (+max HP, +HP regen, +Stamina; the Templar's damage), Agility (+evasion, +accuracy, +move/attack speed; the Rogue's damage), Spirit (+max MP, +MP regen, +spell power, +healing, +Spirit Veil shield; the Mage's damage), Luck (+crit, +loot quality). How much each point gives is CLASS-SCALED — e.g. Vitality gives the Templar the most HP, Spirit gives the Mage the most spell power. Pump your class's single damage attribute for damage; every attribute also pays a defensive/utility role.`,
+      `Four classes, each with ONE identity attribute that powers its SKILLS: Warrior (Might, tanky melee), Rogue (Agility, crit & dodge), Mage (Spirit, spells & big MP), Templar (Vitality, durable hybrid). Basic (auto) attacks scale off MIGHT for everyone. Class gates which weapons you can equip.`,
+      `Five attributes (gameState().player.attributes), with re-homed roles: Might (+basic attack damage for ALL classes, +Accuracy, +Defense; also the Warrior's skills), Vitality (+max HP, +HP regen, +Stamina; the Templar's skills), Agility (+evasion, +move/attack speed; the Rogue's skills), Spirit (+max MP, +MP regen, +spell power, +healing, +Spirit Veil shield; the Mage's spells), Luck (+crit, +loot quality). How much each point gives is CLASS-SCALED — e.g. Vitality gives the Templar the most HP, Spirit gives the Mage the most spell power, Might gives the Warrior the most basic-attack damage. Pump Might for weapon damage and your class's identity attribute for its skills; every attribute also pays a defensive/utility role.`,
       `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend), and FULLY restores the hero — HP, MP and Stamina all top off to max — a clean second wind. Spend attributes on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
       `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives. From level 20 you also earn a SEPARATE ascendancy point every 5 levels (20, 25, 30…; gameState().menu.pointsToSpend.ascendancy), spent only on the ascendancy path tree. Normal skill points can't buy path skills and ascendancy points can't buy passive/active skills. Path skills carry NO level requirement — they're gated only by the earlier skills in the path tree.`,
       `Respec attributes/skills or change class at the Trainer for gold that scales with your level (points refund). Switching to your class's other ascension afterwards costs a lot of gold (also scales with level and depth; path points refund) — the first ascension stays free, but re-ascending is a deliberate, costly choice, as is retraining class. After a respec, check that worn gear still meets its attribute requirement (under-req pieces turn red and are ignored; the GEAR tab wears a pulsing red dot and the paper doll gives the offending slot a pulsing red border — tap it to read the shortfall and Unequip). gameState().player.gearIgnored lists any such slots.`,
@@ -23690,7 +23713,7 @@ function rollPlayerHit(e) {
   // Keep the whole chain in floating point so the weapon's fractional roll survives to
   // the end — rounding after every step would collapse a small range back into a
   // handful of integers once buffs scale it. One Math.round at the finish; ≥1 floor.
-  let dmg = getWeaponDamage() + player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
+  let dmg = getWeaponDamage() + player.level * 2 + totalStat('ATK') + autoAttrDamage() + skillBonus('atkFlat');
   if (buffs.power) dmg *= 1.5;
   const dmgPct = foodFx('dmgPct') + healerFx('dmgPct'); // ramen + healer Blessing (Might)
   if (dmgPct) dmg *= 1 + dmgPct;
@@ -24497,7 +24520,7 @@ function nextMilestone(rank) { return SKILL_MILESTONES.find(m => rank < m.rank) 
 // Base physical magnitude for weapon actives (a normal swing's raw number, plus
 // any flat ATK passives), before per-skill multiplier and modifiers.
 function skillWeaponBase() {
-  return getWeaponDamage() + player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
+  return getWeaponDamage() + player.level * 2 + totalStat('ATK') + skillAttrDamage() + skillBonus('atkFlat');
 }
 // Whether the LAST applyOffenseMods() blow rolled a critical. Read immediately
 // after skillPhysDamage/skillSpellDamage so a skill or spell can surface its crit
@@ -24563,8 +24586,8 @@ function weaponDmgRange() {
 // A preview of what an active skill hits for RIGHT NOW, for its tooltip. Two numbers:
 //   • min/max — the literal per-hit damage RANGE a single strike can roll, crit
 //     EXCLUDED, folding in everything persistent that scales the hit: the weapon
-//     roll, flat ATK, the class's damage attributes, gear Increased/Skill/Spell
-//     Power, the skill's own coefficient and rank, synergies, the difficulty scar,
+//     roll, flat ATK, the class's identity attribute (skills) or Spirit (spells), gear
+//     Increased/Skill/Spell Power, the skill's own coefficient and rank, synergies, the difficulty scar,
 //     and the armour a typical foe at THIS depth carries. (Situational spikes —
 //     boss damage, execute, rage-from-missing-HP, transient combat buffs — are
 //     left out so the number stays a stable baseline, matching the {level}-foe shim
@@ -24611,7 +24634,7 @@ function skillDamagePreview(node, rank) {
   // this depth's mitigation). Computed per lane so a hybrid shows both.
   const weaponPart = () => {
     const [wLo, wHi] = weaponDmgRange();
-    const flat = player.level * 2 + totalStat('ATK') + attrDamage() + skillBonus('atkFlat');
+    const flat = player.level * 2 + totalStat('ATK') + skillAttrDamage() + skillBonus('atkFlat');
     const mult = c.wpn * synM * rs * skillPowerMult();
     const off = classDmgDealtMult() * diffDebuffMult() * (1 + totalStat('IDMG') / 100) * physFactor;
     return { baseMin: (wLo + flat) * mult, baseMax: (wHi + flat) * mult, off };
@@ -27326,8 +27349,8 @@ function spendAttr(key, ev) {
   bumpLoadout();   // attributes feed the cached gear resolve (equip gates)
   // Raising an attribute immediately grants the extra pool it unlocks so the buy
   // feels responsive. Re-homed in the attribute overhaul: Vitality now tops up HP
-  // AND Stamina; Spirit tops up MP AND the Spirit Veil shield; Might raises Defense
-  // (no pool to fill).
+  // AND Stamina; Spirit tops up MP AND the Spirit Veil shield; Might raises basic
+  // attack damage, Accuracy & Defense (no pool to fill).
   const beforeHp = player.maxHp, beforeMp = player.maxMp;
   const beforeStam = player.maxStamina || MAX_STAMINA, beforeShield = player.maxShield || 0;
   recomputeMaxStats();
@@ -28485,7 +28508,7 @@ function heroStatData() {
   const v = (label, val) => ({ label, val: String(val) });
   const rtg = (label, r, c) => v(label, `${abbreviateNumber(r)} <span style="opacity:0.6">→ ${Math.round(c * 100)}%</span>`);
   const main = [];
-  main.push(v('Attack power', abbreviateNumber(totalStat('ATK') + attrDamage())));
+  main.push(v('Attack power', abbreviateNumber(totalStat('ATK') + autoAttrDamage())));
   main.push(v('Attack speed', '+' + Math.round(playerAttackSpeedPct()) + '% <span style="opacity:0.6">→ ' + (1 / playerAttackInterval()).toFixed(2) + '/s</span>'));
   main.push(v('Move speed', '+' + Math.round(((1 + totalStat('MOVESPD') / 100) * agiMoveMult() - 1) * 100) + '%'));
   if (totalStat('CDR') > 0) main.push(v('Cooldown reduction', `${abbreviateNumber(totalStat('CDR'))} <span style="opacity:0.6">→ ${Math.round(cooldownReductionFrac() * 100)}%</span>`));
@@ -28566,14 +28589,21 @@ function renderHero(el) {
   // Count only ACTIVE gear so this "from gear" subtotal reconciles with the headline
   // POWER (playerPower also skips red/ignored pieces).
   const gearPower = gearContributionPower();
-  const dmgAttr = classDamageAttr(player.class);
-  // Each attribute row shows base+spent plus any gear bonus, tags the class's single
-  // damage attribute, and offers a + to raise it.
+  const dmgAttr = classDamageAttr(player.class);   // identity attr — powers SKILLS/spells
+  const skillWord = dmgAttr === 'spirit' ? 'spell' : 'skill';
+  // Each attribute row shows base+spent plus any gear bonus, tags the two damage lanes
+  // (Might → basic attacks for every class; the class identity attr → its skills/spells),
+  // and offers a + to raise it.
   const rows = ATTR_KEYS.map(key => {
     const at = ATTRIBUTES[key];
     const own = player.attributes?.[key] || 0;
     const gear = totalAttr(key) - own;
-    const tag = key === dmgAttr ? ` <span style="color:var(--gold-350);cursor:help" title="Damage scales with ${at.label}">★dmg</span>` : '';
+    const marks = [];
+    if (key === 'might') marks.push('basic');       // basic (auto) attacks scale off Might
+    if (key === dmgAttr) marks.push(skillWord);     // skills/spells scale off the identity attr
+    const tag = marks.length
+      ? ` <span style="color:var(--gold-350);cursor:help" title="Powers your ${marks.map(m => m === 'basic' ? 'basic attacks' : m + 's').join(' & ')}">★${marks.join(' & ')} dmg</span>`
+      : '';
     const gearStr = gear ? ` <span style="color:var(--green-400)">+${abbreviateNumber(gear)}</span>` : '';
     return `<div class="attr-row">
       <div class="attr-info">
@@ -38190,7 +38220,8 @@ const __DL_FN_BRIDGE = {
   itemPower,
   totalAttr,
   classDmgAttrs,
-  attrDamage,
+  autoAttrDamage,
+  skillAttrDamage,
   critDamageMult,
   playerPower,
   equipUpgradeDelta,

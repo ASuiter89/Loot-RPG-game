@@ -26,12 +26,24 @@ export function channelCoef(channel, cls) {
   return ch.base * mult;
 }
 
-/** The attribute a class's weapon/skill damage scales off. */
+/** The IDENTITY attribute a class's SKILLS/spells scale off (basic autos use Might). */
 export function classDamageAttr(cls) {
   return CLASS_DMG_ATTR[cls] || CLASS_DMG_ATTR_FALLBACK;
 }
 
-/** Attack power contributed by attributes: (that class's damage attr) × per-point. */
+/**
+ * Attack power a BASIC (auto) attack gets from MIGHT — universal to every class, but
+ * class-scaled via the `basicDmg` channel (warrior best, mage least). The rank-#1
+ * class lands at ATTR_DMG_PER_POINT so the class that already mained Might is unchanged.
+ * @param {number} might total Might (base + gear)
+ * @param {string} cls hero class id
+ * @returns {number}
+ */
+export function basicAttrDamage(might, cls) {
+  return Math.max(0, might) * channelCoef('basicDmg', cls);
+}
+
+/** SKILL attack power from the class's identity attribute: (identity attr) × per-point. */
 export function attrDamageFor(attrTotal, cls, perPoint = ATTR_DMG_PER_POINT) {
   return Math.max(0, attrTotal) * perPoint;
 }
