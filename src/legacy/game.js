@@ -74,7 +74,7 @@ import {
   firstHint, keeperIntro, starterChain, deathTip as rampDeathTip,
   rampStatus,
 } from '../systems/onboarding.js';
-import { HINTS, KEEPER_INTRO } from '../data/onboarding.js';
+import { HINTS, KEEPER_INTRO, EARLY_SUSTAIN_ILVL, EARLY_SUSTAIN_CHANCE, EARLY_SUSTAIN_STATS } from '../data/onboarding.js';
 import { salvageVariance, salvageIlvlCurve, salvageRanges as salvageRangesPure } from '../systems/salvage.js';
 import { dangerLevel, heartbeatDue } from '../systems/dangerPulse.js';
 import { rollTo } from '../systems/counterRoll.js';
@@ -278,17 +278,17 @@ const SLOT_AFFIX_POOLS = {
   // them by the weapon's category — a martial weapon keeps only SKILLPWR/ATKSPD, a
   // caster weapon (Staff/Wand) only SPELLPWR/CASTSPD — so the two never mix.
   weapon: { stats: ['ATK','ACC','CRIT','CRITDMG','IDMG','AREA','DBLSTRIKE','CLEAVE','BOSSDMG','EXEC','PEN','MAGICPEN','LEECH','MPLEECH','SPELLPWR','SKILLPWR','BLEED','STUNPWR','ATKSPD','CASTSPD'], attrs: ['might','agility','spirit'] },
-  head:   { stats: ['HP','MP','REGEN','CRIT','CRITDMG','SPD','MAGICFIND','XPGAIN','AREA','SPELLPWR','SKILLPWR','CDR','MCR','CASTSPD','MAGICPEN','DODGE','MPKILL','MATFIND'], attrs: ['vitality','spirit','luck'] },
-  chest:  { stats: ['HP','REGEN','MP','DR','BLOCK','THORNS','HPKILL','DODGE','MAGICFIND','TENAC','STAM','STAMREG'], attrs: ['vitality','spirit','luck'] },
+  head:   { stats: ['HP','MP','REGEN','MPREG','CRIT','CRITDMG','SPD','MAGICFIND','XPGAIN','AREA','SPELLPWR','SKILLPWR','CDR','MCR','CASTSPD','MAGICPEN','DODGE','MPKILL','MATFIND'], attrs: ['vitality','spirit','luck'] },
+  chest:  { stats: ['HP','REGEN','MPREG','MP','DR','BLOCK','THORNS','HPKILL','DODGE','MAGICFIND','TENAC','STAM','STAMREG'], attrs: ['vitality','spirit','luck'] },
   hands:  { stats: ['CRIT','ACC','CRITDMG','IDMG','AREA','DBLSTRIKE','SPD','PEN','LEECH','EXEC','CDR','CLEAVE','BLOCK','THORNS','ATKSPD','SKILLPWR'], attrs: ['might','agility','spirit'] },
-  legs:   { stats: ['SPD','HP','REGEN','DODGE','DR','BLOCK','MP','GOLDFIND','XPGAIN','HPKILL','TENAC','STAM','STAMREG'], attrs: ['agility','vitality','luck'] },
+  legs:   { stats: ['SPD','HP','REGEN','MPREG','DODGE','DR','BLOCK','MP','GOLDFIND','XPGAIN','HPKILL','TENAC','STAM','STAMREG'], attrs: ['agility','vitality','luck'] },
   ring:   { stats: ['CRIT','ACC','CRITDMG','ATK','IDMG','AREA','SKILLPWR','LEECH','MPLEECH','GOLDFIND','MAGICFIND','MATFIND','HP','MP','DEF','DBLSTRIKE','BOSSDMG','EXEC','PEN','MAGICPEN','MCR','MPKILL','CLEAVE'], attrs: ['might','agility','luck','spirit','vitality'] },
-  amulet: { stats: ['MP','HP','REGEN','SPELLPWR','CASTSPD','AREA','MAGICPEN','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC','STAM','STAMREG'], attrs: ['spirit','luck','vitality','might','agility'] },
+  amulet: { stats: ['MP','HP','REGEN','MPREG','SPELLPWR','CASTSPD','AREA','MAGICPEN','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC','STAM','STAMREG'], attrs: ['spirit','luck','vitality','might','agility'] },
   // Off-hands: defensive layers + caster utility. A shield's BLOCK headline already
   // flows through totalStat('BLOCK') into combat, so it needs no special-casing.
   // Like weapons, the power/speed stats here are gated by family in itemStatPool()
   // (caster Tome/Focus → SPELLPWR/CASTSPD; shields & martial off-hands → SKILLPWR).
-  offhand:{ stats: ['BLOCK','DR','THORNS','HP','REGEN','MP','SPELLPWR','CASTSPD','AREA','MAGICPEN','SKILLPWR','CDR','MCR','CRIT','DODGE','TENAC'], attrs: ['vitality','spirit','luck'] },
+  offhand:{ stats: ['BLOCK','DR','THORNS','HP','REGEN','MPREG','MP','SPELLPWR','CASTSPD','AREA','MAGICPEN','SKILLPWR','CDR','MCR','CRIT','DODGE','TENAC'], attrs: ['vitality','spirit','luck'] },
 };
 // Skill/Spell power & their speed levers are mutually exclusive by gear type. The
 // two families below are the ones itemStatPool() drops from the "wrong" gear so a
@@ -3111,7 +3111,9 @@ const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', H
   // Stamina fuels sprint/dash. STAM deepens the pool, STAMREG speeds its refill —
   // so a class that never invests in Vitality can still sprint on gear alone.
   STAM:'Max Stamina', STAMREG:'Stamina Regen',
-  MP:'Max MP', CRIT:'Crit Rating', CRITDMG:'Crit Dmg %', REGEN:'Regen', DMG:'Damage', ACC:'Accuracy',
+  // MP deepens the pool, MPREG speeds its trickle — so a caster can lean on gear for
+  // mana sustain (halved in combat like all MP regen) instead of Spirit alone.
+  MP:'Max MP', MPREG:'Mana Regen', CRIT:'Crit Rating', CRITDMG:'Crit Dmg %', REGEN:'Regen', DMG:'Damage', ACC:'Accuracy',
   // ── new stats ── leech & on-kill sustain, defensive layers, offensive %s,
   // utility/economy %s, and caster %s. Percent stats carry a "%" in their label
   // so every display (tooltip, enchanter, hero pane) reads correctly for free.
@@ -3136,7 +3138,7 @@ const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', H
   TENAC:'Tenacity %' };
 // Short codes for the compact one-line item summary (the tooltip/enchanter use the
 // full STAT_LABELS above). Anything missing falls back to its raw key.
-const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', VEIL:'VEIL', STAM:'STM', STAMREG:'SRG', MP:'MP', CRIT:'CRIT', ACC:'ACC',
+const STAT_SHORT = { ATK:'ATK', DEF:'DEF', SPD:'SPD', LCK:'FOR', HP:'HP', VEIL:'VEIL', STAM:'STM', STAMREG:'SRG', MP:'MP', MPREG:'MRG', CRIT:'CRIT', ACC:'ACC',
   CRITDMG:'CDMG', REGEN:'REG', LEECH:'LCH', MPLEECH:'MLC', HPKILL:'HoK', MPKILL:'MoK',
   THORNS:'THN', DR:'DR', BLOCK:'BLK', DODGE:'DGE', IDMG:'IDMG', DBLSTRIKE:'2X', CLEAVE:'CLV',
   BOSSDMG:'vsB', EXEC:'EXE', PEN:'PEN', MAGICPEN:'MPN', GOLDFIND:'GF', XPGAIN:'XP', MAGICFIND:'MF', MATFIND:'MTF',
@@ -3162,6 +3164,7 @@ const STAT_DESC = {
   STAM: 'Bigger Stamina pool for sprint/dash.',
   STAMREG: 'Stamina refills faster.',
   MP: 'Max mana.',
+  MPREG: 'Mana regen over time (halved in combat).',
   CRIT: 'Crit chance (vs foe level) — autos, skills and spells all crit.',
   CRITDMG: 'Bonus crit damage (spell crits included).',
   REGEN: 'Health regen over time.',
@@ -4021,7 +4024,9 @@ function mpRegenPerSec() {
   // A slow trickle on purpose: mana should run dry in sustained fights so mana
   // pots stay worth quaffing. Scaled to a real per-second rate; applyRegen banks
   // the fractional per-beat share so sub-1 regen works while MP stays an integer.
-  return (0.15 + totalAttr('spirit') * attrCoef('mpRegen') + skillBonus('mpRegen')
+  // Gear Mana Regen (MPREG) stacks on Spirit's trickle here, so it rides the SAME
+  // in-combat halving applyRegen applies to this whole rate — the rationing holds.
+  return (0.15 + totalAttr('spirit') * attrCoef('mpRegen') + totalStat('MPREG') + skillBonus('mpRegen')
     + shrineFx('mpRegenPctMp') * (player.maxMp || 0)) * TICKS_PER_SEC; // + Clarity shrine (% of max MP per beat)
 }
 
@@ -7734,6 +7739,7 @@ window.gameGuide = function gameGuide(topic) {
       `DANGER CUE: drop below a quarter of your max HP and the screen edges pulse red (the danger halo) while a heartbeat thumps — and quickens the closer you are to dying. It's your prompt to disengage and sip. The red glow also colour-cycles with any active poison/burn/stun. The heartbeat rides the SFX channel (mute or the Audio-tab faders silence it) and pauses when a menu holds the game.`,
       `MANA is a RATIONED resource now: a smaller pool (less MP per Spirit, lower base), higher skill costs, and slower regen — and MP regen is HALVED while you're "in combat" (a few seconds after dealing or taking damage — gameState().player.inCombat), so sustained casting genuinely drains you.`,
       `The Mana Potion restores 40% of max MP OVER TIME (gameState().player.pendingMana shows MP still incoming) and shares the health potion's cooldown — so quaffing mana means forgoing a heal, a real triage choice. Mana Shield converts damage to MP more efficiently the more you invest in it. Carry mana potions if you lean on spells.`,
+      `Beyond Spirit, gear itemizes mana sustain directly: MANA REGEN (MRG) is a flat +MP/sec trickle that stacks on Spirit's and rolls from floor 1 on the sustain slots (helm, chest, legs, amulet, off-hand) — subject to the same in-combat halving, so it eases the grind between casts without breaking the ration. Max MP (MP), Mana Cost Reduction (MCR), Mana Leech (MLC) and Mana on Kill (MoK) round out the mana toolkit.`,
     ],
     veil: [
       `SPIRIT VEIL is a persistent blue SHIELD that sits ON TOP of your HP: every hit, damage-over-time and hazard is soaked by the Spirit Veil FIRST, and only the overflow bites your health (a blow that empties it spills the remainder into HP). gameState().player reports shield / maxShield / shieldRecharging; the HP bar shows it as a shimmering blue mask over the bar, with its own number beside HP.`,
@@ -17739,6 +17745,9 @@ const AFFIX_CURVES = {
   // VEIL (flat +max Spirit Veil) rolls a touch under HP — the Veil is the lighter,
   // "slower overall" defensive layer and only appears on dedicated Spirit gear.
   ATK:{flat:1}, DEF:{flat:1}, SPD:{flat:1}, HP:{flat:6}, VEIL:{flat:4}, MP:{flat:3.4}, REGEN:{flat:0.2},
+  // Mana Regen rolls half REGEN's slope: the /sec it buys is ×TICKS_PER_SEC in
+  // mpRegenPerSec, and mana is the rationed pool, so its per-item-level growth stays gentle.
+  MPREG:{flat:0.1},
   // Stamina gear: STAM adds a chunk of the ~100 pool (near an MP roll); STAMREG adds a
   // few /sec of refill (the /sec baseline is 22, so a small flat mult is plenty).
   STAM:{flat:1.5}, STAMREG:{flat:0.3},
@@ -17828,6 +17837,14 @@ function addStatAffixes(item, lvl, mult, count) {
   const pool = itemStatPool(item)
     .filter(s => !(s in item.stats))
     .sort(() => Math.random() - 0.5);
+  // Early-game sustain bias: on a low-item-level drop, a new hero needs HP/MP regen
+  // most when early gear's scarce affix slots hand it out least — so float ONE in-pool
+  // regen stat to the front (chance-based, not guaranteed) so it can actually land.
+  // Fades out by EARLY_SUSTAIN_ILVL as tiers/slots grow. See src/data/onboarding.js.
+  if (lvl <= EARLY_SUSTAIN_ILVL && Math.random() < EARLY_SUSTAIN_CHANCE) {
+    const i = pool.findIndex(s => EARLY_SUSTAIN_STATS.includes(s));
+    if (i > 0) pool.unshift(pool.splice(i, 1)[0]);
+  }
   for (let i = 0; i < count && pool.length; i++) {
     const s = pool.shift();
     item.stats[s] = affixStatValue(s, lvl, mult);
@@ -28217,7 +28234,7 @@ function lootGlossaryHTML() {
   const STAT_GROUPS = [
     ['Offense', ['ATK','ACC','CRIT','CRITDMG','IDMG','PEN','MAGICPEN','DBLSTRIKE','CLEAVE','AREA','EXEC','BOSSDMG','ATKSPD','BLEED','STUNPWR']],
     ['Defense', ['DEF','HP','VEIL','DR','BLOCK','DODGE','TENAC','THORNS']],
-    ['Sustain', ['REGEN','LEECH','MPLEECH','HPKILL','MPKILL']],
+    ['Sustain', ['REGEN','MPREG','LEECH','MPLEECH','HPKILL','MPKILL']],
     ['Caster',  ['MP','SPELLPWR','SKILLPWR','CASTSPD','CDR','MCR']],
     ['Utility / Find', ['SPD','STAM','STAMREG','LCK','GOLDFIND','XPGAIN','MAGICFIND','MATFIND']],
   ];

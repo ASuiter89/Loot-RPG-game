@@ -122,7 +122,9 @@ export const GEAR_POWER = {
   // contributor, so pricing it as flat utility too would double-count it.)
   utilityFlat: {
     GOLDFIND: 1, XPGAIN: 1, MAGICFIND: 2, MATFIND: 1,
-    MCR: 1.5, MPLEECH: 1.2, MPKILL: 0.8, MP: 0.15,
+    // Mana Regen is a scarce per-point trickle (its /sec is ×TICKS_PER_SEC in combat
+    // math), so it prices a hair above the flat mana-cost/leech utilities per point.
+    MCR: 1.5, MPLEECH: 1.2, MPKILL: 0.8, MP: 0.15, MPREG: 1.6,
     // Stamina (sprint/dash fuel): a deep pool is worth a hair per point like MP;
     // faster refill is worth a bit more per point but rolls small.
     STAM: 0.15, STAMREG: 1,
