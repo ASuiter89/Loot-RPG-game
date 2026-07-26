@@ -11,6 +11,10 @@ export const CHANGELOG = [
     "New Mana Regen (MRG) affix — flat +MP/sec on helm/chest/legs/amulet/off-hand, stacks on Spirit's, halved in combat.",
     "Low-level drops float HP/MP regen toward their scarce affix slots, so sustain lands early (was mostly late-game).",
   ] },
+  { date: "2026-07-25", size: "medium", v: "Might drives basic attack damage", by: "Jeff Louie", notes: [
+    "Basic (auto) attacks scale off Might for all classes — Warrior most, Mage least; skills keep your class attribute.",
+    "Accuracy moved off Agility onto Might; Agility now pure evasion + move & attack speed.",
+  ] },
   { date: "2026-07-25", size: "small", v: "Merchant capped at rarity you've found", by: "Jeff Louie", notes: [
     "Merchant never stocks a colour above your highest found rarity — no blue before your first blue, no purple before your first purple.",
     "Layers atop the boss gate; gear you currently hold counts as found.",

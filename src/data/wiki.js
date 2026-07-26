@@ -231,8 +231,8 @@ export const WIKI = [
         body: [
           { p: 'Damage comes from three distinct sources, each with its own scaling. Build into <b>one</b> and you don\'t accidentally waste stats on the others.' },
           { ul: [
-            '<b>Auto-attack</b> — your automatic swing. Scales with weapon damage, Attack (ATK), and your class\'s damage attribute. Amplified by <b>Increased Damage %</b>; sped up by <b>Attack Speed %</b>.',
-            '<b>Skills</b> (martial actives) — scale off the same weapon + ATK base, amplified by <b>Skill Power %</b>. Recharge shortened by <b>Cooldown Reduction</b>.',
+            '<b>Auto-attack</b> — your automatic swing. Scales with weapon damage, Attack (ATK), and <b>Might</b> (the universal basic-attack attribute, for every class). Amplified by <b>Increased Damage %</b>; sped up by <b>Attack Speed %</b>.',
+            '<b>Skills</b> (martial actives) — scale off weapon + ATK + your class\'s <b>identity attribute</b> (Warrior→Might, Rogue→Agility, Templar→Vitality), amplified by <b>Skill Power %</b>. Recharge shortened by <b>Cooldown Reduction</b>.',
             '<b>Spells</b> (magic actives) — scale off <b>Spirit</b> (not weapon or ATK at all), amplified by <b>Spell Power %</b>. Recharge shortened by Cooldown Reduction <b>and</b> Cast Speed %.',
           ] },
           { p: 'A <b>Hybrid</b> ability lands both a physical part (scales like a skill, can leech) and a magic part (scales like a spell) in one cast, so it\'s never fully walled by one defence.' },
@@ -402,14 +402,14 @@ export const WIKI = [
         title: 'The Four Classes',
         keywords: ['class', 'classes', 'warrior', 'rogue', 'mage', 'templar', 'attribute', 'damage'],
         body: [
-          { p: 'There are four classes, and each has <b>one damage attribute</b> that its damage scales from:' },
+          { p: 'Basic (auto) attacks scale off <b>Might</b> for every class. Beyond that, each class has <b>one identity attribute</b> that powers its skills:' },
           { ul: [
-            '<b>Warrior</b> — tanky melee; damage from <b>Might</b>.',
-            '<b>Rogue</b> — crit and dodge; damage from <b>Agility</b>.',
-            '<b>Mage</b> — spells and a deep mana pool; damage from <b>Spirit</b>.',
-            '<b>Templar</b> — durable hybrid; damage from <b>Vitality</b>.',
+            '<b>Warrior</b> — tanky melee; skills from <b>Might</b>.',
+            '<b>Rogue</b> — crit and dodge; skills from <b>Agility</b>.',
+            '<b>Mage</b> — spells and a deep mana pool; spells from <b>Spirit</b>.',
+            '<b>Templar</b> — durable hybrid; skills from <b>Vitality</b>.',
           ] },
-          { p: 'Your class also gates which weapons you can equip. Pump your class\'s single damage attribute for offence — but note every attribute also pays a defensive or utility role.' },
+          { p: 'Your class also gates which weapons you can equip. Pump Might for reliable weapon damage and your class\'s identity attribute for its signature skills — and note every attribute also pays a defensive or utility role.' },
         ],
       },
       {
@@ -419,10 +419,10 @@ export const WIKI = [
         body: [
           { p: 'Five attributes shape your hero. How much each point gives is <b>class-scaled</b> — the same point in Spirit gives a Mage more than it gives a Warrior.' },
           { ul: [
-            '<b>Might</b> — Defense (and the Warrior\'s damage).',
-            '<b>Vitality</b> — max HP, HP regen, Stamina (and the Templar\'s damage).',
-            '<b>Agility</b> — evasion, accuracy, move & attack speed (and the Rogue\'s damage).',
-            '<b>Spirit</b> — max MP, MP regen, spell power, healing, Spirit Veil boost (and the Mage\'s damage).',
+            '<b>Might</b> — basic attack damage (all classes), Accuracy & Defense (and the Warrior\'s skills).',
+            '<b>Vitality</b> — max HP, HP regen, Stamina (and the Templar\'s skills).',
+            '<b>Agility</b> — evasion, move & attack speed (and the Rogue\'s skills).',
+            '<b>Spirit</b> — max MP, MP regen, spell power, healing, Spirit Veil boost (and the Mage\'s spells).',
             '<b>Luck</b> — crit chance and loot quality.',
           ] },
         ],

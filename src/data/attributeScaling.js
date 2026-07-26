@@ -7,17 +7,21 @@
 // reads them through a thin `attrCoef()` adapter.
 //
 // Design summary (why the numbers look like this):
-//   • Each class deals weapon/skill damage off ONE attribute (its dmg attr) —
-//     no more primary+secondary split, no universal Might dab.
+//   • Damage rides TWO lanes. BASIC (auto) attacks scale off MIGHT for every class
+//     (the `basicDmg` channel below) — Might is the universal weapon-power stat.
+//     SKILLS/spells scale off the class's IDENTITY attribute (its dmg attr) — that's
+//     the class's signature lane. Spells specifically live on Spirit + Spell Power.
 //   • Every attribute→stat channel is scaled per class along a shared 4-rank
 //     "ladder": the class ranked #1 for a channel gets the most per point, #4
 //     the least. Rank #2 sits at the historical global value, so the tuned
 //     difficulty curve is preserved for the class that mains a stat.
-//   • Re-homed roles vs the old design: Might now drives DEFENSE (was Vitality);
-//     Vitality now also drives STAMINA (was Might); Spirit now also scales HEALS.
-//     Agility and Luck are unchanged in role.
+//   • Re-homed roles vs the old design: Might drives DEFENSE, ACCURACY and now BASIC
+//     ATTACK DAMAGE (Accuracy moved off Agility, so Agility is pure nimbleness —
+//     Evasion, move & attack speed). Vitality drives HP + STAMINA; Spirit scales
+//     spells + HEALS + Veil; Luck is unchanged (crit + loot).
 
-// ── Damage attribute per class (single attribute, no secondary) ──────────────
+// ── Identity attribute per class — what SKILLS/spells scale off ──────────────
+// (Basic auto-attacks scale off Might for everyone; see the `basicDmg` channel.)
 export const CLASS_DMG_ATTR = {
   warrior: 'might',
   rogue:   'agility',
@@ -27,9 +31,9 @@ export const CLASS_DMG_ATTR = {
 // Classless legacy saves (mid-migration) fall back to this.
 export const CLASS_DMG_ATTR_FALLBACK = 'might';
 
-// Attack power added per point of the class's damage attribute. Was a 2.4 primary
-// + 0.8 secondary split; folded into one channel with a small bump so a hero who
-// mains their damage attribute lands close to the old primary+secondary total.
+// Attack power added per point of the class's IDENTITY attribute to its SKILLS. Was a
+// 2.4 primary + 0.8 secondary split; folded into one channel with a small bump so a
+// hero who mains their identity attribute lands close to the old primary+secondary total.
 export const ATTR_DMG_PER_POINT = 2.6;
 
 // ── The shared per-class scaling ladder ──────────────────────────────────────
@@ -49,8 +53,19 @@ export const CLASS_SCALE_LADDER = [1.20, 1.00, 0.78, 0.55];
 // `base` units match the old ATTR_FX fields exactly, so swapping ATTR_FX.<x> for
 // channelCoef('<channel>') is behaviour-identical for a rank-#2 class.
 export const ATTR_STAT_CHANNELS = {
+  // Might → BASIC (auto) attack damage — the universal weapon-power lane every class
+  // swings off. Class-ranked warrior > rogue > templar > mage (mages rarely auto).
+  // `base` is set so the top class (rank #1) lands at exactly ATTR_DMG_PER_POINT
+  // (2.6), keeping the Warrior — who already mained Might for damage — behaviour-
+  // identical. (Skills still scale off the class's identity attr at ATTR_DMG_PER_POINT.)
+  basicDmg:     { attr: 'might',    base: ATTR_DMG_PER_POINT / CLASS_SCALE_LADDER[0], order: ['warrior', 'rogue', 'templar', 'mage'] },
+
   // Might → Defense (moved off Vitality). Warriors armour up hardest.
   def:          { attr: 'might',    base: 0.5,   order: ['warrior', 'templar', 'rogue', 'mage'] },
+
+  // Might → Accuracy (moved off Agility — Might is now the whole "land your weapon
+  // swing" stat: how hard AND how true). Rogues convert it most efficiently.
+  accuracy:     { attr: 'might',    base: 2.0,   order: ['rogue', 'warrior', 'templar', 'mage'] },
 
   // Vitality → HP & HP regen. Templars are the hardiest.
   hp:           { attr: 'vitality', base: 11,    order: ['templar', 'warrior', 'rogue', 'mage'] },
@@ -62,8 +77,8 @@ export const ATTR_STAT_CHANNELS = {
 
   // Agility → Evasion (rogues dodge best; mages surprisingly nimble).
   evasion:      { attr: 'agility',  base: 1.15,  order: ['rogue', 'mage', 'warrior', 'templar'] },
-  // Agility → Accuracy / Move speed / Attack speed (rogues quickest overall).
-  accuracy:     { attr: 'agility',  base: 2.0,   order: ['rogue', 'warrior', 'templar', 'mage'] },
+  // Agility → Move speed / Attack speed (rogues quickest overall). Accuracy moved to
+  // Might, so Agility is now pure nimbleness — evasion + how fast you move & swing.
   // Move/attack speed are soft-capped curves; `base` is the CAP, class-scaled.
   moveCap:      { attr: 'agility',  base: 0.35,  order: ['rogue', 'warrior', 'templar', 'mage'] },
   atkSpdCap:    { attr: 'agility',  base: 60,    order: ['rogue', 'warrior', 'templar', 'mage'] },
