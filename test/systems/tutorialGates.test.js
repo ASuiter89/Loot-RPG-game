@@ -51,7 +51,7 @@ describe('activeGateKind', () => {
     expect(activeGateKind()).toBe(null);
   });
 
-  it('raises the beach first-hit and equip beats in order', () => {
+  it('raises the beach heal and equip beats in order', () => {
     expect(activeGateKind({ onShore: true, potionCueOn: true, equipCueOn: true })).toBe('potion');
     expect(activeGateKind({ onShore: true, equipCueOn: true })).toBe('equip');
   });

@@ -1,7 +1,8 @@
 // Which teaching moment the world-pausing spotlight gate should hold right now.
 //
-// Three beats use the gate: the beach's first-hit Health Potion, the beach's
-// starter-weapon equip, and the first-cast Mana Potion. The DOM wiring lives in the
+// Three beats use the gate: the beach's Health-Potion heal (once a wound takes the
+// hero past 75% Health), the beach's starter-weapon equip, and the first-cast Mana
+// Potion. The DOM wiring lives in the
 // legacy shell; the DECISIONS live here — pure predicates over a snapshot of live
 // state, so they're testable without a canvas.
 //
@@ -42,7 +43,7 @@ export function shouldTeachFirstSpell(state) {
  * Which gate (if any) should hold the screen, highest priority first:
  *
  *  • `null`    — the death card owns the screen; every gate waits its turn.
- *  • `potion`  — the beach's first-hit Health-Potion beat, until the hero quaffs.
+ *  • `potion`  — the beach's Health-Potion heal beat, until the hero quaffs.
  *  • `equip`   — the beach's starter-weapon beat, until it's worn.
  *  • `mana`    — the first-cast Mana-Potion beat, until the hero quaffs.
  *
@@ -54,7 +55,7 @@ export function shouldTeachFirstSpell(state) {
  *
  * @param {object} state
  * @param {boolean} [state.deathCardOpen] the death overlay is up
- * @param {boolean} [state.potionCueOn] the beach first-hit cue is live
+ * @param {boolean} [state.potionCueOn] the beach heal cue is live
  * @param {boolean} [state.equipCueOn] the starter weapon is still unequipped
  * @param {boolean} [state.onShore] the hero is on the beach tutorial
  * @param {boolean} [state.manaWanted] the first-cast lesson is armed and unfinished

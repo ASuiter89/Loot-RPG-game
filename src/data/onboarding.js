@@ -118,6 +118,14 @@ export const PLAYER_EARLY_DMG = {
 // Smaller packs early: a cap on how many foes a normal floor spawns, by floor.
 export const EARLY_PACK_CAP = { 1: 3, 2: 4, 3: 5, 4: 6, 5: 7 };
 
+// ── BEACH HEALTH-POTION TEACH ─────────────────────────────────────────────────
+// The shore's world-pausing "here's how to heal" gate waits until the hero's
+// Health has actually fallen this far (a fraction of max), rather than firing on
+// the first scratch — so the lesson lands on a hero who genuinely needs the flask,
+// with a wound worth healing, instead of interrupting the opening exchange. Beach
+// foes bite for 8 (the elite 16), so a level-1 pool crosses it a blow or two in.
+export const BEACH_POTION_HP_FRAC = 0.75;
+
 // ── FIRST-ENCOUNTER HINTS ─────────────────────────────────────────────────────
 // One-line teaching chips, each fired at most once per hero and latched by a
 // `player.taught[id]` flag. `text` is the chip HTML (may carry <b> and inline
