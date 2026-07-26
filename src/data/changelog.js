@@ -9,6 +9,9 @@
 export const CHANGELOG = [
   { date: "2026-07-25", size: "small", v: "Any hit shatters a channeling town portal", by: "Jeff Louie", notes: [
     "Town portal breaks on any landed blow mid-channel — even one a shield (Spirit Veil, barrier, mana shield) fully soaks; was: only HP loss.",
+  { date: "2026-07-25", size: "small", v: "Total time played counts open time", by: "Jeff Louie", notes: [
+    "History total bills every foreground second — menus, planning, combat — not just active input; pauses when tab hidden.",
+    "Per-hero row time stays active-play only (the cross-device merge measure), so the header can read above the rows' sum.",
   ] },
   { date: "2026-07-25", size: "small", v: "Total time played survives deleted heroes", by: "Jeff Louie", notes: [
     "History total reads a durable, account-wide lifetime counter — not a sum of surviving heroes; won't drop when a hero's deleted, a slot's reused, or a device's data clears.",
