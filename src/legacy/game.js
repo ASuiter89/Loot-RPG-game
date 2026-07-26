@@ -8135,7 +8135,7 @@ window.gameGuide = function gameGuide(topic) {
       `The hero faces and animates in the direction it walks — down/up/left/right — cycling a walk animation while moving and resting on a standing frame when still. It's purely cosmetic; gameState().player.faceDir reports the current 4-way facing.`,
       `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~34/sec). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch auto-sprint).`,
       `DASH (${key('dash')}) is a quick burst (costs 35 Stamina, ~0.55s cooldown). It only repositions fast — there are no i-frames and enemies are solid, so you can't dash THROUGH a foe to escape.`,
-      `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec) — including while you rest in town, alongside HP/MP. The Vitality attribute deepens the pool and speeds its recharge; gear Max Stamina (STM) and Stamina Regen (SRG) do the same, so a class that never invests in Vitality can still sprint on gear alone. Check player.dashReady before dashing.`,
+      `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec) — including while you rest in town, alongside HP/MP. The Vitality attribute deepens the pool and speeds its recharge; gear Max Stamina (STM) and Stamina Regen (SRG) do the same, so a class that never invests in Vitality can still sprint on gear alone. Grabbing food ("&") is the fastest refill — each snack instantly restores ~50% of max Stamina. Check player.dashReady before dashing.`,
       `In TOWN sprint is FREE — the safe camp never drains Stamina, so you can run everywhere at full 1.7x speed and the pool keeps refilling as if you were resting. Only in the dungeon does sprinting/dashing spend Stamina.`,
       `Being Slowed (a debuff) halves speed; being Stunned roots you entirely (see gameState().effects).`,
       `Foes are solid, so a single one body-blocks you — slide along it and step around. But a MOB can't pin you forever: when bodies plug your heading AND the lanes you'd slide into to go around them, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall, and a lone foe with any real gap beside it stays solid).`,
@@ -8227,7 +8227,7 @@ window.gameGuide = function gameGuide(topic) {
       `A red badge on the LOOT tab (a red pip on the touch Bag button) counts loot that landed in the bag while you were on another tab; it clears the instant you open the LOOT list. gameState().menu.newLoot mirrors the count.`,
       `Two gear loadouts exist; gameState().menu.activeGearSet is the worn one (1 or 2). Swap with ${key('swapWeapon')}. SAFEGUARD: while enemies are near you can't swap onto an EMPTY or much-weaker set (it would strip your armor mid-fight) — break away first, or swap where it's safe; gearing UP to a stronger set is always allowed. Off-class weapons can be carried and sold but not equipped.`,
       `Bosses spill the MOST loot of any foe, and the FIRST time you clear a given boss FLOOR its guardian pays a jackpot — ~3x the drops at noticeably better quality (a one-time windfall per boss floor). In Endless, where boss species recur, this tracks by floor, so every new or deeper boss floor keeps paying; farming a floor you've already cleared drops at the normal boss rate. gameState().enemies[i].firstKill flags a boss whose floor windfall is still unclaimed. See gameGuide("enemies") for the boss rules.`,
-      `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them; each snack instantly restores a little HP, MP AND Stamina (the same amount to all three).`,
+      `Chests ("$") roll their loot only when opened and carry ~10% mimic / ~8% ambush / ~7% trap risk — open them at healthy HP. Coins ("c") and food ("&") are grabbed by walking over them; each snack restores a little HP and MP plus a BIG gulp of Stamina (~50% of max) — the fastest way to refill the sprint/dash pool.`,
       `Crafting materials (Scrap → Glimmer → Core → Chaos, common→rare) come mainly two ways. Foes DROP them, gated by difficulty: Scrap & Glimmer from Normal, Core from Hardened, Chaos from Brutal (Endless drops all four). SALVAGING gear sheds them by the item's rarity regardless of difficulty — so a lucky high-rarity find is your main early route to a material your tier can't yet drop. Bounty rewards and Treasure Goblins are bonus exceptions that ignore the gate — they can hand you a rarer material early. Materials are deliberately scarce; see gameGuide("autoloot") for the salvage bands.`,
     ],
     autoloot: [
@@ -23666,7 +23666,8 @@ function onEnterCell(nx, ny) {
   const fi = groundFood.findIndex(f => f.x === nx && f.y === ny);
   if (fi !== -1) {
     const f = groundFood.splice(fi, 1)[0];
-    // A snack refuels the whole hero — the same bite tops up HP, MP and Stamina.
+    // A snack refuels the whole hero — a flat top-up to HP & MP, and a big gulp of
+    // Stamina (~50% of max) so grabbing food is the go-to sprint/dash refill.
     const g = foodGains(player, f.heal);
     player.hp += g.hp; player.mp += g.mp; player.stamina += g.stamina;
     // One rising floater per pool that actually gained (spawnFloatingText stacks
