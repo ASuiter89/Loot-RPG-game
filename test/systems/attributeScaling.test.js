@@ -1,15 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import {
-  channelCoef, classDamageAttr, attrDamageFor, basicAttrDamage,
+  channelCoef, classDamageAttr, classDamageAttr2, classDamageAttrs, isHybridClass,
+  classDmgPerPoint, attrDamageFor, skillAttrPower, skillAttrCoef, basicAttrDamage,
   shieldMax, spiritVeilMult, shieldPerSpiritPoint,
   shieldRechargePerSec, shieldRechargeDelay, healAmount,
   ATTR_DMG_PER_POINT,
 } from '../../src/systems/attributeScaling.js';
 import {
-  ATTR_STAT_CHANNELS, CLASS_SCALE_LADDER, SHIELD, CLASS_DMG_ATTR,
+  ATTR_STAT_CHANNELS, CLASS_SCALE_LADDER, SHIELD, CLASS_DMG_ATTR, CLASS_DMG_ATTR2,
+  ATTR_DMG_PER_POINT_HYBRID,
 } from '../../src/data/attributeScaling.js';
 
 const CLASSES = ['warrior', 'rogue', 'mage', 'templar'];
+const NEW_CLASSES = ['fortune', 'windblade', 'bloodletter'];
+const ALL_CLASSES = [...CLASSES, ...NEW_CLASSES];
 
 describe('channelCoef', () => {
   it('returns 0 for an unknown channel', () => {
@@ -234,5 +238,142 @@ describe('healAmount', () => {
   });
   it('treats negative Spirit as zero', () => {
     expect(healAmount(24, 2.5, 10, -50, 'mage')).toBeCloseTo(24 + 25, 6);
+  });
+});
+
+// ── The three later classes ───────────────────────────────────────────────────
+// Adding them RE-RANKED nothing: the ladder grew from 4 entries to 7, and every
+// channel ordering keeps the four original classes at ranks #1/#2/#4/#6 — whose
+// ladder values are exactly the old [1.20, 1.00, 0.78, 0.55]. These tests pin that
+// invariant, so a future reshuffle that silently re-tunes a shipped class fails CI.
+describe('seven-class scaling ladder', () => {
+  const HISTORICAL = [1.20, 1.00, 0.78, 0.55];
+
+  it('keeps the original four ladder values at the interleaved ranks', () => {
+    expect(CLASS_SCALE_LADDER).toHaveLength(7);
+    [0, 1, 3, 5].forEach((rank, i) => {
+      expect(CLASS_SCALE_LADDER[rank]).toBeCloseTo(HISTORICAL[i], 10);
+    });
+  });
+
+  it('descends monotonically from best to worst rank', () => {
+    for (let i = 1; i < CLASS_SCALE_LADDER.length; i++) {
+      expect(CLASS_SCALE_LADDER[i]).toBeLessThan(CLASS_SCALE_LADDER[i - 1]);
+    }
+  });
+
+  it('gives every channel all seven classes exactly once', () => {
+    for (const [key, ch] of Object.entries(ATTR_STAT_CHANNELS)) {
+      expect(ch.order.slice().sort(), `${key} ordering`).toEqual(ALL_CLASSES.slice().sort());
+    }
+  });
+
+  it('leaves the original four at ranks #1/#2/#4/#6 in EVERY channel', () => {
+    for (const [key, ch] of Object.entries(ATTR_STAT_CHANNELS)) {
+      const oldRanks = CLASSES.map(c => ch.order.indexOf(c)).sort((a, b) => a - b);
+      expect(oldRanks, `${key} original-class ranks`).toEqual([0, 1, 3, 5]);
+    }
+  });
+
+  it('so every original class keeps its exact pre-existing coefficient', () => {
+    // Spot-check the anchors the old tests pinned, plus a rank-#4 and rank-#7 case.
+    expect(channelCoef('hp', 'templar')).toBeCloseTo(11 * 1.20, 10);
+    expect(channelCoef('hp', 'warrior')).toBeCloseTo(11 * 1.00, 10);
+    expect(channelCoef('hp', 'rogue')).toBeCloseTo(11 * 0.78, 10);
+    expect(channelCoef('hp', 'mage')).toBeCloseTo(11 * 0.55, 10);
+    expect(channelCoef('basicDmg', 'warrior')).toBeCloseTo(ATTR_DMG_PER_POINT, 10);
+  });
+
+  it('gives every class a Spirit Veil multiplier', () => {
+    for (const cls of ALL_CLASSES) expect(typeof SHIELD.classMult[cls]).toBe('number');
+  });
+});
+
+describe('identity attributes across all seven classes', () => {
+  it('names an identity attribute for every class', () => {
+    for (const cls of ALL_CLASSES) expect(typeof CLASS_DMG_ATTR[cls]).toBe('string');
+  });
+
+  it('gives the Fortune-Seeker the Luck lane no other class mains', () => {
+    expect(classDamageAttr('fortune')).toBe('luck');
+    const luckMains = ALL_CLASSES.filter(c => classDamageAttrs(c).includes('luck'));
+    expect(luckMains).toEqual(['fortune']);
+  });
+
+  it('marks exactly the two hybrids as hybrid', () => {
+    expect(ALL_CLASSES.filter(isHybridClass)).toEqual(['windblade', 'bloodletter']);
+    expect(Object.keys(CLASS_DMG_ATTR2).sort()).toEqual(['bloodletter', 'windblade']);
+  });
+
+  it('returns one attribute for a pure class and two for a hybrid', () => {
+    expect(classDamageAttrs('warrior')).toEqual(['might']);
+    expect(classDamageAttrs('windblade')).toEqual(['agility', 'spirit']);
+    expect(classDamageAttrs('bloodletter')).toEqual(['might', 'vitality']);
+    expect(classDamageAttr2('warrior')).toBeNull();
+    expect(classDamageAttr2('bloodletter')).toBe('vitality');
+  });
+
+  it("a hybrid's two attributes are always distinct", () => {
+    for (const cls of Object.keys(CLASS_DMG_ATTR2)) {
+      expect(CLASS_DMG_ATTR2[cls]).not.toBe(CLASS_DMG_ATTR[cls]);
+    }
+  });
+
+  it('charges hybrids the lower per-point rate', () => {
+    expect(classDmgPerPoint('warrior')).toBe(ATTR_DMG_PER_POINT);
+    expect(classDmgPerPoint('fortune')).toBe(ATTR_DMG_PER_POINT);
+    expect(classDmgPerPoint('windblade')).toBe(ATTR_DMG_PER_POINT_HYBRID);
+    expect(ATTR_DMG_PER_POINT_HYBRID).toBeLessThan(ATTR_DMG_PER_POINT);
+  });
+});
+
+describe('skillAttrPower', () => {
+  const totals = { might: 40, agility: 30, vitality: 20, spirit: 10, luck: 50 };
+  const get = a => totals[a] || 0;
+
+  it('matches the pure single-attribute formula for a pure class', () => {
+    expect(skillAttrPower(get, 'warrior')).toBeCloseTo(40 * ATTR_DMG_PER_POINT, 10);
+    expect(skillAttrPower(get, 'fortune')).toBeCloseTo(50 * ATTR_DMG_PER_POINT, 10);
+    expect(skillAttrPower(get, 'rogue')).toBeCloseTo(attrDamageFor(30, 'rogue'), 10);
+  });
+
+  it('sums BOTH attributes at the hybrid rate for a hybrid class', () => {
+    expect(skillAttrPower(get, 'windblade')).toBeCloseTo((30 + 10) * ATTR_DMG_PER_POINT_HYBRID, 10);
+    expect(skillAttrPower(get, 'bloodletter')).toBeCloseTo((40 + 20) * ATTR_DMG_PER_POINT_HYBRID, 10);
+  });
+
+  it('values a point in either hybrid attribute identically (no dump-stat skew)', () => {
+    const base = skillAttrPower(get, 'bloodletter');
+    const plusMight = skillAttrPower(a => get(a) + (a === 'might' ? 1 : 0), 'bloodletter');
+    const plusVit = skillAttrPower(a => get(a) + (a === 'vitality' ? 1 : 0), 'bloodletter');
+    expect(plusMight - base).toBeCloseTo(plusVit - base, 10);
+  });
+
+  it('treats negative and missing attributes as zero', () => {
+    expect(skillAttrPower(() => -100, 'warrior')).toBe(0);
+    expect(skillAttrPower(() => undefined, 'windblade')).toBe(0);
+  });
+
+  it('falls back to the Might lane for a classless hero', () => {
+    expect(skillAttrPower(get, undefined)).toBeCloseTo(40 * ATTR_DMG_PER_POINT, 10);
+  });
+});
+
+describe('skillAttrCoef', () => {
+  it('pays out only for a class identity attribute', () => {
+    expect(skillAttrCoef('might', 'warrior')).toBe(ATTR_DMG_PER_POINT);
+    expect(skillAttrCoef('luck', 'warrior')).toBe(0);
+    expect(skillAttrCoef('spirit', 'windblade')).toBe(ATTR_DMG_PER_POINT_HYBRID);
+    expect(skillAttrCoef('agility', 'windblade')).toBe(ATTR_DMG_PER_POINT_HYBRID);
+    expect(skillAttrCoef('vitality', 'windblade')).toBe(0);
+  });
+
+  it('agrees with skillAttrPower for a single point', () => {
+    for (const cls of ALL_CLASSES) {
+      for (const attr of ['might', 'agility', 'vitality', 'spirit', 'luck']) {
+        const one = skillAttrPower(a => (a === attr ? 1 : 0), cls);
+        expect(one, `${cls}/${attr}`).toBeCloseTo(skillAttrCoef(attr, cls), 10);
+      }
+    }
   });
 });

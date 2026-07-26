@@ -59,7 +59,7 @@
       <div class="bar-track"><div class="bar-shield-under" id="hp-shield-under" style="width:0"></div><div class="bar-pending hp-pending" id="hp-pending"></div><div class="bar-fill hp-fill" id="hp-bar" style="width:100%"></div><div class="bar-shield" id="hp-shield" style="width:0"></div></div>
       <span id="hp-text" style="font-size:1.2rem">100</span><span id="hp-shield-text" class="shield-text"></span>
     </div>
-    <div class="stat-bar" data-tip="<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana (MP)</div><div class='ht-line'>Spent to cast class skills and spells. Regenerates slowly over time and partly recovers when you level up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+    <div class="stat-bar" id="mp-stat-bar" data-tip="<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana (MP)</div><div class='ht-line'>Spent to cast class skills and spells. Regenerates slowly over time and partly recovers when you level up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
       <span style="color:var(--mp);font-size:1.3rem;font-weight:bold;text-shadow:0 0 5px var(--mp)">MP</span>
       <div class="bar-track"><div class="bar-pending mp-pending" id="mp-pending"></div><div class="bar-fill mp-fill" id="mp-bar" style="width:100%"></div></div>
       <span id="mp-text" style="font-size:1.2rem">60/60</span>
@@ -142,7 +142,7 @@
             <span class="dh-end-val" id="dh-end-val">100/100</span>
           </div>
         </div>
-        <div class="dh-vital dh-mp" data-tip="<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana (MP)</div><div class='ht-line'>Spent to cast class skills and spells. Regenerates slowly over time and partly recovers when you level up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
+        <div class="dh-vital dh-mp" id="dh-mp-vital" data-tip="<div class='ht-name' style='color:var(--mp)'><span data-spr=ui_mp></span> Mana (MP)</div><div class='ht-line'>Spent to cast class skills and spells. Regenerates slowly over time and partly recovers when you level up.</div>" onmouseenter="showHoverTip(event,this)" onmouseleave="hideHoverTip()">
           <div class="dh-vital-track"><div class="dh-vital-pending mp" id="dh-mp-pending"></div><div class="dh-vital-fill mp" id="dh-mp-fill"></div><span class="dh-vital-val" id="dh-mp-val">60/60</span></div>
           <span class="dh-vital-tag">MP</span>
         </div>

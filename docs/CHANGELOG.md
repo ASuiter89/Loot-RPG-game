@@ -8,6 +8,52 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — three new classes; the mercenary system removed
+
+- 📦 `src/data/attributeScaling.js` grows from a 4-rank to a 7-rank
+  `CLASS_SCALE_LADDER`. The three new classes INTERLEAVE at ranks #3/#5/#7 so the
+  four original classes stay at #1/#2/#4/#6 — whose ladder values are exactly the
+  old `[1.20, 1.00, 0.78, 0.55]`. Adding a class therefore re-tuned **nothing**;
+  `test/systems/attributeScaling.test.js` pins that invariant per channel.
+- 📦 New `CLASS_DMG_ATTR2` + `ATTR_DMG_PER_POINT_HYBRID` model a HYBRID class whose
+  skills scale off the SUM of two attributes at a lower per-point rate (so a point in
+  either is worth the same and there is no dump-stat skew). `src/systems/attributeScaling.js`
+  gains the pure `classDamageAttr2`, `classDamageAttrs`, `isHybridClass`,
+  `classDmgPerPoint`, `skillAttrPower` and `skillAttrCoef`; the shell's
+  `skillAttrDamage` / `physModelAttrDamage` / `attrPowerAxes` route through them
+  instead of re-deriving the single-attribute case inline.
+- 🧪 `src/legacy/game.js` gains the three classes: `CLASSES`, `CLASS_DMG_DEALT`/
+  `CLASS_DMG_TAKEN`, the innate-passive one-liners, `SKILL_TREES` (30 passives +
+  30 actives each, 180 nodes), six `ASCENSIONS`, `SKILL_BRANCHES`/`SKILL_BRANCH_DESC`
+  and `lastStandLog` lines. Node ids keep the `<letter>_<p|a><band><branch>` shape
+  (`f_`/`z_`/`l_`) that `tools/skill-icons/skills.mjs` parses icon keys out of.
+- 🧪 NO-MANA classes: new `CLASS_NO_MANA` / `classNoMana` / `paysSkillsInLife` /
+  `skillLifeCost`, generalizing the existing Blood Pact life-cost path.
+  `baseMaxMp()` returns 0, both MP HUD rows and the mana flask hide, the hero sheet
+  drops its mana rows, and a single `canAffordSkill` predicate now backs the skill
+  bar, the tooltips and `gameState().skills[].ready` so they cannot disagree with
+  `castSkillById`. A no-mana cast costs a SHARE of max HP, so it keeps mattering at
+  depth; it can never be lethal and never interrupts the Spirit Veil window.
+- 📦 Hero walk art accepts SINGLE-ROW (front-facing) strips: `HERO_STRIP_ART` +
+  `_mkStripSheet` mark a sheet `_rows: 1`, and `drawHeroWalk`/`heroWalkIcon` clamp to
+  row 0. The three new classes reuse the former mercenary walk strips; swapping in
+  full 4-direction art later needs no draw-code change.
+- 🗑️ The Sellsword keeper and the whole mercenary system are removed:
+  `src/data/mercenaries.js`, `src/systems/mercPricing.js` and their tests are
+  deleted, along with `spawnMerc`/`openMercCamp`/`renderMercCamp`/`hireMerc`, the
+  `.merc-card` CSS one-off, the town roster entry and the wiki/guide copy.
+  `TOWN_SERVICE_ARRIVALS` renumbers so the keeper ladder stays contiguous.
+- 🧪 New `test/data/classRoster.test.js` — the first coverage the class trees and the
+  per-class `ASCENSIONS` have ever had. It parses the monolith as text (the
+  `test/systems/vfx.test.js` pattern) and asserts unique node ids, resolvable
+  same-tree prerequisites, packed `@ks` keystone tiles, per-class branch tables, and
+  that the three new classes stay summon-free (one sprite on screen each).
+- 🧪 New `test/smoke/new-classes.mjs` (wired into `npm run smoke`) drives the real
+  built game: the picker offers all seven, each tree renders and its roots are
+  learnable, Luck moves Fortune-Seeker skill damage, both Windblade attributes pay
+  equally, and the Bloodletter's cast spends health in proportion to max HP and is
+  refused rather than lethal at 1 HP.
+
 ## Feature — music-style picker is multi-select
 
 - 📦 New leaf `src/systems/musicVibe.js`: pure selection math over an injected rng —

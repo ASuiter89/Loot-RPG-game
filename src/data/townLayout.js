@@ -57,7 +57,6 @@ export const TOWN_NPCS = [
   { x: 24, y: 14, kind: 'bounty', name: 'Bounty Board' },
   { x: 4, y: 16, kind: 'transmuter', name: 'Transmuter' },
   { x: 20, y: 16, kind: 'enchanter', name: 'Enchanter' },
-  { x: 12, y: 17, kind: 'sellsword', name: 'Sellsword' },
 ];
 
 // Worn dirt trails (list of tiles). Everything else interior is grass. Rendered as
@@ -122,16 +121,16 @@ export const TOWN_DECOR = [
 //   3 Merchant · 4 Vault   — the other essentials (boss floors 15–20)
 //   5 Ramen House · 6 Prospector · 7 Trainer
 //   8 Gambler · 9 Enchanter · 10 Bounty Board
-//   11 Transmuter · 12 Sellsword
-//   13 Ascendant Weave · 14 Cycles · 15 Hall of Deeds   — endgame sanctum
-//   16 Covenant Altar · 17 Mirrorforge · 18 Pantheon    — the deepest keepers
+//   11 Transmuter
+//   12 Ascendant Weave · 13 Cycles · 14 Hall of Deeds   — endgame sanctum
+//   15 Covenant Altar · 16 Mirrorforge · 17 Pantheon    — the deepest keepers
 export const TOWN_SERVICE_ARRIVALS = {
   healer: 1, forge: 1, merchant: 3, stash: 4,
   ramen: 5, prospector: 6, trainer: 7,
   gambler: 8, enchanter: 9, bounty: 10,
-  transmuter: 11, sellsword: 12,
-  weave: 13, cycles: 14, deeds: 15,
-  covenants: 16, mirrorforge: 17, pantheon: 18,
+  transmuter: 11,
+  weave: 12, cycles: 13, deeds: 14,
+  covenants: 15, mirrorforge: 16, pantheon: 17,
 };
 
 // The late-game keepers who gather in the hedged ENDGAME SANCTUM (top-left grove).

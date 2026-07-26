@@ -14,9 +14,14 @@ describe('hero silhouette tints', () => {
     expect(heroSilhouetteTint('rogue')).toBe(HERO_SILHOUETTE_TINT.rogue);
   });
 
-  it('covers exactly the four playable classes', () => {
+  it('covers exactly the seven playable classes', () => {
     expect(Object.keys(HERO_SILHOUETTE_TINT).sort())
-      .toEqual(['mage', 'rogue', 'templar', 'warrior']);
+      .toEqual(['bloodletter', 'fortune', 'mage', 'rogue', 'templar', 'warrior', 'windblade']);
+  });
+
+  it('gives every class a DISTINCT tint, so a hidden hero always reads as itself', () => {
+    const tints = Object.values(HERO_SILHOUETTE_TINT);
+    expect(new Set(tints).size).toBe(tints.length);
   });
 
   it('falls back to the default tint for an unknown or absent class', () => {
