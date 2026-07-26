@@ -36,6 +36,7 @@ import { defaultShrineBuffs, shrineFxFrom, activeShrineBuffs, pickShrineKind, sh
 import { creditInitials } from '../systems/credit.js';
 import { savedOnShore, hasStarterGift } from '../systems/tutorialResume.js';
 import { deathRoute } from '../systems/shoreDeath.js';
+import { shouldTeachFirstSpell, activeGateKind } from '../systems/tutorialGates.js';
 import { restockCost } from '../systems/restockCost.js';
 import { unseenLootCount } from '../systems/lootSeen.js';
 import { hasVaultKey, addVaultKey, spendVaultKey } from '../systems/vaultKeys.js';
@@ -8348,7 +8349,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the FIRST hit you take pops a one-time nudge naming the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice. DYING there doesn't skip it either, and costs nothing: no gold or XP is taken and your bag is never dropped as a grave — the shore simply rebuilds the same way and you wake at the water's edge at full HP/MP/Stamina (gameState().shore stays true; you never see town). The Hardcore exception still applies — one life is one life, beach included.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the FIRST hit you take pops a one-time nudge naming the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. Spending that point on an ACTIVE arms one more lesson right there on the sand: the first cast that actually burns MANA pauses the world and spotlights the Mana Potion (${key('manaPotion')}) until you quaff — the beach beats take the screen first, so it simply waits its turn if a Health-Potion or equip gate is still up. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice. DYING there doesn't skip it either, and costs nothing: no gold or XP is taken and your bag is never dropped as a grave — the shore simply rebuilds the same way and you wake at the water's edge at full HP/MP/Stamina (gameState().shore stays true; you never see town). The Hardcore exception still applies — one life is one life, beach included.`,
       `Opening-floor content pacing (Normal, floors 1–25): the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. DIFFICULTY ARC — a fresh hero's flat attribute damage would otherwise one-shot floor-1 trash, so over floors 1–5 the real numbers bend to make kills take a few blows ORGANICALLY (no per-hit cap): foes carry extra HP and the hero deals less, both easing to full strength by floor 6 as your levels and gear take over — "weak at the start, then earn your strength". Because those fights last longer, foes land more of their (full-strength) hits, so the opening actually threatens. No glowing ELITES or elite affixes until floor 4 (the one scripted beach elite aside). Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -12855,21 +12856,23 @@ let _tutGate = null;               // { kind: 'potion' | 'equip' | 'mana' } or n
 let _manaGateWanted = false;       // the first-spell Mana-Potion beat is pending
 const TUT_GATE_PAD = 8;            // px of breathing room the lit hole leaves around a target
 
-// Which gate (if any) should be up right now. Priority: the standalone first-spell
-// mana beat, then the beach first-hit and equip beats (mana can't collide with them
-// in practice — the shore hands out no spells). null = no gate.
+// Which gate (if any) should be up right now — the beach first-hit and equip beats
+// first, then the first-spell mana beat (see systems/tutorialGates.js for the
+// ordering and why). null = no gate.
 function activeTutGateKind() {
   // The death card owns the screen while it is up — a shore death respawns the hero
   // still holding an unequipped starter weapon, and stacking the equip spotlight
   // (its own dim layer + banner) under the card gives two competing instructions.
   // closeDeath() reconciles the cue, so the gate simply waits its turn.
   const death = document.getElementById('death-overlay');
-  if (death && death.classList.contains('open')) return null;
-  if (_manaGateWanted && player.mp < player.maxMp) return 'mana';
-  if (!tutorialActive) return null;
-  if (_beachPotionCueOn) return 'potion';
-  if (beachEquipCueOn()) return 'equip';
-  return null;
+  return activeGateKind({
+    deathCardOpen: !!(death && death.classList.contains('open')),
+    onShore: tutorialActive,
+    potionCueOn: _beachPotionCueOn,
+    equipCueOn: beachEquipCueOn(),
+    manaWanted: _manaGateWanted,
+    mp: player.mp, maxMp: player.maxMp,
+  });
 }
 // Is the loot drawer actually on screen (the Bag sheet on touch, the always-present
 // sidebar on desktop)? Drives the equip beat's two-step target (Bag button → list).
@@ -12999,16 +13002,16 @@ function syncTutGate() {
   if (kind) openTutGate(kind); else closeTutGate();
 }
 // First-spell teach: the very first time a Guided hero casts a mana-costing spell —
-// AFTER graduating the beach — pause and spotlight the Mana Potion so they learn to
-// refill. The beach already teaches Health-Potion + equip; the mana lesson lands on a
-// real floor once they can cast, so it gates on tutorialDone (which also keeps it off
-// the synthetic mid-game heroes the smoke harnesses boot straight into the dungeon).
-// Latched once ever in player.taught; only arms when there's mana to restore (a bare
-// cast just spent some), so the flask the gate points at is usable.
+// on the BEACH or on a real floor — pause and spotlight the Mana Potion so they learn
+// to refill. The shore does hand out castable spells: clearing it is the first
+// level-up, and the cave stays shut until that skill point is spent, so the lesson has
+// to land wherever the mana is actually burned. Latched once ever in player.taught;
+// only arms when there's mana to restore, so the flask the gate points at is usable.
 function maybeTeachFirstSpell() {
-  if (!player.guided || !player.tutorialDone) return;
-  if (player.taught && player.taught.firstSpell) return;
-  if (inTown || player.mp >= player.maxMp) return;   // nothing to teach yet — a later cast will
+  if (!shouldTeachFirstSpell({
+    guided: player.guided, taught: player.taught,
+    inTown, mp: player.mp, maxMp: player.maxMp,
+  })) return;
   if (!player.taught) player.taught = {};
   player.taught.firstSpell = true;
   _manaGateWanted = true;
