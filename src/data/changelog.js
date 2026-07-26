@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-25", size: "small", v: "Shrine name label lingers long enough to read", by: "Jeff Louie", notes: [
+    "Shrine boon label (\"Fortune\", \"Blood\", …) holds ~2.4s (was 0.8s) — long enough to read.",
+  ] },
   { date: "2026-07-25", size: "small", v: "Total time played survives deleted heroes", by: "Jeff Louie", notes: [
     "History total reads a durable, account-wide lifetime counter — not a sum of surviving heroes; won't drop when a hero's deleted, a slot's reused, or a device's data clears.",
     "Tallies every device and syncs; seeds once from your current total.",

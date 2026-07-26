@@ -20293,12 +20293,13 @@ function drawMonsterArrows(offX, offY, tw, th, W, H) {
   }
 }
 
-function spawnFloatingText(x, y, text, color, size, coin) {
+function spawnFloatingText(x, y, text, color, size, coin, duration) {
   // Canvas floating text can't host sprite spans, so just strip any emoji — the
   // number/word stays. (No emoji anywhere.) `size` scales the font (>1 = a big,
   // bold pop, used for crit / rampage damage numbers). `coin` draws the gold-coin
   // sprite to the left of the text so gold floaters read as "coin + amount", to
-  // match the HUD/menus instead of a trailing "g".
+  // match the HUD/menus instead of a trailing "g". `duration` (ms) overrides the
+  // 800ms default — word labels (shrine names) need longer to actually be read.
   // Big pop-up numbers (a deep-floor crit, a fat gold drop) would splash the tile
   // with a wall of digits, so abbreviate any 1000+ run the same way the HUD and
   // skill tooltips do (15230 → 15.2k). Labels, small numbers and prefixes like
@@ -20314,7 +20315,7 @@ function spawnFloatingText(x, y, text, color, size, coin) {
   for (const ft of floatingTexts) {
     if (now - ft.start < 350 && Math.abs(ft.x - x) < 1.1) stack++;
   }
-  floatingTexts.push({ x, y: y - stack * 0.5, text, color, start: now, duration: 800, size: size || 1, coin: !!coin });
+  floatingTexts.push({ x, y: y - stack * 0.5, text, color, start: now, duration: duration || 800, size: size || 1, coin: !!coin });
   // Safety net: never let a big burst wall the screen with text.
   if (floatingTexts.length > 16) floatingTexts.splice(0, floatingTexts.length - 16);
 }
@@ -22260,9 +22261,10 @@ function activateShrine(nx, ny) {
   }
   // Terse floating label over the hero naming the boon just received ("Fortune",
   // "Leech", …), in the kind's distinct rarity-spectrum tint — quick visual
-  // confirmation of WHICH shrine fired without reading the combat log.
+  // confirmation of WHICH shrine fired without reading the combat log. Held on
+  // screen ~3× a damage number (a word takes longer to read than a digit).
   const sd = SHRINE_DEFS[kind];
-  if (sd) spawnFloatingText(player.x, player.y, shrineShortName(sd.name), sd.tint || PALETTE.text, 1.15);
+  if (sd) spawnFloatingText(player.x, player.y, shrineShortName(sd.name), sd.tint || PALETTE.text, 1.15, false, 2400);
   updateBars();
   // Real-time: the world clock owns enemy/quest cadence — just persist the boon.
   saveGame();
