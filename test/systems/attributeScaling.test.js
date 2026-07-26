@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  channelCoef, classDamageAttr, attrDamageFor,
+  channelCoef, classDamageAttr, attrDamageFor, basicAttrDamage,
   shieldMax, spiritVeilMult, shieldPerSpiritPoint,
   shieldRechargePerSec, shieldRechargeDelay, healAmount,
   ATTR_DMG_PER_POINT,
@@ -26,6 +26,10 @@ describe('channelCoef', () => {
   });
 
   it('honours the requested best→worst orderings', () => {
+    // Might→basic (auto) attack damage: warrior best, then rogue, templar, mage.
+    expect(channelCoef('basicDmg', 'warrior')).toBeGreaterThan(channelCoef('basicDmg', 'rogue'));
+    expect(channelCoef('basicDmg', 'rogue')).toBeGreaterThan(channelCoef('basicDmg', 'templar'));
+    expect(channelCoef('basicDmg', 'templar')).toBeGreaterThan(channelCoef('basicDmg', 'mage'));
     // Might→Def: warrior best, mage worst.
     expect(channelCoef('def', 'warrior')).toBeGreaterThan(channelCoef('def', 'templar'));
     expect(channelCoef('def', 'templar')).toBeGreaterThan(channelCoef('def', 'rogue'));
@@ -54,6 +58,11 @@ describe('channelCoef', () => {
     expect(channelCoef('hp', 'warrior')).toBeCloseTo(11, 10);
   });
 
+  it('pins the top basicDmg class (Warrior) to ATTR_DMG_PER_POINT so it is unchanged', () => {
+    // Warrior mained Might for damage already; keep it behaviour-identical.
+    expect(channelCoef('basicDmg', 'warrior')).toBeCloseTo(ATTR_DMG_PER_POINT, 10);
+  });
+
   it('falls back to the base coefficient for a classless/unknown hero', () => {
     expect(channelCoef('hp', undefined)).toBeCloseTo(ATTR_STAT_CHANNELS.hp.base, 10);
     expect(channelCoef('hp', 'necromancer')).toBeCloseTo(ATTR_STAT_CHANNELS.hp.base, 10);
@@ -61,7 +70,7 @@ describe('channelCoef', () => {
 });
 
 describe('classDamageAttr', () => {
-  it('maps each class to its single damage attribute', () => {
+  it('maps each class to its skill/spell identity attribute', () => {
     expect(classDamageAttr('warrior')).toBe('might');
     expect(classDamageAttr('rogue')).toBe('agility');
     expect(classDamageAttr('mage')).toBe('spirit');
@@ -85,6 +94,29 @@ describe('attrDamageFor', () => {
   });
   it('accepts a per-point override', () => {
     expect(attrDamageFor(10, 'mage', 3)).toBe(30);
+  });
+});
+
+describe('basicAttrDamage', () => {
+  it('is Might × the class-scaled basicDmg coefficient', () => {
+    for (const c of CLASSES) {
+      expect(basicAttrDamage(20, c)).toBeCloseTo(20 * channelCoef('basicDmg', c), 10);
+    }
+  });
+  it('gives the Warrior the most basic-attack damage per Might point, Mage the least', () => {
+    const might = 50;
+    expect(basicAttrDamage(might, 'warrior')).toBeGreaterThan(basicAttrDamage(might, 'rogue'));
+    expect(basicAttrDamage(might, 'rogue')).toBeGreaterThan(basicAttrDamage(might, 'templar'));
+    expect(basicAttrDamage(might, 'templar')).toBeGreaterThan(basicAttrDamage(might, 'mage'));
+  });
+  it('matches the old flat per-point (2.6) for a Warrior — behaviour-identical', () => {
+    expect(basicAttrDamage(30, 'warrior')).toBeCloseTo(30 * ATTR_DMG_PER_POINT, 6);
+  });
+  it('never goes negative', () => {
+    expect(basicAttrDamage(-5, 'warrior')).toBe(0);
+  });
+  it('falls back to the base coefficient for a classless hero', () => {
+    expect(basicAttrDamage(10, undefined)).toBeCloseTo(10 * (ATTR_DMG_PER_POINT / CLASS_SCALE_LADDER[0]), 6);
   });
 });
 

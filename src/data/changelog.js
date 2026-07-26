@@ -10,6 +10,9 @@ export const CHANGELOG = [
   { date: "2026-07-25", size: "small", v: "Total time played survives deleted heroes", by: "Jeff Louie", notes: [
     "History total reads a durable, account-wide lifetime counter — not a sum of surviving heroes; won't drop when a hero's deleted, a slot's reused, or a device's data clears.",
     "Tallies every device and syncs; seeds once from your current total.",
+  { date: "2026-07-25", size: "medium", v: "Might drives basic attack damage", by: "Jeff Louie", notes: [
+    "Basic (auto) attacks scale off Might for all classes — Warrior most, Mage least; skills keep your class attribute.",
+    "Accuracy moved off Agility onto Might; Agility now pure evasion + move & attack speed.",
   ] },
   { date: "2026-07-25", size: "small", v: "Merchant capped at rarity you've found", by: "Jeff Louie", notes: [
     "Merchant never stocks a colour above your highest found rarity — no blue before your first blue, no purple before your first purple.",
