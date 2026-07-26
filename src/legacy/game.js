@@ -24,6 +24,7 @@ import { telegraphPhase, telegraphFill, telegraphDanger, stepTelegraph,
 import { offscreenArrows, tileOnScreen } from '../systems/offscreenArrows.js';
 import { PORTAL_FX, chargeProgress, portalFrame, portalDone } from '../systems/portalFx.js';
 import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.js';
+import { portalChannelStep } from '../systems/portalChannel.js';
 import { footprintSealsPath, footprintInsideRoom, isThroughCorridor } from '../systems/decorPlacement.js';
 import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach.js';
 import { footprintReach } from '../systems/meleeReach.js';
@@ -13541,11 +13542,16 @@ function buyPact(i, floors) {
 // pack is actively wailing on you.
 let portalCharge = 0;                 // real seconds of channel left before the gate opens; 0 = idle
 let portalTimer = null;               // setTimeout handle driving the real-time channel
+// Did a foe/hazard blow LAND on the hero during this tick's enemy phase — even one a
+// shield (Spirit Veil, barrier buff, mana shield) fully soaked? Set in takePlayerDamage,
+// reset each tick right before the enemy phase (see worldTick), read by tickPortalChannel:
+// a landed blow shatters a half-formed portal whether or not it actually cost HP.
+let portalStruck = false;
 const PORTAL_CHANNEL_SECS = 3;        // clean real seconds needed to fully open the portal
 function portalChanneling() { return portalCharge > 0; }
 function clearPortalTimer() { if (portalTimer) { clearTimeout(portalTimer); portalTimer = null; } }
 // Wipe the channel outright (floor change, death, leaving to town) with no fanfare.
-function resetPortal() { portalCharge = 0; clearPortalTimer(); }
+function resetPortal() { portalCharge = 0; portalStruck = false; clearPortalTimer(); }
 // Collapse an in-progress channel, with a reason for the log.
 function cancelPortalChannel(reason) {
   if (portalCharge <= 0 && !portalTimer) return;
@@ -13669,20 +13675,30 @@ function portalTick() {}
 
 // Count the channel down in real seconds on the world clock. Called from worldTick
 // AFTER the hero's own upkeep (status/regen) and the enemies have acted:
-// `hpBeforeEnemies` is the HP going into the foe/hazard phase, so only an enemy blow
-// (not the hero's own poison/burn) shatters the gate — matching the old break rule.
+// `hpBeforeEnemies` is the HP going into the foe/hazard phase, so only a foe/hazard
+// blow (not the hero's own poison/burn) shatters the gate. The break fires on any
+// LANDED blow (`portalStruck`), not just HP loss — a hit a shield fully soaks still
+// collapses the portal. The pure decision lives in systems/portalChannel.js.
 function tickPortalChannel(hpBeforeEnemies) {
   if (portalCharge <= 0) return;
-  if (player.hp <= 0) { resetPortal(); return; }     // a killing blow — death takes over
-  if (player.hp < hpBeforeEnemies) { cancelPortalChannel('💥 A blow shatters your half-formed town portal!'); return; }
   const before = Math.ceil(portalCharge);
-  portalCharge -= WORLD_TICK_SECONDS;
-  // Channel done: kick off the fade-out + beam-up. The actual warp to town waits
-  // for that animation to finish (updatePortalFx), so the floor stays on screen.
-  if (portalCharge <= 0) { resetPortal(); beginPortalDeparture(); return; }
-  const left = Math.ceil(portalCharge);
-  if (left !== before) log(`<span data-spr=feat_gate_red></span> Town portal — ${left}s to go.`);
-  updateBars(); renderSkillBar();
+  const res = portalChannelStep({
+    charge: portalCharge, hpBefore: hpBeforeEnemies, hpNow: player.hp,
+    struck: portalStruck, tickSecs: WORLD_TICK_SECONDS,
+  });
+  switch (res.action) {
+    case 'death':   resetPortal(); return;              // a killing blow — death takes over
+    case 'shatter': cancelPortalChannel('💥 A blow shatters your half-formed town portal!'); return;
+    // Channel done: kick off the fade-out + beam-up. The actual warp to town waits
+    // for that animation to finish (updatePortalFx), so the floor stays on screen.
+    case 'open':    resetPortal(); beginPortalDeparture(); return;
+    default: {      // 'tick' — still charging
+      portalCharge = res.charge;
+      const left = Math.ceil(portalCharge);
+      if (left !== before) log(`<span data-spr=feat_gate_red></span> Town portal — ${left}s to go.`);
+      updateBars(); renderSkillBar();
+    }
+  }
 }
 
 // ── HELD FLOOR (leave-and-return-to-the-same-stage) ──
@@ -23669,6 +23685,11 @@ function absorbWithVeil(dmg) {
 function takePlayerDamage(dmg, label, { lethal = true, isDoT = false } = {}) {
   dmg = Math.max(0, Math.round(dmg || 0));
   if (dmg <= 0) return 0;
+  // A landed blow shatters a channeling town portal even if a shield eats all of it
+  // — the flag is reset each tick before the enemy phase, so only foe/hazard blows
+  // (not the hero's own DoT upkeep, which runs before that reset) count. See
+  // tickPortalChannel / worldTick.
+  if (portalCharge > 0) portalStruck = true;
   if (_egCovMalaiseRate) dmg = Math.max(1, Math.round(dmg * egMalaiseNow()));   // Dread malaise: the floor grows deadlier the longer you linger
   player._noDmgSecs = 0;                 // any damage restarts the calm-before-recharge
   let rem = absorbWithShield(dmg);       // transient buff shield first
@@ -35947,6 +35968,7 @@ function worldTick() {
   tickStatusEffects();
   applyRegen();
   const hpBeforeEnemies = player.hp;   // only foe/hazard damage past here shatters a channel
+  portalStruck = false;                // clear the "blow landed" flag; only this tick's foe/hazard hits count
   // Allies, then foes, then hazards age — guarded against the floor being rebuilt
   // mid-pass (a death-warp or boss kill swaps the enemies array).
   runMinionTurn();

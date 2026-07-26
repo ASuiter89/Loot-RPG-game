@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-25", size: "small", v: "Any hit shatters a channeling town portal", by: "Jeff Louie", notes: [
+    "Town portal breaks on any landed blow mid-channel — even one a shield (Spirit Veil, barrier, mana shield) fully soaks; was: only HP loss.",
+  ] },
   { date: "2026-07-25", size: "small", v: "Total time played survives deleted heroes", by: "Jeff Louie", notes: [
     "History total reads a durable, account-wide lifetime counter — not a sum of surviving heroes; won't drop when a hero's deleted, a slot's reused, or a device's data clears.",
     "Tallies every device and syncs; seeds once from your current total.",
