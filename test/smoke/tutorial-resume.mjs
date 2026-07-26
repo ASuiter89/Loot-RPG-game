@@ -12,6 +12,9 @@
 //   2. reloading that save comes back to the SHORE — its pack of four identical foes
 //      plus one elite — not a generated dungeon floor;
 //   3. the slot list labels that hero "The Shore", not "Floor 1";
+//   3b. a mana-costing cast ON THE SHORE raises the Mana-Potion gate (the shore
+//      spends the hero's first skill point, so that first cast happens on the sand)
+//      and quaffing releases it;
 //   4. DYING on the shore respawns there, cost-free — a town revive would stamp the
 //      hero graduated and skip the tutorial just as surely as the reload bug did;
 //   5. the shore's world-pausing HEAL lesson waits for a real wound (Health at or
@@ -71,7 +74,7 @@ async function main() {
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 
   const failures = [];
-  let fresh = null, resumed = null, slotRow = null, shoreDeath = null, healBeat = null, descended = null, legacyBoot = null;
+  let fresh = null, resumed = null, slotRow = null, manaGate = null, shoreDeath = null, healBeat = null, descended = null, legacyBoot = null;
   try {
     // ── 1. A brand-new hero begins on the shore, and the save records it ──
     await page.goto(url, { waitUntil: 'load', timeout: 30000 });
@@ -132,6 +135,41 @@ async function main() {
       return txt.replace(/\s+/g, ' ').trim();
     });
     if (!/The Shore/.test(slotRow)) failures.push(`slot list does not label the mid-tutorial hero "The Shore" (got: ${slotRow.slice(0, 160)})`);
+
+    // ── 3b. The first cast that burns MANA raises the Mana-Potion gate — ON THE
+    //       SHORE. The beach hands out the hero's first skill point (clearing it is
+    //       the first level-up) and the cave won't open until it's spent, so a first
+    //       active — which auto-slots into auto-cast for a Guided hero — is learned
+    //       and fired right here on the sand. The lesson used to gate on tutorialDone
+    //       and so skipped the beach entirely: mana drained, nothing taught.
+    //       Brace (w_a00) is a SELF buff, so it fires with no foe in reach.
+    manaGate = await page.evaluate(() => {
+      window.player.skillPoints = 1;   // what clearing the shore grants
+      window.player.level = 2;
+      window.buySkill('w_a00');
+      const taughtBefore = !!(window.player.taught && window.player.taught.firstSpell);
+      const mpBefore = window.player.mp;
+      const fired = window.castSkillById('w_a00');
+      const gs = window.gameState();
+      const open = {
+        shore: gs.shore, mode: gs.mode, gate: gs.tutorial,
+        banner: ((document.getElementById('tg-msg') || {}).textContent || '').replace(/\s+/g, ' ').trim(),
+        gated: document.body.classList.contains('tut-gate-mana'),
+        taughtBefore, fired, mpBefore, mpAfter: window.player.mp,
+      };
+      window.useManaPotion();   // the taught action — the gate must let go
+      const after = window.gameState();
+      return { ...open, afterGate: after.tutorial, afterMode: after.mode,
+        afterGated: document.body.classList.contains('tut-gated') };
+    });
+    if (!manaGate.fired) failures.push('the shore hero could not cast the active it just learned');
+    if (manaGate.mpAfter >= manaGate.mpBefore) failures.push(`the cast spent no mana (${manaGate.mpBefore} → ${manaGate.mpAfter}) — nothing for the lesson to teach`);
+    // THE REGRESSION: burning mana on the beach used to teach nothing at all.
+    if (!manaGate.gate || manaGate.gate.kind !== 'mana') failures.push(`a mana-costing cast on the shore did not raise the Mana-Potion gate (gameState().tutorial=${JSON.stringify(manaGate.gate)})`);
+    if (!manaGate.gated) failures.push('the mana gate is missing its body class, so nothing is actually spotlit');
+    if (!/Mana/.test(manaGate.banner)) failures.push(`the mana gate banner does not name the Mana Potion: "${manaGate.banner}"`);
+    if (manaGate.afterGate || manaGate.afterGated) failures.push(`quaffing a Mana Potion did not release the gate (tutorial=${JSON.stringify(manaGate.afterGate)})`);
+    if (manaGate.afterMode === 'tutorial') failures.push('the world stayed paused after the mana lesson was learned');
 
     // ── 4. A death on the shore is a RETRY, not a run cut short ──
     //       A town revive ends the tutorial as surely as the reload bug did: a save
@@ -259,6 +297,11 @@ async function main() {
     console.log('tutorial-resume: fresh     ', JSON.stringify(fresh && { ...shapeOf(fresh.foes), savedTutorial: fresh.savedTutorial, savedFloor: fresh.savedFloor }));
     console.log('tutorial-resume: resumed   ', JSON.stringify(resumed && { ...shapeOf(resumed.foes), floor: resumed.floor, level: resumed.level, tutorialDone: resumed.tutorialDone }));
     console.log('tutorial-resume: slotRow   ', JSON.stringify((slotRow || '').slice(0, 120)));
+    console.log('tutorial-resume: manaGate  ', JSON.stringify(manaGate && {
+      shore: manaGate.shore, mp: `${manaGate.mpBefore}→${manaGate.mpAfter}`,
+      kind: manaGate.gate && manaGate.gate.kind, mode: manaGate.mode,
+      banner: manaGate.banner, afterQuaff: manaGate.afterGate,
+    }));
     console.log('tutorial-resume: shoreDeath', JSON.stringify(shoreDeath && {
       ...shapeOf(shoreDeath.foes), inTown: shoreDeath.inTown, shore: shoreDeath.shore,
       gold: shoreDeath.gold, bag: `${shoreDeath.bagBefore}→${shoreDeath.bag}`, grave: shoreDeath.grave,
