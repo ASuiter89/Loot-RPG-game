@@ -9,6 +9,13 @@
 export const CHANGELOG = [
   { date: "2026-07-25", size: "small", v: "PATH tab rings blue on an unspent ascendancy point", by: "Jeff Louie", notes: [
     "PATH sub-tab wears a light-blue wisp while you hold an unspent ascendancy point.",
+  { date: "2026-07-25", size: "small", v: "Total time played counts open time", by: "Jeff Louie", notes: [
+    "History total bills every foreground second — menus, planning, combat — not just active input; pauses when tab hidden.",
+    "Per-hero row time stays active-play only (the cross-device merge measure), so the header can read above the rows' sum.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Total time played survives deleted heroes", by: "Jeff Louie", notes: [
+    "History total reads a durable, account-wide lifetime counter — not a sum of surviving heroes; won't drop when a hero's deleted, a slot's reused, or a device's data clears.",
+    "Tallies every device and syncs; seeds once from your current total.",
   ] },
   { date: "2026-07-25", size: "small", v: "Mana Regen is now a gear stat; regen shows up early", by: "Jeff Louie", notes: [
     "New Mana Regen (MRG) affix — flat +MP/sec on helm/chest/legs/amulet/off-hand, stacks on Spirit's, halved in combat.",
