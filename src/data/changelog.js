@@ -12,6 +12,25 @@ export const CHANGELOG = [
     "First weapon and first level-up can't be skipped by a mid-tutorial reload.",
     "Save slot reads \"The Shore\" for a hero still on the beach (was \"Floor 1\").",
   ] },
+  { date: "2026-07-25", size: "large", v: "Season & Covenant rules now actually apply", by: "Jeff Louie", notes: [
+    "Season headline rule was advertised and never applied. XP, bounty payout, drop rarity tier and the season enemy affix all bite now.",
+    "Live season (Stormcrown, Volatile): +25% XP, drops roll one tier richer, foes burst on death.",
+    "Season affixes: Frenzied +25% foe attack speed; Armored +8% foe armor; Volatile corpses blast ~1.6 tiles (capped 12% max HP, never lethal).",
+    "Covenant healing debuff now scales every heal; rarity sweetener now scales every drop roll and its cap.",
+    "Covenant boss-point sweetener banks its fraction, paying a whole extra point each time it crosses 1.",
+    "A tier shift never grants a colour you haven't unlocked; un-enrolled and un-sworn heroes are untouched.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Skill costs read true", by: "Jeff Louie", notes: [
+    "Bar, tooltips and tree quote the cost AFTER Mana Cost Reduction — a castable skill no longer greys out as unaffordable.",
+    "Blood-casters (Bloodletter, Blood Pact) see their price in HP, not a mana number they have no pool for.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Auto-cast stops bleeding blood-casters dry", by: "Jeff Louie", notes: [
+    "Auto-cast keeps 50% max HP in reserve on a life-paid skill; it used to pin a Bloodletter at a sliver all floor.",
+    "Manual casts unchanged — spend to your last point if you want.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Death Knight resist profile", by: "Jeff Louie", notes: [
+    "Deep-roster Death Knight listed two resist profiles; the dead one is gone. Live values unchanged (phys 1.4, magic 1.2).",
+  ] },
   { date: "2026-07-25", size: "small", v: "Save Slots rows rebuilt around the hero", by: "Jeff Louie", notes: [
     "Each row leads with that hero walking in place at full row height.",
     "Dropped slot numbers and gold; row now reads Lv · deepest floor, then playtime · last save.",

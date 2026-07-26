@@ -176,7 +176,8 @@ export const ENEMY_RESIST = {
   kraken: { phys: 0.85, magic: 1.4 }, // caster leviathan, wards magic, fleshy to steel
   behemoth: { phys: 1.7, magic: 0.6 }, // colossal thick-hide brute, resists blows not spells
   leviathan: { phys: 1.6, magic: 0.65 }, // armored scaled sea-brute, weak to arcane
-  deathknight: { phys: 1.45, magic: 0.85 }, // heavy plate plus undead, leans physical-tough
+  // (deathknight is BOTH a deep-roster monster and a fixed boss — one shared type key,
+  //  so it carries ONE profile, listed with the bosses below.)
   dreadreaper: { phys: 0.6, magic: 1.7 }, // spectral death lurker, phases through steel
   voidtitan: { phys: 0.75, magic: 1.55 }, // body of void energy, soft to weapons
   // ── Bosses (keyed by BOSSES[].type, not the b_ sprite name). Tanky but never a
@@ -184,7 +185,7 @@ export const ENEMY_RESIST = {
   ratking: { phys: 1.15, magic: 0.95 }, // fleshy swarm — balanced, slight physical lean
   inferno: { phys: 0.8, magic: 1.4 }, // fire demon — blades find little, resists magic
   dragon: { phys: 1.45, magic: 1.05 }, // scaled brute — tough hide, moderate wards
-  deathknight: { phys: 1.4, magic: 1.2 }, // armored undead — heavy plate, strong wards
+  deathknight: { phys: 1.4, magic: 1.2 }, // armored undead — heavy plate, strong wards (also the deep-roster mob of the same type)
   allseer: { phys: 0.8, magic: 1.5 }, // eldritch caster — soft to steel, resists magic
   cindra: { phys: 0.75, magic: 1.45 }, // arcane weaver — frail body, potent magic wards
   emberbound: { phys: 0.9, magic: 1.35 }, // ashen fire warden — resists flame-magic, softer to steel

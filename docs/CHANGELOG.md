@@ -8,6 +8,51 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Fix — the run modifiers a hero opts into now actually apply
+
+- 📦 New `src/data/skillCosts.js` (`MIN_CAST_COST`, `LIFE_COST_PER_MP`,
+  `BLOOD_PRICE_MULT`, `AUTO_CAST_LIFE_RESERVE`) + `src/systems/skillCost.js`
+  (`castCost`, `lifeCost`, `canAfford`, `autoCastAffordsLife`, `costLabel`). The
+  price of a cast was computed in three places with three different answers — the
+  shell discounted the rank cost by Mana Cost Reduction, `gameState()` mirrored it,
+  and the HUD did not — so a hero with MCR read a price they weren't charged and saw
+  castable skills greyed out. The shell's `skillCastCost` / `skillBloodCost` /
+  `canAffordSkill` / `skillCostText` are thin wrappers over the pure module, and
+  every bar, tooltip, tree node and snapshot now reads through them.
+  `gameState().skills[i]` gains `hpCost` (the blood a life-caster pays; 0 otherwise).
+- 📦 New `src/data/seasonAffixes.js` + `src/systems/seasonAffix.js` — the
+  frenzied / volatile / armored modifiers a Cycle's headline rule names. The rule
+  table has always carried an `enemyAffix` knob; nothing resolved it, so the affix
+  was inert. `enemyAttackInterval` and `enemyArmorBase` now read it, and
+  `onEnemyDefeated` detonates a volatile corpse (non-lethal, capped at a share of
+  max HP, like every other hazard).
+- 🧪 `src/legacy/game.js`: the four remaining cycle hooks (`egCycleXp`,
+  `egCyclePayout`, the new `egCycleTierShift`, `egCycleEnemyAffix`) were **defined
+  and never called** — only `egCycleDensity` was wired — so four of the five
+  headline knobs did nothing. All XP grants now funnel through one `grantXp`; bounty
+  gold goes through `egCyclePayout`; `rollTier` shifts its rolled tier via
+  `seasonShiftTier` (never past a locked colour). `egCycleMod()` is memoized on
+  (live cycle | enrolment) so the hot paths don't re-resolve per call.
+- 🧪 Same for the covenants: `egCovHeal` was dead (the healing debuff applied
+  nowhere) and `egCovRarityMult` / `egCovBossPointMult` were only ever displayed.
+  Healing is now scaled in `queueHeal` + the instant branch of `applyHeal` (never
+  twice); rarity scales the per-tier chance and its cap in `rollTier`; and because a
+  boss point is DERIVED from the first-clear ledger, the boss-point multiplier banks
+  its fraction on `player.dreadBossPoints` (absent on old saves → 0) and pays a whole
+  point each time it crosses 1, read back through the new `bossPointsPool()`.
+- 🧪 `gameState().endgame.cycle` gains `cycleId`, `rule` and `applied` so an agent
+  can see which rule is live and the values it is actually applying.
+- 🧪 New `test/systems/skillCost.test.js`, `test/systems/seasonAffix.test.js`, and
+  `test/smoke/run-modifiers.mjs` (drives the real built game: enrol → every knob
+  moves; un-enrol → neutral; swear → healing docked and rarity up; MCR un-greys a
+  castable skill; a blood-caster's auto-cast holds its reserve).
+- 🧪 New `test/baseline/duplicate-keys.test.js` fails the suite on a duplicate object
+  key anywhere in `src/` (esbuild's `duplicate-object-key` warning). It caught two:
+  `src/data/enemyDefense.js` defined `deathknight` twice — the deep-roster mob's
+  tuned profile was dead, silently overridden by the boss row that shares its type
+  key — and the `gameGuide` alias map listed `stamina` twice. `esbuild` is now an
+  explicit devDependency (it was already present transitively via Vite).
+
 ## Feature — three new classes; the mercenary system removed
 
 - 📦 `src/data/attributeScaling.js` grows from a 4-rank to a 7-rank

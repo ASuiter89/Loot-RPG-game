@@ -57,6 +57,9 @@ import { channelCoef, classDamageAttr, classDamageAttr2, classDamageAttrs, isHyb
   ATTR_DMG_PER_POINT } from '../systems/attributeScaling.js';
 import { LUCK_FX } from '../data/attributeScaling.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
+import { castCost, lifeCost as castLifeCost, canAfford as canAffordCast,
+  autoCastAffordsLife, costLabel as castCostLabel } from '../systems/skillCost.js';
+import { AUTO_CAST_LIFE_RESERVE } from '../data/skillCosts.js';
 import { KILL_LOOT, killLootParams } from '../systems/bossLoot.js';
 import { pointsEarned } from '../systems/bossPoints.js';
 import { resistFraction, penFraction, mitigate, physicalShare } from '../systems/defense.js';
@@ -160,8 +163,13 @@ import { CYCLES } from '../data/cycles.js';
 import { CYCLE_MODIFIERS } from '../data/cycleModifiers.js';
 import { cycleById, isCycleLive, activeCycle, cycleJourneyProgress,
   cycleJourneyComplete, cycleRewardsEarned, cycleRankReward } from '../systems/cycles.js';
+// (applyLootTierShift stays in systems/cycleModifiers.js for a weight-array caller;
+//  the drop roll walks per-tier CHANCES, so the season shifts the rolled tier instead
+//  — see egCycleTierShift / seasonShiftTier.)
 import { resolveModifier as resolveCycleModifier, modifierEnemyAffix,
-  applyLootTierShift, applyPayoutMult, applyDensityMult, applyXpMult } from '../systems/cycleModifiers.js';
+  applyPayoutMult, applyDensityMult, applyXpMult } from '../systems/cycleModifiers.js';
+import { seasonAffixDef, seasonAtkSpeedMult, seasonArmorAdd,
+  seasonBurstRadius, seasonBurstDamage } from '../systems/seasonAffix.js';
 import { DEEDS } from '../data/deeds.js';
 import { RENOWN_TRACK } from '../data/renownTrack.js';
 import { TITLES, FRAMES, BADGES } from '../data/titles.js';
@@ -1773,7 +1781,10 @@ function dlIconTrimFill(name) {
   if (i === undefined || !spriteReady) return '';
   const box = _iconTrimBox(name);
   if (!box) return dlIconFill(name);   // fall back to a whole-tile fill until the alpha box is measurable
-  const aw = spriteSheet.naturalWidth || 256, ah = spriteSheet.naturalHeight || 144;
+  // Same pre-decode fallback the other atlas readers use (960×960). It disagreed
+  // (256×144) until this was fixed — three sizes for ONE sheet, so an icon drawn in
+  // the sliver before the atlas decodes was sliced off the wrong grid.
+  const aw = spriteSheet.naturalWidth || 960, ah = spriteSheet.naturalHeight || 960;
   const col = i % ATLAS_COLS, row = (i / ATLAS_COLS) | 0;
   const s = trimFillStyle(col * ATLAS_TS + box.x0, row * ATLAS_TS + box.y0, box.w, box.h, aw, ah);
   return `<span class="dl-ic dl-trimfill" style="aspect-ratio:${s.ar};` +
@@ -5075,29 +5086,46 @@ function classNoMana(cls) { return !!CLASS_NO_MANA[cls || player.class]; }
 // TRUE when the hero pays for skills in health rather than mana — either because the
 // class has no mana at all, or because they took the Blood Pact keystone.
 function paysSkillsInLife() { return classNoMana() || keystoneFlag('bloodpact'); }
+// ── WHAT A CAST COSTS ──
+// Every price in the game funnels through these four helpers, which wrap the pure
+// math in systems/skillCost.js. They take a skill's BASE (rank-scaled) mana number
+// and answer what is actually charged, so the skill bar, the tooltips, the primary
+// button, gameState() and castSkillById can never disagree — they used to, and a
+// hero with Mana Cost Reduction saw casts greyed out as unaffordable that would in
+// fact have fired.
+//
+// The mana a cast charges: the base cost after gear Mana Cost Reduction.
+function skillCastCost(baseMp) { return castCost(baseMp, totalStat('MCR')); }
 // A no-mana class charges each skill a SHARE OF MAX HP instead of a flat number, so
 // the price still stings at level 60 the way it did at level 5 — a flat cost would
 // fade to nothing as the health pool grows. `mpCost` is the skill's ordinary mana
 // price AFTER Mana Cost Reduction, so MCR gear discounts blood the same as mana.
 // (The Blood Pact keystone keeps charging the flat cost, so nothing about existing
 // Rogue/Mage/Templar blood-casters changes.)
-const LIFE_COST_PER_MP = 0.0045;   // fraction of max HP per point of a skill's mana cost
 function skillLifeCost(mpCost) {
-  const mult = keystoneFlag('bloodprice') ? 2 : 1;   // Blood Price keystone: double the toll
-  return Math.max(1, Math.round(player.maxHp * LIFE_COST_PER_MP * Math.max(0, mpCost) * mult));
+  return castLifeCost(player.maxHp, mpCost, keystoneFlag('bloodprice'));   // Blood Price keystone: double the toll
 }
-// Hemorrhage keystone: the health a cast just cost erupts outward as damage around
-// the hero, so the class's own price becomes its area clear.
+// The BLOOD a cast charges, or 0 for a hero who pays in mana. `baseMp` is the base
+// (pre-MCR) cost — the discount is applied here so callers only ever hold one number.
+function skillBloodCost(baseMp) {
+  if (!paysSkillsInLife()) return 0;
+  const cost = skillCastCost(baseMp);
+  if (!cost) return 0;
+  return classNoMana() ? skillLifeCost(cost) : cost;
+}
 // Can the hero currently AFFORD this skill's cost? Mana casts check the mana pool;
 // life casts (a no-mana class, or the Blood Pact keystone) check that spending the
 // health toll would leave them alive. One predicate so the skill bar, the tooltips
-// and the gameState() snapshot never disagree with castSkillById.
-function canAffordSkill(mpCost) {
-  const cost = Math.max(0, mpCost || 0);
-  if (!cost) return true;
-  if (!paysSkillsInLife()) return player.mp >= cost;
-  return player.hp > (classNoMana() ? skillLifeCost(cost) : cost);
+// and the gameState() snapshot never disagree with castSkillById. `baseMp` is the
+// skill's BASE cost — MCR is applied inside, so callers pass sk.mp directly.
+function canAffordSkill(baseMp) {
+  return canAffordCast({ hp: player.hp, mp: player.mp, cost: skillCastCost(baseMp), life: skillBloodCost(baseMp) });
 }
+// The price to PRINT for a skill — "18 HP" for a blood-caster, "31 MP" otherwise —
+// so a tooltip never quotes a number the cast doesn't charge.
+function skillCostText(baseMp) { return castCostLabel(skillCastCost(baseMp), skillBloodCost(baseMp)); }
+// Hemorrhage keystone: the health a cast just cost erupts outward as damage around
+// the hero, so the class's own price becomes its area clear.
 const HEMORRHAGE_RADIUS = 2, HEMORRHAGE_COEF = 1.6;
 function hemorrhageBurst(spent) {
   const dmg = Math.max(1, Math.round(spent * HEMORRHAGE_COEF));
@@ -6931,6 +6959,7 @@ let player = { x: 5, y: 5,
   // ── ENDGAME state (a fresh hero starts empty; loadGame() migrates old saves) ──
   covenantsActive: [],        // Dread Covenants sworn for the next descent
   dreadGrid: {},              // per-class "highest Dread cleared" checklist
+  dreadBossPoints: 0,         // banked FRACTIONAL boss points from the covenant sweetener
   weaveBoard: { nodes: {} },  // Ascendant Weave constellation allocations
   weaveDepthPoints: 0,        // cosmetic infinite Weave Depth (no power)
   aether: 0,                  // Mirrorforge deep material (hero-side)
@@ -7594,13 +7623,15 @@ window.gameState = function gameState(radius) {
     const baseMp = (node && typeof skillManaCost === 'function') ? skillManaCost(node, rank) : (node ? node.mp : null);
     // Match the real cast: Mana Cost Reduction divides the base cost (min 1), so the
     // reported mp — and the affordability check in `ready` — mirror what it will charge.
-    const mcr = (typeof totalStat === 'function') ? Math.max(0, totalStat('MCR')) : 0;
-    const mpCost = (baseMp == null) ? null : Math.max(1, Math.round(baseMp / (1 + mcr / 100)));
+    // `hpCost` is the blood a life-caster (Bloodletter / Blood Pact) pays instead; it
+    // is 0 for everyone else, and `mp` stays the mana figure the toll is priced from.
+    const mpCost = (baseMp == null) ? null : skillCastCost(baseMp);
+    const hpCost = (baseMp == null) ? 0 : skillBloodCost(baseMp);
     const c = node && node.cast;
     const o = {
       id, name: node ? node.name : id, rank,
-      mp: mpCost, cooldown: Math.round(cd * 10) / 10,
-      ready: cd <= 0 && (mpCost == null || canAffordSkill(mpCost)),
+      mp: mpCost, hpCost, cooldown: Math.round(cd * 10) / 10,
+      ready: cd <= 0 && (baseMp == null || canAffordSkill(baseMp)),
       // 'skill' (martial: scales with weapon + Skill Power) or 'spell' (magic:
       // scales with Spell Power; also sped by Cast Speed). Null for non-actives.
       school: (node && node.cast && typeof castKind === 'function') ? castKind(node) : null,
@@ -7954,7 +7985,7 @@ window.gameState = function gameState(radius) {
       pointsToSpend: { attribute: player.attrPoints || 0, skill: player.skillPoints || 0, ascendancy: player.ascPoints || 0 },
       // Boss Points earned = distinct boss floors first-cleared; spent on the Ascendant
       // Weave (gameState().endgame.weave reports the live board + points available).
-      bossPointsEarned: pointsEarned(player.bossFirstKills),
+      bossPointsEarned: bossPointsPool(),
       gold: player.gold,                 // coins in hand (what death loss is taken from)
       vaultGold: isSsf(player) ? 0 : ((stash && stash.gold) || 0),   // banked in the town Vault — safe from death (always 0 for an SSF hero: their vault is sealed)
       spendableGold: spendableGold(),    // carried + vault: what a town shop can actually charge (shortfall auto-drawn from the vault; carried only for SSF)
@@ -8114,7 +8145,7 @@ window.gameGuide = function gameGuide(topic) {
       `COMBAT-LOG COLOURS: the log tints the NUMBER by outcome so a fight reads at a glance — GOLD = damage YOU deal, RED = damage you TAKE, GREEN = HP you heal (the line text stays neutral otherwise). Loot-drop lines are green too, but only the +N on a heal line is; gold/XP keep the coin colour, mana its blue.`,
     ],
     healing: [
-      `PAYING FOR SKILLS IN LIFE. Two heroes spend HEALTH instead of mana: the BLOODLETTER, which has NO mana pool at all (maxMp is 0, the MP bar and the mana flask are hidden, and MP/MP-regen gear rolls are dead for it), and any class that takes the BLOOD PACT keystone. A Bloodletter's cast costs a SHARE OF MAX HP (~0.45% per point of the skill's listed cost), so the toll keeps mattering as the health pool grows; Blood Pact charges the flat mana number instead. Either way the cost is refused outright when it would not leave you alive — a self-inflicted cost NEVER kills you, and it never interrupts the Spirit Veil's recharge window the way real damage does. Mana Cost Reduction (MCR) discounts blood exactly as it discounts mana. gameState().player.maxMp === 0 identifies a no-mana hero, and gameState().skills[i].ready already accounts for the life cost.`,
+      `PAYING FOR SKILLS IN LIFE. Two heroes spend HEALTH instead of mana: the BLOODLETTER, which has NO mana pool at all (maxMp is 0, the MP bar and the mana flask are hidden, and MP/MP-regen gear rolls are dead for it), and any class that takes the BLOOD PACT keystone. A Bloodletter's cast costs a SHARE OF MAX HP (~0.45% per point of the skill's listed cost), so the toll keeps mattering as the health pool grows; Blood Pact charges the flat mana number instead. Either way the cost is refused outright when it would not leave you alive — a self-inflicted cost NEVER kills you, and it never interrupts the Spirit Veil's recharge window the way real damage does. Mana Cost Reduction (MCR) discounts blood exactly as it discounts mana. gameState().player.maxMp === 0 identifies a no-mana hero; gameState().skills[i].hpCost is the blood a cast charges (0 for a mana-caster) and .ready already accounts for it. The AUTO-CAST slot additionally holds a 50%-of-max-HP reserve — see gameGuide('autocast').`,
       `RECOVERY IS OVER TIME, not instant. Most healing no longer snaps HP up — it fills a PENDING pool that pays into HP at a capped rate (~12%/s of max HP per source), so the bar climbs on a visible slope. gameState().player.pendingHeal is the HP still owed; the HP/MP bars show it as a translucent zone ahead of the solid fill.`,
       `OVER-TIME sources STACK (a potion sip pays out on top of any pending leech): the Health Potion, all life leech / lifesteal (paid from your physical attacks and weapon skills — spells don't leech, and a HYBRID strike leeches only from its physical half, not its magic half), Scythe Reap, Vampiric, Life-on-Kill, and incidental on-kill / on-cast "sliver" heals.`,
       `INSTANT sources land immediately, as before: deliberate active HEAL skills you cast (e.g. Divine Storm, Final Judgment, Blood Drinker) and EMERGENCY low-HP triggers (a passive that heals when you drop below 25% HP). A skill's detail card tags which kind it grants (heal — instant / leech — over time). A cast heal's SIZE now scales off SPIRIT and Spell Power (class-scaled: Mage > Templar > Rogue > Warrior) with no flat cap — so a high-Spirit healer mends far more per cast (still capped only by the HP you're actually missing).`,
@@ -8134,6 +8165,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     skills: [
       `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready and grey out while recharging or when you can't afford the MP. Trying to cast one without enough mana faintly pulses the mana bar (and logs why).`,
+      `Every price you SEE is the price you PAY: the bar, the tooltips, the tree nodes and gameState().skills all quote the cost AFTER Mana Cost Reduction, and quote it in HP for a hero who pays in blood (a Bloodletter, or Blood Pact) rather than a mana number they have no pool for. Affordability is the same one predicate, so a skill can never grey out as unaffordable while the cast would in fact fire.`,
       `The bar has ${SKILL_SLOTS} MANUAL slots (cast by hand with ${key('skill1')}-${key('skill' + SKILL_SLOTS)}) plus ONE dedicated auto-cast slot. You choose what goes where — drag a learned active onto a slot, or use the SKILLS-tab slot buttons; a freshly-learned active auto-fills the first open manual slot.`,
       `gameState().skills lists each filled manual slot's number key, MP cost (already reduced by your Mana Cost Reduction), cooldown remaining, ready flag, and what the skill DOES — its shape, range/radius and the damages/heals/buffs/summons flags — so you can pick one without inspecting it. The auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
       `Every active has a SCHOOL — SKILL, SPELL, or HYBRID — shown as a badge on its tree node and in gameState().skills[i].school. A SKILL is martial: weapon-based, scales with weapon damage + Skill Power, leeches life, meets a foe's physical ARMOR (pierced by Armor Pen), recharged by CDR only. A SPELL is magic: scales with Spirit + Spell Power, never leeches, meets a foe's MAGIC RESIST (pierced by Magic Pen), recharged by CDR + Cast Speed. A HYBRID lands BOTH — a physical part (leeches, meets armor, Skill Power) AND a magic part (meets magic resist, Spell Power); its tooltip spells out the split, and it recharges with CDR + Cast Speed. Classes lean differently: Warrior is all SKILL, Mage all SPELL, Rogue mostly skill with shadow/toxic hybrids, Templar mostly holy spells with holy-strike hybrids. Gear the stats that match the actives you lean on.`,
@@ -8167,6 +8199,7 @@ window.gameGuide = function gameGuide(topic) {
       `Set it by dragging a learned active onto the auto-cast slot, ticking the Auto-cast toggle in a slot's assign dialog, or using the SKILLS-tab Auto-cast button. From the console: setAutoSkill("<skillId>") to arm, setAutoSkill(null) to clear. The auto-cast skill is reserved out of the manual row, so it can't also sit in a numbered slot.`,
       `There is no priority list or pacing to juggle any more — it's a single skill, so it simply fires whenever it's ready.`,
       `It is smart about waste: a damage skill only lands when a target is in range, and a pure heal waits until you are below ~85% HP. Buffs, summons and utility recast the instant they come off cooldown — but since a self-buff's cooldown runs well longer than the buff itself (~40% uptime at 0 CDR), an auto-cast buff still spends most of its time down; stacking Cooldown Reduction raises that uptime but won't hold it permanently.`,
+      `It also keeps a HEALTH RESERVE for a skill paid in blood (a Bloodletter, or any hero with the Blood Pact keystone): auto-cast never spends the toll if it would drop you below 50% of max HP — it fires unattended, so without that floor it would pin you at a sliver all floor. A MANUAL cast is unrestricted: you can still spend down to your last point when you choose to. The auto slot shows the hold on its button and in its tooltip.`,
       `It is opt-in and saved per character. Arming a damage or buff skill lets you focus purely on movement. gameState().autoSkill shows the current auto-cast skill (id, name, MP, cooldown, ready), or null when the slot is empty.`,
     ],
     loot: [
@@ -8324,7 +8357,7 @@ window.gameGuide = function gameGuide(topic) {
     pantheon: 'pantheon', god: 'pantheon', gods: 'pantheon', effigy: 'pantheon', shard: 'pantheon', shards: 'pantheon', mythic: 'pantheon', mythics: 'pantheon', uber: 'pantheon', apex: 'pantheon', summit: 'pantheon',
     cycle: 'cycles', season: 'cycles', seasonal: 'cycles', league: 'cycles', ladder: 'cycles', journey: 'cycles', legacyrealm: 'cycles',
     deed: 'deeds', renown: 'deeds', hallofdeeds: 'deeds', trophy: 'deeds', trophies: 'deeds', badge: 'deeds', frame: 'deeds', completionist: 'deeds',
-    move: 'movement', moving: 'movement', sprint: 'movement', dash: 'movement', stamina: 'movement', stamina: 'movement', walk: 'movement', walking: 'movement', facing: 'movement', face: 'movement', direction: 'movement', animation: 'movement', animate: 'movement',
+    move: 'movement', moving: 'movement', sprint: 'movement', dash: 'movement', stamina: 'movement', stam: 'movement', walk: 'movement', walking: 'movement', facing: 'movement', face: 'movement', direction: 'movement', animation: 'movement', animate: 'movement',
     skill: 'skills', cast: 'skills', autocast: 'autocast', autocasting: 'autocast', hybrid: 'skills', school: 'skills', schools: 'skills',
     damage: 'damage', dmg: 'damage', spell: 'damage', spells: 'damage', spellpower: 'damage', skillpower: 'damage', attackspeed: 'damage', castspeed: 'damage', cooldown: 'damage', cdr: 'damage', scaling: 'damage', attack: 'damage', autoattack: 'damage', armor: 'damage', magicpen: 'damage', magicresist: 'damage', magicresistance: 'damage', resist: 'damage', resistance: 'damage', mitigation: 'damage', pen: 'damage', penetration: 'damage',
     autoloot: 'autoloot', autoscrap: 'autoloot', scrap: 'autoloot', sell: 'autoloot', salvage: 'autoloot', material: 'autoloot', materials: 'autoloot', mats: 'autoloot',
@@ -13128,8 +13161,8 @@ function makeQuestFoe(x, y) {
 // Hand out a scaled gold + XP reward for finishing a quest.
 function questReward() {
   const gold = 30 + dungeonLevel * 10;
-  const xp = 20 * dungeonLevel;
-  player.gold += gold; player.xp += xp;
+  const xp = grantXp(20 * dungeonLevel);   // × the season's XP rule
+  player.gold += gold;
   return { gold, xp };
 }
 
@@ -14838,11 +14871,13 @@ function claimBounty() {
   let bannerItem = null;        // best gear piece to celebrate with the drop banner
   let gainedXp = false;
   for (const r of rewards) {
-    if (r.t === 'gold') { player.gold += r.amt; parts.push(`+<span data-spr=ic_money></span>${fmtGold(r.amt)}`); }
+    // × the live season's bounty-payout rule (×1 when un-enrolled) — a Gilded or
+    // Ironblood Cycle pays its contracts richer, which is half of what it promises.
+    if (r.t === 'gold') { const got = egCyclePayout(r.amt); player.gold += got; parts.push(`+<span data-spr=ic_money></span>${fmtGold(got)}`); }
     // Curated-reward exception: a bounty pays its listed material ungated by
     // difficulty — you earned the contract, so the payout ignores the drop gate.
     else if (r.t === 'mat') { gainMaterial(r.mat, r.amt); parts.push(`+${abbreviateNumber(r.amt)}<span data-spr=mat_${r.mat}></span>`); }
-    else if (r.t === 'xp') { player.xp += r.amt; gainedXp = true; parts.push(`+${abbreviateNumber(r.amt)} XP`); }
+    else if (r.t === 'xp') { const got = grantXp(r.amt); gainedXp = true; parts.push(`+${abbreviateNumber(got)} XP`); }
     else if (r.t === 'gear') {
       const item = generateItem(2, r.ilvl || ((player.maxFloor || 1) + 1), r.tier || null);
       inventory.push(item);
@@ -18057,20 +18092,38 @@ function qualityMagicFind() {
   return Math.max(0, gear + food + shrine + luck);
 }
 
+// Nudge a rolled tier N steps along the rarity ladder (TIER_ORDER, junk → unique):
+// the live season's headline rule, 0 for everyone else. A shift never jumps a tier
+// the hero hasn't UNLOCKED yet — the early-game colour gate outranks a season — and
+// never falls off either end.
+function seasonShiftTier(t, locked) {
+  const shift = egCycleTierShift();
+  if (!shift) return t;
+  const i = TIER_ORDER.indexOf(t);
+  if (i < 0) return t;
+  let dst = Math.min(TIER_ORDER.length - 1, Math.max(0, i + shift));
+  while (dst > i && locked && locked.has(TIER_ORDER[dst])) dst--;   // step back to the best unlocked tier
+  return TIER_ORDER[dst];
+}
+
 function rollTier(rolls = 1, ilvl = null) {
   const df = depthFactor(ilvl != null ? ilvl : dungeonLevel);
   const mf = qualityMagicFind() + rollsQualityBonus(rolls);
+  // × the Dread Covenant rarity sweetener (×1 when un-sworn). It scales the per-tier
+  // CAP as well as the chance: the caps bound ordinary play, and out-earning ordinary
+  // play is the whole bargain a covenant strikes.
+  const rare = egCovRarityMult();
   // Early-game colour gate: greens unlock on the first boss (floor 5), blues and
   // rarer on the second (floor 10). Skip any tier still locked so shallow drops
   // stay grey/white until earned (see systems/rarityGate.js).
   const locked = lockedTiers(player.bossFirstKills, player.maxFloor);
   for (const t of TIER_CHECK_ORDER) {
     if (locked.has(t)) continue;
-    let p = TIER_BASE[t] * df * (1 + effMF(mf, TIER_MF_FACTOR[t]) / 100);
-    if (p > TIER_CAP[t]) p = TIER_CAP[t];
-    if (Math.random() < p) return t;
+    let p = TIER_BASE[t] * df * (1 + effMF(mf, TIER_MF_FACTOR[t]) / 100) * rare;
+    if (p > TIER_CAP[t] * rare) p = TIER_CAP[t] * rare;
+    if (Math.random() < p) return seasonShiftTier(t, locked);
   }
-  return Math.random() < JUNK_FRACTION ? 'junk' : 'normal';
+  return seasonShiftTier(Math.random() < JUNK_FRACTION ? 'junk' : 'normal', locked);
 }
 
 // Rarity multiplier applied to every rolled value. Deliberately compressed (~4x
@@ -18258,12 +18311,6 @@ const UNIQUE_SET_CHANCE = 0.4;
 // Which stats a slot's headline OWNS automatically (protected, never a native/mod):
 // DMG for weapons, DEF for armour, the family headline for off-hands,
 // and nothing for jewelry (its native IS the headline).
-function uniqueMandatoryHeadline(slot, familyHeadline) {
-  if (slot === 'weapon') return ['DMG'];
-  if (slot === 'head' || slot === 'chest' || slot === 'hands' || slot === 'legs') return ['DEF'];
-  if (slot === 'offhand') return familyHeadline.slice();
-  return []; // ring / amulet
-}
 // Build a fully-formed FIXED artifact from a definition, rolling each property's
 // VALUE by depth (ilvl) once. applyBaseStats lays down the auto headline
 // (DMG/DEF/family); the definition's `native` then replaces the base's default
@@ -22573,8 +22620,7 @@ function activateShrine(nx, ny) {
       // Risky: costs HP now, big XP reward.
       const cost = Math.floor(player.hp * 0.3);
       player.hp = Math.max(1, player.hp - cost);
-      const xp = 30 * dungeonLevel;
-      player.xp += xp;
+      const xp = grantXp(30 * dungeonLevel);
       log(`🩸 Blood Shrine! Sacrificed ${cost} HP for ${xp} XP.`, 'important');
       screenFlash('#cc0000'); checkLevelUp(); break;
     }
@@ -22625,8 +22671,8 @@ const FLOOR_EVENTS = [
   () => { const heal = Math.floor(player.maxHp*0.2); player.hp = Math.min(player.maxHp, player.hp+heal); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=ramen_scallion></span> An eerie calm settles — ${clHeal(heal)} HP.`); },
   () => { const heal = Math.floor(player.maxHp*0.1); player.hp = Math.min(player.maxHp, player.hp+heal); spawnFloatingText(player.x, player.y, `+${heal}`, '#44dd44'); log(`<span data-spr=food></span> A forgotten ration — you eat it. ${clHeal(heal)} HP.`); },
   () => { const heal = Math.floor(player.maxHp*0.08); player.hp = Math.min(player.maxHp, player.hp+heal); log(`<span data-spr=town_healer></span> You catch your breath. ${clHeal(heal)} HP.`, ''); },
-  () => { const xp = 15*dungeonLevel; player.xp += xp; log(`💡 A flash of insight — +${xp} XP!`, 'important'); checkLevelUp(); },
-  () => { const xp = 10*dungeonLevel; player.xp += xp; log(`<span data-spr=scroll></span> A torn spellbook page — +${xp} XP.`, 'loot'); checkLevelUp(); },
+  () => { const xp = grantXp(15*dungeonLevel); log(`💡 A flash of insight — +${xp} XP!`, 'important'); checkLevelUp(); },
+  () => { const xp = grantXp(10*dungeonLevel); log(`<span data-spr=scroll></span> A torn spellbook page — +${xp} XP.`, 'loot'); checkLevelUp(); },
   () => { buffs.fortune = Math.max(buffs.fortune, 2); log('<span data-spr=chest></span> A lucky coin — better loot for 2 floors!', 'important'); screenFlash('#22cc66'); },
   () => { buffs.power = Math.max(buffs.power, 2); log('<span data-spr=ic_fire></span> Battle fury surges — +50% damage for 2 floors!', 'important'); screenFlash('#ff6600'); },
   () => { buffs.power = Math.max(buffs.power, 1); log('<span data-spr=w_dagger></span> You hone your blade on a whetstone — +50% damage next floor.', 'loot'); },
@@ -22786,6 +22832,7 @@ function pendingHealTotal() { return (player.pendingHeal || 0) + (player.pending
 // Deposit HP healing into the over-time pool. isPotion routes into the interruptible
 // sub-pool. Returns the amount queued (for floating text / logs).
 function queueHeal(amount, isPotion) {
+  amount = egCovHeal(amount);   // × the Dread Covenant healing debuff (×1 when un-sworn)
   amount = Math.round(amount);
   if (!(amount > 0)) return 0;
   if (isPotion) player.pendingPotionHeal = (player.pendingPotionHeal || 0) + amount;
@@ -22814,6 +22861,9 @@ function applyHeal(amount, opts) {
   if (!(amount > 0)) return 0;
   opts = opts || {};
   if (opts.instant) {
+    // × the Dread Covenant healing debuff. Only on this branch — the queued branch
+    // is scaled inside queueHeal, so a heal is never docked twice.
+    amount = egCovHeal(amount);
     const got = Math.min(amount, player.maxHp - player.hp);
     if (got > 0) player.hp += got;
     return Math.max(0, got);
@@ -24155,6 +24205,7 @@ function enemyArmorBase(e) {
   let pct = 0.03 + Math.min(0.10, ((e && e.level) || dungeonLevel) * 0.0035);
   if (e && e.isElite) pct += 0.06;
   if (e && e.isBoss)  pct += 0.12;
+  pct += egSeasonArmorAdd();   // + an Ironblood season's plate on every foe (0 otherwise)
   return pct;
 }
 // PHYSICAL armor: the base reshaped by the foe's physical-resist multiplier. Mitigates
@@ -24317,9 +24368,12 @@ function onEnemyDefeated(e) {
     // A NEW boss floor cleared grants a BOSS POINT (points are derived from this
     // ledger — earned = distinct boss floors cleared). Spend it at the Ascendant
     // Weave in town.
-    const avail = weaveAvail(pointsEarned(player.bossFirstKills), player.weaveBoard);
+    // Dread Covenant: bank the sworn hero's boss-point sweetener BEFORE reading the
+    // pool, so a bonus point earned by this very clear is spendable immediately.
+    const covBonus = egCovBankBossPoint();
+    const avail = weaveAvail(bossPointsPool(), player.weaveBoard);
     sfx('bosspoint');
-    log(`<span data-spr=q_relic></span> First clear — <b>+1 Boss Point</b>! Spend at the Ascendant Weave in town. ${avail} to spend.`, 'important');
+    log(`<span data-spr=q_relic></span> First clear — <b>+${1 + covBonus} Boss Point${covBonus ? 's' : ''}</b>!${covBonus ? ' (covenant)' : ''} Spend at the Ascendant Weave in town. ${avail} to spend.`, 'important');
     // The Floor 5 guardian is the town-unlock — flag the one-time "graduate to the
     // celebrating camp" so leaving this floor whisks the hero there (see graduateToTown).
     if (bfk === '5') player.pendingTownGraduation = true;
@@ -24341,8 +24395,7 @@ function onEnemyDefeated(e) {
   if (e.isBoss && farm < 1 && !firstBossKill) log(`⚠️ ${label} slain here recently — spoils thinner (${Math.round(farm * 100)}%). Rest or move on to reset.`, 'important');
   const xpMult = e.isBoss ? 5 : (e.isElite ? 2 : 1);
   const goldMult = e.isBoss ? 3 : (e.isElite ? 2 : 1);
-  const xp = Math.round(12 * dungeonLevel * xpMult * farm * pfx('xp', 1) * (1 + (totalStat('XPGAIN') + skillBonus('xpGain')) / 100 + foodFx('xpPct') + healerFx('xpPct') + shrineFx('xpPct'))); // + Insight shrine
-  player.xp += xp;
+  const xp = grantXp(12 * dungeonLevel * xpMult * farm * pfx('xp', 1) * (1 + (totalStat('XPGAIN') + skillBonus('xpGain')) / 100 + foodFx('xpPct') + healerFx('xpPct') + shrineFx('xpPct'))); // + Insight shrine, × the season's XP rule
   // Greed gate (cursed floor) and the Greedy item power both fatten the purse.
   const gold = Math.round((rnd(2, 8) + dungeonLevel * 3) * goldMult * farm * (floorMod.goldMult || 1) * greedGoldMult() * (1 + 0.4 * itemPowerCount('greedy')) * pfx('gold', 1) * (1 + (totalStat('GOLDFIND') + skillBonus('goldFind')) / 100 + foodFx('goldPct') + healerFx('goldPct') + shrineFx('goldPct'))); // + Greed shrine
   player.gold += gold;
@@ -24357,6 +24410,7 @@ function onEnemyDefeated(e) {
   if (e.isBoss) { sfx('bosskill'); screenFlash('#ff3344'); addShake(12); spawnParticles(e.x, e.y, '#ffd24b', 22, 0.16); }
   else if (e.isElite) { sfx('crunch'); screenFlash('#ffffff'); addShake(9); spawnParticles(e.x, e.y, '#ffe0a0', 16, 0.14); }
   else sfx('kill');
+  egSeasonDeathBurst(e);   // a Volatile season detonates the corpse (no-op otherwise)
   // Life/Mana on Kill (gear): a flat top-up every time a foe falls.
   const hpKill = totalStat('HPKILL');
   if (hpKill > 0 && player.hp < player.maxHp) {
@@ -24733,7 +24787,7 @@ function castSkillById(id, opts) {
   // cost rather than subtracting a capped %, so cost = base / (1 + MCR/100): each
   // point does a little less than the last and the price asymptotes toward — but
   // never reaches — free (min 1 MP), so there's no hard ceiling to bump into.
-  const cost = Math.max(1, Math.round(sk.mp / (1 + Math.max(0, totalStat('MCR')) / 100)));
+  const cost = skillCastCost(sk.mp);
   // Two ways to pay a skill in LIFE instead of mana:
   //   • the Blood Pact keystone — a martyr's bargain any class can take, charging the
   //     FLAT mana cost as HP (unchanged, so existing heroes feel identical); and
@@ -24741,9 +24795,14 @@ function castSkillById(id, opts) {
   //     SHARE OF MAX HP (skillLifeCost) so the price keeps mattering at every level
   //     rather than fading to nothing once the health pool grows.
   const lifeCast = paysSkillsInLife();
-  const lifeCost = classNoMana() ? skillLifeCost(cost) : cost;
+  const lifeCost = skillBloodCost(sk.mp);
   if (lifeCast) {
     if (player.hp <= lifeCost) { castMsg(`🩸 Not enough life for a blood-cast of ${sk.name} — need ${lifeCost} HP.`); _muteCastLog = false; return false; }
+    // AUTO-CAST holds a reserve: a life toll is refused outright only when it would
+    // be lethal, which is right for a keypress but suicidal for a slot that fires
+    // itself the instant the skill is ready. Without this an auto-cast bled a
+    // blood-caster down to a sliver and pinned them there for the whole floor.
+    if (opts && opts.auto && !autoCastAffordsLife(player.hp, player.maxHp, lifeCost)) { _muteCastLog = false; return false; }
   } else if (player.mp < cost) { castMsg(`💧 Not enough mana for ${sk.name} — need ${cost} MP.`); if (!_muteCastLog) { pulseManaShort(); showRampHint('mana'); } _muteCastLog = false; return false; }
 
   const fired = runActiveSkill(id); // false = no valid target / nothing to do
@@ -24834,8 +24893,9 @@ function tickAutoCast(dt) {
   const id = normAutoSkill();
   if (!id || !autoCastWorthwhile(skillNode(id))) return;
   // A silent probe: castSkillById bails (no log, no cost) if the skill is on
-  // cooldown, unaffordable, or has no target.
-  castSkillById(id, { silent: true });
+  // cooldown, unaffordable, or has no target. `auto` also makes a blood-cast keep a
+  // health reserve — see the AUTO_CAST_LIFE_RESERVE note in data/skillCosts.js.
+  castSkillById(id, { silent: true, auto: true });
 }
 
 // Foes within the hero's melee reach — adjacent, plus the half-tile forgiveness the
@@ -27709,6 +27769,19 @@ function xpForLevel(level) {
   return Math.round(2 * level * level * level + 16 * level * level + 20 * level + 12);
 }
 
+// Every EARNED xp grant funnels through here so a global XP rule can never be applied
+// at some sources and silently missed at others — which is exactly what happened to
+// the seasonal Cycle's xpMult, advertised on the Cycles board and applied nowhere.
+// Rounds the base, multiplies by the live season's rule (×1 when un-enrolled), banks
+// it, and returns the amount ACTUALLY granted so callers print the real number.
+// (grantBeachLevelUp deliberately does NOT use this: it hands over exactly one level
+// as a scripted tutorial beat, not earned XP a season should scale.)
+function grantXp(base) {
+  const amt = egCycleXp(Math.max(0, Math.round(base || 0)));
+  player.xp += amt;
+  return amt;
+}
+
 function checkLevelUp() {
   const needed = xpForLevel(player.level);
   if (player.xp >= needed) {
@@ -28408,8 +28481,8 @@ function updateBars() {
       }
       const cd = skillCd(sk.id);
       const ready = cd <= 0 && canAffordSkill(sk.mp) && !inTown;
-      if (label) label.textContent = cd > 0 ? `${Math.ceil(cd)}s` : `${sk.mp}MP`;
-      skillBtn.dataset.tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(sk.icon,16)||''} ${sk.name}</div><div class='ht-line'>${skillDescHtml(sk.node, skillRank(sk.id))}</div><div class='ht-sub'>${sk.mp} MP · ${sk.cd}s cooldown · ${'press ' + skillKeyLabel(1)}</div>`;
+      if (label) label.textContent = cd > 0 ? `${Math.ceil(cd)}s` : skillCostText(sk.mp).replace(' ', '');
+      skillBtn.dataset.tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(sk.icon,16)||''} ${sk.name}</div><div class='ht-line'>${skillDescHtml(sk.node, skillRank(sk.id))}</div><div class='ht-sub'>${skillCostText(sk.mp)} · ${sk.cd}s cooldown · ${'press ' + skillKeyLabel(1)}</div>`;
       skillBtn.classList.toggle('disabled', !ready);
       skillBtn.classList.toggle('ready', ready && player.hp > 0);
     } else {
@@ -29330,7 +29403,7 @@ function renderSkills(el) {
   if (sn) {
     const rank = skillRank(sn.id);
     const _sm = sn.type === 'active' ? castSchoolMeta(castKind(sn)) : null;
-    const typeTxt = sn.type === 'active' ? `<span data-spr=ic_stun></span> ACTIVE · ${_sm.icons} ${_sm.label} · ${skillManaCost(sn, rank)}MP · ${fmtCd(effectiveSkillCd(sn, rank))}s cd · ${castShapeLabel(sn.cast)}` : 'PASSIVE';
+    const typeTxt = sn.type === 'active' ? `<span data-spr=ic_stun></span> ACTIVE · ${_sm.icons} ${_sm.label} · ${skillCostText(skillManaCost(sn, rank))} · ${fmtCd(effectiveSkillCd(sn, rank))}s cd · ${castShapeLabel(sn.cast)}` : 'PASSIVE';
     const pips = (sn.type === 'active' || (sn.type === 'passive' && !sn.keystone)) ? milestonePips(rank) : '';
     const rankTxt = ` <span style="color:var(--gold)">${rank}/${sn.max}${pips ? ' ' + pips : ''}</span>`;
     const reqRows = [];
@@ -29732,13 +29805,15 @@ function skillRankUpRows(node, rank) {
       const next = Math.round(rankScale(rank + 1) * 100);
       rows.push(['effect power', rank > 0 ? `${cur}% → <b>${next}%</b>` : `<b>100%</b>`]);
     }
-    // Mana cost climbs with each rank — show the next-rank price so the trade-off
-    // (more power for more mana) is clear before you spend the point.
-    const curMp = skillManaCost(node, rank || 1);
-    const nextMp = skillManaCost(node, rank + 1);
-    // Only show mana cost when it actually changes (or on first learn) — a flat
+    // Cost climbs with each rank — show the next-rank price so the trade-off (more
+    // power for more mana) is clear before you spend the point. Both figures are the
+    // price this hero actually pays: Mana Cost Reduction applied, and quoted in HP
+    // for a blood-caster rather than a mana number they have no pool for.
+    const curMp = skillCostText(skillManaCost(node, rank || 1));
+    const nextMp = skillCostText(skillManaCost(node, rank + 1));
+    // Only show the cost when it actually changes (or on first learn) — a flat
     // "7 → 7 MP" row is just noise.
-    if (rank === 0 || nextMp !== curMp) rows.push(['mana cost', rank > 0 ? `${curMp} → <b>${nextMp}</b> MP` : `<b>${nextMp}</b> MP`]);
+    if (rank === 0 || nextMp !== curMp) rows.push([paysSkillsInLife() ? 'blood cost' : 'mana cost', rank > 0 ? `${curMp} → <b>${nextMp}</b>` : `<b>${nextMp}</b>`]);
     if (node.cast.summon) {
       const base = node.cast.summon.count || 1;
       const curN = Math.min(8, base + Math.floor(((rank || 1) - 1) / 4));
@@ -29834,7 +29909,7 @@ function skillTotalSummary(node, rank) {
       const n = Math.min(8, (node.cast.summon.count || 1) + Math.floor((rank - 1) / 4));
       s += `, ${n} minion${n === 1 ? '' : 's'}`;
     }
-    s += `, ${skillManaCost(node, rank)} MP`;
+    s += `, ${skillCostText(skillManaCost(node, rank))}`;
     return s;
   }
   return '';
@@ -30086,7 +30161,7 @@ function renderSkillBar() {
     const castHint = key ? ` · press ${key}` : '';
     const moveHint = 'drag to rearrange · drag a tree skill to swap';
     const manaNote = noMana ? `<div class='ht-sub' style='color:var(--${paysSkillsInLife() ? 'hp' : 'mp'})'>Not enough ${paysSkillsInLife() ? 'life' : 'mana'}</div>` : '';
-    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}${manaNote}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
+    const tip = `<div class='ht-name' style='color:var(--gold)'>${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${skillCostText(s.mp)} · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown${castHint}</div>${skillDmgTipLine(s.node, skillRank(s.id))}${manaNote}<div class='ht-sub' style='opacity:.7'>${moveHint}</div>`;
     return cell(sbPill('skill' + (i + 1)), '', `<button class="skillbar-btn ${ready ? 'ready' : 'disabled'} ${noMana ? 'no-mana' : ''} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}',${i})" ondragend="skillDragEnd()" ${dropAttrs(i)} ${hoverTip(tip)} onclick="castSkillById('${s.id}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
@@ -30115,10 +30190,16 @@ function renderSkillBar() {
   } else {
     const s = autoS;
     const cd = skillCd(s.id);
-    const ready = cd <= 0 && canAffordSkill(s.mp) && player.hp > 0;
-    const noMana = cd <= 0 && player.hp > 0 && !canAffordSkill(s.mp);
-    const manaNote = noMana ? `<div class='ht-sub' style='color:var(--${paysSkillsInLife() ? 'hp' : 'mp'})'>Not enough ${paysSkillsInLife() ? 'life' : 'mana'}</div>` : '';
-    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${s.mp} MP · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}${manaNote}<div class='ht-sub' style='opacity:.7'>drag a skill here to change · tap to edit</div>`;
+    // The auto slot answers to one extra rule: a blood-cast holds a health reserve
+    // (it fires unattended, so it must never bleed the hero out). Show that as the
+    // same "can't pay right now" state a short mana bar gets, with its own note.
+    const held = !autoCastAffordsLife(player.hp, player.maxHp, skillBloodCost(s.mp));
+    const ready = cd <= 0 && canAffordSkill(s.mp) && !held && player.hp > 0;
+    const noMana = cd <= 0 && player.hp > 0 && (!canAffordSkill(s.mp) || held);
+    const manaNote = !noMana ? ''
+      : held ? `<div class='ht-sub' style='color:var(--hp)'>Holding — auto-cast keeps ${Math.round(AUTO_CAST_LIFE_RESERVE * 100)}% of your health in reserve</div>`
+      : `<div class='ht-sub' style='color:var(--${paysSkillsInLife() ? 'hp' : 'mp'})'>Not enough ${paysSkillsInLife() ? 'life' : 'mana'}</div>`;
+    const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${skillCostText(s.mp)} · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}${manaNote}<div class='ht-sub' style='opacity:.7'>drag a skill here to change · tap to edit</div>`;
     autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${noMana ? 'no-mana' : ''} ${cd > 0 ? 'cooling' : ''}" draggable="true"
       ondragstart="skillDragStart(event,'${s.id}','${AUTO_SLOT}')" ondragend="skillDragEnd()" ${dropAttrs(AUTO_SLOT)} ${hoverTip(tip)} onclick="openSlotPicker('${AUTO_SLOT}')">
       <span class="sb-icon">${dlIconFill(s.icon)}</span>${cdDial('sk:' + s.id)}
@@ -32607,6 +32688,8 @@ function loadGame() {
     // Dread Covenants: the sworn set for the next descent + the per-class checklist.
     player.covenantsActive = sanitizeActiveSet(player.covenantsActive);
     player.dreadGrid = sanitizeDreadGrid(player.dreadGrid);
+    // Banked covenant boss-point fraction (absent on every pre-sweetener save → 0).
+    player.dreadBossPoints = Math.max(0, Number(player.dreadBossPoints) || 0);
     // Ascendant Weave: the constellation board + cosmetic depth. Drop any glyph list
     // a pre-glyph-removal save still carries so no vestigial field lingers.
     player.weaveBoard = sanitizeWeaveBoard(player.weaveBoard, WEAVE);
@@ -36408,7 +36491,9 @@ const ENEMY_ATK_BASE = 1.5;
 function enemyAttackInterval(e) {
   const beh = BEHAVIORS[e.behavior] || BEHAVIORS.chaser;
   if (e._atkJit == null) e._atkJit = 0.85 + Math.random() * 0.3;
-  return ENEMY_ATK_BASE * (beh.atkMult || 1) * (e.isBoss ? 0.8 : 1) * e._atkJit;
+  // ÷ the season affix's attack-speed multiplier: a Frenzied season shortens every
+  // foe's wind-up. 1 (no change) unless an enrolled hero's Cycle says otherwise.
+  return ENEMY_ATK_BASE * (beh.atkMult || 1) * (e.isBoss ? 0.8 : 1) * e._atkJit / egSeasonAtkSpeed();
 }
 let _worldAcc = 0, _saveTick = 0, _worldTicks = 0;
 // One beat of world upkeep, on a fixed real-time cadence (every WORLD_TICK_MS).
@@ -36698,6 +36783,32 @@ function egCovBossPointMult() {
   const curve = _egCovReward ? _egCovReward.bossPoint : 1;
   return intrinsic * curve;
 }
+// A boss point is DERIVED (one per distinct boss floor first-cleared), so a ×1.6
+// sweetener can't simply multiply it. The fraction is BANKED on the hero instead and
+// pays out a whole extra point every time the bank crosses 1 — which is why the
+// pool the Weave spends from is bossPointsPool(), not the raw ledger count. Returns
+// how many WHOLE points this clear just handed over (0 for an un-sworn hero).
+function egCovBankBossPoint() {
+  try {
+    const mult = egCovBossPointMult();
+    if (!(mult > 1)) return 0;
+    const before = egCovBankedBossPoints();
+    player.dreadBossPoints = Math.max(0, (Number(player.dreadBossPoints) || 0) + (mult - 1));
+    return egCovBankedBossPoints() - before;
+  } catch (_e) { return 0; }
+}
+// Whole boss points the covenant bank has paid out so far.
+function egCovBankedBossPoints() {
+  const v = Math.floor(Number(player && player.dreadBossPoints) || 0);
+  return v > 0 ? v : 0;
+}
+// The boss-point POOL the Ascendant Weave draws on: one per boss floor first-cleared,
+// plus whatever the covenant sweetener has banked. (bossesBeaten() stays the raw
+// ledger count — it answers "how many boss floors have you beaten", which gates the
+// town keepers' arrival ladder and must not move with a covenant.)
+function bossPointsPool() {
+  return pointsEarned(player.bossFirstKills) + egCovBankedBossPoints();
+}
 
 // ── boss-kill hook ───────────────────────────────────────────────────────────────
 // Record the clear on the per-class/per-boss Dread grid, then — for any completion
@@ -36893,6 +37004,8 @@ function egCovGuideTopic() {
     'Dread Covenants: opt-in curses you swear at the Covenant Altar in town BEFORE a descent. Each is worth some Dread; your total Dread is the number the whole system pivots on.',
     'Every covenant only ever makes enemies tougher, deadlier, denser, more elite, or your healing weaker — never a hard lockout. It is always pressure you can out-gear, out-skill or out-run.',
     'Swearing raises danger AND reward: higher total Dread multiplies loot quantity, drop rarity, boss points and crafting materials along soft-capped curves (generous early, bending to a ceiling).',
+    'Where each reward lands: loot quantity thins the per-kill NoDrop, rarity scales every tier chance AND its cap in the drop roll, materials scale the per-kill material odds, and boss points — being one-per-boss-floor and derived from the first-clear ledger — BANK their fraction on the hero instead, paying a whole extra point each time the bank crosses 1 (gameState().menu.bossPointsEarned already includes it).',
+    'The healing debuff scales every heal you receive — potions, leech, skill heals, on-kill top-ups — as they are applied, so a healing covenant is felt on the very next sip, not just on paper.',
     'Oaths apply to your NEXT descent. Toggle them on the altar; the live preview shows the exact danger and reward multipliers for the set you have chosen.',
     'Beating a boss while bound by Dread records the clear on a per-class, per-boss checklist at the highest Dread you beat it. Reaching milestones earns account-wide marks.',
     'Marks unlock deeper covenants — each covenant needs a certain mark count to become available. Some marks also bank collection targeting (attunement) pity toward a missing artifact.',
@@ -36992,7 +37105,7 @@ function renderWeave() {
   try {
     const board = (player && player.weaveBoard) || { nodes: {} };
     const attrs = (player && player.attributes) || {};
-    const earned = pointsEarned(player.bossFirstKills);
+    const earned = bossPointsPool();
     const avail = weaveAvail(earned, board);
     const lit = weaveNodes(board) || [];
     const activeKs = weaveKeystones(board, attrs) || [];
@@ -37091,7 +37204,7 @@ function _egWeaveApply() {
 function weaveAllocateUI(nodeId) {
   try {
     const board = (player && player.weaveBoard) || { nodes: {} };
-    const earned = pointsEarned(player.bossFirstKills);
+    const earned = bossPointsPool();
     if (!weaveCanAllocate(nodeId, board, earned)) { sfx('error'); return; }
     player.weaveBoard = weaveDoAllocate(board, nodeId);
     sfx('levelup');
@@ -37130,7 +37243,7 @@ function egWeaveGameStateBlock() {
     const board = (player && player.weaveBoard) || { nodes: {} };
     const attrs = (player && player.attributes) || {};
     return {
-      available: weaveAvail(pointsEarned(player.bossFirstKills), board),
+      available: weaveAvail(bossPointsPool(), board),
       spent: weaveSpent(board),
       nodes: weaveNodes(board) || [],
       keystones: weaveKeystones(board, attrs) || [],
@@ -38196,21 +38309,34 @@ function egCycleEnrolled() {
 
 // The resolved headline-rule params for the live season IF this hero is enrolled;
 // otherwise the neutral (no-change) shape so every call site can read a knob safely.
+// MEMOIZED on (live cycle id | this hero's enrolment) because the knobs are read on
+// hot paths — every kill's XP, every drop's tier, every foe's swing — and resolving
+// allocated a fresh params object each call. egCycleLive() is itself cached per
+// minute, so the signature check is a string compare; a season starting, ending, or
+// the hero enrolling all change the signature and rebuild the bundle.
+const EG_CYCLE_NEUTRAL = { lootTierShift: 0, bountyPayoutMult: 1, enemyAffix: null, densityMult: 1, xpMult: 1 };
+let _egCycleModCache = null;
 function egCycleMod() {
   try {
-    if (egCycleEnrolled()) {
-      const c = egCycleLive();
-      return resolveCycleModifier(c.headlineModifierId);
-    }
+    const c = egCycleLive();
+    const sig = (c ? c.id : '') + '|' + ((player && player.cycleId) || '');
+    if (_egCycleModCache && _egCycleModCache.sig === sig) return _egCycleModCache.val;
+    const val = (c && egCycleEnrolled()) ? resolveCycleModifier(c.headlineModifierId) : EG_CYCLE_NEUTRAL;
+    _egCycleModCache = { sig: sig, val: val };
+    return val;
   } catch (_e) { /* fall through to neutral */ }
-  return { lootTierShift: 0, bountyPayoutMult: 1, enemyAffix: null, densityMult: 1, xpMult: 1 };
+  return EG_CYCLE_NEUTRAL;
 }
 
 // ── APPLY the headline rule at the shell's call sites ────────────────────────
 // Each is a thin, no-throw wrapper: pass the base value, get the season-adjusted
 // value (identity when not enrolled / no live cycle).
-function egCycleLootWeights(weights) {
-  try { return applyLootTierShift(weights, egCycleMod().lootTierShift); } catch (_e) { return weights; }
+// The whole-tier nudge a season gives a DROP. The kill/chest loot roll walks per-tier
+// chances rather than a weight array (see rollTier), so the season shifts the rolled
+// RESULT instead — which is exactly what the rule promises ("+1 makes greens land
+// where whites would"). 0 when un-enrolled / no live season.
+function egCycleTierShift() {
+  try { return egCycleMod().lootTierShift | 0; } catch (_e) { return 0; }
 }
 function egCycleDensity(count) {
   try { return applyDensityMult(count, egCycleMod().densityMult); } catch (_e) { return count; }
@@ -38223,6 +38349,36 @@ function egCycleXp(xp) {
 }
 function egCycleEnemyAffix() {
   try { return egCycleMod().enemyAffix; } catch (_e) { return null; }
+}
+// ── The season affix, resolved at the three call sites that feel it ──────────
+// A season affix is GLOBAL — every foe an enrolled hero meets carries it — so these
+// read the cached bundle rather than stamping a field on each spawn.
+function egSeasonAtkSpeed() {
+  try { return seasonAtkSpeedMult(egCycleEnemyAffix()); } catch (_e) { return 1; }
+}
+function egSeasonArmorAdd() {
+  try { return seasonArmorAdd(egCycleEnemyAffix()); } catch (_e) { return 0; }
+}
+// A foe's death burst: damage the hero if they are standing inside the blast. No-op
+// unless the season's affix bursts. Non-lethal — like every other hazard in the game
+// (lava, spikes, vents), it can hurt badly but never lands the killing blow.
+function egSeasonDeathBurst(e) {
+  try {
+    const key = egCycleEnemyAffix();
+    const radius = seasonBurstRadius(key);
+    if (!radius || !e) return;
+    const def = seasonAffixDef(key);
+    spawnParticles(e.x, e.y, (def && def.color) || '#ffb04a', 14, 0.15);
+    if (Math.max(Math.abs(e.x - player.x), Math.abs(e.y - player.y)) > radius) return;
+    const dmg = seasonBurstDamage(key, e.dmg, player.maxHp);
+    if (!dmg) return;
+    const hpLost = takePlayerDamage(dmg, (def && def.name) || 'death burst', { lethal: false });
+    if (hpLost > 0) {
+      spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff8a3a');
+      log(`<span data-spr=ic_fire></span> The corpse bursts — ${clHurt(hpLost)} HP.`, 'important');
+      screenFlash('#ff9040');
+    }
+  } catch (_e) { /* a season twist must never break a kill */ }
 }
 
 // Snapshot of this hero's live running totals in the shape cycleJourneyProgress reads.
@@ -38370,15 +38526,31 @@ function cycleEnrollUI() {
 function egCycleGameStateBlock() {
   try {
     const n = egCycleNow();
+    const row = (n.cycle && Array.isArray(CYCLE_MODIFIERS))
+      ? CYCLE_MODIFIERS.find(m => m && m.id === n.cycle.headlineModifierId) : null;
+    // The headline RULE and the knobs it is actually applying. Reported so an agent
+    // can see WHY its XP, drops, payouts and foes differ from a vanilla run — the
+    // rule used to be advertised in the town panel and applied nowhere, so a live
+    // readout of the applied values is also the regression guard.
+    const mod = egCycleMod();
     return {
       phase: n.phase,
+      cycleId: n.cycle ? n.cycle.id : null,
       cycle: n.cycle ? n.cycle.name : null,
       enrolled: egCycleEnrolled(),
       countdownMs: n.countdownMs,
+      rule: row ? { id: row.id, name: row.name, desc: row.desc } : null,
+      // Live effect on THIS hero: neutral (all no-change) unless they are enrolled.
+      applied: {
+        xpMult: mod.xpMult, bountyPayoutMult: mod.bountyPayoutMult,
+        lootTierShift: mod.lootTierShift, densityMult: mod.densityMult,
+        enemyAffix: mod.enemyAffix,
+        enemyAffixName: mod.enemyAffix ? ((seasonAffixDef(mod.enemyAffix) || {}).name || null) : null,
+      },
       journey: egCycleEnrolled() ? cycleJourneyProgress(egCycleTotals(), egCycleLive()) : null
     };
   } catch (_e) {
-    return { phase: 'ended', cycle: null, enrolled: false, countdownMs: 0, journey: null };
+    return { phase: 'ended', cycleId: null, cycle: null, enrolled: false, countdownMs: 0, rule: null, applied: null, journey: null };
   }
 }
 
@@ -38386,6 +38558,8 @@ function egCycleGameStateBlock() {
 function egCycleGuideTopic() {
   return [
     'Cycles are opt-in seasonal ladders: an enrolled hero races the live season under a rotating headline rule that changes how the run plays (loot, spawns, XP, economy).',
+    'The headline rule turns FIVE knobs, each applied to an enrolled hero only: xpMult on every XP grant, bountyPayoutMult on bounty gold, lootTierShift nudging every rolled drop that many rarity tiers (never past a colour you have not unlocked yet), densityMult on the per-floor spawn count, and enemyAffix — a season-wide modifier on EVERY foe. gameState().endgame.cycle.rule names the rule and .applied reports the live values, so you can read exactly what this run is being scaled by (all-neutral when un-enrolled).',
+    'Season enemy affixes: FRENZIED foes swing 25% faster, ARMORED foes turn aside 8% more of every physical blow, and VOLATILE foes detonate when they die — stand more than ~1.6 tiles from a corpse or eat the blast (capped at 12% of your max HP and, like every hazard, never lethal).',
     'Each Cycle has a fixed milestone Journey; completing a milestone banks its reward. A fresh seasonal hero starts every counter at 0, so progress is just your live total.',
     'The leaderboard is snapshot-and-reset at season end — your standing is captured, then the board clears for the next Cycle.',
     'Enrolling tags THIS hero to the live season; when the season closes the hero forks into a permanent Legacy hero, so nothing is lost — only un-seasoned.'
@@ -38427,9 +38601,6 @@ function writeHallDeeds() {
 
 // Deferred-save shim to parallel saveBestiaryDexSoon(). Module-level debounce state is
 // not allowed in this pasted block, so this just writes now — the payload is tiny.
-function saveHallDeedsSoon(delay) {
-  try { writeHallDeeds(); } catch (_e) {}
-}
 
 // ── Ledger bumps called from gameplay edges (breadth / mastery / bounty deeds) ──
 function egHallAddClass(cls) {
@@ -39581,6 +39752,10 @@ const __DL_FN_BRIDGE = {
   nextMilestone,
   rankScale,
   skillManaCost,
+  skillCastCost,
+  skillBloodCost,
+  skillCostText,
+  canAffordSkill,
   skillWeaponBase,
   applyOffenseMods,
   skillPhysDamage,
@@ -39675,7 +39850,24 @@ const __DL_FN_BRIDGE = {
   pickupChestsAt,
   pickup,
   xpForLevel,
+  grantXp,
   checkLevelUp,
+  // Endgame run-modifier hooks — bridged so the smoke tests can assert the live
+  // season / covenant rules are actually APPLIED, not merely advertised.
+  egCycleMod,
+  egCycleXp,
+  egCyclePayout,
+  egCycleTierShift,
+  egCycleEnemyAffix,
+  egSeasonAtkSpeed,
+  egSeasonArmorAdd,
+  egDeriveCovenantRun,
+  egCovHeal,
+  egCovRarityMult,
+  egCovBossPointMult,
+  egCovBankBossPoint,
+  egCovBankedBossPoints,
+  bossPointsPool,
   spendAttr,
   renderStaminaBar,
   hpRecoveryRate,
