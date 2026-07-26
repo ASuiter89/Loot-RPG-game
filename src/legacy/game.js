@@ -28798,7 +28798,10 @@ function renderSkills(el) {
   // level-ups (while they still hold skill points), ACTIVE & PASSIVE glow with a
   // wisp ring to point out where those points are spent.
   const skGlow = player.guided && (player.levelUpsSeen || 0) <= 3 && (player.skillPoints || 0) > 0;
-  const tabBtn = (v, label) => `<button class="sk-vtab ${skillView === v ? 'on' : ''}${skGlow && (v === 'active' || v === 'passive') ? ' sk-vtab-glow' : ''}" onclick="setSkillView('${v}')">${label}</button>`;
+  // An unspent ascendancy point rings the PATH tab with a light-blue wisp, drawing
+  // the eye there whichever tab is open (mirrors the gold skill-point ramp above).
+  const ascGlow = (player.ascPoints || 0) > 0;
+  const tabBtn = (v, label) => `<button class="sk-vtab ${skillView === v ? 'on' : ''}${skGlow && (v === 'active' || v === 'passive') ? ' sk-vtab-glow' : ''}${ascGlow && v === 'path' ? ' sk-vtab-ascglow' : ''}" onclick="setSkillView('${v}')">${label}</button>`;
   const pathLabel = asc ? `${dlIcon(asc.icon,16)||''} ${asc.name.toUpperCase()}` : '<span data-spr=feat_door></span> PATH';
   // Ramp: the ascendancy PATH tree is meaningless before it opens (level 20), so a
   // Guided hero who hasn't reached it — and hasn't ascended — doesn't see the tab
