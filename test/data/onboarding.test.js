@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   RAMP_FLOOR, SKILL_SLOT_RAMP, HAZARD_INTRO_FLOOR, EARLY_ENEMY_HP, PLAYER_EARLY_DMG, EARLY_PACK_CAP,
   HINTS, KEEPER_INTRO, KEEPER_INTRO_FLOOR, STARTER_STEPS, TIPS, DEATH_TIPS,
+  BEACH_POTION_HP_FRAC,
 } from '../../src/data/onboarding.js';
 import { WIKI, wikiArticles } from '../../src/data/wiki.js';
 
@@ -115,6 +116,14 @@ describe('teaching copy validity', () => {
       ids.add(s.id);
     }
     expect(STARTER_STEPS.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // The shore's heal lesson must land on a real wound: at 1 it fires on any scratch
+  // (the old behaviour), at 0 it could only fire on a corpse.
+  it('the beach potion threshold is a fraction that needs a real wound', () => {
+    expect(typeof BEACH_POTION_HP_FRAC).toBe('number');
+    expect(BEACH_POTION_HP_FRAC).toBeGreaterThan(0);
+    expect(BEACH_POTION_HP_FRAC).toBeLessThan(1);
   });
 
   it('tips and death tips are non-empty strings', () => {

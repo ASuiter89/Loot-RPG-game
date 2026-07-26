@@ -7,7 +7,7 @@
 
 import {
   RAMP_FLOOR, SKILL_SLOT_RAMP, HAZARD_INTRO_FLOOR, EARLY_ENEMY_HP, PLAYER_EARLY_DMG, EARLY_PACK_CAP,
-  HINTS, KEEPER_INTRO, STARTER_STEPS, TIPS, DEATH_TIPS,
+  HINTS, KEEPER_INTRO, STARTER_STEPS, TIPS, DEATH_TIPS, BEACH_POTION_HP_FRAC,
 } from '../data/onboarding.js';
 
 // Deepest floor reached, coerced to a sane integer ≥ 1 (a missing/garbage value
@@ -99,6 +99,16 @@ export function starterChain(ctx) {
   const steps = STARTER_STEPS.map(s => ({ id: s.id, label: s.label, done: !!ctx[s.id] }));
   const activeIndex = steps.findIndex(s => !s.done);
   return { steps, activeIndex, complete: activeIndex === -1 };
+}
+
+// Is the shore's Health-Potion lesson due? True once a wound has taken the hero to
+// BEACH_POTION_HP_FRAC of max Health or below — the gate used to fire on the first
+// blow landed, which interrupted the opening exchange over a scratch. A lethal blow
+// (hp ≤ 0) is NOT the moment to teach healing: the death screen's tip has it, and
+// the shore is about to rebuild. A missing/garbage pool never triggers.
+export function potionTeachDue(hp, maxHp) {
+  if (!(maxHp > 0) || !(hp > 0)) return false;
+  return hp <= maxHp * BEACH_POTION_HP_FRAC;
 }
 
 // A rotating tip by index (wraps in both directions; empty pool ⇒ '').
