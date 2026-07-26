@@ -11,6 +11,10 @@ export const CHANGELOG = [
     "History total reads a durable, account-wide lifetime counter — not a sum of surviving heroes; won't drop when a hero's deleted, a slot's reused, or a device's data clears.",
     "Tallies every device and syncs; seeds once from your current total.",
   ] },
+  { date: "2026-07-25", size: "small", v: "Mana Regen is now a gear stat; regen shows up early", by: "Jeff Louie", notes: [
+    "New Mana Regen (MRG) affix — flat +MP/sec on helm/chest/legs/amulet/off-hand, stacks on Spirit's, halved in combat.",
+    "Low-level drops float HP/MP regen toward their scarce affix slots, so sustain lands early (was mostly late-game).",
+  ] },
   { date: "2026-07-25", size: "medium", v: "Might drives basic attack damage", by: "Jeff Louie", notes: [
     "Basic (auto) attacks scale off Might for all classes — Warrior most, Mage least; skills keep your class attribute.",
     "Accuracy moved off Agility onto Might; Agility now pure evasion + move & attack speed.",
