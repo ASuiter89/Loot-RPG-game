@@ -12,6 +12,11 @@ export const CHANGELOG = [
     "First weapon and first level-up can't be skipped by a mid-tutorial reload.",
     "Save slot reads \"The Shore\" for a hero still on the beach (was \"Floor 1\").",
   ] },
+  { date: "2026-07-25", size: "small", v: "Save Slots rows rebuilt around the hero", by: "Jeff Louie", notes: [
+    "Each row leads with that hero walking in place at full row height.",
+    "Dropped slot numbers and gold; row now reads Lv · deepest floor, then playtime · last save.",
+    "Heroes resting in town show their deepest floor (\"Endless 3\") instead of \"In Town\".",
+  ] },
   { date: "2026-07-25", size: "small", v: "Bosses shrug off stun-chains", by: "Jeff Louie", notes: ["Guardians (elites too, lighter) halve each stun/freeze; repeats diminish — 2nd lasts half, 3rd a sliver, rest shrugged off.", "Can lock a boss for a beat but never stunlock it; DR resets after a few CC-free seconds."] },
   { date: "2026-07-25", size: "small", v: "Any hit shatters a channeling town portal", by: "Jeff Louie", notes: ["Town portal breaks on any landed blow mid-channel — even one a shield (Spirit Veil, barrier, mana shield) fully soaks; was: only HP loss."] },
   { date: "2026-07-25", size: "small", v: "Shrine name label lingers long enough to read", by: "Jeff Louie", notes: ["Shrine boon label (\"Fortune\", \"Blood\", …) holds ~2.4s (was 0.8s) — long enough to read."] },

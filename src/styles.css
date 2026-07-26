@@ -4030,29 +4030,56 @@
   .ov-btn.danger { background: var(--orange-850); border-color: var(--red-650); color: var(--red-250); }
   .ov-btn.danger:active { background: var(--orange-850); }
 
-  /* Save-slot rows: each holds a character summary (or "empty") plus actions. */
+  /* Save-slot rows: a hero walking in place on the left, that character's summary
+     (or "empty") plus actions stacked beside it. There is deliberately NO slot
+     number — the list order already says which slot is which. */
   .slot-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
   .slot-row {
+    display: flex; align-items: center; gap: var(--space-5);
     border: 1px solid var(--border); border-radius: 7px; background: var(--orange-850);
     padding: 9px 10px;
   }
   .slot-row.active { border-color: var(--gold); background: var(--orange-850); }
   .slot-row.empty { opacity: 0.92; }
+  /* Portrait column — a square sized to the stacked name/stats/buttons beside it, so
+     the hero reads at full row height. One knob (--slot-portrait) drives the box, the
+     sheet framing and the walk-cycle offset together. Sized in REM (not px×--ui-scale
+     like most boxes) because it has to TRACK the text block next to it: that block is
+     all rem, so keying off the same root keeps the square row-height at both layout
+     bases and at every UI SIZE. The vw cap stops the sprite eating the row on a narrow
+     phone or foldable cover screen. */
+  .slot-portrait {
+    --slot-portrait: min(9.6rem, 26vw);
+    flex: 0 0 auto; width: var(--slot-portrait); height: var(--slot-portrait);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .slot-portrait > * { max-width: 100%; max-height: 100%; }
+  /* Reuses the shared .town-walk step animation; the source is a full 4-row walk
+     sheet (down/left/right/up), so background-size covers all four rows and the
+     square box crops to the top (down-facing) one. */
+  .slot-walk {
+    width: 100%; height: 100%;
+    background-size: calc(var(--slot-portrait) * 4) calc(var(--slot-portrait) * 4);
+    --twx: calc(var(--slot-portrait) * -4);
+  }
+  .slot-body { flex: 1 1 auto; min-width: 0; }
   .slot-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .slot-num { font-size: 1.3rem; font-weight: bold; color: var(--orange-500); letter-spacing: 1px; flex: 0 0 auto; }
   .slot-badge {
     font-size: 1.2rem; font-weight: bold; color: var(--ink); background: var(--gold);
     border-radius: 4px; padding: 1px 5px; letter-spacing: 1px; flex: 0 0 auto;
   }
-  .slot-class { font-size: 1.8rem; flex: 0 0 auto; }
   .slot-name {
     flex: 1 1 auto; color: var(--xp); font-weight: bold; font-size: 1.5rem;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .slot-name.muted { color: var(--orange-500); font-weight: normal; font-style: italic; }
   .slot-name .slot-cls { color: var(--orange-400); font-weight: normal; font-size: 1.3rem; }
+  /* Two deliberate lines — progress on top, timings below — rather than one long
+     sentence the portrait squeezes into an arbitrary wrap. */
   .slot-stats { font-size: 1.3rem; color: var(--orange-400); margin-bottom: 8px; line-height: 1.4; }
-  .slot-stats .slot-time { color: var(--orange-500); }
+  /* Each time chunk wraps as a WHOLE, so a narrow row can never strand "ago"/"now"
+     alone on a last line. */
+  .slot-stats .slot-time { color: var(--orange-500); white-space: nowrap; }
   .slot-actions { display: flex; gap: 6px; }
   .slot-btn {
     flex: 1 1 0; box-sizing: border-box; padding: 8px 6px; border: 1px solid var(--gold);
