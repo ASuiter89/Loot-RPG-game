@@ -173,6 +173,7 @@ import { planReconcile, planSlotPush, freshDelMeta, sanitizeDelMeta, isTombstone
 import { freshStash, sanitizeStash, mergeStash, depositGold, withdrawGold, depositMaterial, withdrawMaterial, materialsValue, foldHeroMaterials } from '../persistence/stashSync.js';
 import { MERC_TYPES, MERC_ART, MERC_DURATIONS } from '../data/mercenaries.js';
 import { mercCost } from '../systems/mercPricing.js';
+import { splitPlayTick } from '../systems/playtime.js';
 import { PROSPECTOR_LOTS, REFINE_CHAIN } from '../data/prospector.js';
 import { unitPrice as prospectorUnitPrice, lotPrice as prospectorLotPrice,
   refineCost as prospectorRefineCost, refineYield as prospectorRefineYield } from '../systems/prospector.js';
@@ -7919,6 +7920,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     cloud: [
       `Saves live in your browser's local storage by default. Sign in (Settings ▸ Account) with an email + password to also mirror every save slot, your shared Stash, your fallen-hero History, your lifetime Total-time-played, and your settings to the cloud, so the same heroes follow you across devices — it's optional and free, and signed out the game behaves exactly as before.`,
+      `The History header's Total-time-played counts every second the game is open in the FOREGROUND (menus, planning and combat all count — not just seconds you're pressing keys), stops while the tab is hidden, and sums across all your devices. It's the durable account lifetime total, so it never drops when a hero is deleted or a device is wiped. (A per-hero row's time is that hero's active play only — the conflict-merge measure in the next note — so the header can read higher than the rows add up.)`,
       `Cross-device saves are conflict-safe: whichever copy of a hero has been PLAYED longer wins a merge (measured by real active play-time, not the wall clock, so a device with a fast/slow clock can't cheat the merge), and a copy is never overwritten by an older one. Deleting or losing a hero (Hardcore permadeath) is recorded account-wide and can't be undone by an old copy on another device.`,
       `A window you leave OPEN but stop playing goes idle after a minute (or the moment its tab is hidden): while idle it stops writing and stops mirroring saves, so it can't overwrite newer progress. The instant you return and play again — or switch back to its tab — it re-checks the account first and pulls down anything a second device advanced, reloading into that newer copy if needed. So it's safe to leave the game open on one machine and keep playing on another; come back and it catches up instead of clobbering.`,
       `Use Settings ▸ Account ▸ Sync Now to force an immediate reconcile. Because a stale tab defers to the account, the safe habit across devices is simply: play, then let the other device catch up on its own when you return to it.`,
@@ -32663,45 +32665,61 @@ if (typeof document !== 'undefined') {
 }
 
 // ── Play-time heartbeat ─────────────────────────────────────────────────────
-// Accumulate wall-clock time the active hero is actually being PLAYED into
-// player.playMs. We tick once a second, counting time only while active (not hidden
-// and not idle), and clamp the delta so a throttled/backgrounded tab can't dump a
-// huge catch-up chunk. Counting only active time keeps playMs a faithful, monotonic
-// measure of real play — which is what makes it a trustworthy, clock-skew-proof
-// conflict signal (an idle tab can't inflate its play-time and out-rank the device
-// you actually played on). The total rides along in the normal save; we also nudge a
-// save every ~20s so genuine play still persists even when nothing else saved.
+// One tick a second splits the elapsed wall-clock delta between TWO counters on two
+// gates (the split rule is pure + unit-tested in systems/playtime.js ▸ splitPlayTick):
 //
-// The SAME billed `dt` also feeds the durable account-wide lifetime counter
-// (hcMeta.pt[thisDevice]) — the History "Total time played" reads from that, not from
-// summing whatever heroes still exist, so it no longer collapses when a hero is
-// deleted or a device is wiped. hcMeta persists on the same ~20s cadence (and on hide).
+//  • WALL-CLOCK → the durable account-wide lifetime counter (hcMeta.pt[thisDevice]),
+//    which the History "Total time played" reads. Bills EVERY foreground second the
+//    game is open and visible — reading menus, planning, mid-fight — not just while
+//    keys are pressed. This is the headline "how long have I played" number, so it
+//    should track time-in-game, not time-pressing-buttons.
+//  • ACTIVE (recent input, visible) → the per-hero player.playMs, which ALSO serves as
+//    the cross-device conflict signal (saveOrder keeps the more-played copy). Billing
+//    it on ACTIVE time only keeps it a clock-skew-proof, monotonic measure of real
+//    play, so a tab merely left open can't inflate a hero's play-time and out-rank the
+//    device you actually played on. (This is why the two counters must stay split.)
+//
+// The delta is clamped so a throttled/backgrounded tab or a slept machine counts a
+// single nominal tick, never a huge catch-up chunk. hcMeta is grow-only and merges
+// conflict-free (per-device MAX), so flushing wall-clock time while merely open is safe
+// — unlike a HERO save, which we still only nudge while actively played (mirroring an
+// idle hero is what clobbers another device). Both persist on a ~20s cadence and on hide.
 let _ptLastBeat = Date.now();
 let _ptSinceSave = 0;
 let _ptHcDirty = false; // lifetime counter has unpersisted play-time
 function playTimeBeat() {
   const now = Date.now();
-  let dt = now - _ptLastBeat;
+  const dtMs = now - _ptLastBeat;
   _ptLastBeat = now;
-  if (isIdleForSaves()) return;   // hidden or AFK — not really playing; don't bill time or save
-  if (dt < 0) dt = 0;
-  if (dt > 5000) dt = 1000; // background throttle / sleep — count a nominal tick
-  if (typeof player === 'object' && player) player.playMs = (player.playMs || 0) + dt;
-  // Seed the lifetime baseline once (deferred for a signed-in player until the account
-  // counter has merged), THEN start accruing — so the seed can't double-count billed dt.
+  const hidden = (typeof document !== 'undefined' && document.hidden);
+  // active = visible AND input within the idle window (isIdleForSaves is true when
+  // hidden OR AFK). splitPlayTick clamps the delta and applies the two gates.
+  const { wallMs, activeMs } = splitPlayTick({ dtMs, hidden, active: !isIdleForSaves() });
+  if (wallMs <= 0) return;                             // hidden / no elapsed time — bill & save nothing
+  if (!(typeof player === 'object' && player)) return; // no hero loaded (title) — nothing to bill
+
+  // Per-hero playMs = the clock-skew-proof cross-device conflict signal — ACTIVE only.
+  if (activeMs > 0) player.playMs = (player.playMs || 0) + activeMs;
+
+  // Durable account-wide "Total time played" — WALL-CLOCK foreground time. Seed the
+  // baseline once (deferred for a signed-in player until the account counter has merged),
+  // THEN accrue, so the seed can't double-count billed time.
   ensurePlaytimeSeeded();
-  if (_ptSeedChecked && dt > 0 && typeof player === 'object' && player) {
-    bumpHcPlaytime(hcMeta, stashDeviceId(), dt);
+  if (_ptSeedChecked) {
+    bumpHcPlaytime(hcMeta, stashDeviceId(), wallMs);
     _ptHcDirty = true;
   }
-  _ptSinceSave += dt;
+
+  _ptSinceSave += wallMs;
   if (_ptSinceSave >= 20000) {
     _ptSinceSave = 0;
     flushPlaytimeCounter();
-    // The world tick already autosaves every few seconds during play, so only
-    // fire the heartbeat save when nothing else persisted recently (e.g. idling
-    // on a menu). playMs still accumulates either way and rides the next save.
-    if (Date.now() - _lastSaveAt >= 15000) { try { saveGame(); } catch (e) {} }
+    // The world tick already autosaves every few seconds during play, so only nudge a
+    // HERO save when nothing else persisted recently AND we're actively playing —
+    // mirroring an idle hero is what clobbers another device. The lifetime counter
+    // already flushed above (grow-only, conflict-free), so foreground time persists
+    // regardless.
+    if (activeMs > 0 && Date.now() - _lastSaveAt >= 15000) { try { saveGame(); } catch (e) {} }
   }
 }
 // Persist the durable lifetime counter (local write + debounced cloud push) when it
