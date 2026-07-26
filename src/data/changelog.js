@@ -7,9 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
-  { date: "2026-07-25", size: "small", v: "Food refuels Stamina hard", by: "Jeff Louie", notes: [
-    "Each snack now restores ~50% of max Stamina (was a flat 7–28); HP/MP still top up by the food's heal amount.",
-    "Grabbing food is the fastest sprint/dash refill; scales with the pool as Vitality/gear deepen it.",
+  { date: "2026-07-26", size: "small", v: "Food refuels Stamina hard", by: "Jeff Louie", notes: [
+    "Each snack restores ~50% of max Stamina (was flat 7–28); HP/MP still top up by the food's heal value.",
+    "Fastest sprint/dash refill; bite scales as Vitality/gear deepen the pool.",
+  ] },
   { date: "2026-07-26", size: "small", v: "Town keepers drop the floating role icon", by: "Jeff Louie", notes: [
     "Role glyph no longer floats above each keeper's head; \"!\" new-arrival marker stays.",
   ] },
