@@ -1982,6 +1982,30 @@
     mask-composite: exclude;
     animation: sk-wisps 3.4s linear infinite; }
   @media (prefers-reduced-motion: reduce) { .sk-vtab-glow, .sk-vtab-glow::before { animation: none; } }
+  /* Unspent ascendancy point: the PATH tab wears a LIGHT-BLUE wisp ring (the
+     --ascendancy accent) so the eye lands on it, distinct from the gold skill-point
+     ramp above. Reuses the shared --sk-wisp spin; only the hue and pulse differ. */
+  .sk-vtab-ascglow { position: relative; border-color: color-mix(in srgb, var(--ascendancy) 55%, var(--panel));
+    animation: sk-vtab-ascglow-pulse 1.9s ease-in-out infinite; }
+  .sk-vtab-ascglow::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none;
+    background: conic-gradient(from var(--sk-wisp),
+      transparent 0deg,
+      color-mix(in srgb, var(--ascendancy) 90%, transparent) 28deg,
+      transparent 66deg,
+      transparent 180deg,
+      color-mix(in srgb, var(--blue-100) 80%, transparent) 208deg,
+      transparent 246deg,
+      transparent 360deg);
+    -webkit-mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(var(--ink) 0 0) content-box, linear-gradient(var(--ink) 0 0);
+    mask-composite: exclude;
+    animation: sk-wisps 3.4s linear infinite; }
+  @keyframes sk-vtab-ascglow-pulse {
+    0%, 100% { box-shadow: 0 0 4px color-mix(in srgb, var(--ascendancy) 28%, transparent); }
+    50%      { box-shadow: 0 0 13px 1px color-mix(in srgb, var(--ascendancy) 60%, transparent); } }
+  @media (prefers-reduced-motion: reduce) { .sk-vtab-ascglow, .sk-vtab-ascglow::before { animation: none; } }
   /* Branch (specialization) sub-tabs under PASSIVE/ACTIVE — one per build path. */
   /* Auto-fitting grid: tiles size to hold the full branch name and wrap onto a
      second row when they won't all fit across, so names are never cut off. */

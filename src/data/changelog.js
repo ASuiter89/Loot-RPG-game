@@ -9,6 +9,9 @@
 export const CHANGELOG = [
   { date: "2026-07-25", size: "small", v: "Fainter target crosshair", by: "Jeff Louie", notes: [
     "Auto-attack crosshair drops to 35% opacity — marks the locked foe without hiding it.",
+  { date: "2026-07-25", size: "small", v: "PATH tab rings blue on an unspent ascendancy point", by: "Jeff Louie", notes: [
+    "PATH sub-tab wears a light-blue wisp while you hold an unspent ascendancy point.",
+  ] },
   { date: "2026-07-25", size: "small", v: "Total time played counts open time", by: "Jeff Louie", notes: [
     "History total bills every foreground second — menus, planning, combat — not just active input; pauses when tab hidden.",
     "Per-hero row time stays active-play only (the cross-device merge measure), so the header can read above the rows' sum.",
