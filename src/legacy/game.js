@@ -1215,7 +1215,7 @@ const HERO_WALK_IDLE = 1;
 const HERO_WALK_STRIDE = 2.4, HERO_WALK_MAXSPD = 7;
 function _mkWalkSheet(b64) {
   const img = new Image();
-  img.onload = () => { img._ready = true; _heroFaceCache = {}; try { refreshSexPreviews(); } catch (e) {} try { const _t = document.getElementById('title-overlay'); if (_t && _t.classList.contains('open') && typeof showTitle === 'function') showTitle(); } catch (e) {} try { if (typeof panelOpen !== 'undefined' && panelOpen && typeof renderPanel === 'function') renderPanel(); } catch (e) {} try { draw(); } catch (e) {} };
+  img.onload = () => { img._ready = true; _heroFaceCache = {}; try { refreshSexPreviews(); } catch (e) {} try { const _t = document.getElementById('title-overlay'); if (_t && _t.classList.contains('open') && typeof showTitle === 'function') showTitle(); } catch (e) {} try { const _s = document.getElementById('slots-overlay'); if (_s && _s.classList.contains('open') && typeof renderSlots === 'function') renderSlots(); } catch (e) {} try { if (typeof panelOpen !== 'undefined' && panelOpen && typeof renderPanel === 'function') renderPanel(); } catch (e) {} try { draw(); } catch (e) {} };
   img.src = "data:image/png;base64," + b64;
   return img;
 }
@@ -33180,7 +33180,6 @@ function slotSummary(i) {
       level: p.level || 1,
       floor: p.maxFloor || d.dungeonLevel || 1,
       gold: p.gold || 0,
-      inTown: !!d.inTown,
       hardcore: !!p.hardcore,
       ssf: !!p.ssf,
       ts: d.ts || 0,
@@ -33235,6 +33234,18 @@ function closeSlots() {
   if (ov) ov.classList.remove('open');
 }
 
+// A slot row's hero: the same 4-frame walk-in-place cycle the town NPCs use, so the
+// character on the left of the row is alive rather than a static thumbnail. Every
+// size comes from the .slot-portrait CSS box (one --slot-portrait knob), so it
+// tracks UI SIZE and narrow screens instead of a baked-in px. While the walk sheet
+// is still decoding we hold the static down-facing portrait — _mkWalkSheet's onload
+// re-renders an open slot list once the art lands.
+function slotHeroArt(cls, sex) {
+  const img = heroWalkSheet(cls, sex);
+  if (img) return `<span class="town-walk slot-walk" style="background-image:url(${img.src})"></span>`;
+  return heroFaceIcon(cls, sex, 84) || dlIcon(cls ? CLASSES[cls].icon : 'npc_mage', 84);
+}
+
 function renderSlots() {
   const list = document.getElementById('slot-list');
   if (!list) return;
@@ -33250,10 +33261,11 @@ function renderSlots() {
     const s = slotSummary(i);
     const isActive = i === activeSlot;
     const badge = isActive ? '<span class="slot-badge">PLAYING</span>' : '';
-    const icon = heroFaceIcon(s.cls, s.sex, 24) || dlIcon(s.cls ? CLASSES[s.cls].icon : 'npc_mage', 24);
     const who = escapeHtml(s.name || 'Adventurer');
     const clsTag = s.cls ? ` <span class="slot-cls">· ${CLASSES[s.cls].name}</span>` : '';
-    const where = s.inTown ? 'In Town' : lbFloorLabel(s.floor);
+    // Always the deepest floor reached — a hero resting in town still reads as the
+    // difficulty tier they've pushed to, which is what this row is here to answer.
+    const where = lbFloorLabel(s.floor);
     const time = slotTimeAgo(s.ts);
     const playBtn = isActive
       ? `<button class="slot-btn current" disabled>● Playing</button>`
@@ -33263,25 +33275,32 @@ function renderSlots() {
     const hcMark = s.hardcore ? `<span class="hc-tag">${hcIcon(10)} HC</span>` : '';
     const ssfMark = s.ssf ? `<span class="hc-tag ssf">${ssfIcon(10)} SSF</span>` : '';
     html += `<div class="slot-row${isActive ? ' active' : ''}">
-      <div class="slot-head">
-        <span class="slot-num">SLOT ${i + 1}</span>${badge}
-        <span class="slot-class">${icon}</span>
-        <span class="slot-name">${who}${clsTag}</span>${hcMark}${ssfMark}
+      <span class="slot-portrait">${slotHeroArt(s.cls, s.sex)}</span>
+      <div class="slot-body">
+        <div class="slot-head">
+          ${badge}<span class="slot-name">${who}${clsTag}</span>${hcMark}${ssfMark}
+        </div>
+        <div class="slot-stats">
+          <div class="slot-line">Lv ${s.level} · ${where}</div>
+          <div class="slot-line"><span class="slot-time">⏱️ ${formatPlayTime(s.playMs)}</span>${time ? ` · <span class="slot-time">saved ${time}</span>` : ''}</div>
+        </div>
+        <div class="slot-actions">${playBtn}${delBtn}</div>
       </div>
-      <div class="slot-stats">Lv ${s.level} · ${where} · <span data-spr=ic_money></span>${fmtGold(s.gold)} · <span class="slot-time">⏱️ ${formatPlayTime(s.playMs)}</span>${time ? ` · <span class="slot-time">saved ${time}</span>` : ''}</div>
-      <div class="slot-actions">${playBtn}${delBtn}</div>
     </div>`;
   }
-  // One trailing row to start a brand-new hero in the next free slot.
+  // One trailing row to start a brand-new hero in the next free slot. No portrait —
+  // there's no hero yet — so it sits shorter than the character rows and reads as
+  // the lighter, secondary action it is.
   const newActive = freshSlot === activeSlot;
   const newBadge = newActive ? '<span class="slot-badge">PLAYING</span>' : '';
   html += `<div class="slot-row empty${newActive ? ' active' : ''}">
-    <div class="slot-head">
-      <span class="slot-num">SLOT ${freshSlot + 1}</span>${newBadge}
-      <span class="slot-name muted">${newActive ? 'Empty' : 'New Character'}</span>
-    </div>
-    <div class="slot-actions">
-      <button class="slot-btn" onclick="newGameInSlot(${freshSlot})">＋ New Game</button>
+    <div class="slot-body">
+      <div class="slot-head">
+        ${newBadge}<span class="slot-name muted">${newActive ? 'Empty' : 'New Character'}</span>
+      </div>
+      <div class="slot-actions">
+        <button class="slot-btn" onclick="newGameInSlot(${freshSlot})">＋ New Game</button>
+      </div>
     </div>
   </div>`;
   list.innerHTML = html;
