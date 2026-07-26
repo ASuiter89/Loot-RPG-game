@@ -30,6 +30,7 @@ import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach
 import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
+import { tenacityTier, resolveEnemyCC, enemyStunImmune } from '../systems/tenacity.js';
 import { SHRINE_DEFS } from '../data/shrines.js';
 import { defaultShrineBuffs, shrineFxFrom, activeShrineBuffs, pickShrineKind, shrineShortName } from '../systems/shrineEffects.js';
 import { creditInitials } from '../systems/credit.js';
@@ -7418,6 +7419,8 @@ window.gameState = function gameState(radius) {
       warded: (e.shieldT || 0) > 0,            // boss ward up → your damage is HALVED
       enraged: !!e.enraged,                    // boss permanently hits +50% (triggers below 40% HP)
       berserk: (e.berserkT || 0) > 0,          // boss temporary damage spike — wait it out like a ward
+      tenacious: !!tenacityTier(e),            // boss/elite: hard CC (stun/freeze) is shortened & diminishes on repeats (no stunlock)
+      stunImmune: enemyStunImmune(tenacityTier(e), { stacks: e._ccDrStacks | 0, until: e._ccDrUntil || 0 }, _worldTicks), // repeats spent → next stun/freeze is shrugged off right now; save it
       firstKill: !!(e.isBoss && !bossFirstKilled()), // this boss FLOOR's jackpot is unclaimed → its kill drops ~3x loot
       affix: e.affix || null,                  // elite-style modifier on ~22% of ordinary foes (see gameGuide "enemies")
       // Typed defence: % of a blow this foe shrugs off, per school. Physical armor
@@ -7833,7 +7836,7 @@ window.gameGuide = function gameGuide(topic) {
       `CURSED FLOOR (the "greed" gate): rarely, on descending to a non-boss floor from depth 3+, a WORLD-PAUSING prompt offers to brave the floor for DOUBLED loot & gold at the cost of tougher non-boss foes (more HP and damage). Movement freezes until you choose — gameState().greed.pending is true, mode is 'greed' and blockingOverlay is 'greed-overlay'; call acceptGreed() to take it (gameState().greed.active then reads true, mult 2) or declineGreed() to skip.`,
     ],
     enemies: [
-      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), firstKill (a boss floor you haven't cleared yet — its kill drops a jackpot; see below), affix (an elite-style modifier), armor / magicResist (typed defence — see below), and status (e.g. ["stun"], ["slow"]). Every species you slay is also logged in the Bestiary codex (pause menu; gameGuide("bestiary")).`,
+      `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), tenacious / stunImmune (crowd-control resistance — see below), firstKill (a boss floor you haven't cleared yet — its kill drops a jackpot; see below), affix (an elite-style modifier), armor / magicResist (typed defence — see below), and status (e.g. ["stun"], ["slow"]). Every species you slay is also logged in the Bestiary codex (pause menu; gameGuide("bestiary")).`,
       `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
       `Behaviors (gameState().enemies[i].behavior): chaser (steady, 1 tile/turn), swift (2 tiles/turn), pack (1 tile/turn, but rushes to 2 when you drop below 50% HP — wolves/tigers), erratic (darts unpredictably), brute (slow — acts every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand). A foe with the ice CHILL status is likewise dragged to that half-cadence, but chill is a STATUS (it shows in enemies[i].status), not a behavior.`,
       `Each archetype also has its OWN toughness & punch, not just movement: brutes are tanky and hit hard but swing slowly; swift vermin and erratic flyers are frail and jab for less; casters are squishy but strike from range; lurkers ambush for a heavier blow; packs are individually weak but swarm. So two foes on the same floor can differ a lot — read the behavior, not just the sprite.`,
@@ -7842,7 +7845,7 @@ window.gameGuide = function gameGuide(topic) {
       `Ranged foes fire DODGEABLE bolts, not guaranteed hits — a bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
       `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly.`,
       `Treasure Goblins (isGoblin) flee, never attack, and do NOT block the exit — chase fast for jackpot loot (they vanish ~15 ticks after first hit) or ignore them.`,
-      `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. FIRST-KILL JACKPOT: the first time you CLEAR a given boss floor (enemies[i].firstKill true until then), its guardian spills ~3x the loot at noticeably better quality — a one-time windfall per boss floor. Because boss species RECUR across floors in Endless, this tracks by FLOOR: each new or deeper boss floor you conquer pays its own windfall, while farming a floor you've already cleared drops at the normal boss rate (minus farm fatigue on a quick re-kill). So descending to a fresh boss floor is always the richer prize. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
+      `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. TENACITY: guardians (tenacious true — elites too, lighter) shorten every stun/freeze that lands AND diminish repeats — a 2nd hard CC in the window lasts half, a 3rd a sliver, and further ones are shrugged off (enemies[i].stunImmune flips true) until you leave it hard-CC-free for a few seconds. So a boss can be locked for a beat but NEVER stunlocked — spend your stun on the opening that matters (a telegraph wind-up, an escape), not on chaining. FIRST-KILL JACKPOT: the first time you CLEAR a given boss floor (enemies[i].firstKill true until then), its guardian spills ~3x the loot at noticeably better quality — a one-time windfall per boss floor. Because boss species RECUR across floors in Endless, this tracks by FLOOR: each new or deeper boss floor you conquer pays its own windfall, while farming a floor you've already cleared drops at the normal boss rate (minus farm fatigue on a quick re-kill). So descending to a fresh boss floor is always the richer prize. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
       `Summoned allies (gameState().allies) act before foes and soak hits, but expire after ttl turns and have capped damage — resummon and don't expect them to solo a boss.`,
       `On a fresh floor you get a brief moment of arrival immunity — use it to reposition out of a bad spawn before engaging.`,
       `Floor layouts vary in size: now and then a non-boss floor opens into a large, airy cavern — a bigger map of a few sprawling rooms — while most floors are tighter warrens. Foe/hazard density scales with area, so a big open floor isn't emptier, just roomier.`,
@@ -21535,6 +21538,19 @@ function applyStatusEffect(target, effect, secs, source) {
     const t = playerTenacity();
     if (t > 0) secs *= (1 - t);
     if (secs < 0.4) { spawnFloatingText(player.x, player.y, 'RESIST', '#9fe8ff'); return; }
+  } else if (target !== 'player' && CC_EFFECTS.has(effect)) {
+    // Tenacious foes (bosses, elites) shorten hard crowd-control and DIMINISH
+    // repeats so they can be locked for a beat but never STUNLOCKED. The DR state
+    // rides on the foe; _worldTicks is the world-beat clock (see systems/tenacity).
+    const tier = tenacityTier(target);
+    if (tier) {
+      const r = resolveEnemyCC(tier, { stacks: target._ccDrStacks | 0, until: target._ccDrUntil || 0 },
+                               effect, secs, _worldTicks, WORLD_TICK_SECONDS);
+      target._ccDrStacks = r.dr.stacks;
+      target._ccDrUntil = r.dr.until;
+      if (r.immune) { spawnFloatingText(target.x, target.y, 'RESIST', '#ffd27a'); return; }
+      secs = r.secs;
+    }
   }
   const existing = statusEffects.find(s => s.target === target && s.effect === effect);
   if (existing) { existing.secs = Math.max(existing.secs, secs); return; }
