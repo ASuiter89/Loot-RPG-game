@@ -4,9 +4,9 @@ import {
   elitesAllowed, gearRequirementsActive, setItemsAllowed, cursedItemsAllowed,
   uniqueItemsAllowed, loadoutSwapUnlocked, detailedTooltips,
   hazardAllowed, earlyEnemyHp, playerEarlyDamage, earlyPackCap,
-  firstHint, keeperIntro, starterChain, tip, deathTip, rampStatus,
+  firstHint, keeperIntro, starterChain, tip, deathTip, rampStatus, potionTeachDue,
 } from '../../src/systems/onboarding.js';
-import { RAMP_FLOOR, TIPS, HINTS, STARTER_STEPS } from '../../src/data/onboarding.js';
+import { RAMP_FLOOR, TIPS, HINTS, STARTER_STEPS, BEACH_POTION_HP_FRAC } from '../../src/data/onboarding.js';
 
 describe('rampDepth', () => {
   it('coerces to an integer floor ≥ 1', () => {
@@ -195,6 +195,40 @@ describe('tip / deathTip', () => {
     expect(deathTip(null, 1)).toBe(TIPS[1]);
     // Index defaults to 0 when omitted.
     expect(deathTip(null)).toBe(TIPS[0]);
+  });
+});
+
+describe('potionTeachDue', () => {
+  // The beat used to fire on the FIRST blow landed, pausing the world over a
+  // scratch. It now waits for a wound worth healing.
+  it('holds off while the hero is barely scratched', () => {
+    expect(potionTeachDue(100, 100)).toBe(false);
+    expect(potionTeachDue(80, 100)).toBe(false);
+  });
+
+  it('arms once Health reaches the threshold', () => {
+    expect(potionTeachDue(75, 100)).toBe(true);
+    expect(potionTeachDue(40, 100)).toBe(true);
+    expect(potionTeachDue(1, 100)).toBe(true);
+  });
+
+  it('reads the threshold from the schedule, not a hardcoded 75%', () => {
+    const maxHp = 200, at = maxHp * BEACH_POTION_HP_FRAC;
+    expect(potionTeachDue(at + 1, maxHp)).toBe(false);
+    expect(potionTeachDue(at, maxHp)).toBe(true);
+  });
+
+  // A killing blow is not a teaching moment — the death screen's tip covers it and
+  // the shore is about to rebuild.
+  it('never arms on a lethal blow', () => {
+    expect(potionTeachDue(0, 100)).toBe(false);
+    expect(potionTeachDue(-5, 100)).toBe(false);
+  });
+
+  it('refuses a missing or garbage pool rather than throwing', () => {
+    for (const [hp, maxHp] of [[10, 0], [10, undefined], [undefined, 100], [NaN, 100], [10, NaN]]) {
+      expect(potionTeachDue(hp, maxHp)).toBe(false);
+    }
   });
 });
 

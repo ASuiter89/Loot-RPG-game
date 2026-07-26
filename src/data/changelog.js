@@ -7,6 +7,9 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-26", size: "small", v: "Beach heal lesson waits for a real wound", by: "Jeff Louie", notes: [
+    "Health-Potion gate pauses the shore at 75% Health (was: first hit landed, over a scratch).",
+  ] },
   { date: "2026-07-26", size: "small", v: "Dying on the beach keeps you on the beach", by: "Jeff Louie", notes: [
     "Fall on the opening shore and it rebuilds around you at the water's edge (was: revived in town, tutorial skipped).",
     "Costs nothing — no gold, no XP, bag kept, so the first weapon and first level-up survive a stumble.",
