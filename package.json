@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Dungeon Loot — a loot-based pixel RPG that runs entirely in the browser. Modular ES-module source, built to a static bundle with Vite.",
+  "description": "Dungeon Loot \u2014 a loot-based pixel RPG that runs entirely in the browser. Modular ES-module source, built to a static bundle with Vite.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -11,12 +11,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
-    "smoke": "node test/smoke/smoke.mjs && node test/smoke/reward-banner.mjs && node test/smoke/bounty-hud.mjs && node test/smoke/dungeon-facing.mjs && node test/smoke/cracked-wall-render.mjs && node test/smoke/teleporter-warp.mjs && node test/smoke/warp-unlock.mjs && node test/smoke/path-connectivity.mjs && node test/smoke/town-wallet.mjs && node test/smoke/town-welcome.mjs && node test/smoke/touch-controls.mjs && node test/smoke/gamepad-controls.mjs && node test/smoke/mobile-resize.mjs && node test/smoke/endgame-panels.mjs && node test/smoke/continue-save.mjs",
-    "smoke:pages": "node test/smoke/smoke.mjs index.html && node test/smoke/reward-banner.mjs index.html && node test/smoke/bounty-hud.mjs index.html && node test/smoke/dungeon-facing.mjs index.html && node test/smoke/cracked-wall-render.mjs index.html && node test/smoke/teleporter-warp.mjs index.html && node test/smoke/warp-unlock.mjs index.html && node test/smoke/path-connectivity.mjs index.html && node test/smoke/town-wallet.mjs index.html && node test/smoke/town-welcome.mjs index.html && node test/smoke/touch-controls.mjs index.html && node test/smoke/gamepad-controls.mjs index.html && node test/smoke/mobile-resize.mjs index.html && node test/smoke/endgame-panels.mjs index.html && node test/smoke/continue-save.mjs index.html",
+    "smoke": "node test/smoke/smoke.mjs && node test/smoke/reward-banner.mjs && node test/smoke/bounty-hud.mjs && node test/smoke/dungeon-facing.mjs && node test/smoke/cracked-wall-render.mjs && node test/smoke/teleporter-warp.mjs && node test/smoke/warp-unlock.mjs && node test/smoke/path-connectivity.mjs && node test/smoke/town-wallet.mjs && node test/smoke/town-welcome.mjs && node test/smoke/touch-controls.mjs && node test/smoke/gamepad-controls.mjs && node test/smoke/mobile-resize.mjs && node test/smoke/endgame-panels.mjs && node test/smoke/continue-save.mjs && node test/smoke/tutorial-resume.mjs && node test/smoke/new-classes.mjs && node test/smoke/run-modifiers.mjs",
+    "smoke:pages": "node test/smoke/smoke.mjs index.html && node test/smoke/reward-banner.mjs index.html && node test/smoke/bounty-hud.mjs index.html && node test/smoke/dungeon-facing.mjs index.html && node test/smoke/cracked-wall-render.mjs index.html && node test/smoke/teleporter-warp.mjs index.html && node test/smoke/warp-unlock.mjs index.html && node test/smoke/path-connectivity.mjs index.html && node test/smoke/town-wallet.mjs index.html && node test/smoke/town-welcome.mjs index.html && node test/smoke/touch-controls.mjs index.html && node test/smoke/gamepad-controls.mjs index.html && node test/smoke/mobile-resize.mjs index.html && node test/smoke/endgame-panels.mjs index.html && node test/smoke/continue-save.mjs index.html && node test/smoke/tutorial-resume.mjs index.html && node test/smoke/new-classes.mjs index.html && node test/smoke/run-modifiers.mjs index.html",
     "lint:styles": "node tools/styles-lint.js"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^2.1.9",
+    "esbuild": "0.21.5",
     "jsdom": "^25.0.1",
     "playwright": "^1.49.1",
     "vite": "^5.4.11",

@@ -399,17 +399,21 @@ export const WIKI = [
     articles: [
       {
         id: 'classes',
-        title: 'The Four Classes',
-        keywords: ['class', 'classes', 'warrior', 'rogue', 'mage', 'templar', 'attribute', 'damage'],
+        title: 'The Seven Classes',
+        keywords: ['class', 'classes', 'warrior', 'rogue', 'mage', 'templar', 'fortune', 'seeker', 'windblade', 'bloodletter', 'hybrid', 'attribute', 'damage'],
         body: [
-          { p: 'Basic (auto) attacks scale off <b>Might</b> for every class. Beyond that, each class has <b>one identity attribute</b> that powers its skills:' },
+          { p: 'Basic (auto) attacks scale off <b>Might</b> for every class. Beyond that, each class has an <b>identity attribute</b> that powers its skills — and three of them break the mould:' },
           { ul: [
             '<b>Warrior</b> — tanky melee; skills from <b>Might</b>.',
             '<b>Rogue</b> — crit and dodge; skills from <b>Agility</b>.',
             '<b>Mage</b> — spells and a deep mana pool; spells from <b>Spirit</b>.',
             '<b>Templar</b> — durable hybrid; skills from <b>Vitality</b>.',
+            '<b>Fortune-Seeker</b> — ranged chancer; the only class whose skills scale off <b>Luck</b>, so crit and find are firepower.',
+            '<b>Windblade</b> — blade-caster; skills scale off <b>Agility + Spirit</b> together.',
+            '<b>Bloodletter</b> — has <b>no mana at all</b>: every skill costs a share of your health. Skills scale off <b>Might + Vitality</b> together.',
           ] },
-          { p: 'Your class also gates which weapons you can equip. Pump Might for reliable weapon damage and your class\'s identity attribute for its signature skills — and note every attribute also pays a defensive or utility role.' },
+          { p: 'A <b>hybrid</b> adds both of its attributes together at a slightly lower rate per point, so it trades peak skill damage for the full defensive payout of two attributes — and a point in either one is worth exactly the same.' },
+          { p: 'Your class also gates which weapons you can equip. Pump Might for reliable weapon damage and your class\'s identity attribute(s) for its signature skills — and note every attribute also pays a defensive or utility role.' },
         ],
       },
       {
@@ -751,13 +755,12 @@ export const WIKI = [
       },
       {
         id: 'buffs-hires',
-        title: 'Ramen House, Mystic & Sellsword',
-        keywords: ['ramen', 'cook', 'food', 'meal', 'mystic', 'pact', 'sellsword', 'mercenary', 'hire', 'buff'],
+        title: 'Ramen House & Mystic',
+        keywords: ['ramen', 'cook', 'food', 'meal', 'mystic', 'pact', 'buff'],
         body: [
           { ul: [
             '<b>Ramen House</b> — cook toppings into a multi-floor food buff (only one active at a time). Secret recipes can grant lifesteal, thorns, bonus XP, or a one-time revive. Assign cooked bowls to meal slots to eat them mid-run.',
             '<b>Mystic</b> — buy a multi-floor <b>pact</b> that warps the next 1, 5 or 10 floors (more damage, loot or gold, or an easier stretch). Each mystic offers two of the twelve pacts at random, so the pick changes every time; sealing more floors costs more per floor.',
-            '<b>Sellsword</b> (Brutal and up) — hire a combat companion for a stretch of floors; it fights beside you like a strong summon and revives between floors.',
           ] },
         ],
       },

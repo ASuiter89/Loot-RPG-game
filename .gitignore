@@ -22,3 +22,8 @@ scratch-shots/
 # tools/skill-icons/{generate,pack}.mjs. Not committed (the packed sheet lives in
 # src/assets/skillIconsAtlas.js).
 tools/skill-icons/.work/
+
+# Hero walk sheets are intermediates: the shipped copy is base64 inside
+# HERO_WALK in src/legacy/game.js, and art/hero-walk/build-sheets.py rebuilds
+# these from the GIF masters on demand.
+art/hero-walk/sheet_*.png

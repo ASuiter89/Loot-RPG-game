@@ -82,13 +82,34 @@ export function delCloudHasAll(local, cloud) {
 // are account-wide and synced identically — monotonic, so a stale device can never
 // shrink them. The feat sets live HERE, not in a per-slot save, precisely so
 // achievements are ACCOUNT-WIDE: earned on any hero or slot, they light up on every
-// hero and slot and survive that hero's death or a slot deletion. The set algebra is
-// pure and unit-tested here; the shell owns the storage + cloud plumbing.
+// hero and slot and survive that hero's death or a slot deletion.
+//
+// The row also carries `pt`, a fourth grow-only member of the same shape as the
+// stash's gold counter: a MAP of deviceId → lifetime billed play-time (ms). Total
+// time played is the SUM across devices, and the merge takes the per-device MAX, so
+// two devices' independent play both survive and a stale device can't lower another's
+// tally. Keeping the total HERE (not reconstructed by summing whatever heroes still
+// exist) is what makes it durable — it no longer drops when a hero is deleted, a save
+// slot is reused, or a device's localStorage is evicted. The set algebra is pure and
+// unit-tested here; the shell owns the storage + cloud plumbing.
 
-/** A blank meta ledger: no deaths, no feats, never written. */
-export function freshHcMeta() { return { cids: [], ach: [], nach: [], ts: 0 }; }
+/** A blank meta ledger: no deaths, no feats, no play-time, never written. */
+export function freshHcMeta() { return { cids: [], ach: [], nach: [], pt: {}, ts: 0 }; }
 
-/** Coerce an arbitrary parsed blob into a clean { cids, ach, nach, ts } ledger. */
+// A per-device grow-only play-time counter (deviceId → ms). Keeps only the positive
+// integer entries — mirrors the stash gold counter's cleaner.
+function cleanPt(o) {
+  const out = {};
+  if (o && typeof o === 'object') {
+    for (const k of Object.keys(o)) {
+      const v = Math.max(0, Math.floor(Number(o[k])) || 0);
+      if (v > 0) out[k] = v;
+    }
+  }
+  return out;
+}
+
+/** Coerce an arbitrary parsed blob into a clean { cids, ach, nach, pt, ts } ledger. */
 export function sanitizeHcMeta(d) {
   const out = freshHcMeta();
   if (d && typeof d === 'object') {
@@ -96,9 +117,45 @@ export function sanitizeHcMeta(d) {
     out.cids = strs(d.cids);
     out.ach = strs(d.ach);
     out.nach = strs(d.nach);
+    out.pt = cleanPt(d.pt);
     out.ts = Math.max(0, Math.floor(d.ts) || 0);
   }
   return out;
+}
+
+/** Account-wide lifetime play-time (ms) = the sum of every device's counter. */
+export function hcPlaytimeValue(meta) {
+  const pt = sanitizeHcMeta(meta).pt;
+  return Object.keys(pt).reduce((a, k) => a + pt[k], 0);
+}
+
+/**
+ * Add billed play-time (ms) for ONE device — grow-only. Mutates + returns `meta`
+ * (matching the stash's depositGold), so the shell can accrue straight onto the live
+ * ledger before persisting. A falsy/zero delta or missing device id is a no-op.
+ */
+export function bumpHcPlaytime(meta, deviceId, deltaMs) {
+  const n = Math.max(0, Math.floor(deltaMs) || 0);
+  if (n > 0 && deviceId) {
+    if (!meta.pt || typeof meta.pt !== 'object') meta.pt = {};
+    meta.pt[deviceId] = (meta.pt[deviceId] || 0) + n;
+  }
+  return meta;
+}
+
+/**
+ * Seed a play-time bucket to AT LEAST `ms` (idempotent MAX, never lowers). Used once
+ * to fold a pre-existing reconstructed total into a SHARED bucket key so re-seeding on
+ * this or another device can't double-count it (the same fold the stash does for its
+ * legacy gold under a shared key). Mutates + returns `meta`.
+ */
+export function seedHcPlaytime(meta, key, ms) {
+  const n = Math.max(0, Math.floor(ms) || 0);
+  if (n > 0 && key) {
+    if (!meta.pt || typeof meta.pt !== 'object') meta.pt = {};
+    meta.pt[key] = Math.max(meta.pt[key] || 0, n);
+  }
+  return meta;
 }
 
 /**
@@ -120,10 +177,20 @@ export function mergeHcMeta(local, cloud, now) {
   incoming.cids.forEach(x => cidSet.add(x));
   incoming.ach.forEach(x => achSet.add(x));
   incoming.nach.forEach(x => nachSet.add(x));
-  const grew = cidSet.size !== baseCids.size || achSet.size !== baseAch.size || nachSet.size !== baseNach.size;
+  // Play-time counter: per-device MAX (grow-only). It grew if any device's tally rose
+  // above what we already held — that's what tells the caller a newer copy arrived.
+  const pt = {};
+  let ptGrew = false;
+  new Set(Object.keys(base.pt).concat(Object.keys(incoming.pt))).forEach(k => {
+    const v = Math.max(base.pt[k] || 0, incoming.pt[k] || 0);
+    pt[k] = v;
+    if (v > (base.pt[k] || 0)) ptGrew = true;
+  });
+  const grew = cidSet.size !== baseCids.size || achSet.size !== baseAch.size
+    || nachSet.size !== baseNach.size || ptGrew;
   return {
     meta: {
-      cids: Array.from(cidSet), ach: Array.from(achSet), nach: Array.from(nachSet),
+      cids: Array.from(cidSet), ach: Array.from(achSet), nach: Array.from(nachSet), pt,
       ts: grew ? now : Math.max(base.ts, incoming.ts),
     },
     grew,
@@ -131,12 +198,18 @@ export function mergeHcMeta(local, cloud, now) {
   };
 }
 
-/** True when the cloud ledger already holds every cid/feat we do (skip a pointless write). */
+/**
+ * True when the cloud ledger already holds every cid/feat we do AND at least as much
+ * play-time per device (skip a pointless write). A device that billed time the cloud
+ * hasn't seen returns false, forcing a push.
+ */
 export function hcMetaCloudHasAll(local, cloud) {
   const base = sanitizeHcMeta(local);
   const c = sanitizeHcMeta(cloud);
   const cc = new Set(c.cids), ca = new Set(c.ach), cn = new Set(c.nach);
-  return base.cids.every(x => cc.has(x)) && base.ach.every(x => ca.has(x)) && base.nach.every(x => cn.has(x));
+  const ptCovered = Object.keys(base.pt).every(k => (c.pt[k] || 0) >= base.pt[k]);
+  return base.cids.every(x => cc.has(x)) && base.ach.every(x => ca.has(x))
+    && base.nach.every(x => cn.has(x)) && ptCovered;
 }
 
 // ── Graveyard (fallen-hero History) — a union-merged set of headstones ────────
