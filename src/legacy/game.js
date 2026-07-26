@@ -7402,9 +7402,10 @@ let townBuildings = []; // decorative shop buildings drawn behind the NPCs
 let townPathSet = new Set();       // "y,x" cobble/dirt trail tiles (ground painter + terrain paths)
 let townGatePos = null;            // {x,y,name} — walk into it / interact to descend
 let townPortalPos = null;          // {x,y,name} — return to the held floor (see townPortalActive)
-// Small pixel badge shown above each service keeper (and in its interaction prompt).
-// The keeper's BODY is the animated walk sprite drawTownWalk(kind); this is just the
-// role glyph. All are real atlas keys (no emoji), per the pixel-art rule.
+// Small pixel role glyph for each service keeper, used only as the fallback icon in
+// the arrival banner (showNpcBanner) when a walk sprite isn't available — it is no
+// longer floated above a keeper's head. All are real atlas keys (no emoji), per the
+// pixel-art rule.
 const TOWN_SVC_TAG = {
   merchant: 'ic_money', forge: 'ic_mallet', healer: 'ic_heart', mystic: 'ic_orb',
   trainer: 'ic_wand', gambler: 'ic_coffer', enchanter: 'ic_wand', stash: 'ic_coffer',
@@ -14380,9 +14381,8 @@ function buildTown(atPortal = false) {
     if (solid) for (const [fx, fy] of decorFootprint(id, d.x, d.y)) furnitureMap[fy + ',' + fx] = 1;
   }
 
-  // The service keepers. `kind` maps 1:1 to openTownService(kind); `tag` is the small
-  // pixel badge above them (and in the interaction prompt); body is the animated walk
-  // sprite drawTownWalk(kind). Only keepers who have ARRIVED are placed — a
+  // The service keepers. `kind` maps 1:1 to openTownService(kind); body is the
+  // animated walk sprite drawTownWalk(kind). Only keepers who have ARRIVED are placed — a
   // still-locked keeper is simply ABSENT (no greyed placeholder), so the camp fills in
   // one keeper at a time as the hero fells deeper guardians.
   //   • ENDGAME keepers keep their authored tiles inside the hedged sanctum, fixed.
@@ -14397,7 +14397,7 @@ function buildTown(atPortal = false) {
   const fixedKinds = new Set(TOWN_FIXED_KINDS);
   const available = TOWN_NPCS.filter((n) => townServiceAvailable(n.kind));
   const mkNpc = (n, x, y, wander) => ({
-    x, y, kind: n.kind, name: n.name, tag: TOWN_SVC_TAG[n.kind] || 'npc_quest',
+    x, y, kind: n.kind, name: n.name,
     fx: x, fy: y, tx: x, ty: y, homeX: x, homeY: y, wander, dwell: 0, faceDx: 0, faceDy: 1,
   });
   // Free tiles a wanderer may occupy: interior, off any solid decor/furniture, outside
@@ -17607,8 +17607,8 @@ function drawTownBuildings(offX, offY, tw, th) {
 // Draw the friendly townsfolk on top of the plaza, with a glow + name label.
 // Draw the walkable town's living props: the statue centrepiece, the Dungeon Gate,
 // the Town Portal (only when a floor is held), every service keeper (animated walk
-// sprite + role badge + name, greyed with a lock badge while its service is still
-// gated), and a bobbing prompt over whichever object the hero is standing next to.
+// sprite + name, greyed with a lock badge while its service is still gated), and a
+// bobbing prompt over whichever object the hero is standing next to.
 // Culled implicitly — the town is small and iterated once, like the roaming vendor.
 // A newly-arrived keeper flags a bobbing pixel-art "!" over their head — the
 // classic "come see me" marker — until you greet them (open their service). Drawn
@@ -17654,7 +17654,7 @@ function drawTownWorld(offX, offY, tw, th, scale) {
     const nx = n.fx != null ? n.fx : n.x, ny = n.fy != null ? n.fy : n.y;
     const cx = offX + nx * tw + tw / 2, footY = offY + ny * th + th * 0.92;
     // Every keeper here is UNLOCKED (buildTown never places a locked one), so all
-    // draw at full presence — the warm hub glow, body, role badge and name label.
+    // draw at full presence — the warm hub glow, body and name label.
     drawActorShadow(cx, footY, tw * 0.78);
     glowUnder(cx, footY - th * 0.28, tw * 0.5, `rgba(255,210,120,${pulse + 0.06})`);
     // Body: the animated walk sprite; fall back to the static role sprite.
@@ -17662,8 +17662,6 @@ function drawTownWorld(offX, offY, tw, th, scale) {
       const tSprite = TOWN_SPRITE[n.kind];
       if (tSprite && spriteReady) drawSpriteC(tSprite, cx, footY - th * 0.42, charSpritePx(tw));
     }
-    // Role glyph badge above the head.
-    if (n.tag && spriteReady) drawSpriteC(n.tag, cx, footY - th * 1.6, Math.round(tw * 0.42));
     // A keeper freshly arrived (unlocked since you last greeted them) flags a
     // bobbing "!" over their head until you walk up and open their service.
     if (npcNewlyArrived(n.kind)) drawTownArrivedMark(cx, footY, tw, th);
