@@ -88,6 +88,8 @@ export const WIKI = [
             'Your whole bag drops as a <b>reclaimable grave</b> on the floor where you fell — go back and pick it up to recover your gear.',
             'You do <b>not</b> lose floor progress. The Dungeon Gate drops you at a five-floor checkpoint at or just below where you died, and you walk the last stretch back down.',
           ] },
+          { h: 'The opening beach' },
+          { p: 'Falling on the starting <b>beach</b> costs nothing — no gold, no XP, no dropped bag. The shore rebuilds and you wake at the water\'s edge to try again, so a first-fight stumble can never skip the tutorial, its starter weapon or its level-up.' },
           { note: 'Bank gold and prized gear in the town Vault before a risky push, so a death can\'t take them.' },
         ],
       },

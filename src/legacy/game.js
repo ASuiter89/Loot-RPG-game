@@ -35,6 +35,8 @@ import { SHRINE_DEFS } from '../data/shrines.js';
 import { defaultShrineBuffs, shrineFxFrom, activeShrineBuffs, pickShrineKind, shrineShortName } from '../systems/shrineEffects.js';
 import { creditInitials } from '../systems/credit.js';
 import { savedOnShore, hasStarterGift } from '../systems/tutorialResume.js';
+import { deathRoute } from '../systems/shoreDeath.js';
+import { shouldTeachFirstSpell, activeGateKind } from '../systems/tutorialGates.js';
 import { restockCost } from '../systems/restockCost.js';
 import { unseenLootCount } from '../systems/lootSeen.js';
 import { hasVaultKey, addVaultKey, spendVaultKey } from '../systems/vaultKeys.js';
@@ -79,7 +81,7 @@ import {
   setItemsAllowed, cursedItemsAllowed, uniqueItemsAllowed, loadoutSwapUnlocked,
   detailedTooltips, hazardAllowed, earlyEnemyHp, playerEarlyDamage, earlyPackCap,
   firstHint, keeperIntro, starterChain, deathTip as rampDeathTip,
-  rampStatus,
+  rampStatus, potionTeachDue,
 } from '../systems/onboarding.js';
 import { HINTS, KEEPER_INTRO, EARLY_SUSTAIN_ILVL, EARLY_SUSTAIN_CHANCE, EARLY_SUSTAIN_STATS } from '../data/onboarding.js';
 import { salvageVariance, salvageIlvlCurve, salvageRanges as salvageRangesPure } from '../systems/salvage.js';
@@ -7400,9 +7402,10 @@ let townBuildings = []; // decorative shop buildings drawn behind the NPCs
 let townPathSet = new Set();       // "y,x" cobble/dirt trail tiles (ground painter + terrain paths)
 let townGatePos = null;            // {x,y,name} — walk into it / interact to descend
 let townPortalPos = null;          // {x,y,name} — return to the held floor (see townPortalActive)
-// Small pixel badge shown above each service keeper (and in its interaction prompt).
-// The keeper's BODY is the animated walk sprite drawTownWalk(kind); this is just the
-// role glyph. All are real atlas keys (no emoji), per the pixel-art rule.
+// Small pixel role glyph for each service keeper, used only as the fallback icon in
+// the arrival banner (showNpcBanner) when a walk sprite isn't available — it is no
+// longer floated above a keeper's head. All are real atlas keys (no emoji), per the
+// pixel-art rule.
 const TOWN_SVC_TAG = {
   merchant: 'ic_money', forge: 'ic_mallet', healer: 'ic_heart', mystic: 'ic_orb',
   trainer: 'ic_wand', gambler: 'ic_coffer', enchanter: 'ic_wand', stash: 'ic_coffer',
@@ -7694,7 +7697,7 @@ window.gameState = function gameState(radius) {
     blockingOverlay, // DOM id of the open modal, or null
     // A world-pausing tutorial spotlight gate, or null. `kind` names the beat and
     // `act` the one call that dismisses it — everything else on screen is greyed and
-    // inert until then. (potion → first-hit heal, equip → wear the starter weapon,
+    // inert until then. (potion → heal once Health dips to 75%, equip → wear the starter weapon,
     // mana → first-spell refill.)
     tutorial: _tutGate ? { kind: _tutGate.kind, act: _tutGate.kind === 'equip' ? 'quickEquip(<starter weapon>)' : _tutGate.kind === 'mana' ? 'useManaPotion()' : 'useHealthPotion()' } : null,
     // Teleport ANIMATION in flight, else null. 'out' (fading out to town) or 'in'
@@ -7711,6 +7714,11 @@ window.gameState = function gameState(radius) {
     input: (typeof document !== 'undefined' && document.body && document.body.classList.contains('touch')) ? 'touch'
          : (typeof document !== 'undefined' && document.body && document.body.classList.contains('pad')) ? 'pad' : 'mouse',
     inTown: !!inTown,
+    // On the one-time opening BEACH (the tutorial shore). It runs at floor 1 — the
+    // same number as the real floor 1 — so this flag is the only way to tell them
+    // apart. While it's true a death is a plain retry: the shore rebuilds and the
+    // hero wakes at the water's edge, costing nothing (see gameGuide("onboarding")).
+    shore: (typeof tutorialActive !== 'undefined') && !!tutorialActive,
     floor: dungeonLevel,                                                   // continuous depth (1, 2, 3, …)
     floorDisplay: (typeof displayFloor === 'function') ? displayFloor() : dungeonLevel, // 1–25 within a tier
     tier: (typeof diffOf === 'function' && typeof DIFFS !== 'undefined') ? ((DIFFS[diffOf(dungeonLevel) - 1] || {}).name || null) : null,
@@ -8090,7 +8098,7 @@ window.gameGuide = function gameGuide(topic) {
     overview: [
       `Dungeon Loot is a real-time, loot-driven pixel dungeon crawler. Delve floor by floor, kill foes, grab ever-better gear, and survive as deep as you can.`,
       `Depth is one continuous counter across four difficulty tiers of 25 floors each: Normal (1-25), Hardened (26-50), Brutal (51-75), Endless (76+, uncapped). gameState().floorDisplay and .tier show where you are.`,
-      `Core loop per floor: clear every hostile to unseal the down-stairs, loot, then descend. Every 5th floor is a boss floor. Death is NOT game over — it sends you back to town (you lose some gold/XP and drop your bag as a recoverable grave) but revives you at full HP/MP/Stamina; your hero lives on.`,
+      `Core loop per floor: clear every hostile to unseal the down-stairs, loot, then descend. Every 5th floor is a boss floor. Death is NOT game over — it sends you back to town (you lose some gold/XP and drop your bag as a recoverable grave) but revives you at full HP/MP/Stamina; your hero lives on. The one exception is the opening BEACH (gameState().shore): dying there costs nothing at all — the shore rebuilds and you wake at the water's edge to try again.`,
       `There is no single "win" — the goal is to push as deep as you can. Best objective on any normal floor: clear all foes, grab nearby loot, reach the down-stairs.`,
       `gameState() shows the live situation; gameGuide() explains the rules. Use them together.`,
     ],
@@ -8342,7 +8350,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the FIRST hit you take pops a one-time nudge naming the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the moment a wound takes you to 75% Health or below a one-time nudge names the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire — it waits for a wound worth healing rather than firing on the first scratch. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. Spending that point on an ACTIVE arms one more lesson right there on the sand: the first cast that actually burns MANA pauses the world and spotlights the Mana Potion (${key('manaPotion')}) until you quaff — the beach beats take the screen first, so it simply waits its turn if a heal or equip gate is still up. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice. DYING there doesn't skip it either, and costs nothing: no gold or XP is taken and your bag is never dropped as a grave — the shore simply rebuilds the same way and you wake at the water's edge at full HP/MP/Stamina (gameState().shore stays true; you never see town). The Hardcore exception still applies — one life is one life, beach included.`,
       `Opening-floor content pacing (Normal, floors 1–25): the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. DIFFICULTY ARC — a fresh hero's flat attribute damage would otherwise one-shot floor-1 trash, so over floors 1–5 the real numbers bend to make kills take a few blows ORGANICALLY (no per-hit cap): foes carry extra HP and the hero deals less, both easing to full strength by floor 6 as your levels and gear take over — "weak at the start, then earn your strength". Because those fights last longer, foes land more of their (full-strength) hits, so the opening actually threatens. No glowing ELITES or elite affixes until floor 4 (the one scripted beach elite aside). Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -12698,11 +12706,13 @@ function finishTutorial() {
 // floating pill is left only for the non-blocking level-up nudge.)
 let _tutPopupVariant = null;
 const _tutDismissed = { equip: false, levelup: false };
-// First-hit Health-Potion teach: the moment a beach foe first bites, a one-time
-// world-pausing gate spotlights the Health-Potion flask so a new hero learns to heal
-// under fire. `_taught` latches it to once per shore; `_cueOn` drives the gate (it
-// holds until the hero quaffs — see beachPotionHint / activeTutGateKind). Reset in
-// buildTutorialMap.
+// Health-Potion teach: once a beach foe has bitten the hero down to
+// BEACH_POTION_HP_FRAC of max Health (75%), a one-time world-pausing gate spotlights
+// the Health-Potion flask so a new hero learns to heal under fire. Waiting for a real
+// wound — rather than the first scratch, which used to fire it — means the pause lands
+// when the flask is actually worth drinking. `_taught` latches it to once per shore;
+// `_cueOn` drives the gate (it holds until the hero quaffs — see beachPotionHint /
+// activeTutGateKind). Reset in buildTutorialMap.
 let _beachPotionTaught = false;
 let _beachPotionCueOn = false;
 // The ambient "?" hint stage the shore wants to show ('move' at spawn, 'cave' once
@@ -12782,12 +12792,15 @@ function grantBeachLevelUp() {
   refreshTutorialCues();
 }
 
-// First beach blow: raise the one-time "here's how to heal" GATE. Fired from
-// enemyAttackPlayer the moment a foe's hit actually lands on the shore. Latched so it
-// arms once per shore; the gate then pauses the world and spotlights the Health-Potion
-// flask until the hero quaffs (clearBeachPotionCue), so the lesson can't be missed.
+// A beach blow landed: raise the one-time "here's how to heal" GATE — but only once
+// the hit has actually taken the hero to 75% Health or below (potionTeachDue, over
+// data/onboarding's BEACH_POTION_HP_FRAC), so the world doesn't pause over a scratch.
+// Fired from enemyAttackPlayer after the damage is applied. Latched so it arms once
+// per shore; the gate then pauses the world and spotlights the Health-Potion flask
+// until the hero quaffs (clearBeachPotionCue), so the lesson can't be missed.
 function beachPotionHint() {
   if (!tutorialActive || _beachPotionTaught) return;
+  if (!potionTeachDue(player.hp, player.maxHp)) return;   // still barely scratched — wait for a wound worth healing
   _beachPotionTaught = true;
   _beachPotionCueOn = true;
   refreshTutorialCues();                 // reconcile → syncTutGate opens the potion gate
@@ -12849,15 +12862,23 @@ let _tutGate = null;               // { kind: 'potion' | 'equip' | 'mana' } or n
 let _manaGateWanted = false;       // the first-spell Mana-Potion beat is pending
 const TUT_GATE_PAD = 8;            // px of breathing room the lit hole leaves around a target
 
-// Which gate (if any) should be up right now. Priority: the standalone first-spell
-// mana beat, then the beach first-hit and equip beats (mana can't collide with them
-// in practice — the shore hands out no spells). null = no gate.
+// Which gate (if any) should be up right now — the beach heal and equip beats
+// first, then the first-spell mana beat (see systems/tutorialGates.js for the
+// ordering and why). null = no gate.
 function activeTutGateKind() {
-  if (_manaGateWanted && player.mp < player.maxMp) return 'mana';
-  if (!tutorialActive) return null;
-  if (_beachPotionCueOn) return 'potion';
-  if (beachEquipCueOn()) return 'equip';
-  return null;
+  // The death card owns the screen while it is up — a shore death respawns the hero
+  // still holding an unequipped starter weapon, and stacking the equip spotlight
+  // (its own dim layer + banner) under the card gives two competing instructions.
+  // closeDeath() reconciles the cue, so the gate simply waits its turn.
+  const death = document.getElementById('death-overlay');
+  return activeGateKind({
+    deathCardOpen: !!(death && death.classList.contains('open')),
+    onShore: tutorialActive,
+    potionCueOn: _beachPotionCueOn,
+    equipCueOn: beachEquipCueOn(),
+    manaWanted: _manaGateWanted,
+    mp: player.mp, maxMp: player.maxMp,
+  });
 }
 // Is the loot drawer actually on screen (the Bag sheet on touch, the always-present
 // sidebar on desktop)? Drives the equip beat's two-step target (Bag button → list).
@@ -12877,8 +12898,8 @@ function tutGateTarget(kind) {
 function tutGateMessage(kind) {
   const touch = isTouchMode();
   if (kind === 'potion') return { spr: 'ic_heart', html: touch
-    ? `First blood! Tap the glowing <b>Health Potion</b> to heal.`
-    : `First blood! Press <b>${kbLabel('healthPotion')}</b> to quaff a <b>Health Potion</b>.` };
+    ? `Health is dropping — tap the glowing <b>Health Potion</b> to heal.`
+    : `Health is dropping — press <b>${kbLabel('healthPotion')}</b> to quaff a <b>Health Potion</b>.` };
   if (kind === 'mana') return { spr: 'potion_g', html: touch
     ? `Spells cost <b>Mana</b> — tap the glowing <b>Mana Potion</b> to refill.`
     : `Spells cost <b>Mana</b> — press <b>${kbLabel('manaPotion')}</b> for a <b>Mana Potion</b>.` };
@@ -12987,16 +13008,16 @@ function syncTutGate() {
   if (kind) openTutGate(kind); else closeTutGate();
 }
 // First-spell teach: the very first time a Guided hero casts a mana-costing spell —
-// AFTER graduating the beach — pause and spotlight the Mana Potion so they learn to
-// refill. The beach already teaches Health-Potion + equip; the mana lesson lands on a
-// real floor once they can cast, so it gates on tutorialDone (which also keeps it off
-// the synthetic mid-game heroes the smoke harnesses boot straight into the dungeon).
-// Latched once ever in player.taught; only arms when there's mana to restore (a bare
-// cast just spent some), so the flask the gate points at is usable.
+// on the BEACH or on a real floor — pause and spotlight the Mana Potion so they learn
+// to refill. The shore does hand out castable spells: clearing it is the first
+// level-up, and the cave stays shut until that skill point is spent, so the lesson has
+// to land wherever the mana is actually burned. Latched once ever in player.taught;
+// only arms when there's mana to restore, so the flask the gate points at is usable.
 function maybeTeachFirstSpell() {
-  if (!player.guided || !player.tutorialDone) return;
-  if (player.taught && player.taught.firstSpell) return;
-  if (inTown || player.mp >= player.maxMp) return;   // nothing to teach yet — a later cast will
+  if (!shouldTeachFirstSpell({
+    guided: player.guided, taught: player.taught,
+    inTown, mp: player.mp, maxMp: player.maxMp,
+  })) return;
   if (!player.taught) player.taught = {};
   player.taught.firstSpell = true;
   _manaGateWanted = true;
@@ -14360,9 +14381,8 @@ function buildTown(atPortal = false) {
     if (solid) for (const [fx, fy] of decorFootprint(id, d.x, d.y)) furnitureMap[fy + ',' + fx] = 1;
   }
 
-  // The service keepers. `kind` maps 1:1 to openTownService(kind); `tag` is the small
-  // pixel badge above them (and in the interaction prompt); body is the animated walk
-  // sprite drawTownWalk(kind). Only keepers who have ARRIVED are placed — a
+  // The service keepers. `kind` maps 1:1 to openTownService(kind); body is the
+  // animated walk sprite drawTownWalk(kind). Only keepers who have ARRIVED are placed — a
   // still-locked keeper is simply ABSENT (no greyed placeholder), so the camp fills in
   // one keeper at a time as the hero fells deeper guardians.
   //   • ENDGAME keepers keep their authored tiles inside the hedged sanctum, fixed.
@@ -14377,7 +14397,7 @@ function buildTown(atPortal = false) {
   const fixedKinds = new Set(TOWN_FIXED_KINDS);
   const available = TOWN_NPCS.filter((n) => townServiceAvailable(n.kind));
   const mkNpc = (n, x, y, wander) => ({
-    x, y, kind: n.kind, name: n.name, tag: TOWN_SVC_TAG[n.kind] || 'npc_quest',
+    x, y, kind: n.kind, name: n.name,
     fx: x, fy: y, tx: x, ty: y, homeX: x, homeY: y, wander, dwell: 0, faceDx: 0, faceDy: 1,
   });
   // Free tiles a wanderer may occupy: interior, off any solid decor/furniture, outside
@@ -17587,8 +17607,8 @@ function drawTownBuildings(offX, offY, tw, th) {
 // Draw the friendly townsfolk on top of the plaza, with a glow + name label.
 // Draw the walkable town's living props: the statue centrepiece, the Dungeon Gate,
 // the Town Portal (only when a floor is held), every service keeper (animated walk
-// sprite + role badge + name, greyed with a lock badge while its service is still
-// gated), and a bobbing prompt over whichever object the hero is standing next to.
+// sprite + name, greyed with a lock badge while its service is still gated), and a
+// bobbing prompt over whichever object the hero is standing next to.
 // Culled implicitly — the town is small and iterated once, like the roaming vendor.
 // A newly-arrived keeper flags a bobbing pixel-art "!" over their head — the
 // classic "come see me" marker — until you greet them (open their service). Drawn
@@ -17634,7 +17654,7 @@ function drawTownWorld(offX, offY, tw, th, scale) {
     const nx = n.fx != null ? n.fx : n.x, ny = n.fy != null ? n.fy : n.y;
     const cx = offX + nx * tw + tw / 2, footY = offY + ny * th + th * 0.92;
     // Every keeper here is UNLOCKED (buildTown never places a locked one), so all
-    // draw at full presence — the warm hub glow, body, role badge and name label.
+    // draw at full presence — the warm hub glow, body and name label.
     drawActorShadow(cx, footY, tw * 0.78);
     glowUnder(cx, footY - th * 0.28, tw * 0.5, `rgba(255,210,120,${pulse + 0.06})`);
     // Body: the animated walk sprite; fall back to the static role sprite.
@@ -17642,8 +17662,6 @@ function drawTownWorld(offX, offY, tw, th, scale) {
       const tSprite = TOWN_SPRITE[n.kind];
       if (tSprite && spriteReady) drawSpriteC(tSprite, cx, footY - th * 0.42, charSpritePx(tw));
     }
-    // Role glyph badge above the head.
-    if (n.tag && spriteReady) drawSpriteC(n.tag, cx, footY - th * 1.6, Math.round(tw * 0.42));
     // A keeper freshly arrived (unlocked since you last greeted them) flags a
     // bobbing "!" over their head until you walk up and open their service.
     if (npcNewlyArrived(n.kind)) drawTownArrivedMark(cx, footY, tw, th);
@@ -26080,7 +26098,7 @@ function enemyAttackPlayer(e) {
   sfx('hurt');
   if (hpLost > 0) spawnFloatingText(player.x, player.y, `${hpLost}`, '#ff3344');
   if (dmg > 0) { if (hpLost > 0) spawnParticles(player.x, player.y, '#d22a3a', 6, 0.07); addShake(4); playEnemyMeleeVfx(e, beh); }
-  if (tutorialActive && dmg > 0) beachPotionHint();   // first beach blow → teach the Health-Potion hotkey
+  if (tutorialActive && dmg > 0) beachPotionHint();   // a beach wound past 75% Health → teach the Health-Potion hotkey
   log(`💢 ${enemyLabel(e)} ${clHurt(dmg)}`);
   if (player.hp > 0 && player.hp <= player.maxHp * 0.25) fireSkillTrigger('lowhp', { enemy: e });
   if (player.hp <= player.maxHp * 0.25) screenFlash('#cc0000');
@@ -27221,10 +27239,19 @@ function handleDeath() {
   clearGreed(); updateObjectiveChip();   // death breaks the streak & clears floor state
   resetPortal();   // a killing blow always collapses any half-formed town portal + its timer
   clearPendingRecovery();   // owed over-time leech/potion doesn't heal a corpse (or a Last-Stand/revive rise)
+  // WHERE this blow sends the hero — the free Last Stand, a burned revive bowl,
+  // Hardcore's one life, the beach retry, or the ordinary trip to town. The pure
+  // priority order lives in systems/shoreDeath.js; each branch below runs it.
+  const route = deathRoute({
+    lastStandReady: !!player.lastStandReady,
+    reviveBuff: !!(player.foodBuff && player.foodBuff.fx && player.foodBuff.fx.revive),
+    hardcore: !!player.hardcore,
+    tutorialActive, inTown,
+  });
   // Last Stand: once per floor, a killing blow leaves you clinging to 1 HP
   // instead of dying. It's free (no buff burned) so it triggers before the
   // Phoenix bowl below, saving that revive for a later death.
-  if (player.lastStandReady) {
+  if (route === 'laststand') {
     player.lastStandReady = false;
     player.hp = 1;
     sfx('levelup'); screenFlash('#ffd24b'); addShake(6);
@@ -27237,7 +27264,7 @@ function handleDeath() {
   // Phoenix / Everything ramen: a `revive` bowl lets you cheat death ONCE. The
   // buff is burned, every ailment is cleansed, and you rise at half health/mana
   // right where you stand — no town trip, no penalties.
-  if (player.foodBuff && player.foodBuff.fx && player.foodBuff.fx.revive) {
+  if (route === 'revive') {
     const fb = player.foodBuff;
     player.foodBuff = null;
     statusEffects = statusEffects.filter(s => s.target !== 'player');
@@ -27253,7 +27280,10 @@ function handleDeath() {
   }
   // Hardcore: past the Last Stand / Phoenix safety nets, death is the end. No town,
   // no penalties to tally — the hero is gone for good.
-  if (player.hardcore) { hardcoreDeath(); return; }
+  if (route === 'permadeath') { hardcoreDeath(); return; }
+  // The opening beach is a TUTORIAL, so falling on it is a retry, not a run: the
+  // shore rebuilds and the hero wakes at the water's edge with everything intact.
+  if (route === 'shore') { shoreDeath(); return; }
   // The cost of dying scales with the dungeon difficulty: gentle on Normal so the
   // early game forgives a stumble, escalating to brutal in Endless where a fall
   // costs every coin and most of a level. Your equipped gear is always untouched.
@@ -27317,16 +27347,63 @@ function handleDeath() {
   draw();
 }
 
+// ── DEATH ON THE OPENING SHORE ───────────────────────────────────────────────
+// The beach is a TUTORIAL, so falling on it is a RETRY, not a run cut short. Town
+// is the one place a mid-shore hero must never wake: a save taken there never
+// resumes the beach (savedOnShore → boot; see systems/tutorialResume.js), so the
+// old town revive quietly ended the tutorial for good — the cave, the starter
+// weapon it hands over, and the level-up earned by clearing it, all skipped
+// because a level-1 hero lost their very first fight.
+//
+// So the shore is REBUILT and the hero wakes at the water's edge, whole: no gold
+// or XP taken (the ordinary penalties, and the Guided one-death gold waiver, are
+// saved for a real dungeon death), and the BAG is kept — dropping it as a grave
+// would strand the starter weapon on a dungeon floor they have never seen.
+// Nothing pays out twice: buildTutorialMap seeds the gift latch from the hero's
+// own gear and grantBeachLevelUp only ever lifts a level-1 hero, so re-clearing
+// the respawned pack hands over neither a second weapon nor a second level.
+function shoreDeath() {
+  statusEffects = [];   // every ailment cleansed — the retry starts clean (buildTutorialMap keeps player effects, a death shouldn't)
+  player.skillCds = {}; combatBuffs = {}; minions = []; clearCharges();   // rise with skills ready, like any revive
+  sfx('death');
+  screenFlash('#cc0000');
+  buildTutorialMap();   // fresh shore: foes respawned, cave resealed, hero back on the spawn tile
+  // Woken at FULL strength, exactly like a town revive — the lesson is the cost.
+  recomputeMaxStats();
+  player.hp = player.maxHp;
+  player.mp = player.maxMp;
+  player.shield = player.maxShield; player._noDmgSecs = 0;
+  player.stamina = player.maxStamina; player._stamDelay = 0;
+  showDeathScreen(0, 0, 0, 0, true);   // the beach variant: how you died + a tip, no penalties
+  dmgTaken = [];
+  log(`<span data-spr=b_deathknight></span> ${player.name || HERO} falls on the shore — you wake at the water's edge. Nothing lost; the beach begins again.`, 'important');
+  updateBars();
+  renderPanel();
+  saveGame();
+  draw();
+}
+
 // A hard, unmistakable death screen that spells out every penalty. Death costs
 // gold/XP and drops your bag as a grave, but NOT floor progress — so there is no
 // "knocked back / floors re-lock" line; you just warp back in from a checkpoint.
-function showDeathScreen(lostGold, lostXp, lostBag, graveFloor) {
+// `onShore` switches it to the beach-tutorial variant: same "how you died" lines
+// and teaching tip, but it takes nothing and wakes you on the shore (shoreDeath).
+function showDeathScreen(lostGold, lostXp, lostBag, graveFloor, onShore) {
+  const subEl = document.getElementById('death-sub');
+  if (subEl) subEl.innerHTML = onShore
+    ? `You fell on the shore and woke at the water's edge, back where the <b>beach</b> began.`
+    : `You fell in the dungeon and woke up back in <b>Town</b>.`;
+  const contEl = document.getElementById('death-continue');
+  if (contEl) contEl.textContent = onShore ? 'Back to the shore →' : 'Wake up in Town →';
   const el = document.getElementById('death-penalties');
   if (el) {
-    const lines = [
+    const lines = (onShore ? [
+      `<span data-spr=ic_heart></span> Nothing lost — gear, gold and level kept`,
+      `<span data-spr=feat_door></span> The shore's foes rise again — fell them to unseal the cave`,
+    ] : [
       `<span data-spr=ic_money></span> Lost <span data-spr=ic_money></span>${fmtGold(lostGold)}${lostXp ? ` & ${abbreviateNumber(lostXp)} XP` : ''} — gear kept`,
       (lostBag && graveFloor) ? `<span data-spr=feat_grave></span> Bag (${lostBag} item${lostBag === 1 ? '' : 's'}) dropped on ${floorLabel(graveFloor)} — go reclaim it` : null,
-    ].filter(Boolean);
+    ]).filter(Boolean);
     el.innerHTML = lines.map(t => `<div class="death-pen">${t}</div>`).join('');
   }
   const causeEl = document.getElementById('death-cause');
@@ -27346,7 +27423,11 @@ function showDeathScreen(lostGold, lostXp, lostBag, graveFloor) {
   const ov = document.getElementById('death-overlay');
   if (ov) ov.classList.add('open');
 }
-function closeDeath() { const ov = document.getElementById('death-overlay'); if (ov) ov.classList.remove('open'); }
+function closeDeath() {
+  const ov = document.getElementById('death-overlay');
+  if (ov) ov.classList.remove('open');
+  refreshTutorialCues();   // the card is gone — let any tutorial spotlight it held back open now
+}
 
 // ── DEATH-SCREEN COMBAT LOG VIEWER ──
 // Both death screens offer a "View Combat Log" button so a fallen hero can read
@@ -28533,7 +28614,7 @@ function useHealthPotion() {
   sfx('potion');
   log(`<span data-spr=ic_heart></span> Quaffed a ${logPotion('Health Potion')} — ${clHeal(amt)} HP over a few seconds.`);
   spendPotionTurn();
-  if (tutorialActive) clearBeachPotionCue();   // lesson learned — retire the first-hit teach
+  if (tutorialActive) clearBeachPotionCue();   // lesson learned — retire the heal teach
 }
 
 // Mana potions restore a fraction of max MP (so they scale with you) rather than
@@ -39835,6 +39916,7 @@ const __DL_FN_BRIDGE = {
   notePlayerDamage,
   deathSummaryLines,
   handleDeath,
+  shoreDeath,
   showDeathScreen,
   closeDeath,
   openDeathLog,

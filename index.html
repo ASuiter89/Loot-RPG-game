@@ -444,12 +444,14 @@
   <div id="death-overlay">
     <div id="death-card">
       <div class="death-title"><span data-spr=b_deathknight></span> YOU DIED</div>
-      <div class="death-sub">You fell in the dungeon and woke up back in <b>Town</b>.</div>
+      <!-- Both lines are rewritten by showDeathScreen: the beach-tutorial variant
+           wakes you on the shore instead of town, so neither may be hardcoded. -->
+      <div class="death-sub" id="death-sub">You fell in the dungeon and woke up back in <b>Town</b>.</div>
       <div id="death-cause"></div>
       <div id="death-penalties"></div>
       <div class="death-actions">
         <button class="death-btn death-btn--ghost" onclick="openDeathLog()"><span data-spr=scroll></span> View Combat Log</button>
-        <button class="death-btn" onclick="closeDeath()">Wake up in Town →</button>
+        <button class="death-btn" id="death-continue" onclick="closeDeath()">Wake up in Town →</button>
       </div>
     </div>
   </div>
@@ -782,7 +784,7 @@
 </div>
 
 <!-- Tutorial spotlight GATE — a world-pausing "grey out everything but ONE control"
-     teaching moment (first-hit Health Potion, equip-your-weapon, first-spell Mana
+     teaching moment (the 75%-Health Potion beat, equip-your-weapon, first-spell Mana
      Potion). Four blocker panels tile the viewport around a lit hole, both placed in
      viewport px by positionTutGate(); the panels swallow every pointer OUTSIDE the
      hole, so the only reachable control is the one being taught, and the world stays

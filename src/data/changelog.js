@@ -10,6 +10,22 @@ export const CHANGELOG = [
   { date: "2026-07-25", size: "small", v: "Food refuels Stamina hard", by: "Jeff Louie", notes: [
     "Each snack now restores ~50% of max Stamina (was a flat 7–28); HP/MP still top up by the food's heal amount.",
     "Grabbing food is the fastest sprint/dash refill; scales with the pool as Vitality/gear deepen it.",
+  { date: "2026-07-26", size: "small", v: "Town keepers drop the floating role icon", by: "Jeff Louie", notes: [
+    "Role glyph no longer floats above each keeper's head; \"!\" new-arrival marker stays.",
+  ] },
+  { date: "2026-07-26", size: "small", v: "Mana lesson lands on the beach too", by: "Jeff Louie", notes: [
+    "First cast that burns mana spotlights the Mana Potion wherever it happens; it used to skip the shore entirely.",
+    "The beach spends your first skill point, so that first cast is often on the sand.",
+    "Health-Potion and equip beats keep the screen first; the mana beat opens once they're done.",
+  ] },
+  { date: "2026-07-26", size: "small", v: "Beach heal lesson waits for a real wound", by: "Jeff Louie", notes: [
+    "Health-Potion gate pauses the shore at 75% Health (was: first hit landed, over a scratch).",
+  ] },
+  { date: "2026-07-26", size: "small", v: "Dying on the beach keeps you on the beach", by: "Jeff Louie", notes: [
+    "Fall on the opening shore and it rebuilds around you at the water's edge (was: revived in town, tutorial skipped).",
+    "Costs nothing — no gold, no XP, bag kept, so the first weapon and first level-up survive a stumble.",
+    "Hardcore unchanged: one life, beach included.",
+  ] },
   { date: "2026-07-25", size: "small", v: "Loading a hero mid-tutorial returns to the beach", by: "Jeff Louie", notes: [
     "Quitting the opening shore and loading that slot resumes there (was: dungeon floor 1).",
     "First weapon and first level-up can't be skipped by a mid-tutorial reload.",

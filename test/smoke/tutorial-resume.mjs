@@ -12,8 +12,15 @@
 //   2. reloading that save comes back to the SHORE — its pack of four identical foes
 //      plus one elite — not a generated dungeon floor;
 //   3. the slot list labels that hero "The Shore", not "Floor 1";
-//   4. a hero who has left for the dungeon stops recording the shore; and
-//   5. a save predating the flag is stamped graduated, never dragged back to it.
+//   3b. a mana-costing cast ON THE SHORE raises the Mana-Potion gate (the shore
+//      spends the hero's first skill point, so that first cast happens on the sand)
+//      and quaffing releases it;
+//   4. DYING on the shore respawns there, cost-free — a town revive would stamp the
+//      hero graduated and skip the tutorial just as surely as the reload bug did;
+//   5. the shore's world-pausing HEAL lesson waits for a real wound (Health at or
+//      under 75%) instead of firing on the first scratch;
+//   6. a hero who has left for the dungeon stops recording the shore; and
+//   7. a save predating the flag is stamped graduated, never dragged back to it.
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -67,7 +74,7 @@ async function main() {
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 
   const failures = [];
-  let fresh = null, resumed = null, slotRow = null, descended = null, legacyBoot = null;
+  let fresh = null, resumed = null, slotRow = null, manaGate = null, shoreDeath = null, healBeat = null, descended = null, legacyBoot = null;
   try {
     // ── 1. A brand-new hero begins on the shore, and the save records it ──
     await page.goto(url, { waitUntil: 'load', timeout: 30000 });
@@ -129,7 +136,125 @@ async function main() {
     });
     if (!/The Shore/.test(slotRow)) failures.push(`slot list does not label the mid-tutorial hero "The Shore" (got: ${slotRow.slice(0, 160)})`);
 
-    // ── 4. Off the shore and into the dungeon — the save must stop claiming it ──
+    // ── 3b. The first cast that burns MANA raises the Mana-Potion gate — ON THE
+    //       SHORE. The beach hands out the hero's first skill point (clearing it is
+    //       the first level-up) and the cave won't open until it's spent, so a first
+    //       active — which auto-slots into auto-cast for a Guided hero — is learned
+    //       and fired right here on the sand. The lesson used to gate on tutorialDone
+    //       and so skipped the beach entirely: mana drained, nothing taught.
+    //       Brace (w_a00) is a SELF buff, so it fires with no foe in reach.
+    manaGate = await page.evaluate(() => {
+      window.player.skillPoints = 1;   // what clearing the shore grants
+      window.player.level = 2;
+      window.buySkill('w_a00');
+      const taughtBefore = !!(window.player.taught && window.player.taught.firstSpell);
+      const mpBefore = window.player.mp;
+      const fired = window.castSkillById('w_a00');
+      const gs = window.gameState();
+      const open = {
+        shore: gs.shore, mode: gs.mode, gate: gs.tutorial,
+        banner: ((document.getElementById('tg-msg') || {}).textContent || '').replace(/\s+/g, ' ').trim(),
+        gated: document.body.classList.contains('tut-gate-mana'),
+        taughtBefore, fired, mpBefore, mpAfter: window.player.mp,
+      };
+      window.useManaPotion();   // the taught action — the gate must let go
+      const after = window.gameState();
+      return { ...open, afterGate: after.tutorial, afterMode: after.mode,
+        afterGated: document.body.classList.contains('tut-gated') };
+    });
+    if (!manaGate.fired) failures.push('the shore hero could not cast the active it just learned');
+    if (manaGate.mpAfter >= manaGate.mpBefore) failures.push(`the cast spent no mana (${manaGate.mpBefore} → ${manaGate.mpAfter}) — nothing for the lesson to teach`);
+    // THE REGRESSION: burning mana on the beach used to teach nothing at all.
+    if (!manaGate.gate || manaGate.gate.kind !== 'mana') failures.push(`a mana-costing cast on the shore did not raise the Mana-Potion gate (gameState().tutorial=${JSON.stringify(manaGate.gate)})`);
+    if (!manaGate.gated) failures.push('the mana gate is missing its body class, so nothing is actually spotlit');
+    if (!/Mana/.test(manaGate.banner)) failures.push(`the mana gate banner does not name the Mana Potion: "${manaGate.banner}"`);
+    if (manaGate.afterGate || manaGate.afterGated) failures.push(`quaffing a Mana Potion did not release the gate (tutorial=${JSON.stringify(manaGate.afterGate)})`);
+    if (manaGate.afterMode === 'tutorial') failures.push('the world stayed paused after the mana lesson was learned');
+
+    // ── 4. A death on the shore is a RETRY, not a run cut short ──
+    //       A town revive ends the tutorial as surely as the reload bug did: a save
+    //       taken in town never comes back to the beach, so the cave, the starter
+    //       weapon and the shore level-up would all be skipped. Fell one foe first so
+    //       the hero is actually carrying the gift a town death would bury in a grave.
+    shoreDeath = await page.evaluate(() => {
+      const first = window.gameState().enemies[0];
+      window.onEnemyDefeated(window.getEnemyAt(first.x, first.y));   // → hands over the starter weapon
+      const bagBefore = (window.gameState().menu.inventory || []).length;
+      window.player.gold = 250;               // a purse an ordinary death would halve
+      window.player.lastStandReady = false;   // spend the free save, so the blow is lethal
+      window.player.hp = 0;
+      window.handleDeath();
+      const gs = window.gameState();
+      const d = JSON.parse(localStorage.getItem('dungeonLoot_save_v1'));
+      return {
+        bagBefore,
+        inTown: gs.inTown, shore: gs.shore, floor: gs.floor,
+        gold: gs.player.gold, hp: gs.player.hp, maxHp: gs.player.maxHp,
+        level: gs.player.level, tutorialDone: !!window.player.tutorialDone,
+        bag: (d.inventory || []).length, grave: !!d.graveSite,
+        savedTutorial: d.tutorial, savedInTown: d.inTown,
+        foes: gs.enemies.map((e) => ({ name: e.name, isElite: e.isElite })),
+        sub: ((document.getElementById('death-sub') || {}).textContent || '').trim(),
+        button: ((document.getElementById('death-continue') || {}).textContent || '').trim(),
+      };
+    });
+    if (shoreDeath.inTown) failures.push('a death on the shore revived the hero in TOWN — the tutorial is skipped from there');
+    if (!shoreDeath.shore) failures.push('gameState().shore is false after a shore death — the hero left the beach');
+    if (shoreDeath.savedTutorial !== true || shoreDeath.savedInTown) failures.push(`the post-death save does not record the shore (tutorial=${JSON.stringify(shoreDeath.savedTutorial)}, inTown=${JSON.stringify(shoreDeath.savedInTown)})`);
+    if (shoreDeath.tutorialDone) failures.push('a shore death stamped the hero as having graduated the tutorial');
+    if (!isShore(shoreDeath.foes)) failures.push(`the shore was not rebuilt after a death — ${JSON.stringify(shapeOf(shoreDeath.foes))}`);
+    if (shoreDeath.bagBefore < 1) failures.push('felling the first shore foe did not hand over the starter weapon');
+    if (shoreDeath.bag !== shoreDeath.bagBefore) failures.push(`the bag was not kept through a shore death (${shoreDeath.bagBefore} → ${shoreDeath.bag})`);
+    if (shoreDeath.grave) failures.push('a shore death dropped the bag as a grave — the starter weapon would be stranded on a floor the hero has never seen');
+    if (shoreDeath.gold !== 250) failures.push(`a shore death took gold (250 → ${shoreDeath.gold})`);
+    if (shoreDeath.hp !== shoreDeath.maxHp) failures.push(`the hero did not wake at full Health (${shoreDeath.hp}/${shoreDeath.maxHp})`);
+    if (/Town/.test(shoreDeath.sub) || /Town/.test(shoreDeath.button)) failures.push(`the death screen still says Town on the shore: "${shoreDeath.sub}" / "${shoreDeath.button}"`);
+
+    // ── 5. The heal lesson waits for a wound worth healing ──
+    //       The gate PAUSES the world, so firing it on the first scratch interrupted the
+    //       opening exchange over ~7% of a Health bar. It now arms at 75% Health.
+    //       (The hero is back on a freshly rebuilt shore from step 4, so the once-per-
+    //       shore latch is re-armed and full Health is the honest starting point.)
+    healBeat = await page.evaluate(async () => {
+      window.closeDeath();                        // dismiss the death card from step 4
+      // Wear the step-4 starter weapon first: its own equip gate would otherwise sit
+      // in front of the heal beat, exactly as it does in play (equip, then fight).
+      if ((window.gameState().menu.inventory || []).length) window.quickEquip(0);
+      const gateKind = () => (window.gameState().tutorial || {}).kind || null;
+      const foeAt = () => {
+        const f = window.gameState().enemies[0];
+        return window.getEnemyAt(f.x, f.y);
+      };
+      window.doDash();                            // any action ends the arrival grace that eats hits
+      window.player.hp = window.player.maxHp;
+      // A single bite off a full bar is a scratch — the gate must stay shut.
+      const scratched = foeAt();
+      scratched.atkCd = 0;
+      window.enemyAttackPlayer(scratched);
+      const afterScratch = { hp: window.player.hp, maxHp: window.player.maxHp, gate: gateKind() };
+      // Now wounded past the line: the next landed blow raises the gate. Retry a few
+      // times so a dodged swing (no damage, no teach) can't flake the run.
+      window.player.hp = Math.floor(window.player.maxHp * 0.7);
+      window.player.shield = 0;
+      for (let i = 0; i < 5 && gateKind() !== 'potion'; i++) {
+        const e = foeAt(); e.atkCd = 0; window.enemyAttackPlayer(e);
+      }
+      await new Promise((r) => setTimeout(r, 100));
+      const gs = window.gameState();
+      return {
+        afterScratch,
+        woundedHp: gs.player.hp,
+        gate: gateKind(),
+        mode: gs.mode,
+        act: (gs.tutorial || {}).act || null,
+        banner: ((document.querySelector('#tg-msg .tg-msg-text') || {}).textContent || '').trim(),
+      };
+    });
+    if (healBeat.afterScratch.gate === 'potion') failures.push(`the heal gate fired on a scratch (${healBeat.afterScratch.hp}/${healBeat.afterScratch.maxHp} Health) — it must wait for a real wound`);
+    if (healBeat.gate !== 'potion') failures.push(`the heal gate did not raise once Health fell past 75% (gate=${JSON.stringify(healBeat.gate)}, hp=${healBeat.woundedHp})`);
+    if (healBeat.gate === 'potion' && healBeat.act !== 'useHealthPotion()') failures.push(`the heal gate names the wrong action for an agent: ${JSON.stringify(healBeat.act)}`);
+
+    // ── 6. Off the shore and into the dungeon — the save must stop claiming it ──
     descended = await page.evaluate(() => {
       window.enterDungeonAt(1, 1);
       window.saveGame();
@@ -138,7 +263,7 @@ async function main() {
     });
     if (descended.savedTutorial !== false) failures.push(`a hero in the dungeon still records tutorial=${JSON.stringify(descended.savedTutorial)}`);
 
-    // ── 5. A save that predates the flag carries no `tutorial` field and no
+    // ── 7. A save that predates the flag carries no `tutorial` field and no
     //       tutorialDone — a hero from before the shore shipped, or one the bug
     //       already carried into the dungeon. Boot must leave them there AND stamp
     //       them graduated, so the post-shore lessons (maybeTeachFirstSpell) stop
@@ -172,6 +297,20 @@ async function main() {
     console.log('tutorial-resume: fresh     ', JSON.stringify(fresh && { ...shapeOf(fresh.foes), savedTutorial: fresh.savedTutorial, savedFloor: fresh.savedFloor }));
     console.log('tutorial-resume: resumed   ', JSON.stringify(resumed && { ...shapeOf(resumed.foes), floor: resumed.floor, level: resumed.level, tutorialDone: resumed.tutorialDone }));
     console.log('tutorial-resume: slotRow   ', JSON.stringify((slotRow || '').slice(0, 120)));
+    console.log('tutorial-resume: manaGate  ', JSON.stringify(manaGate && {
+      shore: manaGate.shore, mp: `${manaGate.mpBefore}→${manaGate.mpAfter}`,
+      kind: manaGate.gate && manaGate.gate.kind, mode: manaGate.mode,
+      banner: manaGate.banner, afterQuaff: manaGate.afterGate,
+    }));
+    console.log('tutorial-resume: shoreDeath', JSON.stringify(shoreDeath && {
+      ...shapeOf(shoreDeath.foes), inTown: shoreDeath.inTown, shore: shoreDeath.shore,
+      gold: shoreDeath.gold, bag: `${shoreDeath.bagBefore}→${shoreDeath.bag}`, grave: shoreDeath.grave,
+      hp: `${shoreDeath.hp}/${shoreDeath.maxHp}`, button: shoreDeath.button,
+    }));
+    console.log('tutorial-resume: healBeat  ', JSON.stringify(healBeat && {
+      scratch: `${healBeat.afterScratch.hp}/${healBeat.afterScratch.maxHp} gate=${healBeat.afterScratch.gate}`,
+      wounded: `${healBeat.woundedHp} gate=${healBeat.gate}`, mode: healBeat.mode,
+    }));
     console.log('tutorial-resume: descended ', JSON.stringify(descended));
     console.log('tutorial-resume: legacyBoot', JSON.stringify(legacyBoot && { ...shapeOf(legacyBoot.foes), floor: legacyBoot.floor, tutorialDone: legacyBoot.tutorialDone }));
     await browser.close();
