@@ -34,6 +34,7 @@ import { tenacityTier, resolveEnemyCC, enemyStunImmune } from '../systems/tenaci
 import { SHRINE_DEFS } from '../data/shrines.js';
 import { defaultShrineBuffs, shrineFxFrom, activeShrineBuffs, pickShrineKind, shrineShortName } from '../systems/shrineEffects.js';
 import { creditInitials } from '../systems/credit.js';
+import { savedOnShore, hasStarterGift } from '../systems/tutorialResume.js';
 import { restockCost } from '../systems/restockCost.js';
 import { unseenLootCount } from '../systems/lootSeen.js';
 import { hasVaultKey, addVaultKey, spendVaultKey } from '../systems/vaultKeys.js';
@@ -6546,6 +6547,10 @@ let entryGuard = false;
 // low-level foes and a random-type elite to fight, and a cave to the north that
 // drops them into the real dungeon. See buildTutorialMap().
 let tutorialActive = false;
+// Set by loadGame() when the save being restored was taken ON that beach, so the
+// boot sequence rebuilds the shore rather than generating dungeon floor 1. The
+// shore runs at dungeonLevel 1, so the floor number alone can't tell them apart.
+let resumeTutorial = false;
 // ── TOWN GATE ACCESS ──
 // The town gate is no longer locked behind a combat / cooldown check — it's always
 // clickable. The restriction lives in the CHANNEL instead (see the TOWN PORTAL
@@ -8304,7 +8309,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the FIRST hit you take pops a one-time nudge naming the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the FIRST hit you take pops a one-time nudge naming the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice.`,
       `Opening-floor content pacing (Normal, floors 1–25): the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. DIFFICULTY ARC — a fresh hero's flat attribute damage would otherwise one-shot floor-1 trash, so over floors 1–5 the real numbers bend to make kills take a few blows ORGANICALLY (no per-hit cap): foes carry extra HP and the hero deals less, both easing to full strength by floor 6 as your levels and gear take over — "weak at the start, then earn your strength". Because those fights last longer, foes land more of their (full-strength) hits, so the opening actually threatens. No glowing ELITES or elite affixes until floor 4 (the one scripted beach elite aside). Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -12574,8 +12579,11 @@ function buildTutorialMap() {
   //   • The ELITE waits further north again, up by the cave; the cave stays sealed
   //     until it and the pack fall.
   // Whichever foe falls FIRST hands over the starter weapon (see onEnemyDefeated /
-  // _beachGearDropped), so the gift never hinges on kill order.
-  _beachGearDropped = false;
+  // _beachGearDropped), so the gift never hinges on kill order. Resuming a save
+  // taken mid-shore rebuilds the pack from scratch, so seed the latch from the
+  // hero instead of clearing it — one that already holds (or wears) the gift must
+  // not be handed a second weapon for re-felling the respawned foes.
+  _beachGearDropped = hasStarterGift(inventory, gearSets);
   // Re-arm the first-hit Health-Potion teach for this fresh shore (it fires once,
   // the moment a foe first bites — see beachPotionHint / enemyAttackPlayer).
   _beachPotionTaught = false; _beachPotionCueOn = false;
@@ -12726,11 +12734,17 @@ function dropTutorialGear(e) {
 // level-up — the first skill point and stat points, EARNED here rather than at spawn.
 // Grant a real 1→2 level (the beach banks no kill XP, so this is exactly one
 // level), suppressing the fly-in banner in favour of the tutorial popup.
+// Resuming a save taken mid-shore respawns the pack, so a hero who already cleared
+// it can clear it twice — the shore is worth exactly ONE level, so the grant itself
+// only fires while they're still level 1. The cue always reconciles, so a level-2
+// hero with points still unspent keeps being nudged to spend them.
 function grantBeachLevelUp() {
-  _skipLevelBanner = true;
-  player.xp += xpForLevel(player.level);
-  checkLevelUp();               // +1 skill point, +5 stat points, stat recompute, save
-  _skipLevelBanner = false;
+  if (player.level < 2) {
+    _skipLevelBanner = true;
+    player.xp += xpForLevel(player.level);
+    checkLevelUp();             // +1 skill point, +5 stat points, stat recompute, save
+    _skipLevelBanner = false;
+  }
   _tutDismissed.levelup = false;
   refreshTutorialCues();
 }
@@ -32298,6 +32312,11 @@ function saveGame() {
       // two-loadout state lives in gearSets + activeGearSet.
       player, inventory, equipped, gearSets, activeGearSet, dungeonLevel, buffs, pact,
       inTown, dungeonReturn, graveSite,
+      // WHERE the hero stands, beach included. The shore runs at dungeonLevel 1 —
+      // the same number as the real floor 1 — so without this flag a mid-tutorial
+      // save is indistinguishable from a floor-1 save, and the next boot drops the
+      // hero into the dungeon, skipping the starter weapon and the first level-up.
+      tutorial: tutorialActive,
       ts: Date.now(),
     };
     const payload = JSON.stringify(data);
@@ -32333,6 +32352,9 @@ function saveGameSoon(delay = 500) {
 }
 
 function loadGame() {
+  // Any bail-out below leaves the caller with `hadSave` false, so the shore-resume
+  // flag must never survive a refused or half-read save.
+  resumeTutorial = false;
   try {
     const raw = localStorage.getItem(slotKey(activeSlot));
     if (!raw) return false;
@@ -32604,6 +32626,14 @@ function loadGame() {
     player.journeyPoints = Math.max(0, Math.floor(player.journeyPoints) || 0);
     player.cycleRewardsClaimed = Array.isArray(player.cycleRewardsClaimed) ? player.cycleRewardsClaimed.filter(x => typeof x === 'string') : [];
     inTown = !!data.inTown;
+    // Was this save taken on the beach tutorial? The boot sequence reads this to
+    // rebuild the shore instead of a dungeon floor (see the boot branch below).
+    // Anyone NOT resuming the shore is past it, so stamp tutorialDone: a save that
+    // predates the flag (or one this bug already pushed into the dungeon) must never
+    // be dragged back to the beach, and the post-shore lessons that gate on the flag
+    // (maybeTeachFirstSpell) must stop being locked off forever.
+    resumeTutorial = savedOnShore(data);
+    if (!resumeTutorial) player.tutorialDone = true;
     dungeonReturn = data.dungeonReturn || data.dungeonLevel || 1;
     // Restore an unclaimed death-grave, tolerating saves that predate it.
     graveSite = (data.graveSite && Array.isArray(data.graveSite.items) && data.graveSite.items.length)
@@ -32705,6 +32735,7 @@ function loadGame() {
     setPlayerCell(5, 5);
     return true;
   } catch (e) {
+    resumeTutorial = false;   // a half-read save must not route boot onto the shore
     return false;
   }
 }
@@ -33181,6 +33212,9 @@ function slotSummary(i) {
       floor: p.maxFloor || d.dungeonLevel || 1,
       gold: p.gold || 0,
       inTown: !!d.inTown,
+      // Still on the opening shore. The beach runs at dungeonLevel 1, so without this
+      // the row reads "Floor 1" — indistinguishable from a hero already in the dungeon.
+      tutorial: savedOnShore(d),
       hardcore: !!p.hardcore,
       ssf: !!p.ssf,
       ts: d.ts || 0,
@@ -33253,7 +33287,7 @@ function renderSlots() {
     const icon = heroFaceIcon(s.cls, s.sex, 24) || dlIcon(s.cls ? CLASSES[s.cls].icon : 'npc_mage', 24);
     const who = escapeHtml(s.name || 'Adventurer');
     const clsTag = s.cls ? ` <span class="slot-cls">· ${CLASSES[s.cls].name}</span>` : '';
-    const where = s.inTown ? 'In Town' : lbFloorLabel(s.floor);
+    const where = s.inTown ? 'In Town' : (s.tutorial ? 'The Shore' : lbFloorLabel(s.floor));
     const time = slotTimeAgo(s.ts);
     const playBtn = isActive
       ? `<button class="slot-btn current" disabled>● Playing</button>`
@@ -35594,9 +35628,11 @@ try {
   // loads even when the active slot is empty.
   loadStash();
   // Resume in town if that's where the save left off; a brand-new hero who hasn't
-  // done the beach tutorial gets it first; otherwise build the dungeon floor.
+  // done the beach tutorial gets it first — as does a hero whose save was taken ON
+  // the shore (loading a slot reloads the page, so quitting mid-tutorial must come
+  // back to the beach, not skip it for dungeon floor 1); otherwise build the floor.
   if (inTown) { buildTown(); }   // walkable town — no auto-opened hub menu; the map IS the town
-  else if (!hadSave && !player.tutorialDone) buildTutorialMap();
+  else if (resumeTutorial || (!hadSave && !player.tutorialDone)) buildTutorialMap();
   else generateMap();
   seedAmbientEmbers();
   draw();
@@ -35621,6 +35657,9 @@ try {
   if (hadSave) {
     log(`Welcome back, level ${player.level} adventurer.`, 'important');
     if (inTown) log('In town. Pick a service, or take <span data-spr=feat_gate_red></span> Warp to Dungeon.');
+    // The shore also runs at dungeonLevel 1, so say where they actually are —
+    // "dungeon level 1" would read as the real floor 1 they haven't reached yet.
+    else if (resumeTutorial) log('🏖️ Back on the shore. Clear the beach, then take the cave north.');
     else log(`Resuming on dungeon level ${dungeonLevel}.`);
   } else {
     log('Move with WASD or the arrow keys.', 'important');
