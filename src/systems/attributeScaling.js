@@ -5,7 +5,8 @@
 // All tuning lives in src/data/attributeScaling.js — this module only applies it.
 
 import {
-  CLASS_DMG_ATTR, CLASS_DMG_ATTR_FALLBACK, ATTR_DMG_PER_POINT,
+  CLASS_DMG_ATTR, CLASS_DMG_ATTR2, CLASS_DMG_ATTR_FALLBACK,
+  ATTR_DMG_PER_POINT, ATTR_DMG_PER_POINT_HYBRID,
   CLASS_SCALE_LADDER, ATTR_STAT_CHANNELS, SHIELD,
 } from '../data/attributeScaling.js';
 
@@ -32,6 +33,32 @@ export function classDamageAttr(cls) {
 }
 
 /**
+ * The SECOND identity attribute of a hybrid class, or null for a pure class.
+ * A hybrid's skills scale off the SUM of both at the lower hybrid per-point rate.
+ * @param {string} cls hero class id
+ * @returns {string|null}
+ */
+export function classDamageAttr2(cls) {
+  return CLASS_DMG_ATTR2[cls] || null;
+}
+
+/** Both identity attributes of a class, in order — one entry for a pure class, two for a hybrid. */
+export function classDamageAttrs(cls) {
+  const second = classDamageAttr2(cls);
+  return second ? [classDamageAttr(cls), second] : [classDamageAttr(cls)];
+}
+
+/** True when the class splits its skill scaling across two attributes. */
+export function isHybridClass(cls) {
+  return !!CLASS_DMG_ATTR2[cls];
+}
+
+/** Per-point skill-damage rate for a class: the lower hybrid rate when it mains two attributes. */
+export function classDmgPerPoint(cls) {
+  return isHybridClass(cls) ? ATTR_DMG_PER_POINT_HYBRID : ATTR_DMG_PER_POINT;
+}
+
+/**
  * Attack power a BASIC (auto) attack gets from MIGHT — universal to every class, but
  * class-scaled via the `basicDmg` channel (warrior best, mage least). The rank-#1
  * class lands at ATTR_DMG_PER_POINT so the class that already mained Might is unchanged.
@@ -46,6 +73,33 @@ export function basicAttrDamage(might, cls) {
 /** SKILL attack power from the class's identity attribute: (identity attr) × per-point. */
 export function attrDamageFor(attrTotal, cls, perPoint = ATTR_DMG_PER_POINT) {
   return Math.max(0, attrTotal) * perPoint;
+}
+
+/**
+ * SKILL attack power from ALL of a class's identity attributes. A pure class converts
+ * its one attribute at ATTR_DMG_PER_POINT; a hybrid converts the SUM of its two at the
+ * lower ATTR_DMG_PER_POINT_HYBRID, so a point in either is worth the same.
+ * @param {(attr: string) => number} getAttr reads a total attribute value by name
+ * @param {string} cls hero class id
+ * @returns {number}
+ */
+export function skillAttrPower(getAttr, cls) {
+  const perPoint = classDmgPerPoint(cls);
+  let sum = 0;
+  for (const attr of classDamageAttrs(cls)) sum += Math.max(0, getAttr(attr) || 0);
+  return sum * perPoint;
+}
+
+/**
+ * Skill-lane attack power ONE attribute is worth per point for a class — 0 when it
+ * isn't one of that class's identity attributes. The gear Power model uses this to
+ * value a +ATTR roll without re-deriving the pure/hybrid split.
+ * @param {string} attr attribute name
+ * @param {string} cls hero class id
+ * @returns {number}
+ */
+export function skillAttrCoef(attr, cls) {
+  return classDamageAttrs(cls).includes(attr) ? classDmgPerPoint(cls) : 0;
 }
 
 /**
@@ -130,4 +184,4 @@ export function healAmount(flat, perLevel, level, spirit, cls, rankScale = 1, sp
 }
 
 // Re-export so the shell can import tuning + math from one place.
-export { ATTR_DMG_PER_POINT };
+export { ATTR_DMG_PER_POINT, ATTR_DMG_PER_POINT_HYBRID };

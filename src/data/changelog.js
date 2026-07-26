@@ -16,6 +16,18 @@ export const CHANGELOG = [
   { date: "2026-07-25", size: "small", v: "PATH tab rings blue on an unspent ascendancy point", by: "Jeff Louie", notes: [
     "PATH sub-tab wears a light-blue wisp while you hold an unspent ascendancy point.",
   ] },
+  { date: "2026-07-25", size: "large", v: "Three new classes: Fortune-Seeker, Windblade, Bloodletter", by: "Jeff Louie", notes: [
+    "Fortune-Seeker — ranged; first class whose skills scale off LUCK. Crits build STREAK; keystones turn gold & magic find into damage.",
+    "Windblade — Agility + Spirit hybrid blade-caster. Dodges build GALE; steel and spell land as one hit.",
+    "Bloodletter — Might + Vitality hybrid with NO mana: every skill costs ~0.45% max HP per point of its cost. MP bar and flask hidden.",
+    "A hybrid sums both attributes at a lower rate per point, so either one is worth the same.",
+    "Each ships 30 passives, 30 actives and 2 ascendancies; none summon minions.",
+    "Existing four classes are untouched — the scaling ladder grew to 7 ranks with their coefficients unchanged.",
+  ] },
+  { date: "2026-07-25", size: "small", v: "Sellsword leaves town", by: "Jeff Louie", notes: [
+    "Sellsword keeper and companion hiring are gone; their art now walks as the three new heroes.",
+    "Later keepers arrive one boss sooner — Weave 12th, Cycles 13th, Deeds 14th, Covenants 15th, Mirrorforge 16th, Pantheon 17th.",
+  ] },
   { date: "2026-07-25", size: "small", v: "Total time played counts open time", by: "Jeff Louie", notes: [
     "History total bills every foreground second — menus, planning, combat — not just active input; pauses when tab hidden.",
     "Per-hero row time stays active-play only (the cross-device merge measure), so the header can read above the rows' sum.",

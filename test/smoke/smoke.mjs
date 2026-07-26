@@ -123,7 +123,7 @@ async function main() {
         out.guideTopics = g && g.topics ? g.topics : null;
         // New topics must be reachable via their aliases (returns the topic array,
         // not the {error, topics} object) so an agent can look them up.
-        out.aliasTopics = ['transmuter', 'quests', 'greed', 'conquest', 'merc', 'gamepad']
+        out.aliasTopics = ['transmuter', 'quests', 'greed', 'conquest', 'gambler', 'gamepad']
           .map((t) => Array.isArray(window.gameGuide(t)));
       } catch (e) {
         out.ok = false;
@@ -169,7 +169,7 @@ async function main() {
       }
     }
     if (!result.aliasTopics || result.aliasTopics.some((ok) => !ok)) {
-      failures.push('gameGuide alias(es) do not resolve (transmuter/quests/greed/conquest/merc/gamepad)');
+      failures.push('gameGuide alias(es) do not resolve (transmuter/quests/greed/conquest/gambler/gamepad)');
     }
     if (!result.playerHasDefense) {
       failures.push('gameState().player missing defense/weaponReach fields');

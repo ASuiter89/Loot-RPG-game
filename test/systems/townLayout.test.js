@@ -178,7 +178,7 @@ describe('authored town data', () => {
     const expected = [
       'forge', 'enchanter', 'transmuter', 'mirrorforge', 'merchant', 'gambler', 'ramen',
       'covenants', 'weave', 'pantheon', 'healer', 'trainer', 'bounty', 'deeds',
-      'cycles', 'stash', 'sellsword', 'prospector',
+      'cycles', 'stash', 'prospector',
     ];
     expect(kinds.slice().sort()).toEqual(expected.slice().sort());
   });

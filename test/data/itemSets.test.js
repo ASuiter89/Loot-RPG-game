@@ -37,7 +37,7 @@ const POWER_KEYS = new Set(['vampiric', 'arcing', 'greedy', 'stalwart', 'attuned
   'warded', 'thornmail', 'evasive', 'bulwark', 'aegis', 'mending', 'spellbound', 'warmage',
   'spellblade', 'quickened', 'hasty', 'focused', 'tenacious', 'hemorrhage', 'concussive',
   'fleet', 'deadeye', 'fortunate', 'prospector', 'scholar', 'salvager']);
-const CLASSES = new Set(['warrior', 'rogue', 'mage', 'templar', 'any']);
+const CLASSES = new Set(['warrior', 'rogue', 'mage', 'templar', 'fortune', 'windblade', 'bloodletter', 'any']);
 const FORBIDDEN_GAME = /\b(diablo|golden sun|roguelike|rogue-like|zelda|elden|dark souls|final fantasy|world of warcraft|warcraft|runescape|path of exile)\b/i;
 
 // Stats a slot's headline OWNS automatically — a native/mod must never claim one.
