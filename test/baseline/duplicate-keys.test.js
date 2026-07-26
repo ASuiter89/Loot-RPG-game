@@ -16,20 +16,29 @@
 // instead of letting a build warning scroll past.
 import { describe, it, expect } from 'vitest';
 import { transformSync } from 'esbuild';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve, relative } from 'node:path';
-import { globSync } from 'node:fs';
+import { dirname, resolve, join, relative } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 // Every source file, including the legacy monolith (that is where half the object
 // literals still live) but excluding the base64 asset blobs, which are megabytes of
 // string with no object literals to check.
-function sourceFiles() {
-  return globSync('src/**/*.js', { cwd: ROOT })
-    .filter((f) => !f.startsWith('src/assets/'))
-    .sort();
+//
+// Hand-rolled walk rather than fs.globSync / readdirSync({recursive}) — both are
+// newer than the Node 20 the CI gate runs, so either one passes locally and fails
+// there.
+function sourceFiles(dir = 'src', out = []) {
+  for (const entry of readdirSync(resolve(ROOT, dir), { withFileTypes: true })) {
+    const rel = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (rel !== join('src', 'assets')) sourceFiles(rel, out);
+    } else if (entry.isFile() && entry.name.endsWith('.js')) {
+      out.push(rel);
+    }
+  }
+  return out.sort();
 }
 
 describe('no duplicate object keys in src/', () => {
