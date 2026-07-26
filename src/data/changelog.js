@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-25", size: "small", v: "Food refuels Stamina hard", by: "Jeff Louie", notes: [
+    "Each snack now restores ~50% of max Stamina (was a flat 7–28); HP/MP still top up by the food's heal amount.",
+    "Grabbing food is the fastest sprint/dash refill; scales with the pool as Vitality/gear deepen it.",
+  ] },
   { date: "2026-07-25", size: "medium", v: "Might drives basic attack damage", by: "Jeff Louie", notes: [
     "Basic (auto) attacks scale off Might for all classes — Warrior most, Mage least; skills keep your class attribute.",
     "Accuracy moved off Agility onto Might; Agility now pure evasion + move & attack speed.",
