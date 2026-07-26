@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-25", size: "small", v: "Loading a hero mid-tutorial returns to the beach", by: "Jeff Louie", notes: [
+    "Quitting the opening shore and loading that slot resumes there (was: dungeon floor 1).",
+    "First weapon and first level-up can't be skipped by a mid-tutorial reload.",
+    "Save slot reads \"The Shore\" for a hero still on the beach (was \"Floor 1\").",
+  ] },
   { date: "2026-07-25", size: "small", v: "Save Slots rows rebuilt around the hero", by: "Jeff Louie", notes: [
     "Each row leads with that hero walking in place at full row height.",
     "Dropped slot numbers and gold; row now reads Lv · deepest floor, then playtime · last save.",
