@@ -48,6 +48,21 @@ export const RAMP_FLOOR = {
   typedDefense: 8,
 };
 
+// ── EARLY-GAME SUSTAIN BIAS ───────────────────────────────────────────────────
+// A new hero has no life-leech, tiny skills and a shallow mana pool, so raw HP/MP
+// regen matters MOST exactly when the affix game hands it out LEAST: low-tier early
+// gear carries only a slot or two of affixes drawn from a wide pool, so a specific
+// stat like regen rarely lands — which is why regen reads as a "late-game" stat. To
+// keep sustain first-class early, a LOW-item-level drop floats ONE in-pool regen stat
+// toward the front of its affix pool with a modest chance (present, never guaranteed),
+// fading out entirely at EARLY_SUSTAIN_ILVL as tiers deepen and slots open on their
+// own. Keyed on the DROP's item level, so only genuinely early gear is nudged — a deep
+// hero's high-ilvl drops draw uniformly, exactly as before. Pure data; the draw logic
+// lives in addStatAffixes (src/legacy/game.js).
+export const EARLY_SUSTAIN_ILVL = 8;        // above this item level: no bias, pool draws uniformly
+export const EARLY_SUSTAIN_CHANCE = 0.5;    // chance a qualifying early drop floats a regen stat first
+export const EARLY_SUSTAIN_STATS = ['REGEN', 'MPREG'];  // the sustain stats the bias favours early
+
 // ── HOTBAR SLOT RAMP ──────────────────────────────────────────────────────────
 // How many of the four hotbar slots are revealed, by deepest floor reached. A new
 // hero starts with a single slot (plus the always-present auto-cast slot) and
