@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-07-31", size: "medium", v: "Bloodletter gets its own skill art", by: "Jeff Louie", notes: [
+    "All 30 Bloodletter skills carry bespoke crimson-and-bone icons; they borrowed Warrior art before.",
+    "Skill badges centre on the art itself; stray sparks used to drag icons off-centre.",
+  ] },
   { date: "2026-07-31", size: "medium", v: "Fortune-Seeker gets its own skill art", by: "Jeff Louie", notes: [
     "All 30 Fortune-Seeker skills carry bespoke violet-and-gold icons; they borrowed Rogue art before.",
     "Coins, dice, cards and gilded arrows per skill — Jackpot, Snake Eyes, Roll the Bones and the rest.",
