@@ -246,7 +246,11 @@ replaced), not a to-do. Masters live in `art/skill-icons/fortune/`.
 | z_a53 | Perfect Edge | Two flawless cuts — the form completed. | `sk_za_perfectedge` | `sk_ra_perfectvanish` | a single flawless mirror-bright blade held vertical, one clean teal glint on the edge |
 | z_a54 | Unbroken Wind | Become the wind itself. | `sk_za_unbrokenwind` | `sk_ma_iceprison` | a humanoid outline dissolving upward into streaming teal wind ribbons |
 
-### Bloodletter — 30 actives
+### Bloodletter — 30 actives ✅ SHIPPED
+
+Generated, keyed and packed; nodes point at their bespoke `sk_la_*` keys, so the
+`Currently` column is historical. Masters in `art/skill-icons/bloodletter/`.
+
 
 | # | Spell | In-game description | Icon key | Currently | SUBJECT line |
 |---|---|---|---|---|---|

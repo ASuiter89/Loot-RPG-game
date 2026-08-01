@@ -123,6 +123,7 @@ function TILE_DRAW() {
     // fills the well. Fit the alpha bounding box into the well (contain, centred)
     // so a small centred subject expands to fill the badge without distortion.
     let sx = 0, sy = 0, sw = img.width, sh = img.height;
+    let cx = null, cy = null;                        // alpha centre of mass, image coords
     try {
       const off = document.createElement('canvas');
       off.width = img.width; off.height = img.height;
@@ -130,12 +131,15 @@ function TILE_DRAW() {
       octx.drawImage(img, 0, 0);
       const d = octx.getImageData(0, 0, img.width, img.height).data;
       let minX = img.width, minY = img.height, maxX = -1, maxY = -1;
+      let mass = 0, mx = 0, my = 0;
       const A = 12;                                  // alpha threshold
       for (let y = 0; y < img.height; y++) {
         for (let x = 0; x < img.width; x++) {
-          if (d[(y * img.width + x) * 4 + 3] > A) {
+          const a = d[(y * img.width + x) * 4 + 3];
+          if (a > A) {
             if (x < minX) minX = x; if (x > maxX) maxX = x;
             if (y < minY) minY = y; if (y > maxY) maxY = y;
+            mass += a; mx += x * a; my += y * a;      // alpha-weighted centre of mass
           }
         }
       }
@@ -143,12 +147,24 @@ function TILE_DRAW() {
       if (maxX >= minX && maxY >= minY && (maxX - minX) < img.width - 2 && (maxY - minY) < img.height - 2) {
         sx = minX; sy = minY; sw = maxX - minX + 1; sh = maxY - minY + 1;
       }
+      if (mass > 0) { cx = mx / mass; cy = my / mass; }
     } catch (e) { /* tainted / unreadable — draw untrimmed */ }
     const pad = iw * 0.02;
     const avail = iw - pad * 2;
     const scale = Math.min(avail / sw, avail / sh);
     const dw = sw * scale, dh = sh * scale;
-    const dx = ix + (iw - dw) / 2, dy = iy + (iw - dh) / 2;
+    // Centre on the alpha CENTRE OF MASS, not on the middle of the bounding box.
+    // The house style scatters sparse sparks and trails, so a single faint speck
+    // near the frame edge stretches the bbox and shoves the whole subject the
+    // other way — Coin Toss and Piercing Volley both sat visibly left. The mass
+    // centre ignores those outliers because they carry almost no alpha. Scale
+    // still comes from the bbox, and the offset is CLAMPED to the padded well, so
+    // nothing can be cropped or pushed out of frame.
+    const relX = (cx === null) ? 0.5 : Math.min(1, Math.max(0, (cx - sx) / sw));
+    const relY = (cy === null) ? 0.5 : Math.min(1, Math.max(0, (cy - sy) / sh));
+    const clamp = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+    const dx = clamp(ix + iw / 2 - relX * dw, ix + pad, ix + iw - pad - dw);
+    const dy = clamp(iy + iw / 2 - relY * dh, iy + pad, iy + iw - pad - dh);
     ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);   // trimmed subject fills the well
 
     const vg = ctx.createRadialGradient(S / 2, iy + iw * 0.46, iw * 0.18, S / 2, iy + iw * 0.5, iw * 0.72);
