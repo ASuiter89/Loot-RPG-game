@@ -171,7 +171,12 @@ is the borrowed art it replaces. Filename = `<icon key>.png`.
 Descriptions are the in-game text with the `{dmg}` damage placeholder trimmed for
 readability — the full strings live on the nodes in `SKILL_TREES`.
 
-### Fortune-Seeker — 30 actives
+### Fortune-Seeker — 30 actives ✅ SHIPPED
+
+All 30 are generated, keyed and packed — the nodes now point at their bespoke
+`sk_fa_*` keys, so the `Currently` column below is historical (what each one
+replaced), not a to-do. Masters live in `art/skill-icons/fortune/`.
+
 
 | # | Spell | In-game description | Icon key | Currently | SUBJECT line |
 |---|---|---|---|---|---|
@@ -203,7 +208,7 @@ readability — the full strings live on the nodes in `SKILL_TREES`.
 | f_a50 | Roll the Bones | Six certain crits scatter across the floor. | `sk_fa_rollthebones` | `sk_ra54` | six gold dice frozen mid-scatter, tumbling outward, all faces glowing violet |
 | f_a51 | Midas Volley | A double storm of gilded shot. | `sk_fa_midasvolley` | `sk_ra_thousandcuts` | a swirling ring of golden arrows circling a centre, molten gold dripping from them |
 | f_a52 | Storm of Arrows | A crit-certain deluge that finishes the wounded. | `sk_fa_stormofarrows` | `sk_ra_deathrain` | a dense deluge of arrows falling from a violet storm-lit sky |
-| f_a53 | Perfect Run | Two flawless shots — the streak at its peak. | `sk_fa_perfectrun` | `sk_ra_perfectvanish` | two identical arrows struck through the exact same bullseye, gold rings rippling |
+| f_a53 | Perfect Run | Two flawless shots — the streak at its peak. | `sk_fa_perfectrun` | `sk_ra_perfectvanish` | two identical gold arrows flying in perfect parallel formation, exactly mirror-matched, tips toward the lower-left, twin violet spark trails behind them |
 | f_a54 | Last Ace | Play the card you kept back. | `sk_fa_lastace` | `sk_ra_shadowclone` | a single ace card held upright, blazing with violet-gold aura and a shield glint |
 
 ### Windblade — 30 actives
