@@ -918,9 +918,9 @@
       <span class="hc-tog-text"><b id="ssf-tog-label">SOLO SELF-FOUND</b> — Only what this hero finds can be used. No shared vault.</span>
     </label>
     <label class="hc-toggle classic" id="classic-toggle">
-      <input type="checkbox" id="classic-checkbox">
+      <input type="checkbox" id="classic-checkbox" onchange="syncVeteranToggle()">
       <span class="hc-tog-box"></span>
-      <span class="hc-tog-text"><b>VETERAN</b> — Skip the tutorials.</span>
+      <span class="hc-tog-text"><b>VETERAN</b> — Skip the tutorials. Open on floor 1 with no hints and no eased start.</span>
     </label>
     <button class="ov-btn" onclick="submitName()">Begin Your Quest</button>
   </div>

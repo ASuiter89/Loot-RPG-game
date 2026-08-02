@@ -80,10 +80,18 @@ lives in `src/legacy/game.js` and shrinks as code is extracted.)
     BOTH sides' entries when it actually merges), but GitHub's mergeability precheck
     ignores merge drivers and still flags the PR DIRTY — so `auto-merge.yml`
     AUTO-HEALS a changelog-only DIRTY: it merges `main` in (union resolves the
-    changelog as whole blocks), pushes, then gates + merges. Same-day order may
-    shuffle; that's cosmetic, and the data test pins only date order. A DIRTY PR that
-    conflicts on anything ELSE is left for you: rebase onto latest `main`, keep both
-    sides' intent, and push so it can merge.
+    changelog as whole blocks), verifies the result with `tools/changelog-lint.js`,
+    pushes, then gates + merges. Same-day order may shuffle; that's cosmetic, and the
+    data test pins only date order. A DIRTY PR that conflicts on anything ELSE is left
+    for you: rebase onto latest `main`, keep both sides' intent, and push so it can
+    merge.
+  - **Prefer a ONE-LINE changelog entry** (~216 entries already are). Union has a
+    corruption mode: two entries inserted at the top of the array end on the identical
+    `  ] },`, git keeps that shared trailing line ONCE as context, and the first entry
+    loses its close — the file stops parsing and takes the build down with it. A whole
+    entry on one line shares no trailing text with its neighbours, so union can't fold
+    it. If a heal does collapse one, `changelog-lint` now blocks the push instead of
+    publishing broken JS; restore the missing `] },` and collapse the entry to one line.
   - **When your change has merged and nothing's left to do, tell the user they can
     archive this session** — Claude Code has no tool to archive a session itself, so
     this can't be automatic. The PR subscription delivers a merged event

@@ -69,7 +69,8 @@ import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { pickVaultRoom, findSealedRoom } from '../systems/vaultRooms.js';
 import { rollHoardRoomCount } from '../systems/hoardRooms.js';
-import { carveArenaGrid } from '../systems/bossArena.js';
+import { carveArenaGrid, ARENA_R } from '../systems/bossArena.js';
+import { targetViewTiles, makeZoom, stepZoom, zoomAnimating } from '../systems/cameraZoom.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
@@ -2237,9 +2238,10 @@ function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
     // rebaking the whole floor per step would freeze the drag. While the resize
     // is in flight (body.resizing, cleared 200ms after the last event) stretch
     // the same floor's stale bake — momentarily soft but fluid — and bake crisp
-    // once on the first frame after it settles.
+    // once on the first frame after it settles. The boss-fight zoom glide walks
+    // the same ladder of tile sizes inside one second, so it rides the same path.
     if (_lpcCache.cv && _lpcCache.baseKey === baseKey &&
-        document.body.classList.contains('resizing')) {
+        (viewZoomAnimating() || document.body.classList.contains('resizing'))) {
       const s = tw / _lpcCache.tw;
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(_lpcCache.cv, ox - tw, oy - tw, _lpcCache.cv.width * s, _lpcCache.cv.height * s);
@@ -8307,7 +8309,7 @@ window.gameGuide = function gameGuide(topic) {
       `TRAP-THEMED FLOORS: some floors (gameState().modifier "Spike Gauntlet" / "Arrow Gallery" / "The Vent Works") dedicate the whole floor to ONE trap kind, packed in far denser than usual — expect a field of spikes, a hall lined with arrow emitters, or clusters of fire vents. Loot runs a little richer to reward threading them; a walkable route through the spikes is always guaranteed.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `BOSS TELEGRAPHS (gameState().hazards.telegraphs) are a guardian's wind-up attacks — a floor indicator that fills, flashes, then detonates. Each carries its shape (disc = filled circle; ring = donut, lethal in the band between innerR and r but SAFE in the centre hole and beyond r; lane = beam between (x1,y1)-(x2,y2); cone = wedge of radius r opening ±halfAngle around facing), its centre (x,y)/geometry, seconds until it lands (secsToHit), and danger:true when it hurts. They are ALWAYS dodgeable by MOVING out of the zone before secsToHit hits 0 (for a ring, step past r or into the hole) — never an RNG dodge. Red = damage; cyan = a benign spawn marker. A tracking disc follows you early in its wind-up, then locks — keep moving and it lands where you were.`,
-      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, and the exit is north. EACH guardian has its OWN arena — the cover and hazards vary by boss (columns to break line-of-sight on volleys and beams, lava pools, breakable cracked walls, spike beds), so read the ASCII map (# wall, ^ lava, " spikes, % cracked wall) and use the cover: duck behind a pillar to break a telegraphed shot, smash through a cracked wall for a new lane. A big open centre plaza, a clear north-south lane and an open perimeter ring are always kept, so there's room to kite. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
+      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, and the exit is north. EACH guardian has its OWN arena — the cover and hazards vary by boss (columns to break line-of-sight on volleys and beams, lava pools, breakable cracked walls, spike beds), so read the ASCII map (# wall, ^ lava, " spikes, % cracked wall) and use the cover: duck behind a pillar to break a telegraphed shot, smash through a cracked wall for a new lane. The arena is a 31-tile-wide circle (map 35x35), and a big open centre plaza, a wide north-south lane and a five-tile perimeter lap lane are always kept, so there's room to kite and the guardian always has room to close. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
       `ISLAND FLOORS (gameState().island true) come up now and then on outdoor floors: the landmass is ringed by open SEA, so the whole map edge is deep water (~) instead of a rock wall. You can see and shoot across it but never walk off — the shore IS the boundary. Nothing reachable is lost; the sea only replaces the impassable frame, so play it like any other floor.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. Most are multi-floor boons that fold into your stats while active (see gameState().effects): power (+50% dmg), guard (−40% dmg taken), fortune (loot), greed (+60% gold), insight (+50% xp), discovery (+50 Magic Find), harvest (+60% materials), precision (+18% crit), phantom (+15% dodge), sorcery (+30% skill/spell power), leech (+15% lifesteal), thorns (reflect), renewal (HP regen), clarity (MP regen), bulwark (+Defense), swift (+18% move), haste (+25% attack speed), vigor (tireless sprint/dash + full Stamina). wisdom instantly restores 50% max HP and refills MP; but BLOOD costs 30% of current HP for XP — check the kind before stepping on one.`,
@@ -8411,7 +8413,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the moment a wound takes you to 75% Health or below a one-time nudge names the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire — it waits for a wound worth healing rather than firing on the first scratch. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. Spending that point on an ACTIVE arms one more lesson right there on the sand: the first cast that actually burns MANA pauses the world and spotlights the Mana Potion (${key('manaPotion')}) until you quaff — the beach beats take the screen first, so it simply waits its turn if a heal or equip gate is still up. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice. DYING there doesn't skip it either, and costs nothing: no gold or XP is taken and your bag is never dropped as a grave — the shore simply rebuilds the same way and you wake at the water's edge at full HP/MP/Stamina (gameState().shore stays true; you never see town). The Hardcore exception still applies — one life is one life, beach included.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The opening hint chip ("head north and fight the pack") stays up for that whole walk and only retires on your FIRST SWING at a foe, so the instruction is still on screen when the fight it names starts. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the moment a wound takes you to 75% Health or below a one-time nudge names the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire — it waits for a wound worth healing rather than firing on the first scratch. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. Spending that point on an ACTIVE arms one more lesson right there on the sand: the first cast that actually burns MANA pauses the world and spotlights the Mana Potion (${key('manaPotion')}) until you quaff — the beach beats take the screen first, so it simply waits its turn if a heal or equip gate is still up. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice. DYING there doesn't skip it either, and costs nothing: no gold or XP is taken and your bag is never dropped as a grave — the shore simply rebuilds the same way and you wake at the water's edge at full HP/MP/Stamina (gameState().shore stays true; you never see town). The Hardcore exception still applies — one life is one life, beach included. The one way PAST the shore is to tick VETERAN on the name screen when creating the hero: that skips the beach outright (and the whole teaching layer) and opens the hero on real floor 1 — gameState().shore is false and ramp.guided is false from the first frame.`,
       `Opening-floor content pacing (Normal, floors 1–25): the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. DIFFICULTY ARC — a fresh hero's flat attribute damage would otherwise one-shot floor-1 trash, so over floors 1–5 the real numbers bend to make kills take a few blows ORGANICALLY (no per-hit cap): foes carry extra HP and the hero deals less, both easing to full strength by floor 6 as your levels and gear take over — "weak at the start, then earn your strength". Because those fights last longer, foes land more of their (full-strength) hits, so the opening actually threatens. No glowing ELITES or elite affixes until floor 4 (the one scripted beach elite aside). Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -8514,8 +8516,24 @@ function musicBusGain() { return MUSIC_BASE_GAIN * audio.musicLevel / AUDIO_LEVE
 // ── VIEW ── how many tiles span the shorter axis of the play area. Fewer tiles
 // = bigger tiles, so the game reads well at default browser zoom. This was once
 // an adjustable Wide / Wider / Widest setting; it's now fixed at the most
-// zoomed-in stop (Wide), which is the only view everyone wanted.
-const VIEW_TILES = 13;
+// zoomed-in stop (Wide), which is the only view everyone wanted — EXCEPT during
+// a boss fight, which eases the camera back so the guardian's arena reads at its
+// real scale, then eases in again once it falls (systems/cameraZoom.js).
+// `viewZoom.tiles` is the live, mid-ease value; `viewShortCssPx` is the shorter
+// axis of the map box in CSS px, which caps the pull-back on a small screen.
+let viewZoom = makeZoom(), viewShortCssPx = 0;
+// True while the glide is in flight. drawLPCTerrain reads this to STRETCH the
+// floor's existing bake rather than re-bake at each intermediate tile size —
+// a dozen full-floor bakes inside one second would hitch the fight badly.
+function viewZoomAnimating() { return zoomAnimating(viewZoom); }
+function updateViewZoom(dt) {
+  // One early-exit pass over this floor's foes. The draw loop already walks the
+  // same array every frame, so this costs nothing beside it — and unlike a cached
+  // flag it needs no invalidation hook at every spawn/kill/revive site.
+  let bossFight = false;
+  for (let i = 0; i < enemies.length; i++) if (!enemies[i].dead && enemies[i].isBoss) { bossFight = true; break; }
+  viewZoom = stepZoom(viewZoom, targetViewTiles(bossFight, viewShortCssPx), dt);
+}
 
 // Lazily create the AudioContext and the gain graph (master → sfx / music).
 function audioInit() {
@@ -10413,6 +10431,10 @@ function resizeCanvas() {
   // map (clear) while the observer, seeing no size change, skips its own redraw,
   // leaving the map gone for the tail of the slide. Only assign (and thus only clear)
   // when the size actually changes; the following draw() repaints when it does.
+  // The boss-fight zoom caps its pull-back on how small tiles would get, which is
+  // a question about CSS pixels — so snapshot the shorter axis here (offsetWidth
+  // forces layout; the camera must never ask for it per frame).
+  viewShortCssPx = Math.min(cw, ch);
   const nw = Math.max(1, Math.round(cw * dpr)), nh = Math.max(1, Math.round(ch * dpr));
   if (canvas.width !== nw) canvas.width = nw;
   if (canvas.height !== nh) canvas.height = nh;
@@ -12512,12 +12534,14 @@ function generateMap() {
 // uncleared floor) until the boss falls. Each guardian's own cover and hazards
 // (pillars to duck telegraphed shots, lava, breakable walls, spike beds) are stamped
 // into the annulus around the plaza (see src/data/bossArenas.js); a big open central
-// plaza, a clear N-S lane and an open perimeter ring are always preserved so even a
-// 3×3 guardian can lumber freely (systems/bossArena.js). No trash, no loot clutter,
-// no side rooms — just the hero and the boss. The confirmation gate and the exit
-// locks that trap you here until you win or die are layered on in the stairs and
-// town-portal handlers.
-const BOSS_ARENA_R = 10;                        // circle radius, centre-to-wall (tiles)
+// plaza, a wide N-S lane and a five-tile perimeter ring are always preserved so even
+// a 3×3 guardian can lumber freely, with slack to spare — it moves greedily rather
+// than pathing, so a lane only just wide enough reads in play as the boss wedging
+// itself on a pillar (systems/bossArena.js). No trash, no loot clutter, no side
+// rooms — just the hero and the boss. The confirmation gate and the exit locks that
+// trap you here until you win or die are layered on in the stairs and town-portal
+// handlers.
+const BOSS_ARENA_R = ARENA_R;                   // circle radius, centre-to-wall (tiles)
 const BOSS_ARENA_SIZE = BOSS_ARENA_R * 2 + 5;   // map dimension, with a wall margin
 function buildBossArena() {
   // Fixed size regardless of difficulty, so the arena is identical every time.
@@ -12689,7 +12713,6 @@ function buildTutorialMap() {
   // Re-arm the first-hit Health-Potion teach for this fresh shore (it fires once,
   // the moment a foe first bites — see beachPotionHint / enemyAttackPlayer).
   _beachPotionTaught = false; _beachPotionCueOn = false;
-  _beachMoveTime = 0;                  // fresh shore → the 'move' hint re-earns its 2s
   _manaGateWanted = false;             // no first-spell gate carrying over onto a new hero
   closeTutGate();                      // tear down any lingering spotlight from a prior run
   const packType = pick(BEACH_FOE_TYPES);
@@ -12730,7 +12753,9 @@ function buildTutorialMap() {
 }
 
 // Leaving the beach: step into the cave to begin the real dungeon on floor 1.
-function finishTutorial() {
+// `quiet` skips the arrival flourish for a hero who never walked the shore at all
+// — a VETERAN skipping the tutorial outright (see submitName).
+function finishTutorial(quiet) {
   tutorialActive = false;
   player.tutorialDone = true;
   _beachHintStage = null;
@@ -12740,8 +12765,10 @@ function finishTutorial() {
   dungeonLevel = 1;
   arrivalDir = 'down';
   statusEffects = [];
-  sfx('stairs');
-  log('🕳️ Into the cave — the dungeon opens below...', 'important');
+  if (!quiet) {
+    sfx('stairs');
+    log('🕳️ Into the cave — the dungeon opens below...', 'important');
+  }
   setPlayerCell(5, 5);
   generateMap();
   tickPact();
@@ -12781,9 +12808,6 @@ let _beachPotionCueOn = false;
 // SHARES the lower banner slot with the actionable popup, so syncBeachHint() reveals
 // it only when no popup is up.
 let _beachHintStage = null;
-// Cumulative seconds the hero has spent walking while the opening 'move' hint is up —
-// once it passes 2s the hint retires itself (see updatePlayer). Reset per tutorial.
-let _beachMoveTime = 0;
 // Whether the beach's one starter weapon has already dropped this tutorial. The
 // FIRST foe felled — whichever of the pack or the elite it is — hands it
 // over, so the gift never depends on kill order. Reset per tutorial in
@@ -12832,6 +12856,38 @@ function dropTutorialGear(e) {
   renderPanelSoon();
   log(`<span data-spr=chest></span> The ${(e && e.name) || 'foe'} drops ${logItem(item)}!`, 'loot');
   refreshTutorialCues();
+}
+
+// The same starter weapon, handed to a VETERAN who skipped the shore outright.
+// A fresh hero owns no gear (gearSets start empty) and the beach's first kill is
+// the ONLY source of that first weapon — so skipping the tutorial would otherwise
+// drop a hero onto floor 1 with bare fists. It comes already WORN: there's no
+// equip lesson to teach a player who opted out of the lessons.
+function grantStarterWeapon() {
+  const item = generateItem(1, 1, 'junk', 'weapon', classStarterWeaponBase());
+  item.tutorialGift = true;   // always wearable — no stat gate on the opening gift
+  recordWardrobe(item);
+  if (equipped.weapon) { inventory.push(item); return; }
+  equipped.weapon = item;
+  bumpLoadout();   // worn gear changed — cached gear resolve/stat sums are stale
+  log(`Armed with ${logItem(item)}.`, 'loot');
+}
+
+// …and the beach's graduation LEVEL, for the same VETERAN. No points are handed out
+// at spawn (SKILL_POINTS_AT_START is 0, attrPoints starts empty) — clearing the pack
+// IS the hero's first level-up, and the shore cave won't even open until those points
+// are spent. So skipping the beach without this opens floor 1 at level 1 with nothing
+// to spend and no skill, a level behind the Guided hero who walked the sand. Grants
+// the same single 1 → 2 (the shore is worth exactly one level), banner suppressed —
+// there's no tutorial popup to hand off to. Returns whether it fired, so the caller
+// can avoid stacking a second level-up sting on top of checkLevelUp's.
+function grantVeteranLevelUp() {
+  if (player.level >= 2) return false;
+  _skipLevelBanner = true;
+  player.xp += xpForLevel(player.level);
+  checkLevelUp();             // +1 skill point, +5 stat points, stat recompute, save
+  _skipLevelBanner = false;
+  return true;
 }
 
 // Beach graduation: felling the pack and the elite is the hero's FIRST
@@ -12909,6 +12965,17 @@ function syncBeachHint() {
   const el = document.getElementById('tutorial-hint');
   if (!el) return;
   el.classList.toggle('show', !!_beachHintStage && !_tutPopupVariant);
+}
+
+// The opening "head north and fight the pack" chip retires on the hero's FIRST SWING
+// at a foe — the exact beat it teaches. It used to time out after two seconds of
+// walking, which retired it mid-stroll: the lesson vanished before the fight it was
+// pointing at, leaving a new player facing their first pack with nothing on screen.
+// Called from attackEnemy, so a swing (melee or a loosed shot) closes it either way.
+function retireBeachMoveHint() {
+  if (!tutorialActive || _beachHintStage !== 'move') return;
+  _beachHintStage = null;
+  syncBeachHint();
 }
 
 // ── TUTORIAL SPOTLIGHT GATE ──────────────────────────────────────────────────
@@ -13140,10 +13207,12 @@ function tutorialStage(stage) {
   _beachHintStage = (stage === 'move' || stage === 'cave') ? stage : null;
   if (stage === 'move') {
     // The beach opens empty — teach walking first; the pack is a stroll north. Name
-    // the foe from the live pack so the hint matches whichever species rolled.
+    // the foe from the live pack so the hint matches whichever species rolled. The
+    // chip holds through the whole walk AND the first exchange (retireBeachMoveHint),
+    // so it also names what happens on contact: attacks swing themselves in reach.
     const packFoe = (enemies || []).find(e => e && e.tutorial && !e.isElite && !e.dead);
     const foeName = (packFoe && packFoe.name) || 'creature';
-    setTutorialHint(`Use <b>${moveHow}</b> to head <b>north</b> toward the <b>${foeName}</b> pack.`);
+    setTutorialHint(`Use <b>${moveHow}</b> to head <b>north</b> and fight the <b>${foeName}</b> pack — you swing automatically in reach.`);
   } else if (stage === 'cave') {
     setTutorialHint(`Step into the <b>cave</b> (<span data-spr=ic_down></span>) up north to descend.`);
   }
@@ -19371,8 +19440,9 @@ function draw() {
   ctx.fillRect(0, 0, W, H);
 
   // ── FOLLOW CAMERA ──
-  // Aim to show ~VIEW_TILES across the shorter axis, so tiles are large.
-  const tw = Math.ceil(Math.min(W, H) / VIEW_TILES);
+  // Aim to show ~viewTiles across the shorter axis, so tiles are large. A boss
+  // fight eases that count up, pulling the camera back off the guardian.
+  const tw = Math.ceil(Math.min(W, H) / viewZoom.tiles);
   const th = tw;
 
   // Center the camera on the player, then clamp so we never scroll past edges.
@@ -23648,13 +23718,9 @@ function updatePlayer(dt) {
   const moving = mag > 0.01;
   if (moving) { ix /= mag; iy /= mag; entryGuard = false; } // first move ends arrival grace
 
-  // Beach tutorial: the opening "head north" hint has done its job once the hero has
-  // actually walked for a couple of seconds — retire it so it doesn't linger the whole
-  // stroll up the shore. (Clearing the pack later still swaps in the 'cave' hint.)
-  if (moving && tutorialActive && _beachHintStage === 'move') {
-    _beachMoveTime += dt;
-    if (_beachMoveTime >= 2) { _beachHintStage = null; syncBeachHint(); }
-  }
+  // (The beach's opening move/fight hint is NOT retired here: it holds through the
+  // whole walk up the shore and only closes on the hero's first swing — see
+  // retireBeachMoveHint, called from attackEnemy.)
 
   // Sprint: wanting it + moving + stamina. Held Shift or a latched auto-sprint
   // toggle counts. Drains stamina; otherwise it refills. Town is a safe hub —
@@ -24674,6 +24740,7 @@ function onEnemyDefeated(e) {
 // (bow/staff/spear reach), which never provoke a melee counterattack.
 function attackEnemy(e, opts = {}) {
   if (e) e.provoked = true; // striking a neutral foe wakes it up
+  retireBeachMoveHint();    // the shore's opening move/fight chip has done its job
   if (e) triggerAttackAnim(player, e.x, e.y); // quick lunge toward the foe being struck
   const style = opts.style || weaponStyle();
   const ranged = !!opts.ranged;
@@ -35259,6 +35326,11 @@ function showNameEntry() {
   const scb = document.getElementById('ssf-checkbox');
   if (scb) scb.checked = !!(player.ssf || scb.checked);
   syncSsfToggle();
+  // Veteran likewise. `guided` defaults to true, so an explicit false is a pick the
+  // player already made (they backed out to the class list and came back).
+  const ccb = document.getElementById('classic-checkbox');
+  if (ccb) ccb.checked = !!(player.guided === false || ccb.checked);
+  syncVeteranToggle();
   // Body-type picker: default to any previous/in-progress choice, else male.
   // Classes with bespoke male/female art show the sprite previews; the rest hide
   // the thumbnails but still record a choice.
@@ -35296,6 +35368,14 @@ function syncHardcoreToggle() {
 function syncSsfToggle() {
   const cb = document.getElementById('ssf-checkbox');
   const row = document.getElementById('ssf-toggle');
+  if (row) row.classList.toggle('on', !!(cb && cb.checked));
+}
+// …and the Veteran row (steel-blue when armed). This row shipped WITHOUT a sync,
+// so ticking it flipped the hidden checkbox and changed nothing on screen — no
+// checkmark, no lit border — and read as "Veteran can't be selected".
+function syncVeteranToggle() {
+  const cb = document.getElementById('classic-checkbox');
+  const row = document.getElementById('classic-toggle');
   if (row) row.classList.toggle('on', !!(cb && cb.checked));
 }
 // Body-type (sex) picker state for the name screen. pendingSex holds the choice
@@ -35367,6 +35447,12 @@ function submitName() {
   // Hardcore/SSF this only shows for a fresh hero, so it locks in here.
   const ccb = document.getElementById('classic-checkbox');
   player.guided = !(ccb && ccb.checked);
+  // …and VETERAN says "skip the tutorialS" — plural, the beach included. Boot
+  // builds the shore for every fresh hero BEFORE this screen is even shown, so
+  // turning the ramp off is only half the promise: without this the Veteran was
+  // still dropped on the beach to fight the scripted pack. Retire it and open on
+  // real floor 1 (quiet — they never walked into the cave).
+  const skipShore = !player.guided && tutorialActive;
   const ov = document.getElementById('name-overlay');
   if (ov) ov.classList.remove('open');
   namePaused = false; // resume — naming is done
@@ -35376,7 +35462,13 @@ function submitName() {
   const cls = CLASSES[player.class];
   const sig = classSignature(player.class);
   log(`${dlIcon(cls.icon, 16)} ${player.name} the ${cls.name} begins the descent! ${cls.passive}.${sig ? ` Learn ${sig.name} in the SKILLS tab (B).` : ''}`, 'important');
-  sfx('levelup');
+  // Veteran opens on real floor 1, not the shore — carrying everything the beach
+  // would have handed over on the way through: the starter weapon its first kill
+  // drops, and the graduation level with its stat + skill points. Skipping the
+  // lessons costs the lessons, not the hero's opening kit.
+  let leveled = false;
+  if (skipShore) { finishTutorial(true); grantStarterWeapon(); leveled = grantVeteranLevelUp(); }
+  if (!leveled) sfx('levelup');   // the level-up played its own sting already
   updateBars(); renderPanel(); renderSkillBar(); draw(); saveGame();
 }
 
@@ -36837,6 +36929,7 @@ function gameLoop(ts) {
   // stays crisp through the slide instead of stretching. One re-fit + one draw
   // per frame keeps the slide smooth (see refitMapDuringSlide).
   if (performance.now() < _slideRefitUntil) safeStep('slideRefit', () => resizeCanvas());
+  safeStep('viewZoom', () => updateViewZoom(dt));   // ease the camera back for a boss fight, in for the walk home
   safeStep('draw', () => draw());
 }
 requestAnimationFrame(gameLoop);
@@ -40265,6 +40358,7 @@ const __DL_FN_BRIDGE = {
   nameBack,
   syncHardcoreToggle,
   syncSsfToggle,
+  syncVeteranToggle,
   pickSex,
   refreshSexPreviews,
   submitName,

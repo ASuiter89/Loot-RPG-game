@@ -7,9 +7,22 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
-  { date: "2026-08-01", size: "small", v: "Sprite boxes and a stuck danger halo, fixed", by: "Jeff Louie", notes: [
-    "Coloured box behind every sprite on some floors — art sheets now blit per tile, never a slice of the sheet.",
-    "Danger halo clears while a menu is open; it froze mid-pulse as a solid wash over the panel.",
+  { date: "2026-08-01", size: "small", v: "Sprite boxes and a stuck danger halo, fixed", by: "Jeff Louie", notes: ["Coloured box behind every sprite on some floors — art sheets now blit per tile, never a slice of the sheet.", "Danger halo clears while a menu is open; it froze mid-pulse as a solid wash over the panel."] },
+  { date: "2026-08-02", size: "small", v: "Beach's opening hint holds till your first swing", by: "Jeff Louie", notes: ["Move/fight chip stays up the whole walk north, retiring on your first swing (was 2s of walking).", "Chip also names that attacks swing themselves in reach."] },
+  { date: "2026-08-01", size: "small", v: "Veteran keeps the beach's opening kit", by: "Jeff Louie", notes: ["Veteran opens at level 2 with 5 attribute points and 1 skill point — the shore's graduation level.", "Skipping the beach cost it before: floor 1 at level 1, nothing to spend."] },
+  { date: "2026-08-01", size: "small", v: "Camera pulls back for boss fights", by: "Jeff Louie", notes: [
+    "View widens 13 → 17 tiles while a guardian lives, easing back in once it falls.",
+    "Small screens pull back only as far as tiles stay readable.",
+  ] },
+  { date: "2026-08-01", size: "medium", v: "Boss arenas grow", by: "Jeff Louie", notes: [
+    "Arena circle widens to 31 tiles across (was 21) — over twice the ground to kite on.",
+    "Five-tile lap lane inside the wall — 3x3 guardians wedged squeezing past corner pillars.",
+    "Wider centre plaza and north-south lane; every guardian's cover keeps its shape.",
+  ] },
+  { date: "2026-08-01", size: "small", v: "Veteran mode is selectable — and skips the beach", by: "Jeff Louie", notes: [
+    "Ticking VETERAN lights the row and checkmark; it armed silently before, reading as unselectable.",
+    "Veteran skips the shore outright, opening on floor 1 with the grey starter weapon worn.",
+    "It only muted hints before — the beach ran anyway. Row wears steel blue, not Hardcore's crimson.",
   ] },
   { date: "2026-07-31", size: "medium", v: "Bloodletter gets its own skill art", by: "Jeff Louie", notes: [
     "All 30 Bloodletter skills carry bespoke crimson-and-bone icons; they borrowed Warrior art before.",

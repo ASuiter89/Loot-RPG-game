@@ -7,4 +7,14 @@
 # same-day order may shuffle — cosmetic, and the data test pins only date order).
 # This is the standard fix for changelog merge conflicts and is honored by GitHub's
 # server-side merge, so concurrent PRs stop colliding on the changelog.
+#
+# CAVEAT — union has one corruption mode, so the result is always verified. When two
+# branches both insert at the TOP of the array, their hunks end on the identical line
+# `  ] },`; git treats that as shared trailing CONTEXT rather than part of either
+# insertion, and union emits it ONCE. The entry that sorts first is then left with an
+# unclosed object literal and the file stops parsing. auto-merge.yml runs
+# `tools/changelog-lint.js` after its union merge and BEFORE pushing, so a collapse
+# fails loudly instead of shipping. Writing an entry on ONE line (as ~216 entries here
+# already do) sidesteps it entirely — a whole entry shares no trailing text with its
+# neighbours, so there is nothing for union to fold.
 src/data/changelog.js merge=union

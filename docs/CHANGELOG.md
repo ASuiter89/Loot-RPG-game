@@ -8,6 +8,46 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — the camera pulls back for a boss fight
+
+- 📦 New `src/systems/cameraZoom.js` — the follow camera's view width, extracted from
+  the legacy `const VIEW_TILES = 13`. `targetViewTiles()` picks the stop (13 normal,
+  17 while a guardian lives); `makeZoom`/`stepZoom`/`zoomAnimating` run a smoothstep
+  glide between them. Pure: no DOM, no clock — `game.js` owns the value and feeds it
+  a frame delta.
+- 📦 The pull-back is capped by `MIN_BOSS_TILE_PX` rather than a fixed number, so a
+  phone or a foldable cover screen gets less of the effect instead of an unreadable
+  one; a screen already below that floor stays at the normal view.
+- 🧪 `src/legacy/game.js`: `viewZoom` + `updateViewZoom(dt)` in the frame loop, and
+  `drawLPCTerrain` now takes the STRETCH path while the glide is in flight — the same
+  one a live window drag uses. A glide crosses a dozen integer tile sizes inside a
+  second, and a full-floor terrain bake at each would hitch the fight. `resizeCanvas`
+  snapshots the map box's shorter axis in CSS px so the camera never forces layout.
+- 🧪 `test/systems/cameraZoom.test.js` — the stops, the small-screen cap, the ease
+  curve (leans in rather than lurching), exact landing, frame-rate independence,
+  mid-glide reversal, and that a settled frame allocates nothing.
+
+## Fix — boss arenas are big enough for the guardian that holds them
+
+- 📦 `src/systems/bossArena.js` now owns the arena RADIUS too (`ARENA_R`, 15 — was a
+  legacy-local `BOSS_ARENA_R = 10`), so the one constant every clearance rule is
+  derived from sits beside those rules. `src/legacy/game.js` imports it.
+- 📦 The perimeter lap lane is measured in TILES (`ARENA_RING_TILES`) instead of as a
+  fraction of R. A fraction thins to ~2.6 tiles on the diagonals — exactly where the
+  corner cover sits — so a 3×3 guardian could squeeze past a pillar on one exact tile
+  and, since it lumbers greedily rather than pathing, visibly wedged there instead.
+  New `maxFeatureR()` takes the tighter of the tile ring and the old fraction.
+- 📦 A blob reaching past that bound is now slid inward WHOLE (`pullInside`) rather
+  than having its out-of-bounds cells dropped, so a 2×2 column can't come out an L.
+  The plaza and N-S lane widen to match (`ARENA_PLAZA_CHEB` 4, `ARENA_LANE_HALF` 2).
+- 🧪 `arenaNavIssues` gains `'boss-pinch'`, backed by exported `pinchAnchors()` —
+  articulation points of the guardian's roaming graph, i.e. the one-tile needles it
+  wedges on. Every shipped layout had them at R=10 (the Elder Dragon's roost: 36);
+  all fifteen are at zero now. Gated to multi-tile guardians, since a 1×1 foe paths
+  around obstacles and legitimately noses into single-tile nooks.
+- 🧪 `test/systems/bossArena.test.js` grows the ring/lap-lane, blob-integrity and
+  pinch cases; it now runs at `ARENA_R` rather than a hardcoded 10.
+
 ## Fix — a death on the beach tutorial stays on the beach
 
 - 📦 New `src/systems/shoreDeath.js` (`deathRoute`) — the priority order a killing
