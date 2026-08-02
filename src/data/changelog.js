@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-01", size: "small", v: "Veteran mode is selectable — and skips the beach", by: "Jeff Louie", notes: [
+    "Ticking VETERAN lights the row and checkmark; it armed silently before, reading as unselectable.",
+    "Veteran skips the shore outright, opening on floor 1 with the grey starter weapon worn.",
+    "It only muted hints before — the beach ran anyway. Row wears steel blue, not Hardcore's crimson.",
+  ] },
   { date: "2026-07-31", size: "medium", v: "Bloodletter gets its own skill art", by: "Jeff Louie", notes: [
     "All 30 Bloodletter skills carry bespoke crimson-and-bone icons; they borrowed Warrior art before.",
     "Skill badges centre on the art itself; stray sparks used to drag icons off-centre.",
