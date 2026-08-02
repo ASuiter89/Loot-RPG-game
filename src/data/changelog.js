@@ -10,6 +10,9 @@ export const CHANGELOG = [
   { date: "2026-08-01", size: "small", v: "Veteran keeps the beach's opening kit", by: "Jeff Louie", notes: [
     "Veteran opens at level 2 with 5 attribute points and 1 skill point — the shore's graduation level.",
     "Skipping the beach cost it before: floor 1 at level 1, nothing to spend.",
+  { date: "2026-08-01", size: "small", v: "Camera pulls back for boss fights", by: "Jeff Louie", notes: [
+    "View widens 13 → 17 tiles while a guardian lives, easing back in once it falls.",
+    "Small screens pull back only as far as tiles stay readable.",
   ] },
   { date: "2026-08-01", size: "medium", v: "Boss arenas grow", by: "Jeff Louie", notes: [
     "Arena circle widens to 31 tiles across (was 21) — over twice the ground to kite on.",
