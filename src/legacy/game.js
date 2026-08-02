@@ -12816,6 +12816,23 @@ function grantStarterWeapon() {
   log(`Armed with ${logItem(item)}.`, 'loot');
 }
 
+// …and the beach's graduation LEVEL, for the same VETERAN. No points are handed out
+// at spawn (SKILL_POINTS_AT_START is 0, attrPoints starts empty) — clearing the pack
+// IS the hero's first level-up, and the shore cave won't even open until those points
+// are spent. So skipping the beach without this opens floor 1 at level 1 with nothing
+// to spend and no skill, a level behind the Guided hero who walked the sand. Grants
+// the same single 1 → 2 (the shore is worth exactly one level), banner suppressed —
+// there's no tutorial popup to hand off to. Returns whether it fired, so the caller
+// can avoid stacking a second level-up sting on top of checkLevelUp's.
+function grantVeteranLevelUp() {
+  if (player.level >= 2) return false;
+  _skipLevelBanner = true;
+  player.xp += xpForLevel(player.level);
+  checkLevelUp();             // +1 skill point, +5 stat points, stat recompute, save
+  _skipLevelBanner = false;
+  return true;
+}
+
 // Beach graduation: felling the pack and the elite is the hero's FIRST
 // level-up — the first skill point and stat points, EARNED here rather than at spawn.
 // Grant a real 1→2 level (the beach banks no kill XP, so this is exactly one
@@ -35361,10 +35378,13 @@ function submitName() {
   const cls = CLASSES[player.class];
   const sig = classSignature(player.class);
   log(`${dlIcon(cls.icon, 16)} ${player.name} the ${cls.name} begins the descent! ${cls.passive}.${sig ? ` Learn ${sig.name} in the SKILLS tab (B).` : ''}`, 'important');
-  // Veteran opens on real floor 1, not the shore — armed with the weapon the beach's
-  // first kill would have dropped, so skipping the lessons never costs the gift.
-  if (skipShore) { finishTutorial(true); grantStarterWeapon(); }
-  sfx('levelup');
+  // Veteran opens on real floor 1, not the shore — carrying everything the beach
+  // would have handed over on the way through: the starter weapon its first kill
+  // drops, and the graduation level with its stat + skill points. Skipping the
+  // lessons costs the lessons, not the hero's opening kit.
+  let leveled = false;
+  if (skipShore) { finishTutorial(true); grantStarterWeapon(); leveled = grantVeteranLevelUp(); }
+  if (!leveled) sfx('levelup');   // the level-up played its own sting already
   updateBars(); renderPanel(); renderSkillBar(); draw(); saveGame();
 }
 
