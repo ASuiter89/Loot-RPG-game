@@ -18,7 +18,11 @@
 # and GitHub reports DIRTY because its mergeability precheck ignores `.gitattributes`
 # merge drivers. A DIRTY PR whose conflict touches anything ELSE is left for a human.
 # The full gate suite (incl. the changelog data test) runs on the healed tree, so a
-# bad heal can never land.
+# bad heal can never land. The heal is also VERIFIED BEFORE IT IS PUSHED: union can
+# silently emit an unclosed entry when both sides insert at the top of the array
+# (their hunks share the trailing `  ] },`, which git keeps once as context), so
+# `tools/changelog-lint.js` runs between the merge and the push and leaves the branch
+# untouched rather than publishing unparseable JS.
 #
 # Safety: only same-repo, non-draft `claude/*` branches merge; human and fork PRs
 # are untouched. Gates run against the PR head (with `main` merged in when a PR was
@@ -189,6 +193,20 @@ jobs:
           # fails — that is a real conflict, so leave the PR for a human.
           if git merge --no-edit FETCH_HEAD; then
             echo "Merged main cleanly; any changelog collision was resolved by the union driver."
+            # VERIFY BEFORE PUBLISHING. A clean `git merge` exit does NOT mean the
+            # union driver produced valid JS: when both sides insert at the TOP of
+            # the array, their hunks end on the identical `  ] },`, git treats that
+            # as shared trailing CONTEXT, and union emits it once — leaving one
+            # entry's object literal unclosed. That shipped twice on 2026-08-01
+            # (#747 and #749 landing beside an in-flight PR), each time pushed
+            # before a single gate ran. changelog-lint is dependency-free so it
+            # works here, before `npm ci`.
+            if ! node tools/changelog-lint.js; then
+              echo "::error::Auto-heal produced an INVALID changelog for PR #$NUM (merge=union collapse). Nothing was pushed — the branch is untouched. Merge main in locally, restore the mangled entry, and push."
+              git merge --abort 2>/dev/null || git reset --hard HEAD@{1}
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             git push origin "HEAD:refs/heads/$HEAD_REF"
           else
             echo "A conflict remains outside the changelog — leaving PR #$NUM for a human."
