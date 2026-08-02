@@ -69,7 +69,7 @@ import { resistFor as enemyResistFor, RESIST_CAP } from '../data/enemyDefense.js
 import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '../systems/crackedWalls.js';
 import { pickVaultRoom, findSealedRoom } from '../systems/vaultRooms.js';
 import { rollHoardRoomCount } from '../systems/hoardRooms.js';
-import { carveArenaGrid } from '../systems/bossArena.js';
+import { carveArenaGrid, ARENA_R } from '../systems/bossArena.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
@@ -8246,7 +8246,7 @@ window.gameGuide = function gameGuide(topic) {
       `TRAP-THEMED FLOORS: some floors (gameState().modifier "Spike Gauntlet" / "Arrow Gallery" / "The Vent Works") dedicate the whole floor to ONE trap kind, packed in far denser than usual — expect a field of spikes, a hall lined with arrow emitters, or clusters of fire vents. Loot runs a little richer to reward threading them; a walkable route through the spikes is always guaranteed.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `BOSS TELEGRAPHS (gameState().hazards.telegraphs) are a guardian's wind-up attacks — a floor indicator that fills, flashes, then detonates. Each carries its shape (disc = filled circle; ring = donut, lethal in the band between innerR and r but SAFE in the centre hole and beyond r; lane = beam between (x1,y1)-(x2,y2); cone = wedge of radius r opening ±halfAngle around facing), its centre (x,y)/geometry, seconds until it lands (secsToHit), and danger:true when it hurts. They are ALWAYS dodgeable by MOVING out of the zone before secsToHit hits 0 (for a ring, step past r or into the hole) — never an RNG dodge. Red = damage; cyan = a benign spawn marker. A tracking disc follows you early in its wind-up, then locks — keep moving and it lands where you were.`,
-      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, and the exit is north. EACH guardian has its OWN arena — the cover and hazards vary by boss (columns to break line-of-sight on volleys and beams, lava pools, breakable cracked walls, spike beds), so read the ASCII map (# wall, ^ lava, " spikes, % cracked wall) and use the cover: duck behind a pillar to break a telegraphed shot, smash through a cracked wall for a new lane. A big open centre plaza, a clear north-south lane and an open perimeter ring are always kept, so there's room to kite. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
+      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, and the exit is north. EACH guardian has its OWN arena — the cover and hazards vary by boss (columns to break line-of-sight on volleys and beams, lava pools, breakable cracked walls, spike beds), so read the ASCII map (# wall, ^ lava, " spikes, % cracked wall) and use the cover: duck behind a pillar to break a telegraphed shot, smash through a cracked wall for a new lane. The arena is a 31-tile-wide circle (map 35x35), and a big open centre plaza, a wide north-south lane and a five-tile perimeter lap lane are always kept, so there's room to kite and the guardian always has room to close. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
       `ISLAND FLOORS (gameState().island true) come up now and then on outdoor floors: the landmass is ringed by open SEA, so the whole map edge is deep water (~) instead of a rock wall. You can see and shoot across it but never walk off — the shore IS the boundary. Nothing reachable is lost; the sea only replaces the impassable frame, so play it like any other floor.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. Most are multi-floor boons that fold into your stats while active (see gameState().effects): power (+50% dmg), guard (−40% dmg taken), fortune (loot), greed (+60% gold), insight (+50% xp), discovery (+50 Magic Find), harvest (+60% materials), precision (+18% crit), phantom (+15% dodge), sorcery (+30% skill/spell power), leech (+15% lifesteal), thorns (reflect), renewal (HP regen), clarity (MP regen), bulwark (+Defense), swift (+18% move), haste (+25% attack speed), vigor (tireless sprint/dash + full Stamina). wisdom instantly restores 50% max HP and refills MP; but BLOOD costs 30% of current HP for XP — check the kind before stepping on one.`,
@@ -12451,12 +12451,14 @@ function generateMap() {
 // uncleared floor) until the boss falls. Each guardian's own cover and hazards
 // (pillars to duck telegraphed shots, lava, breakable walls, spike beds) are stamped
 // into the annulus around the plaza (see src/data/bossArenas.js); a big open central
-// plaza, a clear N-S lane and an open perimeter ring are always preserved so even a
-// 3×3 guardian can lumber freely (systems/bossArena.js). No trash, no loot clutter,
-// no side rooms — just the hero and the boss. The confirmation gate and the exit
-// locks that trap you here until you win or die are layered on in the stairs and
-// town-portal handlers.
-const BOSS_ARENA_R = 10;                        // circle radius, centre-to-wall (tiles)
+// plaza, a wide N-S lane and a five-tile perimeter ring are always preserved so even
+// a 3×3 guardian can lumber freely, with slack to spare — it moves greedily rather
+// than pathing, so a lane only just wide enough reads in play as the boss wedging
+// itself on a pillar (systems/bossArena.js). No trash, no loot clutter, no side
+// rooms — just the hero and the boss. The confirmation gate and the exit locks that
+// trap you here until you win or die are layered on in the stairs and town-portal
+// handlers.
+const BOSS_ARENA_R = ARENA_R;                   // circle radius, centre-to-wall (tiles)
 const BOSS_ARENA_SIZE = BOSS_ARENA_R * 2 + 5;   // map dimension, with a wall margin
 function buildBossArena() {
   // Fixed size regardless of difficulty, so the arena is identical every time.
