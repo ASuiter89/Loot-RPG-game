@@ -8352,7 +8352,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the moment a wound takes you to 75% Health or below a one-time nudge names the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire — it waits for a wound worth healing rather than firing on the first scratch. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. Spending that point on an ACTIVE arms one more lesson right there on the sand: the first cast that actually burns MANA pauses the world and spotlights the Mana Potion (${key('manaPotion')}) until you quaff — the beach beats take the screen first, so it simply waits its turn if a heal or equip gate is still up. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice. DYING there doesn't skip it either, and costs nothing: no gold or XP is taken and your bag is never dropped as a grave — the shore simply rebuilds the same way and you wake at the water's edge at full HP/MP/Stamina (gameState().shore stays true; you never see town). The Hardcore exception still applies — one life is one life, beach included. The one way PAST the shore is to tick VETERAN on the name screen when creating the hero: that skips the beach outright (and the whole teaching layer) and opens the hero on real floor 1 — gameState().shore is false and ramp.guided is false from the first frame.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The opening hint chip ("head north and fight the pack") stays up for that whole walk and only retires on your FIRST SWING at a foe, so the instruction is still on screen when the fight it names starts. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the moment a wound takes you to 75% Health or below a one-time nudge names the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire — it waits for a wound worth healing rather than firing on the first scratch. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. Spending that point on an ACTIVE arms one more lesson right there on the sand: the first cast that actually burns MANA pauses the world and spotlights the Mana Potion (${key('manaPotion')}) until you quaff — the beach beats take the screen first, so it simply waits its turn if a heal or equip gate is still up. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice. DYING there doesn't skip it either, and costs nothing: no gold or XP is taken and your bag is never dropped as a grave — the shore simply rebuilds the same way and you wake at the water's edge at full HP/MP/Stamina (gameState().shore stays true; you never see town). The Hardcore exception still applies — one life is one life, beach included. The one way PAST the shore is to tick VETERAN on the name screen when creating the hero: that skips the beach outright (and the whole teaching layer) and opens the hero on real floor 1 — gameState().shore is false and ramp.guided is false from the first frame.`,
       `Opening-floor content pacing (Normal, floors 1–25): the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. DIFFICULTY ARC — a fresh hero's flat attribute damage would otherwise one-shot floor-1 trash, so over floors 1–5 the real numbers bend to make kills take a few blows ORGANICALLY (no per-hit cap): foes carry extra HP and the hero deals less, both easing to full strength by floor 6 as your levels and gear take over — "weak at the start, then earn your strength". Because those fights last longer, foes land more of their (full-strength) hits, so the opening actually threatens. No glowing ELITES or elite affixes until floor 4 (the one scripted beach elite aside). Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -12652,7 +12652,6 @@ function buildTutorialMap() {
   // Re-arm the first-hit Health-Potion teach for this fresh shore (it fires once,
   // the moment a foe first bites — see beachPotionHint / enemyAttackPlayer).
   _beachPotionTaught = false; _beachPotionCueOn = false;
-  _beachMoveTime = 0;                  // fresh shore → the 'move' hint re-earns its 2s
   _manaGateWanted = false;             // no first-spell gate carrying over onto a new hero
   closeTutGate();                      // tear down any lingering spotlight from a prior run
   const packType = pick(BEACH_FOE_TYPES);
@@ -12748,9 +12747,6 @@ let _beachPotionCueOn = false;
 // SHARES the lower banner slot with the actionable popup, so syncBeachHint() reveals
 // it only when no popup is up.
 let _beachHintStage = null;
-// Cumulative seconds the hero has spent walking while the opening 'move' hint is up —
-// once it passes 2s the hint retires itself (see updatePlayer). Reset per tutorial.
-let _beachMoveTime = 0;
 // Whether the beach's one starter weapon has already dropped this tutorial. The
 // FIRST foe felled — whichever of the pack or the elite it is — hands it
 // over, so the gift never depends on kill order. Reset per tutorial in
@@ -12908,6 +12904,17 @@ function syncBeachHint() {
   const el = document.getElementById('tutorial-hint');
   if (!el) return;
   el.classList.toggle('show', !!_beachHintStage && !_tutPopupVariant);
+}
+
+// The opening "head north and fight the pack" chip retires on the hero's FIRST SWING
+// at a foe — the exact beat it teaches. It used to time out after two seconds of
+// walking, which retired it mid-stroll: the lesson vanished before the fight it was
+// pointing at, leaving a new player facing their first pack with nothing on screen.
+// Called from attackEnemy, so a swing (melee or a loosed shot) closes it either way.
+function retireBeachMoveHint() {
+  if (!tutorialActive || _beachHintStage !== 'move') return;
+  _beachHintStage = null;
+  syncBeachHint();
 }
 
 // ── TUTORIAL SPOTLIGHT GATE ──────────────────────────────────────────────────
@@ -13139,10 +13146,12 @@ function tutorialStage(stage) {
   _beachHintStage = (stage === 'move' || stage === 'cave') ? stage : null;
   if (stage === 'move') {
     // The beach opens empty — teach walking first; the pack is a stroll north. Name
-    // the foe from the live pack so the hint matches whichever species rolled.
+    // the foe from the live pack so the hint matches whichever species rolled. The
+    // chip holds through the whole walk AND the first exchange (retireBeachMoveHint),
+    // so it also names what happens on contact: attacks swing themselves in reach.
     const packFoe = (enemies || []).find(e => e && e.tutorial && !e.isElite && !e.dead);
     const foeName = (packFoe && packFoe.name) || 'creature';
-    setTutorialHint(`Use <b>${moveHow}</b> to head <b>north</b> toward the <b>${foeName}</b> pack.`);
+    setTutorialHint(`Use <b>${moveHow}</b> to head <b>north</b> and fight the <b>${foeName}</b> pack — you swing automatically in reach.`);
   } else if (stage === 'cave') {
     setTutorialHint(`Step into the <b>cave</b> (<span data-spr=ic_down></span>) up north to descend.`);
   }
@@ -23631,13 +23640,9 @@ function updatePlayer(dt) {
   const moving = mag > 0.01;
   if (moving) { ix /= mag; iy /= mag; entryGuard = false; } // first move ends arrival grace
 
-  // Beach tutorial: the opening "head north" hint has done its job once the hero has
-  // actually walked for a couple of seconds — retire it so it doesn't linger the whole
-  // stroll up the shore. (Clearing the pack later still swaps in the 'cave' hint.)
-  if (moving && tutorialActive && _beachHintStage === 'move') {
-    _beachMoveTime += dt;
-    if (_beachMoveTime >= 2) { _beachHintStage = null; syncBeachHint(); }
-  }
+  // (The beach's opening move/fight hint is NOT retired here: it holds through the
+  // whole walk up the shore and only closes on the hero's first swing — see
+  // retireBeachMoveHint, called from attackEnemy.)
 
   // Sprint: wanting it + moving + stamina. Held Shift or a latched auto-sprint
   // toggle counts. Drains stamina; otherwise it refills. Town is a safe hub —
@@ -24657,6 +24662,7 @@ function onEnemyDefeated(e) {
 // (bow/staff/spear reach), which never provoke a melee counterattack.
 function attackEnemy(e, opts = {}) {
   if (e) e.provoked = true; // striking a neutral foe wakes it up
+  retireBeachMoveHint();    // the shore's opening move/fight chip has done its job
   if (e) triggerAttackAnim(player, e.x, e.y); // quick lunge toward the foe being struck
   const style = opts.style || weaponStyle();
   const ranged = !!opts.ranged;
