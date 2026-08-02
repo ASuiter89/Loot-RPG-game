@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-01", size: "small", v: "Sprite boxes and a stuck danger halo, fixed", by: "Jeff Louie", notes: [
+    "Coloured box behind every sprite on some floors — art sheets now blit per tile, never a slice of the sheet.",
+    "Danger halo clears while a menu is open; it froze mid-pulse as a solid wash over the panel.",
+  ] },
   { date: "2026-07-31", size: "medium", v: "Bloodletter gets its own skill art", by: "Jeff Louie", notes: [
     "All 30 Bloodletter skills carry bespoke crimson-and-bone icons; they borrowed Warrior art before.",
     "Skill badges centre on the art itself; stray sparks used to drag icons off-centre.",
