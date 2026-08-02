@@ -8,6 +8,27 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Fix — boss arenas are big enough for the guardian that holds them
+
+- 📦 `src/systems/bossArena.js` now owns the arena RADIUS too (`ARENA_R`, 15 — was a
+  legacy-local `BOSS_ARENA_R = 10`), so the one constant every clearance rule is
+  derived from sits beside those rules. `src/legacy/game.js` imports it.
+- 📦 The perimeter lap lane is measured in TILES (`ARENA_RING_TILES`) instead of as a
+  fraction of R. A fraction thins to ~2.6 tiles on the diagonals — exactly where the
+  corner cover sits — so a 3×3 guardian could squeeze past a pillar on one exact tile
+  and, since it lumbers greedily rather than pathing, visibly wedged there instead.
+  New `maxFeatureR()` takes the tighter of the tile ring and the old fraction.
+- 📦 A blob reaching past that bound is now slid inward WHOLE (`pullInside`) rather
+  than having its out-of-bounds cells dropped, so a 2×2 column can't come out an L.
+  The plaza and N-S lane widen to match (`ARENA_PLAZA_CHEB` 4, `ARENA_LANE_HALF` 2).
+- 🧪 `arenaNavIssues` gains `'boss-pinch'`, backed by exported `pinchAnchors()` —
+  articulation points of the guardian's roaming graph, i.e. the one-tile needles it
+  wedges on. Every shipped layout had them at R=10 (the Elder Dragon's roost: 36);
+  all fifteen are at zero now. Gated to multi-tile guardians, since a 1×1 foe paths
+  around obstacles and legitimately noses into single-tile nooks.
+- 🧪 `test/systems/bossArena.test.js` grows the ring/lap-lane, blob-integrity and
+  pinch cases; it now runs at `ARENA_R` rather than a hardcoded 10.
+
 ## Fix — a death on the beach tutorial stays on the beach
 
 - 📦 New `src/systems/shoreDeath.js` (`deathRoute`) — the priority order a killing

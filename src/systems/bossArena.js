@@ -3,20 +3,37 @@
 // deterministic (no rng, no DOM); the legacy monolith carves the circle by calling
 // `carveArenaGrid` and stamps the result into `mapData`.
 //
-// Every arena is a stone circle of radius R. Three regions are ALWAYS kept open,
-// whatever the layout asks for, so a guardian (up to 3×3) can never be boxed in and
-// the hero can always reach the exit:
+// Every arena is a stone circle of radius ARENA_R. Three regions are ALWAYS kept
+// open, whatever the layout asks for, so a guardian (up to 3×3) can never be boxed
+// in and the hero can always reach the exit:
 //   • the central PLAZA (Chebyshev ≤ ARENA_PLAZA_CHEB) — the guardian's ground,
 //   • the north-south LANE (|dx| ≤ ARENA_LANE_HALF) — entrance stair ↔ exit stair,
-//   • the perimeter RING (outside ARENA_OUTER_FRAC·R) — a lap lane around the wall.
+//   • the perimeter RING (the outermost ARENA_RING_TILES tiles) — a lap lane.
 // Cover and hazards live in the annulus between plaza and ring. `arenaNavIssues`
 // re-derives the grid and flood-fills it to prove the invariant; the systems test
 // runs it on all fifteen layouts.
+//
+// Every one of those widths is sized so a 3×3 guardian has SLACK, not a single
+// thread of legal footprint: a lane it can only cross one tile at a time reads in
+// play as the boss wedging itself on a pillar (it lumbers greedily, it does not
+// path). So the ring is measured in TILES of open floor rather than as a fraction
+// of R — a fraction thins to a needle at the diagonals, which is exactly where the
+// corner cover sits — and `arenaNavIssues` fails any layout whose roaming area has
+// a one-anchor bottleneck.
 import { BOSS_ARENAS, DEFAULT_BOSS_ARENA } from '../data/bossArenas.js';
 
-export const ARENA_PLAZA_CHEB = 3;    // open central plaza radius (Chebyshev)
-export const ARENA_LANE_HALF = 1;     // half-width of the clear N-S entrance/exit lane
-export const ARENA_OUTER_FRAC = 0.72; // features stay within this fraction of R
+export const ARENA_R = 15;            // circle radius, centre-to-wall (tiles)
+export const ARENA_PLAZA_CHEB = 4;    // open central plaza radius (Chebyshev)
+export const ARENA_LANE_HALF = 2;     // half-width of the clear N-S entrance/exit lane
+export const ARENA_RING_TILES = 5;    // open perimeter lap lane, in tiles of floor
+export const ARENA_OUTER_FRAC = 0.72; // …and features never pass this fraction of R
+
+// How far from the centre a feature cell may sit. The tile ring is the binding rule
+// at every radius we'd ship; the fraction only takes over past R≈18, so an arena
+// grown much larger still reads as a ring of cover rather than a lonely inner island.
+export function maxFeatureR(R) {
+  return Math.min(ARENA_OUTER_FRAC * R, R - ARENA_RING_TILES);
+}
 
 // Terrain codes (mirror of the legacy tile legend) — kept local so the module is
 // self-contained. 0 floor · 1 wall · 2 stairs down · 7 lava · 8 spikes · 12 stairs up.
@@ -60,25 +77,48 @@ function anchorsFor(spec, R) {
   return out;
 }
 
+// The furthest any cell of `blob` sits from its anchor.
+function blobReach(blob, ax, ay) {
+  let far = 0;
+  for (const [ddx, ddy] of blob) far = Math.max(far, Math.hypot(ax + ddx, ay + ddy));
+  return far;
+}
+
+// Slide an anchor straight in toward the centre until its WHOLE blob clears the
+// perimeter lap lane. A spec that reaches too far loses ground, not cells: pulling
+// the anchor keeps the pillar/pool the shape its layout asked for, where dropping
+// the out-of-bounds cells would gnaw a 2×2 column down to an L.
+function pullInside(ax, ay, blob, maxR) {
+  const d0 = Math.hypot(ax, ay);
+  if (!d0 || blobReach(blob, ax, ay) <= maxR) return [ax, ay];
+  let x = ax, y = ay;
+  for (let d = d0 - 1; d > 0; d--) {
+    x = Math.round(ax * (d / d0)); y = Math.round(ay * (d / d0));
+    if (blobReach(blob, x, y) <= maxR) break;
+  }
+  return [x, y];
+}
+
 // Expand a layout into the concrete feature cells to stamp, as {dx, dy, tile} offsets
-// from the arena centre. Anything that would land in the plaza, the N-S lane, the
-// perimeter ring, or outside the floor circle is dropped here — the safety net that
-// keeps a bad layout from sealing the room.
+// from the arena centre. Blobs reaching into the perimeter ring are pulled inward;
+// anything still landing in the plaza, the N-S lane or outside the floor circle is
+// dropped — together, the safety net that keeps a bad layout from sealing the room.
 export function arenaFeatureCells(type, R) {
   const layout = arenaLayoutFor(type);
   const plaza = ARENA_PLAZA_CHEB, lane = ARENA_LANE_HALF;
-  const outer = ARENA_OUTER_FRAC * R, outer2 = outer * outer;
+  const maxR = maxFeatureR(R), maxR2 = maxR * maxR;
   const floor2 = (R - 1) * (R - 1);
   const seen = new Set(), cells = [];
   for (const spec of (layout.features || [])) {
     const blob = blobOffsets(spec);
     for (const { ax, ay, sx, sy } of anchorsFor(spec, R)) {
+      const [cax, cay] = pullInside(ax, ay, blob, maxR);
       for (const [ddx, ddy] of blob) {
-        const dx = sx * (ax + ddx), dy = sy * (ay + ddy);
+        const dx = sx * (cax + ddx), dy = sy * (cay + ddy);
         if (Math.max(Math.abs(dx), Math.abs(dy)) <= plaza) continue; // keep the plaza open
         if (Math.abs(dx) <= lane) continue;                          // keep the N-S lane open
         const d2 = dx * dx + dy * dy;
-        if (d2 > outer2 || d2 > floor2) continue;                    // keep the perimeter ring open
+        if (d2 > maxR2 || d2 > floor2) continue;                     // keep the perimeter ring open
         const key = dx + ',' + dy;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -156,12 +196,67 @@ function bossFlood(grid, sx, sy, size) {
   return seen;
 }
 
+// Anchors that are the SOLE link between two halves of the guardian's roaming area
+// — articulation points of the anchor graph. Each one is a spot where the only legal
+// footprint is a single tile, i.e. the guardian threading a needle between cover and
+// the wall. Since it lumbers greedily (one axis, then the other) rather than pathing,
+// a needle is where it visibly wedges, so we treat any as a broken arena.
+// (Tarjan, iterated rather than recursed — an arena holds ~700 anchors at size 1.)
+export function pinchAnchors(anchors) {
+  const keys = [...anchors], n = keys.length;
+  if (n < 3) return [];
+  const idx = new Map(keys.map((k, i) => [k, i]));
+  const adj = keys.map((k) => {
+    const c = k.split(','), y = +c[0], x = +c[1], out = [];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const j = idx.get((y + dy) + ',' + (x + dx));
+      if (j !== undefined) out.push(j);
+    }
+    return out;
+  });
+  // A node cuts the graph when some DFS child's subtree can't reach back above it
+  // (at the root, when it has more than one child).
+  const disc = new Int32Array(n).fill(-1), low = new Int32Array(n);
+  const parent = new Int32Array(n).fill(-1), isCut = new Uint8Array(n);
+  let timer = 0;
+  for (let s = 0; s < n; s++) {
+    if (disc[s] !== -1) continue;
+    disc[s] = low[s] = timer++;
+    let rootKids = 0;
+    const stack = [[s, 0]];
+    while (stack.length) {
+      const top = stack[stack.length - 1], u = top[0], e = top[1]++;
+      if (e < adj[u].length) {
+        const v = adj[u][e];
+        if (disc[v] === -1) {
+          parent[v] = u; disc[v] = low[v] = timer++;
+          if (u === s) rootKids++;
+          stack.push([v, 0]);
+        } else if (v !== parent[u]) {
+          low[u] = Math.min(low[u], disc[v]);
+        }
+      } else {
+        stack.pop();
+        const p = parent[u];
+        if (p !== -1) {
+          low[p] = Math.min(low[p], low[u]);
+          if (p !== s && low[u] >= disc[p]) isCut[p] = 1;
+        }
+      }
+    }
+    if (rootKids > 1) isCut[s] = 1;
+  }
+  return keys.filter((_, i) => isCut[i]);
+}
+
 // Prove an arena is fair to fight in. Returns a list of problems (empty = good):
 //   'player-path'  the hero can't walk from the entrance to the exit,
 //   'boss-boxed'   a `size`×`size` guardian can't lumber out toward the north,
-//                  south, east AND west of the room from its central spawn.
+//                  south, east AND west of the room from its central spawn,
+//   'boss-pinch'   it CAN get there, but only by threading a one-tile-wide needle
+//                  between cover and the wall — where it wedges instead.
 // The systems test runs this over every layout so a too-tight arena fails CI.
-export function arenaNavIssues(type, R, size = 3) {
+export function arenaNavIssues(type, R = ARENA_R, size = 3) {
   const { grid, cx, cy } = carveArenaGrid(type, R);
   const issues = [];
   const ent = arenaEntrance(R, cx, cy), ex = arenaExit(R, cx, cy);
@@ -178,11 +273,16 @@ export function arenaNavIssues(type, R, size = 3) {
     west = Math.min(west, ax);
     east = Math.max(east, ax + size - 1);
   }
-  const margin = 5; // must reach within ~5 tiles of the wall on every side
+  // Must lap the room: reach within the perimeter ring on every side.
+  const margin = ARENA_RING_TILES;
   if (!anchors.size ||
       north > cy - (R - margin) || south < cy + (R - margin) ||
       west > cx - (R - margin) || east < cx + (R - margin)) {
     issues.push('boss-boxed');
   }
+  // Only a multi-tile guardian wedges: it lumbers greedily on one axis then the
+  // other, so a needle stops it dead. A 1×1 foe paths around obstacles instead, and
+  // legitimately noses into single-tile nooks (the circle's north and south tips).
+  if (size > 1 && pinchAnchors(anchors).length) issues.push('boss-pinch');
   return issues;
 }

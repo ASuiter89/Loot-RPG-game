@@ -7,6 +7,11 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-01", size: "medium", v: "Boss arenas grow", by: "Jeff Louie", notes: [
+    "Arena circle widens to 31 tiles across (was 21) — over twice the ground to kite on.",
+    "Five-tile lap lane inside the wall; 3x3 guardians wedged on corner pillars squeezing past.",
+    "Wider centre plaza and north-south lane; every guardian's cover keeps its shape.",
+  ] },
   { date: "2026-07-31", size: "medium", v: "Bloodletter gets its own skill art", by: "Jeff Louie", notes: [
     "All 30 Bloodletter skills carry bespoke crimson-and-bone icons; they borrowed Warrior art before.",
     "Skill badges centre on the art itself; stray sparks used to drag icons off-centre.",
