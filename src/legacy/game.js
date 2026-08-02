@@ -70,6 +70,7 @@ import { MAX_CRACK_HITS, SMASH_COOLDOWN, applyCrackHit, crackSeverity } from '..
 import { pickVaultRoom, findSealedRoom } from '../systems/vaultRooms.js';
 import { rollHoardRoomCount } from '../systems/hoardRooms.js';
 import { carveArenaGrid, ARENA_R } from '../systems/bossArena.js';
+import { targetViewTiles, makeZoom, stepZoom, zoomAnimating } from '../systems/cameraZoom.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
@@ -2192,9 +2193,10 @@ function drawLPCTerrain(ox, oy, tw, x0, y0, x1, y1) {
     // rebaking the whole floor per step would freeze the drag. While the resize
     // is in flight (body.resizing, cleared 200ms after the last event) stretch
     // the same floor's stale bake — momentarily soft but fluid — and bake crisp
-    // once on the first frame after it settles.
+    // once on the first frame after it settles. The boss-fight zoom glide walks
+    // the same ladder of tile sizes inside one second, so it rides the same path.
     if (_lpcCache.cv && _lpcCache.baseKey === baseKey &&
-        document.body.classList.contains('resizing')) {
+        (viewZoomAnimating() || document.body.classList.contains('resizing'))) {
       const s = tw / _lpcCache.tw;
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(_lpcCache.cv, ox - tw, oy - tw, _lpcCache.cv.width * s, _lpcCache.cv.height * s);
@@ -8453,8 +8455,24 @@ function musicBusGain() { return MUSIC_BASE_GAIN * audio.musicLevel / AUDIO_LEVE
 // ── VIEW ── how many tiles span the shorter axis of the play area. Fewer tiles
 // = bigger tiles, so the game reads well at default browser zoom. This was once
 // an adjustable Wide / Wider / Widest setting; it's now fixed at the most
-// zoomed-in stop (Wide), which is the only view everyone wanted.
-const VIEW_TILES = 13;
+// zoomed-in stop (Wide), which is the only view everyone wanted — EXCEPT during
+// a boss fight, which eases the camera back so the guardian's arena reads at its
+// real scale, then eases in again once it falls (systems/cameraZoom.js).
+// `viewZoom.tiles` is the live, mid-ease value; `viewShortCssPx` is the shorter
+// axis of the map box in CSS px, which caps the pull-back on a small screen.
+let viewZoom = makeZoom(), viewShortCssPx = 0;
+// True while the glide is in flight. drawLPCTerrain reads this to STRETCH the
+// floor's existing bake rather than re-bake at each intermediate tile size —
+// a dozen full-floor bakes inside one second would hitch the fight badly.
+function viewZoomAnimating() { return zoomAnimating(viewZoom); }
+function updateViewZoom(dt) {
+  // One early-exit pass over this floor's foes. The draw loop already walks the
+  // same array every frame, so this costs nothing beside it — and unlike a cached
+  // flag it needs no invalidation hook at every spawn/kill/revive site.
+  let bossFight = false;
+  for (let i = 0; i < enemies.length; i++) if (!enemies[i].dead && enemies[i].isBoss) { bossFight = true; break; }
+  viewZoom = stepZoom(viewZoom, targetViewTiles(bossFight, viewShortCssPx), dt);
+}
 
 // Lazily create the AudioContext and the gain graph (master → sfx / music).
 function audioInit() {
@@ -10352,6 +10370,10 @@ function resizeCanvas() {
   // map (clear) while the observer, seeing no size change, skips its own redraw,
   // leaving the map gone for the tail of the slide. Only assign (and thus only clear)
   // when the size actually changes; the following draw() repaints when it does.
+  // The boss-fight zoom caps its pull-back on how small tiles would get, which is
+  // a question about CSS pixels — so snapshot the shorter axis here (offsetWidth
+  // forces layout; the camera must never ask for it per frame).
+  viewShortCssPx = Math.min(cw, ch);
   const nw = Math.max(1, Math.round(cw * dpr)), nh = Math.max(1, Math.round(ch * dpr));
   if (canvas.width !== nw) canvas.width = nw;
   if (canvas.height !== nh) canvas.height = nh;
@@ -19331,8 +19353,9 @@ function draw() {
   ctx.fillRect(0, 0, W, H);
 
   // ── FOLLOW CAMERA ──
-  // Aim to show ~VIEW_TILES across the shorter axis, so tiles are large.
-  const tw = Math.ceil(Math.min(W, H) / VIEW_TILES);
+  // Aim to show ~viewTiles across the shorter axis, so tiles are large. A boss
+  // fight eases that count up, pulling the camera back off the guardian.
+  const tw = Math.ceil(Math.min(W, H) / viewZoom.tiles);
   const th = tw;
 
   // Center the camera on the player, then clamp so we never scroll past edges.
@@ -36792,6 +36815,7 @@ function gameLoop(ts) {
   // stays crisp through the slide instead of stretching. One re-fit + one draw
   // per frame keeps the slide smooth (see refitMapDuringSlide).
   if (performance.now() < _slideRefitUntil) safeStep('slideRefit', () => resizeCanvas());
+  safeStep('viewZoom', () => updateViewZoom(dt));   // ease the camera back for a boss fight, in for the walk home
   safeStep('draw', () => draw());
 }
 requestAnimationFrame(gameLoop);
