@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-01", size: "small", v: "Camera pulls back for boss fights", by: "Jeff Louie", notes: [
+    "View widens 13 → 17 tiles while a guardian lives, easing back in once it falls.",
+    "Small screens pull back only as far as tiles stay readable.",
+  ] },
   { date: "2026-08-01", size: "medium", v: "Boss arenas grow", by: "Jeff Louie", notes: [
     "Arena circle widens to 31 tiles across (was 21) — over twice the ground to kite on.",
     "Five-tile lap lane inside the wall — 3x3 guardians wedged squeezing past corner pillars.",

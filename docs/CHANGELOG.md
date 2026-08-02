@@ -8,6 +8,25 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — the camera pulls back for a boss fight
+
+- 📦 New `src/systems/cameraZoom.js` — the follow camera's view width, extracted from
+  the legacy `const VIEW_TILES = 13`. `targetViewTiles()` picks the stop (13 normal,
+  17 while a guardian lives); `makeZoom`/`stepZoom`/`zoomAnimating` run a smoothstep
+  glide between them. Pure: no DOM, no clock — `game.js` owns the value and feeds it
+  a frame delta.
+- 📦 The pull-back is capped by `MIN_BOSS_TILE_PX` rather than a fixed number, so a
+  phone or a foldable cover screen gets less of the effect instead of an unreadable
+  one; a screen already below that floor stays at the normal view.
+- 🧪 `src/legacy/game.js`: `viewZoom` + `updateViewZoom(dt)` in the frame loop, and
+  `drawLPCTerrain` now takes the STRETCH path while the glide is in flight — the same
+  one a live window drag uses. A glide crosses a dozen integer tile sizes inside a
+  second, and a full-floor terrain bake at each would hitch the fight. `resizeCanvas`
+  snapshots the map box's shorter axis in CSS px so the camera never forces layout.
+- 🧪 `test/systems/cameraZoom.test.js` — the stops, the small-screen cap, the ease
+  curve (leans in rather than lurching), exact landing, frame-rate independence,
+  mid-glide reversal, and that a settled frame allocates nothing.
+
 ## Fix — boss arenas are big enough for the guardian that holds them
 
 - 📦 `src/systems/bossArena.js` now owns the arena RADIUS too (`ARENA_R`, 15 — was a
