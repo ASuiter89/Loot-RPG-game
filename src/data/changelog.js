@@ -7,6 +7,10 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-01", size: "small", v: "Veteran keeps the beach's opening kit", by: "Jeff Louie", notes: [
+    "Veteran opens at level 2 with 5 attribute points and 1 skill point — the shore's graduation level.",
+    "Skipping the beach cost it before: floor 1 at level 1, nothing to spend.",
+  ] },
   { date: "2026-08-01", size: "small", v: "Veteran mode is selectable — and skips the beach", by: "Jeff Louie", notes: [
     "Ticking VETERAN lights the row and checkmark; it armed silently before, reading as unselectable.",
     "Veteran skips the shore outright, opening on floor 1 with the grey starter weapon worn.",

@@ -14,10 +14,14 @@
 //   3. the row wears its own palette, not Hardcore's crimson;
 //   4. the pick survives backing out to the class list and returning;
 //   5. submitting with it armed opens on REAL floor 1 — off the shore, graduated,
-//      with the teaching layer off and the shore's starter weapon already worn
-//      (a fresh hero owns no gear, so skipping the beach must not mean bare fists);
+//      with the teaching layer off and the whole opening kit the beach would have
+//      handed over: the starter weapon worn (a fresh hero owns no gear, so skipping
+//      the beach must not mean bare fists) and the graduation LEVEL with its stat +
+//      skill points (none are granted at spawn — clearing the pack IS the first
+//      level-up, so without it a Veteran starts a level down with nothing to spend);
+//   6. that kit matches, point for point, what a Guided hero holds after the beach;
 //      and
-//   6. leaving it alone still starts a Guided hero on the shore.
+//   7. leaving it alone still starts a Guided hero on the shore.
 //
 // Usage:
 //   node test/smoke/veteran-mode.mjs [path-to-html]   (default: ./index.html)
@@ -140,9 +144,11 @@ async function main() {
     out.veteranRun = await page.evaluate(() => {
       const s = window.gameState();
       const w = window.equipped && window.equipped.weapon;
+      const p = window.player;
       return { shore: s.shore, floor: s.floor, guided: s.ramp && s.ramp.guided,
-               tutorialDone: !!window.player.tutorialDone, inTown: s.inTown,
-               weapon: w ? w.name : null, weaponTier: w ? w.tier : null };
+               tutorialDone: !!p.tutorialDone, inTown: s.inTown,
+               weapon: w ? w.name : null, weaponTier: w ? w.tier : null,
+               level: p.level, attrPoints: p.attrPoints || 0, skillPoints: p.skillPoints || 0 };
     });
     if (out.veteranRun.shore) failures.push('a VETERAN hero still woke on the beach tutorial');
     if (!out.veteranRun.tutorialDone) failures.push('a VETERAN hero was not stamped past the tutorial — it can come back');
@@ -153,6 +159,11 @@ async function main() {
     if (out.veteranRun.weapon && out.veteranRun.weaponTier !== 'junk') {
       failures.push(`the VETERAN starter weapon rolled "${out.veteranRun.weaponTier}", want the shore's grey (junk) gift`);
     }
+    if (out.veteranRun.level < 2) {
+      failures.push(`a VETERAN hero opened at level ${out.veteranRun.level} — the beach's graduation level was skipped with it`);
+    }
+    if (!out.veteranRun.skillPoints) failures.push('a VETERAN hero opened with no skill point to spend');
+    if (!out.veteranRun.attrPoints) failures.push('a VETERAN hero opened with no attribute points to spend');
 
     // ── 6. The default is untouched: a Guided hero still gets the shore ──────
     const page2 = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -170,8 +181,22 @@ async function main() {
       const s = window.gameState();
       return { shore: s.shore, guided: s.ramp && s.ramp.guided, foes: (s.enemies || []).length };
     });
+    // Graduate the shore the way clearing the pack does (grantBeachLevelUp's exact
+    // two lines) and compare kits: the Veteran's head start must be the SAME single
+    // level and the SAME point pools, never a richer or poorer opening.
+    out.guidedGraduated = await page2.evaluate(() => {
+      window.player.xp += window.xpForLevel(window.player.level);
+      window.checkLevelUp();
+      const p = window.player;
+      return { level: p.level, attrPoints: p.attrPoints || 0, skillPoints: p.skillPoints || 0 };
+    });
     if (!out.guidedRun.shore) failures.push('a default (Guided) hero no longer starts on the shore — the tutorial was lost for everyone');
     if (out.guidedRun.guided !== true) failures.push('a default hero is no longer Guided');
+    for (const k of ['level', 'attrPoints', 'skillPoints']) {
+      if (out.veteranRun[k] !== out.guidedGraduated[k]) {
+        failures.push(`Veteran ${k} is ${out.veteranRun[k]}, a graduated Guided hero has ${out.guidedGraduated[k]} — the skip changed the opening kit`);
+      }
+    }
     await page2.close();
 
     console.log('veteran-mode: idle      =', JSON.stringify(out.idle));
@@ -179,6 +204,7 @@ async function main() {
     console.log('veteran-mode: palette   =', JSON.stringify(out.palette));
     console.log('veteran-mode: veteran   =', JSON.stringify(out.veteranRun));
     console.log('veteran-mode: guided    =', JSON.stringify(out.guidedRun));
+    console.log('veteran-mode: gradKit   =', JSON.stringify(out.guidedGraduated));
   } catch (err) {
     failures.push(`exception: ${String(err)}`);
   } finally {
