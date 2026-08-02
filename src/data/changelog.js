@@ -9,8 +9,9 @@
 export const CHANGELOG = [
   { date: "2026-08-01", size: "medium", v: "Boss arenas grow", by: "Jeff Louie", notes: [
     "Arena circle widens to 31 tiles across (was 21) — over twice the ground to kite on.",
-    "Five-tile lap lane inside the wall; 3x3 guardians wedged on corner pillars squeezing past.",
+    "Five-tile lap lane inside the wall — 3x3 guardians wedged squeezing past corner pillars.",
     "Wider centre plaza and north-south lane; every guardian's cover keeps its shape.",
+  ] },
   { date: "2026-08-01", size: "small", v: "Veteran mode is selectable — and skips the beach", by: "Jeff Louie", notes: [
     "Ticking VETERAN lights the row and checkmark; it armed silently before, reading as unselectable.",
     "Veteran skips the shore outright, opening on floor 1 with the grey starter weapon worn.",
