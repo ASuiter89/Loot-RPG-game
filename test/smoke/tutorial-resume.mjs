@@ -74,7 +74,7 @@ async function main() {
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 
   const failures = [];
-  let fresh = null, resumed = null, slotRow = null, manaGate = null, shoreDeath = null, healBeat = null, descended = null, legacyBoot = null;
+  let fresh = null, moveHint = null, resumed = null, slotRow = null, manaGate = null, shoreDeath = null, healBeat = null, descended = null, legacyBoot = null;
   try {
     // ── 1. A brand-new hero begins on the shore, and the save records it ──
     await page.goto(url, { waitUntil: 'load', timeout: 30000 });
@@ -99,6 +99,40 @@ async function main() {
     });
     if (fresh.savedTutorial !== true) failures.push(`saveGame() did not record the shore (tutorial=${JSON.stringify(fresh.savedTutorial)})`);
     if (!isShore(fresh.foes)) failures.push(`a fresh hero did not start on the shore — ${JSON.stringify(shapeOf(fresh.foes))}`);
+
+    // ── 1b. The opening move/fight hint holds until the FIRST SWING ──
+    //       It used to retire after two seconds of walking, so it vanished mid-stroll
+    //       — before the fight it points at. Walk west along the shoreline (away from
+    //       the pack, so no auto-attack can close it early) for well past that old
+    //       timeout, then swing: only the swing may retire it.
+    const chipState = () => page.evaluate(() => {
+      const el = document.getElementById('tutorial-hint');
+      return {
+        shown: !!el && el.classList.contains('show'),
+        text: ((el || {}).textContent || '').replace(/\s+/g, ' ').trim(),
+        fx: window.player.fx,
+      };
+    });
+    moveHint = { start: await chipState() };
+    await page.keyboard.down('ArrowLeft');
+    await page.waitForTimeout(3000);          // 3s of walking — the old timer fired at 2s
+    moveHint.walked = await chipState();
+    await page.keyboard.up('ArrowLeft');
+    // Guard the guard: if the hero never actually walked, "still shown" proves nothing.
+    if (Math.abs(moveHint.walked.fx - moveHint.start.fx) < 0.5) failures.push(`the hero did not walk during the hint check (fx ${moveHint.start.fx} → ${moveHint.walked.fx}) — the hold test is vacuous`);
+    moveHint.struck = await page.evaluate(async () => {
+      const f = window.gameState().enemies[0];
+      window.attackEnemy(window.getEnemyAt(f.x, f.y));
+      await new Promise((r) => setTimeout(r, 100));
+      const el = document.getElementById('tutorial-hint');
+      return { shown: !!el && el.classList.contains('show'), text: ((el || {}).textContent || '').replace(/\s+/g, ' ').trim() };
+    });
+    if (!moveHint.start.shown) failures.push('a fresh hero on the shore gets no opening move hint at all');
+    if (!/north/i.test(moveHint.start.text)) failures.push(`the opening hint does not point the hero north: "${moveHint.start.text}"`);
+    if (!/fight|attack|swing/i.test(moveHint.start.text)) failures.push(`the opening hint never mentions fighting the pack: "${moveHint.start.text}"`);
+    // THE REGRESSION: walking used to time the hint out before the first fight.
+    if (!moveHint.walked.shown) failures.push('the opening hint retired mid-walk — it must hold until the hero first swings');
+    if (moveHint.struck.shown) failures.push(`the opening hint survived the hero's first swing: "${moveHint.struck.text}"`);
 
     // ── 2. Reload — exactly what the slot list's Load button does (activateSlot
     //       saves, points ACTIVE_SLOT_KEY at the slot, then reloads the page).
@@ -295,6 +329,10 @@ async function main() {
     if (pageErrors.length) failures.push(`page errors on pre-flag save boot: ${pageErrors.slice(0, 3).join(' | ')}`);
   } finally {
     console.log('tutorial-resume: fresh     ', JSON.stringify(fresh && { ...shapeOf(fresh.foes), savedTutorial: fresh.savedTutorial, savedFloor: fresh.savedFloor }));
+    console.log('tutorial-resume: moveHint  ', JSON.stringify(moveHint && {
+      start: moveHint.start.shown, walked3s: moveHint.walked && moveHint.walked.shown,
+      afterSwing: moveHint.struck && moveHint.struck.shown, text: moveHint.start.text.slice(0, 100),
+    }));
     console.log('tutorial-resume: resumed   ', JSON.stringify(resumed && { ...shapeOf(resumed.foes), floor: resumed.floor, level: resumed.level, tutorialDone: resumed.tutorialDone }));
     console.log('tutorial-resume: slotRow   ', JSON.stringify((slotRow || '').slice(0, 120)));
     console.log('tutorial-resume: manaGate  ', JSON.stringify(manaGate && {
