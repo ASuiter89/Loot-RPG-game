@@ -8287,8 +8287,8 @@ window.gameGuide = function gameGuide(topic) {
     character: [
       `Create a hero in TWO steps from the title's ENTER THE DUNGEON button: first PICK A CLASS (Warrior/Rogue/Mage/Templar), then on the next screen ENTER A NAME and choose a body type — Female or Male. Both screens have a ◀ Back button (Esc does the same): the class pick backs out to the title, the name screen back to the class pick — a typed name and toggles are kept.`,
       `Body type is cosmetic — it only sets which hero sprite is drawn. Warrior, Rogue, Mage and Templar each have female and male art, so the name screen offers the choice. The Fortune-Seeker (female), Windblade (male) and Bloodletter (male) are SINGLE-SEX — one bespoke sheet each — so the picker is hidden for them and the body type is set by the class. Either way the sprite shows in-world and anywhere the hero appears (paperdoll, save slots, graveyard, leaderboard, title card). gameState().player.sex reports it ('male'|'female') and .name reports the chosen name.`,
-      `Hardcore mode (one life, permadeath) is also chosen on the name screen and locks in for that hero. Class can be retrained later at the town Trainer, but name, body type and Hardcore are fixed once you begin. While the class screen is open gameState().mode is 'classSelect'; on the name screen it's 'nameSelect'.`,
-      `SOLO SELF-FOUND (SSF) is a second name-screen toggle, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
+      `Three optional MODES sit behind the name screen's ADVANCED GAME MODES button — collapsed by default (they are opt-in, never a required pick), and the button names any you have armed. Hardcore mode (one life, permadeath) is one of them, and locks in for that hero. Class can be retrained later at the town Trainer, but name, body type and Hardcore are fixed once you begin. While the class screen is open gameState().mode is 'classSelect'; on the name screen it's 'nameSelect'.`,
+      `SOLO SELF-FOUND (SSF) is a second toggle under that same ADVANCED GAME MODES button, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
     ],
     town: [
 `The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived — and the HUD's Town button stays HIDDEN until you first set foot in the camp (player.townVisited flips true on that first arrival, revealing the button). That first Floor-5 lair has NO stairs onward: felling its guardian tears open an escape portal (glyph 'O', gameState().escapePortal) right beside you with a "Quick! Step into the portal!" cue — step onto it to graduate up into town for a one-time celebration (the townsfolk cheer and thank you, a one-time WELCOME hint chip greets you — town is your safe haven and the Town button teleports you home — the two founding keepers — the Healer and the Craftsman — arrive, and the newly-revealed Town button glows for that visit). This first visit holds NO return portal, so a Town Portal there carries you on to Floor 6. `
@@ -8352,7 +8352,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the moment a wound takes you to 75% Health or below a one-time nudge names the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire — it waits for a wound worth healing rather than firing on the first scratch. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. Spending that point on an ACTIVE arms one more lesson right there on the sand: the first cast that actually burns MANA pauses the world and spotlights the Mana Potion (${key('manaPotion')}) until you quaff — the beach beats take the screen first, so it simply waits its turn if a heal or equip gate is still up. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice. DYING there doesn't skip it either, and costs nothing: no gold or XP is taken and your bag is never dropped as a grave — the shore simply rebuilds the same way and you wake at the water's edge at full HP/MP/Stamina (gameState().shore stays true; you never see town). The Hardcore exception still applies — one life is one life, beach included. The one way PAST the shore is to tick VETERAN on the name screen when creating the hero: that skips the beach outright (and the whole teaching layer) and opens the hero on real floor 1 — gameState().shore is false and ramp.guided is false from the first frame.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the moment a wound takes you to 75% Health or below a one-time nudge names the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire — it waits for a wound worth healing rather than firing on the first scratch. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. Spending that point on an ACTIVE arms one more lesson right there on the sand: the first cast that actually burns MANA pauses the world and spotlights the Mana Potion (${key('manaPotion')}) until you quaff — the beach beats take the screen first, so it simply waits its turn if a heal or equip gate is still up. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice. DYING there doesn't skip it either, and costs nothing: no gold or XP is taken and your bag is never dropped as a grave — the shore simply rebuilds the same way and you wake at the water's edge at full HP/MP/Stamina (gameState().shore stays true; you never see town). The Hardcore exception still applies — one life is one life, beach included. The one way PAST the shore is to tick VETERAN when creating the hero — under the name screen's ADVANCED GAME MODES button (collapsed until you open it): that skips the beach outright (and the whole teaching layer) and opens the hero on real floor 1 — gameState().shore is false and ramp.guided is false from the first frame.`,
       `Opening-floor content pacing (Normal, floors 1–25): the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. DIFFICULTY ARC — a fresh hero's flat attribute damage would otherwise one-shot floor-1 trash, so over floors 1–5 the real numbers bend to make kills take a few blows ORGANICALLY (no per-hit cap): foes carry extra HP and the hero deals less, both easing to full strength by floor 6 as your levels and gear take over — "weak at the start, then earn your strength". Because those fights last longer, foes land more of their (full-strength) hits, so the opening actually threatens. No glowing ELITES or elite affixes until floor 4 (the one scripted beach elite aside). Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -35247,6 +35247,10 @@ function showNameEntry() {
   const ccb = document.getElementById('classic-checkbox');
   if (ccb) ccb.checked = !!(player.guided === false || ccb.checked);
   syncVeteranToggle();
+  // The modes stay COLLAPSED for a fresh hero — three modes laid out flat read as a
+  // choice you must make to play. An in-progress pick (backed out to the class list
+  // and returned) reopens the section so that pick is still in sight, not buried.
+  setAdvModesOpen([cb, scb, ccb].some(box => box && box.checked));
   // Body-type picker: default to any previous/in-progress choice, else male.
   // Classes with bespoke male/female art show the sprite previews; the rest hide
   // the thumbnails but still record a choice.
@@ -35274,17 +35278,47 @@ function nameBack() {
   namePaused = false; // the class overlay itself still blocks the world
   showClassPick();
 }
+// ── Advanced game modes disclosure ──────────────────────────────────────────
+// The three opt-in modes are COLLAPSED on a fresh name screen: laid out flat they
+// read as a required pick ("which of these do I have to choose?"), which is the
+// opposite of what they are. Opening them is a deliberate act; the button summary
+// keeps whatever is armed visible while closed.
+function setAdvModesOpen(open) {
+  const wrap = document.getElementById('adv-modes');
+  const btn = document.getElementById('adv-modes-btn');
+  if (wrap) wrap.classList.toggle('open', !!open);
+  if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+function toggleAdvModes() {
+  const wrap = document.getElementById('adv-modes');
+  setAdvModesOpen(!(wrap && wrap.classList.contains('open')));
+}
+// Name the armed modes on the button (gold) — read from each row's OWN label, so
+// the summary can never drift from the rows it stands in for.
+function syncAdvModes() {
+  const sum = document.getElementById('adv-modes-sum');
+  const body = document.getElementById('adv-modes-body');
+  if (!sum || !body) return;
+  const on = [...body.querySelectorAll('.hc-toggle')]
+    .filter(row => { const cb = row.querySelector('input'); return cb && cb.checked; })
+    .map(row => { const b = row.querySelector('.hc-tog-text b'); return b ? b.textContent.trim() : ''; })
+    .filter(Boolean);
+  sum.textContent = on.length ? on.join(' · ') : 'Optional';
+  sum.classList.toggle('armed', on.length > 0);
+}
 // Reflect the checkbox state on the toggle row (crimson when armed).
 function syncHardcoreToggle() {
   const cb = document.getElementById('hc-checkbox');
   const row = document.getElementById('hc-toggle');
   if (row) row.classList.toggle('on', !!(cb && cb.checked));
+  syncAdvModes();
 }
 // Same for the Solo Self-Found row (gold when armed).
 function syncSsfToggle() {
   const cb = document.getElementById('ssf-checkbox');
   const row = document.getElementById('ssf-toggle');
   if (row) row.classList.toggle('on', !!(cb && cb.checked));
+  syncAdvModes();
 }
 // …and the Veteran row (steel-blue when armed). This row shipped WITHOUT a sync,
 // so ticking it flipped the hidden checkbox and changed nothing on screen — no
@@ -35293,6 +35327,7 @@ function syncVeteranToggle() {
   const cb = document.getElementById('classic-checkbox');
   const row = document.getElementById('classic-toggle');
   if (row) row.classList.toggle('on', !!(cb && cb.checked));
+  syncAdvModes();
 }
 // Body-type (sex) picker state for the name screen. pendingSex holds the choice
 // until submitName() writes it to player.sex.
@@ -40262,6 +40297,8 @@ const __DL_FN_BRIDGE = {
   doSyncNow,
   showNameEntry,
   nameBack,
+  toggleAdvModes,
+  syncAdvModes,
   syncHardcoreToggle,
   syncSsfToggle,
   syncVeteranToggle,
