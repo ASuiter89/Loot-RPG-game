@@ -1295,6 +1295,15 @@
   .hc-toggle.ssf.on .hc-tog-box { border-color: var(--gold-350); background: var(--orange-550); }
   .hc-toggle.ssf .hc-tog-text { color: var(--gold-200); }
   .hc-toggle.ssf .hc-tog-text b { color: var(--gold-350); }
+  /* Veteran toggle — the same component in steel blue. Skipping the tutorials
+     costs nothing and risks nothing, so it must not wear Hardcore's crimson
+     (which it did, reading as a third danger mode). */
+  .hc-toggle.classic { border-color: var(--blue-650); }
+  .hc-toggle.classic.on { border-color: var(--blue-300); background: var(--blue-800); box-shadow: 0 0 14px color-mix(in srgb, var(--blue-300) 25%, transparent); }
+  .hc-toggle.classic .hc-tog-box { border-color: var(--blue-500); }
+  .hc-toggle.classic.on .hc-tog-box { border-color: var(--blue-300); background: var(--blue-500); }
+  .hc-toggle.classic .hc-tog-text { color: var(--blue-100); }
+  .hc-toggle.classic .hc-tog-text b { color: var(--blue-300); }
 
   /* Small crimson "HARDCORE" tag reused on the title card, slots list and graveyard. */
   .hc-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 1.2rem; font-weight: bold;
