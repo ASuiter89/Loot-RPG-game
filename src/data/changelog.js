@@ -7,6 +7,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-01", size: "small", v: "Sprite boxes and a stuck danger halo, fixed", by: "Jeff Louie", notes: ["Coloured box behind every sprite on some floors — art sheets now blit per tile, never a slice of the sheet.", "Danger halo clears while a menu is open; it froze mid-pulse as a solid wash over the panel."] },
   { date: "2026-08-02", size: "small", v: "Beach's opening hint holds till your first swing", by: "Jeff Louie", notes: ["Move/fight chip stays up the whole walk north, retiring on your first swing (was 2s of walking).", "Chip also names that attacks swing themselves in reach."] },
   { date: "2026-08-01", size: "small", v: "Veteran keeps the beach's opening kit", by: "Jeff Louie", notes: ["Veteran opens at level 2 with 5 attribute points and 1 skill point — the shore's graduation level.", "Skipping the beach cost it before: floor 1 at level 1, nothing to spend."] },
   { date: "2026-08-01", size: "small", v: "Camera pulls back for boss fights", by: "Jeff Louie", notes: [
