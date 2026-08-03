@@ -37,6 +37,8 @@ import { creditInitials } from '../systems/credit.js';
 import { savedOnShore, hasStarterGift } from '../systems/tutorialResume.js';
 import { deathRoute } from '../systems/shoreDeath.js';
 import { shouldTeachFirstSpell, activeGateKind } from '../systems/tutorialGates.js';
+import { pointPoolPhrase, hasUnspentPoints } from '../systems/pointPools.js';
+import { upStairPlaced } from '../systems/upStair.js';
 import { restockCost } from '../systems/restockCost.js';
 import { unseenLootCount } from '../systems/lootSeen.js';
 import { hasVaultKey, addVaultKey, spendVaultKey } from '../systems/vaultKeys.js';
@@ -8340,7 +8342,7 @@ window.gameGuide = function gameGuide(topic) {
     progression: [
       `Seven classes, each with an identity attribute that powers its SKILLS: Warrior (Might, tanky melee), Rogue (Agility, crit & dodge), Mage (Spirit, spells & big MP), Templar (Vitality, durable hybrid), Fortune-Seeker (LUCK, ranged — the only class that turns Luck into skill damage), Windblade (Agility+Spirit HYBRID, blade-caster) and Bloodletter (Might+Vitality HYBRID, and the only class with NO MANA AT ALL — every skill costs a share of max HP instead; see gameGuide('healing')). A HYBRID sums BOTH its attributes at a lower per-point rate, so a point in either is worth the same. Basic (auto) attacks scale off MIGHT for everyone. Class gates which weapons you can equip.`,
       `Five attributes (gameState().player.attributes), with re-homed roles: Might (+basic attack damage for ALL classes, +Accuracy, +Defense; also the Warrior's skills), Vitality (+max HP, +HP regen, +Stamina; the Templar's skills), Agility (+evasion, +move/attack speed; the Rogue's skills), Spirit (+max MP, +MP regen, +spell power, +healing, +Spirit Veil shield; the Mage's spells), Luck (+crit, +loot quality). How much each point gives is CLASS-SCALED — e.g. Vitality gives the Templar the most HP, Spirit gives the Mage the most spell power, Might gives the Warrior the most basic-attack damage. Pump Might for weapon damage and your class's identity attribute for its skills; every attribute also pays a defensive/utility role.`,
-      `Each level grants 5 attribute points and 1 skill point (gameState().menu.pointsToSpend), and FULLY restores the hero — HP, MP and Stamina all top off to max — a clean second wind. Spend attributes on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
+      `Each level grants 5 HERO points (attributes) and 1 skill point (gameState().menu.pointsToSpend), and FULLY restores the hero — HP, MP and Stamina all top off to max — a clean second wind. The level-up banner names exactly what the level paid, so the reward is legible without opening a tab. Spend hero points on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
       `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives. From level 20 you also earn a SEPARATE ascendancy point every 5 levels (20, 25, 30…; gameState().menu.pointsToSpend.ascendancy), spent only on the ascendancy path tree. Normal skill points can't buy path skills and ascendancy points can't buy passive/active skills. Path skills carry NO level requirement — they're gated only by the earlier skills in the path tree.`,
       `Respec attributes/skills or change class at the Trainer for gold that scales with your level (points refund). Switching to your class's other ascension afterwards costs a lot of gold (also scales with level and depth; path points refund) — the first ascension stays free, but re-ascending is a deliberate, costly choice, as is retraining class. After a respec, check that worn gear still meets its attribute requirement (under-req pieces turn red and are ignored; the GEAR tab wears a pulsing red dot and the paper doll gives the offending slot a pulsing red border — tap it to read the shortfall and Unequip). gameState().player.gearIgnored lists any such slots.`,
       `BOSS POINTS are a separate progression track that rewards new depth: every boss floor you clear for the FIRST time grants ONE point (farming a floor you've already cleared grants none — it's the same first-clear ledger as the boss loot jackpot). Spend them at the ASCENDANT WEAVE, a town service that opens once you've cleared your first boss floor: a constellation board of stat nodes, attribute-threshold keystones and socketed Glyphs where every point is a real, opportunity-cost choice — see gameGuide('weave'). gameState().menu.bossPointsEarned reports the total earned all-time; gameState().endgame.weave reports points available, lit nodes and active keystones.`,
@@ -12248,11 +12250,16 @@ function generateMap() {
   const climbing = arrivalDir === 'up';
   const farStair = climbing ? 12 : 2;   // the way onward
   const entryStair = climbing ? 2 : 12; // the way back, under your feet
+  // …and a floor-1 gate is only laid once there's a TOWN behind it (the Floor-5
+  // guardian opens the way). Before then it can do nothing but refuse — a brand-new
+  // hero used to walk out of the beach cave and spawn standing on a dead red gate
+  // that reads like the way back to the shore. See systems/upStair.js.
+  const upStair = upStairPlaced({ displayFloor: displayFloor(), townUnlocked: townUnlocked() });
   // The last floor of a finite difficulty (its boss floor 25) is the END of that
   // dungeon — there are no stairs down. Conquer the guardian, then return to town
   // and pick the next difficulty at the Dungeon Gate. (Endless never ends, so it
   // always has its onward stairs.)
-  const noOnward = isLastFiniteFloor() && farStair === 2;
+  const noOnward = (isLastFiniteFloor() && farStair === 2) || (farStair === 12 && !upStair);
   if (!noOnward) {
     let best = null, bestD = -1;
     for (let t = 0; t < 80; t++) {
@@ -12267,8 +12274,11 @@ function generateMap() {
   // ── ENTRY STAIR ── back the way you came. It sits on the entry tile (where you
   // arrive), so walking back onto it returns you whence you came. On floor 1 of a
   // difficulty this is the UP stair, which leads back to TOWN rather than a floor
-  // above — every first floor gets one so you can always step out to town.
-  mapData[startPos.y][startPos.x] = entryStair;
+  // above — so every first floor gets one ONCE the town is open, and none before.
+  // Leaving the tile plain is safe: the spawn cell is fenced off from every later
+  // placement pass (randomFloorTile skips it outright, furniture and decor hold a
+  // three-tile ring around it, and lava only starts pooling on floor 2).
+  if (entryStair !== 12 || upStair) mapData[startPos.y][startPos.x] = entryStair;
 
   // ── LAVA (passable, burns) ── pooled into a couple of cohesive patches
   // rather than scattered single tiles. Lava and water must never touch (it
@@ -12879,8 +12889,11 @@ function grantStarterWeapon() {
 // are spent. So skipping the beach without this opens floor 1 at level 1 with nothing
 // to spend and no skill, a level behind the Guided hero who walked the sand. Grants
 // the same single 1 → 2 (the shore is worth exactly one level), banner suppressed —
-// there's no tutorial popup to hand off to. Returns whether it fired, so the caller
-// can avoid stacking a second level-up sting on top of checkLevelUp's.
+// this fires from the name screen, before the hero has seen a single frame of the
+// world, so there's nothing on screen for a fly-in to celebrate over. (The Guided
+// shore DOES show its banner — it's the only place a touch player is told what the
+// level paid.) Returns whether it fired, so the caller can avoid stacking a second
+// level-up sting on top of checkLevelUp's.
 function grantVeteranLevelUp() {
   if (player.level >= 2) return false;
   _skipLevelBanner = true;
@@ -12891,19 +12904,22 @@ function grantVeteranLevelUp() {
 }
 
 // Beach graduation: felling the pack and the elite is the hero's FIRST
-// level-up — the first skill point and stat points, EARNED here rather than at spawn.
-// Grant a real 1→2 level (the beach banks no kill XP, so this is exactly one
-// level), suppressing the fly-in banner in favour of the tutorial popup.
+// level-up — the first skill point and hero points, EARNED here rather than at spawn.
+// Grant a real 1→2 level (the beach banks no kill XP, so this is exactly one level).
+// The fly-in banner used to be SUPPRESSED here "in favour of the tutorial popup",
+// which quietly made the game's very first reward its least legible one: the popup
+// says where to spend, never how much was earned, and on touch the combat log that
+// carries the numbers is display:none. Players came away certain they'd been handed
+// a skill point and nothing else. So the banner fires like any other level — it
+// lands mid-screen, the nudge pill sits at the top, and neither hides the other.
 // Resuming a save taken mid-shore respawns the pack, so a hero who already cleared
 // it can clear it twice — the shore is worth exactly ONE level, so the grant itself
 // only fires while they're still level 1. The cue always reconciles, so a level-2
 // hero with points still unspent keeps being nudged to spend them.
 function grantBeachLevelUp() {
   if (player.level < 2) {
-    _skipLevelBanner = true;
     player.xp += xpForLevel(player.level);
-    checkLevelUp();             // +1 skill point, +5 stat points, stat recompute, save
-    _skipLevelBanner = false;
+    checkLevelUp();             // +1 skill point, +5 hero points, stat recompute, save
   }
   _tutDismissed.levelup = false;
   refreshTutorialCues();
@@ -13160,7 +13176,13 @@ function showTutPopup(variant) {
   if (!el) return;
   const prev = _tutPopupVariant;
   _tutPopupVariant = variant;
-  const cfg = { spr: null, html: '<b>Level up!</b> Open your bag and spend your Hero and Skill&nbsp;points.' };
+  // Name what's actually waiting ("5 hero points and 1 skill point"), not a vague
+  // "your points" — the shore's graduation is most players' first sight of either
+  // pool, and a nudge that never says how many taught them there was only one.
+  const owed = pointPoolPhrase({ attr: player.attrPoints, skill: player.skillPoints, asc: player.ascPoints });
+  const cfg = { spr: null, html: owed
+    ? `<b>Level up!</b> You earned ${owed} — open your bag and spend&nbsp;them.`
+    : '<b>Level up!</b> Open your bag and spend your Hero and Skill&nbsp;points.' };
   const icon = el.querySelector('.tp-ic');
   const txt = el.querySelector('.tp-text');
   // A null sprite means no left badge (the level-up nudge is text-only); toggle the
@@ -22377,10 +22399,16 @@ function screenFlash(color) {
 // Big, unmissable LEVEL UP banner that pops in the center of the screen and
 // fades out, nudging the player to spend their fresh hero (attribute) and skill points.
 let levelupBannerTimer;
-// Set while the beach graduation grants its scripted 1→2 level, so that milestone
-// shows ONLY its fuller tutorial popup, not the fly-in banner on top of it.
+// Set while a VETERAN is handed the beach's graduation level mid-creation, where
+// there's no world on screen yet to pop a banner over (see grantVeteranLevelUp).
+// The shore's own graduation does NOT suppress it: the banner is the only place a
+// touch player is ever told what the level paid, since the combat log that carries
+// the numbers is display:none on the mobile layer.
 let _skipLevelBanner = false;
-function showLevelUpBanner(level) {
+// `gained` is what the level just paid ({ attr, skill, asc }) — the banner names it
+// outright rather than saying "spend your points" and leaving the player to find out
+// how many, and of what, by hunting through tabs.
+function showLevelUpBanner(level, gained) {
   if (_skipLevelBanner) return;
   const el = document.getElementById('levelup-banner');
   if (!el) return;
@@ -22389,7 +22417,8 @@ function showLevelUpBanner(level) {
   // The "spend your points" hint only teaches the first few levels — after that
   // it's just a nag, so drop it and let the banner simply celebrate the level.
   const sub = el.querySelector('.lvl-sub');
-  if (sub) sub.innerHTML = level <= 3 ? 'Spend your hero and skill points!' : '';
+  const earned = pointPoolPhrase(gained);
+  if (sub) sub.innerHTML = level <= 3 && earned ? `+${earned} — spend them!` : '';
   // Restart the animation cleanly even if banners stack from multi-level gains.
   el.classList.remove('show');
   void el.offsetWidth; // force reflow so the animation re-triggers
@@ -23937,12 +23966,9 @@ function goDownStairs(nx, ny) {
     if (!floorCleared) { const left = hostilesRemaining(); log(`<span data-spr=b_deathknight></span> The cave is sealed — defeat ${left === 1 ? 'the last foe' : `all ${left} foes`} first.`, 'important'); sfx('click'); return; }
     // The cave won't take you until your Level-2 points are spent — a new hero
     // learns to build BEFORE descending. Warn, and re-surface the nudge.
-    const unspentA = player.attrPoints || 0, unspentS = player.skillPoints || 0;
-    if (unspentA > 0 || unspentS > 0) {
-      const parts = [];
-      if (unspentA > 0) parts.push(`${unspentA} stat point${unspentA === 1 ? '' : 's'}`);
-      if (unspentS > 0) parts.push(`${unspentS} skill point${unspentS === 1 ? '' : 's'}`);
-      log(`<span data-spr=ui_level></span> Spend your ${parts.join(' and ')} first — open the <b>Hero</b> and <b>Skills</b> tabs before the cave will take you.`, 'important');
+    const owed = { attr: player.attrPoints, skill: player.skillPoints };
+    if (hasUnspentPoints(owed)) {
+      log(`<span data-spr=ui_level></span> Spend your ${pointPoolPhrase(owed)} first — open the <b>Hero</b> and <b>Skills</b> tabs before the cave will take you.`, 'important');
       sfx('denied');
       _tutDismissed.levelup = false;   // bring the nudge back as the reminder
       refreshTutorialCues();
@@ -28033,9 +28059,12 @@ function checkLevelUp() {
     // Ramp: count the first few level-ups — while they're fresh, the SKILLS tab's
     // ACTIVE and PASSIVE buttons glow to point a new hero at where points are spent.
     if (player.guided) player.levelUpsSeen = (player.levelUpsSeen || 0) + 1;
-    showLevelUpBanner(player.level);
+    // What this level actually paid, named once (systems/pointPools.js) and reused by
+    // the banner and the log so they can never disagree about it.
+    const gained = { attr: ATTR_POINTS_PER_LEVEL, skill: SKILL_POINTS_PER_LEVEL, asc: ascGained };
+    showLevelUpBanner(player.level, gained);
     log(`<span data-spr=ui_level></span> LEVEL UP! Now level ${player.level}!`, 'important');
-    log(`<span data-spr=mat_glimmer></span> +${ATTR_POINTS_PER_LEVEL} attribute points (HERO tab) · +${SKILL_POINTS_PER_LEVEL} skill point (SKILLS tab)${ascGained ? ` · +${ascGained} ascendancy point (PATH tree)` : ''}.`, 'important');
+    log(`<span data-spr=mat_glimmer></span> +${pointPoolPhrase(gained, '·')} — spend them on the HERO and SKILLS tabs${ascGained ? ' and the PATH tree' : ''}.`, 'important');
     updateBars();
     renderPanel();
     saveGame();
@@ -36061,7 +36090,16 @@ try {
   log('Open <span data-spr=chest></span> BAG to view loot; press the pad\'s USE button to grab items.');
   log(`Tap the <span data-spr=potion_r></span> or <span data-spr=potion_g></span> flask to quaff a ${logPotion('Potion')} — free, but they share a short cooldown.`);
   log('⌨️ Keys: Q health potion · E mana potion · R primary skill · 3–9 skills · T town · B open bag · Space/F use.');
-  log('<span data-spr=ic_stun></span> You have a skill point — open <span data-spr=chest></span> BAG ▸ SKILLS to learn an active, then tap <span data-spr=ic_stun></span> (or press ' + skillKeyLabel(1) + ') to cast it.');
+  // Only claim points the hero actually holds. A fresh hero starts with NONE
+  // (SKILL_POINTS_AT_START is 0 — the shore's graduation is where the first ones are
+  // earned), so this line used to greet every new player with a skill point they
+  // didn't have, and then never mention the hero points they later did.
+  {
+    const owed = { attr: player.attrPoints, skill: player.skillPoints, asc: player.ascPoints };
+    if (hasUnspentPoints(owed)) {
+      log(`<span data-spr=ic_stun></span> You have ${pointPoolPhrase(owed)} to spend — open <span data-spr=chest></span> BAG ▸ HERO and SKILLS, then tap <span data-spr=ic_stun></span> (or press ${skillKeyLabel(1)}) to cast what you learn.`);
+    }
+  }
   log(PWR_GLYPH + ' Each item has Power; your total blends level, gear, and attributes.');
   log('<span data-spr=mat_glimmer></span> Level up for points, then raise attributes in the bag\'s HERO tab.');
   log('<span data-spr=w_dagger></span> Every weapon fights differently — axes cleave, daggers flurry, bows & staves strike at range, maces stun, scythes drain. Try them all!');
