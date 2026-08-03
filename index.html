@@ -6,7 +6,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- The game is a fixed, full-viewport surface, so pinch-zoom is refused: a zoomed
+     page pans freely, which drags the fixed HUD bands off-screen. Players scale the
+     interface with UI SIZE in Settings (100–200%) instead. iOS ignores
+     user-scalable, so game.js also cancels Safari's gesture events. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Dungeon Loot</title>
 <link rel="stylesheet" href="./src/styles.css">
 </head>
