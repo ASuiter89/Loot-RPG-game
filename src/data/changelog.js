@@ -7,6 +7,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-03", size: "small", v: "Bosses walk around cover instead of wedging behind it", by: "Jeff Louie", notes: ["Guardians pathfind their whole body around rocks, furniture and wall corners; a lone rock used to pin one in place for free hits.", "Unreachable hero — foes close as near as they fit and hold, not freeze.", "Wide foe sights you from any tile of its bulk, so a wedged one still shoots back."] },
   { date: "2026-08-03", size: "small", v: "Phone screen no longer scrolls away", by: "Jeff Louie", notes: ["Page is pinned to the screen; dragging can't slide HUD bands off or park map over blank space.", "Menus, bag and shop lists scroll as before; pinch-zoom off — use UI SIZE in Settings."] },
   { date: "2026-08-02", size: "small", v: "Beach foes fall in the same 3 blows for every class", by: "Jeff Louie", notes: ["Shore sizes foe HP off your own opening swing: pack foe 3 hits, cave elite 5 — any class (was 3–6 and 5–10; a Fortune-teller needed twice a Warrior's swings)."] },
   { date: "2026-08-02", size: "small", v: "Second skill tier waits for level 6", by: "Jeff Louie", notes: ["Tier 2 of both trees opens at hero level 6 (was 4); deeper tiers unchanged at 9/16/24/30.", "Ranks already learned keep their points."] },
