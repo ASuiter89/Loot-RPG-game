@@ -18,6 +18,8 @@ import { milestonePower, rankScale, passiveRankScale, passiveSurgeLive, skillMan
   earnedSkillPoints, earnedAscPoints,
   SKILL_POINTS_PER_LEVEL, SKILL_POINTS_AT_START, ASCEND_LEVEL, ASC_POINT_EVERY } from '../systems/skillMath.js';
 import { PASSIVE_SURGES } from '../data/passiveSurges.js';
+import { tierUnlockLevel } from '../systems/skillTiers.js';
+import { SKILL_TIER_LEVELS, ASC_TIER_LEVELS } from '../data/skillTiers.js';
 import { glideVitalFill, latchFillRate } from '../systems/vitalFill.js';
 import { telegraphPhase, telegraphFill, telegraphDanger, stepTelegraph,
   TELE_ACTIVE, TELE_DONE } from '../systems/telegraph.js';
@@ -5216,32 +5218,29 @@ function hemorrhageBurst(spent) {
 // unit-tested. Two independent pools: NORMAL skill points (one per level) fund
 // the passive + active trees; ASCENDANCY points (one every ASC_POINT_EVERY
 // levels from ASCEND_LEVEL) fund only the ascendancy path tree.
-// band index → minimum hero level for base trees. (Ascension PATH nodes are no
-// longer level-gated — they're gated purely by the earlier skills in their tree
-// — so ASC_BANDS survives only as a cosmetic default and is never checked.)
-const SKILL_BANDS = [1, 4, 8, 13, 19, 26];
-const ASC_BANDS   = [20, 25, 31];
+// Tier (band index) → minimum hero level. Both ladders live in
+// data/skillTiers.js and are read through tierUnlockLevel(); SKILL_TIER_LEVELS
+// gates the base passive/active webs, while ASC_TIER_LEVELS is a cosmetic default
+// — ascension PATH nodes are gated purely by the earlier skills in their tree, so
+// their level is never checked.
 
-// Build a tree from rows of node literals: assigns band/col/type/max/lvl and a
-// default prerequisite (the node directly above in the previous row) unless the
-// node already declares `req`. Ascension nodes (asc set) use ASC_BANDS for level.
-// Tier → minimum hero level for a WEB-laid-out tree (band index 0..n). Webs use
-// fewer, deeper tiers than the old 6-band grid.
-const WEB_BANDS = [1, 4, 9, 16, 24, 30];
 // Build a free-form WEB tree: a flat list of nodes that each carry their own
 // position (x,y in 0..1) and explicit req/reqAny edges, so a class path can branch
 // and re-converge into a web instead of a straight column. `band` is kept only to
-// gate by level (via WEB_BANDS); positions come from x/y, not a grid.
+// gate by level (via SKILL_TIER_LEVELS); positions come from x/y, not a grid.
 function buildWeb(nodes, kind, ascId) {
   for (const n of nodes) {
     n.type = n.t || kind; delete n.t;
     n.max = n.keystone ? 1 : (n.max || 10);
     if (ascId) n.asc = ascId;
-    n.lvl = n.lvl != null ? n.lvl : (WEB_BANDS[Math.min(n.band || 0, WEB_BANDS.length - 1)] || 1);
+    n.lvl = n.lvl != null ? n.lvl : tierUnlockLevel(n.band);
     if (n.col == null) n.col = 0;
   }
   return nodes;
 }
+// Build a tree from rows of node literals: assigns band/col/type/max/lvl and a
+// default prerequisite (the node directly above in the previous row) unless the
+// node already declares `req`. Ascension nodes (asc set) use ASC_TIER_LEVELS.
 function buildTree(rows, kind, ascId) {
   const out = [];
   rows.forEach((row, b) => {
@@ -5251,7 +5250,7 @@ function buildTree(rows, kind, ascId) {
       // Keystones are single-rank build-definers; everything else ranks to 10.
       n.max = n.keystone ? 1 : (n.max || 10);
       if (ascId) n.asc = ascId;
-      n.lvl = (ascId ? ASC_BANDS : SKILL_BANDS)[b];
+      n.lvl = tierUnlockLevel(b, ascId ? ASC_TIER_LEVELS : SKILL_TIER_LEVELS);
       // Auto-link a node to the one directly above it ONLY when it declares no
       // explicit prerequisite of its own. A DAG node uses `req` (AND of all) and/or
       // `reqAny` (OR of any), and a `root:true` node opens with no prereq at all —
@@ -8246,7 +8245,7 @@ window.gameGuide = function gameGuide(topic) {
       `BUFF UPKEEP: self-buffs are TACTICAL, not sustained — each self-buff's cooldown is set well LONGER than the buff it grants, so at 0 CDR it is up only ~40% of the time (the exact baseline varies by skill: cheaper/weaker buffs ~50%, standard buffs ~42-45%, the strongest capstones/ultimates ~38-40%). You cannot keep one permanent by recasting alone. Cooldown Reduction (and a self-buff's rank milestones, which lengthen its buff at ranks 7 & 10 and add a 20%-faster recharge at rank 10) raises uptime a lot — e.g. 100 CDR rating (a 50% cut) plus a maxed skill's longer, faster buff lifts a 40%-baseline buff well past ~70% — but true 100% permanence needs extreme CDR, so buffs stay something you time rather than park. A few offensive/summon actives whose buff was a rider had the buff DURATION trimmed instead of the cooldown, so their attack cadence is unchanged (their rider buff sits a touch higher, ~46-60%).`,
       `Higher ranks cost more MP (the cost only ever climbs) but spike in power at ranks 3 / 7 / 10 — +28% (Empowered), +20% (Honed), +30% (Mastered) — so deepening a key skill outpaces its rising mana cost. On TOP of that flat power, each milestone grants a SIGNATURE perk unique to the skill's archetype — no two kinds of spell read alike: a chain arcs to more foes, a summon lingers longer then raises an extra minion, an ailment nova inflicts more reliably then longer and wider, a self-buff hits harder then lasts longer, a bolt gains range then a double-strike, a piercing beam reaches further then strikes twice, a cleave leeches, a floor-wide storm hits more foes, an assassin's strike gains an execute. Every skill's detail card shows a "Surge bonuses" ladder listing all three (its power spike + that rank's signature), each marked with a ✓ once your rank has earned it — the ladder itself is a one-time Craftsman HUD upgrade (the Sage's Codex; a bare hero learns skills without it, see gameGuide("town")).`,
       `PASSIVES surge too: a passive's always-on bonus spikes at those same ranks 3 / 7 / 10 by +8% / +10% / +12% (up to +30% of its stat total at rank 10) — the ladder names the passive's OWN bonus so each reads uniquely — so maxing one passive beats spreading points thin. AND at rank 10 a passive unlocks one BRAND-NEW stat it never gave before — thematic to the node (a crit passive gains crit damage, an HP passive gains regen, a spell passive gains crit, and so on) — folded straight into the same combat formulas. Its detail card lists all three spikes plus the rank-10 stat in the ✓-when-earned "Surge bonuses" ladder, shows milestone pips by the rank, and folds the surge into the on-rank-up preview's number jump. Keystones stay single-rank, so they don't surge.`,
-      `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1).`,
+      `Learn and rank skills on the SKILLS tab. The PASSIVE and ACTIVE trees spend your normal skill points (1 per level); the ASCENDANCY (path) tree spends separate ascendancy points (1 every 5 levels from level 20). Click a tree node for its detail card + Learn button; on desktop you can also shift-click, ctrl-click (⌘-click) or double-click a node to learn/rank it directly without opening the card. Spend your first point on a band-0 root active (the only nodes with no prerequisites at level 1). A node also needs the HERO LEVEL its tier demands — the base trees open tier by tier at levels ${SKILL_TIER_LEVELS.join(' / ')}, so the second tier waits for level ${SKILL_TIER_LEVELS[1]} however many points you've banked. Its detail card names the level it wants.`,
       `Refund a rank from a skill's SKILLS-tab popover: the ↩︎ Refund button returns its point — a skill point for passive/active nodes, an ascendancy point for path nodes — for gold (cost scales with your level). You can't refund a rank another learned skill still needs — refund the dependent first. From the console: refundSkill("<skillId>"). The town Trainer still offers a full one-shot respec of everything.`,
       `Some actives SUMMON allies (minions) that fight for you and expire after a number of turns — recast them as they run out (gameState().allies shows ttl). Ranged minions need line of sight to their target too — they'll close in until they can see it.`,
       `RANGED casts need LINE OF SIGHT: a bolt, beam (line), nova or chain only strikes foes YOU can see — a SOLID obstruction (wall, door, boss barrier, furniture) between you and a foe blocks it, but open ground and water don't; the cast fails with "No foe in sight" if nothing visible is in range. Melee/cleave (adjacent-only) and the rare floor-wide "strike random foes" ultimate ignore walls.`,
