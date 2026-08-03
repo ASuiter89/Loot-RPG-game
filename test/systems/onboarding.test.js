@@ -5,8 +5,12 @@ import {
   uniqueItemsAllowed, loadoutSwapUnlocked, detailedTooltips,
   hazardAllowed, earlyEnemyHp, playerEarlyDamage, earlyPackCap,
   firstHint, keeperIntro, starterChain, tip, deathTip, rampStatus, potionTeachDue,
+  beachFoeHp,
 } from '../../src/systems/onboarding.js';
-import { RAMP_FLOOR, TIPS, HINTS, STARTER_STEPS, BEACH_POTION_HP_FRAC } from '../../src/data/onboarding.js';
+import {
+  RAMP_FLOOR, TIPS, HINTS, STARTER_STEPS, BEACH_POTION_HP_FRAC,
+  BEACH_FOE_HITS, BEACH_FOE_HP_CLAMP,
+} from '../../src/data/onboarding.js';
 
 describe('rampDepth', () => {
   it('coerces to an integer floor ≥ 1', () => {
@@ -228,6 +232,43 @@ describe('potionTeachDue', () => {
   it('refuses a missing or garbage pool rather than throwing', () => {
     for (const [hp, maxHp] of [[10, 0], [10, undefined], [undefined, 100], [NaN, 100], [10, NaN]]) {
       expect(potionTeachDue(hp, maxHp)).toBe(false);
+    }
+  });
+});
+
+describe('beachFoeHp', () => {
+  it('sizes the pool at the kind\'s blow count', () => {
+    expect(beachFoeHp(20, 'pack')).toBe(20 * BEACH_FOE_HITS.pack);
+    expect(beachFoeHp(20, 'elite')).toBe(20 * BEACH_FOE_HITS.elite);
+  });
+
+  // The whole point: the pool tracks the hero's swing, so a soft-hitting class
+  // trades the SAME number of blows as a Warrior instead of twice as many.
+  it('holds the blow count fixed across a 2x spread in hero damage', () => {
+    for (const blow of [8, 11, 15, 18.2]) {
+      expect(Math.ceil(beachFoeHp(blow, 'pack') / blow)).toBe(BEACH_FOE_HITS.pack);
+      expect(Math.ceil(beachFoeHp(blow, 'elite') / blow)).toBe(BEACH_FOE_HITS.elite);
+    }
+  });
+
+  it('treats an unknown kind as the pack', () => {
+    expect(beachFoeHp(20, 'boss')).toBe(beachFoeHp(20, 'pack'));
+    expect(beachFoeHp(20, undefined)).toBe(beachFoeHp(20, 'pack'));
+  });
+
+  // Rounding UP would put the pool a hair past what N swings deliver — an extra
+  // swing bought with a fraction of a hit point.
+  it('floors a fractional pool to a whole one, never up', () => {
+    expect(beachFoeHp(8.4, 'pack')).toBe(25);
+    expect(beachFoeHp(18.2, 'pack')).toBe(54);
+    expect(beachFoeHp(8.4, 'elite')).toBe(42);
+  });
+
+  it('clamps a wild or garbage blow instead of spawning a 1-HP foe or a wall', () => {
+    expect(beachFoeHp(0.1, 'pack')).toBe(BEACH_FOE_HP_CLAMP.min);
+    expect(beachFoeHp(9999, 'elite')).toBe(BEACH_FOE_HP_CLAMP.max);
+    for (const bad of [0, -5, NaN, undefined, 'nope']) {
+      expect(beachFoeHp(bad, 'pack')).toBe(BEACH_FOE_HP_CLAMP.min);
     }
   });
 });

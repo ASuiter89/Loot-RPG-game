@@ -118,6 +118,20 @@ export const PLAYER_EARLY_DMG = {
 // Smaller packs early: a cap on how many foes a normal floor spawns, by floor.
 export const EARLY_PACK_CAP = { 1: 3, 2: 4, 3: 5, 4: 6, 5: 7 };
 
+// ── BEACH FOE TOUGHNESS ───────────────────────────────────────────────────────
+// The shore sizes its foes in BLOWS, not raw HP. A level-1 hero's opening swing
+// varies ~2x across the classes (Might feeds auto-attacks through a class-ranked
+// lane — a Warrior hits ~19, a Fortune-teller ~8), so the one flat pool the beach
+// used to carry meant the same foe fell in 3 swings for one class and 6 for
+// another. Each pool is derived from the hero's own weakest opening blow x the
+// count below, so every class trades the same number of blows on the sand.
+// Unarmed counts: the pack's first kill hands over the starter weapon, so the
+// elite goes down in fewer than its 5 once that's worn.
+export const BEACH_FOE_HITS = { pack: 3, elite: 5 };
+// Floor/ceiling on the derived pool, so an odd build (or a garbage blow estimate)
+// can never spawn a 1-HP foe or a wall.
+export const BEACH_FOE_HP_CLAMP = { min: 12, max: 140 };
+
 // ── BEACH HEALTH-POTION TEACH ─────────────────────────────────────────────────
 // The shore's world-pausing "here's how to heal" gate waits until the hero's
 // Health has actually fallen this far (a fraction of max), rather than firing on

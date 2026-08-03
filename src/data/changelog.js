@@ -7,6 +7,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-02", size: "small", v: "Beach foes fall in the same 3 blows for every class", by: "Jeff Louie", notes: ["Shore sizes foe HP off your own opening swing: pack foe 3 hits, cave elite 5 — any class (was 3–6 and 5–10; a Fortune-teller needed twice a Warrior's swings)."] },
   { date: "2026-08-02", size: "small", v: "Second skill tier waits for level 6", by: "Jeff Louie", notes: ["Tier 2 of both trees opens at hero level 6 (was 4); deeper tiers unchanged at 9/16/24/30.", "Ranks already learned keep their points."] },
   { date: "2026-08-02", size: "small", v: "Level-ups name what they paid; floor 1 drops its dead gate", by: "Jeff Louie", notes: ["Level-up banner reads \"+5 hero points and 1 skill point\"; shore's graduation shows it too (was silent — its numbers only ever hit the combat log, hidden on touch).", "Floor 1 lays its red town gate only once Floor 5 opens the town; before that it just refused.", "Points called \"hero points\" everywhere (was stat/attribute/Hero)."] },
   { date: "2026-08-02", size: "small", v: "Game modes tucked behind one button", by: "Jeff Louie", notes: ["Hardcore, Solo Self-Found and Veteran collapse under an \"Advanced Game Modes\" button on the name screen — three modes laid out flat read as a required pick.", "Button names whatever is armed, and reopens if you back out to the class list and return."] },
