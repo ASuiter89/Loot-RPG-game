@@ -8,6 +8,7 @@
 import {
   RAMP_FLOOR, SKILL_SLOT_RAMP, HAZARD_INTRO_FLOOR, EARLY_ENEMY_HP, PLAYER_EARLY_DMG, EARLY_PACK_CAP,
   HINTS, KEEPER_INTRO, STARTER_STEPS, TIPS, DEATH_TIPS, BEACH_POTION_HP_FRAC,
+  BEACH_FOE_HITS, BEACH_FOE_HP_CLAMP,
 } from '../data/onboarding.js';
 
 // Deepest floor reached, coerced to a sane integer ≥ 1 (a missing/garbage value
@@ -99,6 +100,22 @@ export function starterChain(ctx) {
   const steps = STARTER_STEPS.map(s => ({ id: s.id, label: s.label, done: !!ctx[s.id] }));
   const activeIndex = steps.findIndex(s => !s.done);
   return { steps, activeIndex, complete: activeIndex === -1 };
+}
+
+// Max HP for a beach-tutorial foe, sized so it falls on the Nth blow of a hero whose
+// weakest hit LANDS for `minHit` (BEACH_FOE_HITS by kind — 'elite' or anything else
+// = the pack). Feed it the smallest number the foe actually loses off its bar: the
+// worst weapon roll, already through the foe's armor and rounded the way a real hit
+// is. The count is then a guarantee rather than an average — a better roll or a crit
+// only gets there sooner. Clamped by BEACH_FOE_HP_CLAMP; a missing/garbage blow reads
+// as the floor.
+export function beachFoeHp(minHit, kind) {
+  const hits = BEACH_FOE_HITS[kind] || BEACH_FOE_HITS.pack;
+  const blow = (Number.isFinite(minHit) && minHit > 0) ? minHit : 0;
+  // FLOOR, never round: rounding a fractional blow UP puts the pool just past what
+  // N swings deliver, which costs an extra swing for the sake of a fraction of HP.
+  const hp = Math.floor(blow * hits);
+  return Math.min(BEACH_FOE_HP_CLAMP.max, Math.max(BEACH_FOE_HP_CLAMP.min, hp));
 }
 
 // Is the shore's Health-Potion lesson due? True once a wound has taken the hero to

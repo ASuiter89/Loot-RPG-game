@@ -84,7 +84,7 @@ import {
   setItemsAllowed, cursedItemsAllowed, uniqueItemsAllowed, loadoutSwapUnlocked,
   detailedTooltips, hazardAllowed, earlyEnemyHp, playerEarlyDamage, earlyPackCap,
   firstHint, keeperIntro, starterChain, deathTip as rampDeathTip,
-  rampStatus, potionTeachDue,
+  rampStatus, potionTeachDue, beachFoeHp,
 } from '../systems/onboarding.js';
 import { HINTS, KEEPER_INTRO, EARLY_SUSTAIN_ILVL, EARLY_SUSTAIN_CHANCE, EARLY_SUSTAIN_STATS } from '../data/onboarding.js';
 import { salvageVariance, salvageIlvlCurve, salvageRanges as salvageRangesPure } from '../systems/salvage.js';
@@ -3383,6 +3383,7 @@ const BALANCE = {
   conquestScar: 0.94,    // permanent HP+damage scale per difficulty conquered (lower = harsher)
   endlessRate: 0.006,    // extra threat ramp per Endless floor (floor 76+)
   hpPerLevel: 8,         // flat max HP granted per hero level (before Vitality/gear)
+  fistDmgLo: 1, fistDmgHi: 3,  // bare-fisted weapon roll, for a hero with nothing worn
 };
 
 // A fresh attribute block — every attribute starts at ATTR_BASE. Used for new
@@ -8415,7 +8416,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     onboarding: [
       `The game eases a new hero in rather than dumping every system on floor 1. The pacing keys on the DEEPEST floor you have reached (gameState().ramp), so it only ever affects a fresh hero on the way down — a returning deep hero, and any existing save, has everything open. Two layers ride on it: CONTENT PACING (below) applies to everyone; a TEACHING layer (first-encounter hints, tab glows, keeper intros, a starter checklist, death-screen tips) is on only for a "Guided" hero — pick Guided or Veteran when you create the hero (gameState().ramp.guided).`,
-      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The opening hint chip ("head north and fight the pack") stays up for that whole walk and only retires on your FIRST SWING at a foe, so the instruction is still on screen when the fight it names starts. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the moment a wound takes you to 75% Health or below a one-time nudge names the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire — it waits for a wound worth healing rather than firing on the first scratch. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. Spending that point on an ACTIVE arms one more lesson right there on the sand: the first cast that actually burns MANA pauses the world and spotlights the Mana Potion (${key('manaPotion')}) until you quaff — the beach beats take the screen first, so it simply waits its turn if a heal or equip gate is still up. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice. DYING there doesn't skip it either, and costs nothing: no gold or XP is taken and your bag is never dropped as a grave — the shore simply rebuilds the same way and you wake at the water's edge at full HP/MP/Stamina (gameState().shore stays true; you never see town). The Hardcore exception still applies — one life is one life, beach included. The one way PAST the shore is to tick VETERAN when creating the hero — under the name screen's ADVANCED GAME MODES button (collapsed until you open it): that skips the beach outright (and the whole teaching layer) and opens the hero on real floor 1 — gameState().shore is false and ramp.guided is false from the first frame.`,
+      `A brand-new hero begins on a one-time BEACH before floor 1: a tall, narrow sandy cove ringed by sea where you wake at the water's edge and learn to MOVE across an empty beach before the camera reveals a PACK of four low-level foes up the shore. The opening hint chip ("head north and fight the pack") stays up for that whole walk and only retires on your FIRST SWING at a foe, so the instruction is still on screen when the fight it names starts. The pack is one random species (all four the same — rats, slimes, whatever rolled), so no two new games open the same; they turn HOSTILE as you approach (you don't have to strike first). Beach foes are sized in BLOWS, not HP: each pool is derived from your own weakest opening swing, so a pack foe falls in 3 hits and the cave elite in 5 whatever class you picked (the starter weapon then brings the elite down quicker still) — a soft-hitting class no longer needs twice the swings a Warrior does. Felling your FIRST foe — whichever you down first — drops your first weapon: a GREY (junk) piece, always a base your class favours (a Warrior gets a sword/axe/…, a Mage a staff/dagger). Colour is withheld until the first boss, so this gift is grey, not green — a real upgrade over bare fists all the same. A non-blocking nudge (which does NOT navigate on tap) tells you to open Loot and equip it, while the LOOT tab and that item's EQUIP button wisp on desktop, and the BAG button wisps on touch, until you do. The pack and the cave elite BITE — their blows visibly drain your Health, and the moment a wound takes you to 75% Health or below a one-time nudge names the Health-Potion control (${key('healthPotion')}; on touch, the footer potion button) so you learn to heal under fire — it waits for a wound worth healing rather than firing on the first scratch. A lone ELITE of its own random type guards the cave further north, and the cave down to floor 1 stays SEALED until it and the pack fall. Clearing them all is the hero's first LEVEL-UP — no skill point is handed out at spawn; your first skill point (and first 5 stat points) are EARNED here, and the cave WON'T take you until you have SPENT them (attrPoints + skillPoints both 0) — trying to descend early only warns you and shakes the nudge back into view. Spending that point on an ACTIVE arms one more lesson right there on the sand: the first cast that actually burns MANA pauses the world and spotlights the Mana Potion (${key('manaPotion')}) until you quaff — the beach beats take the screen first, so it simply waits its turn if a heal or equip gate is still up. QUITTING the shore does NOT skip it: a save taken here resumes on the shore (the slot lists it as "The Shore"), with the beach rebuilt and its foes respawned — but the starter weapon is handed over only ONCE, and the graduation level-up only lifts you 1 → 2, so re-clearing a rebuilt shore pays nothing twice. DYING there doesn't skip it either, and costs nothing: no gold or XP is taken and your bag is never dropped as a grave — the shore simply rebuilds the same way and you wake at the water's edge at full HP/MP/Stamina (gameState().shore stays true; you never see town). The Hardcore exception still applies — one life is one life, beach included. The one way PAST the shore is to tick VETERAN when creating the hero — under the name screen's ADVANCED GAME MODES button (collapsed until you open it): that skips the beach outright (and the whole teaching layer) and opens the hero on real floor 1 — gameState().shore is false and ramp.guided is false from the first frame.`,
       `Opening-floor content pacing (Normal, floors 1–25): the first crowds are capped small, and a Guided hero's FIRST death is forgiven its gold cost. DIFFICULTY ARC — a fresh hero's flat attribute damage would otherwise one-shot floor-1 trash, so over floors 1–5 the real numbers bend to make kills take a few blows ORGANICALLY (no per-hit cap): foes carry extra HP and the hero deals less, both easing to full strength by floor 6 as your levels and gear take over — "weak at the start, then earn your strength". Because those fights last longer, foes land more of their (full-strength) hits, so the opening actually threatens. No glowing ELITES or elite affixes until floor 4 (the one scripted beach elite aside). Foes carry negligible typed armor/magic-resist until floor 8, so a "wrong" damage school never silently punishes while you learn. Placed HAZARDS stagger in — arrow traps from floor 6, fire vents from floor 9 — and trap-themed floors hold back until then. Dropped gear carries NO attribute REQUIREMENT until it drops on floor 5+. Loot KINDS stagger in: plain affixes first, then SET pieces and CURSED items around floor 10, then one-of-a-kind UNIQUES by floor 12 (the rarity colours themselves already unlock at the floor-5 and floor-10 bosses). Hotbar SLOTS reveal as you descend (1 → 2 at floor 3 → 3 at floor 8 → 4 at floor 13); your first skill auto-casts itself to cut cooldown juggling. The second weapon LOADOUT (and its swap button) is introduced on floor 20, and the ascendancy PATH tree stays hidden until it opens at level 20. Item tooltips run in a trimmed form until floor 10, then show full detail.`,
       `Later systems introduce themselves across Hardened (26–50) as their town keepers arrive: the Ascendant Weave, Cycles and Hall of Deeds at floor 25, Dread Covenants around floor 30, the Mirrorforge around floor 40, and the Pantheon of the Deep by floor 50 — each with a one-time intro for a Guided hero. Nothing here is a mode you can fail: it is purely the order things appear, and it is all open again the moment you have been deep enough once.`,
     ],
@@ -12731,13 +12732,13 @@ function buildTutorialMap() {
   // `type` (sprite) and name come from the rolled species.
   const mkFoe = (type, x, y, extra) => Object.assign({
     x, y, type, name: (MONSTERS[type] && MONSTERS[type].name) || 'Creature',
-    // HP sized so the ramped opening hit (attribute damage eased by the guided
-    // player-damage ramp) fells a pack foe in a few blows, not one — the beach's
-    // "trade real blows" lesson now comes from HP, not a per-hit cap. Their bite is
-    // deliberately REAL (dmg 8, well above a floor-1 mob's ~5): a fresh hero's Health
-    // visibly drops as the pack closes, so the first blow's Health-Potion teach
-    // (beachPotionHint) lands on a hero who actually needs to heal — not a faceroll.
-    hp: 45, maxHp: 45, level: 1, dmg: 8,
+    // HP is a placeholder here — retuneBeachFoes() below sizes every shore foe once
+    // they all exist, in BLOWS off the hero's own weakest swing (BEACH_FOE_HITS: 3
+    // for the pack) rather than one flat pool, so every class trades the SAME number
+    // of them. Their bite is deliberately REAL (dmg 8, well above a floor-1 mob's
+    // ~5): a fresh hero's Health visibly drops as the pack closes, so the
+    // Health-Potion teach (beachPotionHint) lands on a hero who needs to heal.
+    hp: 1, maxHp: 1, level: 1, dmg: 8,
     dead: false, behavior: 'chaser', passive: true, provoked: false, slow: true,
     wakeRange: 4, tutorial: true,
     mColor: (MONSTERS[type] && MONSTERS[type].color) || null,
@@ -12753,13 +12754,37 @@ function buildTutorialMap() {
   // heal through, driving home the potion lesson. Still tutorial-flagged, so it pays
   // out through the beach handler like the rest.
   enemies.push(mkFoe(eliteType, caveX, 6, {
-    name: pick(ELITE_NAMES), hp: 85, maxHp: 85, dmg: 16, level: 2,
+    name: pick(ELITE_NAMES), dmg: 16, level: 2,
     isElite: true, slow: false, wakeRange: 5,
   }));
+  // Now that both species are on the sand, size their pools to the hero's blow (each
+  // reads its OWN armor). Boot lays the shore down BEFORE the class pick, so a
+  // brand-new hero is sized class-less here and re-sized by chooseClass(); a save
+  // resumed mid-shore already has its class and lands right on the number.
+  retuneBeachFoes();
 
   // Seal the cave until every foe falls, so the fight can't be skipped.
   floorCleared = false;
   tutorialStage('move');
+}
+
+// Re-size the shore's foes to the hero's actual opening swing. The beach is built
+// at boot, BEFORE the class is chosen, and Might feeds auto-attacks through a
+// class-ranked lane — so a pool laid down class-less would have a Warrior felling a
+// pack foe in half the blows a Fortune-teller needs. chooseClass() calls this so the
+// count is the same for everyone. Safe to run any time: it's a no-op off the shore,
+// and the foes are still untouched at full HP while the creation screens are up.
+function retuneBeachFoes() {
+  if (!tutorialActive) return;
+  for (const e of enemies) {
+    if (!e || !e.tutorial || e.dead) continue;
+    // Per foe, not once for the shore: a scorpion's carapace shaves more off a swing
+    // than a slime's ooze does, and a pool sized on the unmitigated number would cost
+    // an extra hit to chew through the remainder.
+    const full = e.hp >= e.maxHp;
+    e.maxHp = beachFoeHp(unarmedMinHit(e), e.isElite ? 'elite' : 'pack');
+    e.hp = full ? e.maxHp : Math.min(e.hp, e.maxHp);
+  }
 }
 
 // Leaving the beach: step into the cave to begin the real dungeon on floor 1.
@@ -24133,7 +24158,25 @@ function getWeaponDamage() {
     // not just two or three discrete numbers. The final hit is rounded by the caller.
     return rollDamage(lo, hi, Math.random);
   }
-  return rollDamage(1, 3, Math.random); // bare fists
+  return rollDamage(BALANCE.fistDmgLo, BALANCE.fistDmgHi, Math.random); // bare fists
+}
+
+// The FLOOR of the hero's unarmed auto-attack against `e` — rollPlayerHit's
+// deterministic core (weakest fist roll + level + flat ATK + Might's auto lane)
+// through the class damage multiplier, the guided early-damage ramp and the foe's
+// armor, rounded the way a real hit is. The situational layers a fresh hero doesn't
+// have yet (crit, buffs, execute) are left out, so this is the smallest number the
+// foe can lose off its bar. Used to size the beach's foes in BLOWS rather than raw
+// HP (see beachFoeHp): pinning the pool to the weakest swing makes the blow count a
+// guarantee, so a better roll or a crit only ever kills sooner.
+function unarmedMinHit(e) {
+  const raw = BALANCE.fistDmgLo + (player.level || 1) * 2 + totalStat('ATK')
+    + autoAttrDamage() + skillBonus('atkFlat');
+  const ramp = player.guided ? playerEarlyDamage(1) : 1;
+  let dmg = raw * classDmgDealtMult() * ramp;
+  const armor = enemyArmorPct(e);
+  if (armor > 0) dmg *= 1 - armor * (1 - armorPenFrac());
+  return Math.max(1, Math.round(dmg));
 }
 
 // Sum a flat stat (ATK, DEF, etc.) across all equipped gear. Titan's Grip lets you
@@ -30610,6 +30653,7 @@ function chooseClass(key) {
   player.hp = player.maxHp;
   player.mp = player.maxMp;
   player.shield = player.maxShield;   // a fresh hero starts with a full Spirit Veil
+  retuneBeachFoes();   // the shore was built class-less at boot — size its foes to THIS class's swing
   const ov = document.getElementById('class-overlay');
   if (ov) ov.classList.remove('open');
   // New flow: class is chosen FIRST. A brand-new hero then goes to the name + body
