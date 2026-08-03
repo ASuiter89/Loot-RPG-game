@@ -293,12 +293,35 @@ describe('CORRUPT — seeded outcomes, always sealed, never null', () => {
     const penalty = out.affixes.find(a => a.curse);
     expect(penalty.val).toBe(-swing);
   });
-  it('curse on an item with no affixes still seals & flags, no throw', () => {
+  it('curse on an item with NO affixes seals but does NOT flag it cursed', () => {
+    // The contract lists only sculptable (unlocked) properties, so a headline-only
+    // weapon or a fixed unique/set piece arrives with an empty list. There is nothing
+    // to gift and nothing to charge for, so flagging it cursed would brand it with a
+    // skull and zero drawback — a cursed item with no downside, which a curse must
+    // never be. It still seals and still records the outcome; it just isn't a curse.
     const data = { ...MIRRORFORGE, corruptOutcomes: [{ id: 'curse', weight: 1, kind: 'curse' }] };
     const out = applyCorrupt({ tier: 'rare', rank: 3, ilvl: 10, affixes: [] }, mulberry32(1), data);
-    expect(out.cursed).toBe(true);
+    expect(out.cursed).toBeFalsy();
+    expect(out.curseStat).toBeUndefined();
     expect(out.sealed).toBe(true);
+    expect(out._corrupt).toBe('curse');
     expect(out.affixes).toEqual([]);
+  });
+
+  it('never flags cursed without a real penalty affix, across seeds and affix counts', () => {
+    const data = { ...MIRRORFORGE, corruptOutcomes: [{ id: 'curse', weight: 1, kind: 'curse' }] };
+    const shapes = [
+      [],
+      [{ key: 'ATK', val: 20, min: 10, max: 40 }],
+      [{ key: 'ATK', val: 20, min: 10, max: 40 }, { key: 'HP', val: 100, min: 50, max: 200 }],
+    ];
+    for (const affixes of shapes) {
+      for (let s = 0; s < 30; s++) {
+        const out = applyCorrupt({ tier: 'legendary', rank: 5, ilvl: 80, affixes: affixes.map(a => ({ ...a })) }, mulberry32(s), data);
+        const penalty = out.affixes.find(a => a.curse && a.val < 0);
+        expect(!!out.cursed).toBe(!!penalty);   // the flag follows the drawback, always
+      }
+    }
   });
   it('an unknown outcome kind still seals safely', () => {
     const data = { ...MIRRORFORGE, corruptOutcomes: [{ id: 'weird', weight: 1, kind: '???' }] };
