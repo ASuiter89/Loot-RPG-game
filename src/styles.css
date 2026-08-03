@@ -545,8 +545,15 @@
     16%      { filter: brightness(1.4); }
   }
   #levelup-banner .lvl-sub {
-    font-family: var(--font-ui); font-size: 1.6rem; letter-spacing: 1px;
-    color: var(--paper); margin-top: 8px;
+    font-family: var(--font-ui); font-size: var(--fs-head); letter-spacing: 1px;
+    color: var(--paper); margin: var(--space-4) auto 0;
+    /* The line now names what the level actually paid ("+5 hero points and 1 skill
+       point"), which is far longer than the old "spend your points!" it replaced — so
+       it has to WRAP inside the screen instead of running off both edges of a phone.
+       Capped in vw (never px) so it fits a ~280px cover screen and a foldable alike;
+       the ceiling leaves room for the scale(1.12) overshoot mid-pop. `balance` keeps
+       a two-line wrap from stranding one word on the last line. */
+    max-width: min(80vw, 40ch); text-wrap: balance;
     text-shadow: 0 0 8px color-mix(in srgb, var(--gold-350) 80%, transparent), 0 1px 3px var(--ink);
   }
   #levelup-banner .lvl-sub:empty { display: none; }  /* drop the hint line once it's cleared */
