@@ -76,6 +76,7 @@ import { rollHoardRoomCount } from '../systems/hoardRooms.js';
 import { carveArenaGrid, ARENA_R } from '../systems/bossArena.js';
 import { targetViewTiles, makeZoom, stepZoom, zoomAnimating } from '../systems/cameraZoom.js';
 import { joystickVector, slideOrigin, JOY_DEFAULTS } from '../systems/joystickMath.js';
+import { isScrollBox, shouldBlockPageDrag } from '../systems/scrollLock.js';
 import { padStickVector, stickToDir, edgePressed, edgeReleased, pickInDirection, readingOrder, PAD_DEFAULTS } from '../systems/gamepadMath.js';
 import { floorUnlockedByClear, foldReached, clearedFrontier } from '../systems/depth.js';
 import { lockedTiers } from '../systems/rarityGate.js';
@@ -31687,6 +31688,89 @@ function _isTextField(t) { return !!(t && (t.tagName === 'INPUT' || t.tagName ==
 window.addEventListener('contextmenu', e => { if (!_isTextField(e.target)) e.preventDefault(); clearHeld(); });
 document.addEventListener('selectstart', e => { if (!_isTextField(e.target)) e.preventDefault(); });
 document.addEventListener('dragstart', e => { const t = e.target; if (t && (t.tagName === 'IMG' || t.tagName === 'CANVAS')) e.preventDefault(); });
+
+// ── LOCK THE PAGE (the last word on mobile scrolling) ──
+// The app is one fixed, full-viewport surface, so the PAGE must never scroll or
+// rubber-band: when it does, the fixed header/footer bands slide off and blank
+// browser background shows under the map. styles.css sizes the document to the
+// viewport and hides its overflow, but WebKit still pans the visual viewport past
+// an `overflow:hidden` root, so cancel the drag ourselves — for drags the PAGE
+// owns only. A drag that starts inside a real scroller (shop list, LOOT drawer,
+// wiki article, the horizontal skill strip) is left to the browser, right up to
+// the edge where the leftover scroll would chain to the page. Perf: the ancestor
+// walk reads computed styles ONCE per gesture (touchstart), never per move; only
+// the live scroll offsets are re-read as the finger travels.
+const DRAG_DECIDE_PX = 4;          // jitter below this hasn't picked a direction yet
+let _dragHosts = null;             // scrollable ancestors under the finger, innermost first
+let _dragX = 0, _dragY = 0;        // where the gesture started (client px)
+let _dragVerdict = '';             // '' undecided · 'block' cancel it · 'allow' hands off
+
+// Snapshot each scrollable ancestor's overflow once; the element rides along so
+// the live scrollTop/scrollLeft can be re-read per move.
+function _scrollHostsFor(node) {
+  const hosts = [];
+  for (let el = node; el && el.nodeType === 1 && el !== document.body; el = el.parentElement) {
+    const cs = getComputedStyle(el);
+    const host = { el, overflowX: cs.overflowX, overflowY: cs.overflowY,
+                   scrollWidth: el.scrollWidth, scrollHeight: el.scrollHeight,
+                   clientWidth: el.clientWidth, clientHeight: el.clientHeight };
+    if (isScrollBox(host)) hosts.push(host);
+  }
+  return hosts;
+}
+function _liveBox(h) {
+  return { overflowX: h.overflowX, overflowY: h.overflowY,
+           scrollLeft: h.el.scrollLeft, scrollTop: h.el.scrollTop,
+           scrollWidth: h.el.scrollWidth, scrollHeight: h.el.scrollHeight,
+           clientWidth: h.el.clientWidth, clientHeight: h.el.clientHeight };
+}
+document.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  _dragX = t ? t.clientX : 0;
+  _dragY = t ? t.clientY : 0;
+  // `touch-action: none` (the map canvas, the joystick) already tells the browser
+  // not to pan from here, so there is nothing to cancel — stay out of the way of
+  // the joystick's own pointer stream.
+  const locked = e.target && e.target.nodeType === 1 && getComputedStyle(e.target).touchAction === 'none';
+  _dragVerdict = locked ? 'allow' : '';
+  _dragHosts = locked ? null : _scrollHostsFor(e.target);
+}, { passive: true, capture: true });
+document.addEventListener('touchmove', e => {
+  if (_dragVerdict === 'allow') return;
+  const t = e.touches[0];
+  if (!t) return;
+  const dx = t.clientX - _dragX, dy = t.clientY - _dragY;
+  if (!_dragVerdict) {
+    // Decide ONCE per gesture and latch it: re-deciding mid-drag would kill a
+    // scroll the moment the list hit its end, stranding the rest of the gesture.
+    if (_dragHosts && _dragHosts.length &&
+        Math.abs(dx) < DRAG_DECIDE_PX && Math.abs(dy) < DRAG_DECIDE_PX) return;
+    _dragVerdict = shouldBlockPageDrag((_dragHosts || []).map(_liveBox), dx, dy) ? 'block' : 'allow';
+    if (_dragVerdict === 'allow') return;
+  }
+  if (e.cancelable) e.preventDefault();
+}, { passive: false, capture: true });
+function _endDrag() { _dragHosts = null; _dragVerdict = ''; }
+document.addEventListener('touchend', _endDrag, { passive: true });
+document.addEventListener('touchcancel', _endDrag, { passive: true });
+
+// Safari's pinch-zoom is a page gesture of its own (iOS ignores the viewport
+// meta's user-scalable), and a zoomed page pans freely — the same drifted-bands
+// mess by another route. Refuse it; UI SIZE in Settings is the way to scale up.
+// Touch-mode only: desktop Safari fires these for a TRACKPAD pinch, and
+// desktop's zoom is left exactly as it is.
+for (const g of ['gesturestart', 'gesturechange', 'gestureend'])
+  document.addEventListener(g, e => { if (isTouchMode() && e.cancelable) e.preventDefault(); }, { passive: false });
+
+// Whatever still slips through (a browser restoring an old scroll position, the
+// on-screen keyboard shoving the page up), snap back to the top. Skipped while a
+// text field has focus, so the keyboard can keep the field it revealed in view.
+function snapScrollHome() {
+  if (_isTextField(document.activeElement)) return;
+  if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+}
+window.addEventListener('scroll', snapScrollHome, { passive: true });
+window.addEventListener('orientationchange', snapScrollHome);
 
 document.addEventListener('keyup', e => {
   const d = moveKeyName(e.key);

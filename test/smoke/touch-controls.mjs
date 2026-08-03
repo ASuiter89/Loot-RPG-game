@@ -285,9 +285,57 @@ async function main() {
       if (!r.onBag) failures.push(`Bag opened over #${ovId} but renders behind it (elementFromPoint hit ${r.hit || 'nothing'}) — the Bag must sit above town menus`);
     }
 
+    // 9) The page itself never scrolls. On a phone the document used to run taller
+    //    than the visible viewport (`height:100%` resolves against iOS Safari's
+    //    LARGE viewport while the body is sized in dvh), so a drag scrolled the
+    //    fixed HUD bands off-screen and left blank browser background under the
+    //    map. Guard all three halves of the fix: the document is exactly
+    //    viewport-sized, the body is pinned, and a drag with no scroller under it
+    //    is cancelled — while a drag inside a REAL scroller still belongs to the
+    //    browser. Real TouchEvents, since defaultPrevented is the whole assertion.
+    const scrollLock = await page.evaluate(() => {
+      const de = document.documentElement;
+      const fire = (el, type, x, y) => {
+        const t = new Touch({ identifier: 7, target: el, clientX: x, clientY: y });
+        const list = type === 'touchend' ? [] : [t];
+        const ev = new TouchEvent(type, { touches: list, targetTouches: list, changedTouches: [t], bubbles: true, cancelable: true });
+        el.dispatchEvent(ev);
+        return ev.defaultPrevented;
+      };
+      const drag = (el, x, y, dy) => {
+        fire(el, 'touchstart', x, y);
+        const blocked = fire(el, 'touchmove', x, y + dy);
+        fire(el, 'touchend', x, y + dy);
+        return blocked;
+      };
+      // a) Document sized to the screen, with nothing to scroll into.
+      const fits = de.scrollHeight - de.clientHeight <= 1 && Math.abs(de.clientHeight - window.innerHeight) <= 1;
+      // b) A drag on the footer band — no scroller anywhere above it — is cancelled.
+      const bandBlocked = drag(document.getElementById('touch-cluster'), 30, window.innerHeight - 30, 120);
+      // c) …but a drag inside the LOOT list, which really scrolls, is handed on.
+      const tiers = ['junk', 'normal', 'uncommon', 'rare', 'epic', 'legendary'];
+      const slots = ['weapon', 'head', 'chest', 'hands', 'legs', 'feet', 'ring', 'amulet'];
+      for (let i = 0; i < 40; i++) window.inventory.push(window.generateItem(3, 6, tiers[i % 6], slots[i % 8]));
+      if (!document.body.classList.contains('bag-open')) window.toggleBag();
+      window.switchTab('inv');
+      const pc = document.getElementById('panel-content');
+      pc.scrollTop = 80;
+      const r = pc.getBoundingClientRect();
+      const paneScrolls = pc.scrollHeight - pc.clientHeight > 1;
+      const paneBlocked = drag(pc, Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2), -60);
+      if (document.body.classList.contains('bag-open')) window.toggleBag();
+      return { fits, docOver: de.scrollHeight - de.clientHeight, bodyPos: getComputedStyle(document.body).position, bandBlocked, paneScrolls, paneBlocked };
+    });
+    if (!scrollLock.fits) failures.push(`page-scroll lock: document is not viewport-sized (${scrollLock.docOver}px of scrollable overflow)`);
+    if (scrollLock.bodyPos !== 'fixed') failures.push(`page-scroll lock: body.touch is position:${scrollLock.bodyPos}, expected fixed`);
+    if (!scrollLock.bandBlocked) failures.push('page-scroll lock: a drag on the footer band was not cancelled — the page can still be dragged');
+    if (!scrollLock.paneScrolls) failures.push('page-scroll lock: the LOOT list did not overflow, so the scroller case proves nothing');
+    if (scrollLock.paneBlocked) failures.push('page-scroll lock: a drag inside the scrollable LOOT list was cancelled — real scrollers must keep working');
+
     if (pageErrors.length) failures.push(`uncaught page errors:\n  - ${pageErrors.join('\n  - ')}`);
 
     console.log('touch: reveal', revealed, '| bagPause', bagPause, '| moved', moved, '| joyCleared', !rest.joyOn, '| tap', tapped,
+      '| scrollLock', scrollLock,
       '| enchPicked', enchPicked,
       '| tapCast', tapCast, 'tapTip', tapTip, '| holdTip', holdTip, 'holdCast', holdCast,
       '| multiTip', multiTip, 'multiCast', multiCast, '| bagStack', bagStack);

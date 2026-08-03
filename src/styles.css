@@ -23,8 +23,18 @@
      selects text (the blue copy-paste highlight), and rubber-band scrolling can
      shove the canvas off-screen. Lock all of it down. NOTE: iOS Safari only
      honours the -webkit- prefixed forms — the lone unprefixed `user-select` on
-     <body> was silently ignored there, which is why selection still happened. */
-  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+     <body> was silently ignored there, which is why selection still happened.
+     The page itself must NEVER scroll — it's a fixed, full-viewport surface. Note
+     the two heights: `100%` on <html> resolves against the initial containing
+     block, which iOS Safari sizes to the LARGE viewport (toolbars retracted),
+     while <body> below is `100dvh` (the viewport as it stands right now). With
+     the toolbars showing, that left <html> ~a toolbar taller than anything
+     visible, so the document scrolled: the fixed header/footer bands slid away
+     and blank browser background showed under the map. Sizing BOTH in dvh keeps
+     the document exactly as tall as the screen, with `100%` as the fallback for
+     engines without dvh. game.js cancels the touchmove as well, since WebKit
+     still pans the visual viewport past an `overflow:hidden` root. */
+  html, body { height: 100%; height: 100dvh; overflow: hidden; overscroll-behavior: none; }
   * {
     -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;
     -webkit-touch-callout: none;
@@ -5507,6 +5517,16 @@
      Colours/sizes come from :root tokens (see styles-lint); translucency uses
      color-mix so no raw rgba() escapes the token layer.
      ═══════════════════════════════════════════════════════════════════════════ */
+
+  /* Pin the whole surface. The root rules already hide overflow, but a fixed body
+     takes the document out of flow entirely, so there is no scrollable content
+     left for a phone browser to drag, rubber-band or leave parked mid-scroll. Only
+     `top`/`left`/`width` are set — `height: 100dvh` from the base rule still sizes
+     it, so the bands track the viewport as browser toolbars come and go. Fixed
+     descendants (the bands, overlays, tooltips) still resolve against the viewport
+     — a plain fixed ancestor with no transform/filter never becomes their
+     containing block — so nothing here is repositioned or clipped. */
+  body.touch { position: fixed; top: 0; left: 0; width: 100%; }
 
   /* Banded layout: a solid HEADER band and FOOTER band, with the map filling the
      space BETWEEN them — so HUD content sits on its band and never spills onto the
