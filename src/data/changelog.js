@@ -7,6 +7,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-02", size: "small", v: "Second skill tier waits for level 6", by: "Jeff Louie", notes: ["Tier 2 of both trees opens at hero level 6 (was 4); deeper tiers unchanged at 9/16/24/30.", "Ranks already learned keep their points."] },
   { date: "2026-08-02", size: "small", v: "Beach's opening hint holds till your first swing", by: "Jeff Louie", notes: ["Move/fight chip stays up the whole walk north, retiring on your first swing (was 2s of walking).", "Chip also names that attacks swing themselves in reach."] },
   { date: "2026-08-01", size: "small", v: "Veteran keeps the beach's opening kit", by: "Jeff Louie", notes: ["Veteran opens at level 2 with 5 attribute points and 1 skill point — the shore's graduation level.", "Skipping the beach cost it before: floor 1 at level 1, nothing to spend."] },
   { date: "2026-08-01", size: "small", v: "Camera pulls back for boss fights", by: "Jeff Louie", notes: [

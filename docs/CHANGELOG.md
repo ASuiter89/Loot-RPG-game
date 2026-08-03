@@ -8,6 +8,21 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Balance — the second skill tier waits for level 6
+
+- 📦 New `src/data/skillTiers.js` — the tier→hero-level ladders, extracted from the
+  legacy `WEB_BANDS`/`SKILL_BANDS`/`ASC_BANDS` locals. `SKILL_TIER_LEVELS` gates both
+  base webs (`[1, 6, 9, 16, 24, 30]`; tier 1 was 4) and `ASC_TIER_LEVELS` keeps the
+  path tree's cosmetic default. The dead grid ladder (`SKILL_BANDS`, reachable only by
+  a non-ascension `buildTree` call that no longer exists) folded into the web one.
+- 📦 New `src/systems/skillTiers.js` — `tierUnlockLevel(tier, ladder)` /
+  `tierUnlocked(level, tier, ladder)`, the clamped lookup `buildWeb`/`buildTree` now
+  call instead of indexing a local array.
+- 🧪 `test/data/skillTiers.test.js` + `test/systems/skillTiers.test.js` — the ladder's
+  shape (ascending, affordable at one point per level), the level-6 gate, clamping
+  past the last tier, and the empty/missing-ladder fallbacks.
+- 📄 `gameGuide("skills")` and the wiki's Levelling page now name the tier ladder.
+
 ## Feature — the camera pulls back for a boss fight
 
 - 📦 New `src/systems/cameraZoom.js` — the follow camera's view width, extracted from
