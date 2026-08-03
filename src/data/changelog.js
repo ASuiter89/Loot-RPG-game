@@ -7,6 +7,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-02", size: "small", v: "Level-ups name what they paid; floor 1 drops its dead gate", by: "Jeff Louie", notes: ["Level-up banner reads \"+5 hero points and 1 skill point\"; shore's graduation shows it too (was silent — its numbers only ever hit the combat log, hidden on touch).", "Floor 1 lays its red town gate only once Floor 5 opens the town; before that it just refused.", "Points called \"hero points\" everywhere (was stat/attribute/Hero)."] },
   { date: "2026-08-02", size: "small", v: "Beach's opening hint holds till your first swing", by: "Jeff Louie", notes: ["Move/fight chip stays up the whole walk north, retiring on your first swing (was 2s of walking).", "Chip also names that attacks swing themselves in reach."] },
   { date: "2026-08-01", size: "small", v: "Veteran keeps the beach's opening kit", by: "Jeff Louie", notes: ["Veteran opens at level 2 with 5 attribute points and 1 skill point — the shore's graduation level.", "Skipping the beach cost it before: floor 1 at level 1, nothing to spend."] },
   { date: "2026-08-01", size: "small", v: "Camera pulls back for boss fights", by: "Jeff Louie", notes: [
