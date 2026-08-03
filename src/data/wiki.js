@@ -440,6 +440,7 @@ export const WIKI = [
         body: [
           { p: 'Each level grants <b>5 attribute points</b> and <b>1 skill point</b>. Spend attributes on the HERO tab (shift-click to add 5 at once); spend skill points on the SKILLS tab\'s Passive and Active trees.' },
           { p: 'You can\'t out-level the dungeon — depth outpaces raw levels, so gear and a focused skill build matter more the deeper you go. Spend your first skill point on a root active (the only nodes with no prerequisites).' },
+          { p: 'The Passive and Active trees also open a <b>tier at a time</b> by hero level — the roots at 1, then <b>6</b>, 9, 16, 24 and 30. Banking points won\'t rush a tier; deepen what you have while you climb to it.' },
         ],
       },
       {
