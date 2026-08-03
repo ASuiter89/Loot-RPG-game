@@ -906,22 +906,39 @@
         <span class="sex-lbl">Female</span>
       </button>
     </div>
-    <div class="ov-sub">Optional Game Modes</div>
-    <label class="hc-toggle" id="hc-toggle">
-      <input type="checkbox" id="hc-checkbox" onchange="syncHardcoreToggle()">
-      <span class="hc-tog-box"></span>
-      <span class="hc-tog-text"><b id="hc-tog-label">HARDCORE</b> — one life. Die and this hero is gone forever.</span>
-    </label>
-    <label class="hc-toggle ssf" id="ssf-toggle">
-      <input type="checkbox" id="ssf-checkbox" onchange="syncSsfToggle()">
-      <span class="hc-tog-box"></span>
-      <span class="hc-tog-text"><b id="ssf-tog-label">SOLO SELF-FOUND</b> — Only what this hero finds can be used. No shared vault.</span>
-    </label>
-    <label class="hc-toggle classic" id="classic-toggle">
-      <input type="checkbox" id="classic-checkbox" onchange="syncVeteranToggle()">
-      <span class="hc-tog-box"></span>
-      <span class="hc-tog-text"><b>VETERAN</b> — Skip the tutorials. Open on floor 1 with no hints and no eased start.</span>
-    </label>
+    <!-- Advanced game modes — collapsed behind a disclosure button. Laid out flat
+         the three opt-in modes read as a REQUIRED pick ("which of these do I have
+         to choose?"), so a new hero's path is now name → body type → Begin and the
+         modes are opened only by someone looking for them. The button carries a
+         summary of whatever is armed (and reopens the section on the way back from
+         the class pick), so a closed section never hides a live choice. -->
+    <div class="adv-modes" id="adv-modes">
+      <button type="button" class="adv-modes-btn" id="adv-modes-btn" aria-expanded="false"
+              aria-controls="adv-modes-body" onclick="toggleAdvModes()">
+        <span class="adv-modes-txt">
+          <span class="adv-modes-lbl">Advanced Game Modes</span>
+          <span class="adv-modes-sum" id="adv-modes-sum">Optional</span>
+        </span>
+        <span class="log-caret" aria-hidden="true">▾</span>
+      </button>
+      <div class="adv-modes-body" id="adv-modes-body">
+        <label class="hc-toggle" id="hc-toggle">
+          <input type="checkbox" id="hc-checkbox" onchange="syncHardcoreToggle()">
+          <span class="hc-tog-box"></span>
+          <span class="hc-tog-text"><b id="hc-tog-label">HARDCORE</b> — one life. Die and this hero is gone forever.</span>
+        </label>
+        <label class="hc-toggle ssf" id="ssf-toggle">
+          <input type="checkbox" id="ssf-checkbox" onchange="syncSsfToggle()">
+          <span class="hc-tog-box"></span>
+          <span class="hc-tog-text"><b id="ssf-tog-label">SOLO SELF-FOUND</b> — Only what this hero finds can be used. No shared vault.</span>
+        </label>
+        <label class="hc-toggle classic" id="classic-toggle">
+          <input type="checkbox" id="classic-checkbox" onchange="syncVeteranToggle()">
+          <span class="hc-tog-box"></span>
+          <span class="hc-tog-text"><b>VETERAN</b> — Skip the tutorials. Open on floor 1 with no hints and no eased start.</span>
+        </label>
+      </div>
+    </div>
     <button class="ov-btn" onclick="submitName()">Begin Your Quest</button>
   </div>
 </div>
