@@ -1282,6 +1282,44 @@
   #death-log-content { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 14px 14px; text-align: left; }
   #death-log-content .log-line { font-size: 1.2rem; line-height: 1.5; content-visibility: visible; }
 
+  /* Advanced game modes disclosure on the new-hero name screen — the three opt-in
+     mode rows below live inside it, collapsed by default. Shown flat they read as a
+     required choice, so they now sit behind one button; the summary names whatever
+     is armed (gold) so a closed section never hides a pick the player already made.
+     Fluid by construction: full-width, no fixed column count or px max-width, and
+     the summary is the only part allowed to ellipsize on a narrow screen. */
+  .adv-modes { margin-bottom: var(--space-5); }
+  .adv-modes-btn {
+    width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: var(--space-4);
+    padding: 10px 11px; border: 1px solid var(--border); border-radius: var(--radius-md);
+    background: var(--orange-850); color: var(--orange-400); font-family: var(--font-ui);
+    font-size: 1.3rem; letter-spacing: .5px; text-align: left; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+    transition: border-color .15s, color .15s;
+  }
+  .adv-modes-btn:active { border-color: var(--gold); }
+  .adv-modes.open .adv-modes-btn { border-color: var(--gold); color: var(--xp); margin-bottom: var(--space-5); }
+  /* Label + summary share one wrapping column beside the fixed caret: on a wide
+     button they sit on one line (summary flush right), and on a narrow one the
+     summary drops to its own line instead of ellipsizing to "HARDCORE · VETE…". */
+  .adv-modes-txt {
+    flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: var(--space-1) var(--space-4);
+  }
+  .adv-modes-lbl { flex: 0 1 auto; }
+  .adv-modes-sum {
+    flex: 0 1 auto; min-width: 0; margin-left: auto; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; font-size: 1.2rem; color: var(--meta);
+  }
+  .adv-modes-sum.armed { color: var(--gold); }
+  /* Open, the rows speak for themselves — the summary would only repeat them. */
+  .adv-modes.open .adv-modes-sum { display: none; }
+  .adv-modes-btn .log-caret { flex: 0 0 auto; font-size: 1.2rem; transform: rotate(-90deg); transition: transform .15s; }
+  .adv-modes.open .adv-modes-btn .log-caret { transform: none; }
+  .adv-modes-body { display: none; }
+  .adv-modes.open .adv-modes-body { display: block; }
+  .adv-modes-body .hc-toggle:last-child { margin-bottom: 0; }
+
   /* Hardcore toggle on the new-hero name screen. */
   .hc-toggle { display: flex; align-items: flex-start; gap: 10px; text-align: left; cursor: pointer;
     border: 1px solid var(--red-700); border-radius: 8px; background: var(--ink); padding: 10px 11px; margin-bottom: 12px;

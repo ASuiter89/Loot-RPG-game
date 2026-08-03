@@ -9,6 +9,8 @@
 // pack — the label promises "skip the tutorials".
 //
 // Asserts, driving the row by real taps the way a player does:
+//   0. the three modes ship COLLAPSED behind an ADVANCED GAME MODES button (flat,
+//      they read as a required pick), and tapping it reveals them;
 //   1. tapping VETERAN arms the checkbox AND lights the row (.on + a ✓ glyph);
 //   2. tapping again disarms it, visuals included;
 //   3. the row wears its own palette, not Hardcore's crimson;
@@ -55,6 +57,23 @@ function findExe() {
 
 // What the player can actually SEE of a toggle row: armed state, the ✓ glyph the
 // .on rule paints into ::after, and the border/background it lights up with.
+// What the player can see of the ADVANCED GAME MODES disclosure: whether it is
+// open, whether a mode row is actually on screen, and the summary it carries while
+// closed (which must name anything armed, so a closed section hides no live pick).
+const readDisclosure = () => {
+  const wrap = document.getElementById('adv-modes');
+  const btn = document.getElementById('adv-modes-btn');
+  const sum = document.getElementById('adv-modes-sum');
+  const row = document.getElementById('classic-toggle');
+  return {
+    open: !!(wrap && wrap.classList.contains('open')),
+    expandedAttr: btn ? btn.getAttribute('aria-expanded') : null,
+    summary: sum ? sum.textContent.trim() : null,
+    summaryArmed: !!(sum && sum.classList.contains('armed')),
+    rowVisible: !!(row && row.getClientRects().length > 0),
+  };
+};
+
 const readRow = ([rowId, cbId]) => {
   const row = document.getElementById(rowId);
   const cb = document.getElementById(cbId);
@@ -92,6 +111,20 @@ async function main() {
     // Walk onboarding the real way: title → class → name screen.
     await page.evaluate(() => { window.titlePlay(); window.chooseClass('warrior'); });
     await page.waitForTimeout(200);
+
+    // ── 0. The modes ship COLLAPSED behind ADVANCED GAME MODES ───────────────
+    // Laid out flat the three read as a required pick; opening them is deliberate.
+    out.collapsed = await page.evaluate(readDisclosure);
+    if (out.collapsed.open) failures.push('the advanced game modes started expanded — they read as a required choice');
+    if (out.collapsed.rowVisible) failures.push('a mode row was visible before the disclosure was opened');
+    if (out.collapsed.expandedAttr !== 'false') failures.push(`aria-expanded was "${out.collapsed.expandedAttr}" while collapsed`);
+    if (out.collapsed.summary !== 'Optional') failures.push(`collapsed summary read "${out.collapsed.summary}", want "Optional"`);
+
+    await page.locator('#adv-modes-btn').tap();
+    await page.waitForTimeout(80);
+    out.expanded = await page.evaluate(readDisclosure);
+    if (!out.expanded.open || !out.expanded.rowVisible) failures.push('tapping ADVANCED GAME MODES did not reveal the mode rows');
+    if (out.expanded.expandedAttr !== 'true') failures.push(`aria-expanded was "${out.expanded.expandedAttr}" while expanded`);
 
     out.idle = await page.evaluate(readRow, ['classic-toggle', 'classic-checkbox']);
     if (out.idle.checked || out.idle.on) failures.push('VETERAN started armed on a fresh hero');
@@ -134,8 +167,23 @@ async function main() {
     if (!out.afterBack.checked || !out.afterBack.on) {
       failures.push('the VETERAN pick was lost backing out to the class list and returning');
     }
+    // …and an armed mode must not come back BURIED: the section reopens on its own.
+    out.afterBackDisc = await page.evaluate(readDisclosure);
+    if (!out.afterBackDisc.open || !out.afterBackDisc.rowVisible) {
+      failures.push('an armed VETERAN came back collapsed behind ADVANCED GAME MODES — the pick is hidden');
+    }
+    // Closing it again must still NAME the pick on the button, so no live choice
+    // can hide behind a shut section — and submitting while shut must honour it.
+    await page.locator('#adv-modes-btn').tap();
+    await page.waitForTimeout(80);
+    out.armedCollapsed = await page.evaluate(readDisclosure);
+    if (out.armedCollapsed.rowVisible) failures.push('the disclosure would not close again');
+    if (!/VETERAN/i.test(out.armedCollapsed.summary || '')) {
+      failures.push(`collapsed summary read "${out.armedCollapsed.summary}" with VETERAN armed`);
+    }
+    if (!out.armedCollapsed.summaryArmed) failures.push('the collapsed summary did not light up with a mode armed');
 
-    // ── 5. Submitting armed must actually skip the shore ─────────────────────
+    // ── 5. Submitting armed (and collapsed) must actually skip the shore ─────
     await page.evaluate(() => {
       document.getElementById('name-input').value = 'Vet';
       window.submitName();
@@ -199,6 +247,10 @@ async function main() {
     }
     await page2.close();
 
+    console.log('veteran-mode: collapsed =', JSON.stringify(out.collapsed));
+    console.log('veteran-mode: expanded  =', JSON.stringify(out.expanded));
+    console.log('veteran-mode: afterBack =', JSON.stringify(out.afterBackDisc));
+    console.log('veteran-mode: armedShut =', JSON.stringify(out.armedCollapsed));
     console.log('veteran-mode: idle      =', JSON.stringify(out.idle));
     console.log('veteran-mode: armed     =', JSON.stringify(out.armed));
     console.log('veteran-mode: palette   =', JSON.stringify(out.palette));

@@ -80,6 +80,27 @@ describe('critical DOM ids (markup↔script contract)', () => {
   });
 });
 
+describe('advanced game modes disclosure (name screen)', () => {
+  // The three opt-in modes must stay INSIDE the collapsed disclosure. Flat on the
+  // name screen they read as a required pick, which is what this hides; a future
+  // edit that lifts one back out would silently restore that confusion.
+  it.each(['hc-checkbox', 'ssf-checkbox', 'classic-checkbox'])('keeps #%s inside #adv-modes-body', (id) => {
+    const body = doc.getElementById('adv-modes-body');
+    expect(body).toBeTruthy();
+    expect(body.contains(doc.getElementById(id)), `#${id} escaped the disclosure`).toBe(true);
+  });
+
+  it('opens from a labelled button wired to toggleAdvModes()', () => {
+    const btn = doc.getElementById('adv-modes-btn');
+    expect(btn).toBeTruthy();
+    expect(btn.getAttribute('onclick')).toContain('toggleAdvModes()');
+    expect(btn.getAttribute('aria-controls')).toBe('adv-modes-body');
+    expect(btn.getAttribute('aria-expanded')).toBe('false'); // ships collapsed
+    expect(btn.textContent).toMatch(/Advanced Game Modes/i);
+    expect(game).toMatch(/function toggleAdvModes\(/);
+  });
+});
+
 describe('embedded configuration & console API (now in src/legacy/game.js)', () => {
   it('embeds the Supabase leaderboard/cloud config', () => {
     expect(game).toMatch(/const LB_SUPABASE_URL\s*=/);
