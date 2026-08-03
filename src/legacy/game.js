@@ -29,6 +29,7 @@ import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.j
 import { portalChannelStep } from '../systems/portalChannel.js';
 import { footprintSealsPath, footprintInsideRoom, isThroughCorridor } from '../systems/decorPlacement.js';
 import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach.js';
+import { chaseStep } from '../systems/chasePath.js';
 import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
@@ -8323,6 +8324,7 @@ window.gameGuide = function gameGuide(topic) {
     enemies: [
       `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), tenacious / stunImmune (crowd-control resistance — see below), firstKill (a boss floor you haven't cleared yet — its kill drops a jackpot; see below), affix (an elite-style modifier), armor / magicResist (typed defence — see below), and status (e.g. ["stun"], ["slow"]). Every species you slay is also logged in the Bestiary codex (pause menu; gameGuide("bestiary")).`,
       `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
+      `Every hunting foe PATHFINDS — it routes around walls, furniture, rocks and other foes instead of shoving into them, and a multi-tile guardian walks its whole body around cover the same way (it needs a gap its FULL footprint fits through, so a 3x3 boss can't follow you down a one-tile crack — but it will take the long way round). So cover breaks LINE OF SIGHT; it does NOT pin a foe in place. Standing behind a rock to plink a boss for free doesn't work: expect it to come around the side. When you are genuinely unreachable, a foe closes as near as the floor allows and holds there (shooting if it has a shot) rather than freezing where it stands.`,
       `Behaviors (gameState().enemies[i].behavior): chaser (steady, 1 tile/turn), swift (2 tiles/turn), pack (1 tile/turn, but rushes to 2 when you drop below 50% HP — wolves/tigers), erratic (darts unpredictably), brute (slow — acts every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand). A foe with the ice CHILL status is likewise dragged to that half-cadence, but chill is a STATUS (it shows in enemies[i].status), not a behavior.`,
       `Each archetype also has its OWN toughness & punch, not just movement: brutes are tanky and hit hard but swing slowly; swift vermin and erratic flyers are frail and jab for less; casters are squishy but strike from range; lurkers ambush for a heavier blow; packs are individually weak but swarm. So two foes on the same floor can differ a lot — read the behavior, not just the sprite.`,
       `TYPED DEFENCE (gameState().enemies[i].armor / magicResist, whole %): every foe shrugs off a slice of your damage, and how big depends on the SCHOOL of the hit. Physical armor blunts auto-attacks + martial SKILLS (your Armor Pen % pierces it); magic resistance blunts SPELLS (your Magic Pen % pierces it). Foes differ by nature — a stone/metal/armored/scaled foe carries high armor but low magic resist (cast at it); a ghost, wisp, elemental, ooze or caster resists magic but not steel (strike it); most beasts sit in between. Hit each foe with the school it is SOFT to; a HYBRID ability splits its blow across both, so it is never fully walled. The bestiary card shows both values once you've slain enough of a species.`,
@@ -25931,10 +25933,6 @@ function enemyTileFree(x, y) {
 }
 
 const ENEMY_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-// ENEMY_DIRS flattened into two parallel arrays (same order!) so the BFS hot loop
-// below can index them without destructuring a pair per neighbour.
-const ENEMY_DIR_X = [1, -1, 0, 0, 1, 1, -1, -1];
-const ENEMY_DIR_Y = [0, 0, 1, -1, 1, -1, 1, -1];
 
 // A snapshot grid of every tile a foe can't enter this instant — walls, conjured
 // boss barriers, town NPCs, the player's tile, and every living enemy footprint.
@@ -25981,64 +25979,23 @@ function pathBlockedGrid() {
   return b;
 }
 
-// Breadth-first search from an enemy to (tx,ty); returns the first [dx,dy] step
-// along a shortest path, or null if unreachable. This is what lets foes route
-// around walls instead of grinding into them.
+// First [dx,dy] step of a shortest route from an enemy to (tx,ty) — what lets
+// foes route around walls instead of grinding into them. The search itself is
+// the pure body-aware flood in systems/chasePath.js; this wrapper just feeds it
+// the current blocked/solid grids and the mover's footprint.
 //
-// `came`/`seen` are reused scratch buffers stamped with a per-call generation so
-// neither needs reallocating or clearing each turn (only the rare stamp wrap
-// does), and the "is this tile free?" test reads the precomputed blocked grid.
-// The queue is a reused flat buffer too (each cell enqueues at most once, so W*H
-// slots always suffice) — no growable array churn per pathfind.
-let _pfCame = null, _pfSeen = null, _pfQueue = null, _pfGen = 0;
+// A one-tile foe ends ON the target square (reach 0) so the caller can turn that
+// last step into a swing. A multi-tile body can never stand where the hero
+// stands, so it aims to end BESIDE the target (reach 1) — the same `footDist(e)
+// <= 1` line its attack check uses.
+const MULTI_TILE_CHASE_REACH = 1;   // a wide body closes to adjacent, not onto you
 function enemyPathStep(e, tx, ty) {
-  const W = MAP_W, H = MAP_H, n = W * H;
-  // Exploration bound: BFS can never dequeue more than every cell, so capping at
-  // the map area changes NO chase (old semantics exactly) — it only names the
-  // worst case. The real unreachable-flood savings come from the cached static
-  // grid + pooled queue, not from giving up early.
-  const exploreCap = n;
-  const start = e.y * W + e.x, goal = ty * W + tx;
-  if (start === goal) return null;
-  const blocked = pathBlockedGrid();
-  if (!_pfCame || _pfCame.length !== n) { _pfCame = new Int32Array(n); _pfSeen = new Uint16Array(n); _pfQueue = new Int32Array(n); _pfGen = 0; }
-  const came = _pfCame, seen = _pfSeen, queue = _pfQueue;
-  // The seen stamps live in a Uint16Array, so the generation must wrap at the
-  // STORAGE width — a plain `=== 0` guard never fires on a JS number, and once
-  // gen outgrows 16 bits every `seen[ni] === gen` compare goes false forever:
-  // dedupe dies, the fixed-size queue silently overflows, and every foe freezes
-  // (~65k pathfinds ≈ under an hour of heavy combat). Wrap-and-clear instead.
-  if (++_pfGen > 0xffff) { seen.fill(0); _pfGen = 1; }
-  const gen = _pfGen;
-  queue[0] = start;
-  came[start] = -1; seen[start] = gen;
-  let qi = 0, qt = 1, found = false, dequeued = 0;
-  while (qi < qt) {
-    const cur = queue[qi++];
-    if (cur === goal) { found = true; break; }
-    if (++dequeued > exploreCap) break;       // backstop only — cap = map area, no chase is ever cut short
-    const cx = cur % W, cy = (cur - cx) / W;
-    for (let d = 0; d < 8; d++) {
-      const dx = ENEMY_DIR_X[d], dy = ENEMY_DIR_Y[d];
-      const nx = cx + dx, ny = cy + dy;
-      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-      const ni = ny * W + nx;
-      if (seen[ni] === gen) continue;
-      const isGoal = (ni === goal);
-      if (!isGoal && blocked[ni]) continue;
-      // Don't cut diagonally through a wall corner.
-      if (dx !== 0 && dy !== 0 && mapData[cy][nx] !== 0 && mapData[ny][cx] !== 0) continue;
-      came[ni] = cur; seen[ni] = gen;
-      queue[qt++] = ni;
-    }
-  }
-  if (!found) return null;
-  let cur = goal, hops = 0;
-  // Walk the parent chain back to the step adjacent to start. Bounded by the grid
-  // size; the guard is a backstop against a malformed chain rather than a real path.
-  while (came[cur] !== start) { cur = came[cur]; if (cur < 0 || ++hops > n) return null; }
-  const cx = cur % W, cy = (cur - cx) / W;
-  return [cx - e.x, cy - e.y];
+  const size = e.size || 1;
+  // `solid` (terrain + solid furniture) mirrors enemyStep's own corner-cut test,
+  // so the route never plans a diagonal squeeze the step itself will refuse.
+  const blocked = pathBlockedGrid(), solid = pathStaticGrid();
+  return chaseStep(MAP_W, MAP_H, blocked, solid, e.x, e.y, size, tx, ty,
+                   size > 1 ? MULTI_TILE_CHASE_REACH : 0);
 }
 
 function enemyMove(e) {
@@ -26065,18 +26022,19 @@ function enemyMove(e) {
   const beh = BEHAVIORS[e.behavior] || BEHAVIORS.chaser;
   const dist = Math.abs(e.x - player.x) + Math.abs(e.y - player.y);
 
-  // A multi-tile boss lumbers after you through its open arena: it casts/summons
-  // from range, crushes anything next to its footprint, lurches one tile toward
-  // you when it can fit, and has reach (a breath/lunge) when it can't close.
+  // A multi-tile boss lumbers after you through its arena: it casts/summons from
+  // range, crushes anything next to its footprint, and otherwise walks its whole
+  // bulk toward you — ROUTING AROUND rocks, furniture and wall corners. It used
+  // to try only "one step on the x axis, else one on the y", so a single solid
+  // tile on that axis pinned it in place forever and you could shoot it for free
+  // from behind the rock. Now it runs the same body-aware search every foe does,
+  // and when you're truly unreachable it still presses as close as it can fit.
   if ((e.size || 1) > 1) {
     const fd = footDist(e);
     if (e.isBoss && bossSpecial(e, fd, beh)) return;
     if (fd <= 1) { enemyAttackPlayer(e); return; }
-    const sx = Math.sign(player.x - e.x), sy = Math.sign(player.y - e.y);
-    const horizFirst = Math.abs(player.x - e.x) >= Math.abs(player.y - e.y);
-    const tries = horizFirst ? [[sx, 0], [0, sy]] : [[0, sy], [sx, 0]];
-    let moved = false;
-    for (const [mx, my] of tries) { if ((mx || my) && enemyStep(e, mx, my)) { moved = true; break; } }
+    const step = enemyPathStep(e, player.x, player.y);
+    const moved = !!step && enemyStep(e, step[0], step[1]);
     if (!moved && fd <= (beh.range || 4) && hasLineToPlayer(e)) enemyRangedAttack(e);
     return;
   }
@@ -26417,8 +26375,17 @@ function hasLineOfSight(ax, ay, bx, by) {
   }
   return true;
 }
-// Can foe `e` see the hero? (LOS from the enemy's tile to the player's.)
-function hasLineToPlayer(e) { return hasLineOfSight(e.x, e.y, player.x, player.y); }
+// Can foe `e` see the hero? (LOS from the enemy's tile to the player's.) A
+// multi-tile body sights from ANY tile it covers: its anchor is the top-left
+// corner, which can sit behind a rock while the rest of the bulk has a clear
+// shot — checking only the anchor is what left a wedged boss doing nothing.
+function hasLineToPlayer(e) {
+  const s = e.size || 1;
+  if (s === 1) return hasLineOfSight(e.x, e.y, player.x, player.y);
+  for (let dx = 0; dx < s; dx++) for (let dy = 0; dy < s; dy++)
+    if (hasLineOfSight(e.x + dx, e.y + dy, player.x, player.y)) return true;
+  return false;
+}
 
 // ── BOSS SIGNATURE ABILITIES ──
 function bossLifesteal(e, dmg) {
@@ -36530,6 +36497,68 @@ try {
           moved: !mystic || mystic.x !== 4 || mystic.y !== 1 });
       } catch (e) { out.cases.push({ kind: 'detour-npc', err: String(e) }); }
       return out;
+    };
+    // __BOSS_CHASE_TEST__ (preview only): a hunting foe must WALK AROUND cover to
+    // reach the hero, never wedge behind it. Each case builds a bare arena, drops
+    // solid rock between a body of the given size and the hero, then beats the real
+    // enemy AI and reports how far it closed. `stuck: true` is the old bug — the
+    // body never moved a single tile because its only greedy option was blocked.
+    // The wide cases use a plain (non-boss) foe so no random signature ability can
+    // fire: the movement branch under test is the one every multi-tile body runs.
+    window.__bossChaseTest = function () {
+      const solidBase = DECOR_INDEX.findIndex((d) => d.block === 'base'); // 1-tile solid decor
+      const run = (label, W, H, size, rocks, ex, ey, px, py, beats) => {
+        try {
+          MAP_W = W; MAP_H = H;
+          mapData = [];
+          for (let y = 0; y < H; y++) { mapData[y] = []; for (let x = 0; x < W; x++) mapData[y][x] = (x === 0 || y === 0 || x === W - 1 || y === H - 1) ? 1 : 0; }
+          furnitureMap = {}; decorMap = {}; teleporters = {}; merchant = null; mystic = null;
+          for (const [rx, ry] of rocks) { decorMap[ry + ',' + rx] = solidBase; furnitureMap[ry + ',' + rx] = 1; }
+          floorSerial++; bumpMapEpoch(); pathGridDirty();
+          statusEffects = []; bossHazards = []; enemies.length = 0; bumpEnemyPos();
+          player.x = px; player.y = py; player.fx = px; player.fy = py;
+          player.hp = player.maxHp = 9999999;
+          const e = { x: ex, y: ey, fx: ex, fy: ey, size, hp: 999999, maxHp: 999999, dmg: 0,
+                      behavior: 'chaser', type: 'ratking', name: 'Chase Dummy', dead: false };
+          enemies.push(e); bumpEnemyPos();
+          // "In reach" differs by body: a one-tile foe swings the moment it can
+          // STEP onto you, diagonals included (Chebyshev 1, which is Manhattan 2),
+          // while a wide body attacks anything orthogonally touching its footprint
+          // (the fd <= 1 rule its own branch uses).
+          const cheb = () => { let b = Infinity;
+            for (let dx = 0; dx < size; dx++) for (let dy = 0; dy < size; dy++)
+              b = Math.min(b, Math.max(Math.abs(e.x + dx - player.x), Math.abs(e.y + dy - player.y)));
+            return b; };
+          const inReach = () => (size > 1 ? footDist(e) <= 1 : cheb() <= 1);
+          const start = footDist(e), startReach = inReach();
+          const trail = [[e.x, e.y]];
+          let best = start, moves = 0, beat = 0;
+          for (; beat < beats; beat++) {
+            if (inReach()) break;             // stop before it swings
+            const bx = e.x, by = e.y;
+            enemyMove(e);
+            if (e.x !== bx || e.y !== by) { moves++; if (trail.length < 24) trail.push([e.x, e.y]); }
+            const d = footDist(e); if (d < best) best = d;
+          }
+          return { label, size, start, startReach, end: footDist(e), endCheb: cheb(),
+                   reached: inReach(), best, moves, beats: beat, stuck: moves === 0, trail };
+        } catch (err) { return { label, size, err: String(err) }; }
+      };
+      return { cases: [
+        // The reported case: a 2x2 body level with the hero, one rock covering both
+        // its rows. Greedy "x then y" had exactly one move to try (the y try is a
+        // no-op when you share its rows), the rock vetoed it, and it froze there.
+        run('wide-behind-rock', 13, 11, 2, [[4, 4], [4, 5]], 2, 4, 8, 4, 40),
+        // A 3x3 body against a wall it must climb over the end of.
+        run('huge-around-wall', 17, 15, 3, [[8, 4], [8, 5], [8, 6], [8, 7], [8, 8], [8, 9], [8, 10]], 2, 6, 13, 6, 60),
+        // Regression guard: a lone foe still rounds the same rock it always did.
+        run('single-around-rock', 13, 11, 1, [[4, 4], [4, 5]], 2, 4, 8, 4, 40),
+        // Hero sealed off entirely: the body must still press as close as it fits
+        // and hold there — standing still from the first beat was the whole bug.
+        run('unreachable-hero', 17, 15, 2,
+            [[8, 1], [8, 2], [8, 3], [8, 4], [8, 5], [8, 6], [8, 7], [8, 8], [8, 9], [8, 10], [8, 11], [8, 12], [8, 13]],
+            2, 7, 12, 7, 40),
+      ] };
     };
     // __DECOR_PLUG_CHECK__ (preview only): a SOLID multi-tile piece (bed/table/
     // sofa) must sit wholly inside a room, never bridging a doorway or corridor —
