@@ -23,10 +23,14 @@ test suite + smoke green.
 - 🧪 `test/data/uniques.test.js` and `test/data/itemSets.test.js` import `SLOT_BASES`
   instead of each hand-copying it, so a new base without its unique fails there
   rather than sliding past a stale fixture.
-- 🏗️ New `tools/gun-sprite.mjs` — hand-authors the `w_gun` atlas tile (a 48×48
-  indexed pixel grid, doubled into the 96px cell) and writes it into the packed
-  sprite atlas at cell 99, the one free slot. Idempotent: every other cell
-  round-trips byte-identically through the canvas encoder.
+- 🏗️ New `tools/gun-sprite.mjs` — draws the `w_gun` atlas tile (a flintlock rifle)
+  and writes it into the packed sprite atlas at cell 99, the one free slot. The art
+  is authored in a frame rotated 45° so it matches the angle every other long
+  weapon is packed at (muzzle upper-left, butt lower-right, corner to corner), with
+  a 6px barrel to match the spear shaft's line weight and per-part gradient shading
+  plus hash-based grain so its colour spread sits in the same range as the shipped
+  tiles (957 distinct colours, mean luma 50 — vs the spear's 895/58 and the axe's
+  1955/50). Idempotent: every other cell round-trips byte-identically.
 - 📄 The `gear`, `classes`, `weapons-reach` and attack-speed guide topics plus the
   wiki's "Bases & Class Lean" entry describe the Gun category and the even gate grid.
 

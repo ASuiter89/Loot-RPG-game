@@ -43,7 +43,7 @@ const BASE_SLOT = {
   Stiletto: 'weapon', Kris: 'weapon', Mace: 'weapon', Morningstar: 'weapon', Maul: 'weapon',
   Warhammer: 'weapon',
   Spear: 'weapon', Halberd: 'weapon', Pike: 'weapon', Staff: 'weapon', Wand: 'weapon',
-  Shortbow: 'weapon', Longbow: 'weapon', Flintlock: 'weapon', 'Hand Cannon': 'weapon',
+  Shortbow: 'weapon', Longbow: 'weapon', Carbine: 'weapon', Longrifle: 'weapon',
   Scythe: 'weapon', 'War Scythe': 'weapon',
   Buckler: 'offhand', 'Kite Shield': 'offhand', 'Tower Shield': 'offhand', 'Spiked Shield': 'offhand',
   Tome: 'offhand', Focus: 'offhand', Quiver: 'offhand', Bandolier: 'offhand', 'Parrying Dagger': 'offhand',
@@ -144,10 +144,10 @@ const DEFS = [
     flavor: 'one long sweep fells an entire rank, and every man who falls only feeds the advance' },
 
   // ── GUNS ──
-  { id: 'longOdds', base: 'Flintlock', name: 'Long Odds', cls: 'fortune', native: 'CRITDMG',
+  { id: 'longOdds', base: 'Carbine', name: 'Long Odds', cls: 'fortune', native: 'CRITDMG',
     mods: [s('CRIT'), s('MAGICFIND'), s('GOLDFIND'), s('PEN'), s('ACC'), a('luck')], powers: ['fortunate', 'prospector', 'duelist'],
     flavor: 'one ball, one chance, and it has yet to come up short for anyone brave enough to ask' },
-  { id: 'thunderclap', base: 'Hand Cannon', name: 'Thunderclap', cls: 'fortune', native: 'EXEC',
+  { id: 'thunderclap', base: 'Longrifle', name: 'Thunderclap', cls: 'fortune', native: 'EXEC',
     mods: [s('BOSSDMG'), s('IDMG'), s('STUNPWR'), s('ACC'), s('CRITDMG'), a('luck')], powers: ['giantsbane', 'concussive', 'brutish'],
     flavor: 'the report arrives well after the hole does, and the room needs a moment to believe either' },
 
