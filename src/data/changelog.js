@@ -7,6 +7,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-03", size: "small", v: "Blessings run 5 floors; potion upgrades 25% cheaper", by: "Jeff Louie", notes: ["Every Healer Blessing lasts 5 floors (was 3); Rested still 3.", "Potion Potency & Recharge ranks start at 9k gold (was 12k), whole curve down 25%."] },
   { date: "2026-08-03", size: "small", v: "Merchant founds the town; Healer follows", by: "Jeff Louie", notes: ["Merchant is a founding keeper on boss #1 with the Craftsman (was Healer); Healer joins on boss #3."] },
   { date: "2026-08-03", size: "small", v: "Bosses walk around cover instead of wedging behind it", by: "Jeff Louie", notes: ["Guardians pathfind their whole body around rocks, furniture and wall corners; a lone rock used to pin one in place for free hits.", "Unreachable hero — foes close as near as they fit and hold, not freeze.", "Wide foe sights you from any tile of its bulk, so a wedged one still shoots back."] },
   { date: "2026-08-03", size: "small", v: "Phone screen no longer scrolls away", by: "Jeff Louie", notes: ["Page is pinned to the screen; dragging can't slide HUD bands off or park map over blank space.", "Menus, bag and shop lists scroll as before; pinch-zoom off — use UI SIZE in Settings."] },

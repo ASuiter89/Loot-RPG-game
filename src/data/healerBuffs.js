@@ -9,9 +9,13 @@
 //   dmgPct · maxHpPct · regen · critPct · goldPct · dropPct · xpPct
 // (values are fractions except `regen`, which is a flat per-beat trickle.)
 
-// How many floors a healer buff lasts before it fades. Deliberately short so a
-// buff is a burst you spend gold to renew, not permanent power creep.
+// How many floors the free Rested bonus lasts before it fades. Deliberately short
+// so it's a burst you renew with the next rest, not permanent power creep.
 export const HEALER_BUFF_FLOORS = 3;
+
+// Blessings are bought outright at a steep, level-scaled price, so they run longer
+// than the rest-granted bonus — long enough that a purchase carries a run.
+export const BLESSING_FLOORS = 5;
 
 // The Rested bonus, granted free with every paid Full Rest. A well-rested hero is
 // sharper — bonus XP for the next few floors. `kind:'rested'` gives it its own slot
@@ -29,8 +33,8 @@ export const RESTED_BUFF = {
 // which — with the short duration and one-at-a-time limit — is what makes them worth
 // the premium. `kind:'blessing'` marks them mutually exclusive.
 export const HEALER_BLESSINGS = [
-  { id: 'bless_might',   kind: 'blessing', name: 'Blessing of Might',   icon: 'w_sword',   base: 600, fx: { dmgPct: 0.30 },                 floors: HEALER_BUFF_FLOORS, desc: '+30% damage dealt' },
-  { id: 'bless_vigor',   kind: 'blessing', name: 'Blessing of Vigor',   icon: 'a_shield',  base: 600, fx: { maxHpPct: 0.25, regen: 6 },     floors: HEALER_BUFF_FLOORS, desc: '+25% max HP & steady regen' },
-  { id: 'bless_focus',   kind: 'blessing', name: 'Blessing of Focus',   icon: 'ic_target', base: 600, fx: { critPct: 0.20 },                floors: HEALER_BUFF_FLOORS, desc: '+20% crit chance' },
-  { id: 'bless_fortune', kind: 'blessing', name: 'Blessing of Fortune', icon: 'ic_money',  base: 800, fx: { goldPct: 0.50, dropPct: 0.35 }, floors: HEALER_BUFF_FLOORS, desc: '+50% gold & richer loot' },
+  { id: 'bless_might',   kind: 'blessing', name: 'Blessing of Might',   icon: 'w_sword',   base: 600, fx: { dmgPct: 0.30 },                 floors: BLESSING_FLOORS, desc: '+30% damage dealt' },
+  { id: 'bless_vigor',   kind: 'blessing', name: 'Blessing of Vigor',   icon: 'a_shield',  base: 600, fx: { maxHpPct: 0.25, regen: 6 },     floors: BLESSING_FLOORS, desc: '+25% max HP & steady regen' },
+  { id: 'bless_focus',   kind: 'blessing', name: 'Blessing of Focus',   icon: 'ic_target', base: 600, fx: { critPct: 0.20 },                floors: BLESSING_FLOORS, desc: '+20% crit chance' },
+  { id: 'bless_fortune', kind: 'blessing', name: 'Blessing of Fortune', icon: 'ic_money',  base: 800, fx: { goldPct: 0.50, dropPct: 0.35 }, floors: BLESSING_FLOORS, desc: '+50% gold & richer loot' },
 ];
