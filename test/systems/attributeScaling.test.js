@@ -4,7 +4,7 @@ import {
   classDmgPerPoint, attrDamageFor, skillAttrPower, skillAttrCoef, basicAttrDamage,
   shieldMax, spiritVeilMult, shieldPerSpiritPoint,
   shieldRechargePerSec, shieldRechargeDelay, healAmount,
-  ATTR_DMG_PER_POINT,
+  ATTR_DMG_PER_POINT, ATTR_DMG_PER_POINT_BASIC,
 } from '../../src/systems/attributeScaling.js';
 import {
   ATTR_STAT_CHANNELS, CLASS_SCALE_LADDER, SHIELD, CLASS_DMG_ATTR, CLASS_DMG_ATTR2,
@@ -62,9 +62,11 @@ describe('channelCoef', () => {
     expect(channelCoef('hp', 'warrior')).toBeCloseTo(11, 10);
   });
 
-  it('pins the top basicDmg class (Warrior) to ATTR_DMG_PER_POINT so it is unchanged', () => {
-    // Warrior mained Might for damage already; keep it behaviour-identical.
-    expect(channelCoef('basicDmg', 'warrior')).toBeCloseTo(ATTR_DMG_PER_POINT, 10);
+  it('pins the top basicDmg class (Warrior) to the AUTO lane\'s own per-point rate', () => {
+    // The basic-attack lane has its own dial, deliberately above the skill lane's:
+    // an auto-attack spends no cooldown but gets no Skill Power either.
+    expect(channelCoef('basicDmg', 'warrior')).toBeCloseTo(ATTR_DMG_PER_POINT_BASIC, 10);
+    expect(ATTR_DMG_PER_POINT_BASIC).toBeGreaterThan(ATTR_DMG_PER_POINT);
   });
 
   it('falls back to the base coefficient for a classless/unknown hero', () => {
@@ -113,14 +115,14 @@ describe('basicAttrDamage', () => {
     expect(basicAttrDamage(might, 'rogue')).toBeGreaterThan(basicAttrDamage(might, 'templar'));
     expect(basicAttrDamage(might, 'templar')).toBeGreaterThan(basicAttrDamage(might, 'mage'));
   });
-  it('matches the old flat per-point (2.6) for a Warrior — behaviour-identical', () => {
-    expect(basicAttrDamage(30, 'warrior')).toBeCloseTo(30 * ATTR_DMG_PER_POINT, 6);
+  it('pays the top class the full basic-lane per-point rate', () => {
+    expect(basicAttrDamage(30, 'warrior')).toBeCloseTo(30 * ATTR_DMG_PER_POINT_BASIC, 6);
   });
   it('never goes negative', () => {
     expect(basicAttrDamage(-5, 'warrior')).toBe(0);
   });
   it('falls back to the base coefficient for a classless hero', () => {
-    expect(basicAttrDamage(10, undefined)).toBeCloseTo(10 * (ATTR_DMG_PER_POINT / CLASS_SCALE_LADDER[0]), 6);
+    expect(basicAttrDamage(10, undefined)).toBeCloseTo(10 * (ATTR_DMG_PER_POINT_BASIC / CLASS_SCALE_LADDER[0]), 6);
   });
 });
 
@@ -281,7 +283,7 @@ describe('seven-class scaling ladder', () => {
     expect(channelCoef('hp', 'warrior')).toBeCloseTo(11 * 1.00, 10);
     expect(channelCoef('hp', 'rogue')).toBeCloseTo(11 * 0.78, 10);
     expect(channelCoef('hp', 'mage')).toBeCloseTo(11 * 0.55, 10);
-    expect(channelCoef('basicDmg', 'warrior')).toBeCloseTo(ATTR_DMG_PER_POINT, 10);
+    expect(channelCoef('basicDmg', 'warrior')).toBeCloseTo(ATTR_DMG_PER_POINT_BASIC, 10);
   });
 
   it('gives every class a Spirit Veil multiplier', () => {
