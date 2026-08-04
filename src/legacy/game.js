@@ -106,6 +106,7 @@ import { cookableCount, cookBatchOptions } from '../systems/cooking.js';
 import { RESTED_BUFF, HEALER_BLESSINGS, BLESSING_FLOORS } from '../data/healerBuffs.js';
 import { POTION_POWER_MAX, POTION_CD_MAX, POTION_PCT_PER_LVL, POTION_CD_PER_LVL, POTION_CD_MIN, POTION_UPGRADE_BASE_COST, POTION_UPGRADE_COST_GROWTH } from '../data/potionMastery.js';
 import { blessingCost, blessingById, healerBuffFx, upsertHealerBuff, tickHealerBuffs, sanitizeHealerBuffs } from '../systems/healerBuffs.js';
+import { GOLD_DROP_MIN, GOLD_DROP_MAX, GOLD_DROP_PER_DEPTH } from '../data/goldDrops.js';
 import { trimFillStyle } from '../utils/iconTrim.js';
 import { cursorHotspotPx } from '../systems/cursorMath.js';
 import { equipReqStatus, equipReqShort } from '../systems/equipReq.js';
@@ -7834,6 +7835,13 @@ window.gameState = function gameState(radius) {
         healReady: potionReady('hp'), manaReady: potionReady('mp'),
         healFull: effectivePotionCd('hp'), manaFull: effectivePotionCd('mp'),
       },
+      // What one sip gives back, after that flask's own Potency ranks (bought per
+      // flask at the Healer): the share of the pool and the flat amount it pays.
+      potionSip: {
+        healPct: Math.round(potionHealPct() * 100), manaPct: Math.round(potionManaPct() * 100),
+        heal: healPotionAmount(), mana: manaPotionAmount(),
+        healPotency: potionPowerLvl('hp'), manaPotency: potionPowerLvl('mp'),
+      },
       inCombat: (player._combatSecs || 0) > 0,
       stamina: Math.round(player.stamina || 0), maxStamina: Math.round(player.maxStamina || 0), // Stamina for sprint/dash
       // Spirit Veil: the persistent Spirit shield (blue over-HP buffer) that soaks damage
@@ -8249,11 +8257,11 @@ window.gameGuide = function gameGuide(topic) {
       `RECOVERY IS OVER TIME, not instant. Most healing no longer snaps HP up — it fills a PENDING pool that pays into HP at a capped rate (~12%/s of max HP per source), so the bar climbs on a visible slope. gameState().player.pendingHeal is the HP still owed; the HP/MP bars show it as a translucent zone ahead of the solid fill.`,
       `OVER-TIME sources STACK (a potion sip pays out on top of any pending leech): the Health Potion, all life leech / lifesteal (paid from your physical attacks and weapon skills — spells don't leech, and a HYBRID strike leeches only from its physical half, not its magic half), Scythe Reap, Vampiric, Life-on-Kill, and incidental on-kill / on-cast "sliver" heals.`,
       `INSTANT sources land immediately, as before: deliberate active HEAL skills you cast (e.g. Divine Storm, Final Judgment, Blood Drinker) and EMERGENCY low-HP triggers (a passive that heals when you drop below 25% HP). A skill's detail card tags which kind it grants (heal — instant / leech — over time). A cast heal's SIZE now scales off SPIRIT and Spell Power (class-scaled: Mage > Templar > Rogue > Warrior) with no flat cap — so a high-Spirit healer mends far more per cast (still capped only by the HP you're actually missing).`,
-      `The Health Potion mends 35% of max HP over a few seconds (Potency raises the amount; its own ${POTION_CD}s cooldown, down to ${POTION_CD - POTION_CD_PER_LVL * POTION_CD_MAX}s via the Healer's Health Recharge — ${POTION_CD_MAX} ranks, −${POTION_CD_PER_LVL}s each). It is INTERRUPTIBLE: one DIRECT hit above 18% of max HP spills half the remaining sip ("SIP SPILLED"). Damage-over-time (lava/poison/burn) never interrupts it, and earned leech is never interrupted — only the potion sip is fragile.`,
+      `The Health Potion mends 35% of max HP over a few seconds (the Healer's HEALTH POTENCY raises that share — ${POTION_POWER_MAX} ranks, +${Math.round(POTION_PCT_PER_LVL * 100)} points each, and it lifts the health flask ONLY; its own ${POTION_CD}s cooldown, down to ${POTION_CD - POTION_CD_PER_LVL * POTION_CD_MAX}s via the Healer's Health Recharge — ${POTION_CD_MAX} ranks, −${POTION_CD_PER_LVL}s each). It is INTERRUPTIBLE: one DIRECT hit above 18% of max HP spills half the remaining sip ("SIP SPILLED"). Damage-over-time (lava/poison/burn) never interrupts it, and earned leech is never interrupted — only the potion sip is fragile.`,
       `Because you can no longer burst back to full, don't wait until you're low: sip EARLY, keep moving, and let the pending pool refill the slope while you avoid the next hit.`,
       `DANGER CUE: drop below a quarter of your max HP and the screen edges pulse red (the danger halo) while a heartbeat thumps — and quickens the closer you are to dying. It's your prompt to disengage and sip. The red glow also colour-cycles with any active poison/burn/stun. The heartbeat rides the SFX channel (mute or the Audio-tab faders silence it) and pauses when a menu holds the game.`,
       `MANA is a RATIONED resource now: a smaller pool (less MP per Spirit, lower base), higher skill costs, and slower regen — and MP regen is HALVED while you're "in combat" (a few seconds after dealing or taking damage — gameState().player.inCombat), so sustained casting genuinely drains you.`,
-      `The Mana Potion restores 40% of max MP OVER TIME (gameState().player.pendingMana shows MP still incoming) and recharges on its OWN ${POTION_CD}s cooldown (down to ${POTION_CD - POTION_CD_PER_LVL * POTION_CD_MAX}s via the Healer's Mana Recharge), independent of the health flask — so a heal never locks out a mana sip. Mana Shield converts damage to MP more efficiently the more you invest in it. Carry mana potions if you lean on spells.`,
+      `The Mana Potion restores 40% of max MP OVER TIME (gameState().player.pendingMana shows MP still incoming; the Healer's MANA POTENCY raises that share — ${POTION_POWER_MAX} ranks, +${Math.round(POTION_PCT_PER_LVL * 100)} points each, health flask untouched) and recharges on its OWN ${POTION_CD}s cooldown (down to ${POTION_CD - POTION_CD_PER_LVL * POTION_CD_MAX}s via the Healer's Mana Recharge), independent of the health flask — so a heal never locks out a mana sip. Mana Shield converts damage to MP more efficiently the more you invest in it. Carry mana potions if you lean on spells.`,
       `Beyond Spirit, gear itemizes mana sustain directly: MANA REGEN (MRG) is a flat +MP/sec trickle that stacks on Spirit's and rolls from floor 1 on the sustain slots (helm, chest, legs, amulet, off-hand) — subject to the same in-combat halving, so it eases the grind between casts without breaking the ration. Max MP (MP), Mana Cost Reduction (MCR), Mana Leech (MLC) and Mana on Kill (MoK) round out the mana toolkit.`,
     ],
     veil: [
@@ -8390,7 +8398,7 @@ window.gameGuide = function gameGuide(topic) {
       + `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the regular service keepers milling about the green at FRESH random spots every visit (most of them slowly strolling around — except the Craftsman, pinned just off the avenue beside the Town Portal so you always find it) and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all. A keeper only appears once it has ARRIVED (one joins per boss kill) — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
       `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff, healerBuffs and pact.`,
       `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same per-flask cooldowns — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
-      `Merchant (buy gear / pay to restock — ware rarity SCALES with how deep you've pushed and never grey junk: shallow stalls stock white→green, deeper ones lean blue→purple→orange→red. The same early-game gate as dungeon drops applies, so no colour you haven't earned yet — greens wait for the floor-5 boss, blues+ for floor-10. TIGHTER STILL, wares are capped at the highest rarity you've actually FOUND — no blue on the stall before your first blue, no purple before your first purple, and so on up the ladder (player.rarityFound holds that high-water rank). Each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is a FOUNDING keeper — it arrives with the Merchant the moment the town opens (boss floor 5), so its HUD upgrades are on hand from your first visit — and stands PINNED just off the avenue beside the Town Portal (a step up-left of it) — it never wanders and sits BESIDE the path, not on it, so a hero returning by portal finds it right where they land without it ever blocking the walkway. Its HUD UPGRADES bench (the Craftsman's landing tab, ahead of the GEAR forge) builds them in three groups: HUD READOUTS that each switch on a heads-up-display piece (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana/stamina numbers, status-effect icons), BAG & LOOT TOOLS (Assayer's Glass = item level, Coin Scale = item gold value, Salvage Gauge = salvage-material preview, Appraiser's Loupe = item Power ratings, Gauging Calipers = +/- stat compare vs equipped, Quartermaster's Ledger = bag sort & filter, Sorting Sieve = auto-loot rules), and CHARACTER & SKILL SHEET readouts (Adept's Slate = the derived-stats breakdown under your gear, Sage's Codex = each skill's milestone surge bonuses). A fresh hero starts BARE — no HUD numbers/minimap/counters/labels/status icons; a bag auto-grouped by gear category (rarest first) but showing no item level, gold value, salvage yield, Power ratings, stat compare, re-sort/filter or auto-loot; and no derived-stats panel or skill surge bonuses — and buys these as gold + materials allow. Even bare, the Merchant's sell tab still shows each item's sell price and salvage yield, and Sell-all / Scrap-all totals always show, so a hero can always transact. Each is a one-time build with a mixed price: Scrap on the cheap readouts, Glimmer from the mid tier up, and a Core on the two premium tools (the minimap and auto-loot), so the priciest pieces wait until you've dived deep enough to drop those materials. Each is kept for that hero, and a freshly-fitted HUD piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + each upgrade's mixed {gold,scrap,glimmer,core} cost; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for ${RESTED_BUFF.floors} floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each lasting ${BLESSING_FLOORS} floors, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
+      `Merchant (buy gear / pay to restock — ware rarity SCALES with how deep you've pushed and never grey junk: shallow stalls stock white→green, deeper ones lean blue→purple→orange→red. The same early-game gate as dungeon drops applies, so no colour you haven't earned yet — greens wait for the floor-5 boss, blues+ for floor-10. TIGHTER STILL, wares are capped at the highest rarity you've actually FOUND — no blue on the stall before your first blue, no purple before your first purple, and so on up the ladder (player.rarityFound holds that high-water rank). Each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is a FOUNDING keeper — it arrives with the Merchant the moment the town opens (boss floor 5), so its HUD upgrades are on hand from your first visit — and stands PINNED just off the avenue beside the Town Portal (a step up-left of it) — it never wanders and sits BESIDE the path, not on it, so a hero returning by portal finds it right where they land without it ever blocking the walkway. Its HUD UPGRADES bench (the Craftsman's landing tab, ahead of the GEAR forge) builds them in three groups: HUD READOUTS that each switch on a heads-up-display piece (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana/stamina numbers, status-effect icons), BAG & LOOT TOOLS (Assayer's Glass = item level, Coin Scale = item gold value, Salvage Gauge = salvage-material preview, Appraiser's Loupe = item Power ratings, Gauging Calipers = +/- stat compare vs equipped, Quartermaster's Ledger = bag sort & filter, Sorting Sieve = auto-loot rules), and CHARACTER & SKILL SHEET readouts (Adept's Slate = the derived-stats breakdown under your gear, Sage's Codex = each skill's milestone surge bonuses). A fresh hero starts BARE — no HUD numbers/minimap/counters/labels/status icons; a bag auto-grouped by gear category (rarest first) but showing no item level, gold value, salvage yield, Power ratings, stat compare, re-sort/filter or auto-loot; and no derived-stats panel or skill surge bonuses — and buys these as gold + materials allow. Even bare, the Merchant's sell tab still shows each item's sell price and salvage yield, and Sell-all / Scrap-all totals always show, so a hero can always transact. Each is a one-time build with a mixed price: Scrap on the cheap readouts, Glimmer from the mid tier up, and a Core on the two premium tools (the minimap and auto-loot), so the priciest pieces wait until you've dived deep enough to drop those materials. Each is kept for that hero, and a freshly-fitted HUD piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + each upgrade's mixed {gold,scrap,glimmer,core} cost; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for ${RESTED_BUFF.floors} floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each lasting ${BLESSING_FLOORS} floors, only ONE active at a time (buying another replaces it), priced off the FLOOR you're on rather than your hero level — the fee tracks the average gold a kill drops at that depth (and is half what it used to be), so a Blessing stays affordable however deep you push; call buyBlessing(id). The Healer's POTION MASTERY bench sells the four permanent flask upgrades — Health/Mana Potency (bigger sip) and Health/Mana Recharge (shorter timer), ${POTION_POWER_MAX} ranks each, priced per track; call upgradePotion('pwrhp'|'cdhp'|'pwrmp'|'cdmp'). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1, 5 or 10 floors (more damage/loot/gold, or an easier stretch). Each mystic offers just TWO pacts, rolled at random from twelve, so the choice changes every time you find one; a longer pact costs MORE per floor (the price climbs exponentially with floors sealed). gameState().npcs lists the two pacts a nearby mystic offers. Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (arrives with your 11th boss kill): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
@@ -16437,9 +16445,9 @@ function restHeal() {
 // The premium Blessings the Healer sells: costly, impactful buffs that last a few
 // floors, one active at a time. Rendered as shop-rows below the Full Rest service.
 function renderHealerBuffs() {
-  const lvl = player.level || 1;
+  const depth = curDepth();
   const rows = HEALER_BLESSINGS.map(b => {
-    const cost = blessingCost(b.base, lvl);
+    const cost = blessingCost(b.base, depth);
     const active = (player.healerBuffs || []).find(x => x && x.id === b.id);
     const afford = spendableGold() >= cost;
     const sub = active
@@ -16455,13 +16463,13 @@ function renderHealerBuffs() {
       ${btn}</div>`;
   }).join('');
   return `<div class="cook-sec"><span data-spr=feat_shrine></span> Blessings</div>
-    <div class="town-blurb" style="opacity:0.8">Costly boons that empower you for a few floors — only one Blessing runs at a time, and buying another replaces it.</div>
+    <div class="town-blurb" style="opacity:0.8">Boons that empower you for a few floors — only one Blessing runs at a time, and buying another replaces it. Priced against what floor ${depth} pays, so they stay within reach as you dive.</div>
     ${rows}`;
 }
 function buyBlessing(id) {
   const def = blessingById(id);
   if (!def) return;
-  const cost = blessingCost(def.base, player.level || 1);
+  const cost = blessingCost(def.base, curDepth());
   if (spendableGold() < cost) { log(`Need <span data-spr=ic_money></span>${fmtGold(cost)} for the ${def.name}.`); return; }
   spendGold(cost);
   player.healerBuffs = upsertHealerBuff(player.healerBuffs, def);
@@ -16475,23 +16483,25 @@ function buyBlessing(id) {
 }
 
 
-// ── POTION MASTERY ── permanent, gold-bought upgrades to the dungeon potions:
-// Potency raises the % of max HP/MP each sip restores (both flasks at once);
-// the two Recharge tracks each shorten ONE flask's own cooldown. Levels persist
-// on the character (potionPowerLvl / potionCdHpLvl / potionCdMpLvl, all
-// defaulting to 0 on older saves).
+// ── POTION MASTERY ── permanent, gold-bought upgrades to the dungeon potions,
+// two tracks per flask: Potency raises the % of that flask's pool each sip
+// restores, Recharge shortens that flask's own cooldown. Levels persist on the
+// character (potionPowerHpLvl / potionPowerMpLvl / potionCdHpLvl / potionCdMpLvl,
+// all defaulting to 0 on older saves).
 // Tuning (caps, per-rank gains, cost curve) lives in src/data/potionMastery.js.
-// The three upgrade tracks are keyed by `kind`: 'power' · 'cdhp' · 'cdmp'.
+// The four upgrade tracks are keyed by `kind`: 'pwrhp' · 'cdhp' · 'pwrmp' · 'cdmp'.
 const POTION_TRACKS = {
-  power: { name: 'Potion Potency',   field: 'potionPowerLvl', max: POTION_POWER_MAX },
-  cdhp:  { name: 'Health Recharge',  field: 'potionCdHpLvl',  max: POTION_CD_MAX },
-  cdmp:  { name: 'Mana Recharge',    field: 'potionCdMpLvl',  max: POTION_CD_MAX },
+  pwrhp: { name: 'Health Potency',   field: 'potionPowerHpLvl', max: POTION_POWER_MAX },
+  cdhp:  { name: 'Health Recharge',  field: 'potionCdHpLvl',    max: POTION_CD_MAX },
+  pwrmp: { name: 'Mana Potency',     field: 'potionPowerMpLvl', max: POTION_POWER_MAX },
+  cdmp:  { name: 'Mana Recharge',    field: 'potionCdMpLvl',    max: POTION_CD_MAX },
 };
-function potionPowerLvl() { return player.potionPowerLvl || 0; }
+// Rank of one flask's Potency track — 'mp' for the mana flask, health otherwise.
+function potionPowerLvl(flask) { return (flask === 'mp' ? player.potionPowerMpLvl : player.potionPowerHpLvl) || 0; }
 // Rank of one flask's Recharge track — 'mp' for the mana flask, health otherwise.
 function potionCdLvl(flask) { return (flask === 'mp' ? player.potionCdMpLvl : player.potionCdHpLvl) || 0; }
-function potionHealPct() { return HEAL_PERCENT + POTION_PCT_PER_LVL * potionPowerLvl(); }
-function potionManaPct() { return MANA_PERCENT + POTION_PCT_PER_LVL * potionPowerLvl(); }
+function potionHealPct() { return HEAL_PERCENT + POTION_PCT_PER_LVL * potionPowerLvl('hp'); }
+function potionManaPct() { return MANA_PERCENT + POTION_PCT_PER_LVL * potionPowerLvl('mp'); }
 // Seconds that flask takes to come back, after its own Recharge ranks. Rounded to
 // a tenth — the raw figure is printed straight into the shop row and the flask
 // tooltip, where binary drift would read as "4.799999999999999s".
@@ -16518,18 +16528,25 @@ function potionUpgradeRow(kind, icon, sub, subMax) {
     </div>`;
 }
 function potionUpgradeHTML() {
-  const pctNow = Math.round(potionHealPct() * 100), pctNext = Math.round((potionHealPct() + POTION_PCT_PER_LVL) * 100);
   const next = (flask) => Math.round(Math.max(POTION_CD_MIN, effectivePotionCd(flask) - POTION_CD_PER_LVL) * 10) / 10;
+  // Each flask owns BOTH its tracks, so the rows pair up per flask: how much a sip
+  // gives back, then how soon that flask comes back.
+  const pwrRow = (kind, flask, icon, pool) => {
+    const pct = flask === 'mp' ? potionManaPct() : potionHealPct();
+    const now = Math.round(pct * 100), then = Math.round((pct + POTION_PCT_PER_LVL) * 100);
+    return potionUpgradeRow(kind, icon,
+      `Restores ${now}% → <b style="color:var(--gold)">${then}%</b> of max ${pool} per sip.`,
+      `Each sip restores ${now}% of max ${pool}.`);
+  };
   const cdRow = (kind, flask, icon, label) => potionUpgradeRow(kind, icon,
     `${label} recharges ${effectivePotionCd(flask)}s → <b style="color:var(--gold)">${next(flask)}s</b> between sips.`,
     `${label} recharges in ${effectivePotionCd(flask)}s.`);
   return `
     <div class="cook-sec"><span data-spr=potion_g></span> Potion Mastery</div>
-    <div class="town-blurb" style="opacity:0.8">Permanently empower the Health &amp; Mana potions you quaff in the dungeon. Each flask recharges on its own timer.</div>
-    ${potionUpgradeRow('power', 'ic_heart',
-      `Restores ${pctNow}% → <b style="color:var(--gold)">${pctNext}%</b> of max HP/MP per sip.`,
-      `Each sip restores ${pctNow}% of max HP/MP.`)}
+    <div class="town-blurb" style="opacity:0.8">Permanently empower the Health &amp; Mana potions you quaff in the dungeon. Each flask carries its own potency and recharge timer.</div>
+    ${pwrRow('pwrhp', 'hp', 'ic_heart', 'HP')}
     ${cdRow('cdhp', 'hp', 'potion_r', 'Health flask')}
+    ${pwrRow('pwrmp', 'mp', 'ic_orb', 'MP')}
     ${cdRow('cdmp', 'mp', 'potion_g', 'Mana flask')}`;
 }
 function upgradePotion(kind) {
@@ -24739,7 +24756,7 @@ function onEnemyDefeated(e) {
   const goldMult = e.isBoss ? 3 : (e.isElite ? 2 : 1);
   const xp = grantXp(12 * dungeonLevel * xpMult * farm * pfx('xp', 1) * (1 + (totalStat('XPGAIN') + skillBonus('xpGain')) / 100 + foodFx('xpPct') + healerFx('xpPct') + shrineFx('xpPct'))); // + Insight shrine, × the season's XP rule
   // Greed gate (cursed floor) and the Greedy item power both fatten the purse.
-  const gold = Math.round((rnd(2, 8) + dungeonLevel * 3) * goldMult * farm * (floorMod.goldMult || 1) * greedGoldMult() * (1 + 0.4 * itemPowerCount('greedy')) * pfx('gold', 1) * (1 + (totalStat('GOLDFIND') + skillBonus('goldFind')) / 100 + foodFx('goldPct') + healerFx('goldPct') + shrineFx('goldPct'))); // + Greed shrine
+  const gold = Math.round((rnd(GOLD_DROP_MIN, GOLD_DROP_MAX) + dungeonLevel * GOLD_DROP_PER_DEPTH) * goldMult * farm * (floorMod.goldMult || 1) * greedGoldMult() * (1 + 0.4 * itemPowerCount('greedy')) * pfx('gold', 1) * (1 + (totalStat('GOLDFIND') + skillBonus('goldFind')) / 100 + foodFx('goldPct') + healerFx('goldPct') + shrineFx('goldPct'))); // + Greed shrine
   player.gold += gold;
   // Lifetime counters that bounty contracts snapshot & track against.
   if (e.isBoss) player.bossKills = (player.bossKills || 0) + 1;
@@ -32972,6 +32989,14 @@ function loadGame() {
       if (typeof player.potionCdHpLvl !== 'number') player.potionCdHpLvl = owed;
       if (typeof player.potionCdMpLvl !== 'number') player.potionCdMpLvl = owed;
       delete player.potionCdLvl;
+    }
+    // Potency split the same way — one track lifted BOTH flasks, now each flask has
+    // its own. Same deal: an older hero keeps every rank they bought on both flasks.
+    if (typeof player.potionPowerLvl === 'number') {
+      const owed = Math.max(0, Math.min(POTION_POWER_MAX, Math.floor(player.potionPowerLvl)));
+      if (typeof player.potionPowerHpLvl !== 'number') player.potionPowerHpLvl = owed;
+      if (typeof player.potionPowerMpLvl !== 'number') player.potionPowerMpLvl = owed;
+      delete player.potionPowerLvl;
     }
     // Real-time movement adds stamina (sprint/dash) and momentum/cooldown fields.
     // Seed them on older saves — and repair a NaN stamina a prior buggy build may

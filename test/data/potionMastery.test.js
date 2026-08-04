@@ -10,7 +10,7 @@ import {
 const cost = (lvl) => Math.round(POTION_UPGRADE_BASE_COST * Math.pow(POTION_UPGRADE_COST_GROWTH, lvl));
 
 describe('potion mastery tuning', () => {
-  it('caps both tracks at a small, whole number of ranks', () => {
+  it('caps every track at a small, whole number of ranks', () => {
     for (const max of [POTION_POWER_MAX, POTION_CD_MAX]) {
       expect(Number.isInteger(max)).toBe(true);
       expect(max).toBeGreaterThan(0);
@@ -37,9 +37,13 @@ describe('potion mastery tuning', () => {
     expect(POTION_CD_MIN).toBeGreaterThan(0);
   });
 
-  it('maxed Potency lands under a full-restore sip', () => {
+  it('maxed Potency lands under a full-restore sip on EITHER flask', () => {
     expect(POTION_PCT_PER_LVL).toBeGreaterThan(0);
-    expect(0.35 + POTION_PCT_PER_LVL * POTION_POWER_MAX).toBeLessThan(1); // 35% base heal
+    // HEAL_PERCENT / MANA_PERCENT in the game shell — each flask now has its own
+    // Potency track, so both bases have to clear the cap on their own.
+    for (const base of [0.35, 0.40]) {
+      expect(base + POTION_PCT_PER_LVL * POTION_POWER_MAX).toBeLessThan(1);
+    }
   });
 
   it('prices the first rank at the discounted base and climbs steeply', () => {

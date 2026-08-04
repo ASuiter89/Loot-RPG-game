@@ -3,18 +3,30 @@
 // the add/replace + per-floor expiry rules. Kept free of DOM / RNG / clock so it's
 // unit-tested; the game shell wires live state + logging around it.
 import { HEALER_BLESSINGS } from '../data/healerBuffs.js';
+import { GOLD_DROP_FLAT, GOLD_DROP_PER_DEPTH } from '../data/goldDrops.js';
 
-// Blessings price like the rest fee: a modest base that climbs with hero level,
-// capped so it stays a heavy — but never absurd — gold sink at depth.
-export const BLESSING_COST_GROWTH = 1.20;
-export const BLESSING_COST_CAP = 75000;
+// Blessings price off the DUNGEON, not the hero. The old curve compounded with
+// hero level and outran a purse that only grows linearly with depth, so a
+// Blessing priced itself out of reach exactly when it mattered. Now the sticker
+// price tracks the average gold a kill drops at the floor you're on: the ratio of
+// price to income holds flat forever, so a Blessing is as affordable on floor 90
+// as on floor 9 — and it carries an explicit half-off cut on top.
+export const BLESSING_DISCOUNT = 0.5;
 
-// Gold price of a Blessing at a given hero level: base × growth^(level-1), floored
-// to an integer and clamped to the cap. Non-finite / negative inputs floor to 0.
-export function blessingCost(base, level) {
-  const lvl = Math.max(1, Math.floor(level || 1));
+// Average gold one kill drops at `depth`, before the hero's own multipliers —
+// the mean of the shell's roll (GOLD_DROP_MIN..MAX + depth × per-depth).
+export function avgGoldDrop(depth) {
+  const d = Math.max(1, Math.floor(depth) || 1);
+  return GOLD_DROP_FLAT + GOLD_DROP_PER_DEPTH * d;
+}
+
+// Gold price of a Blessing at a given dungeon depth: `base` is what it costs on
+// floor 1, scaled by how much richer a drop is down here and halved. Floored to
+// an integer; non-finite / negative inputs floor to 0.
+export function blessingCost(base, depth) {
   const b = Math.max(0, base || 0);
-  return Math.min(BLESSING_COST_CAP, Math.round(b * Math.pow(BLESSING_COST_GROWTH, lvl - 1)));
+  if (!(b > 0)) return 0;
+  return Math.round(b * BLESSING_DISCOUNT * (avgGoldDrop(depth) / avgGoldDrop(1)));
 }
 
 // Look up a Blessing definition by id (from the given catalog, defaulting to the
