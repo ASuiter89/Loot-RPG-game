@@ -5533,7 +5533,7 @@
      map. Portrait only (landscape shows the rotate notice). */
   body.touch {
     --hdr-h: 104px;   /* header band content height (minimap + vitals) */
-    --ftr-h: 150px;   /* footer band content height (2×2 tiles + RUN/AUTO pill row, with clearance so the pills never clip onto the map) */
+    --ftr-h: 150px;   /* footer band content height (2×2 tiles + row gap + padding; the AUTO pill sits between the rows, so nothing overhangs onto the map) */
     --mm-w: 88px;     /* minimap box (fits inside the header band) */
     /* Bag/settings tile diameter — fluid so it's a big 58px target on a normal
        phone yet shrinks on a ~280px foldable cover screen (where a fixed 58px would
@@ -5628,13 +5628,15 @@
      here by syncHudLayout(). Scrolls horizontally if the tiles overflow a very
      narrow screen. No USE/DASH buttons — tap the map to use, double-tap-drag the
      joystick to dash. */
-  /* ── Footer band ── solid bar across the bottom; the extra top padding gives the
-     RUN / AUTO pills room ON the band, so they never poke up onto the map. */
+  /* ── Footer band ── solid bar across the bottom. The top padding is just breathing
+     room above the tiles: with no label pill over the top row, nothing overhangs the
+     band any more (the AUTO pill sits between the two tile rows), so the tiles grow
+     into the height the old RUN pill held. */
   body.touch #touch-cluster {
     position: fixed; pointer-events: auto; left: 0; right: 0; bottom: 0;
     height: calc(env(safe-area-inset-bottom, 0px) + var(--ftr-h));
     display: flex; align-items: flex-end; justify-content: space-between;
-    padding: 20px calc(env(safe-area-inset-right, 0px) + 10px) calc(env(safe-area-inset-bottom, 0px) + 10px) calc(env(safe-area-inset-left, 0px) + 10px);
+    padding: 8px calc(env(safe-area-inset-right, 0px) + 10px) calc(env(safe-area-inset-bottom, 0px) + 10px) calc(env(safe-area-inset-left, 0px) + 10px);
     background: linear-gradient(0deg, var(--panel-raised), var(--panel));
     border-top: 2px solid var(--frame);
     box-shadow: 0 -2px 8px color-mix(in srgb, var(--ink) 55%, transparent);
@@ -5708,7 +5710,7 @@
   }
   @media (prefers-reduced-motion: reduce) { .tb-newloot { animation: none; } }
 
-  /* RUN sprint toggle (rendered as a skill tile leading the left group): lights
+  /* Sprint toggle (rendered as a skill tile leading the left group): lights
      gold when auto-sprint is latched. */
   body.touch #touch-cluster .skillbar-btn.sprint-btn {
     border: 1px solid var(--border); color: var(--purple-200); background: var(--panel-raised);
@@ -5721,23 +5723,31 @@
   }
 
   /* The re-homed live #skill-bar spans the bar as three groups: a left 2×2
-     (RUN · town over HP · MP), the centred AUTO slot, and a right 2×2 of skills
+     (sprint · town over HP · MP), the centred AUTO slot, and a right 2×2 of skills
      1–4. Same buttons / onclick / cooldowns as desktop, just re-laid. */
   body.touch #touch-cluster #skill-bar {
     flex: 1 1 auto; min-width: 0; width: 100%;
     display: flex; align-items: end; justify-content: space-between; flex-wrap: nowrap;
     gap: 8px; padding: 0; background: none; border: none; box-shadow: none;
-    --sb-size: clamp(42px, 11.5vw, 50px);
+    /* Tile size, fluid on BOTH axes. Width is the binding limit — five tiles across
+       plus their gaps and the band's side padding must fit the screen, so the vw term
+       keeps them inside a ~280px cover screen; the 60px cap is all the two rows can
+       take within --ftr-h (8px top pad + 2 rows + 6px row gap + 10px bottom pad). */
+    --sb-size: clamp(44px, 16vw, 60px);
   }
+  /* The belt's growable module fills (bounty · meals · loadout) can never reveal here —
+     their container queries key on .dh-belt, which the touch cluster isn't — so drop
+     them rather than leave two zero-width flex items each eating a gap. */
+  body.touch #touch-cluster #skill-bar .sb-fill { display: none; }
   body.touch #touch-cluster #skill-bar .sb-left,
   body.touch #touch-cluster #skill-bar .sb-right {
     flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, var(--sb-size));
     gap: 6px; align-items: end; justify-items: center;
   }
-  /* Left cluster: pin RUN over the HP/MP potions so heal + mana ALWAYS share the
+  /* Left cluster: pin sprint over the HP/MP potions so heal + mana ALWAYS share the
      bottom row — explicit placement, so the layout holds whether or not the optional
      Town Portal cell (row 1, col 2) is present. Without this, an absent Town cell let
-     auto-flow push mana onto its own row under RUN. */
+     auto-flow push mana onto its own row under sprint. */
   body.touch #touch-cluster #skill-bar .sb-left { grid-template-rows: auto auto; }
   body.touch #touch-cluster #skill-bar .sb-left .sb-cell-sprint { grid-column: 1; grid-row: 1; }
   body.touch #touch-cluster #skill-bar .sb-left .sb-cell-town   { grid-column: 2; grid-row: 1; }
@@ -5750,12 +5760,13 @@
   body.touch #touch-cluster .sb-cell {
     position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
   }
-  /* Keep only the RUN and AUTO labels (as pills, like desktop's AUTO); drop the
-     keyboard hotkey pills. Shown pills float just above their tile so every button
-     still bottom-aligns in its grid row. */
+  /* Keep only the AUTO label (as a pill, like desktop's); drop the keyboard hotkey
+     pills and the sprint tile's label — the sprint glyph reads on its own, and with
+     no pill over the top row the tiles claim that height instead. The AUTO pill
+     floats just above its tile, which bottom-aligns in row 2, so it lands BETWEEN
+     the rows and never needs clearance at the top of the band. */
   body.touch #touch-cluster #skill-bar .sb-pill { display: none; }
-  body.touch #touch-cluster #skill-bar .sb-pill.auto,
-  body.touch #touch-cluster #skill-bar .sb-pill.sprint {
+  body.touch #touch-cluster #skill-bar .sb-pill.auto {
     /* Sit the pill fully ABOVE its tile (bottom edge a hair over the tile top),
        not overlapping into it — a fixed negative `top` let the tile, which paints
        later in DOM order, clip the pill's bottom rim (the AUTO pill tucking under
