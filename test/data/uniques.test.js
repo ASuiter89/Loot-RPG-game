@@ -1,23 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { UNIQUES, uniqueById, uniqueForBase, uniquesForSlot, allUniqueBases } from '../../src/data/uniques.js';
+import { SLOT_BASES } from '../../src/data/gearBases.js';
 
-// ── The canonical gear taxonomy (mirrors SLOTS in src/legacy/game.js) ──
-// Every base below must have EXACTLY ONE hand-crafted unique — the unique version
-// of that exact gear type. This table is the source of truth the test gates on, so
-// adding a new base to the game (and forgetting its unique) fails here.
-const SLOT_BASES = {
-  weapon: ['Shortsword', 'Arming Sword', 'Rapier', 'Greatsword', 'Claymore',
-    'Hatchet', 'War Axe', 'Greataxe', 'Battleaxe', 'Dagger', 'Stiletto', 'Kris',
-    'Mace', 'Morningstar', 'Maul', 'Spear', 'Halberd', 'Pike', 'Staff', 'Wand',
-    'Shortbow', 'Longbow', 'Scythe', 'War Scythe'],
-  offhand: ['Buckler', 'Kite Shield', 'Tower Shield', 'Tome', 'Focus', 'Quiver', 'Parrying Dagger'],
-  head: ['Helm', 'Cap', 'Crown', 'Hood', 'Circlet'],
-  chest: ['Chestplate', 'Robe', 'Cuirass', 'Tunic', 'Mail'],
-  hands: ['Gauntlets', 'Gloves', 'Bracers', 'Grips'],
-  legs: ['Greaves', 'Leggings', 'Tassets', 'Trousers'],
-  ring: ['Ring', 'Band', 'Signet', 'Loop'],
-  amulet: ['Amulet', 'Pendant', 'Necklace', 'Talisman', 'Charm'],
-};
+// ── The canonical gear taxonomy ──
+// SLOT_BASES is the shipped table the game itself rolls from, so a base added
+// there without its hand-crafted unique fails here rather than drifting past a
+// hand-copied fixture. Every base must have EXACTLY ONE unique — the one-of-a-kind
+// version of that exact gear type.
 const BASE_SLOT = {};
 for (const [slot, bases] of Object.entries(SLOT_BASES)) for (const b of bases) BASE_SLOT[b] = slot;
 const ALL_BASES = Object.keys(BASE_SLOT);
@@ -51,16 +40,16 @@ function mandatoryHeadline(slot, base) {
   if (slot === 'weapon') return ['DMG'];
   if (slot === 'head' || slot === 'chest' || slot === 'hands' || slot === 'legs') return ['DEF'];
   if (slot === 'offhand') {
-    if (['Buckler', 'Kite Shield', 'Tower Shield'].includes(base)) return ['DEF', 'BLOCK'];
+    if (['Buckler', 'Kite Shield', 'Tower Shield', 'Spiked Shield'].includes(base)) return ['DEF', 'BLOCK'];
     if (['Tome', 'Focus'].includes(base)) return ['SPELLPWR'];
-    if (base === 'Quiver') return ['ATK'];
+    if (['Quiver', 'Bandolier'].includes(base)) return ['ATK'];
     if (base === 'Parrying Dagger') return ['ATK', 'BLOCK'];
   }
   return []; // ring / amulet — the native IS the headline
 }
 
 describe('UNIQUES data — shape & coverage', () => {
-  it('is a non-empty array with one unique per gear type (58 total)', () => {
+  it('is a non-empty array with one unique per gear type', () => {
     expect(Array.isArray(UNIQUES)).toBe(true);
     expect(UNIQUES.length).toBe(ALL_BASES.length);
     const bases = allUniqueBases().slice().sort();
@@ -183,7 +172,7 @@ describe('UNIQUES data — each unique feels distinct', () => {
     const counts = {};
     for (const u of UNIQUES) for (const p of u.powers) counts[p] = (counts[p] || 0) + 1;
     const max = Math.max(...Object.values(counts));
-    // 58 uniques × 2–3 powers ≈ 150 power-slots over 42 powers; a well-spread set
+    // ~69 uniques × 2–3 powers ≈ 180 power-slots over 42 powers; a well-spread set
     // leans on no single power for more than ~1/6 of them.
     expect(max, `a power is reused too often: ${JSON.stringify(counts)}`).toBeLessThanOrEqual(10);
   });

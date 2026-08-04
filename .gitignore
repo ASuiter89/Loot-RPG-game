@@ -27,3 +27,8 @@ tools/skill-icons/.work/
 # HERO_WALK in src/legacy/game.js, and art/hero-walk/build-sheets.py rebuilds
 # these from the GIF masters on demand.
 art/hero-walk/sheet_*.png
+
+# Atlas-cell renders from tools/gun-sprite.mjs — a preview of the tile it packs
+# into the sprite atlas in src/legacy/game.js. Not committed (the tile ships
+# inside that atlas).
+.atlas-cells/

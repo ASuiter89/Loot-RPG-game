@@ -8,6 +8,28 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — the Gun weapon line, and an even equip-gate grid
+
+- 📦 New `src/data/gearBases.js` — the canonical `SLOT_BASES` roster plus the three
+  equip-gate tables (`WEAPON_REQ` / `OFFHAND_REQ` / `ARMOR_REQ`), lifted out of the
+  monolith so a base can never exist without a gate (or a gate without a base). The
+  shell's `SLOTS[*].names` and `itemAttrReq` now read them; `BASE_SLOT` and
+  `gateFor(slot, base)` are derived there too.
+- 🧪 `test/data/gearBases.test.js` (new) enforces the two coverage rules the audit
+  produced: **every slot offers a base gated on all five attributes**, and **every
+  class has a weapon gated on each attribute its skills scale off**. It parses
+  `CLASSES` / `WEAPON_SUBTYPES` out of the monolith as text (the
+  `test/data/classRoster.test.js` pattern), so the rules track the shipped tables.
+- 🧪 `test/data/uniques.test.js` and `test/data/itemSets.test.js` import `SLOT_BASES`
+  instead of each hand-copying it, so a new base without its unique fails there
+  rather than sliding past a stale fixture.
+- 🏗️ New `tools/gun-sprite.mjs` — hand-authors the `w_gun` atlas tile (a 48×48
+  indexed pixel grid, doubled into the 96px cell) and writes it into the packed
+  sprite atlas at cell 99, the one free slot. Idempotent: every other cell
+  round-trips byte-identically through the canvas encoder.
+- 📄 The `gear`, `classes`, `weapons-reach` and attack-speed guide topics plus the
+  wiki's "Bases & Class Lean" entry describe the Gun category and the even gate grid.
+
 ## Balance — per-flask Potency, depth-priced Blessings
 
 - 📦 New `src/data/goldDrops.js` — the kill-payout roll's constants (`GOLD_DROP_MIN`/

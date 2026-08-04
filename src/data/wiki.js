@@ -542,6 +542,7 @@ export const WIKI = [
         body: [
           { p: 'Within a slot, the <b>base</b> (Helm vs Hood, Chestplate vs Robe) sets its defence and a protected signature stat that never rerolls. Heavier bases bank a defensive stat; lighter bases grant evasion, crit, mana, cooldown or find. Same slot, different roles — no base is strictly best.' },
           { p: 'Loot <b>leans to your class</b>: drops, the merchant and the gambler favour build-relevant bases. Each armour base also gates on the attribute that fits its identity, and that requirement climbs steeply with item level — so deep gear demands a real stake in its attribute, rewarding a committed build.' },
+          { p: 'Every slot offers a base for <b>each of the five attributes</b>, so whatever you main, there is a piece in every slot your own attribute unlocks. Weapons work the same way — heavy melee wants Might, braced two-handers and shields Vitality, finesse blades and bows Agility, staves and runeblades Spirit, and guns Luck — and every class can reach a weapon gated on the attribute its own skills scale off.' },
         ],
       },
       {
