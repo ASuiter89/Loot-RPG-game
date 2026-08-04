@@ -18,9 +18,16 @@ describe('potion mastery tuning', () => {
     }
   });
 
-  it('every Recharge rank stays above the cooldown floor', () => {
+  it('five Recharge ranks take a flask from 6s to exactly the 5s floor', () => {
+    const BASE_CD = 6; // POTION_CD in the game shell
+    expect(POTION_CD_PER_LVL).toBe(0.2);
+    expect(POTION_CD_MAX).toBe(5);
+    expect(BASE_CD - POTION_CD_PER_LVL * POTION_CD_MAX).toBeCloseTo(POTION_CD_MIN);
+    expect(POTION_CD_MIN).toBe(5);
+  });
+
+  it('never lets a flask recharge instantly', () => {
     expect(POTION_CD_MIN).toBeGreaterThan(0);
-    expect(POTION_CD_PER_LVL * POTION_CD_MAX).toBeLessThan(6); // 6s base cooldown
   });
 
   it('maxed Potency lands under a full-restore sip', () => {
