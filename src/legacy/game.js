@@ -41,6 +41,7 @@ import { savedOnShore, hasStarterGift } from '../systems/tutorialResume.js';
 import { deathRoute } from '../systems/shoreDeath.js';
 import { shouldTeachFirstSpell, activeGateKind } from '../systems/tutorialGates.js';
 import { pointPoolPhrase, hasUnspentPoints } from '../systems/pointPools.js';
+import { refreshSkillCooldowns } from '../systems/levelUpRefresh.js';
 import { upStairPlaced } from '../systems/upStair.js';
 import { restockCost } from '../systems/restockCost.js';
 import { unseenLootCount } from '../systems/lootSeen.js';
@@ -8239,7 +8240,7 @@ window.gameGuide = function gameGuide(topic) {
       `Because it soaks before HP and comes back free between fights, +Spirit Veil gear is the shield's source and +Spirit is valued for the boost it adds ON TOP — but only once you actually carry some Veil (see the "power" topic).`,
     ],
     skills: [
-      `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready and grey out while recharging or when you can't afford the MP. Trying to cast one without enough mana faintly pulses the mana bar (and logs why).`,
+      `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready and grey out while recharging or when you can't afford the MP. Trying to cast one without enough mana faintly pulses the mana bar (and logs why). A LEVEL-UP wipes every skill cooldown along with refilling HP/MP/Stamina, so dinging mid-fight hands the whole kit straight back (a revive does the same).`,
       `Every price you SEE is the price you PAY: the bar, the tooltips, the tree nodes and gameState().skills all quote the cost AFTER Mana Cost Reduction, and quote it in HP for a hero who pays in blood (a Bloodletter, or Blood Pact) rather than a mana number they have no pool for. Affordability is the same one predicate, so a skill can never grey out as unaffordable while the cast would in fact fire.`,
       `The bar has ${SKILL_SLOTS} MANUAL slots (cast by hand with ${key('skill1')}-${key('skill' + SKILL_SLOTS)}) plus ONE dedicated auto-cast slot. You choose what goes where — drag a learned active onto a slot, or use the SKILLS-tab slot buttons; a freshly-learned active auto-fills the first open manual slot.`,
       `gameState().skills lists each filled manual slot's number key, MP cost (already reduced by your Mana Cost Reduction), cooldown remaining, ready flag, and what the skill DOES — its shape, range/radius and the damages/heals/buffs/summons flags — so you can pick one without inspecting it. The auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
@@ -8345,7 +8346,7 @@ window.gameGuide = function gameGuide(topic) {
     progression: [
       `Seven classes, each with an identity attribute that powers its SKILLS: Warrior (Might, tanky melee), Rogue (Agility, crit & dodge), Mage (Spirit, spells & big MP), Templar (Vitality, durable hybrid), Fortune-Seeker (LUCK, ranged — the only class that turns Luck into skill damage), Windblade (Agility+Spirit HYBRID, blade-caster) and Bloodletter (Might+Vitality HYBRID, and the only class with NO MANA AT ALL — every skill costs a share of max HP instead; see gameGuide('healing')). A HYBRID sums BOTH its attributes at a lower per-point rate, so a point in either is worth the same. Basic (auto) attacks scale off MIGHT for everyone. Class gates which weapons you can equip.`,
       `Five attributes (gameState().player.attributes), with re-homed roles: Might (+basic attack damage for ALL classes, +Accuracy, +Defense; also the Warrior's skills), Vitality (+max HP, +HP regen, +Stamina; the Templar's skills), Agility (+evasion, +move/attack speed; the Rogue's skills), Spirit (+max MP, +MP regen, +spell power, +healing, +Spirit Veil shield; the Mage's spells), Luck (+crit, +loot quality). How much each point gives is CLASS-SCALED — e.g. Vitality gives the Templar the most HP, Spirit gives the Mage the most spell power, Might gives the Warrior the most basic-attack damage. Pump Might for weapon damage and your class's identity attribute for its skills; every attribute also pays a defensive/utility role.`,
-      `Each level grants 5 HERO points (attributes) and 1 skill point (gameState().menu.pointsToSpend), and FULLY restores the hero — HP, MP and Stamina all top off to max — a clean second wind. The level-up banner names exactly what the level paid, so the reward is legible without opening a tab. Spend hero points on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
+      `Each level grants 5 HERO points (attributes) and 1 skill point (gameState().menu.pointsToSpend), and FULLY restores the hero — HP, MP and Stamina all top off to max AND every skill cooldown is wiped (gameState().skills all come back cooldown 0 / ready) — a clean second wind. The level-up banner names exactly what the level paid, so the reward is legible without opening a tab. Spend hero points on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
       `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives. From level 20 you also earn a SEPARATE ascendancy point every 5 levels (20, 25, 30…; gameState().menu.pointsToSpend.ascendancy), spent only on the ascendancy path tree. Normal skill points can't buy path skills and ascendancy points can't buy passive/active skills. Path skills carry NO level requirement — they're gated only by the earlier skills in the path tree.`,
       `Respec attributes/skills or change class at the Trainer for gold that scales with your level (points refund). Switching to your class's other ascension afterwards costs a lot of gold (also scales with level and depth; path points refund) — the first ascension stays free, but re-ascending is a deliberate, costly choice, as is retraining class. After a respec, check that worn gear still meets its attribute requirement (under-req pieces turn red and are ignored; the GEAR tab wears a pulsing red dot and the paper doll gives the offending slot a pulsing red border — tap it to read the shortfall and Unequip). gameState().player.gearIgnored lists any such slots.`,
       `BOSS POINTS are a separate progression track that rewards new depth: every boss floor you clear for the FIRST time grants ONE point (farming a floor you've already cleared grants none — it's the same first-clear ledger as the boss loot jackpot). Spend them at the ASCENDANT WEAVE, a town service that opens once you've cleared your first boss floor: a constellation board of stat nodes, attribute-threshold keystones and socketed Glyphs where every point is a real, opportunity-cost choice — see gameGuide('weave'). gameState().menu.bossPointsEarned reports the total earned all-time; gameState().endgame.weave reports points available, lit nodes and active keystones.`,
@@ -28063,6 +28064,11 @@ function checkLevelUp() {
     player.mp = player.maxMp;
     player.stamina = player.maxStamina || MAX_STAMINA;
     player._stamDelay = 0;      // and a ready Stamina bar — no lingering exertion delay
+    // …and the whole kit comes back with the bars: every skill cooldown wipes, so a
+    // mid-fight level hands over full mana AND something to spend it on
+    // (systems/levelUpRefresh.js).
+    const cdRefresh = refreshSkillCooldowns(player.skillCds);
+    player.skillCds = cdRefresh.cooldowns;
     // A level that also banks an ascendancy point gets its own ethereal sting so the
     // milestone stands out from an ordinary level-up fanfare.
     if (ascGained) sfx('ascpoint'); else sfx('levelup');
@@ -28075,8 +28081,11 @@ function checkLevelUp() {
     showLevelUpBanner(player.level, gained);
     log(`<span data-spr=ui_level></span> LEVEL UP! Now level ${player.level}!`, 'important');
     log(`<span data-spr=mat_glimmer></span> +${pointPoolPhrase(gained, '·')} — spend them on the HERO and SKILLS tabs${ascGained ? ' and the PATH tree' : ''}.`, 'important');
+    // Only worth a line when the refresh actually cut something short.
+    if (cdRefresh.cleared) log(`<span data-spr=ic_orb></span> ${cdRefresh.cleared} skill${cdRefresh.cleared === 1 ? '' : 's'} off cooldown — cast again.`, 'important');
     updateBars();
     renderPanel();
+    renderSkillBar();   // dials read ready immediately, not on the next frame's sweep
     saveGame();
     // Recurse in case multiple levels were gained from one big XP haul.
     checkLevelUp();
