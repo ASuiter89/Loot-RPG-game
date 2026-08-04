@@ -43,6 +43,7 @@ import { shouldTeachFirstSpell, activeGateKind } from '../systems/tutorialGates.
 import { pointPoolPhrase, hasUnspentPoints } from '../systems/pointPools.js';
 import { refreshSkillCooldowns } from '../systems/levelUpRefresh.js';
 import { upStairPlaced } from '../systems/upStair.js';
+import { isBossDepth, descentSignal } from '../systems/descentSignal.js';
 import { restockCost } from '../systems/restockCost.js';
 import { unseenLootCount } from '../systems/lootSeen.js';
 import { hasVaultKey, addVaultKey, spendVaultKey } from '../systems/vaultKeys.js';
@@ -7791,13 +7792,14 @@ window.gameState = function gameState(radius) {
     floor: dungeonLevel,                                                   // continuous depth (1, 2, 3, …)
     floorDisplay: (typeof displayFloor === 'function') ? displayFloor() : dungeonLevel, // 1–25 within a tier
     tier: (typeof diffOf === 'function' && typeof DIFFS !== 'undefined') ? ((DIFFS[diffOf(dungeonLevel) - 1] || {}).name || null) : null,
-    isBossFloor: dungeonLevel % 5 === 0,                                   // a guardian holds this floor
+    isBossFloor: isBossLevel(dungeonLevel),                                // a guardian holds this floor
     island: (typeof floorIslandTheme !== 'undefined') && !!floorIslandTheme, // landmass ringed by impassable sea (~ tiles frame the map)
     modifier: (typeof floorMod !== 'undefined' && floorMod && floorMod.name) ? floorMod.name : null, // active floor theme, e.g. "Spike Gauntlet" (null = a plain floor)
     floorCleared: (typeof floorCleared !== 'undefined') ? !!floorCleared : null,
     hostilesLeft: (typeof hostilesRemaining === 'function') ? hostilesRemaining() : live.length, // foes still sealing the stairs
     // Explicit exit coordinates + whether the down-stairs are still sealed.
     stairs: { down: stairsDown, up: stairsUp, locked: (typeof floorCleared !== 'undefined') ? !floorCleared : null,
+      bossBelow: isBossLevel(dungeonLevel + 1),  // descending drops you onto a guardian floor (its ring pulses red, not gold)
       express: (typeof deepStair !== 'undefined') ? deepStair : null }, // a vault's two-floor express stair, if opened
 
     player: {
@@ -8315,7 +8317,7 @@ window.gameGuide = function gameGuide(topic) {
       `TRAP-THEMED FLOORS: some floors (gameState().modifier "Spike Gauntlet" / "Arrow Gallery" / "The Vent Works") dedicate the whole floor to ONE trap kind, packed in far denser than usual — expect a field of spikes, a hall lined with arrow emitters, or clusters of fire vents. Loot runs a little richer to reward threading them; a walkable route through the spikes is always guaranteed.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `BOSS TELEGRAPHS (gameState().hazards.telegraphs) are a guardian's wind-up attacks — a floor indicator that fills, flashes, then detonates. Each carries its shape (disc = filled circle; ring = donut, lethal in the band between innerR and r but SAFE in the centre hole and beyond r; lane = beam between (x1,y1)-(x2,y2); cone = wedge of radius r opening ±halfAngle around facing), its centre (x,y)/geometry, seconds until it lands (secsToHit), and danger:true when it hurts. They are ALWAYS dodgeable by MOVING out of the zone before secsToHit hits 0 (for a ring, step past r or into the hole) — never an RNG dodge. Red = damage; cyan = a benign spawn marker. A tracking disc follows you early in its wind-up, then locks — keep moving and it lands where you were.`,
-      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, and the exit is north. EACH guardian has its OWN arena — the cover and hazards vary by boss (columns to break line-of-sight on volleys and beams, lava pools, breakable cracked walls, spike beds), so read the ASCII map (# wall, ^ lava, " spikes, % cracked wall) and use the cover: duck behind a pillar to break a telegraphed shot, smash through a cracked wall for a new lane. The arena is a 31-tile-wide circle (map 35x35), and a big open centre plaza, a wide north-south lane and a five-tile perimeter lap lane are always kept, so there's room to kite and the guardian always has room to close. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
+      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, and the exit is north. EACH guardian has its OWN arena — the cover and hazards vary by boss (columns to break line-of-sight on volleys and beams, lava pools, breakable cracked walls, spike beds), so read the ASCII map (# wall, ^ lava, " spikes, % cracked wall) and use the cover: duck behind a pillar to break a telegraphed shot, smash through a cracked wall for a new lane. The arena is a 31-tile-wide circle (map 35x35), and a big open centre plaza, a wide north-south lane and a five-tile perimeter lap lane are always kept, so there's room to kite and the guardian always has room to close. The stair that leads down to one rings RED instead of gold on the floor above (gameState().stairs.bossBelow), so the threshold is readable before you step on it. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
       `ISLAND FLOORS (gameState().island true) come up now and then on outdoor floors: the landmass is ringed by open SEA, so the whole map edge is deep water (~) instead of a rock wall. You can see and shoot across it but never walk off — the shore IS the boundary. Nothing reachable is lost; the sea only replaces the impassable frame, so play it like any other floor.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. Most are multi-floor boons that fold into your stats while active (see gameState().effects): power (+50% dmg), guard (−40% dmg taken), fortune (loot), greed (+60% gold), insight (+50% xp), discovery (+50 Magic Find), harvest (+60% materials), precision (+18% crit), phantom (+15% dodge), sorcery (+30% skill/spell power), leech (+15% lifesteal), thorns (reflect), renewal (HP regen), clarity (MP regen), bulwark (+Defense), swift (+18% move), haste (+25% attack speed), vigor (tireless sprint/dash + full Stamina). wisdom instantly restores 50% max HP and refills MP; but BLOOD costs 30% of current HP for XP — check the kind before stepping on one.`,
@@ -8332,7 +8334,7 @@ window.gameGuide = function gameGuide(topic) {
       `TYPED DEFENCE (gameState().enemies[i].armor / magicResist, whole %): every foe shrugs off a slice of your damage, and how big depends on the SCHOOL of the hit. Physical armor blunts auto-attacks + martial SKILLS (your Armor Pen % pierces it); magic resistance blunts SPELLS (your Magic Pen % pierces it). Foes differ by nature — a stone/metal/armored/scaled foe carries high armor but low magic resist (cast at it); a ghost, wisp, elemental, ooze or caster resists magic but not steel (strike it); most beasts sit in between. Hit each foe with the school it is SOFT to; a HYBRID ability splits its blow across both, so it is never fully walled. The bestiary card shows both values once you've slain enough of a species.`,
       `ENEMY AFFIXES (gameState().enemies[i].affix): roughly a fifth of ordinary (non-elite) foes carry ONE modifier, shown by a coloured aura and a name prefix — tough (+HP), fierce (+damage), venomous (poison-on-hit), accurate (cuts through your dodge), evasive (your hits often whiff — bring Accuracy), chill (snares you on hit). Read the affix, not just the sprite.`,
       `Ranged foes fire DODGEABLE bolts, not guaranteed hits — a bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
-      `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly.`,
+      `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly. Once unsealed the stair ring pulses gold — or RED when the floor below is a guardian's (.stairs.bossBelow), the point-of-no-return warning.`,
       `Treasure Goblins (isGoblin) flee, never attack, and do NOT block the exit — chase fast for jackpot loot (they vanish ~15 ticks after first hit) or ignore them.`,
       `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. TENACITY: guardians (tenacious true — elites too, lighter) shorten every stun/freeze that lands AND diminish repeats — a 2nd hard CC in the window lasts half, a 3rd a sliver, and further ones are shrugged off (enemies[i].stunImmune flips true) until you leave it hard-CC-free for a few seconds. So a boss can be locked for a beat but NEVER stunlocked — spend your stun on the opening that matters (a telegraph wind-up, an escape), not on chaining. FIRST-KILL JACKPOT: the first time you CLEAR a given boss floor (enemies[i].firstKill true until then), its guardian spills ~3x the loot at noticeably better quality — a one-time windfall per boss floor. Because boss species RECUR across floors in Endless, this tracks by FLOOR: each new or deeper boss floor you conquer pays its own windfall, while farming a floor you've already cleared drops at the normal boss rate (minus farm fatigue on a quick re-kill). So descending to a fresh boss floor is always the richer prize. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
       `Summoned allies (gameState().allies) act before foes and soak hits, but expire after ttl turns and have capped damage — resummon and don't expect them to solo a boss.`,
@@ -19575,14 +19577,18 @@ function draw() {
           ctx.save(); ctx.globalAlpha = 0.28; ctx.fillStyle = '#cc3322'; ctx.fillRect(px, py, tw, th); ctx.restore();
           if (spriteReady) drawSpriteC('feat_lock', px + tw/2, py + th*0.5, Math.round(tw*0.5));
         } else {
-          // Cleared → highlight the way deeper with a pulsing gold ring so the
-          // descent stair is unmistakable next to the (plain) up-stairs.
+          // Cleared → highlight the way deeper with a pulsing ring so the descent
+          // stair is unmistakable next to the (plain) up-stairs. GOLD for an
+          // ordinary floor below; DANGER-RED when the stair drops into a
+          // guardian's floor (descentSignal), so the point of no return reads from
+          // across the room and not only in the threshold prompt.
+          const ring = descentSignal(dungeonLevel) === 'boss' ? PALETTE.danger : PALETTE.gold;
           const pulse = 0.5 + 0.5 * Math.sin(animNow() / 320);
           const lw = Math.max(2, tw * 0.09), o = lw / 2 + 1;
           ctx.save();
           ctx.lineWidth = lw;
-          ctx.strokeStyle = `rgba(255,207,90,${0.5 + 0.45 * pulse})`;
-          ctx.shadowColor = 'rgba(255,200,80,0.9)';
+          ctx.strokeStyle = hexA(ring, 0.5 + 0.45 * pulse);
+          ctx.shadowColor = hexA(ring, 0.9);
           ctx.shadowBlur = tw * (0.18 + 0.22 * pulse);
           ctx.strokeRect(px + o, py + o, tw - o * 2, th - o * 2);
           ctx.restore();
@@ -23938,7 +23944,7 @@ function onEnterCell(nx, ny) {
 // threshold. The prompt pauses the world (it's a MODAL); "I'm Ready" runs the
 // stored transition, "Not Ready" cancels it and leaves you where you stand.
 let pendingBossEntry = null;   // a thunk that performs the confirmed transition
-function isBossLevel(dl) { return dl > 0 && dl % 5 === 0; }
+function isBossLevel(dl) { return isBossDepth(dl); }   // cadence lives in systems/descentSignal
 function bossFloorCleared(dl) { return !!(player.clearedFloors && player.clearedFloors[dl]); }
 // True when moving to depth `dl` would drop you into an unbeaten boss arena.
 function bossGateNeeded(dl) { return !tutorialActive && isBossLevel(dl) && !bossFloorCleared(dl); }
