@@ -9,11 +9,11 @@
 export const POTION_POWER_MAX = 5;
 export const POTION_CD_MAX = 5;
 
-// Per-rank gains: +5 percentage points of max HP/MP per sip, and −0.2s off that
-// flask's recharge. Five Recharge ranks take a flask from 6s to the 5s floor.
+// Per-rank gains: +5 percentage points of max HP/MP per sip, and −0.4s off that
+// flask's recharge. Five Recharge ranks take a flask from 6s to the 4s floor.
 export const POTION_PCT_PER_LVL = 0.05;
-export const POTION_CD_PER_LVL = 0.2;
-export const POTION_CD_MIN = 5;
+export const POTION_CD_PER_LVL = 0.4;
+export const POTION_CD_MIN = 4;
 
 // Cost curve: base × growth^(ranks already bought). Steep on purpose — a true
 // late-game gold sink that competes with Blessings and forge upgrades. Each of

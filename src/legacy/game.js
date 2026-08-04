@@ -16476,8 +16476,13 @@ function potionPowerLvl() { return player.potionPowerLvl || 0; }
 function potionCdLvl(flask) { return (flask === 'mp' ? player.potionCdMpLvl : player.potionCdHpLvl) || 0; }
 function potionHealPct() { return HEAL_PERCENT + POTION_PCT_PER_LVL * potionPowerLvl(); }
 function potionManaPct() { return MANA_PERCENT + POTION_PCT_PER_LVL * potionPowerLvl(); }
-// Seconds that flask takes to come back, after its own Recharge ranks.
-function effectivePotionCd(flask) { return Math.max(POTION_CD_MIN, POTION_CD - POTION_CD_PER_LVL * potionCdLvl(flask)); }
+// Seconds that flask takes to come back, after its own Recharge ranks. Rounded to
+// a tenth — the raw figure is printed straight into the shop row and the flask
+// tooltip, where binary drift would read as "4.799999999999999s".
+function effectivePotionCd(flask) {
+  const cd = Math.max(POTION_CD_MIN, POTION_CD - POTION_CD_PER_LVL * potionCdLvl(flask));
+  return Math.round(cd * 10) / 10;
+}
 function potionTrackLvl(kind) { const t = POTION_TRACKS[kind]; return t ? (player[t.field] || 0) : 0; }
 function potionUpgradeCost(kind) {
   return Math.round(POTION_UPGRADE_BASE_COST * Math.pow(POTION_UPGRADE_COST_GROWTH, potionTrackLvl(kind)));
@@ -16498,7 +16503,7 @@ function potionUpgradeRow(kind, icon, sub, subMax) {
 }
 function potionUpgradeHTML() {
   const pctNow = Math.round(potionHealPct() * 100), pctNext = Math.round((potionHealPct() + POTION_PCT_PER_LVL) * 100);
-  const next = (flask) => Math.max(POTION_CD_MIN, effectivePotionCd(flask) - POTION_CD_PER_LVL);
+  const next = (flask) => Math.round(Math.max(POTION_CD_MIN, effectivePotionCd(flask) - POTION_CD_PER_LVL) * 10) / 10;
   const cdRow = (kind, flask, icon, label) => potionUpgradeRow(kind, icon,
     `${label} recharges ${effectivePotionCd(flask)}s → <b style="color:var(--gold)">${next(flask)}s</b> between sips.`,
     `${label} recharges in ${effectivePotionCd(flask)}s.`);

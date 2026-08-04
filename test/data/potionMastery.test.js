@@ -18,12 +18,19 @@ describe('potion mastery tuning', () => {
     }
   });
 
-  it('five Recharge ranks take a flask from 6s to exactly the 5s floor', () => {
+  it('five Recharge ranks take a flask from 6s to exactly the 4s floor', () => {
     const BASE_CD = 6; // POTION_CD in the game shell
-    expect(POTION_CD_PER_LVL).toBe(0.2);
+    expect(POTION_CD_PER_LVL).toBe(0.4);
     expect(POTION_CD_MAX).toBe(5);
     expect(BASE_CD - POTION_CD_PER_LVL * POTION_CD_MAX).toBeCloseTo(POTION_CD_MIN);
-    expect(POTION_CD_MIN).toBe(5);
+    expect(POTION_CD_MIN).toBe(4);
+  });
+
+  it('walks 6s down to the floor in even steps, no rank wasted on the clamp', () => {
+    const curve = Array.from({ length: POTION_CD_MAX + 1 },
+      (_, lvl) => Math.round(Math.max(POTION_CD_MIN, 6 - POTION_CD_PER_LVL * lvl) * 10) / 10);
+    expect(curve).toEqual([6, 5.6, 5.2, 4.8, 4.4, 4]);
+    expect(new Set(curve).size).toBe(curve.length); // every rank buys a real cut
   });
 
   it('never lets a flask recharge instantly', () => {
