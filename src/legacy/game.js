@@ -7214,7 +7214,7 @@ function resetTouchStick() {
 function toggleTouchSprint() {
   sprintLatched = !sprintLatched;
   if (typeof sfx === 'function') sfx('click');
-  if (typeof renderSkillBar === 'function') renderSkillBar();   // repaints the RUN tile's on/off state
+  if (typeof renderSkillBar === 'function') renderSkillBar();   // repaints the sprint tile's on/off state
 }
 function heldDir(d) { return keyHeld[d]; }
 function clearHeld() {
@@ -8187,7 +8187,7 @@ window.gameGuide = function gameGuide(topic) {
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A quick key-tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
       `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls but runs STRAIGHT THROUGH lava/spikes toward the cursor (it never detours around a trap; steer where you want to go, just like the keyboard), and holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. IN THE WALKABLE TOWN, clicking a keeper (or the Town Portal) walks the hero over and OPENS its menu on arrival, and clicking the Dungeon Gate walks straight into it — no separate interact press. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
-      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right — a quick TAP on a footer button fires it (cast the skill, quaff the potion); HOLD one for ~0.5s to read its tooltip instead of firing. The header holds the minimap, vitals, and the bag + settings buttons (upper-right). On touch the game runs fullscreen so it fills the whole screen with no browser chrome — any tap re-enters fullscreen whenever you've left it, and you exit with the phone's native back/swipe gesture. The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
+      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a sprint toggle (speed-lines icon, auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right — a quick TAP on a footer button fires it (cast the skill, quaff the potion); HOLD one for ~0.5s to read its tooltip instead of firing. The header holds the minimap, vitals, and the bag + settings buttons (upper-right). On touch the game runs fullscreen so it fills the whole screen with no browser chrome — any tap re-enters fullscreen whenever you've left it, and you exit with the phone's native back/swipe gesture. The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk / use: ${key('interact')} — open a chest you're standing on, talk to an adjacent NPC, and IN TOWN open a keeper's service when you're beside them (or the Dungeon Gate / Town Portal). A floating prompt shows who's in reach; gameState().menu.town.nearby reports it.`,
@@ -30399,7 +30399,7 @@ function renderSkillBar() {
   // is the hotkey (or "AUTO" for the auto-cast slot); `tone` tints the pill to match
   // the button family ('' for a plain skill slot). The icon now fills the box below.
   // The tone also tags the CELL (sb-cell-hp / -mp / -sprint / -town / -auto) so the
-  // touch footer can grid-place the left cluster — RUN over the HP/MP potions on one
+  // touch footer can grid-place the left cluster — sprint over the HP/MP potions on one
   // row — regardless of whether the optional Town Portal cell is present.
   const cell = (label, tone, btn) => `<div class="sb-cell${tone ? ' sb-cell-' + tone : ''}"><span class="sb-pill${tone ? ' ' + tone : ''}">${label}</span>${btn}</div>`;
   // The live countdown text ("4s" on a recharging potion, the portal timer) is
@@ -30513,11 +30513,13 @@ function renderSkillBar() {
       <span class="sb-icon">${dlIconFill('feat_gate_red')}</span><span class="sb-info sb-cd-text" data-cdt="portal"></span>
     </button>`);
   }
-  // On touch a RUN (sprint) toggle leads the left group, so the bottom bar reads
-  // as a 2×2 (RUN/Town over HP/MP) · AUTO · 2×2 (skills). It's a plain toggle, not
+  // On touch a sprint toggle leads the left group, so the bottom bar reads as a
+  // 2×2 (sprint/Town over HP/MP) · AUTO · 2×2 (skills). It's a plain toggle, not
   // a skill; it lights up while auto-sprint is latched. Absent on desktop.
+  // No label pill — the speed-lines glyph carries it (the aria-label names it for
+  // screen readers), and dropping the text hands the row back to the tiles.
   const sprintCell = isTouchMode()
-    ? cell('RUN', 'sprint', `<button class="skillbar-btn sprint-btn${sprintLatched ? ' on' : ''}" onclick="toggleTouchSprint()" aria-label="Toggle sprint">
+    ? cell('', 'sprint', `<button class="skillbar-btn sprint-btn${sprintLatched ? ' on' : ''}" onclick="toggleTouchSprint()" aria-label="Toggle sprint">
       <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg></span>
     </button>`)
     : '';
