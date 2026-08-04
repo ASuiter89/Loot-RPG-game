@@ -29,6 +29,7 @@ import { PORTAL_WARP, warpFrameAt, warpDone } from '../systems/portalTraversal.j
 import { portalChannelStep } from '../systems/portalChannel.js';
 import { footprintSealsPath, footprintInsideRoom, isThroughCorridor } from '../systems/decorPlacement.js';
 import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach.js';
+import { chaseStep } from '../systems/chasePath.js';
 import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
@@ -40,7 +41,9 @@ import { savedOnShore, hasStarterGift } from '../systems/tutorialResume.js';
 import { deathRoute } from '../systems/shoreDeath.js';
 import { shouldTeachFirstSpell, activeGateKind } from '../systems/tutorialGates.js';
 import { pointPoolPhrase, hasUnspentPoints } from '../systems/pointPools.js';
+import { refreshSkillCooldowns } from '../systems/levelUpRefresh.js';
 import { upStairPlaced } from '../systems/upStair.js';
+import { isBossDepth, descentSignal } from '../systems/descentSignal.js';
 import { restockCost } from '../systems/restockCost.js';
 import { unseenLootCount } from '../systems/lootSeen.js';
 import { hasVaultKey, addVaultKey, spendVaultKey } from '../systems/vaultKeys.js';
@@ -100,7 +103,8 @@ import { warpFloorFor, warpCheckpoints } from '../systems/warpGate.js';
 import { moatCells, seaMargin } from '../systems/islandFloor.js';
 import { emptyMealSlots, sanitizeMealSlots, assignMealToSlot, assignMealToSlotAt, groupPantry, removePantryStack, takeFromMealSlot, returnSlotToPantry, filledSlotCount, mealSignature } from '../systems/meals.js';
 import { cookableCount, cookBatchOptions } from '../systems/cooking.js';
-import { RESTED_BUFF, HEALER_BLESSINGS } from '../data/healerBuffs.js';
+import { RESTED_BUFF, HEALER_BLESSINGS, BLESSING_FLOORS } from '../data/healerBuffs.js';
+import { POTION_POWER_MAX, POTION_CD_MAX, POTION_PCT_PER_LVL, POTION_CD_PER_LVL, POTION_CD_MIN, POTION_UPGRADE_BASE_COST, POTION_UPGRADE_COST_GROWTH } from '../data/potionMastery.js';
 import { blessingCost, blessingById, healerBuffFx, upsertHealerBuff, tickHealerBuffs, sanitizeHealerBuffs } from '../systems/healerBuffs.js';
 import { trimFillStyle } from '../utils/iconTrim.js';
 import { cursorHotspotPx } from '../systems/cursorMath.js';
@@ -6934,10 +6938,11 @@ let player = { x: 5, y: 5,
   // systems/vaultKeys.js), so a key found where its door isn't worth the trip
   // isn't lost — spend it on a locked '+' door on any floor below, or hoard a few.
   keys: 0,
-  // Potions are no longer hoarded consumables — they're an always-available
-  // skill gated by a shared 5-second cooldown (see useHealthPotion/useManaPotion),
-  // so you can't spam potions back-to-back. `potionCd` is that cooldown, in seconds.
-  potionCd: 0,
+  // Potions are no longer hoarded consumables — they're an always-available skill
+  // gated by a cooldown (see useHealthPotion/useManaPotion), so you can't spam them.
+  // Each flask carries its OWN countdown in seconds, so a heal never locks out a
+  // mana sip; the Healer sells a Recharge track per flask.
+  potionCdHp: 0, potionCdMp: 0,
   // Chosen character name (null until entered on a new game) and the peak gold
   // and Power ever reached — all feed the global leaderboards.
   name: null, maxGold: 0, maxPower: 0,
@@ -7216,7 +7221,7 @@ function resetTouchStick() {
 function toggleTouchSprint() {
   sprintLatched = !sprintLatched;
   if (typeof sfx === 'function') sfx('click');
-  if (typeof renderSkillBar === 'function') renderSkillBar();   // repaints the RUN tile's on/off state
+  if (typeof renderSkillBar === 'function') renderSkillBar();   // repaints the sprint tile's on/off state
 }
 function heldDir(d) { return keyHeld[d]; }
 function clearHeld() {
@@ -7800,13 +7805,14 @@ window.gameState = function gameState(radius) {
     floor: dungeonLevel,                                                   // continuous depth (1, 2, 3, …)
     floorDisplay: (typeof displayFloor === 'function') ? displayFloor() : dungeonLevel, // 1–25 within a tier
     tier: (typeof diffOf === 'function' && typeof DIFFS !== 'undefined') ? ((DIFFS[diffOf(dungeonLevel) - 1] || {}).name || null) : null,
-    isBossFloor: dungeonLevel % 5 === 0,                                   // a guardian holds this floor
+    isBossFloor: isBossLevel(dungeonLevel),                                // a guardian holds this floor
     island: (typeof floorIslandTheme !== 'undefined') && !!floorIslandTheme, // landmass ringed by impassable sea (~ tiles frame the map)
     modifier: (typeof floorMod !== 'undefined' && floorMod && floorMod.name) ? floorMod.name : null, // active floor theme, e.g. "Spike Gauntlet" (null = a plain floor)
     floorCleared: (typeof floorCleared !== 'undefined') ? !!floorCleared : null,
     hostilesLeft: (typeof hostilesRemaining === 'function') ? hostilesRemaining() : live.length, // foes still sealing the stairs
     // Explicit exit coordinates + whether the down-stairs are still sealed.
     stairs: { down: stairsDown, up: stairsUp, locked: (typeof floorCleared !== 'undefined') ? !floorCleared : null,
+      bossBelow: isBossLevel(dungeonLevel + 1),  // descending drops you onto a guardian floor (its ring pulses red, not gold)
       express: (typeof deepStair !== 'undefined') ? deepStair : null }, // a vault's two-floor express stair, if opened
 
     player: {
@@ -7820,6 +7826,14 @@ window.gameState = function gameState(radius) {
       // inCombat (a few seconds after dealing/taking damage) mana regen is halved.
       pendingHeal: (player.pendingHeal || 0) + (player.pendingPotionHeal || 0),
       pendingMana: player.pendingMana || 0,
+      // Each flask recharges on its OWN timer — seconds left (0 = ready to quaff)
+      // and the full recharge that flask rolls back to, after its Recharge ranks
+      // from the Healer's Potion Mastery bench. useHealthPotion()/useManaPotion().
+      potionCd: {
+        heal: Math.round(potionCdLeft('hp') * 10) / 10, mana: Math.round(potionCdLeft('mp') * 10) / 10,
+        healReady: potionReady('hp'), manaReady: potionReady('mp'),
+        healFull: effectivePotionCd('hp'), manaFull: effectivePotionCd('mp'),
+      },
       inCombat: (player._combatSecs || 0) > 0,
       stamina: Math.round(player.stamina || 0), maxStamina: Math.round(player.maxStamina || 0), // Stamina for sprint/dash
       // Spirit Veil: the persistent Spirit shield (blue over-HP buffer) that soaks damage
@@ -8194,11 +8208,11 @@ window.gameGuide = function gameGuide(topic) {
       `Movement is REAL-TIME and held, not turn-based. Hold a direction to walk; release to stop. A quick key-tap barely nudges you.`,
       `Move: W/A/S/D or Arrow keys (hardcoded, not rebindable). Two perpendicular keys = a diagonal.`,
       `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls but runs STRAIGHT THROUGH lava/spikes toward the cursor (it never detours around a trap; steer where you want to go, just like the keyboard), and holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. IN THE WALKABLE TOWN, clicking a keeper (or the Town Portal) walks the hero over and OPENS its menu on arrival, and clicking the Dungeon Gate walks straight into it — no separate interact press. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
-      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a RUN toggle (auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right — a quick TAP on a footer button fires it (cast the skill, quaff the potion); HOLD one for ~0.5s to read its tooltip instead of firing. The header holds the minimap, vitals, and the bag + settings buttons (upper-right). On touch the game runs fullscreen so it fills the whole screen with no browser chrome — any tap re-enters fullscreen whenever you've left it, and you exit with the phone's native back/swipe gesture. The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
+      `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a sprint toggle (speed-lines icon, auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right — a quick TAP on a footer button fires it (cast the skill, quaff the potion); HOLD one for ~0.5s to read its tooltip instead of firing. The header holds the minimap, vitals, and the bag + settings buttons (upper-right). On touch the game runs fullscreen so it fills the whole screen with no browser chrome — any tap re-enters fullscreen whenever you've left it, and you exit with the phone's native back/swipe gesture. The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
       `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk / use: ${key('interact')} — open a chest you're standing on, talk to an adjacent NPC, and IN TOWN open a keeper's service when you're beside them (or the Dungeon Gate / Town Portal). A floating prompt shows who's in reach; gameState().menu.town.nearby reports it.`,
-      `Health potion: ${key('healthPotion')} · Mana potion: ${key('manaPotion')} — always available (not a hoarded consumable); they share a cooldown and both now restore OVER TIME (see the "healing" topic).`,
+      `Health potion: ${key('healthPotion')} · Mana potion: ${key('manaPotion')} — always available (not a hoarded consumable); each recharges on its OWN cooldown and both restore OVER TIME (see the "healing" topic).`,
       `Town Portal: ${key('portal')} — channel a portal to town (needs 3 clean turns; any enemy hit — or moving — cancels it). A blue aura charges over the hero for the count; when it opens the hero fades out up a beam of light (~1s, unhittable) before you land in town — gameState().transit reads 'out' then, and 'in' when you materialize back below.`,
       `Swap weapon / gear set: ${key('swapWeapon')} — flip between loadout 1 and 2.`,
       `Bag / inventory: ${key('bag')} — opens the LOOT / GEAR / HERO / SKILLS tabs.`,
@@ -8235,11 +8249,11 @@ window.gameGuide = function gameGuide(topic) {
       `RECOVERY IS OVER TIME, not instant. Most healing no longer snaps HP up — it fills a PENDING pool that pays into HP at a capped rate (~12%/s of max HP per source), so the bar climbs on a visible slope. gameState().player.pendingHeal is the HP still owed; the HP/MP bars show it as a translucent zone ahead of the solid fill.`,
       `OVER-TIME sources STACK (a potion sip pays out on top of any pending leech): the Health Potion, all life leech / lifesteal (paid from your physical attacks and weapon skills — spells don't leech, and a HYBRID strike leeches only from its physical half, not its magic half), Scythe Reap, Vampiric, Life-on-Kill, and incidental on-kill / on-cast "sliver" heals.`,
       `INSTANT sources land immediately, as before: deliberate active HEAL skills you cast (e.g. Divine Storm, Final Judgment, Blood Drinker) and EMERGENCY low-HP triggers (a passive that heals when you drop below 25% HP). A skill's detail card tags which kind it grants (heal — instant / leech — over time). A cast heal's SIZE now scales off SPIRIT and Spell Power (class-scaled: Mage > Templar > Rogue > Warrior) with no flat cap — so a high-Spirit healer mends far more per cast (still capped only by the HP you're actually missing).`,
-      `The Health Potion mends 35% of max HP over a few seconds (Potency raises the amount; shared 6s cooldown, down to 2s via Recharge). It is INTERRUPTIBLE: one DIRECT hit above 18% of max HP spills half the remaining sip ("SIP SPILLED"). Damage-over-time (lava/poison/burn) never interrupts it, and earned leech is never interrupted — only the potion sip is fragile.`,
+      `The Health Potion mends 35% of max HP over a few seconds (Potency raises the amount; its own ${POTION_CD}s cooldown, down to ${POTION_CD - POTION_CD_PER_LVL * POTION_CD_MAX}s via the Healer's Health Recharge — ${POTION_CD_MAX} ranks, −${POTION_CD_PER_LVL}s each). It is INTERRUPTIBLE: one DIRECT hit above 18% of max HP spills half the remaining sip ("SIP SPILLED"). Damage-over-time (lava/poison/burn) never interrupts it, and earned leech is never interrupted — only the potion sip is fragile.`,
       `Because you can no longer burst back to full, don't wait until you're low: sip EARLY, keep moving, and let the pending pool refill the slope while you avoid the next hit.`,
       `DANGER CUE: drop below a quarter of your max HP and the screen edges pulse red (the danger halo) while a heartbeat thumps — and quickens the closer you are to dying. It's your prompt to disengage and sip. The red glow also colour-cycles with any active poison/burn/stun. The heartbeat rides the SFX channel (mute or the Audio-tab faders silence it) and pauses when a menu holds the game.`,
       `MANA is a RATIONED resource now: a smaller pool (less MP per Spirit, lower base), higher skill costs, and slower regen — and MP regen is HALVED while you're "in combat" (a few seconds after dealing or taking damage — gameState().player.inCombat), so sustained casting genuinely drains you.`,
-      `The Mana Potion restores 40% of max MP OVER TIME (gameState().player.pendingMana shows MP still incoming) and shares the health potion's cooldown — so quaffing mana means forgoing a heal, a real triage choice. Mana Shield converts damage to MP more efficiently the more you invest in it. Carry mana potions if you lean on spells.`,
+      `The Mana Potion restores 40% of max MP OVER TIME (gameState().player.pendingMana shows MP still incoming) and recharges on its OWN ${POTION_CD}s cooldown (down to ${POTION_CD - POTION_CD_PER_LVL * POTION_CD_MAX}s via the Healer's Mana Recharge), independent of the health flask — so a heal never locks out a mana sip. Mana Shield converts damage to MP more efficiently the more you invest in it. Carry mana potions if you lean on spells.`,
       `Beyond Spirit, gear itemizes mana sustain directly: MANA REGEN (MRG) is a flat +MP/sec trickle that stacks on Spirit's and rolls from floor 1 on the sustain slots (helm, chest, legs, amulet, off-hand) — subject to the same in-combat halving, so it eases the grind between casts without breaking the ration. Max MP (MP), Mana Cost Reduction (MCR), Mana Leech (MLC) and Mana on Kill (MoK) round out the mana toolkit.`,
     ],
     veil: [
@@ -8250,7 +8264,7 @@ window.gameGuide = function gameGuide(topic) {
       `Because it soaks before HP and comes back free between fights, +Spirit Veil gear is the shield's source and +Spirit is valued for the boost it adds ON TOP — but only once you actually carry some Veil (see the "power" topic).`,
     ],
     skills: [
-      `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready and grey out while recharging or when you can't afford the MP. Trying to cast one without enough mana faintly pulses the mana bar (and logs why).`,
+      `Active skills cost MP and each has its own cooldown in SECONDS; their bar buttons glow when ready and grey out while recharging or when you can't afford the MP. Trying to cast one without enough mana faintly pulses the mana bar (and logs why). A LEVEL-UP wipes every skill cooldown along with refilling HP/MP/Stamina, so dinging mid-fight hands the whole kit straight back (a revive does the same).`,
       `Every price you SEE is the price you PAY: the bar, the tooltips, the tree nodes and gameState().skills all quote the cost AFTER Mana Cost Reduction, and quote it in HP for a hero who pays in blood (a Bloodletter, or Blood Pact) rather than a mana number they have no pool for. Affordability is the same one predicate, so a skill can never grey out as unaffordable while the cast would in fact fire.`,
       `The bar has ${SKILL_SLOTS} MANUAL slots (cast by hand with ${key('skill1')}-${key('skill' + SKILL_SLOTS)}) plus ONE dedicated auto-cast slot. You choose what goes where — drag a learned active onto a slot, or use the SKILLS-tab slot buttons; a freshly-learned active auto-fills the first open manual slot.`,
       `gameState().skills lists each filled manual slot's number key, MP cost (already reduced by your Mana Cost Reduction), cooldown remaining, ready flag, and what the skill DOES — its shape, range/radius and the damages/heals/buffs/summons flags — so you can pick one without inspecting it. The auto-cast skill is reported separately as gameState().autoSkill (see the "autocast" topic).`,
@@ -8328,7 +8342,7 @@ window.gameGuide = function gameGuide(topic) {
       `TRAP-THEMED FLOORS: some floors (gameState().modifier "Spike Gauntlet" / "Arrow Gallery" / "The Vent Works") dedicate the whole floor to ONE trap kind, packed in far denser than usual — expect a field of spikes, a hall lined with arrow emitters, or clusters of fire vents. Loot runs a little richer to reward threading them; a walkable route through the spikes is always guaranteed.`,
       `BOSS HAZARDS (hazards.boss): kind "fire" (glyph F) is a wall of flame that burns when stood on; kind "wall" (glyph B, blocks:true) is an arcane barrier that BLOCKS movement even though it otherwise looks like floor. Both expire after a few turns.`,
       `BOSS TELEGRAPHS (gameState().hazards.telegraphs) are a guardian's wind-up attacks — a floor indicator that fills, flashes, then detonates. Each carries its shape (disc = filled circle; ring = donut, lethal in the band between innerR and r but SAFE in the centre hole and beyond r; lane = beam between (x1,y1)-(x2,y2); cone = wedge of radius r opening ±halfAngle around facing), its centre (x,y)/geometry, seconds until it lands (secsToHit), and danger:true when it hurts. They are ALWAYS dodgeable by MOVING out of the zone before secsToHit hits 0 (for a ring, step past r or into the hole) — never an RNG dodge. Red = damage; cyan = a benign spawn marker. A tracking disc follows you early in its wind-up, then locks — keep moving and it lands where you were.`,
-      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, and the exit is north. EACH guardian has its OWN arena — the cover and hazards vary by boss (columns to break line-of-sight on volleys and beams, lava pools, breakable cracked walls, spike beds), so read the ASCII map (# wall, ^ lava, " spikes, % cracked wall) and use the cover: duck behind a pillar to break a telegraphed shot, smash through a cracked wall for a new lane. The arena is a 31-tile-wide circle (map 35x35), and a big open centre plaza, a wide north-south lane and a five-tile perimeter lap lane are always kept, so there's room to kite and the guardian always has room to close. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
+      `BOSS FLOORS (isBossFloor true; every 5th floor) are a fixed circular arena: you enter from the south stairs, the guardian holds the centre, and the exit is north. EACH guardian has its OWN arena — the cover and hazards vary by boss (columns to break line-of-sight on volleys and beams, lava pools, breakable cracked walls, spike beds), so read the ASCII map (# wall, ^ lava, " spikes, % cracked wall) and use the cover: duck behind a pillar to break a telegraphed shot, smash through a cracked wall for a new lane. The arena is a 31-tile-wide circle (map 35x35), and a big open centre plaza, a wide north-south lane and a five-tile perimeter lap lane are always kept, so there's room to kite and the guardian always has room to close. The stair that leads down to one rings RED instead of gold on the floor above (gameState().stairs.bossBelow), so the threshold is readable before you step on it. Stepping in raises a WORLD-PAUSING gate (mode 'bossgate', blockingOverlay 'boss-gate-overlay') — call bossGateReady() to commit or bossGateCancel() to back out. Once inside, BOTH staircases AND the town portal are SEALED until the guardian dies (no retreat). No trash spawns — it is a 1v1 duel of telegraphed attacks; kite, dodge the indicators, and burst it down.`,
       `ISLAND FLOORS (gameState().island true) come up now and then on outdoor floors: the landmass is ringed by open SEA, so the whole map edge is deep water (~) instead of a rock wall. You can see and shoot across it but never walk off — the shore IS the boundary. Nothing reachable is lost; the sea only replaces the impassable frame, so play it like any other floor.`,
       `SOLID FURNITURE (glyph X) sits on a floor tile but blocks movement for you AND for foes — neither side can path through it, so it also works as cover and a chokepoint to break a chase.`,
       `SHRINES (*): gameState().shrines gives each one's kind. Most are multi-floor boons that fold into your stats while active (see gameState().effects): power (+50% dmg), guard (−40% dmg taken), fortune (loot), greed (+60% gold), insight (+50% xp), discovery (+50 Magic Find), harvest (+60% materials), precision (+18% crit), phantom (+15% dodge), sorcery (+30% skill/spell power), leech (+15% lifesteal), thorns (reflect), renewal (HP regen), clarity (MP regen), bulwark (+Defense), swift (+18% move), haste (+25% attack speed), vigor (tireless sprint/dash + full Stamina). wisdom instantly restores 50% max HP and refills MP; but BLOOD costs 30% of current HP for XP — check the kind before stepping on one.`,
@@ -8339,12 +8353,13 @@ window.gameGuide = function gameGuide(topic) {
     enemies: [
       `gameState().enemies lists each live foe with hp, dist, behavior, ranged/range, aggro (is it hunting you?), warded (a boss ward that HALVES your damage), enraged / berserk (boss offensive phases — see below), tenacious / stunImmune (crowd-control resistance — see below), firstKill (a boss floor you haven't cleared yet — its kill drops a jackpot; see below), affix (an elite-style modifier), armor / magicResist (typed defence — see below), and status (e.g. ["stun"], ["slow"]). Every species you slay is also logged in the Bestiary codex (pause menu; gameGuide("bestiary")).`,
       `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
+      `Every hunting foe PATHFINDS — it routes around walls, furniture, rocks and other foes instead of shoving into them, and a multi-tile guardian walks its whole body around cover the same way (it needs a gap its FULL footprint fits through, so a 3x3 boss can't follow you down a one-tile crack — but it will take the long way round). So cover breaks LINE OF SIGHT; it does NOT pin a foe in place. Standing behind a rock to plink a boss for free doesn't work: expect it to come around the side. When you are genuinely unreachable, a foe closes as near as the floor allows and holds there (shooting if it has a shot) rather than freezing where it stands.`,
       `Behaviors (gameState().enemies[i].behavior): chaser (steady, 1 tile/turn), swift (2 tiles/turn), pack (1 tile/turn, but rushes to 2 when you drop below 50% HP — wolves/tigers), erratic (darts unpredictably), brute (slow — acts every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand). A foe with the ice CHILL status is likewise dragged to that half-cadence, but chill is a STATUS (it shows in enemies[i].status), not a behavior.`,
       `Each archetype also has its OWN toughness & punch, not just movement: brutes are tanky and hit hard but swing slowly; swift vermin and erratic flyers are frail and jab for less; casters are squishy but strike from range; lurkers ambush for a heavier blow; packs are individually weak but swarm. So two foes on the same floor can differ a lot — read the behavior, not just the sprite.`,
       `TYPED DEFENCE (gameState().enemies[i].armor / magicResist, whole %): every foe shrugs off a slice of your damage, and how big depends on the SCHOOL of the hit. Physical armor blunts auto-attacks + martial SKILLS (your Armor Pen % pierces it); magic resistance blunts SPELLS (your Magic Pen % pierces it). Foes differ by nature — a stone/metal/armored/scaled foe carries high armor but low magic resist (cast at it); a ghost, wisp, elemental, ooze or caster resists magic but not steel (strike it); most beasts sit in between. Hit each foe with the school it is SOFT to; a HYBRID ability splits its blow across both, so it is never fully walled. The bestiary card shows both values once you've slain enough of a species.`,
       `ENEMY AFFIXES (gameState().enemies[i].affix): roughly a fifth of ordinary (non-elite) foes carry ONE modifier, shown by a coloured aura and a name prefix — tough (+HP), fierce (+damage), venomous (poison-on-hit), accurate (cuts through your dodge), evasive (your hits often whiff — bring Accuracy), chill (snares you on hit). Read the affix, not just the sprite.`,
       `Ranged foes fire DODGEABLE bolts, not guaranteed hits — a bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
-      `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly.`,
+      `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly. Once unsealed the stair ring pulses gold — or RED when the floor below is a guardian's (.stairs.bossBelow), the point-of-no-return warning.`,
       `Treasure Goblins (isGoblin) flee, never attack, and do NOT block the exit — chase fast for jackpot loot (they vanish ~15 ticks after first hit) or ignore them.`,
       `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. TENACITY: guardians (tenacious true — elites too, lighter) shorten every stun/freeze that lands AND diminish repeats — a 2nd hard CC in the window lasts half, a 3rd a sliver, and further ones are shrugged off (enemies[i].stunImmune flips true) until you leave it hard-CC-free for a few seconds. So a boss can be locked for a beat but NEVER stunlocked — spend your stun on the opening that matters (a telegraph wind-up, an escape), not on chaining. FIRST-KILL JACKPOT: the first time you CLEAR a given boss floor (enemies[i].firstKill true until then), its guardian spills ~3x the loot at noticeably better quality — a one-time windfall per boss floor. Because boss species RECUR across floors in Endless, this tracks by FLOOR: each new or deeper boss floor you conquer pays its own windfall, while farming a floor you've already cleared drops at the normal boss rate (minus farm fatigue on a quick re-kill). So descending to a fresh boss floor is always the richer prize. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
       `Summoned allies (gameState().allies) act before foes and soak hits, but expire after ttl turns and have capped damage — resummon and don't expect them to solo a boss.`,
@@ -8359,7 +8374,7 @@ window.gameGuide = function gameGuide(topic) {
     progression: [
       `Seven classes, each with an identity attribute that powers its SKILLS: Warrior (Might, tanky melee), Rogue (Agility, crit & dodge), Mage (Spirit, spells & big MP), Templar (Vitality, durable hybrid), Fortune-Seeker (LUCK, ranged — the only class that turns Luck into skill damage), Windblade (Agility+Spirit HYBRID, blade-caster) and Bloodletter (Might+Vitality HYBRID, and the only class with NO MANA AT ALL — every skill costs a share of max HP instead; see gameGuide('healing')). A HYBRID sums BOTH its attributes at a lower per-point rate, so a point in either is worth the same. Basic (auto) attacks scale off MIGHT for everyone. Class gates which weapons you can equip.`,
       `Five attributes (gameState().player.attributes), with re-homed roles: Might (+basic attack damage for ALL classes, +Accuracy, +Defense; also the Warrior's skills), Vitality (+max HP, +HP regen, +Stamina; the Templar's skills), Agility (+evasion, +move/attack speed; the Rogue's skills), Spirit (+max MP, +MP regen, +spell power, +healing, +Spirit Veil shield; the Mage's spells), Luck (+crit, +loot quality). How much each point gives is CLASS-SCALED — e.g. Vitality gives the Templar the most HP, Spirit gives the Mage the most spell power, Might gives the Warrior the most basic-attack damage. Pump Might for weapon damage and your class's identity attribute for its skills; every attribute also pays a defensive/utility role.`,
-      `Each level grants 5 HERO points (attributes) and 1 skill point (gameState().menu.pointsToSpend), and FULLY restores the hero — HP, MP and Stamina all top off to max — a clean second wind. The level-up banner names exactly what the level paid, so the reward is legible without opening a tab. Spend hero points on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
+      `Each level grants 5 HERO points (attributes) and 1 skill point (gameState().menu.pointsToSpend), and FULLY restores the hero — HP, MP and Stamina all top off to max AND every skill cooldown is wiped (gameState().skills all come back cooldown 0 / ready) — a clean second wind. The level-up banner names exactly what the level paid, so the reward is legible without opening a tab. Spend hero points on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
       `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives. From level 20 you also earn a SEPARATE ascendancy point every 5 levels (20, 25, 30…; gameState().menu.pointsToSpend.ascendancy), spent only on the ascendancy path tree. Normal skill points can't buy path skills and ascendancy points can't buy passive/active skills. Path skills carry NO level requirement — they're gated only by the earlier skills in the path tree.`,
       `Respec attributes/skills or change class at the Trainer for gold that scales with your level (points refund). Switching to your class's other ascension afterwards costs a lot of gold (also scales with level and depth; path points refund) — the first ascension stays free, but re-ascending is a deliberate, costly choice, as is retraining class. After a respec, check that worn gear still meets its attribute requirement (under-req pieces turn red and are ignored; the GEAR tab wears a pulsing red dot and the paper doll gives the offending slot a pulsing red border — tap it to read the shortfall and Unequip). gameState().player.gearIgnored lists any such slots.`,
       `BOSS POINTS are a separate progression track that rewards new depth: every boss floor you clear for the FIRST time grants ONE point (farming a floor you've already cleared grants none — it's the same first-clear ledger as the boss loot jackpot). Spend them at the ASCENDANT WEAVE, a town service that opens once you've cleared your first boss floor: a constellation board of stat nodes, attribute-threshold keystones and socketed Glyphs where every point is a real, opportunity-cost choice — see gameGuide('weave'). gameState().menu.bossPointsEarned reports the total earned all-time; gameState().endgame.weave reports points available, lit nodes and active keystones.`,
@@ -8371,16 +8386,16 @@ window.gameGuide = function gameGuide(topic) {
       `SOLO SELF-FOUND (SSF) is a second toggle under that same ADVANCED GAME MODES button, independent of Hardcore — arm either or BOTH (both is the purest challenge). An SSF hero never touches the account-shared pools: the town Vault is sealed for life (no banking gold or gear, no withdrawing, no Collection filing — the hub tile shows locked), town shops charge CARRIED coin only (no vault auto-draw), and crafting materials go into a PRIVATE per-hero wallet instead of the shared cross-hero pool. Only what this hero finds on their own run can be used. Like Hardcore it locks in at creation and never comes off. gameState().player.ssf reports it; player.vaultGold always reads 0 and menu.materials shows the private wallet. The global Leaderboard has a third SELF-FOUND ladder alongside Standard and Hardcore, ranking self-found heroes against each other (an SSF hero also still appears on their Standard or Hardcore board, tagged SSF).`,
     ],
     town: [
-`The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived — and the HUD's Town button stays HIDDEN until you first set foot in the camp (player.townVisited flips true on that first arrival, revealing the button). That first Floor-5 lair has NO stairs onward: felling its guardian tears open an escape portal (glyph 'O', gameState().escapePortal) right beside you with a "Quick! Step into the portal!" cue — step onto it to graduate up into town for a one-time celebration (the townsfolk cheer and thank you, a one-time WELCOME hint chip greets you — town is your safe haven and the Town button teleports you home — the two founding keepers — the Healer and the Craftsman — arrive, and the newly-revealed Town button glows for that visit). This first visit holds NO return portal, so a Town Portal there carries you on to Floor 6. `
+`The town CAMP stays SEALED until you fell the Floor 5 guardian (the first boss): before that the Town Portal is refused and no keeper has arrived — and the HUD's Town button stays HIDDEN until you first set foot in the camp (player.townVisited flips true on that first arrival, revealing the button). That first Floor-5 lair has NO stairs onward: felling its guardian tears open an escape portal (glyph 'O', gameState().escapePortal) right beside you with a "Quick! Step into the portal!" cue — step onto it to graduate up into town for a one-time celebration (the townsfolk cheer and thank you, a one-time WELCOME hint chip greets you — town is your safe haven and the Town button teleports you home — the two founding keepers — the Merchant and the Craftsman — arrive, and the newly-revealed Town button glows for that visit). This first visit holds NO return portal, so a Town Portal there carries you on to Floor 6. `
       + `Reach town via the Town Portal (${key('portal')}; 3 clean channel turns) or automatically on death (revived at full HP/MP/Stamina, your bag dropped as a reclaimable grave on the death floor — a death does NOT cost floor progress). Town is a WALKABLE base CAMP, not a menu: you arrive at the bottom of a forest clearing — real grass with worn dirt trails winding up past a central campfire (ringed with logs & stumps to sit on) to the Dungeon Gate, with the regular service keepers milling about the green at FRESH random spots every visit (most of them slowly strolling around — except the Craftsman, pinned just off the avenue beside the Town Portal so you always find it) and the late-game keepers gathered in a hedged ENDGAME SANCTUM (a walled grove up the top-left, entered through its south gap), a treeline framing it all. A keeper only appears once it has ARRIVED (one joins per boss kill) — a locked one simply hasn't ARRIVED yet — and a keeper that has just arrived wears a bobbing "!" over their head until you greet them. WALK UP to a keeper (within one tile) and press interact (${key('interact')}; on touch, tap them and the hero walks over and opens it; on desktop you can also CLICK a keeper — or the Town Portal — to walk over and open it) to use their service — a floating prompt names whoever you're beside. Roaming is free: sprint costs no Stamina in town. gameState().menu.town.objects lists every keeper/object present with its tile position (+ a newArrival flag on the freshly-arrived); .nearby is the one you're standing next to (what interact would open); the hero's own position is player.x/player.y. Death does not re-lock any floors: instead the Dungeon Gate only drops you on a five-floor checkpoint, so you resume at the checkpoint at or below where you fell and walk the last few floors down. The Gate flags the tier holding your grave (with the exact floor; gameState().graveSite.where), so you can dive straight back to it.`,
       `Two OBJECTS in the town are your exits (not menu buttons). The DUNGEON GATE stands at the top of the avenue (glyph 'G'; gameState().menu.town.gate) — step INTO it, or interact beside it, to open the tier + floor picker; you can only warp in on a CHECKPOINT floor — every fifth floor starting at 1 (1, 6, 11, 16, 21, … and the same cadence forever in Endless), up to the deepest floor you've reached; walk down from there for the floors in between. The TOWN PORTAL sits by where you arrive (glyph 'P'; gameState().menu.town.portal) and is PRESENT ONLY when you left a floor by portal or conquest, never after a death — interact with it to drop straight back onto the EXACT floor you left (same enemies, loot and layout, right where you stood; gameState().menu.returnToLastFloor.available reports this, .where the floor). After a death there is no portal — take the Gate. Clearing a floor unseals its down-stairs, so it opens the NEXT floor at the Gate right away — that floor counts as your deepest and its checkpoints are re-enterable even if you port to town before descending. Re-entering plays the portal in reverse — a blue pillar stabs into the floor and the hero materializes (~1s, unhittable; gameState().transit reads 'in'). gameState().menu surfaces materials, autoLoot, the active foodBuff, healerBuffs and pact.`,
-      `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same shared cooldown — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
-      `Merchant (buy gear / pay to restock — ware rarity SCALES with how deep you've pushed and never grey junk: shallow stalls stock white→green, deeper ones lean blue→purple→orange→red. The same early-game gate as dungeon drops applies, so no colour you haven't earned yet — greens wait for the floor-5 boss, blues+ for floor-10. TIGHTER STILL, wares are capped at the highest rarity you've actually FOUND — no blue on the stall before your first blue, no purple before your first purple, and so on up the ladder (player.rarityFound holds that high-water rank). Each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is a FOUNDING keeper — it arrives with the Healer the moment the town opens (boss floor 5), so its HUD upgrades are on hand from your first visit — and stands PINNED just off the avenue beside the Town Portal (a step up-left of it) — it never wanders and sits BESIDE the path, not on it, so a hero returning by portal finds it right where they land without it ever blocking the walkway. Its HUD UPGRADES bench (the Craftsman's landing tab, ahead of the GEAR forge) builds them in three groups: HUD READOUTS that each switch on a heads-up-display piece (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana/stamina numbers, status-effect icons), BAG & LOOT TOOLS (Assayer's Glass = item level, Coin Scale = item gold value, Salvage Gauge = salvage-material preview, Appraiser's Loupe = item Power ratings, Gauging Calipers = +/- stat compare vs equipped, Quartermaster's Ledger = bag sort & filter, Sorting Sieve = auto-loot rules), and CHARACTER & SKILL SHEET readouts (Adept's Slate = the derived-stats breakdown under your gear, Sage's Codex = each skill's milestone surge bonuses). A fresh hero starts BARE — no HUD numbers/minimap/counters/labels/status icons; a bag auto-grouped by gear category (rarest first) but showing no item level, gold value, salvage yield, Power ratings, stat compare, re-sort/filter or auto-loot; and no derived-stats panel or skill surge bonuses — and buys these as gold + materials allow. Even bare, the Merchant's sell tab still shows each item's sell price and salvage yield, and Sell-all / Scrap-all totals always show, so a hero can always transact. Each is a one-time build with a mixed price: Scrap on the cheap readouts, Glimmer from the mid tier up, and a Core on the two premium tools (the minimap and auto-loot), so the priciest pieces wait until you've dived deep enough to drop those materials. Each is kept for that hero, and a freshly-fitted HUD piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + each upgrade's mixed {gold,scrap,glimmer,core} cost; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for 3 floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each an impactful multi-floor buff, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
+      `Time flows in town just like the dungeon: HP/MP/Stamina regen, skill/potion cooldowns and status/buff timers keep ticking while you roam or idle (a foodBuff is per-floor, so it is untouched). It pauses only while a service panel, the bag, or a modal (settings, version…) is open, so resting a moment restores you for free. The Health/Mana potions (${key('healthPotion')}/${key('manaPotion')}) are quaffable in town too — the same per-flask cooldowns — so you can top up instantly before a dive instead of waiting out the free rest. Only your combat SKILLS stay parked for the dungeon (no foes to use them on).`,
+      `Merchant (buy gear / pay to restock — ware rarity SCALES with how deep you've pushed and never grey junk: shallow stalls stock white→green, deeper ones lean blue→purple→orange→red. The same early-game gate as dungeon drops applies, so no colour you haven't earned yet — greens wait for the floor-5 boss, blues+ for floor-10. TIGHTER STILL, wares are capped at the highest rarity you've actually FOUND — no blue on the stall before your first blue, no purple before your first purple, and so on up the ladder (player.rarityFound holds that high-water rank). Each restock you buy this visit makes the NEXT restock dearer, resetting when you next return to town). Craftsman/Forge (forge a blank item from materials+gold — rarity sets its affix slots; Chaos Orbs are spent here, not at the Enchanter. The Craftsman is a FOUNDING keeper — it arrives with the Merchant the moment the town opens (boss floor 5), so its HUD upgrades are on hand from your first visit — and stands PINNED just off the avenue beside the Town Portal (a step up-left of it) — it never wanders and sits BESIDE the path, not on it, so a hero returning by portal finds it right where they land without it ever blocking the walkway. Its HUD UPGRADES bench (the Craftsman's landing tab, ahead of the GEAR forge) builds them in three groups: HUD READOUTS that each switch on a heads-up-display piece (minimap, foes counter, chest counter, dungeon-floor counter, difficulty label, health/mana/stamina numbers, status-effect icons), BAG & LOOT TOOLS (Assayer's Glass = item level, Coin Scale = item gold value, Salvage Gauge = salvage-material preview, Appraiser's Loupe = item Power ratings, Gauging Calipers = +/- stat compare vs equipped, Quartermaster's Ledger = bag sort & filter, Sorting Sieve = auto-loot rules), and CHARACTER & SKILL SHEET readouts (Adept's Slate = the derived-stats breakdown under your gear, Sage's Codex = each skill's milestone surge bonuses). A fresh hero starts BARE — no HUD numbers/minimap/counters/labels/status icons; a bag auto-grouped by gear category (rarest first) but showing no item level, gold value, salvage yield, Power ratings, stat compare, re-sort/filter or auto-loot; and no derived-stats panel or skill surge bonuses — and buys these as gold + materials allow. Even bare, the Merchant's sell tab still shows each item's sell price and salvage yield, and Sell-all / Scrap-all totals always show, so a hero can always transact. Each is a one-time build with a mixed price: Scrap on the cheap readouts, Glimmer from the mid tier up, and a Core on the two premium tools (the minimap and auto-loot), so the priciest pieces wait until you've dived deep enough to drop those materials. Each is kept for that hero, and a freshly-fitted HUD piece glows with a "new" wisp until you next leave town. gameState().hud lists what's owned + each upgrade's mixed {gold,scrap,glimmer,core} cost; call buyHudUpgrade(key)); Enchanter (add/reroll affixes for gold + crafting materials — each piece draws its OWN randomized MATERIAL PALETTE, a subset of Scrap/Glimmer/Core/Chaos keyed off the item, so two same-rarity pieces can cost different mixes; rarer gear unlocks rarer materials (Core on rare+, a Chaos Orb on legendary+), and the whole price scales with rarity. Augment also costs more per affix already on the piece, so the last slot is dearest. Every value/type/full reroll a piece takes PERMANENTLY raises all of its future enchant costs (×1.15 compounding per reroll), so brute-forcing a perfect roll gets exponentially dearer — check item.enchN for a piece's reroll tally. Also EMPOWER a piece — raise its item level by 1, 10 or up to what could currently drop for you (deepest floor + 1), for gold + Scrap (+ a Core on rare+) scaling with rarity and level; every stat, modifier and equip requirement scales up as if it dropped that deep. Works on any gear including uniques/set pieces and cursed items, since it only scales values, never the modifier set; call upgradeItemIlvl(id, toIlvl)); Healer (full HP/MP restore for a level-scaled gold fee — call restHeal(); each paid rest also grants RESTED, +25% XP for ${RESTED_BUFF.floors} floors. The Healer also sells premium BLESSINGS — Might (+30% damage), Vigor (+25% max HP & regen), Focus (+20% crit), Fortune (+50% gold & richer loot) — each lasting ${BLESSING_FLOORS} floors, only ONE active at a time (buying another replaces it), priced as a steep gold sink that climbs with your level; call buyBlessing(id). Rested + the active Blessing show in gameState().menu.healerBuffs and gameState().effects with floors left).`,
       `Any spend menu that shows you a SPECIFIC gear piece — a Merchant ware, the Forge preview, an Enchanter piece, a Gambler pull — flags it with an amber "Can't equip yet — needs N ATTR" warning when your current attributes can't wield it. It's a heads-up, not a block: you can still buy or forge the piece and grow the attribute into it (until then it would sit in your bag, or if worn via a gear-set swap it renders red and is ignored). For merchant wares gameState().menu.shop[i].canEquip reports the same true/false.`,
       `The Wandering Mystic keeps no town camp — you meet them out on dungeon FLOORS (glyph '?'; walk up + interact) to buy a multi-floor PACT that warps the next 1, 5 or 10 floors (more damage/loot/gold, or an easier stretch). Each mystic offers just TWO pacts, rolled at random from twelve, so the choice changes every time you find one; a longer pact costs MORE per floor (the price climbs exponentially with floors sealed). gameState().npcs lists the two pacts a nearby mystic offers. Ramen House: cook 3 toppings into a multi-floor food buff (only one active at a time) — secret recipes can grant lifesteal, thorns, +XP, or a one-time revive. Cook one bowl or a whole batch at once (Cook ×N, up to what your toppings afford). Identical bowls STACK into one pantry row with an ×N count; EAT eats one, TRASH (two taps to confirm) dumps the stack. Assign a cooked bowl to one of ${MEAL_SLOT_COUNT} MEAL SLOTS at the Ramen House to eat it from the bottom-HUD belt mid-run without returning to cook — on desktop DRAG the bowl onto a meal slot or the HUD belt; on touch tap its SLOT button. Eating from a slot spends one and applies its buff. gameState().menu.mealSlots lists the slotted stacks. In town, clicking the belt's MEALS module opens the Ramen House.`,
       `Trainer (respec / change class / ascend); Vault (bank gold & gear safe from death — banked gold is still spendable: any shop auto-draws a shortfall from it. The Vault and your crafting materials are SHARED across all your heroes — materials pool automatically with no depositing, so gains on one hero are spendable by another. Standard and Hardcore keep SEPARATE vaults and separate material pools — nothing crosses between the two ladders. A SOLO SELF-FOUND hero is the exception to all of this sharing: their Vault is sealed and their materials stay per-hero — see gameGuide("character"). The Vault has two tabs — Storage for gold + ordinary gear, and Collection, one slot for every unique/set piece where any unique/set piece you store is filed automatically; see gameGuide("collection")); Gambler (wager gold for random gear — pick a slot to guarantee the type); Transmuter (arrives with your 11th boss kill): fuse N UNLOCKED same-rarity bag pieces into 1 item of the next rarity up for a depth-scaled gold cost. The count climbs with rarity — 2 junk/normal, 3 uncommon/rare, 4 epic, 5 legendary (a legendary fuse yields a unique OR a set piece). Pick a rarity, then choose exactly which pieces to spend (locked keepers are never shown, so they're safe either way).`,
       `Prospector (level 5+): trades GOLD for raw crafting materials, and refines commons up a tier. BUY Scrap, Glimmer, Core or Chaos Orbs outright — the price climbs steeply with the material's rarity, grows with the deepest floor you've reached, and rises a little with every purchase you make this visit (resetting when you next enter town) — a bulk lot is priced flat, so it's always the cheapest way to buy a quantity. You can only buy a material your progression could already DROP — the same difficulty gate as kills (Scrap/Glimmer from Normal, Core from Hardened, Chaos from Brutal) — so it tops up what you farm, never a tier you couldn't yet earn. REFINE fuses a stack of a common material into ONE of the next tier up (Scrap→Glimmer→Core→Chaos); it's deliberately lossy, so it never beats simply buying the rarer material — it's a way to spend an overflow of commons. Bought/refined materials land in your shared stash pool (or an SSF hero's private wallet), same as drops.`,
-      `Keepers arrive as you fell boss floors — each guardian you beat (Floor 5 is the first, Floor 10 the second, and so on) brings a keeper, announced by a pop-up banner the instant the boss dies (even mid-fight down in the dungeon). The FLOOR-5 unlock brings TWO founding keepers together — the Healer and the Craftsman — so your first town visit already has both (the Craftsman's HUD upgrades are on hand from the start); every boss after that brings ONE more. The arrival order is: Healer + Craftsman (both on boss #1, the town-unlock), then 3 Merchant, 4 Vault, 5 Ramen House, 6 Prospector, 7 Trainer, 8 Gambler, 9 Enchanter, 10 Bounty Board, 11 Transmuter, then the endgame keepers 12 Ascendant Weave, 13 Cycles, 14 Hall of Deeds, 15 Covenant Altar, 16 Mirrorforge, 17 Pantheon. Each number is the boss-kill count that keeper joins on, so the keeper waiting after your Nth boss kill is arrival #N — except boss #2 lands no one new, since the two founders already arrived together on boss #1. (A Solo Self-Found hero's Vault stays sealed for life.) A still-locked keeper is ABSENT from the walkable camp; in the Town directory it shows GREYED with a padlock and its unlock hint. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
+      `Keepers arrive as you fell boss floors — each guardian you beat (Floor 5 is the first, Floor 10 the second, and so on) brings a keeper, announced by a pop-up banner the instant the boss dies (even mid-fight down in the dungeon). The FLOOR-5 unlock brings TWO founding keepers together — the Merchant and the Craftsman — so your first town visit already has both (the Craftsman's HUD upgrades are on hand from the start); every boss after that brings ONE more. The arrival order is: Merchant + Craftsman (both on boss #1, the town-unlock), then 3 Healer, 4 Vault, 5 Ramen House, 6 Prospector, 7 Trainer, 8 Gambler, 9 Enchanter, 10 Bounty Board, 11 Transmuter, then the endgame keepers 12 Ascendant Weave, 13 Cycles, 14 Hall of Deeds, 15 Covenant Altar, 16 Mirrorforge, 17 Pantheon. Each number is the boss-kill count that keeper joins on, so the keeper waiting after your Nth boss kill is arrival #N — except boss #2 lands no one new, since the two founders already arrived together on boss #1. (A Solo Self-Found hero's Vault stays sealed for life.) A still-locked keeper is ABSENT from the walkable camp; in the Town directory it shows GREYED with a padlock and its unlock hint. gameState().menu.town.objects (and .townServices) list each service's locked flag + need. If you'd rather not walk, the Town button (${key('portal')}) opens a directory list of the same services.`,
       `Bounty Board: accept one contract at a time from a rotating list of 10 (slay foes, clear floors, reach a floor, slay bosses/elites, or plunder gold). Progress tracks live from your running totals; complete it in the dungeon, then return to claim its reward. Each contract pays a DIFFERENT MIX of 1–3 rewards — gold, a crafting material (any of scrap/glimmer/core/chaos, scaled by depth), a lump of XP, or a gear piece scaled to your depth (the toughest boss contracts guarantee a rarer piece) — and a contract paying fewer things pays more of each. The instant a contract's progress reaches its goal a "Bounty complete!" banner, chime and flash announce it, and the belt/objective tracker flips to a green "ready to claim" state — head back to town to turn it in. The board reposts fresh contracts periodically. gameState().menu.bounty reports the accepted contract, its live progress (including menu.bounty.done once it's ready to claim), and menu.bounty.rewards listing exactly what it pays. In town, clicking the belt's BOUNTY module opens the board (even with no active contract).`,
       `Selling and scrapping gear work from the bag anywhere, not only in town.`,
     ],
@@ -8388,7 +8403,7 @@ window.gameGuide = function gameGuide(topic) {
       `Per floor: kill all non-goblin foes to unseal the stairs (watch floorCleared / hostilesLeft), grab chests/coins/food, then walk onto ">" (gameState().stairs.down) to descend.`,
       `Let auto-attack and auto-cast do the fighting and spend your control on POSITIONING: hug melee targets, kite ranged casters, and dodge bolts (hazards.projectiles) and flaring vents.`,
       `Watch player.stamina before sprinting/dashing; dash needs 35 Stamina and a clear cooldown (player.dashReady).`,
-      `Track gameState().effects for debuffs (poison/burn/stun/slow) and buffs; potions share a 5s cooldown, so heal a little early rather than at zero.`,
+      `Track gameState().effects for debuffs (poison/burn/stun/slow) and buffs; each potion has its own ${POTION_CD}s cooldown (gameState().player.potionCd), so heal a little early rather than at zero.`,
       `On boss floors, respect "warded" (your damage is halved while the ward is up) and stay out of boss flame and barriers (hazards.boss).`,
       `Only step on a shrine after checking its kind (blood costs HP), and only take a teleporter when you want its destination (gameState().teleporters).`,
       `Lock keepers before bulk-selling and set Auto-Loot to scrap/sell junk rarities so the bag stays clean.`,
@@ -13163,7 +13178,7 @@ function openTutGate(kind) {
   // The world clock is frozen while the gate holds, so a lingering potion cooldown
   // would deadlock the "quaff to continue" beat — clear it so the flask is ready NOW,
   // and make sure the bar (and thus the flask the hole points at) is actually painted.
-  if (kind === 'potion' || kind === 'mana') { player.potionCd = 0; renderSkillBar(); }
+  if (kind === 'potion' || kind === 'mana') { player.potionCdHp = 0; player.potionCdMp = 0; renderSkillBar(); }
   // The equip beat only lets the LOOT tab work — land there and lock the others.
   if (kind === 'equip') {
     b.add('tut-loot-lock');
@@ -14022,7 +14037,7 @@ function buyItem(i) {
 }
 
 // ── CRAFTSMAN HUD UPGRADES ── the Craftsman's HUD Upgrades bench (see renderForge tabs).
-// The Craftsman (a founding keeper, arriving with the Healer when the town opens) BUILDS
+// The Craftsman (a founding keeper, arriving with the Merchant when the town opens) BUILDS
 // the HUD readout instruments — one-time gold+material buys that switch a piece of the
 // heads-up display on for good (persisted per hero on player.hudUpgrades). The element
 // gating lives in updateBars / drawMinimap / renderStatusStrip; here we just render the
@@ -14471,7 +14486,7 @@ function warpToTown() {
 // GRADUATE TO TOWN — the one-time victory lap the very first time the Floor 5 guardian
 // is felled. The lair has no stairs onward; the kill tears open an escape portal (see
 // placeGraduationPortal) and stepping into it lands the hero here, in the newly-opened
-// camp: the townsfolk celebrate, the two founding keepers (the Healer and the Craftsman,
+// camp: the townsfolk celebrate, the two founding keepers (the Merchant and the Craftsman,
 // its HUD upgrades in hand) are milling about — the rest arrive one per boss kill as the
 // hero descends. No return portal is held on this first visit: the hero presses on
 // through the Dungeon Gate (its "Continue to Floor 6" button), learning the exit they'll
@@ -14497,7 +14512,7 @@ function graduateToTown() {
   screenFlash('#ffd24b');
   sfx('levelup');
   log('<span data-spr=feat_gate_red></span> You step through the portal from the guardian\'s lair — and into <b>town</b> for the very first time.', 'important');
-  log('<span data-spr=q_relic></span> Word of the fallen guardian races ahead of you. The townsfolk pour out cheering — grateful, the <b>Healer</b> and the <b>Craftsman</b> (with their <b>HUD upgrades</b>) throw open their doors; more keepers arrive with each further guardian you fell.', 'important');
+  log('<span data-spr=q_relic></span> Word of the fallen guardian races ahead of you. The townsfolk pour out cheering — grateful, the <b>Merchant</b> and the <b>Craftsman</b> (with their <b>HUD upgrades</b>) throw open their doors; more keepers arrive with each further guardian you fell.', 'important');
   log(`<span data-spr=feat_gate_red></span> Town is your haven now — from any floor, tap the glowing <b>Town</b> button (${kbLabel('portal')}) to teleport back here any time to rest, shop and resupply.`, 'important');
   log('Rest and resupply, then take the <span data-spr=feat_gate_red></span> <b>Dungeon Gate</b> up the avenue and press <b>Continue to Floor 6</b> when you\'re ready to press on.');
   showTownWelcome();   // one-time "welcome to your safe haven" hint chip on the first arrival
@@ -16461,53 +16476,68 @@ function buyBlessing(id) {
 
 
 // ── POTION MASTERY ── permanent, gold-bought upgrades to the dungeon potions:
-// Potency raises the % of max HP/MP each sip restores; Recharge shortens the
-// shared cooldown. Levels persist on the character (potionPowerLvl / potionCdLvl,
-// both defaulting to 0 on older saves).
-const POTION_POWER_MAX = 5, POTION_CD_MAX = 6;
-const POTION_PCT_PER_LVL = 0.05, POTION_CD_PER_LVL = 0.5, POTION_CD_MIN = 2;
+// Potency raises the % of max HP/MP each sip restores (both flasks at once);
+// the two Recharge tracks each shorten ONE flask's own cooldown. Levels persist
+// on the character (potionPowerLvl / potionCdHpLvl / potionCdMpLvl, all
+// defaulting to 0 on older saves).
+// Tuning (caps, per-rank gains, cost curve) lives in src/data/potionMastery.js.
+// The three upgrade tracks are keyed by `kind`: 'power' · 'cdhp' · 'cdmp'.
+const POTION_TRACKS = {
+  power: { name: 'Potion Potency',   field: 'potionPowerLvl', max: POTION_POWER_MAX },
+  cdhp:  { name: 'Health Recharge',  field: 'potionCdHpLvl',  max: POTION_CD_MAX },
+  cdmp:  { name: 'Mana Recharge',    field: 'potionCdMpLvl',  max: POTION_CD_MAX },
+};
 function potionPowerLvl() { return player.potionPowerLvl || 0; }
-function potionCdLvl() { return player.potionCdLvl || 0; }
+// Rank of one flask's Recharge track — 'mp' for the mana flask, health otherwise.
+function potionCdLvl(flask) { return (flask === 'mp' ? player.potionCdMpLvl : player.potionCdHpLvl) || 0; }
 function potionHealPct() { return HEAL_PERCENT + POTION_PCT_PER_LVL * potionPowerLvl(); }
 function potionManaPct() { return MANA_PERCENT + POTION_PCT_PER_LVL * potionPowerLvl(); }
-function effectivePotionCd() { return Math.max(POTION_CD_MIN, POTION_CD - POTION_CD_PER_LVL * potionCdLvl()); }
+// Seconds that flask takes to come back, after its own Recharge ranks.
+function effectivePotionCd(flask) { return Math.max(POTION_CD_MIN, POTION_CD - POTION_CD_PER_LVL * potionCdLvl(flask)); }
+function potionTrackLvl(kind) { const t = POTION_TRACKS[kind]; return t ? (player[t.field] || 0) : 0; }
 function potionUpgradeCost(kind) {
-  const lvl = kind === 'power' ? potionPowerLvl() : potionCdLvl();
-  return Math.round(12000 * Math.pow(2.5, lvl)); // very steep — a true late-game gold sink
+  return Math.round(POTION_UPGRADE_BASE_COST * Math.pow(POTION_UPGRADE_COST_GROWTH, potionTrackLvl(kind)));
 }
-function potionUpgradeHTML() {
-  const pLvl = potionPowerLvl(), cLvl = potionCdLvl();
-  const pMax = pLvl >= POTION_POWER_MAX, cMax = cLvl >= POTION_CD_MAX;
-  const pCost = potionUpgradeCost('power'), cCost = potionUpgradeCost('cd');
-  const pAfford = spendableGold() >= pCost, cAfford = spendableGold() >= cCost;
-  const pctNow = Math.round(potionHealPct() * 100), pctNext = Math.round((potionHealPct() + POTION_PCT_PER_LVL) * 100);
-  const cdNow = effectivePotionCd(), cdNext = Math.max(POTION_CD_MIN, cdNow - POTION_CD_PER_LVL);
-  return `
-    <div class="cook-sec"><span data-spr=potion_g></span> Potion Mastery</div>
-    <div class="town-blurb" style="opacity:0.8">Permanently empower the Health &amp; Mana potions you quaff in the dungeon.</div>
-    <div class="shop-row has-actions ${(pMax || pAfford) ? '' : 'cant-afford'}">
-      <span class="loot-icon"><span data-spr=ic_heart></span></span>
-      <div class="shop-row-info"><div class="shop-row-name">Potion Potency · Lv ${pLvl}/${POTION_POWER_MAX}</div>
-        <div class="shop-row-sub">${pMax ? `Each sip restores ${pctNow}% of max HP/MP.` : `Restores ${pctNow}% → <b style="color:var(--gold)">${pctNext}%</b> of max HP/MP per sip.`}</div></div>
-      ${pMax ? `<button class="act-btn is-active" disabled>MAX</button>` : `<button class="act-btn ${pAfford ? '' : 'short'}" ${pAfford ? '' : 'disabled'} onclick="upgradePotion('power')"><span data-spr=ic_money></span>${fmtGold(pCost)}</button>`}
-    </div>
-    <div class="shop-row has-actions ${(cMax || cAfford) ? '' : 'cant-afford'}">
-      <span class="loot-icon"><span data-spr=ui_mp></span></span>
-      <div class="shop-row-info"><div class="shop-row-name">Potion Recharge · Lv ${cLvl}/${POTION_CD_MAX}</div>
-        <div class="shop-row-sub">${cMax ? `Potions recharge in ${cdNow}s.` : `Recharge ${cdNow}s → <b style="color:var(--gold)">${cdNext}s</b> between sips.`}</div></div>
-      ${cMax ? `<button class="act-btn is-active" disabled>MAX</button>` : `<button class="act-btn ${cAfford ? '' : 'short'}" ${cAfford ? '' : 'disabled'} onclick="upgradePotion('cd')"><span data-spr=ic_money></span>${fmtGold(cCost)}</button>`}
+// One Potion Mastery shop row. `sub` is the level-dependent pitch; `subMax` the
+// copy once the track is bought out (no next-rank arrow to show).
+function potionUpgradeRow(kind, icon, sub, subMax) {
+  const t = POTION_TRACKS[kind], lvl = potionTrackLvl(kind);
+  const maxed = lvl >= t.max, cost = potionUpgradeCost(kind);
+  const afford = spendableGold() >= cost;
+  return `<div class="shop-row has-actions ${(maxed || afford) ? '' : 'cant-afford'}">
+      <span class="loot-icon"><span data-spr=${icon}></span></span>
+      <div class="shop-row-info"><div class="shop-row-name">${t.name} · Lv ${lvl}/${t.max}</div>
+        <div class="shop-row-sub">${maxed ? subMax : sub}</div></div>
+      ${maxed ? `<button class="act-btn is-active" disabled>MAX</button>`
+              : `<button class="act-btn ${afford ? '' : 'short'}" ${afford ? '' : 'disabled'} onclick="upgradePotion('${kind}')"><span data-spr=ic_money></span>${fmtGold(cost)}</button>`}
     </div>`;
 }
+function potionUpgradeHTML() {
+  const pctNow = Math.round(potionHealPct() * 100), pctNext = Math.round((potionHealPct() + POTION_PCT_PER_LVL) * 100);
+  const next = (flask) => Math.max(POTION_CD_MIN, effectivePotionCd(flask) - POTION_CD_PER_LVL);
+  const cdRow = (kind, flask, icon, label) => potionUpgradeRow(kind, icon,
+    `${label} recharges ${effectivePotionCd(flask)}s → <b style="color:var(--gold)">${next(flask)}s</b> between sips.`,
+    `${label} recharges in ${effectivePotionCd(flask)}s.`);
+  return `
+    <div class="cook-sec"><span data-spr=potion_g></span> Potion Mastery</div>
+    <div class="town-blurb" style="opacity:0.8">Permanently empower the Health &amp; Mana potions you quaff in the dungeon. Each flask recharges on its own timer.</div>
+    ${potionUpgradeRow('power', 'ic_heart',
+      `Restores ${pctNow}% → <b style="color:var(--gold)">${pctNext}%</b> of max HP/MP per sip.`,
+      `Each sip restores ${pctNow}% of max HP/MP.`)}
+    ${cdRow('cdhp', 'hp', 'potion_r', 'Health flask')}
+    ${cdRow('cdmp', 'mp', 'potion_g', 'Mana flask')}`;
+}
 function upgradePotion(kind) {
-  const lvl = kind === 'power' ? potionPowerLvl() : potionCdLvl();
-  const max = kind === 'power' ? POTION_POWER_MAX : POTION_CD_MAX;
-  if (lvl >= max) return;
+  const t = POTION_TRACKS[kind];
+  if (!t) return;
+  const lvl = potionTrackLvl(kind);
+  if (lvl >= t.max) return;
   const cost = potionUpgradeCost(kind);
   if (spendableGold() < cost) { log(`Need <span data-spr=ic_money></span>${cost} for that upgrade.`); return; }
   spendGold(cost);
-  if (kind === 'power') player.potionPowerLvl = lvl + 1; else player.potionCdLvl = lvl + 1;
+  player[t.field] = lvl + 1;
   sfx('buy');
-  log(`<span data-spr=potion_g></span> ${kind === 'power' ? 'Potion Potency' : 'Potion Recharge'} upgraded to Lv ${lvl + 1}.`, 'loot');
+  log(`<span data-spr=potion_g></span> ${t.name} upgraded to Lv ${lvl + 1}.`, 'loot');
   updateBars(); renderHealer(); renderSkillBar(); saveGame();
 }
 
@@ -19643,14 +19673,18 @@ function draw() {
           ctx.save(); ctx.globalAlpha = 0.28; ctx.fillStyle = '#cc3322'; ctx.fillRect(px, py, tw, th); ctx.restore();
           if (spriteReady) drawSpriteC('feat_lock', px + tw/2, py + th*0.5, Math.round(tw*0.5));
         } else {
-          // Cleared → highlight the way deeper with a pulsing gold ring so the
-          // descent stair is unmistakable next to the (plain) up-stairs.
+          // Cleared → highlight the way deeper with a pulsing ring so the descent
+          // stair is unmistakable next to the (plain) up-stairs. GOLD for an
+          // ordinary floor below; DANGER-RED when the stair drops into a
+          // guardian's floor (descentSignal), so the point of no return reads from
+          // across the room and not only in the threshold prompt.
+          const ring = descentSignal(dungeonLevel) === 'boss' ? PALETTE.danger : PALETTE.gold;
           const pulse = 0.5 + 0.5 * Math.sin(animNow() / 320);
           const lw = Math.max(2, tw * 0.09), o = lw / 2 + 1;
           ctx.save();
           ctx.lineWidth = lw;
-          ctx.strokeStyle = `rgba(255,207,90,${0.5 + 0.45 * pulse})`;
-          ctx.shadowColor = 'rgba(255,200,80,0.9)';
+          ctx.strokeStyle = hexA(ring, 0.5 + 0.45 * pulse);
+          ctx.shadowColor = hexA(ring, 0.9);
           ctx.shadowBlur = tw * (0.18 + 0.22 * pulse);
           ctx.strokeRect(px + o, py + o, tw - o * 2, th - o * 2);
           ctx.restore();
@@ -24006,7 +24040,7 @@ function onEnterCell(nx, ny) {
 // threshold. The prompt pauses the world (it's a MODAL); "I'm Ready" runs the
 // stored transition, "Not Ready" cancels it and leaves you where you stand.
 let pendingBossEntry = null;   // a thunk that performs the confirmed transition
-function isBossLevel(dl) { return dl > 0 && dl % 5 === 0; }
+function isBossLevel(dl) { return isBossDepth(dl); }   // cadence lives in systems/descentSignal
 function bossFloorCleared(dl) { return !!(player.clearedFloors && player.clearedFloors[dl]); }
 // True when moving to depth `dl` would drop you into an unbeaten boss arena.
 function bossGateNeeded(dl) { return !tutorialActive && isBossLevel(dl) && !bossFloorCleared(dl); }
@@ -24155,7 +24189,7 @@ function useFountain(nx, ny) {
   player.hp = player.maxHp;
   player.mp = player.maxMp;
   player.stamina = player.maxStamina; player._stamDelay = 0; // …and a full, ready Stamina bar (no lingering exertion delay)
-  player.potionCd = 0; // a sip also resets your potion cooldown
+  player.potionCdHp = 0; player.potionCdMp = 0; // a draught also resets both flask cooldowns
   const wasT = mapData[ny][nx];
   mapData[ny][nx] = 0; // fountain is spent
   bumpMapEpochIfChanged(wasT, 0); // fountain→floor bakes identically — no rebake stall
@@ -26002,10 +26036,6 @@ function enemyTileFree(x, y) {
 }
 
 const ENEMY_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-// ENEMY_DIRS flattened into two parallel arrays (same order!) so the BFS hot loop
-// below can index them without destructuring a pair per neighbour.
-const ENEMY_DIR_X = [1, -1, 0, 0, 1, 1, -1, -1];
-const ENEMY_DIR_Y = [0, 0, 1, -1, 1, -1, 1, -1];
 
 // A snapshot grid of every tile a foe can't enter this instant — walls, conjured
 // boss barriers, town NPCs, the player's tile, and every living enemy footprint.
@@ -26052,64 +26082,23 @@ function pathBlockedGrid() {
   return b;
 }
 
-// Breadth-first search from an enemy to (tx,ty); returns the first [dx,dy] step
-// along a shortest path, or null if unreachable. This is what lets foes route
-// around walls instead of grinding into them.
+// First [dx,dy] step of a shortest route from an enemy to (tx,ty) — what lets
+// foes route around walls instead of grinding into them. The search itself is
+// the pure body-aware flood in systems/chasePath.js; this wrapper just feeds it
+// the current blocked/solid grids and the mover's footprint.
 //
-// `came`/`seen` are reused scratch buffers stamped with a per-call generation so
-// neither needs reallocating or clearing each turn (only the rare stamp wrap
-// does), and the "is this tile free?" test reads the precomputed blocked grid.
-// The queue is a reused flat buffer too (each cell enqueues at most once, so W*H
-// slots always suffice) — no growable array churn per pathfind.
-let _pfCame = null, _pfSeen = null, _pfQueue = null, _pfGen = 0;
+// A one-tile foe ends ON the target square (reach 0) so the caller can turn that
+// last step into a swing. A multi-tile body can never stand where the hero
+// stands, so it aims to end BESIDE the target (reach 1) — the same `footDist(e)
+// <= 1` line its attack check uses.
+const MULTI_TILE_CHASE_REACH = 1;   // a wide body closes to adjacent, not onto you
 function enemyPathStep(e, tx, ty) {
-  const W = MAP_W, H = MAP_H, n = W * H;
-  // Exploration bound: BFS can never dequeue more than every cell, so capping at
-  // the map area changes NO chase (old semantics exactly) — it only names the
-  // worst case. The real unreachable-flood savings come from the cached static
-  // grid + pooled queue, not from giving up early.
-  const exploreCap = n;
-  const start = e.y * W + e.x, goal = ty * W + tx;
-  if (start === goal) return null;
-  const blocked = pathBlockedGrid();
-  if (!_pfCame || _pfCame.length !== n) { _pfCame = new Int32Array(n); _pfSeen = new Uint16Array(n); _pfQueue = new Int32Array(n); _pfGen = 0; }
-  const came = _pfCame, seen = _pfSeen, queue = _pfQueue;
-  // The seen stamps live in a Uint16Array, so the generation must wrap at the
-  // STORAGE width — a plain `=== 0` guard never fires on a JS number, and once
-  // gen outgrows 16 bits every `seen[ni] === gen` compare goes false forever:
-  // dedupe dies, the fixed-size queue silently overflows, and every foe freezes
-  // (~65k pathfinds ≈ under an hour of heavy combat). Wrap-and-clear instead.
-  if (++_pfGen > 0xffff) { seen.fill(0); _pfGen = 1; }
-  const gen = _pfGen;
-  queue[0] = start;
-  came[start] = -1; seen[start] = gen;
-  let qi = 0, qt = 1, found = false, dequeued = 0;
-  while (qi < qt) {
-    const cur = queue[qi++];
-    if (cur === goal) { found = true; break; }
-    if (++dequeued > exploreCap) break;       // backstop only — cap = map area, no chase is ever cut short
-    const cx = cur % W, cy = (cur - cx) / W;
-    for (let d = 0; d < 8; d++) {
-      const dx = ENEMY_DIR_X[d], dy = ENEMY_DIR_Y[d];
-      const nx = cx + dx, ny = cy + dy;
-      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-      const ni = ny * W + nx;
-      if (seen[ni] === gen) continue;
-      const isGoal = (ni === goal);
-      if (!isGoal && blocked[ni]) continue;
-      // Don't cut diagonally through a wall corner.
-      if (dx !== 0 && dy !== 0 && mapData[cy][nx] !== 0 && mapData[ny][cx] !== 0) continue;
-      came[ni] = cur; seen[ni] = gen;
-      queue[qt++] = ni;
-    }
-  }
-  if (!found) return null;
-  let cur = goal, hops = 0;
-  // Walk the parent chain back to the step adjacent to start. Bounded by the grid
-  // size; the guard is a backstop against a malformed chain rather than a real path.
-  while (came[cur] !== start) { cur = came[cur]; if (cur < 0 || ++hops > n) return null; }
-  const cx = cur % W, cy = (cur - cx) / W;
-  return [cx - e.x, cy - e.y];
+  const size = e.size || 1;
+  // `solid` (terrain + solid furniture) mirrors enemyStep's own corner-cut test,
+  // so the route never plans a diagonal squeeze the step itself will refuse.
+  const blocked = pathBlockedGrid(), solid = pathStaticGrid();
+  return chaseStep(MAP_W, MAP_H, blocked, solid, e.x, e.y, size, tx, ty,
+                   size > 1 ? MULTI_TILE_CHASE_REACH : 0);
 }
 
 function enemyMove(e) {
@@ -26136,18 +26125,19 @@ function enemyMove(e) {
   const beh = BEHAVIORS[e.behavior] || BEHAVIORS.chaser;
   const dist = Math.abs(e.x - player.x) + Math.abs(e.y - player.y);
 
-  // A multi-tile boss lumbers after you through its open arena: it casts/summons
-  // from range, crushes anything next to its footprint, lurches one tile toward
-  // you when it can fit, and has reach (a breath/lunge) when it can't close.
+  // A multi-tile boss lumbers after you through its arena: it casts/summons from
+  // range, crushes anything next to its footprint, and otherwise walks its whole
+  // bulk toward you — ROUTING AROUND rocks, furniture and wall corners. It used
+  // to try only "one step on the x axis, else one on the y", so a single solid
+  // tile on that axis pinned it in place forever and you could shoot it for free
+  // from behind the rock. Now it runs the same body-aware search every foe does,
+  // and when you're truly unreachable it still presses as close as it can fit.
   if ((e.size || 1) > 1) {
     const fd = footDist(e);
     if (e.isBoss && bossSpecial(e, fd, beh)) return;
     if (fd <= 1) { enemyAttackPlayer(e); return; }
-    const sx = Math.sign(player.x - e.x), sy = Math.sign(player.y - e.y);
-    const horizFirst = Math.abs(player.x - e.x) >= Math.abs(player.y - e.y);
-    const tries = horizFirst ? [[sx, 0], [0, sy]] : [[0, sy], [sx, 0]];
-    let moved = false;
-    for (const [mx, my] of tries) { if ((mx || my) && enemyStep(e, mx, my)) { moved = true; break; } }
+    const step = enemyPathStep(e, player.x, player.y);
+    const moved = !!step && enemyStep(e, step[0], step[1]);
     if (!moved && fd <= (beh.range || 4) && hasLineToPlayer(e)) enemyRangedAttack(e);
     return;
   }
@@ -26488,8 +26478,17 @@ function hasLineOfSight(ax, ay, bx, by) {
   }
   return true;
 }
-// Can foe `e` see the hero? (LOS from the enemy's tile to the player's.)
-function hasLineToPlayer(e) { return hasLineOfSight(e.x, e.y, player.x, player.y); }
+// Can foe `e` see the hero? (LOS from the enemy's tile to the player's.) A
+// multi-tile body sights from ANY tile it covers: its anchor is the top-left
+// corner, which can sit behind a rock while the rest of the bulk has a clear
+// shot — checking only the anchor is what left a wedged boss doing nothing.
+function hasLineToPlayer(e) {
+  const s = e.size || 1;
+  if (s === 1) return hasLineOfSight(e.x, e.y, player.x, player.y);
+  for (let dx = 0; dx < s; dx++) for (let dy = 0; dy < s; dy++)
+    if (hasLineOfSight(e.x + dx, e.y + dy, player.x, player.y)) return true;
+  return false;
+}
 
 // ── BOSS SIGNATURE ABILITIES ──
 function bossLifesteal(e, dmg) {
@@ -28049,7 +28048,7 @@ function availableServiceKinds() {
 }
 // Announce a freshly-arrived keeper with a small pop-up banner (fires even down in the
 // dungeon, the instant a boss kill lands one). Since each boss after the first brings
-// exactly one new keeper (the town-unlock brings two — the Healer and the Craftsman),
+// exactly one new keeper (the town-unlock brings two — the Merchant and the Craftsman),
 // `fresh` is usually a single keeper. `knownServices` latches which have been
 // announced so an arrival is heralded exactly once. Silent baseline sync when
 // `knownServices` is missing (an older save / mid-run load) so nothing spams on boot.
@@ -28167,6 +28166,11 @@ function checkLevelUp() {
     player.mp = player.maxMp;
     player.stamina = player.maxStamina || MAX_STAMINA;
     player._stamDelay = 0;      // and a ready Stamina bar — no lingering exertion delay
+    // …and the whole kit comes back with the bars: every skill cooldown wipes, so a
+    // mid-fight level hands over full mana AND something to spend it on
+    // (systems/levelUpRefresh.js).
+    const cdRefresh = refreshSkillCooldowns(player.skillCds);
+    player.skillCds = cdRefresh.cooldowns;
     // A level that also banks an ascendancy point gets its own ethereal sting so the
     // milestone stands out from an ordinary level-up fanfare.
     if (ascGained) sfx('ascpoint'); else sfx('levelup');
@@ -28179,8 +28183,11 @@ function checkLevelUp() {
     showLevelUpBanner(player.level, gained);
     log(`<span data-spr=ui_level></span> LEVEL UP! Now level ${player.level}!`, 'important');
     log(`<span data-spr=mat_glimmer></span> +${pointPoolPhrase(gained, '·')} — spend them on the HERO and SKILLS tabs${ascGained ? ' and the PATH tree' : ''}.`, 'important');
+    // Only worth a line when the refresh actually cut something short.
+    if (cdRefresh.cleared) log(`<span data-spr=ic_orb></span> ${cdRefresh.cleared} skill${cdRefresh.cleared === 1 ? '' : 's'} off cooldown — cast again.`, 'important');
     updateBars();
     renderPanel();
+    renderSkillBar();   // dials read ready immediately, not on the next frame's sweep
     saveGame();
     // Recurse in case multiple levels were gained from one big XP haul.
     checkLevelUp();
@@ -28886,22 +28893,24 @@ function updateBars() {
   updateHaloVignette();
 }
 
-// Potions are a SKILL, not a consumable: unlimited uses, but both flasks share a
-// cooldown, so you can't spam them — after a sip both flasks recharge over a few
-// real seconds. Health potions restore a percentage of max HP so they scale with
-// you instead of becoming useless at high levels.
+// Potions are a SKILL, not a consumable: unlimited uses, but each flask recharges
+// on its OWN cooldown after a sip, so you can't spam either one. Health potions
+// restore a percentage of max HP so they scale with you instead of becoming
+// useless at high levels.
 const HEAL_PERCENT = 0.35;     // a sip mends 35% of max HP, paid out OVER TIME (not an instant reset)
-const POTION_CD = 6;            // shared cooldown — 6 real seconds between sips
+const POTION_CD = 6;            // base recharge — 6 real seconds per flask (Recharge ranks cut it)
 function healPotionAmount() { return Math.max(1, Math.round(player.maxHp * potionHealPct())); }
-function potionReady() { return (player.potionCd || 0) <= 0; }
+// Seconds left on a flask's own cooldown ('mp' for the mana flask, health otherwise).
+function potionCdLeft(flask) { return (flask === 'mp' ? player.potionCdMp : player.potionCdHp) || 0; }
+function potionReady(flask) { return potionCdLeft(flask) <= 0; }
 function useHealthPotion() {
   if (portalChanneling() || portalTransiting() || mapWarping()) return;   // channeling / mid-teleport
-  if (!potionReady()) { log(`⏳ Potions recharge — ${Math.ceil(player.potionCd)}s left.`); return; }
+  if (!potionReady('hp')) { log(`⏳ Health flask recharging — ${Math.ceil(potionCdLeft('hp'))}s left.`); return; }
   if (player.hp >= player.maxHp) { log('Already at full health.'); return; }
   const amt = queueHeal(healPotionAmount(), true); // over-time, interruptible sip (a heavy direct hit spills it)
   sfx('potion');
   log(`<span data-spr=ic_heart></span> Quaffed a ${logPotion('Health Potion')} — ${clHeal(amt)} HP over a few seconds.`);
-  spendPotionTurn();
+  spendPotionTurn('hp');
   if (tutorialActive) clearBeachPotionCue();   // lesson learned — retire the heal teach
 }
 
@@ -28911,25 +28920,27 @@ const MANA_PERCENT = 0.40;     // a sip restores 40% of max MP, paid out OVER TI
 function manaPotionAmount() { return Math.max(10, Math.round(player.maxMp * potionManaPct())); }
 function useManaPotion() {
   if (portalChanneling() || portalTransiting() || mapWarping()) return;   // channeling / mid-teleport
-  if (!potionReady()) { log(`⏳ Potions recharge — ${Math.ceil(player.potionCd)}s left.`); return; }
+  if (!potionReady('mp')) { log(`⏳ Mana flask recharging — ${Math.ceil(potionCdLeft('mp'))}s left.`); return; }
   if ((player.maxMp || 0) <= 0) { log('You have no mana pool — your skills are paid for in health.'); return; }
   if (player.mp >= player.maxMp) { log('Already at full mana.'); return; }
   const amt = queueMana(manaPotionAmount()); // over-time restore
   sfx('potion');
   log(`<span data-spr=potion_g></span> Quaffed a ${logPotion('Mana Potion')} — +${amt} MP over a few seconds.`, 'loot');
-  spendPotionTurn();
+  spendPotionTurn('mp');
   if (_manaGateWanted) { _manaGateWanted = false; syncTutGate(); }   // first-spell lesson learned — resume
 }
 
-// A potion plays out like an active skill: a sip starts the shared cooldown,
-// which then burns down in real seconds (see tickCooldowns). This holds in town
-// too — potions are quaffable at the hub, and time flows there, so the same sip
-// + shared cooldown applies whether you're topping up before a dive or fighting.
-function spendPotionTurn() {
+// A potion plays out like an active skill: a sip starts THAT flask's cooldown,
+// which then burns down in real seconds (see tickCooldowns) while the other flask
+// stays ready. This holds in town too — potions are quaffable at the hub, and time
+// flows there, so the same sip + cooldown applies whether you're topping up before
+// a dive or fighting.
+function spendPotionTurn(flask) {
   updateBars();
-  // Real-time: quaffing just starts the shared cooldown (it burns down in real
+  // Real-time: quaffing just starts that flask's cooldown (it burns down in real
   // seconds — see tickCooldowns), the same in town as in the dungeon.
-  player.potionCd = effectivePotionCd();
+  if (flask === 'mp') player.potionCdMp = effectivePotionCd('mp');
+  else player.potionCdHp = effectivePotionCd('hp');
   updateBars();
   renderSkillBar();
   saveGame();
@@ -30471,24 +30482,23 @@ function renderSkillBar() {
   bar.classList.toggle('in-town', town);
   document.body.classList.toggle('town-bar', town);
   // Potion skills pinned to the far left of the bar: Health (Q) then Mana (E).
-  // They're unlimited but share a 5-second cooldown, so the info slot shows the
-  // remaining seconds when recharging (blank when ready). They stay live in town —
+  // They're unlimited but each recharges on its OWN cooldown, so each info slot
+  // shows that flask's remaining seconds (blank when ready). They stay live in town —
   // quaff to top up instantly before a dive instead of waiting out the free rest.
-  const pcd = player.potionCd || 0;
-  const potReady = pcd <= 0;
+  const hcd = potionCdLeft('hp'), mcd = potionCdLeft('mp');
   const hpFull = player.hp >= player.maxHp;
   const mpFull = player.mp >= player.maxMp;
-  const urgent = potReady && player.hp < player.maxHp * 0.35;
+  const urgent = hcd <= 0 && player.hp < player.maxHp * 0.35;
   const healHint = 'press ' + kbLabel('healthPotion');
   const manaHint = 'press ' + kbLabel('manaPotion');
-  const healTip = `<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health Potion</div><div class='ht-line'>Mends health <b>over a few seconds</b> — a heavy direct hit spills the rest of the sip.</div><div class='ht-sub'>${healHint} · over time · ${effectivePotionCd()}-second cooldown</div>`;
-  const manaTip = `<div class='ht-name' style='color:var(--mp)'><span data-spr=potion_g></span> Mana Potion</div><div class='ht-line'>Restores mana <b>over a few seconds</b>.</div><div class='ht-sub'>${manaHint} · over time · ${effectivePotionCd()}-second cooldown</div>`;
+  const healTip = `<div class='ht-name' style='color:var(--hp)'><span data-spr=ic_heart></span> Health Potion</div><div class='ht-line'>Mends health <b>over a few seconds</b> — a heavy direct hit spills the rest of the sip.</div><div class='ht-sub'>${healHint} · over time · ${effectivePotionCd('hp')}-second cooldown</div>`;
+  const manaTip = `<div class='ht-name' style='color:var(--mp)'><span data-spr=potion_g></span> Mana Potion</div><div class='ht-line'>Restores mana <b>over a few seconds</b>.</div><div class='ht-sub'>${manaHint} · over time · ${effectivePotionCd('mp')}-second cooldown</div>`;
   const cdDial = (key) => `<span class="sb-cd" data-cd="${key}"></span>`;
   // Each tile rides in a cell with its hotkey pill stacked above the button. `label`
   // is the hotkey (or "AUTO" for the auto-cast slot); `tone` tints the pill to match
   // the button family ('' for a plain skill slot). The icon now fills the box below.
   // The tone also tags the CELL (sb-cell-hp / -mp / -sprint / -town / -auto) so the
-  // touch footer can grid-place the left cluster — RUN over the HP/MP potions on one
+  // touch footer can grid-place the left cluster — sprint over the HP/MP potions on one
   // row — regardless of whether the optional Town Portal cell is present.
   const cell = (label, tone, btn) => `<div class="sb-cell${tone ? ' sb-cell-' + tone : ''}"><span class="sb-pill${tone ? ' ' + tone : ''}">${label}</span>${btn}</div>`;
   // The live countdown text ("4s" on a recharging potion, the portal timer) is
@@ -30496,14 +30506,14 @@ function renderSkillBar() {
   // the _lastSkillBarHtml cache, forcing a full bar rebuild each tick. The
   // .sb-cd-text placeholders stay empty in the cached string and are filled via
   // textContent in syncSkillBarCountdowns() on every render call instead.
-  const healBtn = cell(sbPill('healthPotion'), 'hp', `<button class="skillbar-btn potion ${potReady && !hpFull ? 'ready' : 'empty'} ${urgent ? 'urgent' : ''} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} onclick="useHealthPotion()">
-      <span class="sb-icon">${dlIconFill('potion_r')}</span><span class="sb-info sb-cd-text" data-cdt="pot" id="heal-label"></span>${cdDial('pot')}
+  const healBtn = cell(sbPill('healthPotion'), 'hp', `<button class="skillbar-btn potion ${hcd <= 0 && !hpFull ? 'ready' : 'empty'} ${urgent ? 'urgent' : ''} ${hcd > 0 ? 'cooling' : ''}" ${hoverTip(healTip)} onclick="useHealthPotion()">
+      <span class="sb-icon">${dlIconFill('potion_r')}</span><span class="sb-info sb-cd-text" data-cdt="pot-hp" id="heal-label"></span>${cdDial('pot-hp')}
     </button>`);
   // A no-mana hero has nothing for a mana flask to refill, so the cell is left OUT of
   // the bar rather than shipped as a permanently-greyed button that logs "already at
   // full mana" when tapped. The left cluster reflows without it.
-  const manaBtn = (player.maxMp || 0) <= 0 ? '' : cell(sbPill('manaPotion'), 'mp', `<button class="skillbar-btn potion mana ${potReady && !mpFull ? 'ready' : 'empty'} ${pcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} onclick="useManaPotion()">
-      <span class="sb-icon">${dlIconFill('potion_g')}</span><span class="sb-info sb-cd-text" data-cdt="pot"></span>${cdDial('pot')}
+  const manaBtn = (player.maxMp || 0) <= 0 ? '' : cell(sbPill('manaPotion'), 'mp', `<button class="skillbar-btn potion mana ${mcd <= 0 && !mpFull ? 'ready' : 'empty'} ${mcd > 0 ? 'cooling' : ''}" ${hoverTip(manaTip)} onclick="useManaPotion()">
+      <span class="sb-icon">${dlIconFill('potion_g')}</span><span class="sb-info sb-cd-text" data-cdt="pot-mp"></span>${cdDial('pot-mp')}
     </button>`);
   // The four manual slots are rendered filled or empty (keys 1–4, all styled alike).
   // A filled slot casts on click and can be dragged to another slot to rearrange; an
@@ -30602,11 +30612,13 @@ function renderSkillBar() {
       <span class="sb-icon">${dlIconFill('feat_gate_red')}</span><span class="sb-info sb-cd-text" data-cdt="portal"></span>
     </button>`);
   }
-  // On touch a RUN (sprint) toggle leads the left group, so the bottom bar reads
-  // as a 2×2 (RUN/Town over HP/MP) · AUTO · 2×2 (skills). It's a plain toggle, not
+  // On touch a sprint toggle leads the left group, so the bottom bar reads as a
+  // 2×2 (sprint/Town over HP/MP) · AUTO · 2×2 (skills). It's a plain toggle, not
   // a skill; it lights up while auto-sprint is latched. Absent on desktop.
+  // No label pill — the speed-lines glyph carries it (the aria-label names it for
+  // screen readers), and dropping the text hands the row back to the tiles.
   const sprintCell = isTouchMode()
-    ? cell('RUN', 'sprint', `<button class="skillbar-btn sprint-btn${sprintLatched ? ' on' : ''}" onclick="toggleTouchSprint()" aria-label="Toggle sprint">
+    ? cell('', 'sprint', `<button class="skillbar-btn sprint-btn${sprintLatched ? ' on' : ''}" onclick="toggleTouchSprint()" aria-label="Toggle sprint">
       <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg></span>
     </button>`)
     : '';
@@ -30639,18 +30651,19 @@ function renderSkillBar() {
   syncSkillBarCountdowns(bar, town);
   syncBeltBounty();
 }
-// Fill the .sb-cd-text placeholders with the live countdown text — the potions'
-// shared "Ns" recharge (hidden by CSS while the dial shows, but kept identical to
-// the old baked text) and the town portal's channel seconds. textContent-only, so
-// it never busts the cached bar markup or re-parses any HTML.
+// Fill the .sb-cd-text placeholders with the live countdown text — each flask's own
+// "Ns" recharge (hidden by CSS while the dial shows, but kept identical to the old
+// baked text) and the town portal's channel seconds. textContent-only, so it never
+// busts the cached bar markup or re-parses any HTML.
 function syncSkillBarCountdowns(bar, town) {
   if (!_sbCdTextEls) _sbCdTextEls = Array.from(bar.querySelectorAll('.sb-cd-text'));
   if (!_sbCdTextEls.length) return;
-  const pcd = player.potionCd || 0;
-  const potTxt = pcd > 0 ? Math.ceil(pcd) + 's' : '';
+  const secs = (cd) => cd > 0 ? Math.ceil(cd) + 's' : '';
+  const hpTxt = secs(potionCdLeft('hp')), mpTxt = secs(potionCdLeft('mp'));
   const portalTxt = (!town && portalChanneling()) ? String(Math.ceil(portalCharge)) : '';
   for (const el of _sbCdTextEls) {
-    const txt = el.getAttribute('data-cdt') === 'portal' ? portalTxt : potTxt;
+    const which = el.getAttribute('data-cdt');
+    const txt = which === 'portal' ? portalTxt : which === 'pot-mp' ? mpTxt : hpTxt;
     if (el._cdTxt !== txt) { el._cdTxt = txt; el.textContent = txt; }
   }
 }
@@ -32939,12 +32952,22 @@ function loadGame() {
     // persist across floors as a carried count. Seed it on saves that predate this.
     if (typeof player.keys !== 'number' || !(player.keys >= 0)) player.keys = 0;
     // Potions used to be hoarded consumables; they're a cooldown-gated skill now.
-    // Drop the old counters from older saves and seed the shared potion cooldown.
+    // Drop the old counters from older saves and seed the per-flask cooldowns.
     delete player.healPotions; delete player.manaPotions; delete player.healthPotionsBought;
     // Cooldowns are transient combat state and now measured in seconds (older
-    // saves stored them as world-turns); clear the potion cooldown on load so no
+    // saves stored them as world-turns); clear both flask cooldowns on load so no
     // stale turn-count lingers as a wrong seconds value.
-    player.potionCd = 0;
+    player.potionCdHp = 0; player.potionCdMp = 0;
+    delete player.potionCd;   // the old single shared timer
+    // Potion Recharge used to be ONE track over a shared cooldown; it's now one
+    // track per flask. Hand an older hero the ranks they paid for on BOTH flasks
+    // (capped at the new max) rather than refunding gold, then retire the field.
+    if (typeof player.potionCdLvl === 'number') {
+      const owed = Math.max(0, Math.min(POTION_CD_MAX, Math.floor(player.potionCdLvl)));
+      if (typeof player.potionCdHpLvl !== 'number') player.potionCdHpLvl = owed;
+      if (typeof player.potionCdMpLvl !== 'number') player.potionCdMpLvl = owed;
+      delete player.potionCdLvl;
+    }
     // Real-time movement adds stamina (sprint/dash) and momentum/cooldown fields.
     // Seed them on older saves — and repair a NaN stamina a prior buggy build may
     // have persisted — or sprint stays dead and dashing goes free/unlimited.
@@ -36320,7 +36343,7 @@ try {
   }
   log('Progress auto-saves as you play.');
   log('Open <span data-spr=chest></span> BAG to view loot; press the pad\'s USE button to grab items.');
-  log(`Tap the <span data-spr=potion_r></span> or <span data-spr=potion_g></span> flask to quaff a ${logPotion('Potion')} — free, but they share a short cooldown.`);
+  log(`Tap the <span data-spr=potion_r></span> or <span data-spr=potion_g></span> flask to quaff a ${logPotion('Potion')} — free, but each takes a few seconds to refill.`);
   log('⌨️ Keys: Q health potion · E mana potion · R primary skill · 3–9 skills · T town · B open bag · Space/F use.');
   // Only claim points the hero actually holds. A fresh hero starts with NONE
   // (SKILL_POINTS_AT_START is 0 — the shore's graduation is where the first ones are
@@ -36636,6 +36659,68 @@ try {
       } catch (e) { out.cases.push({ kind: 'detour-npc', err: String(e) }); }
       return out;
     };
+    // __BOSS_CHASE_TEST__ (preview only): a hunting foe must WALK AROUND cover to
+    // reach the hero, never wedge behind it. Each case builds a bare arena, drops
+    // solid rock between a body of the given size and the hero, then beats the real
+    // enemy AI and reports how far it closed. `stuck: true` is the old bug — the
+    // body never moved a single tile because its only greedy option was blocked.
+    // The wide cases use a plain (non-boss) foe so no random signature ability can
+    // fire: the movement branch under test is the one every multi-tile body runs.
+    window.__bossChaseTest = function () {
+      const solidBase = DECOR_INDEX.findIndex((d) => d.block === 'base'); // 1-tile solid decor
+      const run = (label, W, H, size, rocks, ex, ey, px, py, beats) => {
+        try {
+          MAP_W = W; MAP_H = H;
+          mapData = [];
+          for (let y = 0; y < H; y++) { mapData[y] = []; for (let x = 0; x < W; x++) mapData[y][x] = (x === 0 || y === 0 || x === W - 1 || y === H - 1) ? 1 : 0; }
+          furnitureMap = {}; decorMap = {}; teleporters = {}; merchant = null; mystic = null;
+          for (const [rx, ry] of rocks) { decorMap[ry + ',' + rx] = solidBase; furnitureMap[ry + ',' + rx] = 1; }
+          floorSerial++; bumpMapEpoch(); pathGridDirty();
+          statusEffects = []; bossHazards = []; enemies.length = 0; bumpEnemyPos();
+          player.x = px; player.y = py; player.fx = px; player.fy = py;
+          player.hp = player.maxHp = 9999999;
+          const e = { x: ex, y: ey, fx: ex, fy: ey, size, hp: 999999, maxHp: 999999, dmg: 0,
+                      behavior: 'chaser', type: 'ratking', name: 'Chase Dummy', dead: false };
+          enemies.push(e); bumpEnemyPos();
+          // "In reach" differs by body: a one-tile foe swings the moment it can
+          // STEP onto you, diagonals included (Chebyshev 1, which is Manhattan 2),
+          // while a wide body attacks anything orthogonally touching its footprint
+          // (the fd <= 1 rule its own branch uses).
+          const cheb = () => { let b = Infinity;
+            for (let dx = 0; dx < size; dx++) for (let dy = 0; dy < size; dy++)
+              b = Math.min(b, Math.max(Math.abs(e.x + dx - player.x), Math.abs(e.y + dy - player.y)));
+            return b; };
+          const inReach = () => (size > 1 ? footDist(e) <= 1 : cheb() <= 1);
+          const start = footDist(e), startReach = inReach();
+          const trail = [[e.x, e.y]];
+          let best = start, moves = 0, beat = 0;
+          for (; beat < beats; beat++) {
+            if (inReach()) break;             // stop before it swings
+            const bx = e.x, by = e.y;
+            enemyMove(e);
+            if (e.x !== bx || e.y !== by) { moves++; if (trail.length < 24) trail.push([e.x, e.y]); }
+            const d = footDist(e); if (d < best) best = d;
+          }
+          return { label, size, start, startReach, end: footDist(e), endCheb: cheb(),
+                   reached: inReach(), best, moves, beats: beat, stuck: moves === 0, trail };
+        } catch (err) { return { label, size, err: String(err) }; }
+      };
+      return { cases: [
+        // The reported case: a 2x2 body level with the hero, one rock covering both
+        // its rows. Greedy "x then y" had exactly one move to try (the y try is a
+        // no-op when you share its rows), the rock vetoed it, and it froze there.
+        run('wide-behind-rock', 13, 11, 2, [[4, 4], [4, 5]], 2, 4, 8, 4, 40),
+        // A 3x3 body against a wall it must climb over the end of.
+        run('huge-around-wall', 17, 15, 3, [[8, 4], [8, 5], [8, 6], [8, 7], [8, 8], [8, 9], [8, 10]], 2, 6, 13, 6, 60),
+        // Regression guard: a lone foe still rounds the same rock it always did.
+        run('single-around-rock', 13, 11, 1, [[4, 4], [4, 5]], 2, 4, 8, 4, 40),
+        // Hero sealed off entirely: the body must still press as close as it fits
+        // and hold there — standing still from the first beat was the whole bug.
+        run('unreachable-hero', 17, 15, 2,
+            [[8, 1], [8, 2], [8, 3], [8, 4], [8, 5], [8, 6], [8, 7], [8, 8], [8, 9], [8, 10], [8, 11], [8, 12], [8, 13]],
+            2, 7, 12, 7, 40),
+      ] };
+    };
     // __DECOR_PLUG_CHECK__ (preview only): a SOLID multi-tile piece (bed/table/
     // sofa) must sit wholly inside a room, never bridging a doorway or corridor —
     // otherwise it plugs a hall you can't walk down (and a detour keeps the floor
@@ -36900,7 +36985,8 @@ function updatePlayerCombat(dt) {
 // attack cooldown uses), so their on-screen numbers read as a plain seconds
 // countdown instead of abstract world-turns. Floored at 0 so they never undershoot.
 function tickCooldowns(dt) {
-  if (player.potionCd > 0) { player.potionCd -= dt; if (player.potionCd < 0) player.potionCd = 0; }
+  if (player.potionCdHp > 0) { player.potionCdHp -= dt; if (player.potionCdHp < 0) player.potionCdHp = 0; }
+  if (player.potionCdMp > 0) { player.potionCdMp -= dt; if (player.potionCdMp < 0) player.potionCdMp = 0; }
   if (player.skillCds) for (const k in player.skillCds) {
     if (player.skillCds[k] > 0) { player.skillCds[k] -= dt; if (player.skillCds[k] < 0) player.skillCds[k] = 0; }
   }
@@ -36923,7 +37009,10 @@ function updateCooldownDials() {
   for (const d of _sbCdEls) {
     const el = d.el, btn = d.btn, id = d.id;
     let rem = 0, total = 1;
-    if (id === 'pot') { rem = player.potionCd || 0; total = POTION_CD; }
+    if (id === 'pot-hp' || id === 'pot-mp') {
+      const flask = id === 'pot-mp' ? 'mp' : 'hp';
+      rem = potionCdLeft(flask); total = effectivePotionCd(flask);
+    }
     else if (id && id.indexOf('sk:') === 0) { const sid = id.slice(3); rem = skillCd(sid); total = skillCdMax[sid] || rem || 1; }
     if (rem > 0.05) {
       if (!btn.classList.contains('cooling')) btn.classList.add('cooling');

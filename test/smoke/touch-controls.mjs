@@ -168,7 +168,7 @@ async function main() {
     // A live, off-cooldown potion with room to heal, and no tip on screen.
     const armPotion = () => page.evaluate(() => {
       window.player.hp = Math.max(1, window.player.maxHp - 100);
-      window.player.potionCd = 0;
+      window.player.potionCdHp = 0;
       document.getElementById('hovertip').style.display = 'none';
       if (typeof window.renderSkillBar === 'function') window.renderSkillBar();
     });
@@ -189,7 +189,7 @@ async function main() {
       await page.waitForTimeout(60);
       const afterTap = await page.evaluate(() => ({
         tip: getComputedStyle(document.getElementById('hovertip')).display,
-        cd: window.player.potionCd,
+        cd: window.player.potionCdHp,
       }));
       tapTip = afterTap.tip; tapCast = afterTap.cd > 0;
       if (afterTap.tip !== 'none') failures.push('a quick tap on the potion button popped the hover tip (it should only fire the action)');
@@ -203,7 +203,7 @@ async function main() {
       await fireTouch(page, POT_SEL, 'pointerup', potBox.x, potBox.y, 4);
       await page.evaluate((sel) => document.querySelector(sel).click(), POT_SEL);   // a hold still ends on a click — must be swallowed
       await page.waitForTimeout(60);
-      const cdAfterHold = await page.evaluate(() => window.player.potionCd);
+      const cdAfterHold = await page.evaluate(() => window.player.potionCdHp);
       holdCast = cdAfterHold > 0;
       if (holdTip === 'none') failures.push('a long-press on the potion button did not pop the hover tip');
       if (holdCast) failures.push('a long-press on the potion button fired its action (a hold should only inspect)');
@@ -224,7 +224,7 @@ async function main() {
       await fireTouch(page, POT_SEL, 'pointerup', potBox.x, potBox.y, 20);
       await page.evaluate((sel) => document.querySelector(sel).click(), POT_SEL);
       await page.waitForTimeout(60);
-      multiCast = await page.evaluate(() => window.player.potionCd > 0);
+      multiCast = await page.evaluate(() => window.player.potionCdHp > 0);
       if (multiTip === 'none') failures.push('multi-touch: a second finger moving cancelled the long-press (tip never showed)');
       if (multiCast) failures.push('multi-touch: the long-press fired the action despite raising the tip');
     }

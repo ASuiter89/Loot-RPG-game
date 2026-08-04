@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HEALER_BLESSINGS, RESTED_BUFF, HEALER_BUFF_FLOORS } from '../../src/data/healerBuffs.js';
+import { HEALER_BLESSINGS, RESTED_BUFF, HEALER_BUFF_FLOORS, BLESSING_FLOORS } from '../../src/data/healerBuffs.js';
 
 // The fx keys the combat formulas actually read (see foodFx / healerFx wiring in
 // src/legacy/game.js). A buff carrying an unknown key would silently do nothing.
@@ -50,6 +50,15 @@ describe('HEALER_BLESSINGS catalog', () => {
       expect(typeof b.base).toBe('number');
       expect(b.base).toBeGreaterThan(0);
     }
+  });
+
+  it('every blessing runs the full BLESSING_FLOORS duration', () => {
+    expect(BLESSING_FLOORS).toBe(5);
+    for (const b of HEALER_BLESSINGS) expect(b.floors).toBe(BLESSING_FLOORS);
+  });
+
+  it('a bought blessing outlasts the free Rested bonus', () => {
+    expect(BLESSING_FLOORS).toBeGreaterThan(HEALER_BUFF_FLOORS);
   });
 
   it('blessing ids never collide with the rested id', () => {

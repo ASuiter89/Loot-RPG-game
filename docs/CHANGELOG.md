@@ -42,6 +42,48 @@ test suite + smoke green.
   `fortuneStat` / `curseStat` on each item; the wiki's "Cursed Items" page is now
   "Special Items"; onboarding copy reads "set & special pieces".
 
+## UI — the stair into a guardian floor rings red
+
+- 📦 New `src/systems/descentSignal.js` — the boss-floor cadence (`BOSS_EVERY`,
+  `isBossDepth`) plus `descentSignal(dl)`, which answers whether the down-stair on a
+  floor drops you onto a guardian. Pure: a depth in, a `'boss'`/`'normal'` key out.
+- 📦 `src/legacy/game.js`: the cleared down-stair's pulsing ring picks its colour from
+  that key — `PALETTE.danger` when a guardian waits below, `PALETTE.gold` otherwise —
+  and both stroke and glow now read from the `PALETTE` mirror instead of hardcoded
+  `rgba(...)` literals. Legacy `isBossLevel` delegates to `isBossDepth`, so the every-5th
+  cadence has one home.
+- 🧪 `test/systems/descentSignal.test.js` — the cadence across tier boundaries and into
+  Endless, the descent that lands on a guardian, and garbage depths.
+- 📄 `gameState().stairs.bossBelow` exposes the same fact; `gameGuide("bosses")` and the
+  floor-clear topic describe the red ring.
+
+## Fix — a hunting foe never wedges itself behind cover
+
+- 📦 New `src/systems/chasePath.js` — the chase search, extracted from the legacy
+  `enemyPathStep` BFS and generalised to a `size x size` BODY. `chaseStep(...)` floods
+  over body PLACEMENTS (so a wide foe only steps where its whole bulk fits and refuses
+  a gap narrower than itself), keeps the no-diagonal-squeeze rule, and — the part that
+  fixes the report — returns a step toward the CLOSEST reachable placement when the
+  hero is unreachable, so nothing ever freezes out of reach. `bodyDist`/`bodyFits` are
+  exported for the geometry. Pure: flat `blocked`/`solid` grids in, one step out.
+- 📦 `src/legacy/game.js`: `enemyPathStep` is now a thin wrapper that hands the module
+  the current grids and the foe's footprint. The multi-tile branch of `enemyMove` calls
+  it instead of the old greedy "step on x, else step on y" — a single solid tile on the
+  one axis that mattered used to pin a boss in place permanently. Its corner-cut test
+  now reads walls **and** furniture (matching `enemyStep`'s own check) so a planned
+  diagonal is never one the step then refuses. `hasLineToPlayer` sights from any tile of
+  a wide body, not just its top-left anchor.
+- 🧪 `test/systems/chasePath.test.js` — routing around walls, the reported
+  boss-behind-a-rock case, refusing a one-row gap a 2x2 body can't use (while a lone
+  foe slips through it), never overlapping solid, stopping beside rather than on the
+  hero, the corner-cut, the closest-approach fallback, and the 16-bit stamp wrap.
+- 🧪 `test/smoke/boss-pathing.mjs` (+ `npm run smoke`) — drives the REAL AI over
+  deterministic arenas via a new `__bossChaseTest()` preview hook; verified to fail
+  against the old greedy code (`stuck: true`, zero tiles moved).
+- 📄 `gameGuide("enemies")` now states that foes pathfind around cover, that cover
+  breaks line of sight without pinning anything, and how a wide body's footprint
+  limits which gaps it can take.
+
 ## Balance — the second skill tier waits for level 6
 
 - 📦 New `src/data/skillTiers.js` — the tier→hero-level ladders, extracted from the

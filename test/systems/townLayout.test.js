@@ -188,40 +188,47 @@ describe('authored town data', () => {
   });
 
   it('gathers every endgame keeper INSIDE the hedged sanctum, and no regular one', () => {
-    // The endgame keepers cluster in the walled grove (interior x:4..10, y:3..8);
-    // every regular keeper sits out in the open clearing. This is the "group all
-    // end-game NPCs together in a separate room" invariant. The grove sits one tile up
-    // (top wall y:2) so its top butts the treeline with no strandable row above it.
+    // The endgame keepers cluster in the walled grove's interior (one tile in from the
+    // TOWN_SANCTUM box, which is the hedge ring itself); every regular keeper sits out
+    // in the open clearing. This is the "group all end-game NPCs together in a separate
+    // room" invariant.
     const ENDGAME = new Set(['covenants', 'weave', 'pantheon', 'mirrorforge', 'deeds', 'cycles']);
-    const inSanctum = (n) => n.x >= 4 && n.x <= 10 && n.y >= 3 && n.y <= 8;
+    const b = TOWN_SANCTUM;
+    const inInterior = (n) => n.x > b.x0 && n.x < b.x1 && n.y > b.y0 && n.y < b.y1;
     for (const n of TOWN_NPCS) {
-      if (ENDGAME.has(n.kind)) expect(inSanctum(n)).toBe(true);
-      else expect(inSanctum(n)).toBe(false);
+      if (ENDGAME.has(n.kind)) expect(inInterior(n)).toBe(true);
+      else expect(inInterior(n)).toBe(false);
     }
     // The sanctum is a real enclosure: a ring of solid hedge ('h') decor around that
     // interior, with exactly ONE walkable gap (its doorway) on the border.
     const hedges = new Set(TOWN_DECOR.filter((d) => d.c === 'h').map((d) => key(d.x, d.y)));
     let gaps = 0;
-    for (let x = 3; x <= 11; x++) for (let y = 2; y <= 9; y++) {
-      const border = x === 3 || x === 11 || y === 2 || y === 9;
+    for (let x = b.x0; x <= b.x1; x++) for (let y = b.y0; y <= b.y1; y++) {
+      const border = x === b.x0 || x === b.x1 || y === b.y0 || y === b.y1;
       if (border && !hedges.has(key(x, y))) gaps++;
     }
     expect(gaps).toBe(1);
   });
 
-  it('leaves no walkable row directly above the grove (nothing for a keeper to get stranded in)', () => {
-    // The grove's top wall must butt straight against the solid treeline — if an open
-    // row sat between them, a wandering keeper could slip in and pace a dead single-tile
-    // strip. Build the solid-blocked set (borders + solid decor footprints) and assert
-    // every tile directly above the top hedge wall, across the grove's width, is blocked.
+  it('leaves no walkable strip above or west of the grove (nothing for a keeper to get stranded in)', () => {
+    // The grove is tucked into the top-left corner, so its top and west walls butt
+    // straight against the solid treeline — if an open lane sat between them, a
+    // wandering keeper could slip in and pace a dead single-tile strip. Build the
+    // solid-blocked set (borders + solid decor footprints) and assert every tile
+    // directly outside those two walls, across the grove's span, is blocked.
     const hedges = TOWN_DECOR.filter((d) => d.c === 'h');
     const topWallY = Math.min(...hedges.map((d) => d.y));
+    const westWallX = Math.min(...hedges.map((d) => d.x));
     const xs = hedges.map((d) => d.x);
+    const ys = hedges.map((d) => d.y);
     const blocked = new Set();
     for (let x = 0; x < TOWN_W; x++) for (let y = 0; y < TOWN_H; y++) if (isBorder(x, y)) blocked.add(key(x, y));
     for (const d of TOWN_DECOR) { const r = resolve(d); if (r.solid) for (const [fx, fy] of r.foot) blocked.add(key(fx, fy)); }
     for (let x = Math.min(...xs); x <= Math.max(...xs); x++) {
       expect(blocked.has(key(x, topWallY - 1))).toBe(true);
+    }
+    for (let y = Math.min(...ys); y <= Math.max(...ys); y++) {
+      expect(blocked.has(key(westWallX - 1, y))).toBe(true);
     }
   });
 
@@ -253,18 +260,20 @@ describe('authored town data', () => {
     expect(pathAdjacent).toBe(true);             // but a path tile is one step away
   });
 
-  it('makes the Healer and Craftsman the two founding keepers (both share arrival 1)', () => {
+  it('makes the Merchant and Craftsman the two founding keepers (both share arrival 1)', () => {
     // The town-unlock (felling the Floor 5 guardian) brings BOTH founders at once, so a
-    // hero's very first town visit has the Healer AND the Craftsman — the Craftsman's HUD
-    // Field Kit is on hand from the start, and it's the keeper waiting right by the portal.
-    expect(TOWN_SERVICE_ARRIVALS.healer).toBe(1);
+    // hero's very first town visit has the Merchant AND the Craftsman — somewhere to spend
+    // the first haul, plus the Craftsman's HUD Field Kit on hand from the start (and it's
+    // the keeper waiting right by the portal). The Healer follows on boss #3.
+    expect(TOWN_SERVICE_ARRIVALS.merchant).toBe(1);
     expect(TOWN_SERVICE_ARRIVALS.forge).toBe(1);
+    expect(TOWN_SERVICE_ARRIVALS.healer).toBe(3);
     // Exactly those two share arrival 1; every other keeper joins on a later boss (>1),
     // so no keeper is left un-numbered or ahead of the founders.
     for (const n of TOWN_NPCS) {
       const arrival = TOWN_SERVICE_ARRIVALS[n.kind];
       expect(typeof arrival).toBe('number');
-      if (n.kind === 'healer' || n.kind === 'forge') expect(arrival).toBe(1);
+      if (n.kind === 'merchant' || n.kind === 'forge') expect(arrival).toBe(1);
       else expect(arrival).toBeGreaterThan(1);
     }
   });

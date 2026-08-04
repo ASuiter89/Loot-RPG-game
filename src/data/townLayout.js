@@ -32,15 +32,16 @@ export const TOWN_PORTAL = { x: 15, y: 15, name: 'Town Portal' };
 // keepers cluster INSIDE the hedged endgame sanctum (top-left grove); the rest are
 // spread loosely across the open clearing.
 export const TOWN_NPCS = [
-  // Endgame sanctum — the hedged grove (top-left), reached through its south gap.
-  // The grove sits one tile up so its top wall butts against the treeline (no walkable
-  // gap above it for a keeper to get stranded in); keep these in sync with the hedges.
-  { x: 5, y: 3, kind: 'covenants', name: 'Covenant Altar' },
-  { x: 8, y: 4, kind: 'weave', name: 'Ascendant Weave' },
-  { x: 10, y: 6, kind: 'pantheon', name: 'Pantheon' },
-  { x: 4, y: 5, kind: 'mirrorforge', name: 'Mirrorforge' },
-  { x: 6, y: 7, kind: 'deeds', name: 'Hall of Deeds' },
-  { x: 9, y: 8, kind: 'cycles', name: 'Cycles' },
+  // Endgame sanctum — the hedged grove (top-left corner), reached through its south gap.
+  // The grove is tucked into the corner so its top AND west walls butt against the
+  // treeline (no walkable strip beside it for a keeper to get stranded in); keep these
+  // in sync with the hedges.
+  { x: 4, y: 3, kind: 'covenants', name: 'Covenant Altar' },
+  { x: 7, y: 4, kind: 'weave', name: 'Ascendant Weave' },
+  { x: 9, y: 6, kind: 'pantheon', name: 'Pantheon' },
+  { x: 3, y: 5, kind: 'mirrorforge', name: 'Mirrorforge' },
+  { x: 5, y: 7, kind: 'deeds', name: 'Hall of Deeds' },
+  { x: 8, y: 8, kind: 'cycles', name: 'Cycles' },
   // Regular services, scattered organically across the clearing.
   { x: 16, y: 5, kind: 'trainer', name: 'Trainer' },
   { x: 22, y: 4, kind: 'merchant', name: 'Merchant' },
@@ -66,10 +67,10 @@ export const TOWN_NPCS = [
 export const TOWN_PATHS = [
   { x: 15, y: 19 }, { x: 15, y: 18 }, { x: 15, y: 17 }, { x: 15, y: 16 }, { x: 15, y: 15 }, { x: 15, y: 14 }, { x: 15, y: 13 }, { x: 15, y: 12 }, { x: 15, y: 11 }, { x: 15, y: 10 },
   { x: 15, y: 9 }, { x: 15, y: 8 }, { x: 15, y: 7 }, { x: 15, y: 6 }, { x: 15, y: 5 }, { x: 15, y: 4 }, { x: 15, y: 3 }, { x: 12, y: 19 }, { x: 13, y: 19 }, { x: 14, y: 19 },
-  { x: 7, y: 11 }, { x: 8, y: 11 }, { x: 9, y: 11 }, { x: 10, y: 11 }, { x: 11, y: 11 }, { x: 12, y: 11 }, { x: 13, y: 11 }, { x: 14, y: 11 }, { x: 16, y: 11 }, { x: 17, y: 11 },
-  { x: 18, y: 11 }, { x: 19, y: 11 }, { x: 20, y: 11 }, { x: 21, y: 11 }, { x: 22, y: 11 }, { x: 23, y: 11 }, { x: 24, y: 11 }, { x: 24, y: 12 }, { x: 14, y: 13 }, { x: 13, y: 13 },
-  { x: 12, y: 13 }, { x: 11, y: 13 }, { x: 10, y: 13 }, { x: 9, y: 13 }, { x: 8, y: 13 }, { x: 7, y: 13 }, { x: 7, y: 14 }, { x: 24, y: 13 }, { x: 24, y: 14 }, { x: 16, y: 6 },
-  { x: 17, y: 6 }, { x: 18, y: 6 }, { x: 19, y: 6 }, { x: 20, y: 6 }, { x: 21, y: 6 }, { x: 22, y: 6 }, { x: 22, y: 5 }, { x: 7, y: 12 },
+  { x: 6, y: 11 }, { x: 7, y: 11 }, { x: 8, y: 11 }, { x: 9, y: 11 }, { x: 10, y: 11 }, { x: 11, y: 11 }, { x: 12, y: 11 }, { x: 13, y: 11 }, { x: 14, y: 11 }, { x: 16, y: 11 },
+  { x: 17, y: 11 }, { x: 18, y: 11 }, { x: 19, y: 11 }, { x: 20, y: 11 }, { x: 21, y: 11 }, { x: 22, y: 11 }, { x: 23, y: 11 }, { x: 24, y: 11 }, { x: 24, y: 12 }, { x: 14, y: 13 },
+  { x: 13, y: 13 }, { x: 12, y: 13 }, { x: 11, y: 13 }, { x: 10, y: 13 }, { x: 9, y: 13 }, { x: 8, y: 13 }, { x: 7, y: 13 }, { x: 6, y: 13 }, { x: 6, y: 14 }, { x: 24, y: 13 },
+  { x: 24, y: 14 }, { x: 16, y: 6 }, { x: 17, y: 6 }, { x: 18, y: 6 }, { x: 19, y: 6 }, { x: 20, y: 6 }, { x: 21, y: 6 }, { x: 22, y: 6 }, { x: 22, y: 5 }, { x: 6, y: 12 },
 ];
 
 // Scenery. Each entry is an EXACT atlas piece `{x,y,id}` (the campfire, well, sign,
@@ -82,14 +83,14 @@ export const TOWN_DECOR = [
   // logs ring the fire at its corners, kept OFF the walkable trails (the y:11 path and
   // the avenue run between them) so no stump ever sits on a path.
   { x: 15, y: 10, id: 180 }, { x: 13, y: 9, c: 'L' }, { x: 17, y: 9, c: 'L' }, { x: 13, y: 12, c: 'L' }, { x: 17, y: 12, c: 'L' }, { x: 23, y: 12, id: 190 }, { x: 13, y: 18, id: 63 },
-  // Endgame sanctum hedge walls ('h'), shifted up one tile so the top wall (y:2) butts
-  // against the treeline — no walkable row above the grove. Doorway gap on the south
-  // side (at x:7,y:9).
-  { x: 3, y: 2, c: 'h' }, { x: 3, y: 9, c: 'h' }, { x: 4, y: 2, c: 'h' }, { x: 4, y: 9, c: 'h' }, { x: 5, y: 2, c: 'h' }, { x: 5, y: 9, c: 'h' }, { x: 6, y: 2, c: 'h' }, { x: 6, y: 9, c: 'h' }, { x: 7, y: 2, c: 'h' }, { x: 8, y: 2, c: 'h' }, { x: 8, y: 9, c: 'h' }, { x: 9, y: 2, c: 'h' }, { x: 9, y: 9, c: 'h' }, { x: 10, y: 2, c: 'h' }, { x: 10, y: 9, c: 'h' }, { x: 11, y: 2, c: 'h' }, { x: 11, y: 9, c: 'h' }, { x: 3, y: 3, c: 'h' }, { x: 11, y: 3, c: 'h' }, { x: 3, y: 4, c: 'h' }, { x: 11, y: 4, c: 'h' }, { x: 3, y: 5, c: 'h' }, { x: 11, y: 5, c: 'h' }, { x: 3, y: 6, c: 'h' }, { x: 11, y: 6, c: 'h' }, { x: 3, y: 7, c: 'h' }, { x: 11, y: 7, c: 'h' }, { x: 3, y: 8, c: 'h' }, { x: 11, y: 8, c: 'h' },
+  // Endgame sanctum hedge walls ('h'), tucked into the top-left corner so the top wall
+  // (y:2) AND the west wall (x:2) butt against the treeline — no walkable strip above
+  // or beside the grove. Doorway gap on the south side (at x:6,y:9).
+  { x: 2, y: 2, c: 'h' }, { x: 2, y: 9, c: 'h' }, { x: 3, y: 2, c: 'h' }, { x: 3, y: 9, c: 'h' }, { x: 4, y: 2, c: 'h' }, { x: 4, y: 9, c: 'h' }, { x: 5, y: 2, c: 'h' }, { x: 5, y: 9, c: 'h' }, { x: 6, y: 2, c: 'h' }, { x: 7, y: 2, c: 'h' }, { x: 7, y: 9, c: 'h' }, { x: 8, y: 2, c: 'h' }, { x: 8, y: 9, c: 'h' }, { x: 9, y: 2, c: 'h' }, { x: 9, y: 9, c: 'h' }, { x: 10, y: 2, c: 'h' }, { x: 10, y: 9, c: 'h' }, { x: 2, y: 3, c: 'h' }, { x: 10, y: 3, c: 'h' }, { x: 2, y: 4, c: 'h' }, { x: 10, y: 4, c: 'h' }, { x: 2, y: 5, c: 'h' }, { x: 10, y: 5, c: 'h' }, { x: 2, y: 6, c: 'h' }, { x: 10, y: 6, c: 'h' }, { x: 2, y: 7, c: 'h' }, { x: 10, y: 7, c: 'h' }, { x: 2, y: 8, c: 'h' }, { x: 10, y: 8, c: 'h' },
   // Camp props (flowers/grass/potted/rugs walkable; barrels/crates solid).
-  { x: 6, y: 4, c: 'r' }, { x: 8, y: 7, c: 'p' }, { x: 4, y: 8, c: 'f' }, { x: 10, y: 3, c: 'p' }, { x: 7, y: 5, c: 'r' }, { x: 21, y: 5, c: 'o' }, { x: 23, y: 6, c: 'c' }, { x: 20, y: 4, c: 'f' },
+  { x: 5, y: 4, c: 'r' }, { x: 7, y: 7, c: 'p' }, { x: 3, y: 8, c: 'f' }, { x: 9, y: 3, c: 'p' }, { x: 6, y: 5, c: 'r' }, { x: 21, y: 5, c: 'o' }, { x: 23, y: 6, c: 'c' }, { x: 20, y: 4, c: 'f' },
   { x: 27, y: 6, c: 'g' }, { x: 18, y: 7, c: 'p' }, { x: 24, y: 9, c: 'o' }, { x: 26, y: 5, c: 'f' }, { x: 12, y: 5, c: 'f' }, { x: 14, y: 5, c: 'g' }, { x: 16, y: 6, c: 'f' }, { x: 18, y: 4, c: 'g' },
-  { x: 6, y: 12, c: 'c' }, { x: 8, y: 14, c: 'p' }, { x: 5, y: 15, c: 'f' }, { x: 9, y: 16, c: 'g' }, { x: 22, y: 14, c: 'o' }, { x: 25, y: 15, c: 'c' }, { x: 19, y: 15, c: 'p' }, { x: 21, y: 17, c: 'f' },
+  { x: 5, y: 12, c: 'c' }, { x: 8, y: 14, c: 'p' }, { x: 5, y: 15, c: 'f' }, { x: 9, y: 16, c: 'g' }, { x: 22, y: 14, c: 'o' }, { x: 25, y: 15, c: 'c' }, { x: 19, y: 15, c: 'p' }, { x: 21, y: 17, c: 'f' },
   { x: 11, y: 16, c: 'g' }, { x: 13, y: 16, c: 'f' }, { x: 3, y: 17, c: 'g' }, { x: 5, y: 17, c: 'f' }, { x: 16, y: 15, c: 'f' }, { x: 15, y: 14, c: 'g' }, { x: 17, y: 13, c: 'f' },
   // Treeline: short border trees + non-occluding bushes (framing the clearing).
   { x: 1, y: 1, c: 'T' }, { x: 1, y: 20, c: 'T' }, { x: 2, y: 1, c: 'T' }, { x: 2, y: 20, c: 'T' }, { x: 3, y: 1, c: 'a' }, { x: 3, y: 20, c: 't' }, { x: 4, y: 1, c: 'T' }, { x: 4, y: 20, c: 'T' }, { x: 5, y: 1, c: 'T' }, { x: 5, y: 20, c: 'T' },
@@ -100,7 +101,7 @@ export const TOWN_DECOR = [
   { x: 1, y: 5, c: 'T' }, { x: 28, y: 5, c: 'T' }, { x: 1, y: 6, c: 'T' }, { x: 28, y: 6, c: 'T' }, { x: 1, y: 7, c: 'T' }, { x: 28, y: 7, c: 'T' }, { x: 1, y: 8, c: 'T' }, { x: 28, y: 8, c: 'T' }, { x: 1, y: 9, c: 'T' }, { x: 28, y: 9, c: 'T' },
   { x: 1, y: 10, c: 'T' }, { x: 28, y: 10, c: 'T' }, { x: 1, y: 11, c: 'T' }, { x: 28, y: 11, c: 'T' }, { x: 1, y: 12, c: 'T' }, { x: 28, y: 12, c: 'T' }, { x: 1, y: 13, c: 'T' }, { x: 28, y: 13, c: 'T' }, { x: 1, y: 14, c: 'T' }, { x: 28, y: 14, c: 'T' },
   { x: 1, y: 15, c: 'T' }, { x: 28, y: 15, c: 'T' }, { x: 1, y: 16, c: 'T' }, { x: 28, y: 16, c: 'T' }, { x: 1, y: 17, c: 'T' }, { x: 28, y: 17, c: 'T' }, { x: 1, y: 18, c: 'T' }, { x: 28, y: 18, c: 'T' }, { x: 1, y: 19, c: 'T' }, { x: 28, y: 19, c: 'T' },
-  { x: 4, y: 19, c: 'b' }, { x: 6, y: 19, c: 'b' }, { x: 8, y: 19, c: 'b' }, { x: 10, y: 19, c: 'b' }, { x: 18, y: 19, c: 'b' }, { x: 20, y: 19, c: 'b' }, { x: 22, y: 19, c: 'b' }, { x: 24, y: 19, c: 'b' }, { x: 26, y: 19, c: 'b' }, { x: 2, y: 4, c: 'b' },
+  { x: 4, y: 19, c: 'b' }, { x: 6, y: 19, c: 'b' }, { x: 8, y: 19, c: 'b' }, { x: 10, y: 19, c: 'b' }, { x: 18, y: 19, c: 'b' }, { x: 20, y: 19, c: 'b' }, { x: 22, y: 19, c: 'b' }, { x: 24, y: 19, c: 'b' }, { x: 26, y: 19, c: 'b' },
   { x: 27, y: 4, c: 'b' }, { x: 27, y: 6, c: 'b' }, { x: 27, y: 8, c: 'b' }, { x: 27, y: 10, c: 'b' }, { x: 2, y: 12, c: 'b' }, { x: 27, y: 12, c: 'b' }, { x: 27, y: 14, c: 'b' }, { x: 27, y: 16, c: 'b' }, { x: 2, y: 18, c: 'b' },
 ];
 
@@ -110,22 +111,23 @@ export const TOWN_DECOR = [
 // distinct boss floors have been first-cleared (the floor-5 guardian is boss #1, floor
 // 10 is #2, …). Arrival 1 IS the town-unlock: before the floor-5 guardian falls the
 // camp offers no services and the Town Portal is sealed.
-//   The two FOUNDING keepers — the HEALER and the CRAFTSMAN — SHARE arrival 1, so the
-//   very first town visit already has both. Besides forging blank gear, the Craftsman
+//   The two FOUNDING keepers — the MERCHANT and the CRAFTSMAN — SHARE arrival 1, so the
+//   very first town visit already has both: somewhere to spend the first haul, and
+//   somewhere to build the HUD you read it with. Besides forging blank gear, the Craftsman
 //   CRAFTS the HUD "Field Kit" (the minimap, counters, depth/difficulty labels and
 //   vital numbers you build a bare heads-up display out of; see src/data/hudUpgrades.js),
 //   so those readout tools are on hand from the first visit. Every OTHER keeper keeps
 //   its own arrival number below and joins one-per-boss (the two founders share #1, so
-//   boss #2 lands no one new — the next keeper, the Merchant, joins on boss #3):
-//   1 Healer + Craftsman   — the two founders, from the town-unlock (boss floor 5)
-//   3 Merchant · 4 Vault   — the other essentials (boss floors 15–20)
+//   boss #2 lands no one new — the next keeper, the Healer, joins on boss #3):
+//   1 Merchant + Craftsman — the two founders, from the town-unlock (boss floor 5)
+//   3 Healer · 4 Vault     — the other essentials (boss floors 15–20)
 //   5 Ramen House · 6 Prospector · 7 Trainer
 //   8 Gambler · 9 Enchanter · 10 Bounty Board
 //   11 Transmuter
 //   12 Ascendant Weave · 13 Cycles · 14 Hall of Deeds   — endgame sanctum
 //   15 Covenant Altar · 16 Mirrorforge · 17 Pantheon    — the deepest keepers
 export const TOWN_SERVICE_ARRIVALS = {
-  healer: 1, forge: 1, merchant: 3, stash: 4,
+  merchant: 1, forge: 1, healer: 3, stash: 4,
   ramen: 5, prospector: 6, trainer: 7,
   gambler: 8, enchanter: 9, bounty: 10,
   transmuter: 11,
@@ -153,7 +155,7 @@ export const TOWN_FIXED_KINDS = ['forge'];
 // blocks it from the wander free-set, and updateTownNpcs double-guards on it, so the
 // open-clearing folk keep out of the endgame grove. Keep it covering every hedge tile
 // and every endgame-keeper tile (a data test enforces both).
-export const TOWN_SANCTUM = { x0: 3, y0: 2, x1: 11, y1: 9 };
+export const TOWN_SANCTUM = { x0: 2, y0: 2, x1: 10, y1: 9 };
 
 // Slow-stroll tuning for the wandering regular keepers (buildTown + updateTownNpcs).
 // speed in tiles/sec (unhurried amble); radius is how far (Chebyshev) a keeper drifts
