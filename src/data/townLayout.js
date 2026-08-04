@@ -110,22 +110,23 @@ export const TOWN_DECOR = [
 // distinct boss floors have been first-cleared (the floor-5 guardian is boss #1, floor
 // 10 is #2, …). Arrival 1 IS the town-unlock: before the floor-5 guardian falls the
 // camp offers no services and the Town Portal is sealed.
-//   The two FOUNDING keepers — the HEALER and the CRAFTSMAN — SHARE arrival 1, so the
-//   very first town visit already has both. Besides forging blank gear, the Craftsman
+//   The two FOUNDING keepers — the MERCHANT and the CRAFTSMAN — SHARE arrival 1, so the
+//   very first town visit already has both: somewhere to spend the first haul, and
+//   somewhere to build the HUD you read it with. Besides forging blank gear, the Craftsman
 //   CRAFTS the HUD "Field Kit" (the minimap, counters, depth/difficulty labels and
 //   vital numbers you build a bare heads-up display out of; see src/data/hudUpgrades.js),
 //   so those readout tools are on hand from the first visit. Every OTHER keeper keeps
 //   its own arrival number below and joins one-per-boss (the two founders share #1, so
-//   boss #2 lands no one new — the next keeper, the Merchant, joins on boss #3):
-//   1 Healer + Craftsman   — the two founders, from the town-unlock (boss floor 5)
-//   3 Merchant · 4 Vault   — the other essentials (boss floors 15–20)
+//   boss #2 lands no one new — the next keeper, the Healer, joins on boss #3):
+//   1 Merchant + Craftsman — the two founders, from the town-unlock (boss floor 5)
+//   3 Healer · 4 Vault     — the other essentials (boss floors 15–20)
 //   5 Ramen House · 6 Prospector · 7 Trainer
 //   8 Gambler · 9 Enchanter · 10 Bounty Board
 //   11 Transmuter
 //   12 Ascendant Weave · 13 Cycles · 14 Hall of Deeds   — endgame sanctum
 //   15 Covenant Altar · 16 Mirrorforge · 17 Pantheon    — the deepest keepers
 export const TOWN_SERVICE_ARRIVALS = {
-  healer: 1, forge: 1, merchant: 3, stash: 4,
+  merchant: 1, forge: 1, healer: 3, stash: 4,
   ramen: 5, prospector: 6, trainer: 7,
   gambler: 8, enchanter: 9, bounty: 10,
   transmuter: 11,
