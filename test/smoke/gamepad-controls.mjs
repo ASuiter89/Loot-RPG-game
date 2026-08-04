@@ -114,10 +114,10 @@ async function main() {
     if (!moved) failures.push('left stick did not move the hero in any of the 4 directions');
     if (!sawSuppressed) failures.push('left stick engaged but a click-to-move target stayed active (should be suppressed)');
 
-    // 3) D-pad Left fires the Health potion (a play-context action → shared cooldown).
-    await page.evaluate(() => { window.player.hp = Math.max(1, window.player.maxHp - 100); window.player.potionCd = 0; });
+    // 3) D-pad Left fires the Health potion (a play-context action → its flask cooldown).
+    await page.evaluate(() => { window.player.hp = Math.max(1, window.player.maxHp - 100); window.player.potionCdHp = 0; });
     await tap(BTN.DLEFT);
-    const potCd = await page.evaluate(() => window.player.potionCd);
+    const potCd = await page.evaluate(() => window.player.potionCdHp);
     if (!(potCd > 0)) failures.push('D-pad Left did not fire the health potion (cooldown never started)');
 
     // 4) The L1 modifier gates the face buttons: plain □ toggles the log; L1+□ does NOT
