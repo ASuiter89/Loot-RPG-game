@@ -7,6 +7,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-03", size: "small", v: "Blessings run 5 floors; potion upgrades 25% cheaper", by: "Jeff Louie", notes: ["Every Healer Blessing lasts 5 floors (was 3); Rested still 3.", "Potion Potency & Recharge ranks start at 9k gold (was 12k), whole curve down 25%."] },
   { date: "2026-08-03", size: "small", v: "Endgame grove shifts one tile west", by: "Jeff Louie", notes: ["Hedged sanctum sits flush in the town's top-left corner; its west wall butts the treeline, closing the dead lane behind it.", "Doorway and its dirt trail move with it."] },
   { date: "2026-08-03", size: "small", v: "Level-up clears every skill cooldown", by: "Jeff Louie", notes: ["Level-up wipes all skill cooldowns alongside the HP/MP/Stamina refill; log names the count when it cut one short."] },
   { date: "2026-08-03", size: "small", v: "Merchant founds the town; Healer follows", by: "Jeff Louie", notes: ["Merchant is a founding keeper on boss #1 with the Craftsman (was Healer); Healer joins on boss #3."] },
