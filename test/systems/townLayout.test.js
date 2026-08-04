@@ -253,18 +253,20 @@ describe('authored town data', () => {
     expect(pathAdjacent).toBe(true);             // but a path tile is one step away
   });
 
-  it('makes the Healer and Craftsman the two founding keepers (both share arrival 1)', () => {
+  it('makes the Merchant and Craftsman the two founding keepers (both share arrival 1)', () => {
     // The town-unlock (felling the Floor 5 guardian) brings BOTH founders at once, so a
-    // hero's very first town visit has the Healer AND the Craftsman — the Craftsman's HUD
-    // Field Kit is on hand from the start, and it's the keeper waiting right by the portal.
-    expect(TOWN_SERVICE_ARRIVALS.healer).toBe(1);
+    // hero's very first town visit has the Merchant AND the Craftsman — somewhere to spend
+    // the first haul, plus the Craftsman's HUD Field Kit on hand from the start (and it's
+    // the keeper waiting right by the portal). The Healer follows on boss #3.
+    expect(TOWN_SERVICE_ARRIVALS.merchant).toBe(1);
     expect(TOWN_SERVICE_ARRIVALS.forge).toBe(1);
+    expect(TOWN_SERVICE_ARRIVALS.healer).toBe(3);
     // Exactly those two share arrival 1; every other keeper joins on a later boss (>1),
     // so no keeper is left un-numbered or ahead of the founders.
     for (const n of TOWN_NPCS) {
       const arrival = TOWN_SERVICE_ARRIVALS[n.kind];
       expect(typeof arrival).toBe('number');
-      if (n.kind === 'healer' || n.kind === 'forge') expect(arrival).toBe(1);
+      if (n.kind === 'merchant' || n.kind === 'forge') expect(arrival).toBe(1);
       else expect(arrival).toBeGreaterThan(1);
     }
   });
