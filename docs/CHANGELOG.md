@@ -8,6 +8,21 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## UI — the stair into a guardian floor rings red
+
+- 📦 New `src/systems/descentSignal.js` — the boss-floor cadence (`BOSS_EVERY`,
+  `isBossDepth`) plus `descentSignal(dl)`, which answers whether the down-stair on a
+  floor drops you onto a guardian. Pure: a depth in, a `'boss'`/`'normal'` key out.
+- 📦 `src/legacy/game.js`: the cleared down-stair's pulsing ring picks its colour from
+  that key — `PALETTE.danger` when a guardian waits below, `PALETTE.gold` otherwise —
+  and both stroke and glow now read from the `PALETTE` mirror instead of hardcoded
+  `rgba(...)` literals. Legacy `isBossLevel` delegates to `isBossDepth`, so the every-5th
+  cadence has one home.
+- 🧪 `test/systems/descentSignal.test.js` — the cadence across tier boundaries and into
+  Endless, the descent that lands on a guardian, and garbage depths.
+- 📄 `gameState().stairs.bossBelow` exposes the same fact; `gameGuide("bosses")` and the
+  floor-clear topic describe the red ring.
+
 ## Fix — a hunting foe never wedges itself behind cover
 
 - 📦 New `src/systems/chasePath.js` — the chase search, extracted from the legacy
