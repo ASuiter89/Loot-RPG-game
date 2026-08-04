@@ -1,20 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { SLOT_BASES } from '../../src/data/gearBases.js';
 import { ITEM_SETS } from '../../src/data/itemSets.js';
 import { setPieceCount, setsCoverAllSlots, setSlots } from '../../src/systems/itemSets.js';
 
-// ── Canonical gear taxonomy (mirrors SLOTS in src/legacy/game.js) ──
-const SLOT_BASES = {
-  weapon: ['Shortsword', 'Arming Sword', 'Rapier', 'Greatsword', 'Claymore', 'Hatchet', 'War Axe',
-    'Greataxe', 'Battleaxe', 'Dagger', 'Stiletto', 'Kris', 'Mace', 'Morningstar', 'Maul', 'Spear',
-    'Halberd', 'Pike', 'Staff', 'Wand', 'Shortbow', 'Longbow', 'Scythe', 'War Scythe'],
-  offhand: ['Buckler', 'Kite Shield', 'Tower Shield', 'Tome', 'Focus', 'Quiver', 'Parrying Dagger'],
-  head: ['Helm', 'Cap', 'Crown', 'Hood', 'Circlet'],
-  chest: ['Chestplate', 'Robe', 'Cuirass', 'Tunic', 'Mail'],
-  hands: ['Gauntlets', 'Gloves', 'Bracers', 'Grips'],
-  legs: ['Greaves', 'Leggings', 'Tassets', 'Trousers'],
-  ring: ['Ring', 'Band', 'Signet', 'Loop'],
-  amulet: ['Amulet', 'Pendant', 'Necklace', 'Talisman', 'Charm'],
-};
+// ── Canonical gear taxonomy (the shipped table the game rolls from) ──
 const BASE_SLOT = {};
 for (const [slot, bases] of Object.entries(SLOT_BASES)) for (const b of bases) BASE_SLOT[b] = slot;
 const SLOT_KEYS = Object.keys(SLOT_BASES);

@@ -1,6 +1,6 @@
 // ── HAND-CRAFTED UNIQUES ─────────────────────────────────────────────────────
 // The one-of-a-kind, NAMED artifact for every gear type in the game — one unique
-// per weapon sub-type, off-hand, armour slot base and jewelry base (58 in all).
+// per weapon sub-type, off-hand, armour slot base and jewelry base (69 in all).
 //
 // Unlike every other rarity (which rolls random affixes), a unique is FIXED: it
 // always carries the same `native` signature stat and the same six `mods`, plus a
@@ -37,18 +37,21 @@ const a = (key) => ({ kind: 'attr', key });
 // Which slot each base belongs to (mirrors SLOTS in src/legacy/game.js). Used to
 // stamp `slot` onto every definition so lookups never re-derive it.
 const BASE_SLOT = {
-  Shortsword: 'weapon', 'Arming Sword': 'weapon', Rapier: 'weapon', Greatsword: 'weapon', Claymore: 'weapon',
+  Shortsword: 'weapon', 'Arming Sword': 'weapon', Rapier: 'weapon', Runeblade: 'weapon',
+  Greatsword: 'weapon', Claymore: 'weapon',
   Hatchet: 'weapon', 'War Axe': 'weapon', Greataxe: 'weapon', Battleaxe: 'weapon', Dagger: 'weapon',
   Stiletto: 'weapon', Kris: 'weapon', Mace: 'weapon', Morningstar: 'weapon', Maul: 'weapon',
+  Warhammer: 'weapon',
   Spear: 'weapon', Halberd: 'weapon', Pike: 'weapon', Staff: 'weapon', Wand: 'weapon',
-  Shortbow: 'weapon', Longbow: 'weapon', Scythe: 'weapon', 'War Scythe': 'weapon',
-  Buckler: 'offhand', 'Kite Shield': 'offhand', 'Tower Shield': 'offhand', Tome: 'offhand',
-  Focus: 'offhand', Quiver: 'offhand', 'Parrying Dagger': 'offhand',
-  Helm: 'head', Cap: 'head', Crown: 'head', Hood: 'head', Circlet: 'head',
-  Chestplate: 'chest', Robe: 'chest', Cuirass: 'chest', Tunic: 'chest', Mail: 'chest',
-  Gauntlets: 'hands', Gloves: 'hands', Bracers: 'hands', Grips: 'hands',
-  Greaves: 'legs', Leggings: 'legs', Tassets: 'legs', Trousers: 'legs',
-  Ring: 'ring', Band: 'ring', Signet: 'ring', Loop: 'ring',
+  Shortbow: 'weapon', Longbow: 'weapon', Flintlock: 'weapon', 'Hand Cannon': 'weapon',
+  Scythe: 'weapon', 'War Scythe': 'weapon',
+  Buckler: 'offhand', 'Kite Shield': 'offhand', 'Tower Shield': 'offhand', 'Spiked Shield': 'offhand',
+  Tome: 'offhand', Focus: 'offhand', Quiver: 'offhand', Bandolier: 'offhand', 'Parrying Dagger': 'offhand',
+  Helm: 'head', Greathelm: 'head', Cap: 'head', Crown: 'head', Hood: 'head', Circlet: 'head',
+  Chestplate: 'chest', Robe: 'chest', Cuirass: 'chest', Tunic: 'chest', Mail: 'chest', Coat: 'chest',
+  Gauntlets: 'hands', Gloves: 'hands', Bracers: 'hands', Grips: 'hands', Handwraps: 'hands',
+  Greaves: 'legs', Leggings: 'legs', Tassets: 'legs', Trousers: 'legs', Breeches: 'legs',
+  Ring: 'ring', Band: 'ring', Signet: 'ring', Loop: 'ring', Coil: 'ring',
   Amulet: 'amulet', Pendant: 'amulet', Necklace: 'amulet', Talisman: 'amulet', Charm: 'amulet',
 };
 
@@ -70,6 +73,9 @@ const DEFS = [
   { id: 'crescentfall', base: 'Claymore', name: 'Crescentfall', cls: 'warrior', native: 'LEECH',
     mods: [s('CRITDMG'), s('EXEC'), s('CRIT'), s('ATK'), s('HPKILL'), a('might')], powers: ['reckless', 'bloodthirsty', 'executioner'],
     flavor: 'carves a red crescent through the air and drinks whatever it opens' },
+  { id: 'wakingVerse', base: 'Runeblade', name: 'The Waking Verse', cls: 'windblade', native: 'SKILLPWR',
+    mods: [s('MAGICPEN'), s('CRIT'), s('MP'), s('CDR'), s('ATKSPD'), a('spirit')], powers: ['spellblade', 'warmage', 'hasty'],
+    flavor: 'a line of script runs its length, and the blade finishes every sentence it begins' },
   // ── AXES ──
   { id: 'twinbite', base: 'Hatchet', name: 'Twinbite', cls: 'warrior', native: 'DBLSTRIKE',
     mods: [s('ATKSPD'), s('CRIT'), s('CRITDMG'), s('ACC'), s('DODGE'), a('agility')], powers: ['vampiric', 'flurry', 'savage'],
@@ -103,6 +109,9 @@ const DEFS = [
   { id: 'cataclast', base: 'Maul', name: 'Cataclast', cls: 'warrior', native: 'CLEAVE',
     mods: [a('might'), s('ATK'), s('IDMG'), s('HP'), s('TENAC'), s('SKILLPWR')], powers: ['concussive', 'cleaving', 'brutal'],
     flavor: 'one fall splits the earth and leaves a whole warband reeling in the dust' },
+  { id: 'anvilcreed', base: 'Warhammer', name: 'Anvilcreed', cls: 'templar', native: 'STUNPWR',
+    mods: [s('IDMG'), s('HP'), s('TENAC'), s('ACC'), s('DR'), a('vitality')], powers: ['concussive', 'ironhide', 'warlord'],
+    flavor: 'set your feet behind it and nothing that meets the head keeps its shape' },
   // ── SPEARS ──
   { id: 'dawnwardVigil', base: 'Spear', name: 'Dawnward, the Endless Vigil', cls: 'templar', native: 'DR',
     mods: [s('ATK'), s('ACC'), s('CRIT'), s('BLOCK'), s('SKILLPWR'), a('vitality')], powers: ['arcing', 'warded', 'bulwark'],
@@ -134,6 +143,14 @@ const DEFS = [
     mods: [s('LEECH'), s('HPKILL'), s('ATK'), s('SKILLPWR'), s('TENAC'), a('vitality')], powers: ['warlord', 'cleaving', 'bloodthirsty'],
     flavor: 'one long sweep fells an entire rank, and every man who falls only feeds the advance' },
 
+  // ── GUNS ──
+  { id: 'longOdds', base: 'Flintlock', name: 'Long Odds', cls: 'fortune', native: 'CRITDMG',
+    mods: [s('CRIT'), s('MAGICFIND'), s('GOLDFIND'), s('PEN'), s('ACC'), a('luck')], powers: ['fortunate', 'prospector', 'duelist'],
+    flavor: 'one ball, one chance, and it has yet to come up short for anyone brave enough to ask' },
+  { id: 'thunderclap', base: 'Hand Cannon', name: 'Thunderclap', cls: 'fortune', native: 'EXEC',
+    mods: [s('BOSSDMG'), s('IDMG'), s('STUNPWR'), s('ACC'), s('CRITDMG'), a('luck')], powers: ['giantsbane', 'concussive', 'brutish'],
+    flavor: 'the report arrives well after the hole does, and the room needs a moment to believe either' },
+
   // ── OFF-HANDS ──
   { id: 'quickguard', base: 'Buckler', name: 'Quickguard', cls: 'templar', native: 'THORNS',
     mods: [s('DR'), s('HP'), s('DODGE'), s('TENAC'), s('REGEN'), a('vitality')], powers: ['evasive', 'thornmail', 'warded'],
@@ -157,6 +174,13 @@ const DEFS = [
     mods: [s('CRIT'), s('CRITDMG'), s('ACC'), s('DBLSTRIKE'), s('PEN'), a('agility')], powers: ['duelist', 'evasive', 'keen'],
     flavor: 'it does its finest work catching what the main hand invites' },
 
+  { id: 'bristlewall', base: 'Spiked Shield', name: 'Bristlewall', cls: 'warrior', native: 'THORNS',
+    mods: [s('IDMG'), s('HP'), s('STUNPWR'), s('ACC'), s('TENAC'), a('might')], powers: ['thornmail', 'brutish', 'aegis'],
+    flavor: 'answers a shove with a dozen small arguments and wins every one of them' },
+  { id: 'deepPocket', base: 'Bandolier', name: 'The Deep Pocket', cls: 'fortune', native: 'MATFIND',
+    mods: [s('CRIT'), s('GOLDFIND'), s('MAGICFIND'), s('ATKSPD'), s('XPGAIN'), a('luck')], powers: ['salvager', 'greedy', 'frenzied'],
+    flavor: 'every loop sits full, and nobody has ever caught it being filled' },
+
   // ── HEAD ──
   { id: 'ironbrow', base: 'Helm', name: 'Ironbrow', cls: 'warrior', native: 'DR',
     mods: [s('HP'), s('TENAC'), s('THORNS'), s('REGEN'), s('BLOCK'), a('vitality')], powers: ['stalwart', 'warded', 'tenacious'],
@@ -173,6 +197,10 @@ const DEFS = [
   { id: 'theClearMind', base: 'Circlet', name: 'The Clear Mind', cls: 'mage', native: 'CDR',
     mods: [s('CASTSPD'), s('MCR'), s('MP'), s('MPLEECH'), s('CRITDMG'), a('spirit')], powers: ['focused', 'hasty', 'quickened'],
     flavor: 'thought runs quick and clean beneath it, and the words come cheap' },
+
+  { id: 'grimvisor', base: 'Greathelm', name: 'Grimvisor', cls: 'bloodletter', native: 'SKILLPWR',
+    mods: [s('IDMG'), s('HP'), s('ACC'), s('CRITDMG'), s('TENAC'), a('might')], powers: ['warmage', 'brutish', 'ironhide'],
+    flavor: 'a slot for the eyes, a slot for the breath, and no room at all for doubt' },
 
   // ── CHEST ──
   { id: 'bastionPlate', base: 'Chestplate', name: 'Bastion', cls: 'warrior', native: 'HP',
@@ -191,6 +219,10 @@ const DEFS = [
     mods: [s('SPELLPWR'), s('CDR'), s('CASTSPD'), s('MCR'), s('REGEN'), a('spirit')], powers: ['spellbound', 'attuned', 'quickened'],
     flavor: 'a bottomless well of power stitched into cloth, and the hem is never dry' },
 
+  { id: 'ninePockets', base: 'Coat', name: 'Nine Pockets', cls: 'fortune', native: 'MAGICFIND',
+    mods: [s('DODGE'), s('GOLDFIND'), s('HP'), s('TENAC'), s('XPGAIN'), a('luck')], powers: ['greedy', 'scholar', 'evasive'],
+    flavor: 'hangs heavy with things nobody remembers putting into it' },
+
   // ── HANDS ──
   { id: 'crushgrip', base: 'Gauntlets', name: 'Crushgrip', cls: 'warrior', native: 'STUNPWR',
     mods: [s('IDMG'), s('HP'), s('BLOCK'), s('CRIT'), s('PEN'), a('might')], powers: ['brutish', 'concussive', 'bulwark'],
@@ -204,6 +236,10 @@ const DEFS = [
   { id: 'spellweaversGloves', base: 'Gloves', name: 'The Weaver\'s Ten', cls: 'mage', native: 'CDR',
     mods: [s('CASTSPD'), s('MCR'), s('SPELLPWR'), s('MP'), s('CRITDMG'), a('spirit')], powers: ['quickened', 'hasty', 'spellbound'],
     flavor: 'ten fingers that finish a spell before the mouth has spoken it' },
+
+  { id: 'sleightwraps', base: 'Handwraps', name: 'Sleightwraps', cls: 'fortune', native: 'CRITDMG',
+    mods: [s('CRIT'), s('DBLSTRIKE'), s('ATKSPD'), s('MAGICFIND'), s('PEN'), a('luck')], powers: ['duelist', 'fortunate', 'frenzied'],
+    flavor: 'the cut lands where the eye was not, and the hand is already somewhere else' },
 
   // ── LEGS ──
   { id: 'rootstride', base: 'Greaves', name: 'Rootstride', cls: 'templar', native: 'REGEN',
@@ -219,6 +255,10 @@ const DEFS = [
     mods: [s('SPELLPWR'), s('CDR'), s('CASTSPD'), s('REGEN'), s('MPKILL'), a('spirit')], powers: ['attuned', 'spellbound', 'focused'],
     flavor: 'the reserve runs deeper than the cloth has any right to hold' },
 
+  { id: 'winningStreak', base: 'Breeches', name: 'The Winning Streak', cls: 'fortune', native: 'GOLDFIND',
+    mods: [s('SPD'), s('XPGAIN'), s('MAGICFIND'), s('DODGE'), s('HP'), a('luck')], powers: ['prospector', 'fleet', 'scholar'],
+    flavor: 'the pockets never sit empty for long, however the night has been going' },
+
   // ── RINGS (native is the headline) ──
   { id: 'gildedSeal', base: 'Signet', name: 'The Gilded Seal', cls: 'any', native: 'GOLDFIND',
     mods: [s('MAGICFIND'), s('XPGAIN'), s('IDMG'), s('ATK'), s('HP'), a('might')], powers: ['greedy', 'prospector', 'fortunate'],
@@ -232,6 +272,10 @@ const DEFS = [
   { id: 'foolsFortune', base: 'Ring', name: 'Fool\'s Fortune', cls: 'any', native: 'CRIT',
     mods: [s('CRITDMG'), s('MAGICFIND'), s('GOLDFIND'), s('ACC'), s('IDMG'), a('luck')], powers: ['fortunate', 'keen', 'savage'],
     flavor: 'it favours the bold and the doomed alike, and rarely says which you are' },
+
+  { id: 'quickeningCoil', base: 'Coil', name: 'The Quickening Coil', cls: 'windblade', native: 'DBLSTRIKE',
+    mods: [s('ATKSPD'), s('SPD'), s('CRIT'), s('ACC'), s('DODGE'), a('agility')], powers: ['frenzied', 'fleet', 'flurry'],
+    flavor: 'wound tight around the finger, and it never quite stops turning' },
 
   // ── AMULETS (native is the headline) ──
   { id: 'archmagesNecklace', base: 'Necklace', name: 'The Sevenfold Chain', cls: 'mage', native: 'SPELLPWR',
