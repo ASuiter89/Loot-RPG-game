@@ -34,6 +34,8 @@ export const RAMP_FLOOR = {
   gearReq: 5,
   // Loot KINDS stagger in one at a time after the basic affix game is learned.
   setItems: 8,
+  // Gates the whole SPECIAL-ITEM family (cursed / fortunate / deepforged / storied) —
+  // they arrive together as "gear with a twist". Key kept as-is so saves still read.
   cursedItems: 10,
   uniqueItems: 12,
   // The second weapon loadout (and its swap button) is introduced on floor 20 —

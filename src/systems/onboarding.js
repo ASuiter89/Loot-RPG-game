@@ -40,6 +40,10 @@ export const elitesAllowed          = floor => featureUnlocked('elites', floor);
 export const gearRequirementsActive = floor => featureUnlocked('gearReq', floor);
 export const setItemsAllowed        = floor => featureUnlocked('setItems', floor);
 export const cursedItemsAllowed     = floor => featureUnlocked('cursedItems', floor);
+// The whole SPECIAL-ITEM family (cursed / fortunate / deepforged / storied) rides the
+// gate cursed items opened on — they arrive together as "gear with a twist", so a new
+// hero meets plain affixes first. Same key, a name that reads for every kind.
+export const specialItemsAllowed    = cursedItemsAllowed;
 export const uniqueItemsAllowed     = floor => featureUnlocked('uniqueItems', floor);
 export const loadoutSwapUnlocked    = floor => featureUnlocked('loadoutSwap', floor);
 export const detailedTooltips       = floor => featureUnlocked('detailedTooltips', floor);

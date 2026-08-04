@@ -208,6 +208,13 @@ export function applyCorrupt(item, rng, data = MIRRORFORGE) {
         break;
       case 'curse': {
         const mult = curseTierMult(it.tier);
+        // NO SCULPTABLE AFFIX, NO CURSE. The contract lists only UNLOCKED properties,
+        // so a piece whose stats are all locked (a bare headline-only weapon, a fixed
+        // unique/set piece) arrives here with an empty list — there's nothing to gift
+        // and nothing to charge for. Flagging it cursed anyway (the old behaviour, this
+        // flag sat outside the guard) branded it with a skull and zero drawback: a
+        // cursed item with no downside, the exact thing a curse must never be. It still
+        // seals and still records the outcome; it just isn't a curse.
         if (it.affixes.length) {
           const a = it.affixes[idxIn((typeof rng === 'function' ? clamp01(rng()) : 0) * it.affixes.length, it.affixes.length)];
           const swing = statCurseSwing(num(a.max, num(a.val)), mult);
@@ -217,8 +224,8 @@ export function applyCorrupt(item, rng, data = MIRRORFORGE) {
           // The equally-strong drawback, as its own penalty affix (locked negative).
           it.affixes.push({ key: 'CURSE', val: -swing, min: -ceil, max: 0, curse: true });
           it.curseStat = a.key;
+          it.cursed = true;
         }
-        it.cursed = true;
         break;
       }
       default: break; // unknown kind — still seals, still safe

@@ -8,6 +8,40 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — special item kinds (and "Cursed" stops lying)
+
+- 🐛 **The reported bug was a NAME collision, not the curse math.** `'Cursed'` sat in
+  the cosmetic `PREFIXES` table, so an ordinary green rolled as a "Cursed Cap" with no
+  drawback anywhere on it — every screenshot of a "cursed item with no negative stats"
+  was a plain item wearing the word. Replaced with `'Gilded'`; a special item is marked
+  by its FLAG + pixel icon, never by its name. `renameLegacyCursedPrefix` heals saved
+  names (bag, both gear sets, stash, wardrobe) through the new `healItemName`.
+- 📦 New `src/data/specialItems.js` — the kind table (`SPECIAL_ITEM_KINDS`: weight,
+  label, atlas sprite, value multiplier, flavour, blurb) plus per-kind tuning
+  (`FORTUNE_STATS`/`FORTUNE_TIER_MULT`, `DEEPFORGE_ILVL`, `STORIED_EXTRA_STATS`).
+- 📦 New `src/systems/specialItems.js` — `rollSpecialKind(rng, kinds)` (weights read as
+  percentage points, so they sum to the 22% special rate), `eligibleSpecialKinds` /
+  `fortuneStats` (Fortunate needs a finder stat in the slot pool), `fortuneStatValue`,
+  `deepforgeIlvl`, `storiedStatCount`. Pure — rng injected, no DOM.
+- 📦 `generateItem` now rolls the kind BEFORE affixes (deepforged/storied shape how
+  they generate) and applies cursed/fortunate after. The old inline `Math.random() <
+  0.12` curse block became one branch of the family; curse math still lives in
+  `systems/curseRoll.js`.
+- 📦 `lockedStats` now also protects a fortunate item's finder stat, so the Enchanter
+  can't reroll the outsized roll back down to a normal one.
+- 🐛 `repairCurseOverflow` clamped EVERY loaded item to the curse ceiling — and a
+  fortunate roll out-reaches that ceiling by design, so a stash/load round trip would
+  have silently shaved every fortunate item. The bound is per-stat now.
+- 📦 `curseMark` → `specialMark` (+ `specialKindOf`), driving the marker off the kind
+  rather than the cursed flag; `test/smoke/handler-globals.json` follows the rename.
+- 🧪 `test/systems/specialItems.test.js` — weight bands and the null tail, eligibility
+  (and that an ineligible kind is dropped, not re-weighted), the fortunate ceiling
+  relationship vs `cursedStatCeiling` (the invariant the repair bug broke), deepforge
+  monotonicity + clamping, storied counts.
+- 📄 `gameGuide("loot")` splits into one paragraph per kind and reports `special` /
+  `fortuneStat` / `curseStat` on each item; the wiki's "Cursed Items" page is now
+  "Special Items"; onboarding copy reads "set & special pieces".
+
 ## UI — the stair into a guardian floor rings red
 
 - 📦 New `src/systems/descentSignal.js` — the boss-floor cadence (`BOSS_EVERY`,

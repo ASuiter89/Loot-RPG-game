@@ -102,7 +102,7 @@ export const WIKI = [
           { h: 'What Guided does' },
           { ul: [
             'The opening floors are gentler — fewer, softer foes on floors 1&ndash;5, back to full strength by floor 6.',
-            'Mechanics arrive one at a time: elites from floor 4, gear requirements from floor 5, set &amp; cursed pieces around floor 10, unique artifacts by floor 12.',
+            'Mechanics arrive one at a time: elites from floor 4, gear requirements from floor 5, set &amp; special pieces around floor 10, unique artifacts by floor 12.',
             'Hotbar slots open as you descend; the second weapon set is introduced on floor 20.',
             'One-line hints appear the first time you meet a shrine, fountain, teleporter, boss telegraph and more, and a short checklist gets you started.',
           ] },
@@ -522,12 +522,17 @@ export const WIKI = [
       },
       {
         id: 'cursed',
-        title: 'Cursed Items',
-        keywords: ['cursed', 'curse', 'skull', 'drawback', 'penalty', 'trade-off'],
+        title: 'Special Items',
+        keywords: ['special', 'cursed', 'curse', 'skull', 'drawback', 'penalty', 'trade-off',
+                   'fortunate', 'fortune', 'gold find', 'magic find', 'lucky',
+                   'deepforged', 'deep', 'item level', 'storied', 'extra affix'],
         body: [
-          { p: 'Any green-or-better drop can roll a <b>curse</b> (about a 1-in-8 chance). A cursed item pairs a strong <b>boost</b> on one property with an equally strong <b>drawback</b> on another — both real, both flowing into your totals.' },
-          { p: 'The drawback always lands on something you\'ll feel (a core stat or a damage amp), and the swing grows with rarity — a legendary curse hits far harder in both directions than an uncommon one. Like a unique, a cursed item is bound on drop and can\'t be reforged, so the trade is permanent.' },
-          { note: 'A small skull marks a cursed item\'s name.' },
+          { p: 'Rarity is one axis of a drop; <b>special kinds</b> are the other. About 1 green-or-better drop in 5 rolls one special kind, each breaking a different rule about what an item may carry — so it hands you power the ordinary ladder makes you wait for. A piece carries at most one.' },
+          { p: '<b>Cursed</b> pairs a strong <b>boost</b> on one property with an equally strong <b>drawback</b> on another — both real, both flowing into your totals. The drawback always lands on something you\'ll feel (a core stat or a damage amp), and the swing grows with rarity. Like a unique, a cursed item is bound on drop and can\'t be reforged, so the trade is permanent.' },
+          { p: '<b>Fortunate</b> rolls one finder stat — Gold Find or Magic Find — far past its normal ceiling, with no drawback: those stats buy gold and loot, never combat power, so an outsized roll makes a farming tool rather than a fight-winner. The lucky stat is protected like a base stat and can\'t be rerolled down. Only slots that can hold a finder stat roll it.' },
+          { p: '<b>Deepforged</b> rolls the whole piece as if found far deeper — headline, every affix and its gold worth. The price comes built in: the equip requirement rises with item level too, so it gates harder than its floor-mates and only goes on once you\'ve committed the attribute to match.' },
+          { p: '<b>Storied</b> carries its rarity\'s full affix spread <i>plus</i> one property beyond the cap — lifting every rarity a step, and pushing a legendary past the five-modifier ceiling nothing else crosses. No drawback, and it reforges normally.' },
+          { note: 'A special item is never named for its kind — a small pixel icon marks it: skull, coins, down-arrow or scroll.' },
         ],
       },
       {

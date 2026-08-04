@@ -87,7 +87,7 @@ import { firstRarityMilestone, MILESTONE_KICKER, seedMilestones } from '../syste
 import { shopTierWeights } from '../systems/shopStock.js';
 import {
   rampDepth, featureUnlocked, unlockedSkillSlots, elitesAllowed, gearRequirementsActive,
-  setItemsAllowed, cursedItemsAllowed, uniqueItemsAllowed, loadoutSwapUnlocked,
+  setItemsAllowed, specialItemsAllowed, uniqueItemsAllowed, loadoutSwapUnlocked,
   detailedTooltips, hazardAllowed, earlyEnemyHp, playerEarlyDamage, earlyPackCap,
   firstHint, keeperIntro, starterChain, deathTip as rampDeathTip,
   rampStatus, potionTeachDue, beachFoeHp,
@@ -113,6 +113,8 @@ import { bountyProgress as _bountyProgress, bountyDone as _bountyDone, bountyNew
 import { forgeSections } from '../systems/forgeFlow.js';
 import { weaponSpeedInfo } from '../systems/weaponSpeed.js';
 import { CURSE_TIER_MULT, curseTierMult, statCurseSwing, cursedStatCeiling, cursePenaltyStats } from '../systems/curseRoll.js';
+import { specialItemDef, eligibleSpecialKinds, rollSpecialKind, fortuneStats,
+         fortuneTierMult, fortuneStatValue, deepforgeIlvl, storiedStatCount } from '../systems/specialItems.js';
 import { augmentCost as calcAugmentCost, rerollAllCost as calcRerollAllCost,
   rerollTypeCost as calcRerollTypeCost, rerollValueCost as calcRerollValueCost,
   enchTierFactor as calcEnchTierFactor, enchEscalation as calcEnchEscalation } from '../systems/enchantCost.js';
@@ -3004,7 +3006,7 @@ function recordWardrobe(item) {
   if (!player.wardrobe) player.wardrobe = { head:[], chest:[], weapon:[] };
   const list = player.wardrobe[item.slot] || (player.wardrobe[item.slot] = []);
   const icon = itemIcon(item);
-  if (!list.some(w => w.icon === icon)) list.push({ icon, name: stripLegacyCurseMark(item.name) });
+  if (!list.some(w => w.icon === icon)) list.push({ icon, name: healItemName(item.name) });
 }
 
 // The emoji actually drawn on the sprite for a visual slot: a chosen cosmetic
@@ -3179,7 +3181,11 @@ function craftedMark(item) {
   return item && item.crafted ? ' <span style="color:var(--info);font-size:1.2rem"><span data-spr=ic_mallet></span></span>' : '';
 }
 
-const PREFIXES = ['Ancient','Cursed','Blazing','Frozen','Runic','Shadow','Divine','Storm','Iron','Blood','Soul','Void'];
+// Cosmetic name prefixes. NOTHING here may name a real mechanic: "Cursed" used to sit
+// in this list, so an ordinary green rolled as a "Cursed Cap" with no drawback anywhere
+// on it — a plain item that read as a broken cursed one. A special item is marked by
+// its FLAG and its pixel icon (see specialMark), never by its name.
+const PREFIXES = ['Ancient','Gilded','Blazing','Frozen','Runic','Shadow','Divine','Storm','Iron','Blood','Soul','Void'];
 const SUFFIXES = ['of Power','of Doom','of the Fallen','of Light','of Ages','of Chaos','of the Ancients','of Fury'];
 
 const FLAVOR = {
@@ -7538,6 +7544,12 @@ window.gameState = function gameState(radius) {
     // fixed table): a stat that does nothing for your build adds ~0. `upgrade` is
     // the Power swing vs. what fills its slot now (+ = a real upgrade for you).
     ...(it.slot ? { pow: itemPower(it), upgrade: equipUpgradeDelta(it) } : {}),
+    // A SPECIAL piece breaks one of the normal affix rules — surface which kind, the
+    // stat a fortunate roll blew past its ceiling, and (for a curse) the stat carrying
+    // its drawback, so an agent can read the trade without diffing against a plain roll.
+    ...(specialKindOf(it) ? { special: specialKindOf(it) } : {}),
+    ...(it.fortuneStat ? { fortuneStat: it.fortuneStat } : {}),
+    ...(it.curseStat ? { curseStat: it.curseStat } : {}),
     ...(it.unique ? { unique: it.unique, fixed: !!it.fixed } : {}),
     // A set piece is a fixed, named artifact too (like a unique) but also belongs
     // to a set — surface its set id, piece id and the fixed flag so a driving agent
@@ -8297,7 +8309,11 @@ window.gameGuide = function gameGuide(topic) {
       `A legendary or unique piece pops a centre-screen banner — a sting, flash and shake — the instant you gain it, no matter the source: a kill, a chest, a gambler jackpot, a bounty or escort reward, or a transmuter fuse all celebrate the same.`,
       `Your very FIRST green, blue and purple each pop that SAME banner the moment you pick one up — a one-time milestone as each new colour first enters your bag (latched on player.rarityFirsts); after that, that colour reverts to its quiet drop chime. Legendary and red keep bannering every time.`,
       `Set pieces are the OTHER red artifact, shown in teal (not unique-red). Each set piece is ALSO a pre-defined, NAMED, fixed-stat artifact — built exactly like a unique (fixed native + six modifiers + its own signature power, values rolled once then locked, never reforgeable) — but it additionally belongs to a SET. Every set is a family of specific named pieces (one per slot it covers), and sets deliberately vary in size (2 → 6 pieces): small sets complete fast, large ones are a long chase. Wearing more matched pieces of a set lights escalating bonuses; "Worn: n / size" counts against that set's real number of pieces. Wearing EVERY piece completes a set: its top bonus tier AND its COMPLETION POWER turn on (a set-wide effect on top of each piece's own power) and the hero gains a golden aura; the "… set" tag turns gold with a ✦. Hover/press-hold the tag to see the set's named pieces, each tier's bonus, the completion power, and your count. gameState() marks a held/worn set piece with its "set" id, "setPiece" id and "fixed":true; gameState().sets lists worn sets, completion (worn / need) and active completion powers.`,
-      `CURSED items — any green-or-better drop can roll one (~12% chance) — pair a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. The drawback always lands on a property you'll actually FEEL — a core stat (Attack, Defense, Max HP/MP, Speed) or a damage amp (Increased/Boss Damage, Spell/Skill Power) — never on a benefit-only rating whose negative would just floor to zero, so a curse's price is always paid. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — a curse hits ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent — the boost and its price come together. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat.`,
+      `SPECIAL ITEMS are the OTHER axis of a drop, independent of its colour: about 22% of green-or-better drops roll ONE special KIND, each of which breaks a different normal affix rule and so hands you power the ordinary ladder would make you wait for. A piece can carry at most one. Every kind is flagged, never named — the item's name is plain and a small pixel icon brands it (skull / coins / down-arrow / scroll). gameState() reports the kind on each item as "special", so an agent never has to infer it from the stats. The four kinds: CURSED (~12%), FORTUNATE (~4%), DEEPFORGED (~3%), STORIED (~3%) — detailed below.`,
+      `CURSED (~12% of green-or-better drops) pairs a STRONG boost on one property with an equally strong DRAWBACK on another; both are real and flow into your totals. The drawback always lands on a property you'll actually FEEL — a core stat (Attack, Defense, Max HP/MP, Speed) or a damage amp (Increased/Boss Damage, Spell/Skill Power) — never on a benefit-only rating whose negative would just floor to zero, so a curse's price is always paid. Each swing is sized to the stat it lands on (a multiple of that stat's own normal roll) and GROWS WITH RARITY — ~2.2× a normal roll on an uncommon up to ~5× on a legendary, so rarer cursed gear swings far harder in both directions. Like a unique, a cursed item is bound the moment it drops: it CANNOT be augmented or reforged at the Enchanter, so the trade is permanent. A small skull marks the name; read inventory[i] for its "cursed":true flag, the "curseStat" it penalises, and the negative penalty stat. NOTE: a plain item is never called "Cursed" — only the flag means cursed.`,
+      `FORTUNATE (~4%) rolls ONE finder stat — Gold Find % or Magic Find % — far past its normal ceiling: a full roll PLUS a rarity-scaled swing on top (~2.5× an uncommon's ceiling up to ~5.5× a legendary's), so it always beats the best ordinary roll of that stat. It carries NO drawback, because both stats buy gold and loot rarity and never combat power — a fortunate piece is a farming tool, not a fight-winner. Only gear whose slot can hold a finder stat rolls it (head, chest, legs, ring, amulet — never a weapon, gloves or off-hand). The lucky stat is PROTECTED like a headline: the Enchanter can't reroll it back down. Coins mark the name; read "fortuneStat" for which stat it lifted.`,
+      `DEEPFORGED (~3%) rolls the WHOLE piece at an item level well past the floor that dropped it — its own level plus 35% (at least +5) — so its headline, every affix and its gold worth all read like a find from far deeper. The price is built in: the equip requirement is derived from item level, so a deepforged piece gates HARDER than its floor-mates and is only wearable once you've committed the attribute to match. Its "ilvl" already shows the deeper number, and it sits above what the Enchanter's Empower can reach, so Empower is a no-op on it. A down-arrow marks the name.`,
+      `STORIED (~3%) carries its rarity's FULL stat-affix cap PLUS one more property — and skips the usual roll-up-to-the-cap that can come out sparse, so it always reads richer than its colour. That lifts every rarity a full step (an uncommon carries a rare's spread) and pushes a legendary to SIX stat modifiers, past the 5-stat ceiling nothing else in the game crosses. No drawback and no lock: it reforges at the Enchanter like any ordinary piece. A scroll marks the name.`,
       `Item Power is BUILD-AWARE, not driven by rarity or item level alone: each piece's "pow" is what its stats are actually worth to YOUR hero's build (a stat your build can't use — Crit Damage with no crit, Spell Power on a martial build — adds ~0), so a higher-rarity or higher-ilvl piece can read LOWER Power for you. Sort by power and read the "upgrade" swing; see gameGuide("power"). The on-screen Power number, item level, gold value, +/- stat-compare line, and bag Sort/Filter controls are all one-time Craftsman HUD upgrades (Appraiser's Loupe, Assayer's Glass, Coin Scale, Gauging Calipers, Quartermaster's Ledger — see gameGuide("town")); a fresh hero reads gear by its raw stats until they're crafted, but gameState always reports pow, ilvl, value + full stats regardless of what's fitted. gameState().menu.inventory gives brief items (with pow + upgrade); read inventory[i] in the console for full stats, value, ilvl and the locked flag.`,
       `Within a slot, the base (Helm vs Hood, Chestplate vs Robe) sets its DEF AND a protected signature stat that never rerolls: heavier bases bank a defensive stat (HP, damage reduction, block, regen, tenacity), lighter bases grant evasion, crit, mana, cooldown, life-leech or find. Same slot, different roles — no base is strictly best.`,
       `Loot LEANS to your class: drops, the merchant and the gambler favour build-relevant bases (~60%, the rest random) — a Mage sees more staves/wands, robes and tomes; a Warrior/Templar more of their melee weapons, plate and shields; a Rogue more daggers/bows, light armour and quivers. Off-favoured bases still turn up, and picking a slot at the gambler still leans the base within it.`,
@@ -13996,7 +14012,7 @@ function renderShopSellHTML() {
     const lock = locked ? `<span class="shop-price short"><span data-spr=ic_key></span></span>` : '';
     return `<div class="shop-row ${rarityClass(it)} ${locked ? 'locked' : ''}">`
       + `<span class="loot-icon">${iconMarkup(itemIcon(it), tierColor(it))}</span>`
-      + `<div class="shop-row-info ${rarityClass(it)}"><div class="shop-row-name">${rarityPip(it)}${curseMark(it)}${it.name}</div><div class="shop-row-sub">${sub}</div></div>`
+      + `<div class="shop-row-info ${rarityClass(it)}"><div class="shop-row-name">${rarityPip(it)}${specialMark(it)}${it.name}</div><div class="shop-row-sub">${sub}</div></div>`
       + `${lock}${scrapBtn}${sellBtn}</div>`;
   }).join('');
   return ctrls + bulk + rows;
@@ -17324,15 +17340,16 @@ function renderEnchantItem(item) {
   // button you click never jumps somewhere else. (We deliberately do NOT re-sort
   // by pool order here: that would yank a rerolled modifier to wherever its new
   // type sits in the pool, reshuffling the whole list.)
-  // Locked lines: headline/innate stats plus a cursed item's penalty — none of
-  // these can be rerolled, so they're shown separately with a and a tag that
-  // says WHY (headline vs the permanent curse).
+  // Locked lines: headline/innate stats, a cursed item's penalty, and a fortunate
+  // item's finder stat — none can be rerolled, so they're shown separately with a
+  // tag that says WHY (headline vs the permanent curse vs the protected lucky roll).
   const lockRows = locked.filter(k => k in item.stats).map(k => {
     const v = item.stats[k];
     const valStr = (typeof v === 'string') ? abbreviateNumbersIn(v) : (v < 0 ? '' : '+') + abbreviateNumbersIn(String(v));
     const curse = item.cursed && !head.includes(k);
-    const style = curse ? 'opacity:0.85;color:var(--danger)' : 'opacity:0.6';
-    const tag = curse ? '(cursed)' : '(headline)';
+    const lucky = !curse && item.fortuneStat === k;
+    const style = curse ? 'opacity:0.85;color:var(--danger)' : (lucky ? 'opacity:0.85;color:var(--gold)' : 'opacity:0.6');
+    const tag = curse ? '(cursed)' : lucky ? '(fortunate)' : '(headline)';
     return `<div class="hc-line" style="${style}"><span data-spr=feat_door></span> ${valStr} <span class="stat-abbr" ${hoverTip(statMeaningTip('stat', k))}>${STAT_LABELS[k]||k}</span> <span style="font-size:1.2rem">${tag}</span></div>`;
   }).join('');
   const valCost = rerollValueCost(item), typeCost = rerollTypeCost(item);
@@ -17450,7 +17467,7 @@ function renderFixedEnchantItem(item) {
     : `This artifact's modifiers are set for good. Its values were rolled once, scaled to the depth it dropped on, and locked.`;
   setTownContent(`
     <div class="shop-row has-actions"><button class="modal-nav-btn" onclick="enchantBack()">‹ Back</button>
-      <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${rarityPip(item)}${curseMark(item)}${item.name}</div>
+      <div class="shop-row-info ${rarityClass(item)}" style="margin-left:8px"><div class="shop-row-name">${rarityPip(item)}${specialMark(item)}${item.name}</div>
       <div class="shop-row-sub">${SLOTS[item.slot].label} · ilvl ${item.ilvl} · ${kindWord}${setTag}</div></div></div>
     <div class="ench-legend">${legend}</div>
     ${powLine}
@@ -18445,18 +18462,27 @@ function curseSwing(stat, lvl, mult, curseMult) {
 }
 // Repair for the old uncapped-curse bug: a cursed drop used to add a FLAT swing to a
 // stat with no regard for its scale, so items like a ~300% Attack Speed weapon could
-// exist. Pull any stat back to the most a curse can now grant it at this item's rarity
-// (a full normal roll + a rarity-scaled swing), preserving sign so a curse penalty
-// stays a penalty. Legit rolls sit at or below this bound, so they're never touched;
-// the pass is idempotent and runs on every item at load (bag, worn, stash).
+// exist. Pull any stat back to the most a SPECIAL roll can grant it at this item's
+// rarity, preserving sign so a curse penalty stays a penalty. Legit rolls sit at or
+// below the bound, so they're never touched; the pass is idempotent and runs on every
+// item at load (bag, worn, stash).
+//
+// The bound is PER STAT, because the kinds don't share one ceiling: a fortunate roll
+// is DESIGNED to out-reach a curse swing (its multiplier runs hotter), so clamping its
+// finder stat to the curse ceiling would quietly shave every fortunate item on the
+// next load — exactly the silent value loss this pass exists to prevent.
 function repairCurseOverflow(item) {
   if (!item || !item.stats) return;
   const lvl = Math.max(1, Math.round(item.ilvl || 1));
   const mult = tierMult(item.tier);
   const cm = curseTierMult(item.tier);
+  const fm = fortuneTierMult(item.tier);
   for (const [k, v] of Object.entries(item.stats)) {
     if (typeof v !== 'number') continue;      // DMG is a "lo-hi" range string
-    const ceil = cursedStatCeiling(affixStatRange(k, lvl, mult).max, cm);
+    const normalMax = affixStatRange(k, lvl, mult).max;
+    const ceil = (item.fortuneStat === k)
+      ? fortuneStatValue(normalMax, fm)       // this stat's whole reason for existing
+      : cursedStatCeiling(normalMax, cm);
     if (Math.abs(v) > ceil) item.stats[k] = Math.sign(v) * ceil;
   }
 }
@@ -18509,10 +18535,12 @@ function headlineStats(item) {
 }
 
 // The full set of stats that are LOCKED on an item — never rerolled, removed, or
-// counted as a rollable affix. That's every headline/innate stat PLUS a cursed
-// item's penalty stat: a curse is permanent, so the Enchanter can't reroll the
-// drawback away. Newer cursed drops record `item.curseStat`; for older saves we
-// fall back to "any negative stat" (only a curse ever makes a stat negative).
+// counted as a rollable affix. That's every headline/innate stat, PLUS:
+//   • a cursed item's penalty stat — a curse is permanent, so the Enchanter can't
+//     reroll the drawback away. Newer cursed drops record `item.curseStat`; for older
+//     saves we fall back to "any negative stat" (only a curse makes a stat negative).
+//   • a fortunate item's finder stat — the outsized roll IS the piece's identity, so
+//     it's protected like a headline rather than being rerollable back down to normal.
 function lockedStats(item) {
   const locked = headlineStats(item).slice();
   if (item.cursed) {
@@ -18520,6 +18548,9 @@ function lockedStats(item) {
       const isPenalty = item.curseStat === k || (typeof v === 'number' && v < 0);
       if (isPenalty && !locked.includes(k)) locked.push(k);
     }
+  }
+  if (item.fortuneStat && (item.fortuneStat in item.stats) && !locked.includes(item.fortuneStat)) {
+    locked.push(item.fortuneStat);
   }
   return locked;
 }
@@ -18652,24 +18683,49 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
   // Weapon damage uses a slightly gentler curve so epic+ weapons aren't overpowered.
   const dmgMult = { junk:0.55, normal:0.8, uncommon:1, rare:1.3, epic:1.65, legendary:2.1, unique:2.6 }[tier];
 
+  const item = { id: Math.random(), name, tier, slot, ilvl: lvl, stats, attrs, value: 0,
+    flavor: pick(FLAVOR[tier]), icon: iconForBase(slot, baseName) };
+
+  // ── SPECIAL KIND ── (rolled BEFORE the affixes, because deepforged and storied
+  // change how those affixes are generated; cursed and fortunate are applied after.)
+  // A drop carries at most one, from uncommon up. Fortunate needs a finder stat in the
+  // slot's pool, so eligibility is read off SLOT_AFFIX_POOLS — the slot pool, not
+  // itemStatPool(), because the per-item gates it adds (caster/martial, Spirit Veil)
+  // need item.off, which applyBaseStats hasn't set yet and which never touches GF/MF.
+  const tierRank = Object.keys(TIERS).indexOf(tier);
+  // Ramp: specials hold back until their gate, so a new hero meets plain affixes first.
+  // Keyed on deepest-reached.
+  const specialsOk = tierRank >= 2 && (!player.guided || specialItemsAllowed(player.maxFloor));
+  const special = specialsOk
+    ? rollSpecialKind(Math.random, eligibleSpecialKinds(SLOT_AFFIX_POOLS[slot]?.stats || []))
+    : null;
+
+  // Deepforged: roll the WHOLE piece at an item level well past the floor that dropped
+  // it — headline, affixes, gold worth and (since attrReqValue re-derives it from
+  // item.ilvl) the equip requirement all move together. That's the trade: deep-floor
+  // numbers early, but only wearable once you've committed the attribute to match.
+  const rollLvl = (special === 'deepforged') ? deepforgeIlvl(lvl) : lvl;
+  item.ilvl = rollLvl;
+
   // Base value by rarity, lifted by item level so deeper gear is worth more.
   const baseValue = { junk:1, normal:5, uncommon:20, rare:80, epic:300, legendary:1200, unique:5000 }[tier];
-  let value = Math.round(baseValue * (1 + lvl * 0.12));
-
-  const item = { id: Math.random(), name, tier, slot, ilvl: lvl, stats, attrs, value,
-    flavor: pick(FLAVOR[tier]), icon: iconForBase(slot, baseName) };
+  let value = Math.round(baseValue * (1 + rollLvl * 0.12));
+  item.value = value;
 
   // Headline stat by slot, shaped by the rolled base (Axe hits harder than a
   // Dagger, plate guards more than a robe) — and a jewelry base's innate stat.
   // The headline/innate is never an affix, so it's never duplicated below. A small
   // random nudge keeps two same-base drops from being identical.
-  applyBaseStats(item, baseName, lvl + rnd(0,2) * 0.6, mult, dmgMult);
+  applyBaseStats(item, baseName, rollLvl + rnd(0,2) * 0.6, mult, dmgMult);
 
   // Roll bonus affixes — stats and attributes from the slot's pools, each up to
-  // its rarity cap, never duplicating a stat/attribute or the headline.
+  // its rarity cap, never duplicating a stat/attribute or the headline. A STORIED
+  // piece skips the roll-up-to-the-cap and takes the full cap PLUS one, so it always
+  // carries a property its colour alone could never hold.
   const caps = TIER_AFFIX_CAPS[tier] || { stat: 0, attr: 0 };
-  addStatAffixes(item, lvl, mult, rollAffixCount(caps.stat));
-  addAttrAffixes(item, lvl, mult, rollAffixCount(caps.attr));
+  const statCount = (special === 'storied') ? storiedStatCount(caps.stat) : rollAffixCount(caps.stat);
+  addStatAffixes(item, rollLvl, mult, statCount);
+  addAttrAffixes(item, rollLvl, mult, rollAffixCount(caps.attr));
 
   // ── BUILD-DEFINING EXTRAS ── legendaries carry a special power (changes HOW you
   // fight); lower tiers get none. (Red drops — uniques and set pieces alike — are
@@ -18678,16 +18734,13 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
     item.power = rollItemPower();
   }
 
-  // Cursed items (~12% of uncommon+): a STRONG stat boost paired with an equally
-  // strong drawback on another stat. Both flow straight through totalStat(), so the
-  // penalty is real. Swing sizes come from curseSwing() (stat-aware and rarity-scaled —
-  // a big number for whatever stat it lands on, growing with rarity), and boost and
-  // penalty share that one size. A curse binds power to price: cursed items can't be
-  // augmented or reforged at the Enchanter (see isEnchantLocked), so the trade sticks.
-  const tierRank = Object.keys(TIERS).indexOf(tier);
-  // Ramp: cursed items (a boost paired with a real drawback) hold back until the
-  // cursed gate, so a new hero meets plain affixes first. Keyed on deepest-reached.
-  if (tierRank >= 2 && (!player.guided || cursedItemsAllowed(player.maxFloor)) && Math.random() < 0.12) {
+  // Cursed: a STRONG stat boost paired with an equally strong drawback on another
+  // stat. Both flow straight through totalStat(), so the penalty is real. Swing sizes
+  // come from curseSwing() (stat-aware and rarity-scaled — a big number for whatever
+  // stat it lands on, growing with rarity), and boost and penalty share that ONE size.
+  // A curse binds power to price: cursed items can't be augmented or reforged at the
+  // Enchanter (see isEnchantLocked), so the trade sticks.
+  if (special === 'cursed') {
     const pool = itemStatPool(item).length ? itemStatPool(item) : STAT_NAMES.filter(s => s !== 'DMG');
     const boostStat = pick(pool);
     // The penalty must land where a NEGATIVE value is actually FELT: most gear stats are
@@ -18697,17 +18750,35 @@ function generateItem(rolls = 1, ilvl = null, forceTier = null, forceSlot = null
     const positive = Object.keys(stats).filter(k => typeof stats[k] === 'number' && stats[k] > 0);
     const curseStat = pick(cursePenaltyStats(pool, boostStat, positive));
     const cm = curseTierMult(tier); // rarity-scaled curse strength (2.2× → 5×)
-    stats[boostStat] = (stats[boostStat] || 0) + curseSwing(boostStat, lvl, mult, cm);
-    if (curseStat) stats[curseStat] = (stats[curseStat] || 0) - curseSwing(curseStat, lvl, mult, cm); // negative = penalty
+    stats[boostStat] = (stats[boostStat] || 0) + curseSwing(boostStat, rollLvl, mult, cm);
+    if (curseStat) stats[curseStat] = (stats[curseStat] || 0) - curseSwing(curseStat, rollLvl, mult, cm); // negative = penalty
     item.cursed = true;
     // Remember which property carries the curse penalty so displays can tag it — a
     // curse is a curse, and the whole item is locked out of the Enchanter anyway.
     if (curseStat) item.curseStat = curseStat;
-    // The curse is flagged (item.cursed), not baked into the name — displays draw
-    // the cursed pixel icon (ic_cursed) from the flag via curseMark(), so no emoji
-    // ever lives in saved item data.
-    item.flavor = 'Cursed: great power at a price.';
-    item.value = Math.round(value * 1.5);
+  }
+
+  // Fortunate: one finder stat (Gold or Magic Find) rolled far past its normal
+  // ceiling — a full roll plus a rarity-scaled swing on top, so it always beats the
+  // best ordinary roll of that stat. No drawback: both stats buy gold and loot rarity,
+  // never combat power, so an outsized roll makes a farming tool, not a fight-winner.
+  if (special === 'fortunate') {
+    const fstat = pick(fortuneStats(itemStatPool(item)));
+    if (fstat) {
+      const fv = fortuneStatValue(affixStatRange(fstat, rollLvl, mult).max, fortuneTierMult(tier));
+      stats[fstat] = Math.max(stats[fstat] || 0, fv);   // never below a lucky ordinary roll
+      item.fortuneStat = fstat;
+    }
+  }
+
+  // Every special is flagged (item.special), never baked into the NAME — displays draw
+  // its pixel icon from the flag via specialMark(), so no emoji and no misleading word
+  // ever lives in saved item data. A special piece is also worth more gold.
+  if (special) {
+    const def = specialItemDef(special) || {};
+    item.special = special;
+    item.flavor = def.flavor || item.flavor;
+    item.value = Math.round(value * (def.valueMult || 1));
   }
   // Mirrorforge "radiant" greater-roll: deep in Endless a rare drop rolls hot — mark
   // it (egMfRadiantOnAffix) and lift its non-locked positive stats into the greater
@@ -29259,7 +29330,7 @@ function renderPanel() {
       <div class="loot-item ${rarityClass(item)} ${selectedItem===i?'selected':''} ${item.locked?'locked':''} ${cantEquip?'cant-equip':''}">
         <div class="loot-info" onclick="selectItem(${i}, this)"
              onmouseenter="showTooltip(event,${i})" onmouseleave="hideTooltip()">
-          <div class="item-name">${rarityPip(item)}${curseMark(item)}${item.name}${craftedMark(item)}</div>
+          <div class="item-name">${rarityPip(item)}${specialMark(item)}${item.name}${craftedMark(item)}</div>
           <div class="item-type">${slotName}${pwr}</div>
           ${diff}
         </div>
@@ -31158,10 +31229,14 @@ function itemCardHTML(item, opts = {}) {
     // rerolled, so mark them apart from rollable affixes — but keep every stat the
     // same colour so the list reads cleanly. A base stat gets a dim asterisk whose
     // hover title explains it (keeps the row short so name + stats stay the focus);
-    // a curse penalty (negative) keeps its worded tag.
+    // a curse penalty (negative) keeps its worded tag, and a fortunate roll's finder
+    // stat is called out in gold so the one property it blew past its ceiling reads
+    // as the reason the piece is special.
     const isNative = head.includes(k);
-    const style = negative ? ' style="color:var(--red-350)"' : '';
+    const lucky = !negative && item.fortuneStat === k;
+    const style = negative ? ' style="color:var(--red-350)"' : (lucky ? ' style="color:var(--gold)"' : '');
     const tag = negative ? ' <span class="tt-tag">cursed</span>'
+              : lucky ? ' <span class="tt-tag">fortunate</span>'
               : isNative ? ' <span class="tt-base-mark" title="Base stat: innate to this item and can’t be rerolled">*</span>' : '';
     return `<div class="tt-stat"${style}>${val} ${STAT_LABELS[k] || k}${tag}</div>`;
   });
@@ -31204,6 +31279,13 @@ function itemCardHTML(item, opts = {}) {
         ? `<div style="color:${SET_RARITY_COLOR};font-size:1.2rem;font-weight:bold;margin:2px 0">✦ Set piece — properties fixed on drop</div>`
         : `<div style="color:${(TIERS.unique || {}).color || '#ff2222'};font-size:1.2rem;font-weight:bold;margin:2px 0">✦ Unique — properties fixed on drop</div>`)
     : '';
+  // A SPECIAL piece (cursed / fortunate / deepforged / storied) says which kind it is
+  // and what that kind does — the icon on the name only brands it, and every kind
+  // bends a different rule, so the card spells the rule out.
+  const specialDef = specialItemDef(specialKindOf(item));
+  const specialLine = specialDef
+    ? `<div style="color:var(--gold);font-size:1.2rem;margin:2px 0">${dlIcon(specialDef.sprite, 14)} <b>${specialDef.label}</b> — ${specialDef.blurb}</div>`
+    : '';
   // Item level: drives raw stat size, so it's worth surfacing alongside power.
   // Gated on the Assayer's Glass HUD upgrade (hudOwned('ilvl')) — a bare hero reads
   // gear by its raw stats until the readout is crafted at the Craftsman.
@@ -31232,13 +31314,14 @@ function itemCardHTML(item, opts = {}) {
   return `
     ${label}
     <div class="tt-nameline">
-      <span class="tt-name" style="color:${tierColor(item)}">${rarityPip(item)}${curseMark(item)}${item.name}</span>
+      <span class="tt-name" style="color:${tierColor(item)}">${rarityPip(item)}${specialMark(item)}${item.name}</span>
       <span class="tt-tier" style="color:${tierColor(item)}">${item.slot ? `<span data-spr=${SLOTS[item.slot].sprite}></span> ${SLOTS[item.slot].label}` : 'potion'}${ilvlLine ? ' · ' + ilvlLine : ''}</span>
     </div>
     ${weaponTypeLine}
     ${item.slot && !begin && hudOwned('rankings') ? `<div style="color:var(--gold-350);font-weight:bold;font-size:1.3rem;margin:3px 0">${PWR_GLYPH} Power: ${abbreviateNumber(power)}</div>` : ''}
     ${powerLine}
     ${uniqueLine}
+    ${specialLine}
     ${reqLine}
     ${stats}
     ${weaponLine}
@@ -31592,15 +31675,36 @@ function togglePanelCollapse() {
 // Potions get their own signature colour wherever they're named in the log.
 const POTION_COLOR = '#ff5ec4';
 // Wrap an item's name in its rarity tier colour for chat-log mentions.
-// Leading cursed-skull pixel icon for a cursed item, or '' — driven by the
-// item.cursed flag so the marker is never an emoji baked into the name.
-function curseMark(item, px) { return item && item.cursed ? dlIcon('ic_cursed', px || 13) + ' ' : ''; }
+// Which special kind an item carries, or null. Saves that predate the family only
+// carry the cursed flag, so it still resolves to 'cursed'.
+function specialKindOf(item) {
+  if (!item) return null;
+  if (item.special && specialItemDef(item.special)) return item.special;
+  return item.cursed ? 'cursed' : null;
+}
+// Leading pixel icon branding a special item (skull = cursed, coins = fortunate,
+// down-arrow = deepforged, scroll = storied), or '' — driven by the item's FLAG, so
+// the marker is never an emoji and never a word baked into the name.
+function specialMark(item, px) {
+  const def = specialItemDef(specialKindOf(item));
+  return def ? dlIcon(def.sprite, px || 13) + ' ' : '';
+}
 // Older saves baked a skull glyph (U+2620) into cursed item names; strip it so
 // no emoji lingers in loaded data (the marker now comes from the cursed flag).
 function stripLegacyCurseMark(name) { return typeof name === 'string' ? name.replace(/^\u2620\uFE0F?\s*/u, '') : name; }
+// Older saves also hold items named by the RETIRED "Cursed" cosmetic prefix, which
+// read as cursed while carrying no drawback anywhere on them. Re-prefix them so a
+// saved bag tells the same truth a fresh drop does. Base words are matched per slot
+// and never include a prefix, so the swap can't disturb a requirement or an icon.
+function renameLegacyCursedPrefix(name) {
+  return (typeof name === 'string' && name.startsWith('Cursed ')) ? 'Gilded ' + name.slice(7) : name;
+}
+// Every name repair a loaded item gets, in one call — applied to the bag, both gear
+// sets, the stash and saved wardrobe looks so no path misses one.
+function healItemName(name) { return renameLegacyCursedPrefix(stripLegacyCurseMark(name)); }
 function logItem(item) {
   const c = tierColor(item);   // set pieces log in the set colour, not their tier's
-  return `<span style="color:${c}">${rarityPip(item)}${curseMark(item)}${item.name}</span>`;
+  return `<span style="color:${c}">${rarityPip(item)}${specialMark(item)}${item.name}</span>`;
 }
 // Wrap a potion label in the shared potion colour for chat-log mentions.
 function logPotion(label) {
@@ -32675,7 +32779,7 @@ function newStashTag() { return 't' + Date.now().toString(36) + Math.random().to
 // Re-stamp icons and ensure an attrs block on every stashed item — the same
 // healing the bag/equipped gear gets in loadGame().
 function healStashItems(s = stash) {
-  s.items.forEach(it => { if (it.slot) it.icon = itemIcon(it); if (!it.attrs) it.attrs = {}; if (it.name) it.name = stripLegacyCurseMark(it.name); repairCurseOverflow(it); });
+  s.items.forEach(it => { if (it.slot) it.icon = itemIcon(it); if (!it.attrs) it.attrs = {}; if (it.name) it.name = healItemName(it.name); repairCurseOverflow(it); });
 }
 // Which localStorage key / cloud row a given ladder's stash persists under.
 function stashLocalKey(s) { return s === stashHc ? STASH_HC_KEY : STASH_KEY; }
@@ -33168,10 +33272,11 @@ function loadGame() {
       for (const t in firsts) { if (firsts[t]) player.rarityFound = Math.max(player.rarityFound, rarityRank(t)); }
       syncRarityFoundFromHoldings();
     }
-    // Legacy cleanup: older saves baked a skull glyph into cursed item names — the
-    // marker now comes from the cursed flag, so strip any leftover glyph on load.
+    // Legacy cleanup: older saves baked a skull glyph into cursed item names, and
+    // older still, named ordinary drops with the retired "Cursed" cosmetic prefix.
+    // A special item is marked by its flag now, so heal both out of loaded names.
     [...inventory, ...gearSets.flatMap(s => Object.values(s || {}))]
-      .forEach(it => { if (it && it.name) it.name = stripLegacyCurseMark(it.name); });
+      .forEach(it => { if (it && it.name) it.name = healItemName(it.name); });
     // Migrate saves that predate cosmetics: ensure the shape exists, then seed the
     // wardrobe from whatever gear the player is already carrying or wearing.
     if (!player.cosmetics) player.cosmetics = { head:null, chest:null, weapon:null };
@@ -33968,7 +34073,7 @@ function lbInt(v, lo) { v = Math.floor(Number(v)); return Number.isFinite(v) && 
 function lbTrimItem(it) {
   if (!it || typeof it !== 'object') return null;
   const o = {};
-  for (const k of ['name', 'slot', 'tier', 'ilvl', 'stats', 'attrs', 'base', 'crafted', 'fixed', 'set', 'cursed', 'power', 'value', 'flavor']) {
+  for (const k of ['name', 'slot', 'tier', 'ilvl', 'stats', 'attrs', 'base', 'crafted', 'fixed', 'set', 'cursed', 'special', 'fortuneStat', 'power', 'value', 'flavor']) {
     if (it[k] !== undefined) o[k] = it[k];
   }
   return o;
@@ -34333,7 +34438,7 @@ function lbHeroBuildHTML(r, lo) {
       <span class="lb-gear-ic">${iconMarkup(itemIcon(it), col)}</span>
       <div class="lb-gear-info">
         <div class="lb-gear-slot">${label}</div>
-        <div class="lb-gear-name" style="color:${col}">${rarityPip(it)}${curseMark(it)}${escapeHtml(it.name || '')}${it.crafted ? ' ' + (dlIcon('ic_mallet', 12) || '') : ''}</div>
+        <div class="lb-gear-name" style="color:${col}">${rarityPip(it)}${specialMark(it)}${escapeHtml(it.name || '')}${it.crafted ? ' ' + (dlIcon('ic_mallet', 12) || '') : ''}</div>
         <div class="lb-gear-power">${PWR_GLYPH} ${abbreviateNumber(itemPower(it))}${it.ilvl ? ` · <span style="color:var(--blue-250)">ilvl ${abbreviateNumber(it.ilvl)}</span>` : ''}</div>
       </div>
     </div>`;
@@ -37871,12 +37976,14 @@ function egMfFromContract(item, contract) {
     // onto a REAL stat whose negative is felt in combat — writing a nonexistent 'CURSE'
     // stat would be an invisible drawback (see cursePenaltyStats). Prefer a felt stat
     // the item already has, excluding the boosted stat (contract.curseStat).
+    // The flag follows the PENALTY, never the other way round: if no felt stat could
+    // take the drawback, the item is not branded cursed — a skull with no downside is
+    // exactly what a curse must never be.
     if (a.key === 'CURSE' || (a.curse && a.val < 0)) {
       const cpool = (typeof itemStatPool === 'function') ? (itemStatPool(out) || []) : [];
       const cpos = Object.keys(out.stats).filter(k => typeof out.stats[k] === 'number' && out.stats[k] > 0);
       const pen = pick(cursePenaltyStats(cpool, c.curseStat, cpos));
-      if (pen) { out.stats[pen] = (out.stats[pen] || 0) + a.val; out.curseStat = pen; }
-      out.cursed = true;
+      if (pen) { out.stats[pen] = (out.stats[pen] || 0) + a.val; out.curseStat = pen; out.cursed = true; }
       continue;
     }
     // A corrupt addAffix new key (e.g. 'MIRRORFORGE') writes to stats; attrs to attrs; everything else to stats.
@@ -37889,7 +37996,9 @@ function egMfFromContract(item, contract) {
   out._fpSpent = c._fpSpent || 0;
   if (c.signature) out.signature = c.signature;
   if (c._corrupt) out._corrupt = c._corrupt;
-  if (c.cursed) out.cursed = true;
+  // Only carry the contract's curse flag over once a real penalty is on the item —
+  // either folded in above, or already there from the drop that made it cursed.
+  if (c.cursed && (out.curseStat || Object.values(out.stats).some(v => typeof v === 'number' && v < 0))) out.cursed = true;
   return out;
 }
 
@@ -40514,7 +40623,7 @@ const __DL_FN_BRIDGE = {
   toggleLog,
   setPanelCollapsed,
   togglePanelCollapse,
-  curseMark,
+  specialMark,
   stripLegacyCurseMark,
   logItem,
   logPotion,
