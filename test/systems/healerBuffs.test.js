@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  BLESSING_COST_GROWTH,
-  BLESSING_COST_CAP,
+  BLESSING_DISCOUNT,
+  avgGoldDrop,
   blessingCost,
   blessingById,
   healerBuffFx,
@@ -11,36 +11,73 @@ import {
   sanitizeHealerBuffs,
 } from '../../src/systems/healerBuffs.js';
 import { HEALER_BLESSINGS, RESTED_BUFF } from '../../src/data/healerBuffs.js';
+import { GOLD_DROP_FLAT, GOLD_DROP_PER_DEPTH } from '../../src/data/goldDrops.js';
+
+describe('avgGoldDrop', () => {
+  it('is the flat roll plus a slice per floor', () => {
+    expect(avgGoldDrop(1)).toBe(GOLD_DROP_FLAT + GOLD_DROP_PER_DEPTH);
+    expect(avgGoldDrop(10)).toBe(GOLD_DROP_FLAT + GOLD_DROP_PER_DEPTH * 10);
+  });
+
+  it('grows linearly — floor 50 pays 50× the per-depth slice', () => {
+    expect(avgGoldDrop(50) - avgGoldDrop(49)).toBe(GOLD_DROP_PER_DEPTH);
+  });
+
+  it('treats junk / sub-1 depth as floor 1', () => {
+    for (const d of [0, -7, NaN, undefined, null, 'x']) expect(avgGoldDrop(d)).toBe(avgGoldDrop(1));
+    expect(avgGoldDrop(4.9)).toBe(avgGoldDrop(4));
+  });
+});
 
 describe('blessingCost', () => {
-  it('is the base at level 1', () => {
-    expect(blessingCost(600, 1)).toBe(600);
+  it('is the discounted base on floor 1', () => {
+    expect(blessingCost(600, 1)).toBe(Math.round(600 * BLESSING_DISCOUNT));
   });
 
-  it('climbs by the growth factor each level', () => {
-    expect(blessingCost(600, 2)).toBe(Math.round(600 * BLESSING_COST_GROWTH));
-    expect(blessingCost(1000, 3)).toBe(Math.round(1000 * BLESSING_COST_GROWTH ** 2));
-  });
-
-  it('is monotonically non-decreasing with level', () => {
-    let prev = -1;
-    for (let lvl = 1; lvl <= 60; lvl++) {
-      const c = blessingCost(600, lvl);
-      expect(c).toBeGreaterThanOrEqual(prev);
-      prev = c;
+  it('takes half off the sticker price', () => {
+    expect(BLESSING_DISCOUNT).toBe(0.5);
+    const undiscounted = (base, depth) => base * (avgGoldDrop(depth) / avgGoldDrop(1));
+    for (const depth of [1, 7, 25, 80]) {
+      expect(blessingCost(600, depth)).toBe(Math.round(undiscounted(600, depth) * 0.5));
     }
   });
 
-  it('clamps to the cap at high level', () => {
-    expect(blessingCost(800, 200)).toBe(BLESSING_COST_CAP);
+  it('climbs with the average gold drop, not the hero', () => {
+    // Price/income holds flat at every depth — that is what keeps a Blessing buyable.
+    const ratio = (d) => blessingCost(600, d) / avgGoldDrop(d);
+    for (const d of [5, 20, 60, 150]) expect(ratio(d)).toBeCloseTo(ratio(1), 1); // ±0.05, i.e. rounding only
   });
 
-  it('floors bad inputs to 0 and treats level<1 as level 1', () => {
+  it('is monotonically non-decreasing with depth and never caps out', () => {
+    let prev = -1;
+    for (let d = 1; d <= 200; d++) {
+      const c = blessingCost(600, d);
+      expect(c).toBeGreaterThanOrEqual(prev);
+      prev = c;
+    }
+    expect(blessingCost(600, 400)).toBeGreaterThan(blessingCost(600, 200));
+  });
+
+  it('stays well under a floor of takings — always an affordable option', () => {
+    // A floor yields far more than a handful of kills; pricing a Blessing at a few
+    // dozen average drops keeps it in reach at any depth.
+    for (const d of [1, 10, 40, 120]) {
+      expect(blessingCost(800, d) / avgGoldDrop(d)).toBeLessThan(60);
+    }
+  });
+
+  it('undercuts the old hero-level curve wherever level tracks depth', () => {
+    const old = (base, lvl) => Math.min(75000, Math.round(base * Math.pow(1.2, lvl - 1)));
+    for (let d = 1; d <= 100; d++) expect(blessingCost(600, d)).toBeLessThanOrEqual(old(600, d));
+  });
+
+  it('floors bad inputs to 0 and treats depth<1 as floor 1', () => {
     expect(blessingCost(-500, 5)).toBe(0);
     expect(blessingCost(NaN, 5)).toBe(0);
-    expect(blessingCost(600, 0)).toBe(600);
-    expect(blessingCost(600, -3)).toBe(600);
-    expect(blessingCost(600, undefined)).toBe(600);
+    expect(blessingCost(0, 5)).toBe(0);
+    expect(blessingCost(600, 0)).toBe(blessingCost(600, 1));
+    expect(blessingCost(600, -3)).toBe(blessingCost(600, 1));
+    expect(blessingCost(600, undefined)).toBe(blessingCost(600, 1));
   });
 });
 

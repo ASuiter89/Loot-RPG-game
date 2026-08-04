@@ -13,8 +13,8 @@
 // so it's a burst you renew with the next rest, not permanent power creep.
 export const HEALER_BUFF_FLOORS = 3;
 
-// Blessings are bought outright at a steep, level-scaled price, so they run longer
-// than the rest-granted bonus — long enough that a purchase carries a run.
+// Blessings are bought outright at a depth-scaled price, so they run longer than
+// the rest-granted bonus — long enough that a purchase carries a run.
 export const BLESSING_FLOORS = 5;
 
 // The Rested bonus, granted free with every paid Full Rest. A well-rested hero is
@@ -28,8 +28,9 @@ export const RESTED_BUFF = {
 
 // The Blessings the Healer sells. Only ONE Blessing is active at a time (buying a
 // new one replaces the old), so the pick is a real choice. Each carries a `base`
-// price that climbs with hero level (see blessingCost), keeping a Blessing a steep,
-// meaningful gold sink. Magnitudes sit ~1.5–2× the strongest comparable ramen buff,
+// price — its floor-1 sticker — which blessingCost scales by the average gold drop
+// at your depth, so the fee tracks the floor's income and stays payable however
+// deep you dive. Magnitudes sit ~1.5–2× the strongest comparable ramen buff,
 // which — with the short duration and one-at-a-time limit — is what makes them worth
 // the premium. `kind:'blessing'` marks them mutually exclusive.
 export const HEALER_BLESSINGS = [

@@ -8,6 +8,27 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Balance — per-flask Potency, depth-priced Blessings
+
+- 📦 New `src/data/goldDrops.js` — the kill-payout roll's constants (`GOLD_DROP_MIN`/
+  `MAX`/`PER_DEPTH`, plus `GOLD_DROP_FLAT` as the roll's mean). The shell's gold drop
+  now reads them instead of the inline `rnd(2, 8) + dungeonLevel * 3`, so the price
+  curve below and the payout can't drift apart.
+- 📦 `systems/healerBuffs.js` — `blessingCost(base, depth)` replaces the hero-level
+  curve (`BLESSING_COST_GROWTH`/`BLESSING_COST_CAP` retired) with `base ×
+  BLESSING_DISCOUNT × avgGoldDrop(depth)/avgGoldDrop(1)`. New `avgGoldDrop(depth)`
+  exported alongside. Price now tracks the floor's income linearly, so no cap is
+  needed. Both call sites in the shell pass `curDepth()`.
+- 📦 Potion Mastery is four tracks, not three: `POTION_TRACKS` gains `pwrhp`/`pwrmp`
+  (`potionPowerHpLvl` / `potionPowerMpLvl`) and `potionPowerLvl(flask)` takes a flask
+  like `potionCdLvl` does. A save-load migration hands an older hero their old
+  `potionPowerLvl` ranks on BOTH flasks, then retires the field.
+- 🧪 `test/data/goldDrops.test.js` (new) pins the roll; `test/systems/healerBuffs.test.js`
+  covers `avgGoldDrop`, the half-off cut, the flat price/income ratio, and that the new
+  curve undercuts the old one at every depth.
+- 📄 `gameState().player.potionSip` (share + amount + rank, per flask) and the
+  `healing` / `town` guide topics describe the split tracks and the new pricing.
+
 ## Feature — special item kinds (and "Cursed" stops lying)
 
 - 🐛 **The reported bug was a NAME collision, not the curse math.** `'Cursed'` sat in
