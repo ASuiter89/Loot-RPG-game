@@ -8,6 +8,7 @@
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
   { date: "2026-08-03", size: "small", v: "Stairs into a guardian floor ring red", by: "Jeff Louie", notes: ["Unsealed down-stairs pulse red instead of gold when the floor below holds a guardian — the seal-behind-you warning now reads from across the room."] },
+  { date: "2026-08-03", size: "small", v: "Endgame grove shifts one tile west", by: "Jeff Louie", notes: ["Hedged sanctum sits flush in the town's top-left corner; its west wall butts the treeline, closing the dead lane behind it.", "Doorway and its dirt trail move with it."] },
   { date: "2026-08-03", size: "small", v: "Level-up clears every skill cooldown", by: "Jeff Louie", notes: ["Level-up wipes all skill cooldowns alongside the HP/MP/Stamina refill; log names the count when it cut one short."] },
   { date: "2026-08-03", size: "small", v: "Merchant founds the town; Healer follows", by: "Jeff Louie", notes: ["Merchant is a founding keeper on boss #1 with the Craftsman (was Healer); Healer joins on boss #3."] },
   { date: "2026-08-03", size: "small", v: "Bosses walk around cover instead of wedging behind it", by: "Jeff Louie", notes: ["Guardians pathfind their whole body around rocks, furniture and wall corners; a lone rock used to pin one in place for free hits.", "Unreachable hero — foes close as near as they fit and hold, not freeze.", "Wide foe sights you from any tile of its bulk, so a wedged one still shoots back."] },
