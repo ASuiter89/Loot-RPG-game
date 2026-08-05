@@ -327,7 +327,7 @@ export const WIKI = [
         title: 'Stamina',
         keywords: ['stamina', 'sprint', 'dash', 'run', 'vitality', 'exhaust', 'recharge'],
         body: [
-          { p: '<b>Stamina</b> fuels sprinting and dashing. After you exert, it pauses briefly then refills — including while you rest in town. Sprint raises your top speed but burns Stamina steadily; a dash costs a fixed chunk and has a short cooldown.' },
+          { p: '<b>Stamina</b> fuels sprinting and dashing. After you exert, it pauses briefly then refills — including while you rest in town. Sprint raises your top speed and burns Stamina slowly enough to cross a room; a dash takes a big chunk up front and has a short cooldown. A full pool holds two dashes, so dash to escape and sprint to travel.' },
           { p: 'The <b>Vitality</b> attribute deepens the pool and speeds its recharge, and gear can add Max Stamina and Stamina Regen — so even a class that never invests in Vitality can sprint on gear alone.' },
           { note: 'In town, sprinting is FREE — the safe camp never drains Stamina, so you can run everywhere at full speed.' },
         ],
