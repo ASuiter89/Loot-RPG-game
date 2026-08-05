@@ -40,7 +40,7 @@ export const SLOT_BASES = {
     'Spear', 'Halberd', 'Pike',
     'Staff', 'Wand',
     'Shortbow', 'Longbow',
-    'Flintlock', 'Hand Cannon',
+    'Carbine', 'Longrifle',
     'Scythe', 'War Scythe',
   ],
   offhand: ['Buckler', 'Kite Shield', 'Tower Shield', 'Spiked Shield', 'Tome', 'Focus',
@@ -86,7 +86,7 @@ export const WEAPON_REQ = {
   // Bows (ranged → Agility)
   'Shortbow':   { attr: 'agility', w: 0.88 }, 'Longbow':      { attr: 'agility', w: 0.95 },
   // Guns (powder & chance → Luck)
-  'Flintlock':  { attr: 'luck',    w: 0.86 }, 'Hand Cannon':  { attr: 'luck',    w: 1.28 },
+  'Carbine':    { attr: 'luck',    w: 0.86 }, 'Longrifle':    { attr: 'luck',    w: 1.28 },
   // Scythes
   'Scythe':     { attr: 'might',   w: 1.15 }, 'War Scythe':   { attr: 'might',   w: 1.42 },
   // Bare-category fallbacks for legacy weapons whose name has no sub-type word.
