@@ -4757,7 +4757,9 @@ const CLASSES = {
     lore: 'Kills before the foe knows the fight began — speed and a whispered blade, never armour.',
     passive: '+12% damage · crits & dodge that scale with level',
     dmgAttrs: { primary: 'agility', secondary: 'might' },
-    weapons: ['Dagger','Sword','Bow'], offhands: ['ranged','dual'], armor: 'light',
+    // Guns gate on LUCK, not Agility — an off-attribute reach for a Rogue, but Luck
+    // buys crit, which is the Rogue's whole identity, so a crit build grows into them.
+    weapons: ['Dagger','Sword','Bow','Gun'], offhands: ['ranged','dual'], armor: 'light',
   },
   mage: {
     name: 'Mage', icon: 'ic_orb', color: '#7d9bff',
@@ -4787,8 +4789,10 @@ const CLASSES = {
     lore: 'Reads the odds in everything and bets anyway; the deep dark pays out for those who ask.',
     passive: '+8% damage · Luck powers your skills · richer finds',
     dmgAttrs: { primary: 'luck', secondary: 'agility' },
-    // Guns are the class's own weapon: they gate on LUCK, the attribute its skills
-    // scale off, so its signature stat buys it a weapon instead of only trinkets.
+    // Guns are the class's signature weapon: they gate on LUCK, the attribute its
+    // skills scale off, so its identity stat buys it a weapon instead of only
+    // trinkets. The Rogue reaches for them too, but off-attribute — for it, Luck is
+    // a crit investment rather than the stat its skills already ride on.
     weapons: ['Gun','Bow','Dagger'], offhands: ['ranged','dual'], armor: 'light',
     sex: 'female',   // single-sex class: one bespoke walk sheet, so no body-type choice
   },
@@ -8356,7 +8360,7 @@ window.gameGuide = function gameGuide(topic) {
       `Quests never seal the stairs and are safe to skip, but the reward scales with depth — grab the cheap ones on your way to the exit.`,
     ],
     progression: [
-      `Seven classes, each with an identity attribute that powers its SKILLS: Warrior (Might, tanky melee), Rogue (Agility, crit & dodge), Mage (Spirit, spells & big MP), Templar (Vitality, durable hybrid), Fortune-Seeker (LUCK, ranged — the only class that turns Luck into skill damage, and the only one that wields GUNS, the Luck-gated weapon line), Windblade (Agility+Spirit HYBRID, blade-caster) and Bloodletter (Might+Vitality HYBRID, and the only class with NO MANA AT ALL — every skill costs a share of max HP instead; see gameGuide('healing')). A HYBRID sums BOTH its attributes at a lower per-point rate, so a point in either is worth the same. Basic (auto) attacks scale off MIGHT for everyone. Class gates which weapons you can equip.`,
+      `Seven classes, each with an identity attribute that powers its SKILLS: Warrior (Might, tanky melee), Rogue (Agility, crit & dodge), Mage (Spirit, spells & big MP), Templar (Vitality, durable hybrid), Fortune-Seeker (LUCK, ranged — the only class that turns Luck into skill damage; it and the Rogue are the two that wield GUNS, the Luck-gated weapon line), Windblade (Agility+Spirit HYBRID, blade-caster) and Bloodletter (Might+Vitality HYBRID, and the only class with NO MANA AT ALL — every skill costs a share of max HP instead; see gameGuide('healing')). A HYBRID sums BOTH its attributes at a lower per-point rate, so a point in either is worth the same. Basic (auto) attacks scale off MIGHT for everyone. Class gates which weapons you can equip.`,
       `Five attributes (gameState().player.attributes), with re-homed roles: Might (+basic attack damage for ALL classes, +Accuracy, +Defense; also the Warrior's skills), Vitality (+max HP, +HP regen, +Stamina; the Templar's skills), Agility (+evasion, +move/attack speed; the Rogue's skills), Spirit (+max MP, +MP regen, +spell power, +healing, +Spirit Veil shield; the Mage's spells), Luck (+crit, +loot quality). How much each point gives is CLASS-SCALED — e.g. Vitality gives the Templar the most HP, Spirit gives the Mage the most spell power, Might gives the Warrior the most basic-attack damage. Pump Might for weapon damage and your class's identity attribute for its skills; every attribute also pays a defensive/utility role.`,
       `Each level grants 5 HERO points (attributes) and 1 skill point (gameState().menu.pointsToSpend), and FULLY restores the hero — HP, MP and Stamina all top off to max AND every skill cooldown is wiped (gameState().skills all come back cooldown 0 / ready) — a clean second wind. The level-up banner names exactly what the level paid, so the reward is legible without opening a tab. Spend hero points on the HERO tab (Shift-click = 5 at once); spend skill points on the SKILLS tab's PASSIVE and ACTIVE trees. You can't out-level the dungeon — gear and skills matter more with depth.`,
       `At level 20 the town Trainer unlocks ASCENSION into an advanced path — your FIRST ascension is free (earned by reaching the level, never bought) — with signature passives and powerful, often summon-based, actives. From level 20 you also earn a SEPARATE ascendancy point every 5 levels (20, 25, 30…; gameState().menu.pointsToSpend.ascendancy), spent only on the ascendancy path tree. Normal skill points can't buy path skills and ascendancy points can't buy passive/active skills. Path skills carry NO level requirement — they're gated only by the earlier skills in the path tree.`,
