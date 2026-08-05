@@ -7,6 +7,7 @@
 // Rendered by the version overlay in src/legacy/game.js. Extracted from the
 // monolith (see docs/CHANGELOG.md) per the data-driven-design rule.
 export const CHANGELOG = [
+  { date: "2026-08-05", size: "small", v: "Ranged discount moves to the bolt", by: "Jeff Louie", notes: ["0.8× is charged per shot, not per shooter: cornered casters swing at full force again, guardians' basic bolts now take it too.", "Boss telegraphed specials keep full damage."] },
   { date: "2026-08-04", size: "small", v: "Ranged foes trade damage for reach", by: "Jeff Louie", notes: ["Casters — every ranged archetype — hit for 0.8× the melee baseline; cornered melee swing included.", "Bosses unchanged, ranged kit or not."] },
   { date: "2026-08-04", size: "small", v: "Every foe: −15% HP and damage", by: "Jeff Louie", notes: ["Foes carry 0.85× HP and hit for 0.85× — regular, elite, boss, quest horde, hoard guard, boss minion, mimic.", "Quest foes, minions and mimics skipped the global dial before, so a vault guard hit full force beside an eased mob.", "Foe count, accuracy and hazard damage unchanged."] },
   { date: "2026-08-04", size: "small", v: "Trainer arrives before the Ramen House", by: "Jeff Louie", notes: ["Trainer joins on boss #5 (floor 25), Ramen House on #7 (floor 35) — respec and ascension land near the level 20 gate."] },

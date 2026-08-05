@@ -3416,6 +3416,15 @@ const BALANCE = {
   enemyHpMult: 0.85,     // global × on every foe's max HP (regular, elite, boss, quest, minion, mimic)
   enemyDmgMult: 0.85,    // global × on every foe's damage (same coverage)
   enemyCountMult: 1,     // × on the regular foe count per floor (still capped at 40)
+  // Reach is worth damage: a shot chips you from across the room, where a melee
+  // foe has to close and stand next to you to earn its hit. So every bolt loosed
+  // at the hero lands 20% under what the same foe's damage would deal in melee.
+  // Charged on the SHOT rather than on the shooter, which gets it right in both
+  // directions: a cornered caster still swings at full force (closing the gap is
+  // the counterplay), and a guardian's basic bolt takes the discount while its
+  // TELEGRAPHED kit does not — boss specials roll their own damage through
+  // spawnBossBolt/bossHitPlayer, so the tuned set-piece drama is untouched.
+  rangedDmgMult: 0.8,    // × on a foe's bolt damage (melee baseline 1.0)
   hazardDmgMult: 2,      // × on ALL passive/environmental damage — arrow & fire-vent traps, lava, spikes, hidden traps, trapped chests, hazard puddles/webs (every non-combat damage dealer routes through this one knob)
   // Trap / hazard damage tuning (base + per-floor; lava/spikes also add a % of max
   // HP so they stay a real bite as the pool grows). Arrow/fire are mitigated by
@@ -4659,15 +4668,11 @@ const BEHAVIORS = {
   erratic: { speed: 1, range: 1, erratic: 0.6,  atkMult: 0.9,  hpMult: 0.7,  dmgMult: 0.8 },
   lurker:  { speed: 1, range: 1, ambush: 3,     atkMult: 0.85, hpMult: 1.0,  dmgMult: 1.2 },
   brute:   { speed: 1, range: 1, slow: true, hitMult: 1.5, atkMult: 1.7, hpMult: 2.0,  dmgMult: 1.15 },
-  // Reach is worth damage: a caster chips you from across the room, where melee
-  // archetypes have to close and stand next to you to earn their hit. So it pays
-  // 20% under the melee baseline (chaser's 1.0) — the trade that makes a shooter
-  // an attrition threat rather than a burst one. This is the archetype's whole
-  // damage profile, so it also applies to the melee swing a CORNERED caster
-  // throws (see the `dist <= 1` branch in enemyMove) — the foe is what's softer,
-  // not just the bolt. Bosses set their damage from BALANCE.bossDmgMult and are
-  // untouched by this, ranged kit or not.
-  caster:  { speed: 1, range: 4, ranged: true, keepAway: 2, castChance: 0.7, atkMult: 1.2, hpMult: 0.7, dmgMult: 0.8 },
+  // A caster's damage profile sits at the melee baseline; the discount reach earns
+  // is charged on the SHOT instead (BALANCE.rangedDmgMult, applied in
+  // enemyRangedAttack), so a cornered caster still swings at full force — closing
+  // the gap is meant to be the counterplay, not a free win.
+  caster:  { speed: 1, range: 4, ranged: true, keepAway: 2, castChance: 0.7, atkMult: 1.2, hpMult: 0.7, dmgMult: 1.0 },
   pack:    { speed: 1, range: 1, packRush: true, atkMult: 0.8, hpMult: 0.85, dmgMult: 0.9 },
 };
 // Each monster's archetype comes from its MONSTERS entry; anything unlisted hunts
@@ -8386,10 +8391,10 @@ window.gameGuide = function gameGuide(topic) {
       `Foes only act within ~8 tiles and only wake within ~7 tiles with line of sight (or within 2 regardless). Scout and path around dormant foes by keeping distance and breaking line of sight behind walls or other solid obstacles (open ground and water don't block sight).`,
       `Every hunting foe PATHFINDS — it routes around walls, furniture, rocks and other foes instead of shoving into them, and a multi-tile guardian walks its whole body around cover the same way (it needs a gap its FULL footprint fits through, so a 3x3 boss can't follow you down a one-tile crack — but it will take the long way round). So cover breaks LINE OF SIGHT; it does NOT pin a foe in place. Standing behind a rock to plink a boss for free doesn't work: expect it to come around the side. When you are genuinely unreachable, a foe closes as near as the floor allows and holds there (shooting if it has a shot) rather than freezing where it stands.`,
       `Behaviors (gameState().enemies[i].behavior): chaser (steady, 1 tile/turn), swift (2 tiles/turn), pack (1 tile/turn, but rushes to 2 when you drop below 50% HP — wolves/tigers), erratic (darts unpredictably), brute (slow — acts every other turn, so kiting works), lurker (ambush), caster (ranged: looses a real bolt aimed where you stand). A foe with the ice CHILL status is likewise dragged to that half-cadence, but chill is a STATUS (it shows in enemies[i].status), not a behavior.`,
-      `Each archetype also has its OWN toughness & punch, not just movement: brutes are tanky and hit hard but swing slowly; swift vermin and erratic flyers are frail and jab for less; casters are squishy and PAY for their reach, hitting 20% under the melee baseline (a cornered one's melee swing included); lurkers ambush for a heavier blow; packs are individually weak but swarm. So two foes on the same floor can differ a lot — read the behavior, not just the sprite.`,
+      `Each archetype also has its OWN toughness & punch, not just movement: brutes are tanky and hit hard but swing slowly; swift vermin and erratic flyers are frail and jab for less; casters are squishy and PAY for their reach — every BOLT lands 20% under what the same foe would hit for in melee, so corner one and it swings at full force; lurkers ambush for a heavier blow; packs are individually weak but swarm. So two foes on the same floor can differ a lot — read the behavior, not just the sprite.`,
       `TYPED DEFENCE (gameState().enemies[i].armor / magicResist, whole %): every foe shrugs off a slice of your damage, and how big depends on the SCHOOL of the hit. Physical armor blunts auto-attacks + martial SKILLS (your Armor Pen % pierces it); magic resistance blunts SPELLS (your Magic Pen % pierces it). Foes differ by nature — a stone/metal/armored/scaled foe carries high armor but low magic resist (cast at it); a ghost, wisp, elemental, ooze or caster resists magic but not steel (strike it); most beasts sit in between. Hit each foe with the school it is SOFT to; a HYBRID ability splits its blow across both, so it is never fully walled. The bestiary card shows both values once you've slain enough of a species.`,
       `ENEMY AFFIXES (gameState().enemies[i].affix): roughly a fifth of ordinary (non-elite) foes carry ONE modifier, shown by a coloured aura and a name prefix — tough (+HP), fierce (+damage), venomous (poison-on-hit), accurate (cuts through your dodge), evasive (your hits often whiff — bring Accuracy), chill (snares you on hit). Read the affix, not just the sprite.`,
-      `Ranged foes fire DODGEABLE bolts, not guaranteed hits — a bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
+      `Ranged foes fire DODGEABLE bolts, not guaranteed hits — every bolt also lands 20% under the same foe's melee damage (reach costs punch; a guardian's basic bolt too, though its telegraphed specials keep full force). A bolt flies in a straight line toward where you were when it was loosed (glyph !; gameState().hazards.projectiles gives x/y + velocity + dmg), is stopped only by SOLID obstructions (walls, doors, barriers, furniture — not water or open ground), and only hurts you if it actually reaches you. Keep moving perpendicular to a shooter, or break its line behind a wall, and its shots miss.`,
       `The down-stairs stay SEALED until every non-goblin foe is dead. gameState().floorCleared, .hostilesLeft and .stairs.locked tell you directly. Once unsealed the stair ring pulses gold — or RED when the floor below is a guardian's (.stairs.bossBelow), the point-of-no-return warning.`,
       `Treasure Goblins (isGoblin) flee, never attack, and do NOT block the exit — chase fast for jackpot loot (they vanish ~15 ticks after first hit) or ignore them.`,
       `Every 5th floor (isBossFloor) is a guardian + minions. Respect "warded" (wait it out, then burst) and step off boss flame / out of barriers (hazards.boss). Bosses also enter OFFENSIVE phases: enraged (permanent +50% damage once below 40% HP) and berserk (a few beats of amped damage) — disengage/kite until berserk lapses, like a ward. TENACITY: guardians (tenacious true — elites too, lighter) shorten every stun/freeze that lands AND diminish repeats — a 2nd hard CC in the window lasts half, a 3rd a sliver, and further ones are shrugged off (enemies[i].stunImmune flips true) until you leave it hard-CC-free for a few seconds. So a boss can be locked for a beat but NEVER stunlocked — spend your stun on the opening that matters (a telegraph wind-up, an escape), not on chaining. FIRST-KILL JACKPOT: the first time you CLEAR a given boss floor (enemies[i].firstKill true until then), its guardian spills ~3x the loot at noticeably better quality — a one-time windfall per boss floor. Because boss species RECUR across floors in Endless, this tracks by FLOOR: each new or deeper boss floor you conquer pays its own windfall, while farming a floor you've already cleared drops at the normal boss rate (minus farm fatigue on a quick re-kill). So descending to a fresh boss floor is always the richer prize. Floor 25 of a finite tier is the final guardian — clearing it conquers the tier (no down-stairs), which permanently brands a stacking "conquest scar": ~6% less max HP AND damage dealt for every tier conquered, so raw power dips a little as you climb tiers. A walk-on rainbow gate then opens on that floor (gameState().conquestGate; glyph R) — step onto it to dive straight into the next tier at floor 1, or return to town and pick the next tier at the Gate.`,
@@ -26578,7 +26583,7 @@ function enemyRangedAttack(e) {
   // Loose a real, dodgeable bolt aimed at where the hero is NOW. Damage, dodge
   // and on-hit procs all resolve in landEnemyRangedHit — but only if the bolt
   // actually reaches the hero, so sidestepping its path avoids the hit entirely.
-  const raw = Math.round(e.dmg * rnd(75, 110) / 100);
+  const raw = Math.max(1, Math.round(e.dmg * rnd(75, 110) / 100 * BALANCE.rangedDmgMult));
   // Bosses hurl a flaming energy bolt; lesser ranged foes (casters) sling a hex orb
   // — never the fletched arrow, which now reads exclusively as archery (traps, bow).
   const kind = e.isBoss ? 'fire' : 'hex';
