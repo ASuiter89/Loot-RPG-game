@@ -216,6 +216,22 @@ export const WIKI = [
         ],
       },
       {
+        id: 'auto-attack-shape',
+        title: 'Auto-Attack Shape',
+        keywords: ['pierce', 'piercing', 'ricochet', 'caroming', 'multishot', 'volley', 'rebound', 'bounce', 'shape', 'auto-attack build'],
+        body: [
+          { p: 'A swing normally hits one foe. Certain signature powers and ranked class passives change its <b>shape</b>, so the same swing reaches past its mark — this is how an auto-attack build scales against a pack rather than one body at a time.' },
+          { ul: [
+            '<b>Pierce</b> — the blow carries on into foes lined up behind the target (up to 3).',
+            '<b>Ricochet</b> — it caroms foe-to-foe, up to 3 hops, each weaker than the last.',
+            '<b>Multishot</b> — an extra strike goes out at another foe in reach (up to 2).',
+            '<b>Rebound</b> — ricochets carom off <b>walls</b> too: no clear line needed, and further per hop.',
+          ] },
+          { p: 'They stack, and every extra hit rolls its own accuracy and critical. Sources are the <b>Piercing</b>, <b>Caroming</b>, <b>Volleying</b> and <b>Rebounding</b> weapon powers, plus passives in every class tree — a node that teaches one says so on its card, along with the rank it needs. Your current shape sits on the hero sheet.' },
+          { note: 'Shape raises crowd damage only. Against a lone boss there is nobody to pierce, carom or split toward, so a single-target fight is unchanged.' },
+        ],
+      },
+      {
         id: 'weapons-reach',
         title: 'Weapons, Reach & Speed',
         keywords: ['weapon', 'reach', 'range', 'melee', 'ranged', 'bow', 'staff', 'spear', 'attack speed', 'slow', 'fast'],

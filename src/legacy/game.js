@@ -48,6 +48,9 @@ import { restockCost } from '../systems/restockCost.js';
 import { unseenLootCount } from '../systems/lootSeen.js';
 import { hasVaultKey, addVaultKey, spendVaultKey } from '../systems/vaultKeys.js';
 import { isCritical } from '../systems/crit.js';
+import { clampAutoMods, autoModMult, nodeAutoMod, pierceTargets, ricochetChain,
+  multishotTargets, describeAutoMods } from '../systems/autoAttackMods.js';
+import { AUTO_MOD_INFO, AUTO_MOD_NODES } from '../data/autoAttackMods.js';
 import { favouredBases, armorWeight, rollFavouredBase, rollForcedFavouredBase } from '../systems/classLoot.js';
 import { abbreviateNumber, formatDamageRange, abbreviateNumbersIn } from '../utils/format.js';
 import { castHaste, effectiveCooldown, effectiveDps } from '../systems/skillDamage.js';
@@ -358,7 +361,10 @@ const SLOT_AFFIX_POOLS = {
   chest:  { stats: ['HP','REGEN','MPREG','MP','DR','BLOCK','THORNS','HPKILL','DODGE','MAGICFIND','TENAC','STAM','STAMREG'], attrs: ALL_ATTRS },
   hands:  { stats: ['CRIT','ACC','CRITDMG','IDMG','AREA','DBLSTRIKE','SPD','PEN','LEECH','EXEC','CDR','CLEAVE','BLOCK','THORNS','ATKSPD','SKILLPWR'], attrs: ALL_ATTRS },
   legs:   { stats: ['SPD','HP','REGEN','MPREG','DODGE','DR','BLOCK','MP','GOLDFIND','XPGAIN','HPKILL','TENAC','STAM','STAMREG'], attrs: ALL_ATTRS },
-  ring:   { stats: ['CRIT','ACC','CRITDMG','ATK','IDMG','AREA','SKILLPWR','LEECH','MPLEECH','GOLDFIND','MAGICFIND','MATFIND','HP','MP','DEF','DBLSTRIKE','BOSSDMG','EXEC','PEN','MAGICPEN','MCR','MPKILL','CLEAVE'], attrs: ALL_ATTRS },
+  // Rings carry ATKSPD as well as SKILLPWR: the auto-attack's one speed lever used to
+  // roll on just two slots (weapon + gloves) against Skill Power's five, so an
+  // auto-focused build ran out of places to put it long before a skill build did.
+  ring:   { stats: ['CRIT','ACC','CRITDMG','ATK','IDMG','AREA','SKILLPWR','ATKSPD','LEECH','MPLEECH','GOLDFIND','MAGICFIND','MATFIND','HP','MP','DEF','DBLSTRIKE','BOSSDMG','EXEC','PEN','MAGICPEN','MCR','MPKILL','CLEAVE'], attrs: ALL_ATTRS },
   amulet: { stats: ['MP','HP','REGEN','MPREG','SPELLPWR','CASTSPD','AREA','MAGICPEN','CDR','MCR','MPLEECH','MPKILL','HPKILL','THORNS','MAGICFIND','DR','ATK','DEF','BOSSDMG','GOLDFIND','XPGAIN','MATFIND','TENAC','STAM','STAMREG'], attrs: ALL_ATTRS },
   // Off-hands: defensive layers + caster utility. A shield's BLOCK headline already
   // flows through totalStat('BLOCK') into combat, so it needs no special-casing.
@@ -4108,7 +4114,10 @@ function cooldownReductionFrac() { return rated(totalStat('CDR'), CDR_SCALE); }
 // rating/(rating+SCALE), which climbs toward but never reaches 1.0 — so CC can never
 // be fully shrugged off and a second strike is never guaranteed, no hard cap needed.
 const TENAC_SCALE = 100;
-const DBLSTRIKE_SCALE = 100;
+// Double Strike converts on a SHORTER scale than the other ratings (85 vs 100), so a
+// given rating buys a bigger chance. It is the auto-attack's only "extra swing" lever
+// and does nothing at all for a spell, so it can afford to pay out harder.
+const DBLSTRIKE_SCALE = 85;
 
 // ── EFFECTIVE CHANCES (what combat actually rolls; e is the foe, or {level} for UI) ──
 function dodgeChanceVs(e) { return rated(playerEvasionRating(), enemyAccuracyRating(e)); } // player avoids the blow
@@ -7857,6 +7866,15 @@ window.gameState = function gameState(radius) {
         attackSpeed: totalStat('ATKSPD'), castSpeed: totalStat('CASTSPD'),
         cooldownRating: totalStat('CDR'),
         cooldownReduction: (typeof cooldownReductionFrac === 'function') ? Math.round(cooldownReductionFrac() * 1000) / 1000 : 0,
+        // The SHAPE of the auto-attack: how many EXTRA foes one swing reaches beyond
+        // its mark, and how. pierce = foes lined up behind the target; ricochet = hops
+        // foe-to-foe; multishot = extra strikes at other foes in reach; bounce = those
+        // hops carom off walls (so they need no clear line, and reach further). All 0
+        // for a hero with no shape power/passive — see gameGuide("damage").
+        autoAttack: (typeof autoAttackMods === 'function') ? (() => {
+          const m = autoAttackMods();
+          return { pierce: m.pierce, ricochet: m.ricochet, multishot: m.multishot, bounce: m.bounce };
+        })() : null,
       } : null,
       // Auto-attack reach of the equipped weapon, resolved by SUB-TYPE (a Rapier
       // reaches 2, a Pike 3, a Longbow 5) — read this rather than guessing from category.
@@ -8265,6 +8283,7 @@ window.gameGuide = function gameGuide(topic) {
     damage: [
       `Damage comes from THREE distinct sources, each with its own scaling lane — build into one and you don't accidentally buff the others:`,
       `AUTO-ATTACK: your automatic weapon swing. Scales with weapon Damage + Attack (ATK) + MIGHT (all classes — Might is the universal basic-attack attribute; Warriors get the most per point, Mages the least). Dedicated amp: Increased Dmg % (IDMG). Speed lever: Attack Speed % (ATKSPD, from Agility + gear) — faster swings. Can MISS (your Accuracy, from Might, vs the foe's evasion).`,
+      `AUTO-ATTACK SHAPE: the swing can also be taught to reach PAST its mark, which is how an auto-attack build scales against a pack instead of one foe at a time. Four shapes stack: PIERCE (the blow carries on into foes lined up behind the target, up to 3), RICOCHET (it caroms foe-to-foe, up to 3 hops, each weaker), MULTISHOT (an extra strike goes out at another foe in reach, up to 2), REBOUND (ricochets carom off WALLS too — no clear line needed, and they reach further). Every extra hit rolls its own accuracy and crit. Sources: a signature power on a special weapon (Piercing, Caroming, Volleying, Rebounding) and ranked class passives — each class has at least two, listed on the node's card. Read your current shape from gameState().player.offense.autoAttack. Against a lone boss they do nothing, so they raise crowd damage only.`,
       `SKILL (the martial actives): weapon-based active abilities. Scale off weapon + ATK + your class's IDENTITY attribute (Warrior→Might, Rogue→Agility, Templar→Vitality; a Mage's actives are SPELLS), times the skill's own coefficient, PLUS the new dedicated amp Skill Power % (SKILLPWR). Recharge shortened by Cooldown Reduction (CDR). Never miss; no per-hit cap — a big skill hit lands in full.`,
       `SPELL (the magic actives): scale off Spirit (not weapon/ATK at all), times the spell's coefficient, times Spell Power % (SPELLPWR). Recharge shortened by CDR AND the new Cast Speed % (CASTSPD). Never miss; no per-hit cap.`,
       `HYBRID (a weapon strike that also channels magic — the Templar's holy strikes, the Rogue's shadow/toxic strikes): lands a physical part AND a magic part in one cast. The physical part scales like a SKILL (weapon + Skill Power, leeches, meets armor); the magic part scales like a SPELL (Spirit + Spell Power, no leech, meets magic resist). Only the physical half leeches. Recharged by CDR + Cast Speed. Its tooltip shows the exact split ("40 physical + 30 magic"), so build BOTH power stats to max it — or lean one and accept the other half stays modest.`,
@@ -18404,7 +18423,10 @@ const AFFIX_CURVES = {
   // Chance/avoidance stats are flat RATINGS (scale with item level, no cap): they feed
   // the rating-vs-level curves in combat instead of being a flat %.
   CRIT:{flat:1.0}, LCK:{flat:1.0}, DODGE:{flat:1.0}, BLOCK:{flat:1.2}, DR:{flat:0.8}, ACC:{flat:1.8},
-  LEECH:{pct:0.18}, MPLEECH:{pct:0.18}, IDMG:{pct:0.25}, DBLSTRIKE:{pct:0.14}, CLEAVE:{pct:0.5},
+  // Double Strike and Cleave roll a little richer than the shared offense %s: both
+  // are AUTO-ATTACK-ONLY (a spell never reaches either path), so they are the two
+  // affixes a skill build gains nothing from — and were priced as if it did.
+  LEECH:{pct:0.18}, MPLEECH:{pct:0.18}, IDMG:{pct:0.25}, DBLSTRIKE:{pct:0.18}, CLEAVE:{pct:0.62},
   BOSSDMG:{pct:0.4}, EXEC:{pct:0.3}, PEN:{pct:0.5}, MAGICPEN:{pct:0.5}, GOLDFIND:{pct:0.7},
   XPGAIN:{pct:0.5}, MAGICFIND:{pct:0.4}, MATFIND:{pct:0.6}, SPELLPWR:{pct:0.3},
   // Skill Power / Cast Speed mirror Spell Power / Attack Speed exactly.
@@ -22699,6 +22721,15 @@ const ITEM_POWERS = {
   greedy:   { name: 'Greedy',   color: '#ffd24b', desc: 'Slain foes cough up extra gold.' },
   stalwart: { name: 'Stalwart', color: '#9effa0', desc: 'Bolsters your maximum health.' },
   attuned:  { name: 'Attuned',  color: '#a9b6ff', desc: 'Deepens your maximum mana.' },
+  // ── Auto-attack SHAPE powers. These carry an `auto` grant (see
+  // data/autoAttackMods.js) folded into autoAttackMods(): instead of a bigger
+  // number, they change WHO one swing reaches — through a rank, foe-to-foe, at two
+  // marks at once, or off the walls. Each also carries a small `stats` map so the
+  // piece is never dead against a lone boss, where a shape power does nothing.
+  piercing:    { name: 'Piercing',     color: '#ffd08a', desc: 'Attacks carry through into the foe behind.', stats: { PEN: 12, CRITDMG: 20 }, auto: { pierce: 1 } },
+  caroming:    { name: 'Caroming',     color: '#8ad0ff', desc: 'Attacks ricochet on to a nearby foe.',       stats: { CRIT: 0.45, IDMG: 8 },    auto: { ricochet: 1 } },
+  volleying:   { name: 'Volleying',    color: '#ffbe6a', desc: 'Every attack looses a second strike.',       stats: { ATKSPD: 10, IDMG: 10 },   auto: { multishot: 1 } },
+  rebounding:  { name: 'Rebounding',   color: '#a9e0ff', desc: 'Attacks carom off walls to reach cover.',    stats: { CRIT: 0.45, CRITDMG: 18 }, auto: { bounce: 1 } },
   // ── Extra build-defining powers. Each carries a `stats` map folded into
   // totalStat via itemPowerStatBonus(): percent stats grant their % as written,
   // rating/flat stats use a per-item-level coefficient so they stay relevant at
@@ -22791,6 +22822,39 @@ function itemPowerStatBonus(name) {
     }
   }
   return sum;
+}
+// ── AUTO-ATTACK SHAPE ──
+// How many extra foes one auto-attack reaches, and how. Two sources feed it: the
+// `auto` grant on a worn signature power (a special weapon), and a class passive
+// ranked past its threshold (data/autoAttackMods.js). Both are summed raw, then
+// clamped to the per-modifier caps — see systems/autoAttackMods.js.
+//
+// Memoized in the loadout cache like every other gear-derived figure: attackEnemy
+// asks on every swing, and the answer only moves when gear or skill ranks do (both
+// bumpLoadout sites). The `any` flag lets the whole combat block bail in one test.
+function autoAttackMods() {
+  const c = loadoutCache();
+  if (c.autoMods) return c.autoMods;
+  const raw = {};
+  const add = (grant) => { for (const k in grant) raw[k] = (raw[k] || 0) + grant[k]; };
+  const active = activeSlots();
+  for (const slot of SLOT_KEYS) {
+    if (!active[slot]) continue;                 // a red/ignored piece grants nothing
+    const it = equipped[slot];
+    if (!it) continue;
+    for (const key of itemPowerKeys(it)) {
+      const p = ITEM_POWERS[key];
+      if (p && p.auto) add(p.auto);
+    }
+  }
+  // Ranked class passives. Walked through classSkillTree (not player.skills) so a
+  // stale id from a previous class can never grant a shape the hero no longer owns —
+  // the same gate skillBonus() applies.
+  if (player.skills) for (const n of classSkillTree()) {
+    const grant = nodeAutoMod(n.id, skillRank(n.id));
+    if (grant) add(grant);
+  }
+  return c.autoMods = clampAutoMods(raw);
 }
 // The set roster + its pure helpers live in src/data/itemSets.js and
 // src/systems/itemSets.js (imported at the top). Set pieces are fixed, named
@@ -24904,6 +24968,74 @@ function onEnemyDefeated(e) {
   updateFloorClear();
 }
 
+// ── AUTO-ATTACK SHAPE ──
+// The extra foes one swing reaches beyond its mark, given whatever SHAPE the build
+// grants (see autoAttackMods() and systems/autoAttackMods.js). `swing(foe, mult)` is
+// attackEnemy's own strike closure, so every extra hit rolls its own accuracy, crit
+// and on-hit procs exactly like the blow that spawned it; `readTotal()` reads that
+// swing's running damage tally so each hit can pop its own number. Called at most
+// once per swing, and only when the hero actually has a shape.
+function applyAutoShape(struck, style, ranged, swing, readTotal) {
+  const mods = autoAttackMods();
+  const hero = { x: player.x, y: player.y };
+  // Living foes other than the one already struck — the pool every shape draws from.
+  const pool = [];
+  for (const o of enemies) if (!o.dead && o !== struck) pool.push(o);
+  if (!pool.length) return;
+  const free = (taken) => pool.filter(o => !o.dead && !taken.has(o));
+  const taken = new Set();
+  const pal = paletteFor('physical');
+  // Land one extra hit and pop the number it actually dealt (a miss pops its own
+  // MISS through swing(), so a silent gap here means the blow was dodged).
+  const extra = (foe, kind, hop, color) => {
+    const before = readTotal();
+    swing(foe, autoModMult(kind, hop));
+    const dealt = readTotal() - before;
+    if (dealt > 0) spawnFloatingText(foe.x, foe.y, `${dealt}`, color);
+    _fxPush('impact', foe.x + 0.5, foe.y + 0.5, pal, { dur: 240, power: 0.6 });
+  };
+
+  // PIERCE — straight on through the mark, into whoever is lined up behind it.
+  if (mods.pierce > 0) {
+    const hit = pierceTargets(hero, struck, free(taken), mods.pierce);
+    hit.forEach((o, i) => { taken.add(o); extra(o, 'pierce', i + 1, '#ffd08a'); });
+    if (hit.length) {
+      const far = hit[hit.length - 1];
+      _fxPush('beam', player.x + 0.5, player.y + 0.5, pal, { x2: far.x + 0.5, y2: far.y + 0.5, dur: 260 });
+    }
+  }
+
+  // MULTISHOT — a second (and third) strike goes out at other foes in reach. A
+  // ranged weapon still needs a clear line to each extra mark; a melee swing is
+  // already inside its own reach.
+  if (mods.multishot > 0) {
+    const range = (weaponRangeOf(activeWeapon()) || STYLE_RANGE[style] || 1) + MELEE_REACH_BONUS;
+    const canSee = ranged ? (o) => hasLineToPlayer(o) : null;
+    const hit = multishotTargets(hero, free(taken), mods.multishot, range, canSee);
+    const arch = weaponArchetype(style);
+    hit.forEach((o, i) => {
+      taken.add(o);
+      // A projectile weapon visibly SPLITS — a real (cosmetic) bolt flies at each
+      // extra mark, so "two arrows left the bow" reads on screen.
+      if (arch === 'arrow') spawnCastProjectile(o.x + 0.5, o.y + 0.5, 'physical', 'arrow', {});
+      else if (arch === 'magicBolt') spawnCastProjectile(o.x + 0.5, o.y + 0.5, 'arcane', 'magic', {});
+      extra(o, 'multishot', i + 1, '#ffbe6a');
+    });
+  }
+
+  // RICOCHET — foe to foe, each hop weaker than the last. A REBOUND caroms off the
+  // walls as well, so it needs no clear line and covers more ground per hop.
+  if (mods.ricochet > 0) {
+    const chain = ricochetChain(struck, free(taken), mods.ricochet, hasLineOfSight, mods.bounce > 0);
+    if (chain.length) {
+      const pts = [{ x: struck.x + 0.5, y: struck.y + 0.5 }]
+        .concat(chain.map(o => ({ x: o.x + 0.5, y: o.y + 0.5 })));
+      _fxPush('chain', pts[0].x, pts[0].y, paletteFor(mods.bounce > 0 ? 'lightning' : 'physical'), { pts, dur: 380 });
+    }
+    chain.forEach((o, i) => { taken.add(o); extra(o, 'ricochet', i + 1, '#8ad0ff'); });
+  }
+}
+
 // The player attacks an enemy. The equipped weapon's style shapes the swing:
 // cleaving arcs, dagger flurries, stunning crushes, life-stealing reaps, and
 // ranged pokes that draw no counter. `opts.ranged` marks shots fired from afar
@@ -25011,6 +25143,16 @@ function attackEnemy(e, opts = {}) {
       dealDamage(o, sd, false);
     });
   }
+
+  // ── AUTO-ATTACK SHAPE (pierce · ricochet · multishot · rebound) ──
+  // Signature powers and ranked class passives can change WHO one swing reaches:
+  // through the rank behind the mark, foe-to-foe, at a second target, or off the
+  // walls. Sits after the Cleave % splash so that splash still measures the blow
+  // itself, and before the leech lines so the extra hits do feed them. Runs only
+  // when the build actually grants a shape — `any` is false for almost every hero,
+  // and the whole block costs one cached lookup then.
+  const shape = autoAttackMods();
+  if (shape.any) applyAutoShape(e, style, ranged, swing, () => dealtTotal);
 
   // Crush (Mace): heavy blows have a good chance to stun a surviving foe. Stun
   // Power % (gear, biased onto Mauls) raises both the chance and the duration, so a
@@ -29379,6 +29521,10 @@ function heroStatData() {
   main.push(v('Move speed', '+' + Math.round(((1 + totalStat('MOVESPD') / 100) * agiMoveMult() - 1) * 100) + '%'));
   if (totalStat('CDR') > 0) main.push(v('Cooldown reduction', `${abbreviateNumber(totalStat('CDR'))} <span style="opacity:0.6">→ ${Math.round(cooldownReductionFrac() * 100)}%</span>`));
   if (totalStat('DBLSTRIKE') > 0) main.push(v('Double strike', `${abbreviateNumber(totalStat('DBLSTRIKE'))} <span style="opacity:0.6">→ ${Math.round(rated(totalStat('DBLSTRIKE'), DBLSTRIKE_SCALE) * 100)}%</span>`));
+  // The shape your auto-attack has taken on (pierce / ricochet / multishot / rebound),
+  // from signature powers and ranked passives. Hidden entirely when nothing grants one.
+  const autoShape = (typeof autoAttackMods === 'function') ? autoAttackMods() : null;
+  if (autoShape && autoShape.any) main.push(v('Auto-attack', describeAutoMods(autoShape)));
   main.push(v('Max Stamina', abbreviateNumber(player.maxStamina || baseMaxStamina())));
   main.push(v('Stamina regen', '+' + (Math.round(staminaRegenPerSec() * 10) / 10) + '/s'));
   main.push(v('Defense', abbreviateNumber(playerDefense())));
@@ -30071,6 +30217,13 @@ function skillMechList(n, rank) {
   const add = (tag, color, desc) => rows.push({ tag, color, desc });
   if (n.charge) add('Charge', '#e8c267', `Stack up to ${n.charge.max} <b>${n.charge.id}</b> — each grants ${fxOneLine(n.charge.fx)}.`);
   if (n.trigger) add(TRIG_LABEL[n.trigger.on] || n.trigger.on, '#6fb7d9', trigEffectLabel(n.trigger.effect));
+  // A node that teaches the AUTO-ATTACK a new shape at a rank threshold (see
+  // data/autoAttackMods.js) says so, and says whether this hero has earned it yet.
+  const am = AUTO_MOD_NODES[n.id];
+  if (am) {
+    const names = Object.keys(am.grant).map(k => (AUTO_MOD_INFO[k] || {}).blurb || k).join(' ');
+    add('Auto-attack', '#e0a24b', `${rank >= am.at ? '' : `At rank ${am.at}: `}${names}`);
+  }
   if (n.mod && n.mod.skill) {
     const tn = skillNode(n.mod.skill);
     const ml = modLabel(n.mod);
@@ -40798,6 +40951,7 @@ const __DL_FN_BRIDGE = {
   updateActorRender,
   playerAttackSpeedPct,
   playerAttackInterval,
+  autoAttackMods,
   enemyAttackInterval,
   worldTick,
   stepWorldClock,

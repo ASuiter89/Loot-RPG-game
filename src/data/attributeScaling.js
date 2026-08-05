@@ -51,6 +51,12 @@ export const CLASS_DMG_ATTR2 = {
 // 2.4 primary + 0.8 secondary split; folded into one channel with a small bump so a
 // hero who mains their identity attribute lands close to the old primary+secondary total.
 export const ATTR_DMG_PER_POINT = 2.6;
+// Per-point rate for the BASIC (auto) attack lane at the class that converts Might
+// best. Deliberately ABOVE the skill rate: an active spends a cooldown and is amped
+// again by Skill Power, while the auto-attack has neither, so pinning the two lanes
+// to the same number left an auto-only build permanently behind. This is the auto
+// lane's own dial — raising it never touches skills or spells.
+export const ATTR_DMG_PER_POINT_BASIC = 2.95;
 // Per-point rate for a HYBRID class, charged against BOTH attributes. Lower than the
 // pure rate so a hybrid trades peak skill damage for breadth; the class-level damage
 // multiplier (CLASS_DMG_DEALT in the shell) pays part of that gap back.
@@ -83,10 +89,12 @@ export const CLASS_SCALE_LADDER = [1.20, 1.00, 0.88, 0.78, 0.66, 0.55, 0.46];
 export const ATTR_STAT_CHANNELS = {
   // Might → BASIC (auto) attack damage — the universal weapon-power lane every class
   // swings off. Class-ranked warrior > rogue > templar > mage (mages rarely auto).
-  // `base` is set so the top class (rank #1) lands at exactly ATTR_DMG_PER_POINT
-  // (2.6), keeping the Warrior — who already mained Might for damage — behaviour-
-  // identical. (Skills still scale off the class's identity attr at ATTR_DMG_PER_POINT.)
-  basicDmg:     { attr: 'might',    base: ATTR_DMG_PER_POINT / CLASS_SCALE_LADDER[0], order: ['warrior', 'rogue', 'bloodletter', 'templar', 'windblade', 'mage', 'fortune'] },
+  // `base` is set so the top class (rank #1) lands at exactly ATTR_DMG_PER_POINT_BASIC,
+  // which runs a little hotter than the skill lane's per-point rate on purpose — an
+  // auto-attack pays no cooldown but also gets no Skill Power, so matching the two
+  // rates left auto-only builds behind. (Skills still scale off the class's identity
+  // attr at ATTR_DMG_PER_POINT.)
+  basicDmg:     { attr: 'might',    base: ATTR_DMG_PER_POINT_BASIC / CLASS_SCALE_LADDER[0], order: ['warrior', 'rogue', 'bloodletter', 'templar', 'windblade', 'mage', 'fortune'] },
 
   // Might → Defense (moved off Vitality). Warriors armour up hardest.
   def:          { attr: 'might',    base: 0.5,   order: ['warrior', 'templar', 'bloodletter', 'rogue', 'windblade', 'mage', 'fortune'] },

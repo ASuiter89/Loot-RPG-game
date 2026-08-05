@@ -8,6 +8,44 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Feature — auto-attack shape (pierce · ricochet · multishot · rebound)
+
+- 📦 New `src/data/autoAttackMods.js` — the modifier roster (`AUTO_MOD_KEYS`,
+  `AUTO_MOD_INFO`), per-modifier ceilings (`AUTO_MOD_CAPS`), geometry + damage
+  falloff (`AUTO_MOD_TUNING`, `AUTO_MOD_BOUNCE`) and the passive grant table
+  (`AUTO_MOD_NODES`: node id → `{ at, grant }`, mirroring `data/passiveSurges.js` so
+  the giant class-tree JSON is untouched).
+- 📦 New `src/systems/autoAttackMods.js` — pure targeting/damage math with the LOS
+  predicate injected the way `systems/aoeTargeting.js` does it: `clampAutoMods`
+  (caps + "a Rebound always carries a ricochet"), `autoModMult` (per-hop taper),
+  `nodeAutoMod`/`sumNodeAutoMods`, `pierceTargets` (ray projection + perpendicular
+  offset), `ricochetChain` (built on `nextChainLink`; a bounce skips LOS and reaches
+  further), `multishotTargets`, `describeAutoMods`. No DOM, no RNG, no clock.
+- 📦 `src/legacy/game.js`: `autoAttackMods()` aggregates worn `ITEM_POWERS[k].auto`
+  grants + ranked passives, memoized in the `loadoutCache` (bumped on every gear /
+  skill change) so `attackEnemy` pays one lookup per swing; `applyAutoShape()` lands
+  the extra hits through `attackEnemy`'s own `swing` closure, so each rolls its own
+  accuracy, crit and on-hit procs. Sits after the Cleave % splash (which must keep
+  measuring the blow itself) and before the leech lines (which should count the
+  extras).
+- 📦 Four new `ITEM_POWERS` — `piercing`, `caroming`, `volleying`, `rebounding` —
+  each carrying an `auto` grant plus a small `stats` map so the piece is never dead
+  in a single-target fight. Seven unique weapons re-pointed onto them.
+- ⚖️ Auto-attack-only tuning, so none of it inflates skill builds: new
+  `ATTR_DMG_PER_POINT_BASIC` (2.95, was pinned to the skill lane's 2.6) splits the
+  Might auto lane off its own dial; `ATKSPD` joins the ring affix pool (2 → 3 slots
+  against Skill Power's 5); `DBLSTRIKE_SCALE` 100 → 85 and the `DBLSTRIKE`/`CLEAVE`
+  affix curves rise (both are paths a spell can never reach).
+- 📄 Surfaced everywhere the AI-play API and the UI already report offense:
+  `gameState().player.offense.autoAttack`, a `gameGuide("damage")` paragraph, a hero
+  sheet row, a skill-card row on every granting node, and a new wiki article.
+- 🧪 `test/systems/autoAttackMods.test.js` (40 cases — caps, the bounce implication,
+  taper monotonicity, ray geometry incl. diagonals and off-line rejection, chain
+  reach/LOS/no-repeat, multishot range + sight gating, and the data table's own
+  invariants) and `test/smoke/auto-attack-shape.mjs`, which boots the real game,
+  lays four foes out by hand and asserts one swing reaches all of them — and that a
+  shapeless hero still hits exactly one.
+
 ## Feature — the Gun weapon line, and an even equip-gate grid
 
 - 📦 New `src/data/gearBases.js` — the canonical `SLOT_BASES` roster plus the three

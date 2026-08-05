@@ -6,7 +6,7 @@
 
 import {
   CLASS_DMG_ATTR, CLASS_DMG_ATTR2, CLASS_DMG_ATTR_FALLBACK,
-  ATTR_DMG_PER_POINT, ATTR_DMG_PER_POINT_HYBRID,
+  ATTR_DMG_PER_POINT, ATTR_DMG_PER_POINT_BASIC, ATTR_DMG_PER_POINT_HYBRID,
   CLASS_SCALE_LADDER, ATTR_STAT_CHANNELS, SHIELD,
 } from '../data/attributeScaling.js';
 
@@ -61,7 +61,9 @@ export function classDmgPerPoint(cls) {
 /**
  * Attack power a BASIC (auto) attack gets from MIGHT — universal to every class, but
  * class-scaled via the `basicDmg` channel (warrior best, mage least). The rank-#1
- * class lands at ATTR_DMG_PER_POINT so the class that already mained Might is unchanged.
+ * class lands at ATTR_DMG_PER_POINT_BASIC — the auto lane's own per-point rate, which
+ * runs a touch above the skill lane's (an auto-attack has no cooldown to spend, but no
+ * Skill Power to stack either).
  * @param {number} might total Might (base + gear)
  * @param {string} cls hero class id
  * @returns {number}
@@ -184,4 +186,4 @@ export function healAmount(flat, perLevel, level, spirit, cls, rankScale = 1, sp
 }
 
 // Re-export so the shell can import tuning + math from one place.
-export { ATTR_DMG_PER_POINT, ATTR_DMG_PER_POINT_HYBRID };
+export { ATTR_DMG_PER_POINT, ATTR_DMG_PER_POINT_BASIC, ATTR_DMG_PER_POINT_HYBRID };

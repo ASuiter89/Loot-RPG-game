@@ -30,7 +30,9 @@ const POWER_KEYS = new Set(['vampiric', 'arcing', 'greedy', 'stalwart', 'attuned
   'executioner', 'brutish', 'warlord', 'reckless', 'bloodthirsty', 'siphoning', 'ironhide',
   'warded', 'thornmail', 'evasive', 'bulwark', 'aegis', 'mending', 'spellbound', 'warmage',
   'spellblade', 'quickened', 'hasty', 'focused', 'tenacious', 'hemorrhage', 'concussive',
-  'fleet', 'deadeye', 'fortunate', 'prospector', 'scholar', 'salvager']);
+  'fleet', 'deadeye', 'fortunate', 'prospector', 'scholar', 'salvager',
+  // Auto-attack SHAPE powers (see src/data/autoAttackMods.js).
+  'piercing', 'caroming', 'volleying', 'rebounding']);
 const CLASSES = new Set(['warrior', 'rogue', 'mage', 'templar', 'fortune', 'windblade', 'bloodletter', 'any']);
 
 // Stats a slot's headline OWNS automatically — a native/mod must never claim one
@@ -141,7 +143,7 @@ describe('UNIQUES data — every field is valid', () => {
       it('keeps signature powers on their family lane', () => {
         // Powers that grant a lane-locked stat are dead on the wrong family, so a
         // caster never carries Warmage/Frenzied and a martial never Spellbound/Quickened.
-        const MARTIAL_POWERS = new Set(['warmage', 'frenzied']);
+        const MARTIAL_POWERS = new Set(['warmage', 'frenzied', 'volleying']);
         const CASTER_POWERS = new Set(['spellbound', 'quickened']);
         for (const p of u.powers) {
           if (CASTER_BASES.has(u.base)) expect(MARTIAL_POWERS.has(p), `caster carries martial power ${p}`).toBe(false);
