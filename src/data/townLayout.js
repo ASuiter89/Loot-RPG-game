@@ -121,14 +121,16 @@ export const TOWN_DECOR = [
 //   boss #2 lands no one new — the next keeper, the Healer, joins on boss #3):
 //   1 Merchant + Craftsman — the two founders, from the town-unlock (boss floor 5)
 //   3 Healer · 4 Vault     — the other essentials (boss floors 15–20)
-//   5 Ramen House · 6 Prospector · 7 Trainer
+//   5 Trainer · 6 Prospector · 7 Ramen House
+//   (the Trainer lands ahead of the Ramen House so respec/ascension is on hand
+//   around the level the ascension gate opens, not several bosses later)
 //   8 Gambler · 9 Enchanter · 10 Bounty Board
 //   11 Transmuter
 //   12 Ascendant Weave · 13 Cycles · 14 Hall of Deeds   — endgame sanctum
 //   15 Covenant Altar · 16 Mirrorforge · 17 Pantheon    — the deepest keepers
 export const TOWN_SERVICE_ARRIVALS = {
   merchant: 1, forge: 1, healer: 3, stash: 4,
-  ramen: 5, prospector: 6, trainer: 7,
+  trainer: 5, prospector: 6, ramen: 7,
   gambler: 8, enchanter: 9, bounty: 10,
   transmuter: 11,
   weave: 12, cycles: 13, deeds: 14,
