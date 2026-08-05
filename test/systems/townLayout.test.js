@@ -278,6 +278,25 @@ describe('authored town data', () => {
     }
   });
 
+  it('lands the Trainer ahead of the Ramen House (respec/ascension before cooking)', () => {
+    // The Trainer holds respec, class change and ascension, so it joins on boss #5 —
+    // around the level the ascension gate opens — and the Ramen House takes the later
+    // #7 slot it vacated. The Prospector keeps #6 between them.
+    expect(TOWN_SERVICE_ARRIVALS.trainer).toBe(5);
+    expect(TOWN_SERVICE_ARRIVALS.prospector).toBe(6);
+    expect(TOWN_SERVICE_ARRIVALS.ramen).toBe(7);
+    expect(TOWN_SERVICE_ARRIVALS.trainer).toBeLessThan(TOWN_SERVICE_ARRIVALS.ramen);
+  });
+
+  it('gives every keeper its own arrival slot except the two founders', () => {
+    // One keeper joins per boss kill, so no two arrival numbers may collide (the
+    // Merchant + Craftsman pair on #1 is the single deliberate exception) — a swap
+    // that duplicated a number would silently land two keepers on one boss.
+    const counts = new Map();
+    for (const arrival of Object.values(TOWN_SERVICE_ARRIVALS)) counts.set(arrival, (counts.get(arrival) || 0) + 1);
+    for (const [arrival, n] of counts) expect(n).toBe(arrival === 1 ? 2 : 1);
+  });
+
   it('keeps every fixed keeper a regular open-clearing keeper (not a sanctum one)', () => {
     // Fixed keepers pin an OPEN-clearing keeper in place; they are never the hedged
     // endgame keepers (those already own their sanctum tiles), so none sits inside
