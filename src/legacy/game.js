@@ -71,7 +71,7 @@ import { LUCK_FX } from '../data/attributeScaling.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { castCost, lifeCost as castLifeCost, canAfford as canAffordCast,
   autoCastAffordsLife, autoCastAffordsMana, costLabel as castCostLabel } from '../systems/skillCost.js';
-import { AUTO_CAST_LIFE_RESERVE, AUTO_CAST_MANA_RESERVE } from '../data/skillCosts.js';
+import { AUTO_CAST_LIFE_RESERVE, AUTO_CAST_MANA_RESERVE, STAFF_BOLT_MP } from '../data/skillCosts.js';
 import { mpRegenPerSec as calcMpRegenPerSec, gatedMpRegen } from '../systems/manaRegen.js';
 import { MANA_COMBAT_REGEN_MULT, MP_REGEN_PCT_PER_BEAT } from '../data/manaRegen.js';
 import { KILL_LOOT, killLootParams } from '../systems/bossLoot.js';
@@ -4666,7 +4666,7 @@ function behaviorFor(type) { return (typeof MONSTERS === 'object' && MONSTERS[ty
 //   slash  (Sword)  — balanced strike, light follow-through onto a 2nd foe
 //   cleave (Axe)    — hits every adjacent enemy at once
 //   flurry (Dagger) — two rapid lighter hits, extra crit
-//   bolt   (Staff)  — magic blast at range, spends a little MP
+//   bolt   (Staff)  — magic blast at range, spends a little MP (staffBoltCost())
 //   shot   (Bow, Gun) — fires across the room, no counterattack from afar
 //   crush  (Mace)   — heavy blow that can stun
 //   thrust (Spear)  — reaches one extra tile, striking without reprisal
@@ -5206,6 +5206,17 @@ function canAffordSkill(baseMp) {
 // The price to PRINT for a skill — "18 HP" for a blood-caster, "31 MP" otherwise —
 // so a tooltip never quotes a number the cast doesn't charge.
 function skillCostText(baseMp) { return castCostLabel(skillCastCost(baseMp), skillBloodCost(baseMp)); }
+// ── THE STAFF'S CHANNELLED BOLT ──────────────────────────────────────────────
+// The Staff auto-attack (weapon style `bolt`) is the only mana cost that isn't a
+// skill cast. TWO paths charge it — the ranged poke (tryRangedAttack) and the
+// auto-attack loop (updatePlayerCombat) — so it lives here once instead of as a
+// bare literal in both. Routed through skillCastCost, so Mana Cost Reduction
+// discounts a caster's most-used action the way it discounts their spells, and free
+// for a hero with NO mana pool (a Bloodletter used to fail the check every swing and
+// silently never auto-attack at all). See STAFF_BOLT_MP in data/skillCosts.js.
+function staffBoltCost() { return classNoMana() ? 0 : skillCastCost(STAFF_BOLT_MP); }
+function canPayStaffBolt() { const c = staffBoltCost(); return !c || player.mp >= c; }
+function payStaffBolt() { const c = staffBoltCost(); if (c) player.mp -= c; }
 // Hemorrhage keystone: the health a cast just cost erupts outward as damage around
 // the hero, so the class's own price becomes its area clear.
 const HEMORRHAGE_RADIUS = 2, HEMORRHAGE_COEF = 1.6;
@@ -5464,10 +5475,10 @@ const SKILL_TREES = {
       {"id":"m_p54","name":"Blood Pact","icon":"sk_m_omniscience","fx":{"spell":0.28,"lifesteal":0.1,"hpRegen":3},"cfx":{"lifesteal":0.06,"spell":0.2},"cond":"lowhp","kflag":"bloodpact","keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: spells cost LIFE, not mana. Heavy lifesteal and regen; wounded: more.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p34","m_p44"]}
     ], 'passive'),
     active: buildWeb([
-      {"id":"m_a00","name":"Firebolt","icon":"sk_ma_firebolt","mp":6,"cd":1,"syn":{"skill":"m_p00","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Hurl a bolt of flame that deals {dmg} and sets a foe ablaze.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a01","name":"Frost Shard","icon":"sk_ma_frostshard","mp":6,"cd":1,"syn":{"skill":"m_p01","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"stun","dur":1,"chance":0.6}},"desc":"Fire an icy shard that deals {dmg} and may freeze a foe.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a02","name":"Spark","icon":"sk_ma_spark","mp":6,"cd":1,"syn":{"skill":"m_p02","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":7},"desc":"Loose a crackling spark at a distant foe for {dmg}.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a03","name":"Arcane Missile","icon":"sk_ma_arcaneorb","mp":7,"cd":1,"syn":{"skill":"m_p03","per":0.05},"cast":{"shape":"bolt","spell":1.2,"drainMp":0.1,"range":5},"desc":"Launch an unerring arcane missile that deals {dmg} and saps mana.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a00","name":"Firebolt","icon":"sk_ma_firebolt","mp":3,"cd":1,"syn":{"skill":"m_p00","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Hurl a bolt of flame that deals {dmg} and sets a foe ablaze.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a01","name":"Frost Shard","icon":"sk_ma_frostshard","mp":3,"cd":1,"syn":{"skill":"m_p01","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"stun","dur":1,"chance":0.6}},"desc":"Fire an icy shard that deals {dmg} and may freeze a foe.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a02","name":"Spark","icon":"sk_ma_spark","mp":3,"cd":1,"syn":{"skill":"m_p02","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":7},"desc":"Loose a crackling spark at a distant foe for {dmg}.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a03","name":"Arcane Missile","icon":"sk_ma_arcaneorb","mp":4,"cd":1,"syn":{"skill":"m_p03","per":0.05},"cast":{"shape":"bolt","spell":1.2,"drainMp":0.1,"range":5},"desc":"Launch an unerring arcane missile that deals {dmg} and saps mana.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"m_a04","name":"Mana Barrier","icon":"sk_ma_barrier","mp":10,"cd":15,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":40}],"kind":"spell"},"desc":"Conjure a shield that absorbs incoming damage.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"m_a10","name":"Ember Surge","icon":"sk_ma_emberbuff","mp":12,"cd":6,"cast":{"shape":"self","buff":[{"id":"spellUp","dur":5,"mag":0.4}],"kind":"spell"},"desc":"Empower yourself, sharply increasing spell damage for several seconds.","br":0,"x":0.28,"y":0.34,"band":1,"req":["m_a00"]},
       {"id":"m_a11","name":"Frost Nova","icon":"sk_ma_frostnova","mp":12,"cd":4,"syn":{"skill":"m_p11","per":0.05},"cast":{"shape":"nova","spell":1,"radius":2,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Erupt with frost for {dmg}, freezing nearby foes.","br":1,"x":0.28,"y":0.34,"band":1,"req":["m_a01"]},
@@ -7914,6 +7925,12 @@ window.gameState = function gameState(radius) {
       weaponBaseSpeed: (typeof weaponStyle === 'function' && typeof STYLE_ATK_MULT !== 'undefined')
         ? (() => { const i = weaponSpeedInfo(STYLE_ATK_MULT[weaponStyle()] || 1, PLAYER_ATK_BASE); return { atkPerSec: Math.round(i.aps * 100) / 100, tier: i.tier }; })()
         : null,
+      // Mana the NEXT auto-attack will charge: a Staff channels its bolt (already
+      // discounted by Mana Cost Reduction, 0 for a hero with no mana pool). Every
+      // other weapon swings free, so this is 0 — an agent budgeting mana has to see
+      // that a Staff's basic attack competes with its spells for the same pool.
+      boltCost: (typeof staffBoltCost === 'function' && typeof weaponStyle === 'function')
+        ? (weaponStyle() === 'bolt' ? staffBoltCost() : 0) : 0,
       // Survivability — the defensive counterpart to `offense`, mirroring the HERO sheet.
       // The chance fields are 0..1 fractions measured against the current floor's threat.
       defense: (typeof playerDefense === 'function') ? {
@@ -8263,7 +8280,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     combat: [
       `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight). A red crosshair marks the foe currently locked on (Settings → Visuals → CROSSHAIR toggles it; the 🎯 TARGET focus in Settings → Play picks which foe wins).`,
-      `Weapon reach is set by the weapon's SUB-TYPE (its name), not just its category. Category defaults: Staff, Bow & Gun = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee — but several sub-types override that: a Rapier (Sword) reaches 2, a Pike (Spear) 3, a Longbow (Bow) 5, a Carbine (Gun) 3, a War Scythe (Scythe) 2. gameState().player.weaponReach reports your equipped weapon's actual reach. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
+      `Weapon reach is set by the weapon's SUB-TYPE (its name), not just its category. Category defaults: Staff, Bow & Gun = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee — but several sub-types override that: a Rapier (Sword) reaches 2, a Pike (Spear) 3, a Longbow (Bow) 5, a Carbine (Gun) 3, a War Scythe (Scythe) 2. gameState().player.weaponReach reports your equipped weapon's actual reach. A Staff's bolt also spends mana per shot — ${STAFF_BOLT_MP} MP before Mana Cost Reduction, which discounts it exactly as it discounts a spell; a hero with no mana pool (a Bloodletter) fires it free. gameState().player.boltCost reports what your next Staff shot will actually charge (0 for every other weapon). LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
       `THROWN & FIRED attacks land ON IMPACT: a Bow/Staff auto-attack, a ranged summon's shot, and a bolt or blast spell all loose a flying bolt whose damage is dealt the instant it REACHES the foe — not when it's cast — so a target won't drop until the bolt connects (a foe reading full HP for a beat after you fire is normal). Melee swings, novas, beams and chains still resolve on the spot.`,
       `There is NO per-hit damage cap — a big swing, skill or crit lands its full number, so burst and crits are fully rewarded. A foe's actual HP is the only limiter: bosses carry deep HP pools (and hit harder), so they're a genuine, tanky fight rather than a one-shot.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear), and EVERY damage source can crit — auto-attacks, martial skills and spells all roll critical hits, land the big crit number, and fire your on-crit passives (combo/zeal charges, primed crits, mana refunds). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
@@ -25229,8 +25246,8 @@ function tryRangedAttack(dx, dy) {
   const style = weaponStyle();
   const range = weaponRangeOf(activeWeapon()) || STYLE_RANGE[style] || 1;
   if (range < 2) return false;            // melee-only weapons can't poke at range
-  const mpCost = style === 'bolt' ? 4 : 0; // the Staff's bolt spends a little mana
-  if (mpCost && player.mp < mpCost) return false;
+  const bolt = style === 'bolt';           // the Staff's bolt spends a little mana
+  if (bolt && !canPayStaffBolt()) return false;
   let x = player.x, y = player.y;
   for (let step = 1; step <= range; step++) {
     x += dx; y += dy;
@@ -25238,7 +25255,7 @@ function tryRangedAttack(dx, dy) {
     if (blocksShot(x, y)) break;            // wall / door / barrier — but shoot over water & ground
     const tgt = getEnemyAt(x, y);
     if (tgt) {
-      if (mpCost) { player.mp -= mpCost; }
+      if (bolt) payStaffBolt();
       attackEnemy(tgt, { ranged: true, style });
       // A ranged poke still passes the turn — foes get to close in.
       runEnemyTurn();
@@ -37169,7 +37186,7 @@ function updatePlayerCombat(dt) {
   const style = weaponStyle();
   const range = weaponRangeOf(equipped.weapon) || STYLE_RANGE[style] || 1;
   const ranged = range >= 2;
-  if (style === 'bolt') { if (player.mp < 4) return; player.mp -= 4; } // staff bolt spends a little MP
+  if (style === 'bolt') { if (!canPayStaffBolt()) return; payStaffBolt(); } // staff bolt spends a little MP
   if (best.x > player.x) player.facing = 'right'; else if (best.x < player.x) player.facing = 'left';
   entryGuard = false;   // swinging ends arrival grace
   attackEnemy(best, { ranged, style });
@@ -40610,6 +40627,7 @@ const __DL_FN_BRIDGE = {
   skillManaCost,
   skillCastCost,
   skillBloodCost,
+  staffBoltCost,
   skillCostText,
   canAffordSkill,
   skillWeaponBase,

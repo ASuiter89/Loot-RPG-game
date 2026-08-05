@@ -28,6 +28,22 @@ export const SKILL_MP_MULT = 1.0;
 // never a sustain downgrade.
 export const MANA_PER_RANK = 0.08;
 
+// THE STAFF'S CHANNELLED BOLT — the one mana cost that is not a skill cast. A Staff
+// auto-attack (weapon style `bolt`) spends mana per shot, which is flavour worth
+// keeping: the caster's weapon draws on the same well its spells do.
+//
+// It was a bare `4` written twice in the shell (the ranged poke and the auto-attack
+// loop), and that hurt three ways. It dodged castCost, so Mana Cost Reduction — the
+// caster's own cost stat — bought nothing on a caster's most-used action. It fired
+// on the attack timer (~1.7s for a Staff), making it a SUSTAINED 2.3 MP/sec that ate
+// 95% of a level-10 Mage's entire in-combat regen before a single spell. And a
+// no-mana hero (maxMp 0) failed the `mp < 4` check on every swing, so a Bloodletter
+// holding a Staff simply never auto-attacked — silently, with no message.
+//
+// Now: one named value, charged through castCost (so MCR discounts it), and free for
+// a hero with no mana pool. Halved as well, so it reads as a sip rather than a tax.
+export const STAFF_BOLT_MP = 2;
+
 // A no-mana class (Bloodletter) charges a SHARE OF MAX HP per point of the skill's
 // discounted mana cost, so the toll still stings at level 60 the way it did at
 // level 5. (The Blood Pact keystone keeps charging the flat mana number as HP, so
