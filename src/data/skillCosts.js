@@ -11,6 +11,23 @@
 // the price asymptotes toward, but never reaches, free.
 export const MIN_CAST_COST = 1;
 
+// Global multiplier on every skill's authored `mp` number (see skillManaCost). This
+// is a blanket tax on all 210 actives at once, so it is the first dial to reach for
+// when casting feels starved rather than paced.
+//
+// It sat at 1.5 — a hidden 50% surcharge on top of every hand-tuned table value,
+// which is what pushed a mid-tier rotation to roughly seven casts from a full bar.
+// At 1.0 the tables are HONEST: the number authored on a node is the number charged
+// (before rank scaling and Mana Cost Reduction), so tuning one skill no longer means
+// mentally multiplying first.
+export const SKILL_MP_MULT = 1.0;
+
+// Share of the base cost added per skill rank above the first. Cost climbs far more
+// slowly than damage does (rankScale reaches ~3.7× by rank 10 against this ~1.7×), so
+// pouring points into a skill improves its damage PER MANA — ranking up a spell is
+// never a sustain downgrade.
+export const MANA_PER_RANK = 0.08;
+
 // A no-mana class (Bloodletter) charges a SHARE OF MAX HP per point of the skill's
 // discounted mana cost, so the toll still stings at level 60 the way it did at
 // level 5. (The Blood Pact keystone keeps charging the flat mana number as HP, so
@@ -27,3 +44,11 @@ export const BLOOD_PRICE_MULT = 2;
 // therefore keeps this share of max HP in reserve; a MANUAL cast is untouched, so
 // the player can still spend down to their last point when they choose to.
 export const AUTO_CAST_LIFE_RESERVE = 0.5;
+
+// The MANA mirror of that reserve, and for the same reason. The auto-cast slot fires
+// the instant its skill is ready, so with no floor it happily spends the bar down to
+// zero on ONE skill and leaves nothing for the manual row — the hero watches an
+// auto-cast fire while every numbered slot sits greyed out for want of mana. Auto-cast
+// therefore keeps this share of max MP in reserve; a MANUAL cast is untouched, so the
+// player can still spend to the last point when they choose to.
+export const AUTO_CAST_MANA_RESERVE = 0.3;

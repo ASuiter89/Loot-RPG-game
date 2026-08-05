@@ -8,6 +8,36 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Balance — mana economy audit (cast costs · regen · auto-cast reserve)
+
+- 📦 New `src/data/manaRegen.js` — the regen tuning that had been inlined in the
+  shell: `MP_REGEN_FLAT_PER_BEAT` (0.15, unchanged), the new
+  `MP_REGEN_PCT_PER_BEAT` (0.012 → 3%/sec of max MP), and
+  `MANA_COMBAT_REGEN_MULT` (0.5 → 0.65), moved out of `src/legacy/game.js`.
+- 📦 New `src/systems/manaRegen.js` — pure `mpRegenPerSec({maxMp, spirit, gear,
+  skills, shrinePctMp}, ticksPerSec)`, `gatedMpRegen(rate, inCombat)` and
+  `secondsToFullMp(maxMp, rate)`. The shell keeps the SUMS (it owns
+  `totalStat`/`attrCoef`/`shrineFx`); the module owns the SHAPE. `applyRegen()` and
+  `mpRecoveryRate()` both route their in-combat gate through `gatedMpRegen`, so the
+  ration is applied in one place instead of two hand-copied expressions.
+- 📦 `SKILL_MP_MULT` and `MANA_PER_RANK` moved from module-locals in
+  `src/systems/skillMath.js` to `src/data/skillCosts.js`, beside the blood-cost
+  tuning — one file to open when casting feels starved. `SKILL_MP_MULT` 1.5 → 1.0,
+  so an authored `mp` on a skill node is the cost actually charged.
+- 📦 `AUTO_CAST_MANA_RESERVE` (0.30) added to `src/data/skillCosts.js` and
+  `autoCastAffordsMana()` to `src/systems/skillCost.js` — the mana mirror of the
+  existing `AUTO_CAST_LIFE_RESERVE` / `autoCastAffordsLife` pair. Wired into
+  `castSkillById`'s `auto` path, the auto-slot tooltip, and
+  `gameState().autoSkill.held` (which also forces `.ready` false).
+- 🧪 New `test/systems/manaRegen.test.js` (11 tests) incl. a regression pinning that
+  refill time stays flat as the pool grows; `test/systems/skillCost.test.js` and
+  `test/systems/skillMath.test.js` extended; `test/data/manaRegenStats.test.js`
+  re-pinned to the new wiring; `test/smoke/run-modifiers.mjs` gained a §5 proving
+  end-to-end that a Fortune-Seeker's auto-cast stops at the reserve while a manual
+  cast still spends past it.
+- 📄 `gameGuide()` "healing" (mana rules), "autocast" (both reserves) and the MPREG
+  stat blurb updated off the stale "halved in combat" / "slower regen" copy.
+
 ## Feature — auto-attack shape (pierce · ricochet · multishot · rebound)
 
 - 📦 New `src/data/autoAttackMods.js` — the modifier roster (`AUTO_MOD_KEYS`,
