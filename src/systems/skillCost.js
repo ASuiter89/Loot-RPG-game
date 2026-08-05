@@ -9,6 +9,7 @@
 // price higher than they were charged. Everything now routes through castCost().
 import {
   MIN_CAST_COST, LIFE_COST_PER_MP, BLOOD_PRICE_MULT, AUTO_CAST_LIFE_RESERVE,
+  AUTO_CAST_MANA_RESERVE,
 } from '../data/skillCosts.js';
 
 // A finite number or the fallback — a corrupt stat must never poison a price.
@@ -71,6 +72,20 @@ export function autoCastAffordsLife(hp, maxHp, life) {
   if (!toll) return true;
   const max = Math.max(0, num(maxHp, 0));
   return num(hp, 0) - toll >= max * AUTO_CAST_LIFE_RESERVE;
+}
+
+/**
+ * May the AUTO-CAST slot spend MANA right now? The mana mirror of
+ * autoCastAffordsLife: the slot fires unattended the moment its skill is ready, so
+ * without a floor it drains the pool on one skill and starves the manual row. It must
+ * leave AUTO_CAST_MANA_RESERVE of max MP standing. A free cast is always allowed, and
+ * so is a cast paid in blood (that path has its own reserve).
+ */
+export function autoCastAffordsMana(mp, maxMp, cost) {
+  const c = Math.max(0, num(cost, 0));
+  if (!c) return true;
+  const max = Math.max(0, num(maxMp, 0));
+  return num(mp, 0) - c >= max * AUTO_CAST_MANA_RESERVE;
 }
 
 /**

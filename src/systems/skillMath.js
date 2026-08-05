@@ -2,8 +2,9 @@
 // cost. Deterministic: primitives in, numbers out, no globals. Extracted verbatim
 // from the monolith (see docs/CHANGELOG.md).
 
-const MANA_PER_RANK = 0.08; // +8% of base mana per rank above the first
-const SKILL_MP_MULT = 1.5;  // global mana-cost multiplier (mana is rationed — spells cost more)
+// Mana-cost dials live in src/data/skillCosts.js beside the blood-cost tuning — one
+// file to open when casting feels starved. (They used to be module-locals here.)
+import { SKILL_MP_MULT, MANA_PER_RANK } from '../data/skillCosts.js';
 
 // Every base-tree passive maxes at this rank; reaching it unlocks the node's
 // one-off "surge" (a new stat, see data/passiveSurges.js). Keystones max at 1,
