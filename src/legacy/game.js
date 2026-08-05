@@ -32,6 +32,7 @@ import { footReach, firstStrandedTile, pathToRegion } from '../systems/pathReach
 import { chaseStep } from '../systems/chasePath.js';
 import { footprintReach } from '../systems/meleeReach.js';
 import { MELEE_REACH_BONUS } from '../data/combatReach.js';
+import { STAMINA } from '../data/staminaTuning.js';
 import { rated, ratePct, SKILL_RATING } from '../systems/ratings.js';
 import { tenacityTier, resolveEnemyCC, enemyStunImmune } from '../systems/tenacity.js';
 import { SHRINE_DEFS } from '../data/shrines.js';
@@ -7123,12 +7124,13 @@ const SPRINT_MULT   = 1.7;     // top speed multiplier while sprinting
 const PLAYER_ACCEL  = 26;      // how fast velocity chases the input on solid ground (snappy)
 const GROUND_FRICTION = 24;    // how fast you stop on solid ground (snappy)
 // Stamina powers sprinting and dashing; it drains while sprinting and refills
-// after a short pause.
-const MAX_STAMINA   = 100;
-const SPRINT_DRAIN  = 34;      // stamina/sec while sprinting
-const STAM_REGEN    = 22;      // stamina/sec refill
-const STAM_DELAY    = 0.6;     // seconds after exertion before stamina starts refilling
-const DASH_COST     = 35;      // stamina per dash
+// after a short pause. The dials live in src/data/staminaTuning.js (which also
+// documents the sprint window / refill / dash cadence they add up to).
+const MAX_STAMINA   = STAMINA.max;
+const SPRINT_DRAIN  = STAMINA.sprintDrain;   // stamina/sec while sprinting
+const STAM_REGEN    = STAMINA.regenPerSec;   // stamina/sec refill
+const STAM_DELAY    = STAMINA.regenDelay;    // seconds after exertion before stamina starts refilling
+const DASH_COST     = STAMINA.dashCost;      // stamina per dash
 const DASH_CD       = 0.55;    // seconds between dashes
 const DASH_SPEED    = 13;      // dash launch velocity (tiles/sec)
 // Held movement direction, fed by the keyboard. Cleared on blur/floor-change so a
@@ -8240,7 +8242,7 @@ window.gameGuide = function gameGuide(topic) {
       `Mouse (desktop) click-to-move: left-click the map to walk there — the hero auto-routes around walls but runs STRAIGHT THROUGH lava/spikes toward the cursor (it never detours around a trap; steer where you want to go, just like the keyboard), and holding the button drags the target so it keeps chasing the cursor. Click a FOE to path straight to it — the hero chases it into weapon reach, then auto-attack engages. Click a SOLID tile (wall, water, door, NPC, furniture) to walk up to its nearest edge. IN THE WALKABLE TOWN, clicking a keeper (or the Town Portal) walks the hero over and OPENS its menu on arrival, and clicking the Dungeon Gate walks straight into it — no separate interact press. HOVERING a foe pops its codex card (known stats) under the minimap. Any WASD/arrow input takes control back. This is a human convenience; drive with keyboard events, not the mouse.`,
       `Touch (phone/tablet): the interface switches to a mobile layout the first time you touch the screen (gameState().input reads 'touch'). DRAG anywhere on the map to raise a floating joystick and steer. A quick TAP walks to that tile — and USES what's there on arrival (opens a chest, talks to an NPC); tap a foe to chase and attack it. A quick FLICK of the joystick (push and release fast) DASHES in that direction. The footer bar groups a sprint toggle (speed-lines icon, auto-sprint on/off) + town portal + potions on the left, the auto-cast slot centred, and skill slots 1–4 on the right — a quick TAP on a footer button fires it (cast the skill, quaff the potion); HOLD one for ~0.5s to read its tooltip instead of firing. The header holds the minimap, vitals, and the bag + settings buttons (upper-right). On touch the game runs fullscreen so it fills the whole screen with no browser chrome — any tap re-enters fullscreen whenever you've left it, and you exit with the phone's native back/swipe gesture. The game is portrait-only (landscape shows a rotate prompt). Everything is also driveable from the keyboard, which stays live.`,
       `Sprint: hold Shift (or, in TOGGLE mode, tap Shift to auto-sprint and tap again to stop). 1.7x speed, drains Stamina. Hardcoded.`,
-      `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs 35 Stamina, ~0.55s cooldown, and has NO invulnerability.`,
+      `Dash: ${key('dash')} — a short fast burst in your input/facing direction; costs ${DASH_COST} Stamina, ~0.55s cooldown, and has NO invulnerability.`,
       `Interact / pick up / talk / use: ${key('interact')} — open a chest you're standing on, talk to an adjacent NPC, and IN TOWN open a keeper's service when you're beside them (or the Dungeon Gate / Town Portal). A floating prompt shows who's in reach; gameState().menu.town.nearby reports it.`,
       `Health potion: ${key('healthPotion')} · Mana potion: ${key('manaPotion')} — always available (not a hoarded consumable); each recharges on its OWN cooldown and both restore OVER TIME (see the "healing" topic).`,
       `Town Portal: ${key('portal')} — channel a portal to town (needs 3 clean turns; any enemy hit — or moving — cancels it). A blue aura charges over the hero for the count; when it opens the hero fades out up a beam of light (~1s, unhittable) before you land in town — gameState().transit reads 'out' then, and 'in' when you materialize back below.`,
@@ -8255,9 +8257,9 @@ window.gameGuide = function gameGuide(topic) {
     movement: [
       `Walking, sprinting and dashing all move a free-floating body in real time (with momentum), not on a turn grid. Hold a direction; let go to stop. On touch, the floating joystick feeds the same motion — push it to the rim to sprint (see the "controls" topic).`,
       `The hero faces and animates in the direction it walks — down/up/left/right — cycling a walk animation while moving and resting on a standing frame when still. It's purely cosmetic; gameState().player.faceDir reports the current 4-way facing.`,
-      `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~34/sec). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch auto-sprint).`,
-      `DASH (${key('dash')}) is a quick burst (costs 35 Stamina, ~0.55s cooldown). It only repositions fast — there are no i-frames and enemies are solid, so you can't dash THROUGH a foe to escape.`,
-      `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~0.6s then refills (~22/sec) — including while you rest in town, alongside HP/MP. The Vitality attribute deepens the pool and speeds its recharge; gear Max Stamina (STM) and Stamina Regen (SRG) do the same, so a class that never invests in Vitality can still sprint on gear alone. Grabbing food ("&") is the fastest refill — each snack instantly restores ~50% of max Stamina. Check player.dashReady before dashing.`,
+      `SPRINT (Shift) raises top speed to 1.7x while you move, but burns Stamina (~${SPRINT_DRAIN}/sec — about ${Math.round(MAX_STAMINA / SPRINT_DRAIN * 10) / 10}s of sprint from a full baseline pool). Two modes: HOLD (sprint while Shift is down) or TOGGLE (tap Shift to latch auto-sprint).`,
+      `DASH (${key('dash')}) is a quick burst (costs ${DASH_COST} Stamina, ~0.55s cooldown). It only repositions fast — there are no i-frames and enemies are solid, so you can't dash THROUGH a foe to escape. Dash is the EXPENSIVE spender: a full baseline pool buys ${Math.floor(MAX_STAMINA / DASH_COST)} of them, so it's an escape, not a travel move.`,
+      `STAMINA (gameState().player.stamina / maxStamina) fuels sprint and dash. After exerting, it pauses ~${STAM_DELAY}s then refills (~${STAM_REGEN}/sec, so empty → full in ~${Math.round((STAM_DELAY + MAX_STAMINA / STAM_REGEN) * 10) / 10}s) — including while you rest in town, alongside HP/MP. The Vitality attribute deepens the pool and speeds its recharge; gear Max Stamina (STM) and Stamina Regen (SRG) do the same, so a class that never invests in Vitality can still sprint on gear alone. Grabbing food ("&") is the fastest refill — each snack instantly restores ~50% of max Stamina. Check player.dashReady before dashing.`,
       `In TOWN sprint is FREE — the safe camp never drains Stamina, so you can run everywhere at full 1.7x speed and the pool keeps refilling as if you were resting. Only in the dungeon does sprinting/dashing spend Stamina.`,
       `Being Slowed (a debuff) halves speed; being Stunned roots you entirely (see gameState().effects).`,
       `Foes are solid, so a single one body-blocks you — slide along it and step around. But a MOB can't pin you forever: when bodies plug your heading AND the lanes you'd slide into to go around them, keep pushing toward open ground and the hero slowly shoves BETWEEN them to break out (it never squeezes through a wall, and a lone foe with any real gap beside it stays solid).`,
@@ -8433,7 +8435,7 @@ window.gameGuide = function gameGuide(topic) {
     tips: [
       `Per floor: kill all non-goblin foes to unseal the stairs (watch floorCleared / hostilesLeft), grab chests/coins/food, then walk onto ">" (gameState().stairs.down) to descend.`,
       `Let auto-attack and auto-cast do the fighting and spend your control on POSITIONING: hug melee targets, kite ranged casters, and dodge bolts (hazards.projectiles) and flaring vents.`,
-      `Watch player.stamina before sprinting/dashing; dash needs 35 Stamina and a clear cooldown (player.dashReady).`,
+      `Watch player.stamina before sprinting/dashing; dash needs ${DASH_COST} Stamina and a clear cooldown (player.dashReady).`,
       `Track gameState().effects for debuffs (poison/burn/stun/slow) and buffs; each potion has its own ${POTION_CD}s cooldown (gameState().player.potionCd), so heal a little early rather than at zero.`,
       `On boss floors, respect "warded" (your damage is halved while the ward is up) and stay out of boss flame and barriers (hazards.boss).`,
       `Only step on a shrine after checking its kind (blood costs HP), and only take a teleporter when you want its destination (gameState().teleporters).`,
