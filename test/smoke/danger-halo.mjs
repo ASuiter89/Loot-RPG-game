@@ -86,6 +86,16 @@ async function main() {
     // 1. Poisoned and playing — the green halo blooms.
     const effects = await page.evaluate(() => window.__previewStatus('poison', 60));
     if (!effects.effects.includes('poison')) throw new Error('poison was not applied to the hero');
+    // The bloom fades in over ~250ms, so sampling the instant poison lands reads
+    // two or three zeros before it rises — and on a loaded machine the whole
+    // 5×120ms window fits inside the fade, failing a halo that works fine. Let it
+    // come up first (steps 2 and 3 already settle before sampling). A timeout is
+    // swallowed on purpose: sampling then reports the zeros and fails as before,
+    // so this waits out the race without weakening the assertion.
+    await page.waitForFunction(() => {
+      const el = document.getElementById('low-hp-vignette');
+      return el && +(el.style.opacity || 0) > 0;
+    }, { timeout: 4000 }).catch(() => {});
     const playing = await sample(page);
     console.log('danger-halo: playing opacities', playing.join(', '));
     if (!playing.some((o) => o > 0)) failures.push(`halo never showed while poisoned in play (${playing.join(', ')})`);
