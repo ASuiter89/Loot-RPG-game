@@ -6,7 +6,8 @@
 // resolved into live numbers that no call site ever read — the town panels promised
 // them and the game applied none of them. It also pins the two skill-cost fixes that
 // shipped alongside: Mana Cost Reduction reaching the skill bar, and the auto-cast
-// slot holding a health reserve for a blood-caster.
+// slot holding a health reserve for a blood-caster — and a mana reserve for everyone
+// else, so one auto-cast skill can't drain the bar and starve the manual row.
 //
 // Usage:
 //   node test/smoke/run-modifiers.mjs [path-to-html]   (default: ./index.html)
@@ -266,10 +267,132 @@ async function main() {
     });
     failures.push(...blood.fail);
 
+    // ── 5. A mana-caster's auto-cast holds a MANA reserve ────────────────────
+    // The mirror of §4, and the fix for the reported bug: a Fortune Seeker whose
+    // auto-cast slot fired the instant it was ready drained the bar to zero and left
+    // every numbered slot greyed out. The slot must leave a share of max MP standing.
+    await page.evaluate(() => {
+      window.titlePlay(); window.chooseClass('fortune'); window.pickSex('male');
+      const el = document.getElementById('name-input'); if (el) el.value = 'Lucky';
+      window.submitName();
+      window.player.level = 30; window.player.skillPoints = 40;
+      window.player.attributes = { might: 20, agility: 30, vitality: 30, spirit: 10, luck: 60 };
+      window.recomputeMaxStats();
+      const root = (window.classTrees().active || []).find((n) => n.root && n.cast && n.cast.shape === 'self');
+      window.buySkill(root.id);
+      window.setAutoSkill(root.id);
+      window.enterDungeonAt(1, 1);
+    });
+    await page.waitForTimeout(2600);   // the town→floor transit blocks casting
+
+    const mana = await page.evaluate(() => {
+      const fail = [];
+      const out = {};
+      const root = (window.classTrees().active || []).find((n) => n.root && n.cast && n.cast.shape === 'self');
+      const sk = window.activeSkillList().find((s) => s.id === root.id);
+      out.maxMp = window.player.maxMp;
+      out.cost = window.skillCastCost(sk.mp);
+      window.player.mp = window.player.maxMp;
+      let fired = 0;
+      for (let i = 0; i < 60; i++) {
+        window.player.skillCds = {};                       // pretend the cooldown elapsed
+        if (window.castSkillById(root.id, { silent: true, auto: true })) fired++;
+      }
+      out.autoCasts = fired;
+      out.mpLeftPct = Math.round((window.player.mp / window.player.maxMp) * 100);
+      if (fired === 0) fail.push('auto-cast never fired at full mana');
+      // Reserve is 30% of max MP; allow a cast's worth of rounding slack below it.
+      if (out.mpLeftPct < 25) fail.push(`auto-cast drained the bar to ${out.mpLeftPct}% — the mana reserve did not hold`);
+
+      // Held state must be VISIBLE, not silent: the agent-facing snapshot reports it
+      // and stops claiming the skill is ready.
+      const st = window.gameState();
+      out.held = !!(st.autoSkill && st.autoSkill.held);
+      out.stateReady = !!(st.autoSkill && st.autoSkill.ready);
+      if (!out.held) fail.push('gameState().autoSkill.held did not report the mana hold');
+      if (out.stateReady) fail.push('gameState().autoSkill.ready stayed true while the slot was held');
+
+      // A MANUAL cast is untouched: the player may still spend into the reserve.
+      window.player.skillCds = {};
+      const before = window.player.mp;
+      out.manualFired = window.castSkillById(root.id, { silent: true });
+      out.manualSpent = before - window.player.mp;
+      if (!out.manualFired || out.manualSpent <= 0) fail.push('a manual cast was blocked by the auto-cast mana reserve');
+      return { fail, out };
+    });
+    failures.push(...mana.fail);
+
+    // ── 6. The Staff's channelled bolt is a real, discountable, skippable cost ──
+    // It used to be a bare `4` in two attack paths: no Mana Cost Reduction, and a
+    // no-mana hero failed `mp < 4` on every swing and silently never auto-attacked.
+    const staff = await page.evaluate(() => {
+      const fail = [];
+      const out = {};
+      // Only the staff, with NO rolled stats: a random rare can roll MCR of its own,
+      // which would make the discount check below compare against a moving base.
+      const equipStaff = () => {
+        const w = window.generateItem(1, 20, 'rare', 'weapon');
+        w.base = 'Staff'; w.name = 'Test Staff'; w.stats = {}; w.attrs = {};
+        window.equipped = { weapon: w };
+        window.bumpLoadout();
+        return w;
+      };
+
+      // A mana-caster pays, and MCR discounts it exactly as it discounts a spell.
+      window.titlePlay(); window.chooseClass('mage'); window.pickSex('female');
+      const el = document.getElementById('name-input'); if (el) el.value = 'Staffy';
+      window.submitName();
+      window.player.level = 30;
+      window.player.attributes = { might: 200, agility: 200, vitality: 200, spirit: 200, luck: 200 };
+      window.recomputeMaxStats();
+      equipStaff();
+      out.style = window.weaponStyle();
+      out.mcr = window.totalStat('MCR');
+      out.cost = window.staffBoltCost();
+      out.stateBoltCost = window.gameState().player.boltCost;
+      if (out.style !== 'bolt') fail.push(`test staff has style "${out.style}", not bolt`);
+      if (out.mcr !== 0) fail.push(`test hero carries ${out.mcr} MCR — the discount check needs a clean base`);
+      if (!(out.cost > 0)) fail.push('a mana-caster was charged nothing for a staff bolt');
+      if (out.stateBoltCost !== out.cost) fail.push(`gameState reports ${out.stateBoltCost}, charges ${out.cost}`);
+      // It is the SAME price a skill of that cost would pay — that is the whole point
+      // of routing it through castCost instead of hardcoding a literal.
+      if (out.cost !== window.skillCastCost(out.cost)) fail.push('the staff bolt does not price like a cast');
+
+      const ring = window.generateItem(1, 20, 'rare', 'ring');
+      ring.stats = { MCR: 100 };
+      window.equipped = Object.assign({}, window.equipped, { ring });
+      window.bumpLoadout();
+      out.mcrAfter = window.totalStat('MCR');
+      out.costWithMcr = window.staffBoltCost();
+      // 100% MCR halves a price (cost = base / (1 + MCR/100)), floored at 1 MP.
+      out.expectWithMcr = Math.max(1, Math.round(out.cost / (1 + out.mcrAfter / 100)));
+      if (out.costWithMcr !== out.expectWithMcr) fail.push(`MCR gave ${out.costWithMcr} on the staff bolt, expected ${out.expectWithMcr}`);
+      if (out.costWithMcr > out.cost) fail.push('MCR made the staff bolt more expensive');
+
+      // A no-mana hero fires it FREE — the old check locked a Bloodletter out of
+      // auto-attacking entirely while holding a staff.
+      window.titlePlay(); window.chooseClass('bloodletter'); window.pickSex('male');
+      const el2 = document.getElementById('name-input'); if (el2) el2.value = 'Bled';
+      window.submitName();
+      window.player.level = 30;
+      window.recomputeMaxStats();
+      equipStaff();
+      out.noManaMaxMp = window.player.maxMp;
+      out.noManaCost = window.staffBoltCost();
+      out.noManaBoltCost = window.gameState().player.boltCost;
+      if (out.noManaMaxMp !== 0) fail.push(`the no-mana class reports maxMp ${out.noManaMaxMp}`);
+      if (out.noManaCost !== 0) fail.push(`a no-mana hero is charged ${out.noManaCost} MP it can never pay`);
+      if (out.noManaBoltCost !== 0) fail.push('gameState still quotes a staff cost for a no-mana hero');
+      return { fail, out };
+    });
+    failures.push(...staff.fail);
+
     console.log('run-modifiers: season =', JSON.stringify(season.out));
     console.log('run-modifiers: covenant =', JSON.stringify(cov.out));
     console.log('run-modifiers: mcr =', JSON.stringify(mcr.out));
     console.log('run-modifiers: blood =', JSON.stringify(blood.out));
+    console.log('run-modifiers: mana =', JSON.stringify(mana.out));
+    console.log('run-modifiers: staff =', JSON.stringify(staff.out));
   } catch (err) {
     failures.push(`exception: ${String(err)}`);
   } finally {

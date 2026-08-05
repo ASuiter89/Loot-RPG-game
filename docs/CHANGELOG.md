@@ -8,6 +8,64 @@ test suite + smoke green.
 > Legend: 🏗️ tooling · 📦 extraction (code moved out of the monolith) · 🧪 tests ·
 > 📄 docs
 
+## Balance — per-spell mana audit (staff bolt · Mage openers · a rate guard)
+
+Follow-up sweep over all 210 actives plus every non-skill mana cost, hunting the
+same hidden-tax shape the previous entry fixed globally.
+
+- 📦 `STAFF_BOLT_MP` (2, was a bare `4`) added to `src/data/skillCosts.js`, with
+  `staffBoltCost()` / `canPayStaffBolt()` / `payStaffBolt()` in `src/legacy/game.js`
+  replacing the literal that had been written twice — once in `tryRangedAttack`, once
+  in `updatePlayerCombat`. It now routes through `skillCastCost`, so Mana Cost
+  Reduction discounts it like any cast, and returns 0 for `classNoMana()`: a
+  Bloodletter failed the old `player.mp < 4` check on every swing and so silently
+  never auto-attacked at all while holding a Staff.
+- ⚖️ The four Mage band-0 bolts re-priced for their cadence — Firebolt / Frost Shard /
+  Spark 6 → 3 MP, Arcane Missile 7 → 4. They are the ONLY 1-second-cooldown skills in
+  the game and were authored at the same per-cast price as everyone else's 2-4s
+  openers, so they demanded 6.00-7.00 MP/sec against a game-wide band of 0.50-3.50.
+  Mage burden (median band-0/1 demand ÷ own in-combat regen) 184% → 138%, level with
+  warrior 136% / windblade 137%; with the Staff bolt included, 248% → 170%.
+- 🧪 New `test/data/skillManaCosts.test.js` — parses all 210 actives out of the tree
+  JSON and pins cost as a RATE (cost ÷ cooldown), which is where this class of bug
+  hides: a global 5.5 MP/s ceiling, a tighter 4.0 band-0 ceiling, a per-cast cap for
+  any skill on a ≤1s cadence, and a check that cost growth per rank stays under damage
+  growth. Verified it fails on the pre-fix values before landing.
+- 🧪 `test/smoke/run-modifiers.mjs` §6 proves the staff bolt end-to-end: priced like a
+  cast, halved by 100% MCR, and 0 for a no-mana hero.
+- 📄 `gameState().player.boltCost` (what the next auto-attack charges; 0 for every
+  non-Staff weapon) and a corrected `gameGuide("combat")` line.
+
+## Balance — mana economy audit (cast costs · regen · auto-cast reserve)
+
+- 📦 New `src/data/manaRegen.js` — the regen tuning that had been inlined in the
+  shell: `MP_REGEN_FLAT_PER_BEAT` (0.15, unchanged), the new
+  `MP_REGEN_PCT_PER_BEAT` (0.012 → 3%/sec of max MP), and
+  `MANA_COMBAT_REGEN_MULT` (0.5 → 0.65), moved out of `src/legacy/game.js`.
+- 📦 New `src/systems/manaRegen.js` — pure `mpRegenPerSec({maxMp, spirit, gear,
+  skills, shrinePctMp}, ticksPerSec)`, `gatedMpRegen(rate, inCombat)` and
+  `secondsToFullMp(maxMp, rate)`. The shell keeps the SUMS (it owns
+  `totalStat`/`attrCoef`/`shrineFx`); the module owns the SHAPE. `applyRegen()` and
+  `mpRecoveryRate()` both route their in-combat gate through `gatedMpRegen`, so the
+  ration is applied in one place instead of two hand-copied expressions.
+- 📦 `SKILL_MP_MULT` and `MANA_PER_RANK` moved from module-locals in
+  `src/systems/skillMath.js` to `src/data/skillCosts.js`, beside the blood-cost
+  tuning — one file to open when casting feels starved. `SKILL_MP_MULT` 1.5 → 1.0,
+  so an authored `mp` on a skill node is the cost actually charged.
+- 📦 `AUTO_CAST_MANA_RESERVE` (0.30) added to `src/data/skillCosts.js` and
+  `autoCastAffordsMana()` to `src/systems/skillCost.js` — the mana mirror of the
+  existing `AUTO_CAST_LIFE_RESERVE` / `autoCastAffordsLife` pair. Wired into
+  `castSkillById`'s `auto` path, the auto-slot tooltip, and
+  `gameState().autoSkill.held` (which also forces `.ready` false).
+- 🧪 New `test/systems/manaRegen.test.js` (11 tests) incl. a regression pinning that
+  refill time stays flat as the pool grows; `test/systems/skillCost.test.js` and
+  `test/systems/skillMath.test.js` extended; `test/data/manaRegenStats.test.js`
+  re-pinned to the new wiring; `test/smoke/run-modifiers.mjs` gained a §5 proving
+  end-to-end that a Fortune-Seeker's auto-cast stops at the reserve while a manual
+  cast still spends past it.
+- 📄 `gameGuide()` "healing" (mana rules), "autocast" (both reserves) and the MPREG
+  stat blurb updated off the stale "halved in combat" / "slower regen" copy.
+
 ## Feature — auto-attack shape (pierce · ricochet · multishot · rebound)
 
 - 📦 New `src/data/autoAttackMods.js` — the modifier roster (`AUTO_MOD_KEYS`,

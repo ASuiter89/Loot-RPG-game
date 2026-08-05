@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-  castCost, lifeCost, canAfford, autoCastAffordsLife, costLabel,
+  castCost, lifeCost, canAfford, autoCastAffordsLife, autoCastAffordsMana, costLabel,
 } from '../../src/systems/skillCost.js';
 import {
   MIN_CAST_COST, LIFE_COST_PER_MP, BLOOD_PRICE_MULT, AUTO_CAST_LIFE_RESERVE,
+  AUTO_CAST_MANA_RESERVE,
 } from '../../src/data/skillCosts.js';
 
 describe('castCost — mana after Mana Cost Reduction', () => {
@@ -106,6 +107,36 @@ describe('autoCastAffordsLife — the auto slot holds a health reserve', () => {
     const hp = 120, maxHp = 1000, toll = 100;
     expect(canAfford({ hp, mp: 0, cost: 10, life: toll })).toBe(true);  // a keypress may
     expect(autoCastAffordsLife(hp, maxHp, toll)).toBe(false);           // the auto slot may not
+  });
+});
+
+describe('autoCastAffordsMana — the auto slot holds a mana reserve', () => {
+  const RESERVE = AUTO_CAST_MANA_RESERVE;
+
+  it('allows a cast that leaves the reserve standing', () => {
+    expect(autoCastAffordsMana(200, 200, 20)).toBe(true);
+    expect(autoCastAffordsMana(200 * RESERVE + 20, 200, 20)).toBe(true);
+  });
+
+  it('refuses one that would eat into the reserve — the starved-hotbar bug', () => {
+    expect(autoCastAffordsMana(200 * RESERVE + 19, 200, 20)).toBe(false);
+    expect(autoCastAffordsMana(25, 200, 20)).toBe(false);
+  });
+
+  it('never blocks a free cast', () => {
+    expect(autoCastAffordsMana(0, 200, 0)).toBe(true);
+    expect(autoCastAffordsMana(0, 200, NaN)).toBe(true);
+  });
+
+  it('is stricter than mere affordability — that is the whole point', () => {
+    const mp = 200 * RESERVE, maxMp = 200, cost = 20;
+    expect(canAfford({ hp: 500, mp, cost })).toBe(true);        // a keypress may
+    expect(autoCastAffordsMana(mp, maxMp, cost)).toBe(false);   // the auto slot may not
+  });
+
+  it('leaves room for real manual casts: the reserve is a usable share of the pool', () => {
+    expect(RESERVE).toBeGreaterThan(0);
+    expect(RESERVE).toBeLessThan(0.5); // never so big it strangles auto-cast itself
   });
 });
 

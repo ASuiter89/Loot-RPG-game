@@ -4,6 +4,7 @@ import {
   earnedSkillPoints, earnedAscPoints, ASCEND_LEVEL, ASC_POINT_EVERY,
   PASSIVE_MAX_RANK, passiveSurgeLive,
 } from '../../src/systems/skillMath.js';
+import { SKILL_MP_MULT, MANA_PER_RANK } from '../../src/data/skillCosts.js';
 
 describe('milestonePower', () => {
   it('is 0 below rank 3', () => {
@@ -96,19 +97,27 @@ describe('skillManaCost', () => {
     expect(skillManaCost({}, 3)).toBe(0);
     expect(skillManaCost({ mp: 0 }, 3)).toBe(0);
   });
-  it('applies the global multiplier at rank 1', () => {
-    expect(skillManaCost({ mp: 10 }, 1)).toBe(15); // 10 * 1.5
+  it('charges the authored table value at rank 1 — the multiplier is neutral', () => {
+    expect(skillManaCost({ mp: 10 }, 1)).toBe(Math.round(10 * SKILL_MP_MULT));
+    expect(SKILL_MP_MULT).toBe(1); // an honest table: what you author is what you pay
   });
   it('treats rank 0 as rank 1', () => {
-    expect(skillManaCost({ mp: 10 }, 0)).toBe(15);
+    expect(skillManaCost({ mp: 10 }, 0)).toBe(skillManaCost({ mp: 10 }, 1));
   });
   it('climbs 8% of base per rank above the first', () => {
-    expect(skillManaCost({ mp: 10 }, 2)).toBe(16); // round(15 * 1.08)
-    expect(skillManaCost({ mp: 10 }, 5)).toBe(20); // round(15 * 1.32)
-    expect(skillManaCost({ mp: 20 }, 10)).toBe(52); // round(30 * 1.72)
+    expect(MANA_PER_RANK).toBe(0.08);
+    expect(skillManaCost({ mp: 10 }, 2)).toBe(11); // round(10 * 1.08)
+    expect(skillManaCost({ mp: 10 }, 5)).toBe(13); // round(10 * 1.32)
+    expect(skillManaCost({ mp: 20 }, 10)).toBe(34); // round(20 * 1.72)
   });
   it('never returns below 1 for a real cost', () => {
     expect(skillManaCost({ mp: 1 }, 1)).toBeGreaterThanOrEqual(1);
+  });
+  it('grows damage faster than cost, so ranking up is never a sustain downgrade', () => {
+    // rankScale reaches ~3.7x by rank 10 against a ~1.7x cost climb: damage per mana
+    // IMPROVES with every rank invested.
+    const dmgPerMana = r => rankScale(r) / skillManaCost({ mp: 20 }, r);
+    expect(dmgPerMana(10)).toBeGreaterThan(dmgPerMana(1));
   });
 });
 
