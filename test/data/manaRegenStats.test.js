@@ -60,8 +60,18 @@ describe('Mana Regen gear stat — wired through the legacy stat system', () => 
     expect(pairs.length).toBeGreaterThanOrEqual(5);
   });
 
-  it('actually feeds the mana-regen rate', () => {
-    expect(game).toContain("totalAttr('spirit') * attrCoef('mpRegen') + totalStat('MPREG')");
+  it('actually feeds the mana-regen rate, alongside Spirit and passive bonuses', () => {
+    // The shell sums the sources and hands them to systems/manaRegen.js, which owns
+    // the SHAPE (flat floor + share of max MP + the in-combat ration).
+    expect(game).toContain("gear: totalStat('MPREG')");
+    expect(game).toContain("spirit: totalAttr('spirit') * attrCoef('mpRegen')");
+    expect(game).toContain("skills: skillBonus('mpRegen')");
+    expect(game).toContain('calcMpRegenPerSec(');
+  });
+
+  it('rides the same in-combat ration as every other mana source', () => {
+    // One gate, applied in one place — gear regen must never dodge the ration.
+    expect(game).toContain('gatedMpRegen(_mpRegenRate, player._combatSecs > 0)');
   });
 });
 

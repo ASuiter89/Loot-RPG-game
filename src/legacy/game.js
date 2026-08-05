@@ -70,8 +70,10 @@ import { channelCoef, classDamageAttr, classDamageAttr2, classDamageAttrs, isHyb
 import { LUCK_FX } from '../data/attributeScaling.js';
 import { castLeeches, detonateIsPhysical, leechAmount } from '../systems/leech.js';
 import { castCost, lifeCost as castLifeCost, canAfford as canAffordCast,
-  autoCastAffordsLife, costLabel as castCostLabel } from '../systems/skillCost.js';
-import { AUTO_CAST_LIFE_RESERVE } from '../data/skillCosts.js';
+  autoCastAffordsLife, autoCastAffordsMana, costLabel as castCostLabel } from '../systems/skillCost.js';
+import { AUTO_CAST_LIFE_RESERVE, AUTO_CAST_MANA_RESERVE, STAFF_BOLT_MP } from '../data/skillCosts.js';
+import { mpRegenPerSec as calcMpRegenPerSec, gatedMpRegen } from '../systems/manaRegen.js';
+import { MANA_COMBAT_REGEN_MULT, MP_REGEN_PCT_PER_BEAT } from '../data/manaRegen.js';
 import { KILL_LOOT, killLootParams } from '../systems/bossLoot.js';
 import { pointsEarned } from '../systems/bossPoints.js';
 import { resistFraction, penFraction, mitigate, physicalShare } from '../systems/defense.js';
@@ -3249,7 +3251,9 @@ const STAT_LABELS = { ATK:'Attack', DEF:'Defense', SPD:'Speed', LCK:'Fortune', H
   // so a class that never invests in Vitality can still sprint on gear alone.
   STAM:'Max Stamina', STAMREG:'Stamina Regen',
   // MP deepens the pool, MPREG speeds its trickle — so a caster can lean on gear for
-  // mana sustain (halved in combat like all MP regen) instead of Spirit alone.
+  // mana sustain (rationed in combat like all MP regen) instead of Spirit alone. MP
+  // now pulls double duty: the baseline trickle is partly a share of the pool, so a
+  // bigger pool also refills faster (see data/manaRegen.js).
   MP:'Max MP', MPREG:'Mana Regen', CRIT:'Crit Rating', CRITDMG:'Crit Dmg %', REGEN:'Regen', DMG:'Damage', ACC:'Accuracy',
   // ── new stats ── leech & on-kill sustain, defensive layers, offensive %s,
   // utility/economy %s, and caster %s. Percent stats carry a "%" in their label
@@ -3301,7 +3305,7 @@ const STAT_DESC = {
   STAM: 'Bigger Stamina pool for sprint/dash.',
   STAMREG: 'Stamina refills faster.',
   MP: 'Max mana.',
-  MPREG: 'Mana regen over time (halved in combat).',
+  MPREG: 'Mana regen over time (reduced in combat).',
   CRIT: 'Crit chance (vs foe level) — autos, skills and spells all crit.',
   CRITDMG: 'Bonus crit damage (spell crits included).',
   REGEN: 'Health regen over time.',
@@ -4198,13 +4202,20 @@ function hpRegenPerSec() {
   return r * TICKS_PER_SEC;
 }
 function mpRegenPerSec() {
-  // A slow trickle on purpose: mana should run dry in sustained fights so mana
-  // pots stay worth quaffing. Scaled to a real per-second rate; applyRegen banks
+  // The UNGATED rate (applyRegen and mpRecoveryRate apply the in-combat ration on
+  // top). Mana still runs dry in a sustained fight so mana flasks stay worth
+  // quaffing — but the baseline is now part flat, part SHARE OF MAX MP, so refill
+  // time stays flat as the pool grows with level instead of stretching every level
+  // (see data/manaRegen.js). Gear Mana Regen (MPREG), Spirit and passive bonuses all
+  // stack on top and ride the same ration, so the rationing holds. applyRegen banks
   // the fractional per-beat share so sub-1 regen works while MP stays an integer.
-  // Gear Mana Regen (MPREG) stacks on Spirit's trickle here, so it rides the SAME
-  // in-combat halving applyRegen applies to this whole rate — the rationing holds.
-  return (0.15 + totalAttr('spirit') * attrCoef('mpRegen') + totalStat('MPREG') + skillBonus('mpRegen')
-    + shrineFx('mpRegenPctMp') * (player.maxMp || 0)) * TICKS_PER_SEC; // + Clarity shrine (% of max MP per beat)
+  return calcMpRegenPerSec({
+    maxMp: player.maxMp || 0,
+    spirit: totalAttr('spirit') * attrCoef('mpRegen'),
+    gear: totalStat('MPREG'),
+    skills: skillBonus('mpRegen'),
+    shrinePctMp: shrineFx('mpRegenPctMp'),   // Clarity shrine (% of max MP per beat)
+  }, TICKS_PER_SEC);
 }
 
 // Every food drop shows the shared `food` pixel tile (referenced directly).
@@ -4684,7 +4695,7 @@ function behaviorFor(type) { return (typeof MONSTERS === 'object' && MONSTERS[ty
 //   slash  (Sword)  — balanced strike, light follow-through onto a 2nd foe
 //   cleave (Axe)    — hits every adjacent enemy at once
 //   flurry (Dagger) — two rapid lighter hits, extra crit
-//   bolt   (Staff)  — magic blast at range, spends a little MP
+//   bolt   (Staff)  — magic blast at range, spends a little MP (staffBoltCost())
 //   shot   (Bow, Gun) — fires across the room, no counterattack from afar
 //   crush  (Mace)   — heavy blow that can stun
 //   thrust (Spear)  — reaches one extra tile, striking without reprisal
@@ -5224,6 +5235,17 @@ function canAffordSkill(baseMp) {
 // The price to PRINT for a skill — "18 HP" for a blood-caster, "31 MP" otherwise —
 // so a tooltip never quotes a number the cast doesn't charge.
 function skillCostText(baseMp) { return castCostLabel(skillCastCost(baseMp), skillBloodCost(baseMp)); }
+// ── THE STAFF'S CHANNELLED BOLT ──────────────────────────────────────────────
+// The Staff auto-attack (weapon style `bolt`) is the only mana cost that isn't a
+// skill cast. TWO paths charge it — the ranged poke (tryRangedAttack) and the
+// auto-attack loop (updatePlayerCombat) — so it lives here once instead of as a
+// bare literal in both. Routed through skillCastCost, so Mana Cost Reduction
+// discounts a caster's most-used action the way it discounts their spells, and free
+// for a hero with NO mana pool (a Bloodletter used to fail the check every swing and
+// silently never auto-attack at all). See STAFF_BOLT_MP in data/skillCosts.js.
+function staffBoltCost() { return classNoMana() ? 0 : skillCastCost(STAFF_BOLT_MP); }
+function canPayStaffBolt() { const c = staffBoltCost(); return !c || player.mp >= c; }
+function payStaffBolt() { const c = staffBoltCost(); if (c) player.mp -= c; }
 // Hemorrhage keystone: the health a cast just cost erupts outward as damage around
 // the hero, so the class's own price becomes its area clear.
 const HEMORRHAGE_RADIUS = 2, HEMORRHAGE_COEF = 1.6;
@@ -5482,10 +5504,10 @@ const SKILL_TREES = {
       {"id":"m_p54","name":"Blood Pact","icon":"sk_m_omniscience","fx":{"spell":0.28,"lifesteal":0.1,"hpRegen":3},"cfx":{"lifesteal":0.06,"spell":0.2},"cond":"lowhp","kflag":"bloodpact","keystone":true,"pts":{"tree":"passive","n":12},"desc":"KEYSTONE: spells cost LIFE, not mana. Heavy lifesteal and regen; wounded: more.","br":4,"x":0.5,"y":0.82,"band":3,"reqAny":["m_p34","m_p44"]}
     ], 'passive'),
     active: buildWeb([
-      {"id":"m_a00","name":"Firebolt","icon":"sk_ma_firebolt","mp":6,"cd":1,"syn":{"skill":"m_p00","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Hurl a bolt of flame that deals {dmg} and sets a foe ablaze.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a01","name":"Frost Shard","icon":"sk_ma_frostshard","mp":6,"cd":1,"syn":{"skill":"m_p01","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"stun","dur":1,"chance":0.6}},"desc":"Fire an icy shard that deals {dmg} and may freeze a foe.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a02","name":"Spark","icon":"sk_ma_spark","mp":6,"cd":1,"syn":{"skill":"m_p02","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":7},"desc":"Loose a crackling spark at a distant foe for {dmg}.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
-      {"id":"m_a03","name":"Arcane Missile","icon":"sk_ma_arcaneorb","mp":7,"cd":1,"syn":{"skill":"m_p03","per":0.05},"cast":{"shape":"bolt","spell":1.2,"drainMp":0.1,"range":5},"desc":"Launch an unerring arcane missile that deals {dmg} and saps mana.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a00","name":"Firebolt","icon":"sk_ma_firebolt","mp":3,"cd":1,"syn":{"skill":"m_p00","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"burn","dur":3,"chance":1}},"desc":"Hurl a bolt of flame that deals {dmg} and sets a foe ablaze.","br":0,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a01","name":"Frost Shard","icon":"sk_ma_frostshard","mp":3,"cd":1,"syn":{"skill":"m_p01","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":4,"status":{"effect":"stun","dur":1,"chance":0.6}},"desc":"Fire an icy shard that deals {dmg} and may freeze a foe.","br":1,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a02","name":"Spark","icon":"sk_ma_spark","mp":3,"cd":1,"syn":{"skill":"m_p02","per":0.05},"cast":{"shape":"bolt","spell":1.1,"range":7},"desc":"Loose a crackling spark at a distant foe for {dmg}.","br":2,"x":0.5,"y":0.12,"band":0,"root":true},
+      {"id":"m_a03","name":"Arcane Missile","icon":"sk_ma_arcaneorb","mp":4,"cd":1,"syn":{"skill":"m_p03","per":0.05},"cast":{"shape":"bolt","spell":1.2,"drainMp":0.1,"range":5},"desc":"Launch an unerring arcane missile that deals {dmg} and saps mana.","br":3,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"m_a04","name":"Mana Barrier","icon":"sk_ma_barrier","mp":10,"cd":15,"cast":{"shape":"self","buff":[{"id":"shield","dur":6,"mag":40}],"kind":"spell"},"desc":"Conjure a shield that absorbs incoming damage.","br":4,"x":0.5,"y":0.12,"band":0,"root":true},
       {"id":"m_a10","name":"Ember Surge","icon":"sk_ma_emberbuff","mp":12,"cd":6,"cast":{"shape":"self","buff":[{"id":"spellUp","dur":5,"mag":0.4}],"kind":"spell"},"desc":"Empower yourself, sharply increasing spell damage for several seconds.","br":0,"x":0.28,"y":0.34,"band":1,"req":["m_a00"]},
       {"id":"m_a11","name":"Frost Nova","icon":"sk_ma_frostnova","mp":12,"cd":4,"syn":{"skill":"m_p11","per":0.05},"cast":{"shape":"nova","spell":1,"radius":2,"status":{"effect":"stun","dur":2,"chance":0.8}},"desc":"Erupt with frost for {dmg}, freezing nearby foes.","br":1,"x":0.28,"y":0.34,"band":1,"req":["m_a01"]},
@@ -7781,6 +7803,18 @@ window.gameState = function gameState(radius) {
   // reserved out of skillBar above, so surface it separately or it'd be invisible.
   const autoId = (typeof normAutoSkill === 'function') ? normAutoSkill() : (player.autoSkill || null);
   const autoSkill = autoId ? skillInfo(autoId, null) : null;
+  // The auto slot alone answers to a RESERVE it must leave standing — health for a
+  // blood-cast, mana for a mana-cast — so it can read affordable and still not fire.
+  // Report that as `held`, and fold it into `ready` so the flag never lies.
+  if (autoSkill) {
+    const node = (typeof skillNode === 'function') ? skillNode(autoId) : null;
+    const rank = (typeof skillRank === 'function') ? skillRank(autoId) : 0;
+    const baseMp = (node && typeof skillManaCost === 'function') ? skillManaCost(node, rank) : (node ? node.mp : 0);
+    autoSkill.held = paysSkillsInLife()
+      ? !autoCastAffordsLife(player.hp, player.maxHp, skillBloodCost(baseMp))
+      : !autoCastAffordsMana(player.mp, player.maxMp, skillCastCost(baseMp));
+    if (autoSkill.held) autoSkill.ready = false;
+  }
   // Per-enemy status (slow/stun/chill/poison/vuln) lives keyed by the foe object.
   const enemyStatus = e => {
     const out = [];
@@ -7842,7 +7876,7 @@ window.gameState = function gameState(radius) {
       // next few beats at a capped rate (the translucent zone on the HP/MP bars).
       // pendingHeal = incoming HP (leech + potion sips); pendingMana = incoming MP.
       // Instant heals (active-cast heals, emergency low-HP saves) skip this. While
-      // inCombat (a few seconds after dealing/taking damage) mana regen is halved.
+      // inCombat (a few seconds after dealing/taking damage) mana regen is rationed.
       pendingHeal: (player.pendingHeal || 0) + (player.pendingPotionHeal || 0),
       pendingMana: player.pendingMana || 0,
       // Each flask recharges on its OWN timer — seconds left (0 = ready to quaff)
@@ -7920,6 +7954,12 @@ window.gameState = function gameState(radius) {
       weaponBaseSpeed: (typeof weaponStyle === 'function' && typeof STYLE_ATK_MULT !== 'undefined')
         ? (() => { const i = weaponSpeedInfo(STYLE_ATK_MULT[weaponStyle()] || 1, PLAYER_ATK_BASE); return { atkPerSec: Math.round(i.aps * 100) / 100, tier: i.tier }; })()
         : null,
+      // Mana the NEXT auto-attack will charge: a Staff channels its bolt (already
+      // discounted by Mana Cost Reduction, 0 for a hero with no mana pool). Every
+      // other weapon swings free, so this is 0 — an agent budgeting mana has to see
+      // that a Staff's basic attack competes with its spells for the same pool.
+      boltCost: (typeof staffBoltCost === 'function' && typeof weaponStyle === 'function')
+        ? (weaponStyle() === 'bolt' ? staffBoltCost() : 0) : 0,
       // Survivability — the defensive counterpart to `offense`, mirroring the HERO sheet.
       // The chance fields are 0..1 fractions measured against the current floor's threat.
       defense: (typeof playerDefense === 'function') ? {
@@ -8269,7 +8309,7 @@ window.gameGuide = function gameGuide(topic) {
     ],
     combat: [
       `AUTO-ATTACK is automatic — no key. Whenever your attack is off cooldown, the hero strikes the nearest enemy within weapon range. You just need to be in range (and, for ranged weapons, have line of sight). A red crosshair marks the foe currently locked on (Settings → Visuals → CROSSHAIR toggles it; the 🎯 TARGET focus in Settings → Play picks which foe wins).`,
-      `Weapon reach is set by the weapon's SUB-TYPE (its name), not just its category. Category defaults: Staff, Bow & Gun = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee — but several sub-types override that: a Rapier (Sword) reaches 2, a Pike (Spear) 3, a Longbow (Bow) 5, a Carbine (Gun) 3, a War Scythe (Scythe) 2. gameState().player.weaponReach reports your equipped weapon's actual reach. A Staff's bolt also costs 4 MP per shot. LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
+      `Weapon reach is set by the weapon's SUB-TYPE (its name), not just its category. Category defaults: Staff, Bow & Gun = 4 tiles, Spear = 2, everything else (Sword/Axe/Dagger/Mace/Scythe) = 1 melee — but several sub-types override that: a Rapier (Sword) reaches 2, a Pike (Spear) 3, a Longbow (Bow) 5, a Carbine (Gun) 3, a War Scythe (Scythe) 2. gameState().player.weaponReach reports your equipped weapon's actual reach. A Staff's bolt also spends mana per shot — ${STAFF_BOLT_MP} MP before Mana Cost Reduction, which discounts it exactly as it discounts a spell; a hero with no mana pool (a Bloodletter) fires it free. gameState().player.boltCost reports what your next Staff shot will actually charge (0 for every other weapon). LINE OF SIGHT is required to hit at range — a SOLID obstruction (wall, cracked wall, locked door, boss barrier or furniture) between you and a foe blocks ranged auto-attacks, ranged skills and spells; but open ground gives no cover, so you can see and shoot OVER water, lava and other floor terrain. Works both ways: foes can't shoot or hex you through walls either. Melee is unaffected; only adjacent foes are struck.`,
       `THROWN & FIRED attacks land ON IMPACT: a Bow/Staff auto-attack, a ranged summon's shot, and a bolt or blast spell all loose a flying bolt whose damage is dealt the instant it REACHES the foe — not when it's cast — so a target won't drop until the bolt connects (a foe reading full HP for a beat after you fire is normal). Melee swings, novas, beams and chains still resolve on the spot.`,
       `There is NO per-hit damage cap — a big swing, skill or crit lands its full number, so burst and crits are fully rewarded. A foe's actual HP is the only limiter: bosses carry deep HP pools (and hit harder), so they're a genuine, tanky fight rather than a one-shot.`,
       `Crits do 2.0x base damage (more with +CRITDMG gear), and EVERY damage source can crit — auto-attacks, martial skills and spells all roll critical hits, land the big crit number, and fire your on-crit passives (combo/zeal charges, primed crits, mana refunds). Weapon styles differ: Dagger double-hits, Axe & Scythe cleave adjacent foes, Mace can stun, Scythe lifesteals.`,
@@ -8280,14 +8320,14 @@ window.gameGuide = function gameGuide(topic) {
       `COMBAT-LOG COLOURS: the log tints the NUMBER by outcome so a fight reads at a glance — GOLD = damage YOU deal, RED = damage you TAKE, GREEN = HP you heal (the line text stays neutral otherwise). Loot-drop lines are green too, but only the +N on a heal line is; gold/XP keep the coin colour, mana its blue.`,
     ],
     healing: [
-      `PAYING FOR SKILLS IN LIFE. Two heroes spend HEALTH instead of mana: the BLOODLETTER, which has NO mana pool at all (maxMp is 0, the MP bar and the mana flask are hidden, and MP/MP-regen gear rolls are dead for it), and any class that takes the BLOOD PACT keystone. A Bloodletter's cast costs a SHARE OF MAX HP (~0.45% per point of the skill's listed cost), so the toll keeps mattering as the health pool grows; Blood Pact charges the flat mana number instead. Either way the cost is refused outright when it would not leave you alive — a self-inflicted cost NEVER kills you, and it never interrupts the Spirit Veil's recharge window the way real damage does. Mana Cost Reduction (MCR) discounts blood exactly as it discounts mana. gameState().player.maxMp === 0 identifies a no-mana hero; gameState().skills[i].hpCost is the blood a cast charges (0 for a mana-caster) and .ready already accounts for it. The AUTO-CAST slot additionally holds a 50%-of-max-HP reserve — see gameGuide('autocast').`,
+      `PAYING FOR SKILLS IN LIFE. Two heroes spend HEALTH instead of mana: the BLOODLETTER, which has NO mana pool at all (maxMp is 0, the MP bar and the mana flask are hidden, and MP/MP-regen gear rolls are dead for it), and any class that takes the BLOOD PACT keystone. A Bloodletter's cast costs a SHARE OF MAX HP (~0.45% per point of the skill's listed cost), so the toll keeps mattering as the health pool grows; Blood Pact charges the flat mana number instead. Either way the cost is refused outright when it would not leave you alive — a self-inflicted cost NEVER kills you, and it never interrupts the Spirit Veil's recharge window the way real damage does. Mana Cost Reduction (MCR) discounts blood exactly as it discounts mana. gameState().player.maxMp === 0 identifies a no-mana hero; gameState().skills[i].hpCost is the blood a cast charges (0 for a mana-caster) and .ready already accounts for it. The AUTO-CAST slot additionally holds a ${Math.round(AUTO_CAST_LIFE_RESERVE * 100)}%-of-max-HP reserve (and a ${Math.round(AUTO_CAST_MANA_RESERVE * 100)}%-of-max-MP one for a mana-caster) — see gameGuide('autocast').`,
       `RECOVERY IS OVER TIME, not instant. Most healing no longer snaps HP up — it fills a PENDING pool that pays into HP at a capped rate (~12%/s of max HP per source), so the bar climbs on a visible slope. gameState().player.pendingHeal is the HP still owed; the HP/MP bars show it as a translucent zone ahead of the solid fill.`,
       `OVER-TIME sources STACK (a potion sip pays out on top of any pending leech): the Health Potion, all life leech / lifesteal (paid from your physical attacks and weapon skills — spells don't leech, and a HYBRID strike leeches only from its physical half, not its magic half), Scythe Reap, Vampiric, Life-on-Kill, and incidental on-kill / on-cast "sliver" heals.`,
       `INSTANT sources land immediately, as before: deliberate active HEAL skills you cast (e.g. Divine Storm, Final Judgment, Blood Drinker) and EMERGENCY low-HP triggers (a passive that heals when you drop below 25% HP). A skill's detail card tags which kind it grants (heal — instant / leech — over time). A cast heal's SIZE now scales off SPIRIT and Spell Power (class-scaled: Mage > Templar > Rogue > Warrior) with no flat cap — so a high-Spirit healer mends far more per cast (still capped only by the HP you're actually missing).`,
       `The Health Potion mends 35% of max HP over a few seconds (the Healer's HEALTH POTENCY raises that share — ${POTION_POWER_MAX} ranks, +${Math.round(POTION_PCT_PER_LVL * 100)} points each, and it lifts the health flask ONLY; its own ${POTION_CD}s cooldown, down to ${POTION_CD - POTION_CD_PER_LVL * POTION_CD_MAX}s via the Healer's Health Recharge — ${POTION_CD_MAX} ranks, −${POTION_CD_PER_LVL}s each). It is INTERRUPTIBLE: one DIRECT hit above 18% of max HP spills half the remaining sip ("SIP SPILLED"). Damage-over-time (lava/poison/burn) never interrupts it, and earned leech is never interrupted — only the potion sip is fragile.`,
       `Because you can no longer burst back to full, don't wait until you're low: sip EARLY, keep moving, and let the pending pool refill the slope while you avoid the next hit.`,
       `DANGER CUE: drop below a quarter of your max HP and the screen edges pulse red (the danger halo) while a heartbeat thumps — and quickens the closer you are to dying. It's your prompt to disengage and sip. The red glow also colour-cycles with any active poison/burn/stun. The heartbeat rides the SFX channel (mute or the Audio-tab faders silence it) and pauses when a menu holds the game.`,
-      `MANA is a RATIONED resource now: a smaller pool (less MP per Spirit, lower base), higher skill costs, and slower regen — and MP regen is HALVED while you're "in combat" (a few seconds after dealing or taking damage — gameState().player.inCombat), so sustained casting genuinely drains you.`,
+      `MANA is a RATIONED resource, but it RECHARGES on the scale of a fight rather than a floor. Regen is part flat and part SHARE OF MAX MP (${Math.round(MP_REGEN_PCT_PER_BEAT * TICKS_PER_SEC * 100)}%/sec of your pool), so refilling an empty bar takes about the same time at level 60 as at level 10 — a deeper pool fills proportionally faster instead of leaving you stranded. Spirit, gear Mana Regen (MRG), passives and the Clarity shrine all stack on top. Regen is cut to ${Math.round(MANA_COMBAT_REGEN_MULT * 100)}% while you're "in combat" (a few seconds after dealing or taking damage — gameState().player.inCombat), so a sustained rotation still drains you and big spenders are still burst-limited; you just aren't locked out of casting between fights.`,
       `The Mana Potion restores 40% of max MP OVER TIME (gameState().player.pendingMana shows MP still incoming; the Healer's MANA POTENCY raises that share — ${POTION_POWER_MAX} ranks, +${Math.round(POTION_PCT_PER_LVL * 100)} points each, health flask untouched) and recharges on its OWN ${POTION_CD}s cooldown (down to ${POTION_CD - POTION_CD_PER_LVL * POTION_CD_MAX}s via the Healer's Mana Recharge), independent of the health flask — so a heal never locks out a mana sip. Mana Shield converts damage to MP more efficiently the more you invest in it. Carry mana potions if you lean on spells.`,
       `Beyond Spirit, gear itemizes mana sustain directly: MANA REGEN (MRG) is a flat +MP/sec trickle that stacks on Spirit's and rolls from floor 1 on the sustain slots (helm, chest, legs, amulet, off-hand) — subject to the same in-combat halving, so it eases the grind between casts without breaking the ration. Max MP (MP), Mana Cost Reduction (MCR), Mana Leech (MLC) and Mana on Kill (MoK) round out the mana toolkit.`,
     ],
@@ -8335,7 +8375,7 @@ window.gameGuide = function gameGuide(topic) {
       `Set it by dragging a learned active onto the auto-cast slot, ticking the Auto-cast toggle in a slot's assign dialog, or using the SKILLS-tab Auto-cast button. From the console: setAutoSkill("<skillId>") to arm, setAutoSkill(null) to clear. The auto-cast skill is reserved out of the manual row, so it can't also sit in a numbered slot.`,
       `There is no priority list or pacing to juggle any more — it's a single skill, so it simply fires whenever it's ready.`,
       `It is smart about waste: a damage skill only lands when a target is in range, and a pure heal waits until you are below ~85% HP. Buffs, summons and utility recast the instant they come off cooldown — but since a self-buff's cooldown runs well longer than the buff itself (~40% uptime at 0 CDR), an auto-cast buff still spends most of its time down; stacking Cooldown Reduction raises that uptime but won't hold it permanently.`,
-      `It also keeps a HEALTH RESERVE for a skill paid in blood (a Bloodletter, or any hero with the Blood Pact keystone): auto-cast never spends the toll if it would drop you below 50% of max HP — it fires unattended, so without that floor it would pin you at a sliver all floor. A MANUAL cast is unrestricted: you can still spend down to your last point when you choose to. The auto slot shows the hold on its button and in its tooltip.`,
+      `It keeps a RESERVE back, because it fires unattended. For a mana-caster: auto-cast never spends below ${Math.round(AUTO_CAST_MANA_RESERVE * 100)}% of max MP, so one auto-cast skill can no longer drain the bar and leave every numbered slot greyed out — the bottom of the pool is held for the skills YOU press. For a skill paid in blood (a Bloodletter, or any hero with the Blood Pact keystone) the same floor applies to health at ${Math.round(AUTO_CAST_LIFE_RESERVE * 100)}% of max HP, so it can't pin you at a sliver all floor. A MANUAL cast is unrestricted either way: you can still spend to your last point when you choose to. The auto slot shows the hold on its button and in its tooltip, and gameState().autoSkill.held reports it (with .ready false while held).`,
       `It is opt-in and saved per character. Arming a damage or buff skill lets you focus purely on movement. gameState().autoSkill shows the current auto-cast skill (id, name, MP, cooldown, ready), or null when the slot is empty.`,
     ],
     loot: [
@@ -23177,7 +23217,8 @@ let _hpRegenRate = 0, _mpRegenRate = 0, _shieldRechargeRate = 0;
 // rate matches the per-second number shown on the HERO sheet.
 function applyRegen() {
   // In-combat mana gate: dealing/taking damage keeps you "in combat" for a few real
-  // seconds, during which mana regen is halved — so a spender can't refill mid-fight.
+  // seconds, during which mana regen is rationed — so a spender can't fully refill
+  // mid-fight (MANA_COMBAT_REGEN_MULT in data/manaRegen.js).
   if (player._combatSecs > 0) player._combatSecs = Math.max(0, player._combatSecs - WORLD_TICK_SECONDS);
   // Over-time recovery: pending heal/mana pools pay out into the live bars this beat.
   drainPendingRecovery();
@@ -23201,9 +23242,8 @@ function applyRegen() {
   // The per-beat share is fractional, so bank it in an accumulator and only ever
   // add whole points to player.mp (keeps the MP readout an integer). Halved while
   // in combat (see the gate above), so sustained casting genuinely drains you.
-  const gate = player._combatSecs > 0 ? MANA_COMBAT_REGEN_MULT : 1;
   _mpRegenRate = mpRegenPerSec();   // cached ungated per-second rate for the fluid fill
-  const mr = _mpRegenRate * WORLD_TICK_SECONDS * gate;
+  const mr = gatedMpRegen(_mpRegenRate, player._combatSecs > 0) * WORLD_TICK_SECONDS;
   if (player.hp > 0 && player.mp < player.maxMp && mr > 0) {
     player._mpAcc = (player._mpAcc || 0) + mr;
     const whole = Math.floor(player._mpAcc);
@@ -23244,7 +23284,8 @@ const HEAL_DRAIN_PCT = 0.12;         // pending HP pays out at 12%/s of max HP (
 const MANA_DRAIN_PCT = 0.16;         // pending MP pays out at 16%/s of max MP
 const POTION_INTERRUPT_FRAC = 0.18;  // a single direct hit above this % of max HP halves pending potion healing
 const COMBAT_GATE_SECS = 3;          // "in combat" window (real seconds) after dealing/taking damage
-const MANA_COMBAT_REGEN_MULT = 0.5;  // mana regen multiplier while in combat
+// MANA_COMBAT_REGEN_MULT (the in-combat mana ration) now lives in data/manaRegen.js
+// alongside the rest of the regen tuning — imported at the top of this file.
 
 // Total HP still owed by the over-time pools (for the bar overlay + guards).
 function pendingHealTotal() { return (player.pendingHeal || 0) + (player.pendingPotionHeal || 0); }
@@ -25234,8 +25275,8 @@ function tryRangedAttack(dx, dy) {
   const style = weaponStyle();
   const range = weaponRangeOf(activeWeapon()) || STYLE_RANGE[style] || 1;
   if (range < 2) return false;            // melee-only weapons can't poke at range
-  const mpCost = style === 'bolt' ? 4 : 0; // the Staff's bolt spends a little mana
-  if (mpCost && player.mp < mpCost) return false;
+  const bolt = style === 'bolt';           // the Staff's bolt spends a little mana
+  if (bolt && !canPayStaffBolt()) return false;
   let x = player.x, y = player.y;
   for (let step = 1; step <= range; step++) {
     x += dx; y += dy;
@@ -25243,7 +25284,7 @@ function tryRangedAttack(dx, dy) {
     if (blocksShot(x, y)) break;            // wall / door / barrier — but shoot over water & ground
     const tgt = getEnemyAt(x, y);
     if (tgt) {
-      if (mpCost) { player.mp -= mpCost; }
+      if (bolt) payStaffBolt();
       attackEnemy(tgt, { ranged: true, style });
       // A ranged poke still passes the turn — foes get to close in.
       runEnemyTurn();
@@ -25315,6 +25356,11 @@ function castSkillById(id, opts) {
     // blood-caster down to a sliver and pinned them there for the whole floor.
     if (opts && opts.auto && !autoCastAffordsLife(player.hp, player.maxHp, lifeCost)) { _muteCastLog = false; return false; }
   } else if (player.mp < cost) { castMsg(`💧 Not enough mana for ${sk.name} — need ${cost} MP.`); if (!_muteCastLog) { pulseManaShort(); showRampHint('mana'); } _muteCastLog = false; return false; }
+  // The MANA mirror of the blood reserve above, for the same reason: the auto slot
+  // fires itself the instant its skill is ready, so with no floor it spends the whole
+  // bar on ONE skill and leaves the manual row greyed out. It holds a share of max MP
+  // back; a keypress is unrestricted. See AUTO_CAST_MANA_RESERVE in data/skillCosts.js.
+  else if (opts && opts.auto && !autoCastAffordsMana(player.mp, player.maxMp, cost)) { _muteCastLog = false; return false; }
 
   const fired = runActiveSkill(id); // false = no valid target / nothing to do
   _muteCastLog = false;
@@ -28485,8 +28531,7 @@ function hpRecoveryRate() {
 // plus the mana pool draining at MANA_DRAIN_PCT.
 function mpRecoveryRate() {
   if (!(player.hp > 0) || player.mp >= player.maxMp) return 0;
-  const gate = player._combatSecs > 0 ? MANA_COMBAT_REGEN_MULT : 1;
-  let rate = Math.max(0, _mpRegenRate) * gate;
+  let rate = gatedMpRegen(_mpRegenRate, player._combatSecs > 0);
   if ((player.pendingMana || 0) > 0) rate += player.maxMp * MANA_DRAIN_PCT;
   return rate;
 }
@@ -30754,14 +30799,18 @@ function renderSkillBar() {
   } else {
     const s = autoS;
     const cd = skillCd(s.id);
-    // The auto slot answers to one extra rule: a blood-cast holds a health reserve
-    // (it fires unattended, so it must never bleed the hero out). Show that as the
-    // same "can't pay right now" state a short mana bar gets, with its own note.
-    const held = !autoCastAffordsLife(player.hp, player.maxHp, skillBloodCost(s.mp));
+    // The auto slot answers to one extra rule: it fires unattended, so it holds a
+    // RESERVE back — health for a blood-cast (never bleed the hero out), mana for a
+    // mana-cast (never starve the manual row). Show either as the same "can't pay
+    // right now" state a short bar gets, with its own note naming the reserve.
+    const bloodHeld = !autoCastAffordsLife(player.hp, player.maxHp, skillBloodCost(s.mp));
+    const manaHeld = !paysSkillsInLife() && !autoCastAffordsMana(player.mp, player.maxMp, skillCastCost(s.mp));
+    const held = bloodHeld || manaHeld;
     const ready = cd <= 0 && canAffordSkill(s.mp) && !held && player.hp > 0;
     const noMana = cd <= 0 && player.hp > 0 && (!canAffordSkill(s.mp) || held);
     const manaNote = !noMana ? ''
-      : held ? `<div class='ht-sub' style='color:var(--hp)'>Holding — auto-cast keeps ${Math.round(AUTO_CAST_LIFE_RESERVE * 100)}% of your health in reserve</div>`
+      : bloodHeld ? `<div class='ht-sub' style='color:var(--hp)'>Holding — auto-cast keeps ${Math.round(AUTO_CAST_LIFE_RESERVE * 100)}% of your health in reserve</div>`
+      : manaHeld ? `<div class='ht-sub' style='color:var(--mp)'>Holding — auto-cast keeps ${Math.round(AUTO_CAST_MANA_RESERVE * 100)}% of your mana in reserve for manual casts</div>`
       : `<div class='ht-sub' style='color:var(--${paysSkillsInLife() ? 'hp' : 'mp'})'>Not enough ${paysSkillsInLife() ? 'life' : 'mana'}</div>`;
     const tip = `<div class='ht-name' style='color:var(--info)'>⟳ Auto-cast: ${dlIcon(s.icon,16)||''} ${s.name}</div><div class='ht-line'>${s.desc}</div><div class='ht-sub'>${skillCostText(s.mp)} · ${fmtCd(effectiveSkillCd(s.node, skillRank(s.id)))}s cooldown · casts itself the moment it's ready</div>${skillDmgTipLine(s.node, skillRank(s.id))}${manaNote}<div class='ht-sub' style='opacity:.7'>drag a skill here to change · tap to edit</div>`;
     autoCell = cell('AUTO', 'auto', `<button class="skillbar-btn autoslot ${ready ? 'ready' : 'disabled'} ${noMana ? 'no-mana' : ''} ${cd > 0 ? 'cooling' : ''}" draggable="true"
@@ -37166,7 +37215,7 @@ function updatePlayerCombat(dt) {
   const style = weaponStyle();
   const range = weaponRangeOf(equipped.weapon) || STYLE_RANGE[style] || 1;
   const ranged = range >= 2;
-  if (style === 'bolt') { if (player.mp < 4) return; player.mp -= 4; } // staff bolt spends a little MP
+  if (style === 'bolt') { if (!canPayStaffBolt()) return; payStaffBolt(); } // staff bolt spends a little MP
   if (best.x > player.x) player.facing = 'right'; else if (best.x < player.x) player.facing = 'left';
   entryGuard = false;   // swinging ends arrival grace
   attackEnemy(best, { ranged, style });
@@ -40607,6 +40656,7 @@ const __DL_FN_BRIDGE = {
   skillManaCost,
   skillCastCost,
   skillBloodCost,
+  staffBoltCost,
   skillCostText,
   canAffordSkill,
   skillWeaponBase,
