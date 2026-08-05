@@ -46,6 +46,24 @@ test suite + smoke green.
   lays four foes out by hand and asserts one swing reaches all of them — and that a
   shapeless hero still hits exactly one.
 
+## Art — the Gun category reads as a rifle
+
+- 🏗️ `tools/gun-sprite.mjs` redraws `w_gun` as a long-barrelled flintlock rifle,
+  measured off the shipped tiles rather than eyeballed: authored in a frame rotated
+  45° so it runs corner to corner like every other long weapon (muzzle upper-left,
+  butt lower-right — the angle `drawHeldWeapon` assumes when it mirrors for a
+  right-facing hero), a 6px barrel to match the spear shaft's perpendicular line
+  weight, and per-part gradient shading + hash grain so its colour spread sits in
+  the shipped range (957 colours / mean luma 50, vs the spear's 895/58).
+- 📦 The bag icon is redrawn to match, staying upright like the spear and staff
+  vector icons: five bold shapes in the sword's blade/guard/grip/pommel idiom.
+- 📦 Rifle art made the sub-type names wrong — a 1H "Flintlock" and a "Hand Cannon"
+  both read as handguns — so they become **Carbine** (1H) and **Longrifle** (2H)
+  across `WEAPON_SUBTYPES`, `data/gearBases.js`, `data/uniques.js` and the guide
+  topics. Stats, reach and gates are unchanged; both uniques keep their ids.
+- 🧪 `test/data/gearBases.test.js` widens the Gun coverage rule: the category is
+  Luck-gated and reachable by the Rogue as well as the Fortune-Seeker.
+
 ## Feature — the Gun weapon line, and an even equip-gate grid
 
 - 📦 New `src/data/gearBases.js` — the canonical `SLOT_BASES` roster plus the three
@@ -61,10 +79,10 @@ test suite + smoke green.
 - 🧪 `test/data/uniques.test.js` and `test/data/itemSets.test.js` import `SLOT_BASES`
   instead of each hand-copying it, so a new base without its unique fails there
   rather than sliding past a stale fixture.
-- 🏗️ New `tools/gun-sprite.mjs` — hand-authors the `w_gun` atlas tile (a 48×48
-  indexed pixel grid, doubled into the 96px cell) and writes it into the packed
-  sprite atlas at cell 99, the one free slot. Idempotent: every other cell
-  round-trips byte-identically through the canvas encoder.
+- 🏗️ New `tools/gun-sprite.mjs` — hand-authors the `w_gun` atlas tile and writes it
+  into the packed sprite atlas at cell 99, the one free slot. Idempotent: every
+  other cell round-trips byte-identically through the canvas encoder. (Redrawn as a
+  rifle in the art pass below.)
 - 📄 The `gear`, `classes`, `weapons-reach` and attack-speed guide topics plus the
   wiki's "Bases & Class Lean" entry describe the Gun category and the even gate grid.
 

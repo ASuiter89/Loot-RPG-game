@@ -123,12 +123,15 @@ describe('gear bases — equip-gate coverage', () => {
     }
   });
 
-  it("keeps the Fortune-Seeker's own Luck weapons on the Gun category", () => {
-    // Guns are the class's identity weapon the way Staves are the Mage's: the only
-    // Luck-gated weapon line, and the Fortune-Seeker is the class built to want it.
+  it('keeps the whole Gun category on Luck, in reach of the classes built for it', () => {
+    // Guns are the Fortune-Seeker's identity weapon — the only Luck-gated line, and
+    // the only weapon its skill attribute buys. The Rogue wields them too: Luck is
+    // off-attribute for it, but Luck buys crit, which is what a Rogue is.
     const guns = SLOT_BASES.weapon.filter((b) => WEAPON_CAT[b] === 'Gun');
     expect(guns.length, 'the Gun category has no sub-types').toBeGreaterThan(0);
     for (const g of guns) expect(WEAPON_REQ[g].attr, `${g} gate`).toBe('luck');
-    expect(CLASS_WEAPONS.fortune, 'the Fortune-Seeker cannot wield guns').toContain('Gun');
+    for (const cls of ['fortune', 'rogue']) {
+      expect(CLASS_WEAPONS[cls], `${cls} cannot wield guns`).toContain('Gun');
+    }
   });
 });
