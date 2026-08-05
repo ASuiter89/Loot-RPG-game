@@ -63,6 +63,19 @@ const sample = async (page, n = 5) => {
   return out;
 };
 
+// Wait for the halo to actually be up before sampling it. The bloom fades in from
+// 0 over ~250ms, so sampling the instant it is raised reads two or three zeros
+// before it rises — and on a loaded machine the whole 5×120ms window fits inside
+// the fade, failing a halo that works fine. Both bloom steps (poison applied, and
+// the halo returning after the menu closes) start from 0 and need this; the
+// menu-open step must NOT use it, since there the halo is supposed to be absent.
+// A timeout is swallowed on purpose: sampling then reports the zeros and fails as
+// before, so this waits out the race without weakening the assertion.
+const waitForBloom = (page) => page.waitForFunction(() => {
+  const el = document.getElementById('low-hp-vignette');
+  return el && +(el.style.opacity || 0) > 0;
+}, { timeout: 4000 }).catch(() => {});
+
 async function main() {
   const launchOpts = { headless: true, args: ['--no-sandbox', '--disable-gpu'] };
   const exe = findExecutable();
@@ -86,16 +99,7 @@ async function main() {
     // 1. Poisoned and playing — the green halo blooms.
     const effects = await page.evaluate(() => window.__previewStatus('poison', 60));
     if (!effects.effects.includes('poison')) throw new Error('poison was not applied to the hero');
-    // The bloom fades in over ~250ms, so sampling the instant poison lands reads
-    // two or three zeros before it rises — and on a loaded machine the whole
-    // 5×120ms window fits inside the fade, failing a halo that works fine. Let it
-    // come up first (steps 2 and 3 already settle before sampling). A timeout is
-    // swallowed on purpose: sampling then reports the zeros and fails as before,
-    // so this waits out the race without weakening the assertion.
-    await page.waitForFunction(() => {
-      const el = document.getElementById('low-hp-vignette');
-      return el && +(el.style.opacity || 0) > 0;
-    }, { timeout: 4000 }).catch(() => {});
+    await waitForBloom(page);
     const playing = await sample(page);
     console.log('danger-halo: playing opacities', playing.join(', '));
     if (!playing.some((o) => o > 0)) failures.push(`halo never showed while poisoned in play (${playing.join(', ')})`);
@@ -111,7 +115,7 @@ async function main() {
 
     // 3. Close it — the halo comes back, so the warning is not lost for good.
     await page.evaluate(() => window.closeVersion());
-    await page.waitForTimeout(300);
+    await waitForBloom(page);
     const resumed = await sample(page);
     console.log('danger-halo: resumed opacities', resumed.join(', '));
     if (!resumed.some((o) => o > 0)) failures.push(`halo did not return after closing the menu (${resumed.join(', ')})`);
