@@ -3405,11 +3405,16 @@ const AGI_ATKSPD_SCALE = 100;   // Agility-above-base that buys half the atk-spd
 // ── CORE DIFFICULTY-SCALING CONSTANTS ──────────────────────────────────────
 // The bank of tuning numbers the enemy/boss/hero balance formulas below read
 // instead of bare literals, so the scaling curve lives in one named place. The
-// pure multipliers (enemyHpMult, enemyDmgMult, …) sit at 1× and are kept as
-// named knobs for readability; change a value here to retune the whole game.
+// pure multipliers (enemyHpMult, enemyDmgMult, …) are the whole-game difficulty
+// dial; change a value here to retune every fight at once.
 const BALANCE = {
-  enemyHpMult: 1,        // global × on every foe's max HP (regular, elite, boss)
-  enemyDmgMult: 1,       // global × on every foe's damage
+  // Foes were reading as too spongy AND too punchy from the mid floors on, so
+  // both knobs sit 15% under the old 1× baseline. EVERY foe-stat site routes
+  // through them — the spawner inlines them, and the paths that roll their own
+  // pool (quest hordes, boss minions, mimics) go via foeHp()/foeDmg() below — so
+  // these two numbers really are the whole-game difficulty dial.
+  enemyHpMult: 0.85,     // global × on every foe's max HP (regular, elite, boss, quest, minion, mimic)
+  enemyDmgMult: 0.85,    // global × on every foe's damage (same coverage)
   enemyCountMult: 1,     // × on the regular foe count per floor (still capped at 40)
   hazardDmgMult: 2,      // × on ALL passive/environmental damage — arrow & fire-vent traps, lava, spikes, hidden traps, trapped chests, hazard puddles/webs (every non-combat damage dealer routes through this one knob)
   // Trap / hazard damage tuning (base + per-floor; lava/spikes also add a % of max
@@ -3434,6 +3439,17 @@ const BALANCE = {
   hpPerLevel: 8,         // flat max HP granted per hero level (before Vitality/gear)
   fistDmgLo: 1, fistDmgHi: 3,  // bare-fisted weapon roll, for a hero with nothing worn
 };
+
+// Apply the global difficulty dial to a foe's rolled HP / damage. The main
+// spawner (spawnEnemies) multiplies BALANCE.enemyHpMult / enemyDmgMult inline,
+// but plenty of foes are built elsewhere — quest hordes and hoard guards
+// (makeQuestFoe), boss-summoned minions, chest mimics. Those used to roll raw
+// pools and so silently ignored the dial, which left a vault guard hitting full
+// force next to a mob that had been eased. Every such site funnels through these
+// two helpers instead, so the knob means what it says: EVERY foe. Both floor at
+// 1 so a scaled-down foe never rounds away to a harmless 0.
+function foeHp(raw)  { return Math.max(1, Math.round(raw * BALANCE.enemyHpMult)); }
+function foeDmg(raw) { return Math.max(1, Math.round(raw * BALANCE.enemyDmgMult)); }
 
 // A fresh attribute block — every attribute starts at ATTR_BASE. Used for new
 // heroes, respecs (reset to base), and migrating older saves.
@@ -13389,8 +13405,8 @@ function showTownWelcome() {
 function makeQuestFoe(x, y) {
   const bandIdx = Math.min(Math.floor((dungeonLevel - 1) / 3), ENEMY_POOL.length - 1);
   const threat = depthThreat(dungeonLevel);
-  const hp = Math.round((10 + dungeonLevel * 8) * threat * (floorMod.hpMult || 1));
-  const dmg = Math.round((3.5 + dungeonLevel * 1.9 + bandIdx) * threat * (floorMod.dmgMult || 1));
+  const hp = foeHp((10 + dungeonLevel * 8) * threat * (floorMod.hpMult || 1));
+  const dmg = foeDmg((3.5 + dungeonLevel * 1.9 + bandIdx) * threat * (floorMod.dmgMult || 1));
   return { x, y, hp, maxHp: hp, type: pick(ENEMY_POOL[bandIdx]), level: dungeonLevel, dmg, dead: false };
 }
 
@@ -26805,11 +26821,11 @@ function spawnVerminAt(boss, x, y) {
   boss.summoned = boss.summoned || 0;
   if (boss.summoned >= 12) return false;
   if (!enemyTileFree(x, y) || (x === player.x && y === player.y)) return false;
-  const hp = Math.max(1, Math.round(10 + dungeonLevel * 4));
+  const hp = foeHp(10 + dungeonLevel * 4);
   // spawnT drives a scale/fade "pop-in" in the enemy draw so the vermin erupts
   // into being rather than blinking in fully-formed.
   enemies.push({ x, y, hp, maxHp: hp, type: 'rat', level: dungeonLevel,
-    dmg: Math.max(1, Math.round(3 + dungeonLevel)), dead: false, behavior: 'swift', minion: true, spawnT: Date.now() });
+    dmg: foeDmg(3 + dungeonLevel), dead: false, behavior: 'swift', minion: true, spawnT: Date.now() });
   boss.summoned++; bumpEnemyPos();
   // Spawn animation: a summoning burst so the vermin visibly erupts from the ground.
   const sp = paletteFor('summon');
@@ -27068,9 +27084,9 @@ function spawnBossAdd(e, x, y, type) {
   e.summoned = e.summoned || 0;
   if (e.summoned >= 12) return false;
   if (!enemyTileFree(x, y) || (x === player.x && y === player.y)) return false;
-  const hp = Math.max(1, Math.round(10 + dungeonLevel * 4));
+  const hp = foeHp(10 + dungeonLevel * 4);
   const etype = (typeof MONSTER_SPRITE_IDX === 'object' && MONSTER_SPRITE_IDX[type] !== undefined) ? type : 'rat';
-  enemies.push({ x, y, hp, maxHp: hp, type: etype, level: dungeonLevel, dmg: Math.max(1, Math.round(3 + dungeonLevel)), dead: false, behavior: 'swift', minion: true, spawnT: Date.now() });
+  enemies.push({ x, y, hp, maxHp: hp, type: etype, level: dungeonLevel, dmg: foeDmg(3 + dungeonLevel), dead: false, behavior: 'swift', minion: true, spawnT: Date.now() });
   e.summoned++; bumpEnemyPos();
   const sp = paletteFor('summon');
   _fxPush('aura', x + 0.5, y + 0.5, sp, { variant: 'conjure', dur: 500, moteN: 10 });
@@ -27516,9 +27532,9 @@ function bossSummonElite(e, dist) {
   for (const [dx, dy] of spots) {
     const x = e.x + dx, y = e.y + dy;
     if (!enemyTileFree(x, y)) continue;
-    const hp = Math.max(1, Math.round((16 + dungeonLevel * 6) * 1.6));
+    const hp = foeHp((16 + dungeonLevel * 6) * 1.6);
     enemies.push({ x, y, hp, maxHp: hp, type: 'zombie', level: dungeonLevel + 1,
-      dmg: Math.max(1, Math.round((4 + dungeonLevel) * 1.3)), dead: false, behavior: 'brute', minion: true });
+      dmg: foeDmg((4 + dungeonLevel) * 1.3), dead: false, behavior: 'brute', minion: true });
     e.summoned++; e.cd = 7;
     spawnParticles(x, y, '#88aa66', 8, 0.1);
     log(`${dlIcon('e_zombie', 16)} ${e.name} raises a hulking champion to guard it!`, 'important');
@@ -27540,11 +27556,11 @@ function summonMinions(boss, n) {
     if (placed >= n || boss.summoned >= CAP) break;
     const x = boss.x + dx, y = boss.y + dy;
     if (!enemyTileFree(x, y)) continue;
-    const hp = Math.max(1, Math.round(10 + dungeonLevel * 4));
+    const hp = foeHp(10 + dungeonLevel * 4);
     enemies.push({
       x, y, hp, maxHp: hp,
       type: 'rat', level: dungeonLevel,
-      dmg: Math.max(1, Math.round(3 + dungeonLevel)),
+      dmg: foeDmg(3 + dungeonLevel),
       dead: false, behavior: 'swift', minion: true,
     });
     placed++;
@@ -28065,8 +28081,8 @@ function openChest(chest) {
   if (Math.random() < 0.10 * dm) {
     const mLevel = dungeonLevel + 1;
     const mThreat = depthThreat(mLevel);
-    const hp = Math.round((16 + mLevel * 9) * mThreat * 2.4);
-    const dmg = Math.round((5 + mLevel * 2.1) * mThreat * 1.4);
+    const hp = foeHp((16 + mLevel * 9) * mThreat * 2.4);
+    const dmg = foeDmg((5 + mLevel * 2.1) * mThreat * 1.4);
     // Find an open tile next to the player for the mimic to lunge from.
     let placed = false;
     const spots = [[1,0],[-1,0],[0,1],[0,-1]].sort(() => Math.random() - 0.5);
